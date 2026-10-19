@@ -15,6 +15,7 @@ open class AppError(
 sealed class ServiceError(message: String) : AppError(message) {
     class NodeNotSetup : ServiceError("Node is not setup")
     class NodeNotStarted : ServiceError("Node is not started")
+    class PaymentDeadlineExpired : ServiceError("Payment deadline has expired")
     class MnemonicNotFound : ServiceError("Mnemonic not found")
     class VssAuthRequired : ServiceError("VSS requires LNURL-auth")
     class NodeStillRunning : ServiceError("Node is still running")

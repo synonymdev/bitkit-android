@@ -23,12 +23,12 @@ object SharedPubkyContract {
     const val COLUMN_SECRET_KEY = "secret_key"
 
     /** Pubky Ring's Android applicationId. */
-    const val RING_PACKAGE = "app.pubkyring"
+    const val RING_PACKAGE = "to.pubky.ring"
 
     /** Authority of Pubky Ring's shared pubky provider. */
     const val RING_AUTHORITY = RING_PACKAGE + AUTHORITY_SUFFIX
 
-    /** Prefix of the stored `app.pubkyring:<pubky>` source reference that marks an adopted Ring pubky. */
+    /** Prefix of the stored `to.pubky.ring:<pubky>` source reference that marks an adopted Ring pubky. */
     const val RING_SOURCE_PREFIX = "$RING_PACKAGE:"
 
     fun isValidSecret(

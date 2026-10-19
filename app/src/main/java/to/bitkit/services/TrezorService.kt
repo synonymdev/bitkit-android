@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.EventListener
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TransactionHistoryResult
+import com.synonym.bitkitcore.TransactionDetail
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
@@ -26,6 +27,7 @@ import com.synonym.bitkitcore.onchainComposeTransaction
 import com.synonym.bitkitcore.onchainGetAccountInfo
 import com.synonym.bitkitcore.onchainGetAddressInfo
 import com.synonym.bitkitcore.onchainGetTransactionHistory
+import com.synonym.bitkitcore.onchainGetTransactionDetail
 import com.synonym.bitkitcore.onchainStartWatcher
 import com.synonym.bitkitcore.onchainStopAllWatchers
 import com.synonym.bitkitcore.onchainStopWatcher
@@ -48,8 +50,11 @@ import com.synonym.bitkitcore.trezorSignMessage
 import com.synonym.bitkitcore.trezorSignTxFromPsbt
 import com.synonym.bitkitcore.trezorVerifyMessage
 import to.bitkit.async.ServiceQueue
+import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.Instant
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @Suppress("TooManyFunctions")
@@ -57,6 +62,7 @@ import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 class TrezorService @Inject constructor(
     private val transport: TrezorTransport,
     private val uiHandler: TrezorUiHandler,
+    private val clock: Clock = Clock.System,
 ) {
     @Volatile
     private var callbackRegistered = false
@@ -237,10 +243,43 @@ class TrezorService @Inject constructor(
         }
     }
 
-    suspend fun broadcastRawTx(serializedTx: String, electrumUrl: String): String {
+    suspend fun broadcastRawTx(
+        serializedTx: String,
+        electrumUrl: String,
+        paymentDeadlineAt: Instant? = null,
+    ): String {
         return ServiceQueue.CORE.background {
+            if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) {
+                throw ServiceError.PaymentDeadlineExpired()
+            }
             onchainBroadcastRawTx(serializedTx = serializedTx, electrumUrl = electrumUrl)
         }
+    }
+
+    suspend fun broadcastRawTxAtBoundary(
+        serializedTx: String,
+        electrumUrl: String,
+        paymentDeadlineAt: Instant?,
+        beforeNativeBroadcast: suspend () -> Unit,
+    ): String = ServiceQueue.CORE.background {
+        if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) {
+            throw ServiceError.PaymentDeadlineExpired()
+        }
+        beforeNativeBroadcast()
+        if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) {
+            throw ServiceError.PaymentDeadlineExpired()
+        }
+        onchainBroadcastRawTx(serializedTx = serializedTx, electrumUrl = electrumUrl)
+    }
+
+    suspend fun getTransactionDetail(
+        extendedKey: String,
+        electrumUrl: String,
+        txid: String,
+        network: BitkitCoreNetwork,
+        scriptType: AccountType,
+    ): TransactionDetail = ServiceQueue.CORE.background {
+        onchainGetTransactionDetail(extendedKey, electrumUrl, txid, network, scriptType)
     }
 
     suspend fun getTransactionHistory(

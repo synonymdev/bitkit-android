@@ -7,3 +7,9 @@ fun Throwable.isPaykitIdentityError(): Boolean =
 
 fun Throwable.isPaykitRecoveryRequired(): Boolean =
     generateSequence(this) { it.cause }.any { it is PaykitException.RecoveryRequired }
+
+fun Throwable.isPaykitTemporarilyUnavailable(): Boolean =
+    generateSequence(this) { it.cause }.any {
+        it is PaykitException.ConcurrentUpdate || it is PaykitException.SharedStateBusy ||
+            it is PaykitException.Transport
+    }

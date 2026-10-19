@@ -24,6 +24,8 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.toHex
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
@@ -78,6 +80,8 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
             lightningRepo = lightningRepo,
             walletRepo = mock<WalletRepo>(),
             publicPaykitRepo = publicPaykitRepo,
+            paymentRequestRepo = mock<PaykitPaymentRequestRepo>(),
+            usdtRepo = mock<UsdtRepo>(),
             coreService = coreService,
             clock = clock,
         )
@@ -251,8 +255,8 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
         PaykitPaymentRequest(
             paymentRequestId = "request-id",
             counterparty = CONTACT_KEY,
-            amountValue = "0.000025",
-            amountSats = 2_500uL,
+            amount = PaykitAmount(PaykitAsset.BTC, 2_500uL),
+            paymentReference = "fixture-reference",
             expiresAt = Instant.fromEpochSeconds(NOW_SECONDS + 60),
             acceptedPaymentEndpointIdentifiers = accepted,
         )

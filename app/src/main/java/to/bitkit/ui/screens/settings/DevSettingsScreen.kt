@@ -1,10 +1,13 @@
 package to.bitkit.ui.screens.settings
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -14,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -29,6 +33,7 @@ import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.navigateTo
@@ -37,6 +42,7 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.shareZipFile
+import to.bitkit.utils.SubscriptionClockOffset
 import to.bitkit.viewmodels.DevSettingsViewModel
 
 @Composable
@@ -51,6 +57,7 @@ fun DevSettingsScreen(
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
     val disableAllToasts by settings.disableAllToasts.collectAsStateWithLifecycle()
     val isSavingsSwapEnabled by settings.isSavingsSwapEnabled.collectAsStateWithLifecycle()
+    val subscriptionClockOffsetDays by settings.subscriptionClockOffsetDays.collectAsStateWithLifecycle()
     var showPaykitWarning by remember { mutableStateOf(false) }
 
     ScreenColumn {
@@ -108,6 +115,12 @@ fun DevSettingsScreen(
                     },
                     switchTestTag = "PaykitUiToggle",
                 )
+                if (SubscriptionClockOffset.isAvailable) {
+                    SubscriptionClockOffsetRow(
+                        offsetDays = subscriptionClockOffsetDays,
+                        onSelect = settings::setSubscriptionClockOffsetDays,
+                    )
+                }
             }
 
             SectionHeader("HARDWARE WALLET")
@@ -278,3 +291,36 @@ fun DevSettingsScreen(
         )
     }
 }
+
+@Composable
+private fun SubscriptionClockOffsetRow(
+    offsetDays: Int,
+    onSelect: (Int) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        SettingsButtonRow(
+            title = "Subscription clock offset (days)",
+            value = SettingsButtonValue.StringValue(subscriptionClockOffsetLabel(offsetDays)),
+            onClick = { expanded = true },
+            modifier = Modifier.testTag("SubscriptionClockOffset")
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            SubscriptionClockOffset.OFFSET_DAYS_PRESETS.forEach { days ->
+                DropdownMenuItem(
+                    text = { Text(subscriptionClockOffsetLabel(days)) },
+                    onClick = {
+                        expanded = false
+                        onSelect(days)
+                    },
+                    modifier = Modifier.testTag("SubscriptionClockOffset-$days")
+                )
+            }
+        }
+    }
+}
+
+private fun subscriptionClockOffsetLabel(days: Int) = if (days == 0) "Off" else "$days"

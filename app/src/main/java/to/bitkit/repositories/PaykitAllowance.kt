@@ -39,6 +39,8 @@ data class PaykitAllowance(
     val expiresAt: Instant? = null,
     val allowedPaymentEndpointIdentifiers: List<String>? = null,
     val lastEventAt: Instant? = null,
+    /** The received proposal's private stream item; accepting it is bound to this item. */
+    val proposalStreamItemId: ULong? = null,
 ) {
     @Serializable
     data class Id(
@@ -119,6 +121,7 @@ data class PaykitAllowance(
                 expiresAt = terms.expiresAt()?.let(PaykitAllowanceTime::parse),
                 allowedPaymentEndpointIdentifiers = terms.allowedPaymentEndpointIdentifiers(),
                 lastEventAt = record.lastEventAt?.let(PaykitAllowanceTime::parse),
+                proposalStreamItemId = record.proposalStreamItemId,
             )
         }
 

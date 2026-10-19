@@ -1,0 +1,21 @@
+<journey name="receive invoice refresh">
+  <description>
+    Verifies that reopening Receive and editing its amount leaves Auto with a ready unified invoice.
+    Requires a running Lightning node and a ready channel with sufficient inbound capacity for the
+    entered amount. Record the QR changes and inspect or decode their contents; a screenshot of a
+    loading placeholder alone does not establish a failure. This journey is pending device validation.
+  </description>
+  <actions>
+    <action>Launch Bitkit and open Receive from the wallet home screen</action>
+    <action>Select Auto and wait for its QR code to finish loading</action>
+    <action>Verify the Auto QR URI contains both the Bitcoin address and a nonempty lightning parameter</action>
+    <action>Close and reopen Receive three times in quick succession, then select Auto</action>
+    <action>If Auto shows loading, verify Copy and Share are disabled while Edit remains available</action>
+    <action>Wait for the QR code to finish loading and verify its URI still contains a nonempty lightning parameter</action>
+    <action>Open Edit, enter a small amount within the channel's inbound capacity, and return to the QR code</action>
+    <action>Immediately reopen Edit, change the amount to a different small amount, type a new note, and return to Auto</action>
+    <action>Wait for the QR code to finish loading and verify its URI contains the latest amount and a nonempty lightning parameter</action>
+    <action>Decode the Lightning invoice and verify its amount and description match the latest amount and note entered</action>
+    <action>Reopen Edit and verify the latest note remains present</action>
+  </actions>
+</journey>

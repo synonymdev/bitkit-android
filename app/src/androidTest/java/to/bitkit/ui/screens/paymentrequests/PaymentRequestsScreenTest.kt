@@ -4,11 +4,16 @@ package to.bitkit.ui.screens.paymentrequests
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -17,6 +22,9 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.CurrencyState
@@ -39,6 +47,31 @@ import kotlin.time.Instant
 class PaymentRequestsScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    @Test
+    fun detailsDisablePayWhilePreparationIsPending() {
+        val isPreparing = mutableStateOf(false)
+        val request = request()
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                IncomingPaymentRequestDetailsContent(
+                    request = request,
+                    contact = PubkyProfile.placeholder(request.counterparty),
+                    isPending = true,
+                    isPreparing = isPreparing.value,
+                    onBack = {},
+                    onPay = {},
+                    onDismiss = { Result.success(Unit) },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("PaymentRequestDetailsPay").assertIsEnabled()
+        composeTestRule.runOnIdle { isPreparing.value = true }
+        composeTestRule.onNodeWithTag("PaymentRequestDetailsPay").assertIsNotEnabled()
+        composeTestRule.runOnIdle { isPreparing.value = false }
+        composeTestRule.onNodeWithTag("PaymentRequestDetailsPay").assertIsEnabled()
+    }
 
     @Test
     fun queueShowsIncomingRequestAndSeeAllAction() {
@@ -158,7 +191,12 @@ class PaymentRequestsScreenTest {
 
         composeTestRule.onNodeWithTag("PaymentRequestRow-accepted").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRow-outgoing").assertIsDisplayed()
-        composeTestRule.onNodeWithText("pending").assertIsDisplayed()
+        composeTestRule.onNode(
+            hasText("pending") and hasAnyAncestor(hasTestTag("PaymentRequestRow-outgoing"))
+        ).assertIsDisplayed()
+        composeTestRule.onNode(
+            hasText("pending") and hasAnyAncestor(hasTestTag("PaymentRequestRow-accepted"))
+        ).assertIsDisplayed()
         composeTestRule.onNodeWithText("PAYMENT REQUESTS").assertIsDisplayed()
         composeTestRule.onNodeWithText("TODAY").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertIsDisplayed()
@@ -190,7 +228,9 @@ class PaymentRequestsScreenTest {
         }
 
         composeTestRule.onNodeWithTag("MoneyPrimary").assertTextContains("$", substring = true)
-        composeTestRule.onNodeWithText("Accepted").assertIsDisplayed()
+        composeTestRule.onNode(
+            hasText("pending") and hasAnyAncestor(hasTestTag("PaymentRequestRow-accepted"))
+        ).assertIsDisplayed()
     }
 
     @Test
@@ -289,8 +329,8 @@ class PaymentRequestsScreenTest {
     private fun request(id: String = "request") = PaykitPaymentRequest(
         paymentRequestId = id,
         counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-        amountValue = "0.00025",
-        amountSats = 25_000uL,
+        amount = PaykitAmount(PaykitAsset.BTC, 25_000uL),
+        paymentReference = "reference-$id",
         note = "Dinner",
         createdAt = Instant.parse("2027-01-15T08:00:00Z"),
         expiresAt = null,
@@ -300,8 +340,9 @@ class PaymentRequestsScreenTest {
     private fun subscription(note: String) = PaykitSubscription(
         paymentRequestId = "subscription",
         counterparty = request().counterparty,
-        amountValue = "0.00025",
-        amountSats = 25_000uL,
+        amount = PaykitAmount(PaykitAsset.BTC, 25_000uL),
+        paymentReference = "invoice",
+        pricing = PaykitRequestPricing(),
         note = note,
         createdAt = Instant.parse("2027-01-15T08:00:00Z"),
         proposalExpiresAt = null,

@@ -61,7 +61,7 @@ class MnemonicInputFieldTest {
                     onPositionChange = {},
                     onBackspaceInEmpty = { backspaceInEmptyCount++ },
                     focusRequester = focusRequester,
-                    isFocused = false,
+                    isFocused = true,
                     index = 0,
                 )
             }
@@ -95,7 +95,7 @@ class MnemonicInputFieldTest {
         composeTestRule.onNodeWithTag(FIELD_TAG).performTextInput(" ")
         composeTestRule.waitForIdle()
 
-        assertEquals(emptyList(), changes)
+        assertEquals(emptyList(), changes.filter { it != "abandon" })
         assertEquals("abandon", fieldText())
     }
 

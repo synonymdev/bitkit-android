@@ -3,6 +3,7 @@ package to.bitkit.ui.sheets
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,6 +57,7 @@ private fun Content(
             .fillMaxWidth()
             .sheetHeight(isModal = true)
             .gradientBackground()
+            .navigationBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(

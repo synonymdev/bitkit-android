@@ -37,4 +37,15 @@ class PaykitExceptionExtTest {
     fun `generic failures do not require recovery`() {
         assertFalse(AppError("Native load failed").isPaykitRecoveryRequired())
     }
+
+    @Test
+    fun `link observation and transport failures do not require recovery`() {
+        val observation = AppError(PaykitException.Protocol("link_observation_failed", "Invalid link metadata"))
+        val transport = AppError(PaykitException.Transport("transport_error", "Unavailable homeserver"))
+
+        assertFalse(observation.isPaykitRecoveryRequired())
+        assertFalse(observation.isPaykitTemporarilyUnavailable())
+        assertFalse(transport.isPaykitRecoveryRequired())
+        assertTrue(transport.isPaykitTemporarilyUnavailable())
+    }
 }

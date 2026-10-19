@@ -4,6 +4,7 @@ import android.content.Context
 import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.doReturn
@@ -33,6 +34,7 @@ class PubkyAuthApprovalRetryTest : BaseUnitTest() {
     @Test
     fun `relay timeout restores consent and requires local auth for retry`() = test {
         whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
+        whenever(context.getString(R.string.profile__auth_approval_services_separator)).thenReturn(" and ")
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
         val authUrl = "pubkyring://signup?hs=homeserver" +
             "&relay=https://relay.example/inbox/&secret=secret&caps=/pub/example/:rw"
@@ -43,7 +45,14 @@ class PubkyAuthApprovalRetryTest : BaseUnitTest() {
             Result.failure(AppError(PubkyRingAuthTimeoutError())),
             Result.success(Unit),
         )
-        val sut = PubkyAuthApprovalViewModel(context, pubkyRepo, mock())
+        val sut =
+            PubkyAuthApprovalViewModel(
+                context,
+                pubkyRepo,
+                mock(),
+                mock(),
+                mock { on { enabled } doReturn flowOf(false) }
+            )
 
         sut.effects.test {
             sut.load(authUrl)

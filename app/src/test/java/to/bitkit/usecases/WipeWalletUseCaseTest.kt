@@ -31,6 +31,7 @@ import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
@@ -47,6 +48,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val backupRepo = mock<BackupRepo>()
     private val keychain = mock<Keychain>()
     private val coreService = mock<CoreService>()
+    private val usdtRepo = mock<UsdtRepo>()
     private val db = mock<AppDb>()
     private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
@@ -72,6 +74,10 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever { lightningRepo.stop() }.thenReturn(Result.success(Unit))
+        whenever { usdtRepo.wipe(any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(0).invoke()
+            Result.success(Unit)
+        }
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
@@ -85,6 +91,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             backupRepo = backupRepo,
             keychain = keychain,
             coreService = coreService,
+            usdtRepo = usdtRepo,
             db = db,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
@@ -115,6 +122,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             backupRepo,
             keychain,
             coreService,
+            usdtRepo,
             db,
             settingsStore,
             cacheStore,
@@ -141,6 +149,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(migrationService).cleanupAfterMigration()
         inOrder.verify(privatePaykitAddressReservationRepo).clear()
         inOrder.verify(pubkyRepo).wipeLocalState()
+        inOrder.verify(usdtRepo).wipe(any())
         inOrder.verify(keychain).wipe()
         inOrder.verify(coreService).wipeData()
         inOrder.verify(db).clearAllTables()

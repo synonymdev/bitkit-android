@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PrimaryDisplay
@@ -33,11 +34,12 @@ fun MoneyDisplay(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     showSymbol: Boolean = true,
+    prefix: String = "",
 ) {
     val text = rememberMoneyText(sats, showSymbol = showSymbol)
     text?.let {
         Display(
-            text = it.withAccent(
+            text = "$prefix$it".withAccent(
                 accentStyle = SpanStyle(
                     color = Colors.White64,
                     fontWeight = FontWeight.ExtraBold,
@@ -127,11 +129,13 @@ fun MoneyMSB(
     color: Color = MaterialTheme.colorScheme.primary,
     accent: Color = Colors.White64,
     showSymbol: Boolean = unit == PrimaryDisplay.FIAT,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
 ) {
     rememberMoneyText(sats = sats, unit = unit, showSymbol = showSymbol)?.let { text ->
         BodyMSB(
             text = text.withAccent(accentColor = accent),
             color = color,
+            letterSpacing = letterSpacing,
             modifier = modifier.testTag("MoneyText")
         )
     }

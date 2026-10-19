@@ -9,10 +9,13 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TransactionDetails
 import com.synonym.bitkitcore.TxOutput
 import com.synonym.bitkitcore.getActivities
+import com.synonym.bitkitcore.getActivityById
+import com.synonym.bitkitcore.getActivityByTxId
 import com.synonym.bitkitcore.getTransactionDetails
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.upsertActivity
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Test
 import org.lightningdevkit.ldknode.ConfirmationStatus
@@ -135,6 +138,29 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
 
         assertFalse(sut.backfillPaykitContacts())
         assertTrue(updates.isEmpty())
+    }
+
+    @Test
+    fun `backfill preserves a manual edit during the final cache read`() = coreTest {
+        val original = lightning()
+        val edited = Activity.Lightning(original.copy(contact = OTHER_BUYER, message = "manual note"))
+        rows = listOf(Activity.Lightning(original))
+        whenever(contacts.contactsForPaymentHash(original.id)).thenReturn(setOf(BUYER))
+        var cacheReads = 0
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                if (++cacheReads == 2) {
+                    sut.update(original.id, edited)
+                    rows = listOf(edited)
+                }
+                emit(cacheData.value)
+            },
+        )
+
+        assertFalse(sut.backfillPaykitContacts())
+        assertEquals(listOf<Activity>(edited), updates)
+        assertFalse(sut.backfillPaykitContacts())
+        assertEquals(listOf<Activity>(edited), updates)
     }
 
     @Test
@@ -384,9 +410,29 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         assertEquals("server-address", row.address)
         assertEquals(BUYER, row.contact)
         assertEquals(
-            mapOf("nativeSegwit" to 600, "nativeSegwit:account:5" to 200),
+            mapOf("nativeSegwit" to 600, "nativeSegwit:account:5" to 203),
             cacheData.value.addressSearchLastUsedReceiveIndexes,
         )
+    }
+
+    @Test
+    fun `companion account search advances from the matched index through the next window`() = coreTest {
+        whenever(lightningService.listOnchainWalletAccounts()).thenReturn(
+            listOf(OnchainWalletAccount(LdkAddressType.NATIVE_SEGWIT, 5u)),
+        )
+        for (index in listOf(999, 1999)) {
+            val address = "server-address-$index"
+            sharedAddresses(address to BUYER)
+            whenever(lightningService.addressInfosForType(AddressType.P2WPKH, false, index - 199, 200, 5u))
+                .thenReturn(listOf(AddressDerivationInfo(address, index)))
+
+            receive("change-address", address)
+
+            val row = (updates.last() as Activity.Onchain).v1
+            assertEquals(address, row.address)
+            assertEquals(BUYER, row.contact)
+            assertEquals(index, cacheData.value.addressSearchLastUsedReceiveIndexes["nativeSegwit:account:5"])
+        }
     }
 
     @Test
@@ -404,7 +450,8 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         verify(lightningService).addressInfosForType(AddressType.P2WPKH, false, 800, 200, 5u)
         verify(lightningService, never()).addressInfosForType(AddressType.P2WPKH, false, 1000, 200, 5u)
         verify(lightningService).addressInfosForType(AddressType.P2WPKH, true, 1000, 200, 5u)
-        verify(lightningService, never()).addressInfosForType(AddressType.P2WPKH, true, 1200, 200, 5u)
+        verify(lightningService).addressInfosForType(AddressType.P2WPKH, true, 1200, 1, 5u)
+        verify(lightningService, never()).addressInfosForType(AddressType.P2WPKH, true, 1400, 200, 5u)
     }
 
     @Test
@@ -416,6 +463,40 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         sut.syncLdkNodePaymentsToActivities(listOf(payment()))
 
         assertEquals(BUYER, (updates.single() as Activity.Onchain).v1.contact)
+    }
+
+    @Test
+    fun `payment sync skips contact discovery for an attributed activity`() = coreTest {
+        val original = onchain("wallet-address").copy(id = "stored-id", contact = BUYER)
+        rows = listOf(Activity.Onchain(original))
+        val outputs = listOf(output("wallet-address"))
+        details = mock { on { this.outputs }.thenReturn(outputs) }
+
+        repeat(2) { sut.syncLdkNodePaymentsToActivities(listOf(payment())) }
+
+        assertEquals(2, updates.size)
+        assertTrue(updates.all { (it as Activity.Onchain).v1.contact == BUYER })
+        verify(reservations, never()).contactPublicKeyForReservedAddress(any())
+        verify(contacts, never()).contactsForAddresses(any())
+    }
+
+    @Test
+    fun `payment sync skips contact discovery for a manually detached activity`() = coreTest {
+        val original = onchain("wallet-address").copy(id = "stored-id")
+        rows = listOf(Activity.Onchain(original))
+        cacheData.value = cacheData.value.copy(
+            detachedActivityContacts = setOf(scopedActivityId(original.walletId, original.id)),
+        )
+        val outputs = listOf(output("wallet-address"))
+        details = mock { on { this.outputs }.thenReturn(outputs) }
+        sharedAddresses("wallet-address" to BUYER)
+
+        repeat(2) { sut.syncLdkNodePaymentsToActivities(listOf(payment())) }
+
+        assertEquals(2, updates.size)
+        assertTrue(updates.all { (it as Activity.Onchain).v1.contact == null })
+        verify(reservations, never()).contactPublicKeyForReservedAddress(any())
+        verify(contacts, never()).contactsForAddresses(any())
     }
 
     private suspend fun receive(vararg addresses: String) {
@@ -464,6 +545,16 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
                 }.thenAnswer {
                     activityReads++
                     rows
+                }
+                native.`when`<Activity?> { getActivityById(any(), any()) }.thenAnswer { invocation ->
+                    rows.filterIsInstance<Activity.Onchain>().firstOrNull {
+                        it.v1.walletId == invocation.arguments[0] && it.v1.id == invocation.arguments[1]
+                    }
+                }
+                native.`when`<OnchainActivity?> { getActivityByTxId(any(), any()) }.thenAnswer { invocation ->
+                    rows.filterIsInstance<Activity.Onchain>().firstOrNull {
+                        it.v1.walletId == invocation.arguments[0] && it.v1.txId == invocation.arguments[1]
+                    }?.v1
                 }
                 native.`when`<TransactionDetails?> { getTransactionDetails(any(), any()) }.thenAnswer {
                     detailReads++

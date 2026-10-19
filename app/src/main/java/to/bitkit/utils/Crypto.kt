@@ -33,6 +33,35 @@ import javax.inject.Singleton
 @Suppress("SwallowedException", "MagicNumber", "TooGenericExceptionCaught")
 @Singleton
 class Crypto @Inject constructor() {
+    companion object {
+        /**
+         * Puts the bundled BouncyCastle in place of the outdated "BC" provider that Android registers.
+         *
+         * `App.onCreate` calls this before anything can open a TLS connection. While the swap runs no
+         * provider offers the "BKS" keystore, and a native TLS verifier that loads its classes in that
+         * window fails for the rest of the process. Later calls do nothing.
+         */
+        @Synchronized
+        fun installSecurityProvider() {
+            // TODO show setup failure on UI? It throws from App.onCreate and stops start-up
+            try {
+                val provider = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
+                when {
+                    provider == null -> Security.addProvider(BouncyCastleProvider())
+                    provider::class.java != BouncyCastleProvider::class.java -> {
+                        // We substitute the outdated BC provider registered in Android.
+                        // Build the replacement first so the gap without a "BC" provider stays short.
+                        val replacement = BouncyCastleProvider()
+                        Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
+                        Security.insertProviderAt(replacement, 1)
+                    }
+                }
+            } catch (e: Exception) {
+                throw CryptoError.SecurityProviderSetupFailed()
+            }
+        }
+    }
+
     @Suppress("ArrayInDataClass")
     data class KeyPair(
         val privateKey: ByteArray,
@@ -49,26 +78,16 @@ class Crypto @Inject constructor() {
     private val params = ECNamedCurveTable.getParameterSpec("secp256k1")
     private val transformation = "AES/GCM/NoPadding"
 
-    init {
-        // TODO move init to VM (to enable error handling on UI)?
-        try {
-            val provider = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
-            when {
-                provider == null -> Security.addProvider(BouncyCastleProvider())
-                provider::class.java != BouncyCastleProvider::class.java -> {
-                    // We substitute the outdated BC provider registered in Android
-                    Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
-                    Security.insertProviderAt(BouncyCastleProvider(), 1)
-                }
-            }
-        } catch (e: Exception) {
-            throw CryptoError.SecurityProviderSetupFailed()
-        }
+    // Preserve Android's registered providers for concurrent TLS initialization.
+    private val provider = try {
+        BouncyCastleProvider()
+    } catch (_: Exception) {
+        throw CryptoError.SecurityProviderSetupFailed()
     }
 
     fun generateKeyPair(): KeyPair {
         try {
-            val (privateKey, publicKey) = KeyPairGenerator.getInstance("EC", "BC").run {
+            val (privateKey, publicKey) = KeyPairGenerator.getInstance("EC", provider).run {
                 initialize(params)
                 val keys = generateKeyPair()
                 val private = (keys.private as BCECPrivateKey).run { BigIntegers.asUnsignedByteArray(32, d) }
@@ -91,14 +110,14 @@ class Crypto @Inject constructor() {
         derivationName: String? = null,
     ): ByteArray {
         try {
-            val keyFactory = KeyFactory.getInstance("EC", "BC")
+            val keyFactory = KeyFactory.getInstance("EC", provider)
             val privateKey = keyFactory.generatePrivate(ECPrivateKeySpec(BigInteger(1, privateKeyBytes), params))
             val publicKey = let {
                 val publicKeyPoint = params.curve.decodePoint(nodePubkey.fromHex())
                 keyFactory.generatePublic(ECPublicKeySpec(publicKeyPoint, params))
             }
 
-            val baseSecret = KeyAgreement.getInstance("ECDH", "BC").run {
+            val baseSecret = KeyAgreement.getInstance("ECDH", provider).run {
                 // init(privateKey); doPhase(publicKey, true); generateSecret()
                 val sharedPoint = (publicKey as ECPublicKey).q.multiply((privateKey as ECPrivateKey).d)
                 sharedPoint.getEncoded(true)
@@ -120,7 +139,7 @@ class Crypto @Inject constructor() {
         require(secretKey.size == 32) { "Key must be 256 bits (32 bytes) for AES-256-GCM" }
         val key = SecretKeySpec(secretKey, "AES")
 
-        val cipher = Cipher.getInstance(transformation).apply { init(Cipher.ENCRYPT_MODE, key) }
+        val cipher = Cipher.getInstance(transformation, provider).apply { init(Cipher.ENCRYPT_MODE, key) }
         val result = cipher.doFinal(blob)
 
         return EncryptedPayload(
@@ -136,7 +155,7 @@ class Crypto @Inject constructor() {
             val key = SecretKeySpec(secretKey, "AES")
 
             val spec = GCMParameterSpec(128, encryptedPayload.iv)
-            val cipher = Cipher.getInstance(transformation).apply { init(Cipher.DECRYPT_MODE, key, spec) }
+            val cipher = Cipher.getInstance(transformation, provider).apply { init(Cipher.DECRYPT_MODE, key, spec) }
 
             return cipher.doFinal(encryptedPayload.cipher + encryptedPayload.tag)
         } catch (e: Exception) {
@@ -175,7 +194,7 @@ class Crypto @Inject constructor() {
     }.getOrElse { throw CryptoError.SigningFailed() }
 
     fun getPublicKey(privateKey: ByteArray): ByteArray = runCatching {
-        val keyFactory = KeyFactory.getInstance("EC", "BC")
+        val keyFactory = KeyFactory.getInstance("EC", provider)
         val privateKeySpec = ECPrivateKeySpec(BigInteger(1, privateKey), params)
         val privateKeyObj = keyFactory.generatePrivate(privateKeySpec)
 

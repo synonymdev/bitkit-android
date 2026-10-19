@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.profile
 
 import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -111,6 +112,8 @@ private fun Content(
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
 ) {
+    BackHandler(enabled = uiState.isBusy) {}
+
     val pickMedia = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { onAvatarSelected(it) } }
@@ -131,8 +134,8 @@ private fun Content(
     val topBar = @Composable { modifier: Modifier ->
         AppTopBar(
             titleText = stringResource(R.string.profile__edit_nav_title),
-            onBackClick = onBackClick,
-            actions = { DrawerNavIcon() },
+            onBackClick = { if (!uiState.isBusy) onBackClick() },
+            actions = { if (!uiState.isBusy) DrawerNavIcon() },
             modifier = modifier,
         )
     }
@@ -162,13 +165,16 @@ private fun Content(
                 onAddTag = onAddTag,
                 onSave = onSave,
                 onCancel = onBackClick,
-                isSaveEnabled = uiState.name.isNotBlank() && !uiState.isSaving,
+                isSaveEnabled = uiState.name.isNotBlank() && !uiState.isBusy,
                 topBar = topBar,
+                isSaving = uiState.isSaving,
+                isDeleting = uiState.isDeleting,
                 avatarContent = {
                     AvatarSection(
                         imageUrl = uiState.imageUrl,
                         newAvatarUri = uiState.newAvatarUri,
                         onClick = launchPhotoPicker,
+                        enabled = !uiState.isBusy,
                     )
                 },
                 onDelete = onDelete,
@@ -223,6 +229,7 @@ private fun AvatarSection(
     imageUrl: String?,
     newAvatarUri: Uri?,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Box(
         contentAlignment = Alignment.Center,
@@ -231,7 +238,7 @@ private fun AvatarSection(
             .clip(CircleShape)
             .background(Colors.Gray6)
             .testTag("EditProfileAvatar")
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
     ) {
         when {
             newAvatarUri != null -> AsyncImage(

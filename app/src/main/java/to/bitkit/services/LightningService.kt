@@ -30,6 +30,7 @@ import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Config
+import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
@@ -37,15 +38,18 @@ import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.OnchainSendResult
 import org.lightningdevkit.ldknode.OnchainWalletAccount
 import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.PublicKey
 import org.lightningdevkit.ldknode.ScoringFeeParameters
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
+import org.lightningdevkit.ldknode.TransactionDetails
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
@@ -68,6 +72,13 @@ import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
+import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainSendInput
+import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.PreparedOnchainSend
+import to.bitkit.repositories.releaseInputSets
+import to.bitkit.repositories.releaseOutbids
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
@@ -82,8 +93,10 @@ import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.Path
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import org.lightningdevkit.ldknode.AddressType as LdkAddressType
 
 typealias NodeEventHandler = suspend (Event) -> Unit
@@ -142,10 +155,16 @@ class LightningService internal constructor(
     private val loggerLdk: LoggerLdk,
     private val watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
     private val ldkQueue: CoroutineContext,
+    private val onchainFeeRateFactory: (ULong) -> FeeRate = { FeeRate.fromSatPerVbUnchecked(it) },
+    private val clock: Clock = Clock.System,
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
         private const val TAG = "LightningService"
+        private const val RELEASE_FEE_ATTEMPTS = 4
+
+        /** A small fixed payment to a new wallet address; the rest returns as change, which pays the fee. */
+        private const val RELEASE_AMOUNT_SATS = 1_000uL
         private const val NODE_ID_PREVIEW_LEN = 20
 
         private const val SCORING_BASE_PENALTY_MSAT = 40_000uL
@@ -187,6 +206,7 @@ class LightningService internal constructor(
         watchOnlyAccountStore: WatchOnlyAccountStore,
         loggerLdk: LoggerLdk,
         watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
+        clock: Clock = Clock.System,
     ) : this(
         bgDispatcher = bgDispatcher,
         ioDispatcher = ioDispatcher,
@@ -197,6 +217,7 @@ class LightningService internal constructor(
         loggerLdk = loggerLdk,
         watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
         ldkQueue = ServiceQueue.LDK.queueContext,
+        clock = clock,
     )
 
     @Volatile
@@ -949,39 +970,151 @@ class LightningService internal constructor(
         }
     }
 
-    suspend fun send(
+    /** Prepare without dispatch; the caller must durably retain the receipt before calling broadcast. */
+    suspend fun prepareOnchainSend(
         address: Address,
         sats: ULong,
         satsPerVByte: ULong,
         utxosToSpend: List<SpendableUtxo>? = null,
         isMaxAmount: Boolean = false,
-    ): Txid {
-        val node = this.node ?: throw ServiceError.NodeNotSetup()
-
-        Logger.info(
-            "Sending $sats sats to $address, satsPerVByte=$satsPerVByte, isMaxAmount = $isMaxAmount",
-            context = TAG,
+        walletIndex: Int = currentWalletIndex,
+        paymentDeadlineAt: Instant? = null,
+    ): PreparedOnchainSend = callOnchainSend {
+        ensurePaymentDeadline(paymentDeadlineAt)
+        require(satsPerVByte > 0uL && satsPerVByte <= UInt.MAX_VALUE.toULong())
+        if (currentWalletIndex != walletIndex) throw ServiceError.NodeNotSetup()
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        val prepared = if (isMaxAmount) {
+            originalNode.onchainPayment().prepareSendAllToAddress(
+                address,
+                true,
+                onchainFeeRateFactory(satsPerVByte),
+            )
+        } else {
+            originalNode.onchainPayment().prepareSendToAddress(
+                address,
+                sats,
+                onchainFeeRateFactory(satsPerVByte),
+                utxosToSpend,
+            )
+        }
+        val receipt = OnchainPreparedReceipt(
+            prepared.txid(),
+            prepared.inputs().map { OnchainSendInput(it.txid, it.vout) },
+            address,
+            prepared.recipientAmountSats(),
+            miningFeeSats = prepared.miningFeeSats(),
         )
-
-        return ServiceQueue.LDK.background(ldkQueue) {
-            if (isMaxAmount) {
-                node.onchainPayment().sendAllToAddress(
-                    address = address,
-                    retainReserve = true,
-                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
-                )
-            } else {
-                node.onchainPayment().sendToAddress(
-                    address = address,
-                    amountSats = sats,
-                    feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
-                    utxosToSpend = utxosToSpend,
-                )
+        PreparedOnchainSend(receipt) { beforeDispatch ->
+            callOnchainSend {
+                // Dispatch only through the handle that signed the original receipt.
+                if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+                ensurePaymentDeadline(paymentDeadlineAt)
+                beforeDispatch()
+                when (val result = prepared.broadcast()) {
+                    is OnchainSendResult.Accepted -> OnchainSendOutcome.Accepted(result.txid)
+                    is OnchainSendResult.Rejected -> OnchainSendOutcome.Rejected(result.txid, result.reason)
+                    is OnchainSendResult.Unknown -> OnchainSendOutcome.Unknown(result.txid)
+                }
             }
         }
     }
 
-    suspend fun send(bolt11: String, sats: ULong? = null): PaymentId {
+    suspend fun observedOriginalSendFee(attempt: OnchainSendAttempt): ULong? {
+        check(attempt.hasPositiveEvidence && attempt.walletIndex == currentWalletIndex)
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        val txid = requireNotNull(attempt.txid)
+        check(txid.lowercase() in attempt.candidateTxids)
+        return callOnchainSend {
+            check(currentWalletIndex == attempt.walletIndex && node === originalNode)
+            val details = originalNode.getTransactionDetails(txid) ?: return@callOnchainSend null
+            val fee = exactOriginalSendFee(details, requireNotNull(attempt.originalInputs)) {
+                originalNode.getTransactionDetails(it)
+            }
+            check(currentWalletIndex == attempt.walletIndex && node === originalNode)
+            fee
+        }
+    }
+
+    /**
+     * Whether the wallet knows none of the attempt's candidates while it still knows the transactions its coins
+     * came from. A candidate that reached the mempool or the chain spends wallet coins, so a sync adds it.
+     */
+    suspend fun walletKnowsNoCandidate(attempt: OnchainSendAttempt): Boolean {
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        val inputs = attempt.originalInputs.orEmpty()
+        if (inputs.isEmpty() || attempt.walletIndex != currentWalletIndex) return false
+        return callOnchainSend {
+            if (currentWalletIndex != attempt.walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+            attempt.candidateTxids.none { originalNode.getTransactionDetails(it) != null } &&
+                inputs.all { originalNode.getTransactionDetails(it.txid) != null }
+        }
+    }
+
+    /** Whether one of the original's coins is no longer spendable, so a transaction the wallet knows spent it. */
+    suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean {
+        val original = attempt.originalInputs.orEmpty()
+        if (original.isEmpty()) return false
+        val spendable = listSpendableOutputs().getOrThrow()
+            .map { OnchainSendInput(it.outpoint.txid, it.outpoint.vout) }
+            .toSet()
+        return original.any { it !in spendable }
+    }
+
+    suspend fun walletKnowsTransaction(txid: String): Boolean {
+        val originalNode = node ?: return false
+        return callOnchainSend { originalNode.getTransactionDetails(txid) != null }
+    }
+
+    /**
+     * Spends the original's coins back to the wallet at a fee above every candidate's, so the release replaces any
+     * copy of the original a node still holds, and no candidate can confirm once it does.
+     */
+    suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
+        val original = attempt.originalInputs.orEmpty().toSet()
+        // Only confirmed coins join the original's: nodes holding a candidate refuse a replacement that adds an
+        // unconfirmed input (BIP125 rule 2), and an unconfirmed parent can still be replaced or evicted.
+        val confirmedTxids = listPayments().orEmpty().mapNotNull { payment ->
+            (payment.kind as? PaymentKind.Onchain)?.takeIf { it.status is ConfirmationStatus.Confirmed }?.txid
+        }.toSet()
+        val spendable = listSpendableOutputs().getOrThrow().filter {
+            OnchainSendInput(it.outpoint.txid, it.outpoint.vout) in original || it.outpoint.txid in confirmedTxids
+        }
+        val inputSets = releaseInputSets(spendable, original)
+        if (inputSets.isEmpty() || attempt.walletIndex != currentWalletIndex) throw ServiceError.NodeNotSetup()
+        val originalCoins = inputSets.first().map { OnchainSendInput(it.outpoint.txid, it.outpoint.vout) }.toSet()
+        val address = newAddress()
+        var lastError: Throwable = ServiceError.NodeNotSetup()
+        for (utxos in inputSets) {
+            var feeRate = maxOf(attempt.feeRateSatsPerVByte, attempt.candidateFeeRates.values.maxOrNull() ?: 0uL) + 2uL
+            var feeAttemptsLeft = RELEASE_FEE_ATTEMPTS
+            while (feeAttemptsLeft-- > 0) {
+                val prepared = runSuspendCatching {
+                    prepareOnchainSend(
+                        address = address,
+                        sats = RELEASE_AMOUNT_SATS,
+                        satsPerVByte = feeRate,
+                        utxosToSpend = utxos,
+                        walletIndex = attempt.walletIndex,
+                    )
+                }.getOrElse {
+                    // These coins cannot fund the release at this fee; try the next, larger set.
+                    lastError = it
+                    null
+                } ?: break
+                // Every spendable original coin must go, so no candidate can still confirm.
+                check(prepared.receipt.inputs.containsAll(originalCoins))
+                if (releaseOutbids(prepared.receipt, attempt)) return prepared
+                feeRate *= 2uL
+            }
+        }
+        throw lastError
+    }
+
+    internal suspend fun <T> callOnchainSend(block: suspend () -> T): T =
+        ServiceQueue.LDK.background(ldkQueue) { runSuspendCatching { block() } }.getOrThrow()
+
+    suspend fun send(bolt11: String, sats: ULong? = null, paymentDeadlineAt: Instant? = null): PaymentId {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.debug("Paying bolt11: $bolt11", context = TAG)
@@ -990,6 +1123,7 @@ class LightningService internal constructor(
             .getOrElse { throw LdkError(it as NodeException) }
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            ensurePaymentDeadline(paymentDeadlineAt)
             runCatching {
                 when (sats != null) {
                     true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats * 1000u, null)
@@ -999,6 +1133,12 @@ class LightningService internal constructor(
         }.onFailure {
             loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
         }.getOrThrow()
+    }
+
+    private fun ensurePaymentDeadline(paymentDeadlineAt: Instant?) {
+        if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) {
+            throw ServiceError.PaymentDeadlineExpired()
+        }
     }
 
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {
@@ -1414,3 +1554,25 @@ class TrustedPeerForceCloseException : AppError(
 )
 
 class NetworkGraphCacheDeleteError : AppError("Failed to delete network graph cache")
+
+/** Exact signed transaction inputs/prevouts, never an estimate or a backend-absence inference. */
+internal fun exactOriginalSendFee(
+    details: TransactionDetails,
+    originalInputs: List<OnchainSendInput>,
+    previous: (String) -> TransactionDetails?,
+): ULong? {
+    val inputs = details.inputs.map { OnchainSendInput(it.txid, it.vout) }
+    check(inputs.isNotEmpty() && inputs.distinct().size == inputs.size && inputs.toSet() == originalInputs.toSet())
+    fun checkedSum(values: List<Long>): ULong = values.fold(0uL) { sum, value ->
+        check(value >= 0 && ULong.MAX_VALUE - sum >= value.toULong())
+        sum + value.toULong()
+    }
+    val inputValues = inputs.map { input ->
+        val parent = previous(input.txid) ?: return null
+        parent.outputs.single { it.n == input.vout }.value
+    }
+    val inputTotal = checkedSum(inputValues)
+    val outputTotal = checkedSum(details.outputs.map { it.value })
+    check(inputTotal >= outputTotal)
+    return inputTotal - outputTotal
+}

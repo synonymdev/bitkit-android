@@ -1,5 +1,9 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,62 +12,100 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
+import com.synonym.bitkitcore.UsdtDestination
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
 import to.bitkit.models.safe
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.HwWalletConnectionIcon
+import to.bitkit.ui.components.MoneyMSB
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadTextField
+import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
+import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.WalletBalanceContent
+import to.bitkit.ui.components.usdtOverviewAmount
+import to.bitkit.ui.screens.wallets.usdt.UsdtNetworkButton
+import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.NumberPadInputHandler
+import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputUiState
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.LnurlParams
 import to.bitkit.viewmodels.SendEvent
+import to.bitkit.viewmodels.SendFundingOption
+import to.bitkit.viewmodels.SendFundingSource
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.previewAmountInputViewModel
+
+/** Opacity of unavailable payment sources in the balance selector. */
+private const val DISABLED_FUNDING_SOURCE_ALPHA = 0.30f
 
 @Suppress("ViewModelForwarding")
 @Composable
@@ -98,14 +140,19 @@ fun SendAmountScreen(
     }
     val currentMaxExceededMessage by rememberUpdatedState(maxExceededMessage)
 
-    LaunchedEffect(Unit) {
-        if (uiState.amount > 0u) {
+    val pendingRequests = app?.pendingPaymentRequests?.collectAsStateWithLifecycle()?.value
+    LaunchedEffect(pendingRequests, uiState.paykitUsesUsdt) {
+        app?.refreshPaykitRequestAmount()
+    }
+
+    LaunchedEffect(uiState.paykitUsesUsdt, uiState.payMethod, uiState.amount.takeIf { uiState.isPaymentRequest }) {
+        if (!uiState.paykitUsesUsdt && uiState.amount > 0u) {
             amountInputViewModel.setSats(uiState.amount.toLong(), currencies)
         }
     }
 
     LaunchedEffect(amountInputUiState.sats) {
-        currentOnEvent(SendEvent.AmountChange(amountInputUiState.sats.toULong()))
+        if (!uiState.paykitUsesUsdt) currentOnEvent(SendEvent.AmountChange(amountInputUiState.sats.toULong()))
     }
 
     LaunchedEffect(Unit) {
@@ -150,7 +197,7 @@ fun SendAmountScreen(
             }
             amountInputViewModel.setSats(maxSats, currencies)
         },
-        onClickPayMethod = { onEvent(SendEvent.PaymentMethodSwitch) },
+        onClickPayMethod = { onEvent(SendEvent.PaymentMethodSelect(it)) },
         onContinue = { onEvent(SendEvent.AmountContinue) },
     )
 }
@@ -166,20 +213,20 @@ fun SendAmountContent(
     currencies: CurrencyState = LocalCurrencies.current,
     onBack: (() -> Unit)? = {},
     onClickMax: (Long) -> Unit = {},
-    onClickPayMethod: () -> Unit = {},
+    onClickPayMethod: (SendFundingSource) -> Unit = {},
     onContinue: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .gradientBackground()
+            .then(if (uiState.paykitUsesUsdt) Modifier.background(Colors.Gray7) else Modifier.gradientBackground())
             .navigationBarsPadding()
             .testTag("send_amount_screen")
     ) {
         val titleRes = when (uiState.lnurl) {
             is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_title
             is LnurlParams.LnurlPay -> R.string.wallet__lnurl_p_title
-            else -> R.string.wallet__send_amount
+            else -> if (uiState.paykitUsesUsdt) R.string.usdt__amount else R.string.wallet__send_amount
         }
 
         SendContactTopBar(
@@ -188,8 +235,8 @@ fun SendAmountContent(
             onBack = onBack,
         )
 
-        when (nodeLifecycleState) {
-            is NodeLifecycleState.Running -> {
+        when {
+            nodeLifecycleState is NodeLifecycleState.Running || uiState.paykitUsesUsdt -> {
                 SendAmountNodeRunning(
                     amountInputViewModel = amountInputViewModel,
                     uiState = uiState,
@@ -220,10 +267,13 @@ private fun SendAmountNodeRunning(
     uiState: SendUiState,
     balances: BalanceState,
     currencies: CurrencyState,
-    onClickPayMethod: () -> Unit,
+    onClickPayMethod: (SendFundingSource) -> Unit,
     onClickMax: (Long) -> Unit,
     onContinue: () -> Unit,
 ) {
+    val app = appViewModel
+    val usdtWallet = app?.usdtWallet?.collectAsStateWithLifecycle()?.value
+    val hideBalance = settingsViewModel?.hideBalance?.collectAsStateWithLifecycle()?.value == true
     BoxWithConstraints {
         val maxHeight = this.maxHeight
         val isLnurlWithdraw = uiState.lnurl is LnurlParams.LnurlWithdraw
@@ -253,17 +303,31 @@ private fun SendAmountNodeRunning(
         ) {
             VerticalSpacer(16.dp)
 
-            NumberPadTextField(
-                viewModel = amountInputViewModel,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("SendNumberField")
-            )
+            if (uiState.paykitUsesUsdt) {
+                UsdtAmountHeader(
+                    amount = uiState.paykitAmount.ifEmpty { "0" },
+                    modifier = Modifier.testTag("SendNumberField")
+                )
+            } else {
+                NumberPadTextField(
+                    viewModel = amountInputViewModel,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("SendNumberField")
+                )
+            }
 
-            FillHeight(min = 12.dp)
+            if (uiState.paykitUsesUsdt) VerticalSpacer(32.dp) else FillHeight(min = 12.dp)
+            if (uiState.paykitRateUnavailable) {
+                BodyS(
+                    stringResource(R.string.wallet__payment_request_rate_unavailable),
+                    color = Colors.White64
+                )
+            }
 
             val textAvailable = when {
                 uiState.lnurl is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_max
+                uiState.paykitUsesUsdt -> R.string.wallet__send_available
                 uiState.hardwareWalletId != null -> R.string.wallet__send_available
                 uiState.isUnified -> R.string.wallet__send_available
                 uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available
@@ -276,25 +340,52 @@ private fun SendAmountNodeRunning(
             ) {
                 Column(
                     modifier = Modifier
-                        .clickableAlpha { onClickMax(availableAmount) }
+                        .clickableAlpha(
+                            enabled = uiState.isAmountEditable && !uiState.paykitUsesUsdt
+                        ) { onClickMax(availableAmount) }
                         .testTag("AvailableAmount")
                 ) {
-                    Text13Up(
-                        text = stringResource(textAvailable),
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("available_balance")
-                    )
+                    if (uiState.paykitUsesUsdt) {
+                        Caption13Up(
+                            text = stringResource(textAvailable),
+                            color = Colors.White64,
+                            style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                            modifier = Modifier.testTag("available_balance")
+                        )
+                    } else {
+                        Text13Up(
+                            text = stringResource(textAvailable),
+                            color = Colors.White64,
+                            modifier = Modifier.testTag("available_balance")
+                        )
+                    }
                     VerticalSpacer(4.dp)
-                    MoneySSB(sats = availableAmount, showSymbol = true)
+                    if (uiState.paykitUsesUsdt) {
+                        val balance = if (hideBalance) {
+                            UiConstants.HIDE_BALANCE_SHORT
+                        } else {
+                            usdtWallet?.balance?.let { "<accent>$</accent> " + usdtOverviewAmount(it) } ?: "—"
+                        }
+                        BodySSB(
+                            balance.withAccent(accentColor = Colors.White64),
+                            style = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
+                        )
+                    } else {
+                        MoneySSB(sats = availableAmount, showSymbol = true)
+                    }
                 }
 
                 FillWidth()
 
                 val isLnurl = uiState.lnurl != null
-                if (!isLnurl) {
+                if (!isLnurl || uiState.usdtRecipient != null) {
                     PaymentMethodButton(uiState = uiState, onClick = onClickPayMethod)
                 }
-                if (uiState.lnurl is LnurlParams.LnurlPay) {
+                if (uiState.paykitUsesUsdt) {
+                    HorizontalSpacer(8.dp)
+                    UsdtNetworkButton(UsdtDestination.ARBITRUM, null, persistentListOf(UsdtDestination.ARBITRUM))
+                }
+                if (!uiState.isPaymentRequest && !uiState.paykitUsesUsdt && uiState.lnurl is LnurlParams.LnurlPay) {
                     val max = minOf(
                         uiState.lnurl.data.maxSendableSat().toLong(),
                         availableAmount,
@@ -307,30 +398,59 @@ private fun SendAmountNodeRunning(
                             .testTag("SendAmountMax")
                     )
                 }
-                HorizontalSpacer(8.dp)
-                UnitButton(
-                    onClick = { amountInputViewModel.switchUnit(currencies) },
+                if (!uiState.paykitUsesUsdt) {
+                    HorizontalSpacer(8.dp)
+                    UnitButton(
+                        onClick = { amountInputViewModel.switchUnit(currencies) },
+                        modifier = Modifier
+                            .height(28.dp)
+                            .testTag("SendNumberPadUnit")
+                    )
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(top = if (uiState.paykitUsesUsdt) 16.dp else 12.dp))
+
+            if (uiState.paykitUsesUsdt) {
+                BoxWithConstraints(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                ) {
+                    NumberPad(
+                        type = NumberPadType.DECIMAL,
+                        availableHeight = this.maxHeight,
+                        enabled = uiState.isAmountEditable,
+                        onPress = {
+                            app?.onUsdtAmountChange(
+                                NumberPadInputHandler.handleInput(
+                                    it,
+                                    uiState.paykitAmount,
+                                    maxLength = 21,
+                                    maxDecimals = 6
+                                )
+                            )
+                        },
+                        onDeleteLongPress = { app?.onUsdtAmountChange("") }
+                    )
+                }
+            } else {
+                NumberPad(
+                    enabled = uiState.isAmountEditable,
+                    viewModel = amountInputViewModel,
+                    currencies = currencies,
+                    availableHeight = maxHeight,
                     modifier = Modifier
-                        .height(28.dp)
-                        .testTag("SendNumberPadUnit")
+                        .testTag("SendAmountNumberPad")
                 )
             }
 
-            HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
-
-            NumberPad(
-                viewModel = amountInputViewModel,
-                currencies = currencies,
-                availableHeight = maxHeight,
-                modifier = Modifier
-                    .testTag("SendAmountNumberPad")
-            )
-
+            if (uiState.paykitUsesUsdt) VerticalSpacer(16.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,
                 isLoading = uiState.isLoading,
                 onClick = onContinue,
+                textStyle = if (uiState.paykitUsesUsdt) AppTextStyles.BodySSB.copy(letterSpacing = 0.sp) else null,
                 modifier = Modifier.testTag("ContinueAmount")
             )
 
@@ -342,35 +462,167 @@ private fun SendAmountNodeRunning(
 @Composable
 private fun PaymentMethodButton(
     uiState: SendUiState,
-    onClick: () -> Unit,
+    onClick: (SendFundingSource) -> Unit,
 ) {
+    var expanded by remember { mutableStateOf(false) }
     val isHardware = uiState.hardwareWalletId != null
     val testId = when {
         uiState.canSwitchFundingSource -> "switch"
+        uiState.paykitUsesUsdt -> "usdt"
         isHardware -> "trezor"
         uiState.payMethod == SendMethod.ONCHAIN -> "savings"
         else -> "spending"
     }
-    NumberPadActionButton(
-        text = when {
-            isHardware -> uiState.hardwareWalletName ?: stringResource(R.string.hardware__device_model_trezor)
-            uiState.payMethod == SendMethod.ONCHAIN -> stringResource(R.string.wallet__savings__title)
-            else -> stringResource(R.string.wallet__spending__title)
-        },
-        color = when {
-            isHardware -> Colors.Blue
-            uiState.payMethod == SendMethod.ONCHAIN -> Colors.Brand
-            else -> Colors.Purple
-        },
-        icon = if (uiState.canSwitchFundingSource) R.drawable.ic_transfer else null,
-        onClick = onClick,
-        enabled = uiState.canSwitchFundingSource,
-        isLoading = uiState.isFundingSourceLoading,
-        clickable = !uiState.isLoading,
-        modifier = Modifier
-            .height(28.dp)
-            .testTag("AssetButton-$testId")
+    Box {
+        NumberPadActionButton(
+            text = when {
+                uiState.paykitUsesUsdt -> "USDT"
+                isHardware -> uiState.hardwareWalletName ?: stringResource(R.string.hardware__device_model_trezor)
+                uiState.payMethod == SendMethod.ONCHAIN -> stringResource(R.string.wallet__savings__title)
+                else -> stringResource(R.string.wallet__spending__title)
+            },
+            color = paymentMethodColor(uiState),
+            textStyle = if (uiState.paykitUsesUsdt) {
+                AppTextStyles.CaptionM.copy(letterSpacing = 1.sp)
+            } else {
+                AppTextStyles.CaptionM
+            },
+            icon = if (uiState.canSwitchFundingSource) R.drawable.ic_transfer else null,
+            onClick = { expanded = true },
+            enabled = uiState.fundingOptions.isNotEmpty(),
+            isLoading = uiState.isFundingSourceLoading,
+            clickable = !uiState.isLoading,
+            modifier = Modifier
+                .height(28.dp)
+                .testTag("AssetButton-$testId")
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = Colors.Gray6,
+            modifier = Modifier.width(250.dp)
+                .semantics { testTagsAsResourceId = true }
+                .testTag("SendFundingSources")
+        ) {
+            VerticalSpacer(4.dp)
+            uiState.fundingOptions.forEachIndexed { index, option ->
+                FundingSourceOption(option, uiState, onClick = {
+                    expanded = false
+                    onClick(option.source)
+                })
+                if (index < uiState.fundingOptions.lastIndex) {
+                    HorizontalDivider(Modifier.padding(horizontal = 24.dp), color = Colors.White10)
+                }
+            }
+            VerticalSpacer(4.dp)
+        }
+    }
+}
+
+@Composable
+private fun FundingSourceOption(option: SendFundingOption, state: SendUiState, onClick: () -> Unit) {
+    val source = option.source
+    val title = when (source) {
+        SendFundingSource.Savings -> stringResource(R.string.wallet__savings__title)
+        SendFundingSource.Spending -> stringResource(R.string.wallet__spending__title)
+        SendFundingSource.Usdt -> "USDT"
+        is SendFundingSource.Hardware -> option.name ?: stringResource(R.string.hardware__device_model_trezor)
+    }
+    val color = when (source) {
+        SendFundingSource.Savings -> Colors.Brand
+        SendFundingSource.Spending -> Colors.Purple
+        SendFundingSource.Usdt -> Colors.Usdt
+        is SendFundingSource.Hardware -> Colors.Blue
+    }
+    Row(
+        Modifier.fillMaxWidth().alpha(if (option.enabled) 1f else DISABLED_FUNDING_SOURCE_ALPHA)
+            .clickable(enabled = option.enabled && !state.isFundingSourceLoading, onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+    ) {
+        WalletBalanceContent(
+            title = title,
+            icon = { FundingSourceIcon(source) },
+            titleStyle = AppTextStyles.CaptionM.copy(
+                letterSpacing = 1.sp,
+                lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+            ),
+            titleTrailing = {
+                option.transportType?.let { transport ->
+                    HorizontalSpacer(8.dp)
+                    HwWalletConnectionIcon(transport, option.isConnected, modifier = Modifier.size(16.dp))
+                }
+            },
+        ) {
+            FundingSourceBalance(option)
+            FillWidth()
+            if (state.isSelected(source)) {
+                Icon(
+                    painterResource(R.drawable.ic_check),
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FundingSourceIcon(source: SendFundingSource) {
+    Image(
+        painterResource(
+            when (source) {
+                SendFundingSource.Savings -> R.drawable.ic_btc_circle
+                SendFundingSource.Spending -> R.drawable.ic_ln_circle
+                SendFundingSource.Usdt -> R.drawable.tether_circle
+                is SendFundingSource.Hardware -> R.drawable.ic_btc_circle_blue
+            }
+        ),
+        contentDescription = null,
+        modifier = Modifier.padding(end = 4.dp).size(24.dp)
     )
+}
+
+@Composable
+private fun FundingSourceBalance(option: SendFundingOption) {
+    val balances = LocalBalances.current
+    val usdt = appViewModel?.usdtWallet?.collectAsStateWithLifecycle()?.value
+    val hidden = settingsViewModel?.hideBalance?.collectAsStateWithLifecycle()?.value == true
+    val source = option.source
+    if (source == SendFundingSource.Usdt) {
+        BodyMSB(
+            if (hidden) UiConstants.HIDE_BALANCE_SHORT else usdt?.balance?.let { usdtOverviewAmount(it) } ?: "—",
+            letterSpacing = 0.sp,
+        )
+    } else {
+        MoneyMSB(
+            sats = when (source) {
+                SendFundingSource.Savings -> balances.maxSendOnchainSats.toLong()
+                SendFundingSource.Spending -> balances.maxSendLightningSats.toLong()
+                else -> option.balance.toLong()
+            },
+            unit = PrimaryDisplay.BITCOIN,
+            showSymbol = false,
+            letterSpacing = 0.sp,
+        )
+    }
+}
+
+private fun SendUiState.isSelected(source: SendFundingSource): Boolean = when (source) {
+    SendFundingSource.Usdt -> paykitUsesUsdt
+    SendFundingSource.Spending ->
+        !paykitUsesUsdt && hardwareWalletId == null && payMethod == SendMethod.LIGHTNING
+    SendFundingSource.Savings ->
+        !paykitUsesUsdt && hardwareWalletId == null && payMethod == SendMethod.ONCHAIN
+    is SendFundingSource.Hardware -> hardwareWalletId == source.walletId
+}
+
+private fun paymentMethodColor(uiState: SendUiState): Color = when {
+    uiState.paykitUsesUsdt -> Colors.Usdt
+    uiState.hardwareWalletId != null -> Colors.Blue
+    uiState.payMethod == SendMethod.ONCHAIN -> Colors.Brand
+    else -> Colors.Purple
 }
 
 @Preview(showSystemUi = true)

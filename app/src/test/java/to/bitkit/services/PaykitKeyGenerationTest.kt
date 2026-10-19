@@ -1,10 +1,12 @@
 package to.bitkit.services
 
 import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.ObservedBackupStateRevision
 import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
 import com.synonym.paykit.PaykitSdk
+import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkySessionAccess
@@ -30,6 +32,21 @@ class PaykitKeyGenerationTest {
     companion object {
         /** Fixture identity for generation-scoped storage keys. */
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    }
+
+    private suspend fun assertObservationGeneration(sdk: PaykitSdk, service: PaykitSdkService, generation: ULong) {
+        val observation = PaykitStateObservation(
+            publicKey = RING_PUBKY,
+            keyGeneration = generation,
+            observedAt = "2026-10-11T00:00:00Z",
+            contacts = emptyList(),
+            linkedPeers = emptyList(),
+            paymentRequests = emptyList(),
+            receipts = emptyList(),
+        )
+        whenever { sdk.observeState() }.thenReturn(observation.copy(keyGeneration = 1uL), observation)
+        assertFailsWith<IllegalStateException> { service.observeState(RING_PUBKY) }
+        assertEquals(observation, service.observeState(RING_PUBKY))
     }
 
     @Test
@@ -97,8 +114,10 @@ class PaykitKeyGenerationTest {
                 val provider = providers.constructed().single()
                 repeat(2) { assertEquals(RING_PUBKY, service.currentPublicKey()) }
                 verify(sdk).paykitAppRegistry(RING_PUBKY)
+                assertObservationGeneration(sdk, service, 2uL)
                 assertSame(staleKey, assertFailsWith<PaykitException.Identity> { service.currentPublicKey() })
                 assertEquals(RING_PUBKY, service.currentPublicKey())
+                assertObservationGeneration(sdk, service, 3uL)
                 assertSame(staleKey, assertFailsWith<PaykitException.Identity> { service.currentPublicKey() })
                 repeat(2) {
                     val error = assertFailsWith<IllegalStateException> { service.currentPublicKey() }
@@ -116,6 +135,54 @@ class PaykitKeyGenerationTest {
                 verify(keychain).upsertString(any(), any())
                 verify(sdk, times(5)).identityStatus()
                 verify(provider, times(2)).setPaykitIdentitySecretKey(any())
+            }
+        }
+    }
+
+    @Test
+    fun `key changes discard backup snapshots before reusing historical observations`() = runTest {
+        for (reset in listOf("generation", "identity", "missing root")) {
+            var publicKey = RING_PUBKY
+            var generation = 1uL
+            val registry = mock<PaykitAppRegistry>()
+            whenever(registry.keyGeneration).thenReturn(generation)
+            val sdk = mock<PaykitSdk>()
+            whenever(sdk.paykitAppRegistry(any())).thenReturn(registry)
+            whenever(sdk.stateRevision()).thenReturn("state")
+            whenever(sdk.observedBackupStateRevision()).thenReturn(ObservedBackupStateRevision("state", "backup"))
+            whenever(sdk.backupStateRevision()).thenReturn("backup")
+            whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
+            val keychain = mock<Keychain>()
+            whenever(keychain.loadString(any())).thenAnswer { generation.toString() }
+            val root = mock<PubkyLocalSecretKey>()
+            val key = mock<PaykitIdentitySecretKey>()
+            whenever(key.keyGeneration()).thenReturn(generation)
+            whenever(root.derivePaykitIdentitySecretKey(any())).thenReturn(key)
+
+            mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
+                native.`when`<String> { pubkyPublicKeyFromSecret(root) }.thenAnswer { publicKey }
+                mockConstruction(PaykitSdkSessionProvider::class.java) { provider, _ ->
+                    whenever(provider.loadLocalSecretKey()).thenReturn(root)
+                }.use { providers ->
+                    val service = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { sdk }
+                    repeat(2) { service.processPendingPrivateMessages() }
+                    verify(sdk).backupStateRevision()
+
+                    when (reset) {
+                        "generation" -> {
+                            generation = 2uL
+                            whenever(registry.keyGeneration).thenReturn(generation)
+                            whenever(key.keyGeneration()).thenReturn(generation)
+                        }
+                        "identity" -> publicKey = "other-identity"
+                        else -> whenever(providers.constructed().single().loadLocalSecretKey()).thenReturn(null)
+                    }
+                    repeat(2) { service.processPendingPrivateMessages() }
+
+                    verify(sdk, times(2)).backupStateRevision()
+                    verify(sdk, times(if (reset == "missing root") 1 else 2)).paykitAppRegistry(any())
+                    assertEquals(0L, service.backupStateVersion.value)
+                }
             }
         }
     }

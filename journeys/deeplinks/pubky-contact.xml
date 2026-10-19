@@ -6,6 +6,8 @@
     <action>Navigate back to the wallet</action>
     <action>Open bitkit://contact?pubky=&lt;saved-contact-public-key&gt;</action>
     <action>Verify Contact Detail opens for that contact, not Add Contact or a payment sheet</action>
+    <action>Navigate back to the wallet, background the app without terminating it, then open bitkit://contact?pubky=&lt;saved-contact-public-key&gt;</action>
+    <action>Unlock if requested and verify Contact Detail opens for the saved contact exactly once without a payment sheet</action>
     <action>Navigate back to the wallet</action>
     <action>Open bitkit://contact?pubky=&lt;own-public-key&gt;</action>
     <action>Verify Profile opens without adding yourself as a contact</action>

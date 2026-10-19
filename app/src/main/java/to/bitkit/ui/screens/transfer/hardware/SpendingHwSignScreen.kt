@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -21,6 +22,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.safe
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
@@ -30,6 +32,7 @@ import to.bitkit.ui.components.HardwareTransferIllustration
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SIGN_VISUAL_TOP_RATIO
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.illustrationRes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -50,13 +53,17 @@ fun SpendingHwSignScreen(
     onAdvancedClick: () -> Unit,
 ) {
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
+    val hardwareWallets by viewModel.hardwareWallets.collectAsStateWithLifecycle()
+    val vendor = remember(hardwareWallets, walletId) {
+        hardwareWallets.firstOrNull { it.id == walletId }?.vendor ?: HwWalletVendor.TREZOR
+    }
 
     if (state.feeSat == 0uL) {
         onCloseClick()
         return
     }
 
-    BackHandler(enabled = state.isBusy) {}
+    BackHandler(enabled = !state.canLeave) {}
 
     LaunchedEffect(walletId, state.feeSat) {
         viewModel.warmUpHardwareConnection(walletId)
@@ -72,8 +79,10 @@ fun SpendingHwSignScreen(
         miningFeeSats = state.hwMiningFeeSats,
         isAdvanced = state.isAdvanced,
         isSigning = state.isBusy,
+        canLeave = state.canLeave,
         hasPendingBroadcast = state.hasPendingHwBroadcast,
-        onBackClick = { if (!state.isBusy) onBackClick() },
+        vendor = vendor,
+        onBackClick = { if (state.canLeave) onBackClick() },
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
         onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
@@ -95,7 +104,9 @@ private fun Content(
     miningFeeSats: ULong = 0uL,
     isAdvanced: Boolean = false,
     isSigning: Boolean = false,
+    canLeave: Boolean = true,
     hasPendingBroadcast: Boolean = false,
+    vendor: HwWalletVendor = HwWalletVendor.TREZOR,
     onBackClick: () -> Unit = {},
     onLearnMoreClick: () -> Unit = {},
     onAdvancedClick: () -> Unit = {},
@@ -106,11 +117,11 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.lightning__transfer__nav_title),
             onBackClick = onBackClick,
-            actions = { if (!isSigning) DrawerNavIcon() },
+            actions = { if (canLeave) DrawerNavIcon() },
         )
         Box(modifier = Modifier.fillMaxSize()) {
             HardwareTransferIllustration(
-                drawableRes = R.drawable.trezor,
+                drawableRes = vendor.illustrationRes(),
                 topRatio = SIGN_VISUAL_TOP_RATIO,
             )
 
@@ -266,6 +277,7 @@ private fun PreviewSigning() {
         Content(
             state = previewSpendingState(),
             isSigning = true,
+            canLeave = false,
         )
     }
 }

@@ -32,6 +32,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -168,8 +170,7 @@ private fun Content(
                 VerticalSpacer(24.dp)
 
                 when {
-                    uiState.isLoading || uiState.adoptingPubky != null ->
-                        LoadingState(text = stringResource(R.string.profile__choice_loading_profile))
+                    uiState.isLoading -> LoadingState(text = stringResource(R.string.profile__choice_loading_profile))
 
                     uiState.identities.isEmpty() -> OptionCard(
                         iconResId = R.drawable.ic_user_plus,
@@ -181,20 +182,31 @@ private fun Content(
 
                     else -> uiState.identities.forEachIndexed { index, identity ->
                         if (index > 0) VerticalSpacer(8.dp)
+                        val isAdopting = identity.pubky == uiState.adoptingPubky
                         OptionCard(
                             iconResId = R.drawable.ic_lock_key,
                             text = identity.name,
                             onClick = { onIdentityClick(identity.pubky) },
+                            enabled = uiState.adoptingPubky == null,
+                            isLoading = isAdopting,
                             caption = identity.caption,
                             trailing = {
-                                PubkyContactAvatar(
-                                    profile = PubkyProfile.forDisplay(
-                                        publicKey = identity.pubky,
-                                        name = identity.name,
-                                        imageUrl = identity.imageUrl,
-                                    ),
-                                    size = 32.dp,
-                                )
+                                if (identity.isLookingUp && !isAdopting) {
+                                    LoadingIndicator(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .testTag("PubkyChoiceIdentityLookup")
+                                    )
+                                } else {
+                                    PubkyContactAvatar(
+                                        profile = PubkyProfile.forDisplay(
+                                            publicKey = identity.pubky,
+                                            name = identity.name,
+                                            imageUrl = identity.imageUrl,
+                                        ),
+                                        size = 32.dp,
+                                    )
+                                }
                             },
                             modifier = Modifier.testTag("PubkyChoiceIdentity")
                         )
@@ -211,6 +223,8 @@ private fun OptionCard(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    isLoading: Boolean = false,
     caption: String? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
@@ -220,7 +234,7 @@ private fun OptionCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(Colors.Gray6)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(16.dp)
     ) {
         Box(
@@ -229,12 +243,16 @@ private fun OptionCard(
                 .size(40.dp)
                 .background(Colors.Black, CircleShape)
         ) {
-            Icon(
-                painter = painterResource(iconResId),
-                contentDescription = null,
-                tint = Colors.PubkyGreen,
-                modifier = Modifier.size(20.dp)
-            )
+            if (isLoading) {
+                LoadingIndicator()
+            } else {
+                Icon(
+                    painter = painterResource(iconResId),
+                    contentDescription = null,
+                    tint = Colors.PubkyGreen,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
         HorizontalSpacer(16.dp)
         Column(modifier = Modifier.weight(1f)) {
@@ -244,6 +262,17 @@ private fun OptionCard(
         if (trailing != null) {
             trailing()
         }
+    }
+}
+
+@Composable
+private fun LoadingIndicator(modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.profile__choice_loading_profile)
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier.semantics { contentDescription = description }
+    ) {
+        GradientCircularProgressIndicator(modifier = Modifier.size(20.dp))
     }
 }
 
@@ -262,18 +291,62 @@ private fun LoadingState(text: String) {
 @Preview(showBackground = true)
 @Composable
 private fun PreviewIdentities() {
+    val pubky = "a967rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roimbr4"
     AppThemeSurface {
         Content(
             uiState = PubkyChoiceUiState(
                 isLoading = false,
                 identities = persistentListOf(
                     RingIdentity(
-                        pubky = "a967rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roimbr4",
-                        caption = "A967...MBR4",
-                        name = "Satoshi Nakamoto",
-                        imageUrl = null,
+                        pubky = pubky,
+                        profile = PubkyProfile.forDisplay(pubky, name = "Satoshi Nakamoto", imageUrl = null),
                     ),
+                    RingIdentity(pubky = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"),
                 ),
+            ),
+            onBackClick = {},
+            onCreateProfile = {},
+            onIdentityClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewLookingUp() {
+    val pubky = "a967rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roimbr4"
+    AppThemeSurface {
+        Content(
+            uiState = PubkyChoiceUiState(
+                isLoading = false,
+                identities = persistentListOf(
+                    RingIdentity(
+                        pubky = pubky,
+                        profile = PubkyProfile.forDisplay(pubky, name = "Satoshi Nakamoto", imageUrl = null),
+                    ),
+                    RingIdentity(pubky = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy", isLookingUp = true),
+                ),
+            ),
+            onBackClick = {},
+            onCreateProfile = {},
+            onIdentityClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewAdopting() {
+    val pubky = "a967rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roimbr4"
+    AppThemeSurface {
+        Content(
+            uiState = PubkyChoiceUiState(
+                isLoading = false,
+                identities = persistentListOf(
+                    RingIdentity(pubky = pubky, isLookingUp = true),
+                    RingIdentity(pubky = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy", isLookingUp = true),
+                ),
+                adoptingPubky = pubky,
             ),
             onBackClick = {},
             onCreateProfile = {},

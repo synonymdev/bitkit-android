@@ -4,9 +4,28 @@ Cover incoming Paykit Payment Requests from a linked issuer. The issuer contract
 [`docs/paykit-issuer-interoperability.md`](../../docs/paykit-issuer-interoperability.md) and
 [`app/src/test/resources/paykit-issuer-interoperability.json`](../../app/src/test/resources/paykit-issuer-interoperability.json).
 
+`fixed-price-bitcoin.xml` verifies a USD-denominated request settled in BTC and an explicit
+same-asset rail price. After preparation, the Amount screen shows the fixed, uneditable payment
+amount with Savings selected. Continue opens confirmation with the same amount. The amount uses
+the issuer's fixed rate; the displayed fiat estimate uses Bitkit's own market rate. The flow stops
+before broadcasting. Differing rail prices,
+fractional-satoshi Lightning payments, and dynamic quotes remain unsupported.
+
 ## Setup
 
 Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save and link the fixture issuer as a contact, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer. Its App ID is `paykit-server`; Bitkit uses `bitkit`.
+
+`fixed-price-bitcoin.xml` additionally requires an issuer built with Paykit rc71 or newer
+that can send `conversion.fixed` terms. The basic BTC request fixture and Bitkit's Request UI
+cannot create these quotes. Use the standalone `tools/paykit-fixture-sender` documented in
+[bitkit-e2e-tests #269](https://github.com/synonymdev/bitkit-e2e-tests/pull/269), or an equivalent
+conversion-capable issuer, and follow its setup and linking instructions.
+
+`unpayable-endpoint.xml` requires an issuer that can bind a new request to a one-time address
+already recorded as paid by this payer, then send another request with a fresh unused address.
+Prepare that paid-address fixture separately; the journey itself sends no additional payment.
+If the required issuer or paid-address state is unavailable, report the corresponding journey
+as blocked, not as an app failure or a pass.
 
 The accepted journey uses:
 
@@ -18,11 +37,50 @@ The accepted journey uses:
 
 Rejected fixture shapes stay in unit tests because Bitkit intentionally does not present requests that fail the contract gate.
 
+`success-dismissal.xml` matches iOS's journey: after paying a Lightning request, closing success
+must leave no error toast or duplicate payment; closing a later unpaid request must not send it.
+Use two linked disposable regtest wallets and observe or record dismissal to catch short-lived toasts.
+
 `request-summary.xml` uses a second Bitkit instance as the requester instead of the fixture issuer: both instances are authenticated Pubky identities, saved as each other's contacts and linked, and the payer holds enough balance to pay 21,000 sats.
+Its Android-only Sent receipt checks leave the 5,000 sats request open through payment and the
+existing foreground synchronization. A protocol proof changes the note-free subtitle to
+"Proof submitted"; a nonblank note still takes precedence. This is not inferred from a chain
+payment. iOS keeps a static note/date receipt with no lifecycle subtitle, so these receipt-status
+steps do not apply there.
 
 `contact-request-or-pay.xml` uses the same two-instance setup and starts from the payer's Contact Detail screen, opened through the `bitkit://contact` deeplink. Its timing step assumes the payer has been running for about a minute: right after launch, the Paykit session restore and link refresh hold the SDK and can push the Pay step well past the budget.
 
 `definite-pre-broadcast-retry.xml` uses the linked fixture issuer and the local regtest LNURL server. Configure its LNURL-pay metadata endpoint normally, but make its invoice callback fail the first request and succeed after it is switched back to the healthy response. Do not republish the Paykit payment list between attempts. This makes the first send fail before Lightning dispatch and proves that the same private payment details can be opened and paid on retry.
+
+## Foreground synchronization
+
+Bitkit checks the private inbox and shared request state every 10 seconds while foregrounded and online.
+Outbound retries, endpoint publication, and target discovery also run on startup,
+explicit refreshes, and maintenance rounds after 30 seconds, then every 60 seconds.
+Maintenance uses elapsed time, including slow requests; polling remains serialized and does not
+start catch-up rounds. Incoming messages wait for the next poll plus synchronization time.
+
+## Durable proof handoff (manual)
+
+This check needs a disposable regtest fixture with independently controlled payment acceptance,
+local storage failures, and delayed Paykit proof submission. These fault controls are not journey
+capabilities. Report it as blocked when the fixture or payment authorization is unavailable.
+
+1. Hold remote proof submission after a successful payment and verify the accepted activity and
+   exact proof are durably stored. Local completion must finish without waiting for the hold,
+   without claiming the merchant has unlocked anything. No additional payment may be dispatched.
+2. Restart before releasing the hold. Release it and verify the same proof is delivered once the
+   original identity is active, without another payment or duplicate activity.
+3. Repeat with an unknown payment outcome. It must remain unresolved, retaining the original
+   payment guard and not claiming success or allowing a fresh payment.
+4. Fail local proof storage and hold delivery. Local completion must wait for successful delivery
+   or durable retry storage; failing both must preserve the unresolved follow-up.
+5. Switch identities or sign out before delivery, then reset the wallet in a separate run. Proofs
+   must not be submitted under a different identity, and reset state must not be repopulated by a
+   delayed in-memory handoff. Use only disposable fixture data for reset.
+
+The automated repository tests exercise these boundaries without broadcasting funds. Controlled
+submission delays establish local completion isolation, not real-network linking performance.
 
 ## Accepting install
 
@@ -62,6 +120,7 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Contact Detail pay action: `ContactPay`
 - Request or Pay sheet: `RequestOrPaySheet` (its Pay and Request buttons carry no tag; find them by text)
 - Payment Request amount screen: `PaymentRequestAmount`
+- Below-minimum on-chain request toast: `PaymentRequestAmountTooLowToast`
 
 `android layout` can omit test tags applied to plain `Box` and `Column` containers. Use the raw UI Automator hierarchy when a documented container tag is not present in the formatted layout output.
 
@@ -69,11 +128,48 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 
 `delete-contact-with-active-subscription.xml` requires an accepted open-ended payer subscription. It verifies that deletion explains why the contact must stay saved until the subscription ends, then that canceling, deleting, and readding does not revive it. No new payment is sent. Both contact-deletion journeys are mirrored on iOS and Android.
 
+## Hardware broadcast recovery (manual)
+
+This requires a funded disposable regtest hardware wallet, a linked issuer with an absolute
+payment deadline, and fault injection that can drop a successful broadcast response and hold
+wallet reconciliation or its UI delivery. These controls are not journey capabilities; record
+this test as blocked, not passed, when they are unavailable. Do not change the device clock.
+
+For definite hardware failures, inject Core's `InvalidHex` or `InvalidTransaction` before
+the first network submission. Leave the signing screen and reopen the unpaid request; it must
+remain payable. Repeat after an earlier uncertain submission: the proof must stay pending and
+a fresh payment must remain blocked. Electrum and unclassified errors are not proof of rejection.
+
+1. Submit before the deadline, forward the signed transaction to the regtest node, and drop
+   only its response. Record the node's transaction ID and keep wallet reconciliation paused.
+2. Let the payment deadline pass and retry. Verify that no additional broadcast occurs, the
+   signed transaction and started proof remain retained, and an unknown outcome is not treated
+   as a definite failure that allows another payment.
+3. Release reconciliation for that transaction in the same hardware wallet. Verify that the
+   existing send screen reaches normal success, pending progress clears, and navigation is
+   available again. Check the wallet's activity and issuer proof against the recorded transaction;
+   no additional broadcast or duplicate activity may be created.
+4. Repeat with a new request, pausing UI delivery after the matching resolution is retained.
+   Recreate the Activity without killing the process before releasing delivery. Verify the same
+   completion and navigation result; consuming the global proof event must not lose completion.
+5. Deliver a resolution for a different identity, request or hardware wallet before the matching
+   one. Verify it cannot complete the pending send, then release the matching result and verify
+   normal completion. Capture redacted logs and UI evidence for each boundary.
+6. Repeat with a new request, failing the broadcast without forwarding the transaction to the
+   node. After the deadline passes, retry and verify there is no additional broadcast. Back and
+   sheet dismissal must work once the attempt stops; the started proof must remain for
+   reconciliation. Leaving must not turn the uncertain payment into a new payable attempt.
+
 ## Payment deadline history
 
-`payment-deadline-history.xml` covers requests with actual-payment deadlines.
+`absolute-payment-deadline.xml` covers one-time requests with absolute payment deadlines,
+including acceptance before proposal expiry, payment after proposal expiry, and a deadline
+crossed while payment preparation waits. The deadline is inclusive and separate from proposal
+expiry. A sent payment's proof can still be delivered after its payment deadline.
+
+`payment-deadline-history.xml` covers expired one-time requests and recurring payment deadlines.
 Bitkit keeps their lifecycle and paid-period history, and subscription cancellation,
-but does not accept them, offer payments, or schedule payment reminders. The journey
+but does not offer expired payments or support recurring payment deadlines. The journey
 requires a controlled shared-runtime peer to prepare the accepted and paid records; repository
 tests cover these states without sending funds. On Android, unpaid history rows show
 lifecycle labels, while paid rows show subscription names, notes, or dates. Active
@@ -84,3 +180,15 @@ subscription must have no end date so cancellation is available. The proposal re
 must explain that its payment details are unsupported and offer no Subscribe control.
 
 `automatic-presentation.xml` uses the same two-wallet setup and leaves the payer in the foreground. `confirmation-controls.xml` checks Android's fixed amount and confirmation footer on a compact screen with large text; it is not ported to iOS because the confirmation layout is different there.
+
+Incoming preparation uses the existing Send confirmation sheet with saved sender, amount and note.
+Its payment control stays disabled and loading until fresh resolution and wallet validation finish.
+An endpoint rejected as `endpoint_not_payable`, including an already-paid one-time address,
+ends preparation immediately with `PaymentRequestUnavailableToast`. The request stays pending
+for manual retry, but does not automatically reopen during the current identity's app session.
+`unpayable-endpoint.xml` checks this using an address already recorded as paid by the payer.
+`minimum-onchain-amount.xml` checks requests below the on-chain minimum, including
+the boundary at 546 sats, manual retry, and preparation of a new request for 547 sats.
+Closing during preparation leaves the request pending and suppresses automatic reopening for the
+current identity's app session; Pay from the request list or details explicitly retries it.
+An unfunded wallet can verify loading followed by native rejection, not an enabled payment control.

@@ -87,6 +87,7 @@ class AddContactViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.fetchContactProfile(TEST_PUBLIC_KEY)).thenReturn(Result.success(profile))
         whenever(publicPaykitRepo.hasPayablePublicEndpoint(TEST_PUBLIC_KEY)).thenReturn(Result.success(false))
         whenever { pubkyRepo.addContact(TEST_PUBLIC_KEY, profile) }.thenReturn(Result.success(Unit))
+        whenever { refreshContactPaykitLink(TEST_PUBLIC_KEY) }.thenReturn(Result.success(Unit))
         val sut = createSut()
         advanceUntilIdle()
 
@@ -95,6 +96,7 @@ class AddContactViewModelTest : BaseUnitTest() {
             advanceUntilIdle()
 
             assertEquals(AddContactEffect.ContactSaved(TEST_PUBLIC_KEY), awaitItem())
+            verify(refreshContactPaykitLink).invoke(TEST_PUBLIC_KEY)
         }
     }
 

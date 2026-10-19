@@ -18,6 +18,8 @@ import com.synonym.paykit.PaymentExecutionMode
 import com.synonym.paykit.PaymentExecutionStatus
 import com.synonym.paykit.PaymentOccurrenceKey
 import com.synonym.paykit.PaymentOccurrenceRecord
+import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
@@ -26,11 +28,15 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.SubscriptionClockOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -389,6 +395,28 @@ class PaykitAllowanceTest : BaseUnitTest() {
         assertTrue(PaykitAllowanceCapacity.fits(1uL, allowance, attempts, Instant.parse("2026-10-01T00:00:00Z")))
     }
 
+    @Test
+    fun `status and capacity ignore the subscription clock offset`() {
+        SubscriptionClockOffset.setOffsetDays(365)
+        assumeTrue(
+            "The subscription clock offset is unavailable in this build",
+            SubscriptionClockOffset.offsetDays == 365,
+        )
+        assertTrue(SubscriptionClockOffset.subscriptionNow() > Clock.System.now() + 364.days)
+
+        val allowance = fixtures.allowance(expiresAt = fixtures.now + 30.days)
+        val attempts = listOf(fixtures.capacityAttempt(sats = 50_000uL, at = "2026-09-10T10:00:00Z"))
+
+        assertEquals(PaykitAllowance.Status.ACTIVE, allowance.status(fixtures.now))
+        assertEquals(50_000uL, fixtures.usedSats(attempts))
+        assertFalse(PaykitAllowanceCapacity.fits(1uL, allowance, attempts, fixtures.now))
+    }
+
+    @After
+    fun resetSubscriptionClockOffset() {
+        SubscriptionClockOffset.setOffsetDays(0)
+    }
+
     // endregion
 
     // region Grouping and terms
@@ -678,14 +706,13 @@ internal object PaykitAllowanceFixtures {
     fun paymentRequest(
         id: String = "550e8400-e29b-41d4-a716-446655440001",
         counterparty: String = counterpartyKey,
-        amountValue: String = "0.00001",
         amountSats: ULong = 1_000uL,
         createdAt: String = "2026-09-24T11:00:00Z",
     ) = PaykitPaymentRequest(
         paymentRequestId = id,
         counterparty = counterparty,
-        amountValue = amountValue,
-        amountSats = amountSats,
+        amount = PaykitAmount(PaykitAsset.BTC, amountSats),
+        paymentReference = "fixture-reference",
         createdAt = Instant.parse(createdAt),
         expiresAt = null,
         acceptedPaymentEndpointIdentifiers = listOf(lightningIdentifier),

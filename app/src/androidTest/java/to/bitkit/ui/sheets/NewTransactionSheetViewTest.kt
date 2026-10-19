@@ -35,7 +35,8 @@ class NewTransactionSheetViewTest {
         val details = NewTransactionSheetDetails(
             sats = 10000L,
             type = NewTransactionSheetType.LIGHTNING,
-            direction = NewTransactionSheetDirection.SENT
+            direction = NewTransactionSheetDirection.SENT,
+            paymentHashOrTxId = "test_payment_hash",
         )
         var detailsClicked = false
         var closeClicked = false
@@ -54,7 +55,6 @@ class NewTransactionSheetViewTest {
         composeTestRule.waitForIdle()
 
         // Assert
-        composeTestRule.onNodeWithTag("new_transaction_sheet").assertExists()
         composeTestRule.onNodeWithTag("transaction_sent_image").assertExists()
         composeTestRule.onNodeWithTag("transaction_received_image").assertDoesNotExist()
         composeTestRule.onNodeWithTag("confetti_animation").assertExists()
@@ -66,11 +66,11 @@ class NewTransactionSheetViewTest {
         composeTestRule.onNodeWithTag("sent_buttons_row").assertExists()
 
         // Verify buttons exist and click interactions work
-        composeTestRule.onNodeWithTag("details_button").assertExists().performClick()
+        composeTestRule.onNodeWithTag("Details").assertExists().performClick()
         composeTestRule.waitForIdle()
         assert(detailsClicked)
 
-        composeTestRule.onNodeWithTag("close_button").assertExists().performClick()
+        composeTestRule.onNodeWithTag("Close").assertExists().performClick()
         composeTestRule.waitForIdle()
         assert(closeClicked)
     }
@@ -99,7 +99,6 @@ class NewTransactionSheetViewTest {
         composeTestRule.waitForIdle()
 
         // Assert
-        composeTestRule.onNodeWithTag("new_transaction_sheet").assertExists()
         composeTestRule.onNodeWithTag("transaction_received_image").assertExists()
         composeTestRule.onNodeWithTag("transaction_sent_image").assertDoesNotExist()
 

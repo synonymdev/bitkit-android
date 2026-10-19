@@ -3,6 +3,7 @@ package to.bitkit.ui.components
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -50,7 +51,7 @@ class ButtonTest {
                         onClick = {},
                         size = ButtonSize.Small,
                         fullWidth = false,
-                        modifier = Modifier.testTag("SecondarySmallEnabled")
+                        testTag = "SecondarySmallEnabled",
                     )
                     SecondaryButton(
                         text = "Secondary",
@@ -94,6 +95,7 @@ class ButtonTest {
         ).forEach {
             composeTestRule.onNodeWithTag(it).assertHeightIsEqualTo(40.dp)
         }
+        composeTestRule.onNodeWithTag("SecondarySmallEnabled").assertHasClickAction()
         composeTestRule.onNodeWithTag("PrimaryLarge").assertHeightIsEqualTo(56.dp)
         composeTestRule.onNodeWithTag("SecondaryLarge").assertHeightIsEqualTo(56.dp)
     }

@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.trezor
 
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.AddressInfo
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.WatcherEvent
@@ -170,6 +171,32 @@ class TrezorViewModelTest : BaseUnitTest() {
         assertEquals(input, sut.uiState.value.lookupInput)
     }
 
+    @Test
+    fun `populateWatcherFromXpub should copy the xpub and select the account type of its path`() {
+        // Core 0.7.0 returns a normalized xpub/tpub, which prefix detection would read as legacy.
+        val publicKey = TrezorPreviewData.samplePublicKeyResponse
+        trezorStateFlow.value = TrezorState(lastPublicKey = publicKey)
+
+        sut.populateWatcherFromXpub()
+
+        val watcher = sut.uiState.value.watcher
+        assertEquals(publicKey.xpub, watcher.extendedKey)
+        assertEquals(AccountType.NATIVE_SEGWIT, watcher.selectedAccountType)
+    }
+
+    @Test
+    fun `populateWatcherFromXpub should keep the selected account type for an unknown path`() {
+        val publicKey = TrezorPreviewData.samplePublicKeyResponse.copy(path = "m/45'/0'/0'")
+        trezorStateFlow.value = TrezorState(lastPublicKey = publicKey)
+        sut.setWatcherAccountType(AccountType.TAPROOT)
+
+        sut.populateWatcherFromXpub()
+
+        val watcher = sut.uiState.value.watcher
+        assertEquals(publicKey.xpub, watcher.extendedKey)
+        assertEquals(AccountType.TAPROOT, watcher.selectedAccountType)
+    }
+
     // endregion
 
     // region Async methods
@@ -269,14 +296,14 @@ class TrezorViewModelTest : BaseUnitTest() {
         sut.broadcastSignedTx()
         advanceUntilIdle()
 
-        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
     }
 
     @Test
     fun `broadcastSignedTx should not restore signed step after reset`() = test {
         loadSignedTx()
         val broadcastResult = CompletableDeferred<Result<String>>()
-        whenever(trezorRepo.broadcastRawTx(any()))
+        whenever(trezorRepo.broadcastRawTx(any(), org.mockito.kotlin.anyOrNull()))
             .doSuspendableAnswer { broadcastResult.await() }
 
         sut.broadcastSignedTx()
@@ -300,7 +327,7 @@ class TrezorViewModelTest : BaseUnitTest() {
         val broadcastResults = ArrayDeque(
             listOf(firstBroadcastResult, secondBroadcastResult)
         )
-        whenever(trezorRepo.broadcastRawTx(any()))
+        whenever(trezorRepo.broadcastRawTx(any(), org.mockito.kotlin.anyOrNull()))
             .doSuspendableAnswer { broadcastResults.removeFirst().await() }
 
         sut.broadcastSignedTx()

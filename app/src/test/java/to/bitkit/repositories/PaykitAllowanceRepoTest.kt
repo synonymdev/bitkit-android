@@ -11,6 +11,8 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -31,6 +33,7 @@ import to.bitkit.repositories.PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.SubscriptionClockOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -192,6 +195,26 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `coverage ignores the subscription clock offset`() = test {
+        SubscriptionClockOffset.setOffsetDays(400)
+        assumeTrue(
+            "The subscription clock offset is unavailable in this build",
+            SubscriptionClockOffset.offsetDays == 400,
+        )
+        records = listOf(fixtures.record(terms = fixtures.terms(expiresAt = (fixtures.now + 30.days).toString())))
+
+        sut.activate(identity)
+
+        assertTrue(sut.coversRequest(fixtures.paymentRequest()), "The allowance still has 30 days in real time")
+        assertFalse(sut.coversRequest(fixtures.paymentRequest(counterparty = fixtures.otherCounterpartyKey)))
+    }
+
+    @After
+    fun resetSubscriptionClockOffset() {
+        SubscriptionClockOffset.setOffsetDays(0)
+    }
+
+    @Test
     fun `requests created before the allowance was accepted stay manual`() = test {
         records = listOf(fixtures.record(lastEventAt = "2026-09-24T11:30:00Z"))
 
@@ -274,7 +297,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     fun `received ask is presented once and accepting answers it`() = test {
         val proposalRecord = receivedAsk()
         records = listOf(proposalRecord)
-        whenever(sdk.acceptAllowance(any(), any())).thenReturn(proposalRecord)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(proposalRecord)
         sut.activate(identity)
 
         val proposal = checkNotNull(sut.proposalForPresentation())
@@ -285,7 +308,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.accept(proposal.id).isSuccess)
 
-        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID)
+        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
         verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
     }
 
@@ -294,7 +317,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         // The proposer took the allower role, so this wallet is the allowee.
         val offer = receivedProposal()
         records = listOf(offer)
-        whenever(sdk.acceptAllowance(any(), any())).thenAnswer {
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
             records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false))
             records.single()
         }
@@ -304,7 +327,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         val accepted = sut.acceptOffersFromAllowers()
 
         assertEquals(listOf(fixtures.counterpartyKey), accepted.map { it.counterparty })
-        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID)
+        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
         verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
         val entry = sut.entries.value.single()
         assertEquals(PaykitAllowance.Status.ACTIVE, entry.status(fixtures.now))
@@ -313,22 +336,22 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertNull(sut.proposalForPresentation())
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An accepted offer is not accepted or announced twice")
-        verify(sdk, times(1)).acceptAllowance(any(), any())
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
     }
 
     @Test
     fun `failed offer accept stays unanswered and is retried on the next refresh`() = test {
         val offer = receivedProposal()
         records = listOf(offer)
-        whenever(sdk.acceptAllowance(any(), any())).thenThrow(RuntimeException("offline"))
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenThrow(RuntimeException("offline"))
         sut.activate(identity)
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
         assertNull(sut.proposalForPresentation())
 
-        whenever(sdk.acceptAllowance(any(), any())).thenReturn(offer)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(offer)
         assertEquals(1, sut.acceptOffersFromAllowers().size)
-        verify(sdk, times(2)).acceptAllowance(any(), any())
+        verify(sdk, times(2)).acceptAllowance(any(), any(), any())
     }
 
     @Test
@@ -339,7 +362,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
         assertEquals(ALLOWANCE_ID, sut.proposalForPresentation()?.id)
         assertEquals(PaykitAllowance.Status.AWAITING_MY_ANSWER, sut.entries.value.single().status(fixtures.now))
     }
@@ -371,7 +394,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
     }
 
     @Test
@@ -380,7 +403,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
-        verify(sdk, never()).acceptAllowance(any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
     }
 
     @Test

@@ -3,6 +3,12 @@ package to.bitkit.models
 import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
+import to.bitkit.repositories.Endpoint
+import to.bitkit.repositories.MethodId
 import to.bitkit.utils.AppError
 import java.net.URI
 import java.net.URLDecoder
@@ -21,13 +27,49 @@ value class PubkyAuthClaim private constructor(val items: ImmutableList<Item>) {
     enum class Item(val wireValue: String) {
         PAYKIT_ACCESS_V1("paykit-access-v1"),
         WATCH_ONLY_ACCOUNT_V1("watch-only-account-v1"),
+        USDT_ADDRESS_V1("usdt-address-v1"),
     }
 
     val wireValue: String get() = items.joinToString(".") { it.wireValue }
-    val includesWatchOnlyAccount: Boolean get() = Item.WATCH_ONLY_ACCOUNT_V1 in items
+    val includesWatchOnlyAccount: Boolean
+        get() = Item.WATCH_ONLY_ACCOUNT_V1 in items
     val includesPaykitAccess: Boolean get() = Item.PAYKIT_ACCESS_V1 in items
 
+    val sharesBitcoin: Boolean get() = includesWatchOnlyAccount
+    val sharesUsdt: Boolean get() = Item.USDT_ADDRESS_V1 in items
+    val sharesReceivingDetails: Boolean get() = sharesBitcoin || sharesUsdt
+
+    fun unsignedPayload(bitcoin: PreparedWatchOnlyAccountClaim?, usdt: Endpoint?): ByteArray {
+        if (sharesBitcoin && bitcoin == null) throw PubkyAuthRequestError.InvalidPaymentDetails
+        if (!sharesUsdt) return bitcoin?.payload ?: byteArrayOf()
+        if (
+            usdt != null && (
+                usdt.methodId != MethodId.UsdtArbitrum ||
+                    PaykitUsdt.address(usdt.rawPayload) != usdt.value
+                )
+        ) {
+            throw PubkyAuthRequestError.InvalidPaymentDetails
+        }
+        return buildJsonObject {
+            usdt?.let { put(MethodId.UsdtArbitrum.rawValue, Json.parseToJsonElement(it.rawPayload).jsonObject) }
+            if (sharesBitcoin) {
+                val account = checkNotNull(bitcoin).account
+                put(
+                    "bitcoin_account",
+                    buildJsonObject {
+                        put("account_index", account.accountIndex)
+                        put("address_type", account.addressType)
+                        put("xpub", account.xpub)
+                    }
+                )
+            }
+        }.toString().encodeToByteArray()
+    }
+
     companion object {
+        val USDT_ADDRESS_V1 = PubkyAuthClaim(Item.USDT_ADDRESS_V1)
+        val BITCOIN_AND_USDT = PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1, Item.USDT_ADDRESS_V1)
+
         /** Query parameter used for Bitkit-specific Pubky auth claims. */
         const val QUERY_PARAMETER = "x-bitkit-claim"
 
@@ -51,6 +93,7 @@ value class PubkyAuthClaim private constructor(val items: ImmutableList<Item>) {
 
 sealed class PubkyAuthRequestError(cause: Throwable? = null) : AppError(cause = cause) {
     class InvalidUrl(cause: Throwable) : PubkyAuthRequestError(cause)
+    data object InvalidPaymentDetails : PubkyAuthRequestError()
     data object RequesterChanged : PubkyAuthRequestError()
     data object MissingBitkitClaim : PubkyAuthRequestError()
     data object DuplicateBitkitClaim : PubkyAuthRequestError()
@@ -91,6 +134,11 @@ data class PubkyAuthRequest(
     val isSignup: Boolean
         get() = isSignupUrl(rawUrl)
 
+    val isGrantSignup: Boolean
+        get() = isGrantSignupUrl(rawUrl)
+
+    fun requiresIdentityCreation(hasIdentity: Boolean): Boolean = isSignup && (!isGrantSignup || !hasIdentity)
+
     companion object {
         @Suppress("LongParameterList")
         fun parse(
@@ -128,9 +176,38 @@ data class PubkyAuthRequest(
 
         fun isSignupUrl(rawUrl: String): Boolean = runCatching { URI(rawUrl).isSignupRequest() }.getOrDefault(false)
 
+        fun isGrantSignupUrl(rawUrl: String): Boolean = runCatching {
+            val uri = URI(rawUrl)
+            uri.scheme.equals("pubkyauth", ignoreCase = true) &&
+                (uri.host ?: uri.rawAuthority).equals("signup_grant", ignoreCase = true)
+        }.getOrDefault(false)
+
+        fun parseGrantSignup(
+            rawUrl: String,
+            clientId: String,
+            relay: String,
+            capabilities: String,
+            homeserverPublicKey: String?,
+        ): Result<PubkyAuthRequest> = runCatching {
+            require(isGrantSignupUrl(rawUrl)) { "Not a Pubky grant signup request" }
+            val query = parseQuery(URI(rawUrl))
+            query.requiredSingle("hs")
+            parse(
+                rawUrl = rawUrl,
+                clientId = clientId,
+                relay = relay,
+                capabilities = capabilities,
+                homeserverPublicKey = requireNotNull(homeserverPublicKey),
+                signupToken = query.optionalSingle("st"),
+            ).getOrThrow()
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(PubkyAuthRequestError.InvalidUrl(it)) },
+        )
+
         fun parseSignup(rawUrl: String): Result<PubkyAuthRequest> = runCatching {
             val uri = URI(rawUrl)
-            require(uri.isSignupRequest()) { "Unsupported Pubky signup URL" }
+            require(uri.isSignupRequest() && !isGrantSignupUrl(rawUrl)) { "Unsupported Pubky signup URL" }
             val query = parseQuery(uri)
             val homeserver = query.requiredSingle("hs")
             val authorizesApp = uri.authorizesApp(query)
@@ -161,7 +238,7 @@ data class PubkyAuthRequest(
 
         private fun URI.isSignupRequest(): Boolean = when (scheme?.lowercase()) {
             "pubkyring" -> host.equals("signup", ignoreCase = true)
-            "pubkyauth" -> isDirectSignupRequest()
+            "pubkyauth" -> isDirectSignupRequest() || (host ?: rawAuthority).equals("signup_grant", ignoreCase = true)
             else -> false
         }
 

@@ -364,6 +364,21 @@ internal fun LightningActivity.withPendingMessage(
     return copy(message = pendingMessage)
 }
 
+/**
+ * Applies an on-chain confirmation state to the stored activity.
+ *
+ * A block time earlier than the first-seen [OnchainActivity.timestamp] moves the timestamp down to it,
+ * so `confirmTimestamp >= timestamp` holds as bitkit-core requires.
+ */
+internal fun OnchainActivity.withConfirmation(
+    isConfirmed: Boolean,
+    confirmTimestamp: ULong?,
+): OnchainActivity = copy(
+    confirmed = isConfirmed,
+    confirmTimestamp = confirmTimestamp,
+    timestamp = if (confirmTimestamp != null && confirmTimestamp < timestamp) confirmTimestamp else timestamp,
+)
+
 @Suppress("LargeClass", "TooManyFunctions")
 class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
@@ -623,6 +638,7 @@ class ActivityService(
             complete = complete && hydrated
             if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
             if (updated != null && !cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) {
+                if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
                 updateActivity(activityId = activity.rawId(), activity = updated)
                 changed = true
             }
@@ -1073,8 +1089,11 @@ class ActivityService(
         var index = 0
         var currentAddressBatch: Int? = null
         while (index < endIndex) {
-            val addresses = fetchAddressSearchBatch(addressType, isChange, index, addressTypeKey, accountIndex)
-                ?: return null
+            val count = minOf(ADDRESS_SEARCH_BATCH_SIZE, endIndex - index)
+            val addressInfos = fetchAddressSearchBatch(
+                addressType, isChange, index, count, addressTypeKey, accountIndex,
+            ) ?: return null
+            val addresses = addressInfos.map { it.address }
 
             if (
                 currentWalletAddress.isNotBlank() &&
@@ -1085,34 +1104,37 @@ class ActivityService(
             }
 
             findAddressSearchMatch(details, value, addresses)?.let {
-                saveLastUsedAddressSearchIndex(addressTypeKey, isChange, index)
+                val matchedIndex = addressInfos.first { info -> info.address == it }.index
+                saveLastUsedAddressSearchIndex(addressTypeKey, isChange, matchedIndex)
                 return it
             }
 
             if (shouldStopAfterCurrentAddressBatch(currentAddressBatch, index)) return null
 
-            index += ADDRESS_SEARCH_BATCH_SIZE
+            index += count
         }
 
         return null
     }
 
+    @Suppress("LongParameterList")
     private suspend fun fetchAddressSearchBatch(
         addressType: AddressType,
         isChange: Boolean,
         index: Int,
+        count: Int,
         addressTypeKey: String,
         accountIndex: UInt,
-    ): List<String>? {
+    ): List<AddressDerivationInfo>? {
         val scope = if (isChange) "change" else "receive"
         return runSuspendCatching {
             lightningService.addressInfosForType(
                 addressType = addressType,
                 isChange = isChange,
                 startIndex = index,
-                count = ADDRESS_SEARCH_BATCH_SIZE,
+                count = count,
                 accountIndex = accountIndex,
-            ).map { it.address }
+            )
         }.onFailure {
             Logger.warn(
                 "Skipping '$addressTypeKey' '$scope' address search batch '$index'",
@@ -1143,7 +1165,7 @@ class ActivityService(
 
     private fun addressSearchEndIndex(lastUsed: Int?): Int {
         return lastUsed?.let {
-            if (it > Int.MAX_VALUE - ADDRESS_SEARCH_WINDOW) Int.MAX_VALUE else it + ADDRESS_SEARCH_WINDOW
+            if (it > Int.MAX_VALUE - ADDRESS_SEARCH_WINDOW - 1) Int.MAX_VALUE else it + ADDRESS_SEARCH_WINDOW + 1
         } ?: ADDRESS_SEARCH_WINDOW
     }
 
@@ -1241,9 +1263,10 @@ class ActivityService(
         val ldkFeeSats = msatFloorOf(ldkFeeMsat)
         val updatedFee = if (existingActivity.v1.fee == 0uL && ldkFeeSats > 0uL) ldkFeeSats else existingActivity.v1.fee
 
-        val updatedOnChain = existingActivity.v1.copy(
-            confirmed = confirmationData.isConfirmed,
+        val updatedOnChain = existingActivity.v1.withConfirmation(
+            isConfirmed = confirmationData.isConfirmed,
             confirmTimestamp = confirmationData.confirmedTimestamp,
+        ).copy(
             doesExist = finalDoesExist,
             updatedAt = confirmationData.timestamp,
             isTransfer = preservedIsTransfer,
@@ -1304,21 +1327,6 @@ class ActivityService(
         val timestamp = payment.latestUpdateTimestamp
         val confirmationData = getConfirmationStatus(kind, timestamp)
 
-        var existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
-        if (existingActivity == null) {
-            getOnchainActivityByTxId(kind.txid)?.let {
-                existingActivity = Activity.Onchain(it)
-            }
-        }
-
-        val existingOnchainActivity = existingActivity as? Activity.Onchain
-        if (existingOnchainActivity != null &&
-            (existingOnchainActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
-            !(existingOnchainActivity.v1.contact == null && payment.direction == PaymentDirection.INBOUND)
-        ) {
-            return
-        }
-
         var resolvedChannelId = channelId
 
         // Check if this transaction is a channel transfer
@@ -1336,18 +1344,42 @@ class ActivityService(
         val details = transactionDetails ?: payment.takeIf { it.direction == PaymentDirection.INBOUND }
             ?.let { fetchTransactionDetails(kind.txid) }
         val resolvedAddress = resolveAddressForInboundPayment(kind, payment, details)
-        val existingContact = existingOnchainActivity?.v1?.contact
-        val contact = existingContact ?: if (
+        val resolvedContact = if (
             payment.direction == PaymentDirection.INBOUND && payment.status != PaymentStatus.FAILED &&
-            !cacheStore.data.first().isContactDetached(payment.id, defaultWalletId) &&
             !details?.outputs.isNullOrEmpty()
         ) {
-            privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
-                receivingAddress = resolvedAddress,
-                addresses = details.outputs.mapNotNull { it.scriptpubkeyAddress },
-            )
+            val contactCache = cacheStore.data.first()
+            val snapshot =
+                (getActivityById(walletId = defaultWalletId, activityId = payment.id) as? Activity.Onchain)?.v1
+                    ?: getActivityByTxId(walletId = defaultWalletId, txId = kind.txid)
+            if (
+                snapshot?.contact != null ||
+                contactCache.isContactDetached(snapshot?.id ?: payment.id, defaultWalletId)
+            ) {
+                null
+            } else {
+                privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
+                    receivingAddress = resolvedAddress,
+                    addresses = details.outputs.mapNotNull { it.scriptpubkeyAddress },
+                )
+            }
         } else {
             null
+        }
+
+        val cache = cacheStore.data.first()
+        val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
+            ?: getActivityByTxId(walletId = defaultWalletId, txId = kind.txid)?.let { Activity.Onchain(it) }
+        val existingOnchainActivity = existingActivity as? Activity.Onchain
+        if (existingOnchainActivity != null &&
+            (existingOnchainActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
+            !(existingOnchainActivity.v1.contact == null && payment.direction == PaymentDirection.INBOUND)
+        ) {
+            return
+        }
+        val activityId = existingOnchainActivity?.v1?.id ?: payment.id
+        val contact = existingOnchainActivity?.v1?.contact ?: resolvedContact.takeUnless {
+            cache.isContactDetached(activityId, defaultWalletId)
         }
 
         val ldkValue = payment.amountSats ?: 0u
@@ -1372,12 +1404,12 @@ class ActivityService(
             )
         }
 
-        if (cacheStore.data.first().isActivityDeleted(onChain.id, onChain.walletId) && !forceUpdate) {
+        if (cache.isActivityDeleted(onChain.id, onChain.walletId) && !forceUpdate) {
             Logger.verbose("Activity ${onChain.id} was already deleted, skipping", context = TAG)
             return
         }
 
-        if (existingActivity != Activity.Onchain(onChain)) invalidatePaykitContactBackfill()
+        if (existingActivity != Activity.Onchain(onChain)) paykitActivityRevision++
         if (existingActivity != null && existingActivity is Activity.Onchain) {
             val existingOnchain = existingActivity.v1
             updateActivity(activityId = existingOnchain.id, activity = Activity.Onchain(onChain))
@@ -1536,6 +1568,48 @@ class ActivityService(
             }
         }
     }
+
+    /** Apply saved original hardware tags once after exact outgoing activity verification. */
+    suspend fun restoreSentOnchainTags(txid: String, walletId: String): Boolean =
+        ServiceQueue.CORE.background {
+            val activity = requireNotNull(getActivityByTxId(walletId = walletId, txId = txid))
+            check(activity.walletId == walletId && activity.txId.equals(txid, true) &&
+                activity.txType == PaymentType.SENT)
+            val metadata = com.synonym.bitkitcore.getAllPreActivityMetadata().filter {
+                it.walletId == walletId && !it.isReceive && it.paymentId.equals(txid, true) &&
+                    it.txId?.equals(txid, true) == true && it.tags.isNotEmpty()
+            }
+            if (metadata.isEmpty()) return@background false
+            val existingTags = getTags(walletId = walletId, activityId = activity.id)
+            val newTags = metadata.flatMap { it.tags }.distinct().filter { it.isNotBlank() && it !in existingTags }
+            if (newTags.isNotEmpty()) addTags(walletId = walletId, activityId = activity.id, tags = newTags)
+            com.synonym.bitkitcore.upsertPreActivityMetadata(metadata.map { it.copy(tags = emptyList()) })
+            newTags.isNotEmpty()
+        }
+
+    /** Restore original attribution only when no contact has been saved for the accepted transaction. */
+    suspend fun restoreSentOnchainContact(txid: String, walletId: String, contact: String) =
+        ServiceQueue.CORE.background {
+            val existing = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(existing.walletId == walletId && existing.txId == txid && existing.txType == PaymentType.SENT)
+            if (cacheStore.data.first().isContactDetached(existing.id, walletId)) return@background
+            if (existing.contact == null) {
+                upsertActivity(Activity.Onchain(existing.copy(contact = contact)))
+            }
+            check(cacheStore.data.first().isContactDetached(existing.id, walletId) ||
+                requireNotNull(getOnchainActivityByTxId(txid, walletId)).contact != null)
+        }
+
+    /** Called only after exact original-node transaction/prevout verification, to repair an existing placeholder. */
+    suspend fun repairVerifiedSentOnchainFee(txid: String, walletId: String, fee: ULong, feeRate: ULong) =
+        ServiceQueue.CORE.background {
+            val existing = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(existing.walletId == walletId && existing.txId == txid && existing.txType == PaymentType.SENT)
+            val updated = existing.copy(fee = fee, feeRate = feeRate)
+            if (updated != existing) upsertActivity(Activity.Onchain(updated))
+            val restored = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(restored.fee == fee && restored.feeRate == feeRate)
+        }
 
     suspend fun handleOnchainTransactionReceived(txid: String, details: TransactionDetails) {
         ServiceQueue.CORE.background {
