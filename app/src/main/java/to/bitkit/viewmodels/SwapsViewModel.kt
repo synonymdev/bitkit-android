@@ -5,15 +5,20 @@ import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BoltzSwap
 import com.synonym.bitkitcore.BoltzSwapStatus
 import com.synonym.bitkitcore.BoltzSwapType
+import com.synonym.bitkitcore.PubkyDeliveryOperation
+import com.synonym.bitkitcore.PubkyDeliveryStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.repositories.PubkySwapRepo
+import to.bitkit.repositories.PubkySwapState
 import to.bitkit.services.BoltzService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -21,14 +26,22 @@ import javax.inject.Inject
 /**
  * Dev-tools view model backing the Swaps history screen. Reads persisted swaps from
  * bitkit-core (submarine + reverse) so they can be inspected/tracked, and allows a manual
- * reverse-swap claim for recovery when the automatic claim did not fire.
+ * reverse-swap claim for recovery when the automatic claim did not fire. Also shows the
+ * connected Pubky swap provider and the delivery state of its Pubky records.
  */
 @HiltViewModel
 class SwapsViewModel @Inject constructor(
     private val boltzService: BoltzService,
+    private val pubkySwapRepo: PubkySwapRepo,
 ) : ViewModel() {
     private val _swaps = MutableStateFlow<ImmutableList<BoltzSwap>>(persistentListOf())
     val swaps = _swaps.asStateFlow()
+
+    /** Connection state of the Pubky swap provider. */
+    val providerState: StateFlow<PubkySwapState> = pubkySwapRepo.state
+
+    private val _deliveries = MutableStateFlow<ImmutableList<PubkyDeliveryStatus>>(persistentListOf())
+    val deliveries = _deliveries.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
@@ -48,6 +61,27 @@ class SwapsViewModel @Inject constructor(
                     Logger.error("Failed to list swaps", e, context = TAG)
                     _error.update { e.message }
                 }
+            pubkySwapRepo.deliveryStatus()
+                .onSuccess { list -> _deliveries.update { list.toImmutableList() } }
+                .onFailure { Logger.warn("Failed to read Pubky swap delivery status", it, context = TAG) }
+        }
+    }
+
+    fun reconnectProvider(onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            onResult(pubkySwapRepo.ensureConfigured().onSuccess { refresh() })
+        }
+    }
+
+    fun disconnectProvider(onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            onResult(pubkySwapRepo.disconnectProvider().onSuccess { refresh() })
+        }
+    }
+
+    fun retryDelivery(id: String, operation: PubkyDeliveryOperation, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            onResult(pubkySwapRepo.retryDelivery(id, operation).onSuccess { refresh() })
         }
     }
 

@@ -4,13 +4,22 @@ import com.synonym.bitkitcore.BoltzNetwork
 import com.synonym.bitkitcore.BoltzSwap
 import com.synonym.bitkitcore.BoltzSwapStatus
 import com.synonym.bitkitcore.BoltzSwapType
+import com.synonym.bitkitcore.PubkyDeliveryOperation
+import com.synonym.bitkitcore.PubkyDeliveryStatus
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
+import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.repositories.PubkySwapError
+import to.bitkit.repositories.PubkySwapRepo
+import to.bitkit.repositories.PubkySwapState
 import to.bitkit.services.BoltzService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
@@ -21,6 +30,13 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class SwapsViewModelTest : BaseUnitTest() {
     private val boltzService = mock<BoltzService>()
+    private val pubkySwapRepo = mock<PubkySwapRepo>()
+
+    @Before
+    fun setUp() {
+        whenever(pubkySwapRepo.state).thenReturn(MutableStateFlow(PubkySwapState.NoProvider))
+        whenever { pubkySwapRepo.deliveryStatus() }.thenReturn(Result.success(emptyList()))
+    }
 
     @Test
     fun `refresh sorts swaps by creation time descending`() = test {
@@ -31,7 +47,7 @@ class SwapsViewModelTest : BaseUnitTest() {
             ),
         )
 
-        val sut = SwapsViewModel(boltzService)
+        val sut = SwapsViewModel(boltzService, pubkySwapRepo)
         advanceUntilIdle()
 
         assertEquals(listOf("newer", "older"), sut.swaps.value.map { it.id })
@@ -41,7 +57,7 @@ class SwapsViewModelTest : BaseUnitTest() {
     fun `refresh surfaces the error when listing swaps fails`() = test {
         whenever(boltzService.listSwaps()).thenAnswer { throw AppError(LIST_ERROR) }
 
-        val sut = SwapsViewModel(boltzService)
+        val sut = SwapsViewModel(boltzService, pubkySwapRepo)
         advanceUntilIdle()
 
         assertEquals(LIST_ERROR, sut.error.value)
@@ -52,13 +68,53 @@ class SwapsViewModelTest : BaseUnitTest() {
     fun `claimReverseSwap reports the broadcast txid`() = test {
         whenever(boltzService.listSwaps()).thenReturn(emptyList())
         whenever(boltzService.claimReverseSwap(any(), anyOrNull())).thenReturn(TXID)
-        val sut = SwapsViewModel(boltzService)
+        val sut = SwapsViewModel(boltzService, pubkySwapRepo)
 
         var result: Result<String>? = null
         sut.claimReverseSwap(SWAP_ID) { result = it }
         advanceUntilIdle()
 
         assertEquals(TXID, result?.getOrNull())
+    }
+
+    @Test
+    fun `refresh loads the delivery status of the swap provider`() = test {
+        whenever(boltzService.listSwaps()).thenReturn(emptyList())
+        whenever(pubkySwapRepo.deliveryStatus()).thenReturn(Result.success(listOf(delivery())))
+
+        val sut = SwapsViewModel(boltzService, pubkySwapRepo)
+        advanceUntilIdle()
+
+        assertEquals(listOf(DELIVERY_ID), sut.deliveries.value.map { it.id })
+    }
+
+    @Test
+    fun `retryDelivery retries the operation and refreshes`() = test {
+        whenever(boltzService.listSwaps()).thenReturn(emptyList())
+        whenever(pubkySwapRepo.retryDelivery(any(), any())).thenReturn(Result.success(Unit))
+        val sut = SwapsViewModel(boltzService, pubkySwapRepo)
+        advanceUntilIdle()
+
+        var result: Result<Unit>? = null
+        sut.retryDelivery(DELIVERY_ID, PubkyDeliveryOperation.PUBLICATION) { result = it }
+        advanceUntilIdle()
+
+        assertTrue(result?.isSuccess == true)
+        verify(pubkySwapRepo).retryDelivery(DELIVERY_ID, PubkyDeliveryOperation.PUBLICATION)
+        verify(pubkySwapRepo, times(2)).deliveryStatus()
+    }
+
+    @Test
+    fun `disconnectProvider reports a refusal while swaps are pending`() = test {
+        whenever(boltzService.listSwaps()).thenReturn(emptyList())
+        whenever(pubkySwapRepo.disconnectProvider()).thenReturn(Result.failure(PubkySwapError.PendingSwaps))
+        val sut = SwapsViewModel(boltzService, pubkySwapRepo)
+
+        var result: Result<Unit>? = null
+        sut.disconnectProvider { result = it }
+        advanceUntilIdle()
+
+        assertEquals(PubkySwapError.PendingSwaps, result?.exceptionOrNull())
     }
 
     @Test
@@ -89,6 +145,16 @@ class SwapsViewModelTest : BaseUnitTest() {
         )
     }
 
+    private fun delivery() = PubkyDeliveryStatus(
+        id = DELIVERY_ID,
+        scope = "swap",
+        published = false,
+        publicationPaused = true,
+        cleanupPaused = false,
+        publicationFailure = "homeserver unavailable",
+        cleanupFailure = null,
+    )
+
     private fun swap(
         id: String = SWAP_ID,
         swapType: BoltzSwapType = BoltzSwapType.REVERSE,
@@ -116,5 +182,6 @@ class SwapsViewModelTest : BaseUnitTest() {
         const val SWAP_ID = "swap1"
         const val TXID = "txid1"
         const val LIST_ERROR = "database unavailable"
+        const val DELIVERY_ID = "delivery1"
     }
 }
