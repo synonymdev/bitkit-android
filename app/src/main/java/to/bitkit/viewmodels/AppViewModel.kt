@@ -225,6 +225,7 @@ import to.bitkit.services.PubkyService
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
+import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
@@ -267,7 +268,7 @@ class AppViewModel @Inject constructor(
     connectivityRepo: ConnectivityRepo,
     healthRepo: HealthRepo,
     toastManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> ToastQueueManager,
-    timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> TimedSheetManager,
+    timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope, (TimedSheetType) -> Boolean) -> TimedSheetManager,
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
@@ -527,7 +528,7 @@ class AppViewModel @Inject constructor(
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val paymentRequestPresentationCompletionJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
-    private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
+    private val timedSheetManager = timedSheetManagerProvider(viewModelScope, ::tryShowTimedSheet).apply {
         registerSheet(appUpdateSheet)
         registerSheet(usdtSheet)
         registerSheet(backupSheet)
@@ -675,11 +676,7 @@ class AppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             timedSheetManager.currentSheet.collect { sheetType ->
-                if (sheetType != null) {
-                    if (!isHighPrioritySheet(_currentSheet.value)) {
-                        showSheet(Sheet.TimedSheet(sheetType))
-                    }
-                } else {
+                if (sheetType == null) {
                     val shouldFlush = _currentSheet.value is Sheet.TimedSheet
                     _currentSheet.update { current ->
                         if (current is Sheet.TimedSheet) null else current
@@ -687,6 +684,11 @@ class AppViewModel @Inject constructor(
                     if (shouldFlush) flushDeferredScan()
                 }
             }
+        }
+        viewModelScope.launch {
+            combine(currentSheet, isAuthenticated, showForgotPinSheet) { sheet, authenticated, forgotPin ->
+                sheet == null && authenticated && !forgotPin
+            }.collect { if (it) timedSheetManager.reevaluate() }
         }
         viewModelScope.launch {
             pubkyRepo.sessionRestorationFailed.collect { failed ->
@@ -1403,6 +1405,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun onSheetVisible(sheet: Sheet?) {
+        if (sheet is Sheet.TimedSheet && sheet.type == TimedSheetType.USDT) {
+            if (sheet === currentSheet.value && _isAuthenticated.value) {
+                viewModelScope.launch { settingsStore.update { it.copy(hasSeenUsdtIntro = true) } }
+            }
+            return
+        }
         if (sheet is Sheet.Subscription && sheet.route is SubscriptionRoute.Review) {
             subscription(sheet.route.id)?.let { subscription ->
                 viewModelScope.launch {
@@ -7826,6 +7834,13 @@ class AppViewModel @Inject constructor(
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
     private fun String.removeLightningSchemes(): String = LIGHTNING_SCHEME_PATTERNS.fold(this) { acc, regex ->
         acc.replace(regex, "")
+    }
+
+    private fun tryShowTimedSheet(type: TimedSheetType): Boolean {
+        if (!_isAuthenticated.value || _showForgotPinSheet.value) return false
+        if (_currentSheet.value != null || sheetTransitionJob?.isActive == true) return false
+        _currentSheet.update { Sheet.TimedSheet(type) }
+        return true
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()

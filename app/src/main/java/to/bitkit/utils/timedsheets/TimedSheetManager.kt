@@ -2,21 +2,28 @@ package to.bitkit.utils.timedsheets
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.utils.Logger
 
-class TimedSheetManager(private val scope: CoroutineScope) {
+class TimedSheetManager(
+    private val scope: CoroutineScope,
+    private val tryShowSheet: (TimedSheetType) -> Boolean,
+) {
     private val _currentSheet = MutableStateFlow<TimedSheetType?>(null)
     val currentSheet: StateFlow<TimedSheetType?> = _currentSheet.asStateFlow()
 
     private val registeredSheets = mutableListOf<TimedSheetItem>()
     private var currentTimedSheet: TimedSheetItem? = null
     private var checkJob: Job? = null
+    private var isOnHomeScreen = false
 
     fun registerSheet(sheet: TimedSheetItem) {
         registeredSheets.add(sheet)
@@ -29,6 +36,12 @@ class TimedSheetManager(private val scope: CoroutineScope) {
 
     fun onHomeScreenEntered() {
         Logger.debug("User entered home screen, starting timer", context = TAG)
+        isOnHomeScreen = true
+        reevaluate()
+    }
+
+    fun reevaluate() {
+        if (!isOnHomeScreen || currentTimedSheet != null) return
         checkJob?.cancel()
         checkJob = scope.launch {
             delay(CHECK_DELAY_MILLIS)
@@ -37,33 +50,38 @@ class TimedSheetManager(private val scope: CoroutineScope) {
     }
 
     fun onHomeScreenExited() {
+        isOnHomeScreen = false
         Logger.debug("User exited home screen, cancelling timer", context = TAG)
         checkJob?.cancel()
         checkJob = null
     }
 
     fun dismissCurrentSheet() {
-        if (currentTimedSheet == null) return
+        val sheet = currentTimedSheet ?: return
 
         scope.launch {
-            currentTimedSheet?.onDismissed()
-            _currentSheet.value = null
+            sheet.onDismissed()
             currentTimedSheet = null
+            _currentSheet.update { null }
 
             Logger.debug("Clearing timed sheet queue", context = TAG)
         }
     }
 
     private suspend fun checkAndShowNextSheet() {
-        Logger.debug("Registered sheets: ${registeredSheets.map { it.type.name }}")
+        if (!isOnHomeScreen || currentTimedSheet != null) return
         for (sheet in registeredSheets.toList()) {
-            if (sheet.shouldShow()) {
+            val eligible = sheet.shouldShow()
+            currentCoroutineContext().ensureActive()
+            if (!isOnHomeScreen || currentTimedSheet != null) return
+            if (eligible) {
+                if (!tryShowSheet(sheet.type)) return
                 Logger.debug(
                     "Showing timed sheet: ${sheet.type.name} with priority: ${sheet.priority}",
                     context = TAG
                 )
                 currentTimedSheet = sheet
-                _currentSheet.value = sheet.type
+                _currentSheet.update { sheet.type }
                 sheet.onShown()
                 registeredSheets.remove(sheet)
                 return
@@ -71,8 +89,6 @@ class TimedSheetManager(private val scope: CoroutineScope) {
         }
 
         Logger.debug("No timed sheets need to be shown", context = TAG)
-        _currentSheet.value = null
-        currentTimedSheet = null
     }
 
     companion object {

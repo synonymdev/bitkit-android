@@ -330,6 +330,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         on { visible }.thenReturn(flowOf(true))
     }
     private val timedSheetManager = mock<TimedSheetManager>()
+    private lateinit var presentTimedSheet: (TimedSheetType) -> Boolean
     private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
 
     @Before
@@ -783,7 +784,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         connectivityRepo = connectivityRepo,
         healthRepo = healthRepo,
         toastManagerProvider = { toastManager },
-        timedSheetManagerProvider = { timedSheetManager },
+        timedSheetManagerProvider = { _, present ->
+            presentTimedSheet = present
+            timedSheetManager
+        },
         context = context,
         bgDispatcher = testDispatcher,
         keychain = keychain,
@@ -8217,11 +8221,48 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `timed intro waits for unlock and an idle sheet host before recording seen`() = test {
+        sut.setIsAuthenticated(false)
+        assertFalse(presentTimedSheet(TimedSheetType.USDT))
+        assertFalse(settingsData.value.hasSeenUsdtIntro)
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+        verify(timedSheetManager, atLeastOnce()).reevaluate()
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        assertFalse(presentTimedSheet(TimedSheetType.USDT))
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        assertFalse(presentTimedSheet(TimedSheetType.USDT))
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        sut.hideSheet()
+        advanceUntilIdle()
+        verify(timedSheetManager, atLeastOnce()).reevaluate()
+        assertTrue(presentTimedSheet(TimedSheetType.USDT))
+        assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        assertFalse(settingsData.value.hasSeenUsdtIntro)
+        sut.onSheetVisible(Sheet.TimedSheet(TimedSheetType.USDT))
+        assertFalse(settingsData.value.hasSeenUsdtIntro)
+        sut.setIsAuthenticated(false)
+        sut.onSheetVisible(sut.currentSheet.value)
+        advanceUntilIdle()
+        assertFalse(settingsData.value.hasSeenUsdtIntro)
+        sut.setIsAuthenticated(true)
+        sut.onSheetVisible(sut.currentSheet.value)
+        advanceUntilIdle()
+        assertTrue(settingsData.value.hasSeenUsdtIntro)
+    }
+
+    @Test
     fun `queued scan flushes after timed sheet dismisses`() = test {
         val bolt11 = "lnbcrt1lockedtimed"
         settingsData.value = SettingsData(isPinEnabled = true)
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
 
+        sut.setIsAuthenticated(true)
+        assertTrue(presentTimedSheet(TimedSheetType.BACKUP))
+        sut.setIsAuthenticated(false)
         timedSheetType.value = TimedSheetType.BACKUP
         advanceUntilIdle()
 

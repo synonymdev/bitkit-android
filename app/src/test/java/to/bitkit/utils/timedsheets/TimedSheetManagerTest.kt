@@ -1,18 +1,22 @@
 package to.bitkit.utils.timedsheets
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import kotlinx.coroutines.withContext
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.components.TimedSheetType
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TimedSheetManagerTest : BaseUnitTest() {
@@ -21,7 +25,7 @@ class TimedSheetManagerTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        sut = TimedSheetManager(testScope)
+        sut = TimedSheetManager(testScope) { true }
     }
 
     @Test
@@ -174,5 +178,54 @@ class TimedSheetManagerTest : BaseUnitTest() {
         testScope.advanceTimeBy(2100)
 
         assertEquals(TimedSheetType.APP_UPDATE, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `retries rejected presentation without consuming the sheet`() = test {
+        var canPresent = false
+        sut = TimedSheetManager(testScope) { canPresent }
+        val sheet = mock<TimedSheetItem> {
+            on { type } doReturn TimedSheetType.USDT
+        }
+        whenever(sheet.shouldShow()).thenReturn(true)
+        sut.registerSheet(sheet)
+        sut.onHomeScreenEntered()
+        testScope.advanceTimeBy(2100)
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).onShown()
+
+        canPresent = true
+        sut.reevaluate()
+        testScope.advanceTimeBy(2100)
+        assertEquals(TimedSheetType.USDT, sut.currentSheet.value)
+        verify(sheet).onShown()
+
+        sut.onHomeScreenEntered()
+        testScope.advanceTimeBy(2100)
+        assertEquals(TimedSheetType.USDT, sut.currentSheet.value)
+        verify(sheet).onShown()
+    }
+
+    @Test
+    fun `cancelled eligibility check cannot show after leaving home`() = test {
+        val finish = CompletableDeferred<Boolean>()
+        val sheet = object : TimedSheetItem {
+            override val type = TimedSheetType.USDT
+            override val priority = type.priority
+            override suspend fun shouldShow() = withContext(NonCancellable) { finish.await() }
+            override suspend fun onShown() = Unit
+            override suspend fun onDismissed() = Unit
+        }
+        sut.registerSheet(sheet)
+        sut.onHomeScreenEntered()
+        testScope.advanceTimeBy(2100)
+        sut.onHomeScreenExited()
+        finish.complete(true)
+        testScope.advanceTimeBy(100)
+        assertNull(sut.currentSheet.value)
+
+        sut.onHomeScreenEntered()
+        testScope.advanceTimeBy(2100)
+        assertEquals(TimedSheetType.USDT, sut.currentSheet.value)
     }
 }

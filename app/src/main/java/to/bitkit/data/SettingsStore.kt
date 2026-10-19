@@ -177,6 +177,7 @@ data class SettingsData(
     val publicPaykitOnchainEnabled: Boolean = true,
     val publicPaykitUsdtEnabled: Boolean = true,
     val usdtPreference: UsdtPreference = UsdtPreference.UNDECIDED,
+    val hasSeenUsdtIntro: Boolean = false,
     val publicPaykitBolt11: String = "",
     val publicPaykitBolt11PaymentHash: String = "",
     val publicPaykitBolt11ExpiresAtMillis: Long = 0,
