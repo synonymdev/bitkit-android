@@ -683,7 +683,7 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
             .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
     ) {
         if (subscription == null) {
-            Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            Column(Modifier.fillMaxSize().navigationBarsPadding().padding(horizontal = 16.dp)) {
                 SheetTopBar(titleText = stringResource(R.string.subscriptions__subscription))
                 FillHeight()
                 BodyM(stringResource(R.string.subscriptions__unavailable), color = Colors.White64)
