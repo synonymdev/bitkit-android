@@ -66,6 +66,9 @@ private const val TINT_ALPHA = 0.32f
 private const val SHADOW_ALPHA = 0.4f
 private const val ELEVATION_DP = 10
 
+/** End space a sticky toast keeps clear for its close icon: the 16 dp icon plus an 8 dp gap. */
+private const val CLOSE_BUTTON_INSET_DP = 24
+
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun ToastView(
@@ -177,6 +180,7 @@ fun ToastView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
+                    .padding(end = if (toast.autoHide) 0.dp else CLOSE_BUTTON_INSET_DP.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

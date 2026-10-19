@@ -1,0 +1,26 @@
+<journey name="loading toast long locale">
+  <description>
+    A toast that does not hide by itself shows a close X at its top right, and its text never runs
+    under that X. French makes the Pubky sign-in loading toast's title ("Chargement de votre profil
+    Pubky") long enough to fill the first line on a device about 360 dp wide; the title wraps before
+    the X instead of continuing beneath it.
+
+    Precondition: as pubky-auth/signin-cold-start.xml (an unlocked wallet with Paykit enabled, a
+    locally managed Pubky identity, and a fresh pubkyauth://signin_grant URL), on a device about
+    360 dp wide, e.g. `adb shell wm size 1080x2400` and `adb shell wm density 480`. Airplane mode
+    right after the link opens keeps the toast up long enough to inspect it.
+
+    Toasts are not in `android layout`, so every check here reads a screenshot.
+  </description>
+  <actions>
+    <action>Run `adb shell cmd locale set-app-locales to.bitkit.dev --locales fr`</action>
+    <action>Run `adb shell am force-stop to.bitkit.dev`</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "&lt;the prepared signin_grant URL&gt;"`, then `adb shell cmd connectivity airplane-mode enable`</action>
+    <action>Unlock Bitkit with PIN or biometrics when prompted</action>
+    <action>Verify from a screenshot that the toast titled "Chargement de votre profil Pubky" shows a close X at its top right</action>
+    <action>Verify from the same screenshot that no part of the title or description is drawn under or to the right of the left edge of the X</action>
+    <action>Tap the X and verify the toast closes</action>
+    <action>Run `adb shell cmd connectivity airplane-mode disable`</action>
+    <action>Run `adb shell cmd locale set-app-locales to.bitkit.dev --locales ''`</action>
+  </actions>
+</journey>
