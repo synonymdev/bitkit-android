@@ -33,6 +33,8 @@ object PubkyPublicKeyFormat {
         return publicKey.dropLast(1) + canonicalLastCharacter
     }
 
+    fun bareKey(input: String): String? = canonicalized(input)?.removePrefix("pubky")
+
     fun matches(lhs: String?, rhs: String?): Boolean {
         val normalizedLhs = lhs?.let(::normalized) ?: return false
         val normalizedRhs = rhs?.let(::normalized) ?: return false

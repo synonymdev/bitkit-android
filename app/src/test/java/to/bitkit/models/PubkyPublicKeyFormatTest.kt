@@ -48,6 +48,16 @@ class PubkyPublicKeyFormatTest {
     }
 
     @Test
+    fun `bareKey returns the canonical key without the prefix`() {
+        val rawKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val canonicalRawKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+
+        assertEquals(canonicalRawKey, PubkyPublicKeyFormat.bareKey(rawKey))
+        assertEquals(canonicalRawKey, PubkyPublicKeyFormat.bareKey("pubky$canonicalRawKey"))
+        assertNull(PubkyPublicKeyFormat.bareKey("pubkyshort"))
+    }
+
+    @Test
     fun `redacted shortens normalized pubky keys`() {
         val rawKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
 
