@@ -413,6 +413,7 @@ class AppViewModel @Inject constructor(
     val subscriptions = paykitPaymentRequestRepo.subscriptions
     val pubkyContacts = pubkyRepo.contacts
     private var sheetTransitionJob: Job? = null
+    private var isUsdtIntroPresented = false
     private var transitionSheet: Sheet? = null
     private var paymentRequestSheetTransitionJob: Job? = null
     private var queuedPairingCodeRequestId: Long? = null
@@ -688,7 +689,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             combine(currentSheet, isAuthenticated, showForgotPinSheet) { sheet, authenticated, forgotPin ->
                 sheet == null && authenticated && !forgotPin
-            }.collect { if (it && usdtSheet.shouldShow()) timedSheetManager.reevaluate() }
+            }.collect { if (it && !isUsdtIntroPresented && usdtSheet.shouldShow()) timedSheetManager.reevaluate() }
         }
         viewModelScope.launch {
             pubkyRepo.sessionRestorationFailed.collect { failed ->
@@ -7842,6 +7843,7 @@ class AppViewModel @Inject constructor(
         if (!_isAuthenticated.value || _showForgotPinSheet.value) return false
         if (_currentSheet.value != null || sheetTransitionJob?.isActive == true) return false
         _currentSheet.update { Sheet.TimedSheet(type) }
+        if (type == TimedSheetType.USDT) isUsdtIntroPresented = true
         return true
     }
 

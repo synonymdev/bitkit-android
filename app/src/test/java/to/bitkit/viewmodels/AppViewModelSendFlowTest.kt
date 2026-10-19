@@ -8278,6 +8278,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `dismissing the USDT intro before it is visible does not rerun the timed queue`() = test {
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+        assertTrue(presentTimedSheet(TimedSheetType.USDT))
+        timedSheetType.value = TimedSheetType.USDT
+        advanceUntilIdle()
+        clearInvocations(timedSheetManager)
+
+        sut.hideSheet()
+        timedSheetType.value = null
+        advanceUntilIdle()
+        assertFalse(settingsData.value.hasSeenUsdtIntro)
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        verify(timedSheetManager, never()).reevaluate()
+    }
+
+    @Test
     fun `replacing a timed sheet releases its manager without closing the replacement`() = test {
         sut.setIsAuthenticated(true)
         assertTrue(presentTimedSheet(TimedSheetType.APP_UPDATE))
