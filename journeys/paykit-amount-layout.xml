@@ -4,7 +4,7 @@
     <action>Open Payment Requests and create a request for the test contact. Open Amount.</action>
     <action>Select USD and enter 1.50. Verify the amount is leading-aligned near the header, the BTC/USD controls are trailing-aligned directly below it, and a divider separates them from the keypad.</action>
     <action>Switch between BTC and USD several times. Verify the amount controls, divider and keypad stay at the same vertical positions, including when the Bitcoin unit button wraps below the denomination buttons at enlarged text sizes.</action>
-    <action>Verify Continue is visible or reachable by scrolling at enlarged text sizes. Continue to details and verify the request denomination and amount remain 1.50 USD. Cancel without sending.</action>
+    <action>Verify every keypad key remains legible and tappable on a short screen at enlarged text sizes, including zero, decimal/000 and Delete. Scroll as needed to reach all keys and Continue. Continue to details and verify the request denomination and amount remain 1.50 USD. Cancel without sending.</action>
     <action>Open Subscriptions and start creating a subscription for the same contact. Open Amount and repeat the layout check in BTC and USD. Verify the controls do not overlap the keypad or Continue.</action>
     <action>Return to subscription details and verify accepted payment methods remain either USDT or Bitcoin methods, never both groups together. Cancel without sending.</action>
     <action>Repeat the amount checks at a compact screen width and enlarged system text. Verify every control remains readable and reachable; controls may stack or wrap and the screen may scroll.</action>

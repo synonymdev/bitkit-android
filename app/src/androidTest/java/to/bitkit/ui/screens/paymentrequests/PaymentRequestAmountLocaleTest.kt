@@ -6,14 +6,29 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.persistentListOf
@@ -30,6 +45,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.AmountInputViewModel
 import java.util.Locale
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -83,15 +99,15 @@ class PaymentRequestAmountLocaleTest {
         composeTestRule.onNodeWithTag("N5").performClick()
         composeTestRule.onNodeWithTag("N0").performClick()
         composeTestRule.onNodeWithText("150,50", useUnmergedTree = true).assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestAmountContinue").performClick()
+        composeTestRule.onNodeWithTag("PaymentRequestAmountContinue").performScrollTo().performClick()
 
         assertEquals(PaykitAmount(PaykitAsset.USD, 15_050uL), submitted?.amount)
     }
 
     @Test
     fun amountActionsStayAlignedAndReachableOnCompactScreens() {
-        val configuration = mutableStateOf(Triple(320, 1f, PaykitAsset.USD))
-        val height = mutableStateOf(520)
+        val configuration = mutableStateOf(Triple(320, 2f, PaykitAsset.USD))
+        val height = mutableStateOf(468)
         val amountInput = AmountInputViewModel(AmountInputHandler.stub())
         composeTestRule.setContent {
             val (width, scale, asset) = configuration.value
@@ -112,8 +128,16 @@ class PaymentRequestAmountLocaleTest {
                 }
             }
         }
-        for ((width, screenHeight) in listOf(320 to 520, 375 to 520, 320 to 640, 375 to 640)) {
-            for (scale in listOf(1f, 1.6f)) {
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("PaymentRequestAmountField").assertIsDisplayed()
+        composeTestRule.onRoot().performKeyInput {
+            pressKey(Key.Backspace)
+            pressKey(Key.Five)
+            pressKey(Key.Five)
+        }
+        composeTestRule.onNodeWithText("1,55", useUnmergedTree = true).assertIsDisplayed()
+        for ((width, screenHeight) in listOf(320 to 468, 320 to 520, 360 to 568, 375 to 640)) {
+            for (scale in listOf(1f, 1.6f, 2f)) {
                 var bitcoinPositions = emptyList<Float>()
                 for (asset in listOf(PaykitAsset.BTC, PaykitAsset.USD)) {
                     composeTestRule.runOnIdle {
@@ -121,20 +145,23 @@ class PaymentRequestAmountLocaleTest {
                         configuration.value = Triple(width, scale, asset)
                     }
                     composeTestRule.waitForIdle()
-                    val amount = composeTestRule.onNodeWithTag("PaymentRequestAmountField").fetchSemanticsNode().boundsInRoot
-                    val actions = composeTestRule.onNodeWithTag("PaymentRequestAmountActions").fetchSemanticsNode().boundsInRoot
-                    val divider = composeTestRule.onNodeWithTag("PaymentRequestAmountDivider").fetchSemanticsNode().boundsInRoot
+                    composeTestRule.onNode(
+                        hasScrollAction() and hasAnyDescendant(hasTestTag("PaymentRequestAmountField"))
+                    ).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -10_000f) }
+                    val amount = composeTestRule.onNodeWithTag("PaymentRequestAmountField").getUnclippedBoundsInRoot()
+                    val actions = composeTestRule.onNodeWithTag("PaymentRequestAmountActions").getUnclippedBoundsInRoot()
+                    val divider = composeTestRule.onNodeWithTag("PaymentRequestAmountDivider").getUnclippedBoundsInRoot()
                     val lastControl = if (asset == PaykitAsset.BTC) "PaymentRequestAmountUnit" else "PaymentRequestAssetUSD"
-                    val control = composeTestRule.onNodeWithTag(lastControl).fetchSemanticsNode().boundsInRoot
-                    assertEquals(divider.left, amount.left, 1f)
-                    assertEquals(divider.right, control.right, 1f)
-                    assertTrue(actions.top >= amount.bottom && actions.top - amount.bottom <= 34f)
+                    val control = composeTestRule.onNodeWithTag(lastControl).getUnclippedBoundsInRoot()
+                    assertEquals(divider.left.value, amount.left.value, 0.5f)
+                    assertEquals(divider.right.value, control.right.value, 0.5f)
+                    assertTrue(actions.top >= amount.bottom && actions.top - amount.bottom <= 17.dp)
                     assertTrue(divider.top >= actions.bottom)
                     val positions = listOf(
-                        actions.top,
-                        divider.top,
-                        composeTestRule.onNodeWithTag("N1").fetchSemanticsNode().boundsInRoot.top,
-                        composeTestRule.onNodeWithTag("N0").fetchSemanticsNode().boundsInRoot.top,
+                        actions.top.value,
+                        divider.top.value,
+                        composeTestRule.onNodeWithTag("N1").getUnclippedBoundsInRoot().top.value,
+                        composeTestRule.onNodeWithTag("N0").getUnclippedBoundsInRoot().top.value,
                     )
                     if (asset == PaykitAsset.BTC) {
                         bitcoinPositions = positions
@@ -144,12 +171,26 @@ class PaymentRequestAmountLocaleTest {
                             assertEquals(bitcoin, usd, 1f, "Controls must not move when denomination changes")
                         }
                     }
-                    val continueButton = composeTestRule.onNodeWithTag("PaymentRequestAmountContinue")
-                        .fetchSemanticsNode().boundsInRoot
-                    assertTrue(continueButton.height >= 112f, "Continue must be fully visible")
-                    listOf("N1", "N0", "NRemove", "PaymentRequestAmountContinue").forEach {
-                        composeTestRule.onNodeWithTag(it).assertIsDisplayed()
+                    val extraKey = if (asset == PaykitAsset.BTC) "N000" else "NDecimal"
+                    for (tag in (0..9).map { "N$it" } + extraKey + "NRemove") {
+                        composeTestRule.onNodeWithTag(tag)
+                            .performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(50.dp)
+                        if (tag != "NRemove") {
+                            val layouts = mutableListOf<TextLayoutResult>()
+                            val text = when (tag) {
+                                "NDecimal" -> ","
+                                "N000" -> "000"
+                                else -> tag.removePrefix("N")
+                            }
+                            composeTestRule.onNode(
+                                hasText(text) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true
+                            ).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                            assertTrue(layouts.isNotEmpty())
+                            assertFalse(layouts.single().didOverflowHeight, "$tag must fit vertically at $scale font scale")
+                        }
                     }
+                    composeTestRule.onNodeWithTag("PaymentRequestAmountContinue")
+                        .performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(56.dp)
                 }
             }
         }
