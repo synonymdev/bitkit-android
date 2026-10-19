@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -84,6 +85,10 @@ fun AllowanceSheet(
     viewModel: AllowancesViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // The view model outlives this sheet, so a check left open must never run in the next one.
+    DisposableEffect(route) {
+        onDispose { viewModel.onAuthorizationCancelled() }
+    }
 
     if (!uiState.isLoaded) {
         Box(

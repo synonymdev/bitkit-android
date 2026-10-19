@@ -109,6 +109,9 @@ data class PaykitAllowance(
             val terms = record.terms ?: return null
             if (terms.asset() != PaykitIssuerInterop.BITCOIN_ASSET) return null
             val monthly = terms.periodLimits().firstOrNull { isMonthly(it.period()) }
+            // This wallet pays only under limits it can show: terms without a per-payment and a monthly cap are dropped.
+            val isBounded = terms.perPaymentAmount() != null && monthly?.amountLimit() != null
+            if (role == Role.ALLOWER && !isBounded) return null
             return PaykitAllowance(
                 id = Id(record.counterparty, record.allowanceId),
                 role = role,
@@ -255,10 +258,10 @@ object PaykitAllowanceCapacity {
     }
 
     fun fits(amountSats: ULong, allowance: PaykitAllowance, attempts: List<Attempt>, now: Instant): Boolean {
-        val perPaymentMax = allowance.perPaymentMaxSats
-        if (perPaymentMax != null && amountSats > perPaymentMax) return false
-        val monthlyLimit = allowance.monthlyLimitSats ?: return true
-        val anchor = allowance.monthlyAnchor ?: return true
+        val perPaymentMax = allowance.perPaymentMaxSats ?: return false
+        if (amountSats > perPaymentMax) return false
+        val monthlyLimit = allowance.monthlyLimitSats ?: return false
+        val anchor = allowance.monthlyAnchor ?: return false
         return usedSats(allowance.allowanceId, attempts, anchor, now).safe() + amountSats.safe() <= monthlyLimit
     }
 
