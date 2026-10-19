@@ -73,6 +73,8 @@ See: `TransferEntity.kt`
 
 ### LSP Channel Purchase (TO_SPENDING)
 
+Channel orders go through `ChannelProviderRepo`, which picks Blocktank today and is where a connected Pubky swap provider will take over channel orders (see `docs/pubky-swaps.md`).
+
 **Phase 1: Payment**
 ```
 User confirms amount

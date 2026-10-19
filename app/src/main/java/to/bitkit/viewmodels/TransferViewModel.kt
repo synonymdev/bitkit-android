@@ -67,6 +67,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.models.formatMoney
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.ChannelProviderRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
@@ -100,6 +101,7 @@ class TransferViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
+    private val channelProviderRepo: ChannelProviderRepo,
     private val hwWalletRepo: HwWalletRepo,
     private val walletRepo: WalletRepo,
     private val settingsStore: SettingsStore,
@@ -358,7 +360,7 @@ class TransferViewModel @Inject constructor(
 
     private suspend fun getOrCreateSpendingOrder(): IBtOrder? {
         val state = _spendingUiState.value
-        return state.order ?: blocktankRepo.createOrder(
+        return state.order ?: channelProviderRepo.createOrder(
             spendingBalanceSats = state.clientBalanceSat,
             receivingBalanceSats = state.lspBalanceSat,
         ).getOrElse {

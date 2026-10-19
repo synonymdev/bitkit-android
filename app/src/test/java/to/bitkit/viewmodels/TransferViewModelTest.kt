@@ -83,6 +83,7 @@ import to.bitkit.models.formatToModernDisplay
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
+import to.bitkit.repositories.ChannelProviderRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.HwPassphraseMismatchError
@@ -191,6 +192,7 @@ class TransferViewModelTest : BaseUnitTest() {
             context = context,
             lightningRepo = lightningRepo,
             blocktankRepo = blocktankRepo,
+            channelProviderRepo = ChannelProviderRepo(blocktankRepo),
             hwWalletRepo = hwWalletRepo,
             walletRepo = walletRepo,
             settingsStore = settingsStore,
@@ -2787,6 +2789,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 context = context,
                 lightningRepo = lightningRepo,
                 blocktankRepo = blocktankRepo,
+                channelProviderRepo = ChannelProviderRepo(blocktankRepo),
                 hwWalletRepo = hwWalletRepo,
                 walletRepo = walletRepo,
                 settingsStore = settingsStore,

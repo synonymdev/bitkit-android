@@ -15,11 +15,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.ChannelProviderRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class BlocktankViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
+    private val channelProviderRepo: ChannelProviderRepo,
 ) : ViewModel() {
 
     val orders: StateFlow<ImmutableList<IBtOrder>> = blocktankRepo.blocktankState
@@ -49,7 +51,7 @@ class BlocktankViewModel @Inject constructor(
     }
 
     suspend fun createCjit(amountSats: ULong): IcJitEntry {
-        return blocktankRepo.createCjit(amountSats).getOrThrow()
+        return channelProviderRepo.createCjit(amountSats).getOrThrow()
     }
 
     suspend fun openChannel(orderId: String): IBtOrder {
