@@ -139,7 +139,13 @@ validate_symbols_match_shipped_libs() {
 
         artifact_dir="$shipped_root/$(basename "$artifact")"
         mkdir -p "$artifact_dir"
-        unzip -q "$artifact" 'lib/*/*.so' 'base/lib/*/*.so' -d "$artifact_dir" 2>/dev/null || true
+        # unzip exits 11 when a pattern matches nothing, which is expected for one of the two layouts.
+        unzip_status=0
+        unzip -q "$artifact" 'lib/*/*.so' 'base/lib/*/*.so' -d "$artifact_dir" 2>/dev/null || unzip_status=$?
+        if [ "$unzip_status" -ne 0 ] && [ "$unzip_status" -ne 11 ]; then
+            echo "Failed to read native libraries from '$artifact' (unzip exit '$unzip_status')." >&2
+            exit 1
+        fi
 
         for abi in arm64-v8a armeabi-v7a; do
             for lib_name in $required_libs; do

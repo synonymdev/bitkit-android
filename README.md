@@ -36,7 +36,7 @@ Some internal libraries are distributed via GitHub Packages. Configure credentia
      - `gpr.user=YOUR_GITHUB_USERNAME`
      - `gpr.key=YOUR_GITHUB_TOKEN`
 
-Gradle ignores `~/.m2` by default. To test a dependency you published with `publishToMavenLocal`, build with `-PuseMavenLocal=true`; never ship or symbolicate a build made that way, because its native libraries differ from the published AAR and its debug symbols.
+Gradle ignores `~/.m2` by default. To test a dependency you published with `publishToMavenLocal`, build with `-PuseMavenLocal=true` (`paykit-android` and `bitkit-core-android` always resolve from GitHub Packages); never ship or symbolicate a build made that way, because its native libraries differ from the published AAR and its debug symbols.
 
 See also:
 - [bitkit-core android bindings](https://github.com/synonymdev/bitkit-core/tree/master/bindings/android#installation)
