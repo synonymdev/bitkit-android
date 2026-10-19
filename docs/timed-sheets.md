@@ -11,9 +11,9 @@ The manager checks sheets two seconds after the home screen resumes and cancels 
 5. QuickPay
 6. High balance
 
-A busy sheet host leaves the selected prompt queued. When the host becomes idle on Home, the manager retries after the same two-second delay. Eligibility checks that finish after leaving Home cannot open a sheet.
+A busy sheet host leaves prompts queued for a later Home visit. While an unseen, undecided USDT intro has not yet been presented in this app session, becoming idle on Home also retries the queue after the same two-second delay. Once the intro is presented, closing sheets does not advance other timed prompts. Eligibility checks that finish after leaving Home or opening another flow cannot open a sheet.
 
-The selected sheet is removed from the manager only after the host accepts its presentation. It is registered again when the app creates a new manager instance. A standard dismissal calls the selected sheet's `onDismissed()` handler before clearing it.
+The selected sheet is removed from the queue when it is presented. It is registered again when the app creates a new manager instance. Dismissal releases the active sheet before calling its `onDismissed()` handler.
 
 ## USDT
 

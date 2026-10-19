@@ -32,6 +32,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -332,7 +333,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         on { visible }.thenReturn(flowOf(true))
     }
     private val timedSheetManager = mock<TimedSheetManager>()
-    private lateinit var presentTimedSheet: (TimedSheetType) -> Boolean
+    private fun presentTimedSheet(type: TimedSheetType): Boolean {
+        val method = AppViewModel::class.java.getDeclaredMethod("tryShowTimedSheet", TimedSheetType::class.java)
+        method.isAccessible = true
+        return method.invoke(sut, type) as Boolean
+    }
     private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
 
     @Before
@@ -782,14 +787,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
     }
 
-    private fun createViewModel() = AppViewModel(
+    private fun createViewModel(
+        timedSheetManagerProvider: (CoroutineScope) -> TimedSheetManager = { timedSheetManager },
+        usdtSheet: UsdtTimedSheet = UsdtTimedSheet(settingsStore),
+    ) = AppViewModel(
         connectivityRepo = connectivityRepo,
         healthRepo = healthRepo,
         toastManagerProvider = { toastManager },
-        timedSheetManagerProvider = { _, present ->
-            presentTimedSheet = present
-            timedSheetManager
-        },
+        timedSheetManagerProvider = timedSheetManagerProvider,
+
         context = context,
         bgDispatcher = testDispatcher,
         keychain = keychain,
@@ -822,13 +828,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         usdtRepo = usdtRepo,
         paykitUsdtPayments = paykitUsdtPayments,
         samRockRepo = samRockRepo,
-        appUpdateSheet = mock(),
-        backupSheet = mock(),
-        notificationsSheet = mock(),
-        quickPaySheet = mock(),
-        usdtSheet = UsdtTimedSheet(settingsStore),
+        appUpdateSheet = mock { on { type } doReturn TimedSheetType.APP_UPDATE },
+        backupSheet = mock { on { type } doReturn TimedSheetType.BACKUP },
+        notificationsSheet = mock { on { type } doReturn TimedSheetType.NOTIFICATIONS },
+        quickPaySheet = mock { on { type } doReturn TimedSheetType.QUICK_PAY },
+        usdtSheet = usdtSheet,
+
         usdtPreferences = usdtPreferences,
-        highBalanceSheet = mock(),
+        highBalanceSheet = mock { on { type } doReturn TimedSheetType.HIGH_BALANCE },
         formatMoneyValue = formatMoneyValue,
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
@@ -8274,7 +8281,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(timedSheetManager, never()).reevaluate()
         }
         sut.checkTimedSheets()
-        verify(timedSheetManager).onHomeScreenEntered()
+        verify(timedSheetManager).onHomeScreenEntered(any(), any())
     }
 
     @Test
@@ -8328,6 +8335,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(presentTimedSheet(TimedSheetType.BACKUP))
         sut.setIsAuthenticated(false)
         timedSheetType.value = TimedSheetType.BACKUP
+        sut.showSheet(Sheet.TimedSheet(TimedSheetType.BACKUP))
         advanceUntilIdle()
 
         assertTrue(sut.currentSheet.value is Sheet.TimedSheet)
@@ -8342,6 +8350,167 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    private fun useRealTimedSheets(): UsdtTimedSheet {
+        val sheet = mock<UsdtTimedSheet> {
+            on { type } doReturn TimedSheetType.USDT
+            on { priority } doReturn TimedSheetType.USDT.priority
+        }
+        whenever { sheet.shouldShow() }.thenReturn(true)
+        sut.viewModelScope.cancel()
+        sut = createViewModel(timedSheetManagerProvider = ::TimedSheetManager, usdtSheet = sheet)
+        sut.setIsAuthenticated(true)
+        return sheet
+    }
+
+    @Test
+    fun `unseen USDT intro waits until the scanner closes and Home settles`() = test {
+        val sheet = useRealTimedSheets()
+        sut.checkTimedSheets()
+        advanceTimeBy(1000)
+        sut.showScannerSheet()
+        runCurrent()
+        advanceTimeBy(3000)
+
+        assertTrue(sut.currentSheet.value is Sheet.QrScanner)
+        verify(sheet, never()).onShown()
+        verify(sheet, never()).onDismissed()
+
+        sut.hideSheet()
+        runCurrent()
+        advanceTimeBy(1000)
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).onShown()
+
+        advanceTimeBy(1100)
+        runCurrent()
+        assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        verify(sheet).onShown()
+    }
+
+    @Test
+    fun `unseen USDT intro retries after scanner closes on an already resumed Home`() = test {
+        val sheet = useRealTimedSheets()
+        sut.showScannerSheet()
+        runCurrent()
+        sut.checkTimedSheets()
+        advanceTimeBy(1000)
+        runCurrent()
+
+        assertTrue(sut.currentSheet.value is Sheet.QrScanner)
+        verify(sheet, never()).onShown()
+
+        sut.hideSheet()
+        runCurrent()
+        advanceTimeBy(1000)
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).onShown()
+
+        advanceTimeBy(1100)
+        runCurrent()
+        assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        verify(sheet).onShown()
+    }
+
+    @Test
+    fun `scan processing and payment confirmation defer the unseen USDT intro`() = test {
+        val sheet = useRealTimedSheets()
+        val bolt11 = "lnbcrt1slowreminderscan"
+        val finishScan = CompletableDeferred<Unit>()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(coreService.decode(bolt11)).doSuspendableAnswer {
+            finishScan.await()
+            Scanner.Lightning(lightningInvoice(bolt11, 500u))
+        }
+
+        sut.checkTimedSheets()
+        sut.onScanResult(bolt11)
+        advanceTimeBy(3000)
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).onShown()
+
+        finishScan.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+
+        sut.hideSheet()
+        runCurrent()
+        advanceTimeBy(2100)
+        runCurrent()
+        assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        verify(sheet).onShown()
+    }
+
+    @Test
+    fun `queued locked scan blocks timed sheet presentation`() = test {
+        sut.setIsAuthenticated(true)
+        settingsData.value = SettingsData(isPinEnabled = true)
+        runCurrent()
+        val canShowSheet = argumentCaptor<() -> Boolean>()
+        sut.checkTimedSheets()
+        verify(timedSheetManager).onHomeScreenEntered(canShowSheet.capture(), any())
+        assertTrue(canShowSheet.firstValue())
+        sut.setIsAuthenticated(false)
+
+        sut.onScanResult("lnbcrt1queuedreminderscan")
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        assertFalse(canShowSheet.firstValue())
+    }
+
+    @Test
+    fun `timed sheet presentation is blocked throughout another sheet transition`() = test {
+        sut.setIsAuthenticated(true)
+        val canShowSheet = argumentCaptor<() -> Boolean>()
+        sut.checkTimedSheets()
+        verify(timedSheetManager).onHomeScreenEntered(canShowSheet.capture(), any())
+        assertTrue(canShowSheet.firstValue())
+
+        sut.showSheet(Sheet.Widgets())
+        runCurrent()
+        assertFalse(canShowSheet.firstValue())
+
+        sut.showScannerSheet()
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        assertFalse(canShowSheet.firstValue())
+
+        advanceUntilIdle()
+        assertTrue(sut.currentSheet.value is Sheet.QrScanner)
+        assertFalse(canShowSheet.firstValue())
+
+        sut.hideSheet()
+        runCurrent()
+        assertTrue(canShowSheet.firstValue())
+    }
+
+    @Test
+    fun `transaction receipt also defers the USDT reminder without consuming it`() = test {
+        val sheet = useRealTimedSheets()
+        val receipt = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.ONCHAIN,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            paymentHashOrTxId = "received-tx",
+        )
+        sut.showTransactionSheet(receipt)
+        runCurrent()
+        sut.checkTimedSheets()
+        advanceTimeBy(2100)
+        runCurrent()
+
+        assertEquals(receipt, sut.transactionSheet.value)
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).onShown()
+
+        sut.hideNewTransactionSheet()
+        sut.checkTimedSheets()
+        advanceTimeBy(2100)
+        runCurrent()
+        assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
     }
 
     @Test

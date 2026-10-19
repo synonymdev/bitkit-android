@@ -5,7 +5,6 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
-import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.utils.timedsheets.TimedSheetManager
 
 @Module
@@ -13,10 +12,7 @@ import to.bitkit.utils.timedsheets.TimedSheetManager
 object TimedSheetModule {
 
     @Provides
-    fun provideTimedSheetManagerProvider(): @JvmSuppressWildcards (
-        CoroutineScope,
-        (TimedSheetType) -> Boolean
-    ) -> TimedSheetManager {
+    fun provideTimedSheetManagerProvider(): (CoroutineScope) -> TimedSheetManager {
         return ::TimedSheetManager
     }
 }

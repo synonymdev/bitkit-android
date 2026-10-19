@@ -268,7 +268,7 @@ class AppViewModel @Inject constructor(
     connectivityRepo: ConnectivityRepo,
     healthRepo: HealthRepo,
     toastManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> ToastQueueManager,
-    timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope, (TimedSheetType) -> Boolean) -> TimedSheetManager,
+    timedSheetManagerProvider: @JvmSuppressWildcards (CoroutineScope) -> TimedSheetManager,
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
@@ -450,6 +450,7 @@ class AppViewModel @Inject constructor(
         }
         pendingUsdtAction = onEnabled
         pendingUsdtCancel = onCancel
+        timedSheetManager.cancelPendingCheck()
         showUsdtEnablePrompt = true
     }
 
@@ -529,7 +530,7 @@ class AppViewModel @Inject constructor(
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val paymentRequestPresentationCompletionJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
-    private val timedSheetManager = timedSheetManagerProvider(viewModelScope, ::tryShowTimedSheet).apply {
+    private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
         registerSheet(appUpdateSheet)
         registerSheet(usdtSheet)
         registerSheet(backupSheet)
@@ -689,7 +690,11 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             combine(currentSheet, isAuthenticated, showForgotPinSheet) { sheet, authenticated, forgotPin ->
                 sheet == null && authenticated && !forgotPin
-            }.collect { if (it && !isUsdtIntroPresented && usdtSheet.shouldShow()) timedSheetManager.reevaluate() }
+            }.collect {
+                if (it && !isUsdtIntroPresented && usdtSheet.shouldShow()) {
+                    timedSheetManager.reevaluate()
+                }
+            }
         }
         viewModelScope.launch {
             pubkyRepo.sessionRestorationFailed.collect { failed ->
@@ -6606,7 +6611,9 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        if (shouldShow()) _transactionSheet.update { details }
+        if (!shouldShow()) return@launch
+        timedSheetManager.cancelPendingCheck()
+        _transactionSheet.update { details }
     }
 
     fun hideNewTransactionSheet() {
@@ -6713,6 +6720,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun showSheet(sheetType: Sheet) {
+        timedSheetManager.cancelPendingCheck()
         if (sheetType !== paymentRequestPreparation.value?.sheet) clearPaymentRequestPreparation()
         val previousJob = sheetTransitionJob
         transitionSheet = sheetType
@@ -7840,14 +7848,25 @@ class AppViewModel @Inject constructor(
     }
 
     private fun tryShowTimedSheet(type: TimedSheetType): Boolean {
-        if (!_isAuthenticated.value || _showForgotPinSheet.value) return false
-        if (_currentSheet.value != null || sheetTransitionJob?.isActive == true) return false
+        if (!canShowTimedSheet()) return false
         _currentSheet.update { Sheet.TimedSheet(type) }
         if (type == TimedSheetType.USDT) isUsdtIntroPresented = true
         return true
     }
 
-    fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
+    fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered(
+        canShowSheet = ::canShowTimedSheet,
+        showSheet = { tryShowTimedSheet(it) },
+    )
+
+    private fun canShowTimedSheet() = _isAuthenticated.value && !_showForgotPinSheet.value &&
+        _currentSheet.value == null &&
+        sheetTransitionJob?.isActive != true &&
+        paymentRequestSheetTransitionJob?.isActive != true &&
+        _transactionSheet.value == NewTransactionSheetDetails.EMPTY &&
+        !showUsdtEnablePrompt &&
+        !isScanPendingOrActive() &&
+        !_isCriticalUpdateRequired.value
 
     fun onAppResumed() {
         viewModelScope.launch {
