@@ -130,6 +130,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private val operationMutex = Mutex()
+    private val persistenceMutex = Mutex()
     private val deliveryScope = appScope(ioDispatcher, TAG)
 
     // Process-local activity handoffs only; restored proofs must reconstruct their activity.
@@ -162,7 +163,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     )
 
     suspend fun backupSnapshot(): List<PaykitPaymentStateBackup.Proof> = withContext(ioDispatcher) {
-        operationMutex.withLock {
+        persistenceMutex.withLock {
             val proofs = store.load()
             check(proofs.none { it.hardwareDispatchDenied }) { "Hardware dispatch denial cleanup is pending" }
             proofs.map { PaykitPaymentStateBackup.Proof(it) }
@@ -1569,7 +1570,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private suspend fun persist(proofs: List<PendingPaykitPaymentProof>) {
-        store.save(proofs)
+        // Snapshots wait for durable local writes, not the operation's remote SDK calls.
+        persistenceMutex.withLock { store.save(proofs) }
         observedHardwareProofs.retainAll(proofs.toSet())
     }
 }

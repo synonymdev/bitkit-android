@@ -23,6 +23,7 @@ import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
@@ -219,12 +220,42 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `proof delivery does not hold the local proof state lock`() = test {
+    fun `proof snapshot waits for local persistence to finish`() = test {
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val repo = paymentProofRepo()
+        val saveStarted = CompletableDeferred<Unit>()
+        val releaseSave = CompletableDeferred<Unit>()
+        whenever(store.save(any())).doSuspendableAnswer {
+            val proofs = it.getArgument<List<PendingPaykitPaymentProof>>(0)
+            saveStarted.complete(Unit)
+            releaseSave.await()
+            storedProofs = proofs
+        }
+        val preparation = async {
+            repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+        }
+        saveStarted.await()
+        val snapshot = async { repo.backupSnapshot() }
+        runCurrent()
+        assertFalse(snapshot.isCompleted)
+        releaseSave.complete(Unit)
+        preparation.await()
+        assertEquals(request.id, snapshot.await().single().restored().requestId)
+    }
+
+    @Test
+    fun `proof snapshots do not wait for remote enqueue or delivery`() = test {
         val request = paymentRequest(MethodId.Bolt11.rawValue)
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        val submissionStarted = CompletableDeferred<Unit>()
+        val releaseSubmission = CompletableDeferred<Unit>()
         whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
-            .thenReturn(record)
+            .doSuspendableAnswer {
+                submissionStarted.complete(Unit)
+                releaseSubmission.await()
+                record
+            }
         val deliveryStarted = CompletableDeferred<Unit>()
         val releaseDelivery = CompletableDeferred<Unit>()
         whenever(
@@ -242,6 +273,13 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
         repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
         repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
+        submissionStarted.await()
+        try {
+            val snapshot = withTimeout(1_000) { repo.backupSnapshot() }
+            assertEquals(PREIMAGE, snapshot.single().restored().proofData)
+        } finally {
+            releaseSubmission.complete(Unit)
+        }
         deliveryStarted.await()
         try {
             withTimeout(1_000) { repo.backupSnapshot() }
