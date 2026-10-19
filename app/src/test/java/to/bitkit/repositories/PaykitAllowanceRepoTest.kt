@@ -297,7 +297,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     fun `received proposal is presented once and accepting answers it`() = test {
         val proposalRecord = receivedProposal()
         records = listOf(proposalRecord)
-        whenever(sdk.acceptAllowance(any(), any())).thenReturn(proposalRecord)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(proposalRecord)
         sut.activate(identity)
 
         val proposal = checkNotNull(sut.proposalForPresentation())
@@ -308,7 +308,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertTrue(sut.accept(proposal.id).isSuccess)
 
-        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID)
+        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
         verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
     }
 

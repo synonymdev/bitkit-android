@@ -6,15 +6,21 @@ import android.app.Application
 import android.app.Application.ActivityLifecycleCallbacks
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import dagger.Lazy
 import dagger.hilt.android.HiltAndroidApp
 import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.env.Env
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.services.BluetoothInit
 import to.bitkit.services.PubkyAuthHandlerRegistrar
+import to.bitkit.utils.Crypto
 import to.bitkit.utils.Logger
 import to.bitkit.utils.SubscriptionClockOffsetSync
 import javax.inject.Inject
@@ -36,12 +42,18 @@ internal open class App : Application(), Configuration.Provider {
     @Inject
     lateinit var subscriptionClockOffsetSync: SubscriptionClockOffsetSync
 
+    /** Resolved only once the process changes foreground state, so startup does not build the wallet graph. */
+    @Inject
+    lateinit var hwWalletRepo: Lazy<HwWalletRepo>
+
     override val workManagerConfiguration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
 
     override fun onCreate() {
+        // Runs before super.onCreate(), where Hilt starts building services that open TLS connections
+        Crypto.installSecurityProvider()
         super.onCreate()
         Env.initAppStoragePath(filesDir.absolutePath)
         installUncaughtExceptionLogger()
@@ -52,6 +64,19 @@ internal open class App : Application(), Configuration.Provider {
         BluetoothInit.ensureInitialized()
         pubkyAuthHandlerRegistrar.start()
         subscriptionClockOffsetSync.start()
+        observeAppForeground()
+    }
+
+    private fun observeAppForeground() {
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_START -> hwWalletRepo.get().onAppForegrounded()
+                    Lifecycle.Event.ON_STOP -> hwWalletRepo.get().onAppBackgrounded()
+                    else -> Unit
+                }
+            },
+        )
     }
 
     private fun installUncaughtExceptionLogger() {

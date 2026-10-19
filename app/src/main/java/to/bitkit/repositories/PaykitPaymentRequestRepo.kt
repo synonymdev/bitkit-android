@@ -2,10 +2,13 @@
 
 package to.bitkit.repositories
 
+import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateCounterpartySendReport
 import com.synonym.paykit.OutboundPrivateMessageStatus
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaymentConversion
+import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
@@ -15,6 +18,9 @@ import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,7 +29,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -43,10 +51,16 @@ import to.bitkit.di.SubscriptionClock
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPayment
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.satsToMsat
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitPaymentRequestRecurrenceTerms
+import to.bitkit.services.PaykitReadLane
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.isBitkitPaymentRequest
 import to.bitkit.utils.AppError
@@ -59,6 +73,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -72,8 +87,9 @@ data class PaykitPaymentRequestId(
 data class PaykitPaymentRequest(
     val paymentRequestId: String,
     val counterparty: String,
-    val amountValue: String,
-    val amountSats: ULong,
+    val amount: PaykitAmount,
+    val paymentReference: String,
+    val pricing: PaykitRequestPricing = PaykitRequestPricing(),
     val note: String? = null,
     val createdAt: Instant? = null,
     val expiresAt: Instant?,
@@ -83,7 +99,19 @@ data class PaykitPaymentRequest(
     val lifecycleState: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
     val billingPeriod: PaykitBillingPeriod? = null,
     val paymentProofKind: PaykitPaymentProofKind? = null,
+    val paymentProofEventId: String? = null,
+    val paymentDeadlineAt: Instant? = null,
+    val isPaymentInFlight: Boolean = false,
+    val proposalStreamItemId: ULong? = null,
 ) {
+    val amountValue: String get() = amount.value
+
+    fun payment(method: MethodId, at: Instant, quoteId: String? = null): PaykitRequestPayment =
+        pricing.payment(amount, method.rawValue, billingPeriod, at, quoteId)
+
+    fun submissionDeadline(payment: PaykitRequestPayment?): Instant? =
+        listOfNotNull(paymentDeadlineAt, payment?.expiresAt).minOrNull()
+
     enum class ParseFailure(
         val logValue: String,
         val shouldLogIncomingRejection: Boolean = true,
@@ -111,19 +139,43 @@ data class PaykitPaymentRequest(
             billingPeriod?.startsAt?.toString(),
         )
 
+    val canDismiss: Boolean
+        get() = !isPaymentInFlight
+
     val requiresAcceptance: Boolean
         get() = billingPeriod == null && lifecycleState == PaymentRequestLifecycleState.PROPOSED
 
-    fun isExpired(now: Instant): Boolean =
+    fun isProposalExpired(now: Instant): Boolean =
         lifecycleState == PaymentRequestLifecycleState.PROPOSED && expiresAt?.let { it <= now } == true
 
-    fun acceptsLightningInvoiceAmountMsats(amountMsats: ULong?): Boolean =
-        amountMsats == null || amountMsats == satsToMsat(amountSats)
+    fun isPaymentDeadlineExpired(now: Instant): Boolean = paymentDeadlineAt?.let { now > it } == true
+
+    fun isExpired(now: Instant): Boolean = isProposalExpired(now) || isPaymentDeadlineExpired(now)
+
+    fun acceptsLightningInvoiceAmountMsats(
+        amountMsats: ULong?,
+        paymentTerms: PaykitRequestPayment? = null,
+        at: Instant = Clock.System.now(),
+    ): Boolean {
+        if (amountMsats == null) return true
+        val payment = runCatching { payment(MethodId.Bolt11, at, paymentTerms?.quoteId) }.getOrNull() ?: return false
+        return payment.isValid(at) && (paymentTerms == null || paymentTerms == payment) &&
+            payment.amount.atomic <= ULong.MAX_VALUE / 1000uL && amountMsats == satsToMsat(payment.amount.atomic)
+    }
 
     fun acceptsLightningInvoiceAmountSats(amountSats: ULong): Boolean =
-        amountSats == 0uL || acceptsPaymentAmount(amountSats)
+        amountSats == 0uL || acceptsPaymentAmount(amountSats, MethodId.Bolt11)
 
-    fun acceptsPaymentAmount(amountSats: ULong): Boolean = amountSats == this.amountSats
+    fun acceptsPaymentAmount(
+        amountSats: ULong,
+        method: MethodId,
+        paymentTerms: PaykitRequestPayment? = null,
+        at: Instant = Clock.System.now(),
+    ): Boolean {
+        val payment = runCatching { payment(method, at, paymentTerms?.quoteId) }.getOrNull() ?: return false
+        return payment.isValid(at) && (paymentTerms == null || paymentTerms == payment) &&
+            amountSats == payment.amount.atomic
+    }
 
     fun belongsTo(subscription: PaykitSubscription): Boolean =
         billingPeriod != null &&
@@ -183,9 +235,11 @@ private fun String.redactedForPaymentRequestDiagnostics(): String =
 
 private data class ParsedPaykitPaymentRequestTerms(
     val terms: PaymentRequestTerms,
-    val amountSats: ULong,
+    val amount: PaykitAmount,
     val endpoints: List<String>,
     val expiresAt: Instant?,
+    val paymentDeadlineAt: Instant?,
+    val convertedToBitcoin: Boolean = false,
 )
 
 enum class PaykitPaymentRequestDeliveryStatus { Queued, Sent }
@@ -197,9 +251,10 @@ data class PaykitPaymentRequestTarget(
 )
 
 data class PaykitPaymentRequestDraft(
-    val amountSats: ULong,
+    val amount: PaykitAmount,
     val note: String,
     val expiresAt: Instant,
+    val acceptedPaymentEndpointIdentifiers: List<String>? = null,
 )
 
 data class PaykitPaymentRequestCreation(
@@ -208,13 +263,15 @@ data class PaykitPaymentRequestCreation(
     val wasPublishedToActiveState: Boolean,
 )
 
+@Suppress("LongParameterList")
 class PaykitSubscriptionDraft(
-    val amountSats: ULong,
+    val amount: PaykitAmount,
     val name: String,
     val description: String,
     val frequency: PaykitRecurrenceUnit,
     val expiresAt: Instant,
     val iconBytes: ByteArray? = null,
+    val acceptedPaymentEndpointIdentifiers: List<String>? = null,
 )
 
 data class PaykitSubscriptionCreation(
@@ -246,6 +303,12 @@ sealed class PaykitPaymentRequestError(message: String) : AppError(message) {
     data object SubscriptionTooLong : PaykitPaymentRequestError("Subscription proposal exceeds the message size limit")
 }
 
+enum class PaykitPaymentRequestRefreshMode {
+    STORED,
+    INBOX,
+    FULL,
+}
+
 @Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 @Singleton
 class PaykitPaymentRequestRepo @Inject constructor(
@@ -256,20 +319,35 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val diagnostics: PaykitPaymentRequestDiagnostics,
     private val paymentProofStore: PaykitPaymentProofStore,
     private val paymentProofRepo: PaykitPaymentProofRepo,
+    private val usdtPayments: PaykitUsdtPaymentRepo,
     private val subscriptionNotificationScheduler: PaykitSubscriptionNotificationScheduler,
     private val clock: Clock,
     @SubscriptionClock private val subscriptionClock: Clock,
+    private val lightningRepo: LightningRepo,
+    private val currencyRepo: CurrencyRepo,
+    private val usdtRepo: UsdtRepo,
 ) {
     companion object {
         private const val TAG = "PaykitPaymentRequestRepo"
+
+        /** Maximum number of concurrent public capability lookups per discovery. */
+        private const val PAYMENT_REQUEST_DISCOVERY_CONCURRENCY = 8
     }
 
     private val operationMutex = Mutex()
+    private val refreshMutex = Mutex()
     private val targetDiscoveryMutex = Mutex()
     private val creationMutex = Mutex()
     private val processingLock = Any()
     private val processingRequestIds = mutableSetOf<PaykitPaymentRequestId>()
+    private val processingSubscriptionIds = mutableSetOf<PaykitSubscriptionId>()
     private val stateGeneration = AtomicLong()
+    private val completedRefreshVersion = AtomicLong()
+    private var completedRefreshGeneration = -1L
+    private var completedRefreshProofVersion = -1L
+    private var completedRefreshActionVersion = -1L
+    private var actionVersion = 0L
+    private var completedRefreshMode = PaykitPaymentRequestRefreshMode.STORED
     private val repoScope = appScope(ioDispatcher, TAG)
     private var expirationJob: Job? = null
     private var cachedTargetContext: PaykitPaymentRequestTargetContext? = null
@@ -285,6 +363,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
     val eligibleTargets: StateFlow<List<PaykitPaymentRequestTarget>> = _eligibleTargets.asStateFlow()
     private val _isCreatingRequest = MutableStateFlow(false)
     val isCreatingRequest: StateFlow<Boolean> = _isCreatingRequest.asStateFlow()
+
+    val isPaymentSubmissionActive: StateFlow<Boolean>
+        get() = paykitSdkService.isPaymentSubmissionActive
+
+    fun setPaymentSubmissionActive(active: Boolean) = paykitSdkService.setPaymentSubmissionActive(active)
 
     @Volatile
     private var activeIdentity: String? = null
@@ -303,6 +386,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val generation: Long,
         val identity: String,
         val contacts: PaykitReceivedPaymentContacts,
+    )
+
+    private data class RefreshCheckpoint(val actionVersion: Long, val proofVersion: Long)
+
+    private data class RequestSnapshot(
+        val records: List<PaymentRequestRecord>,
+        val blockedPeers: List<LinkedPeerRecord>,
     )
 
     @Volatile
@@ -369,6 +459,25 @@ class PaykitPaymentRequestRepo @Inject constructor(
     fun pendingRequest(id: PaykitPaymentRequestId): PaykitPaymentRequest? =
         _pendingRequests.value.firstOrNull { it.id == id }
 
+    internal suspend fun isSubscriptionNotificationHandled(id: PaykitPaymentRequestId, identity: String): Boolean {
+        val generation = stateGeneration.get()
+        return withContext(ioDispatcher) {
+            operationMutex.withLock {
+                if (completedRefreshGeneration != generation || completedRefreshActionVersion != actionVersion ||
+                    !isCurrentState(generation, identity)
+                ) {
+                    return@withLock false
+                }
+                if (pendingRequest(id) != null) return@withLock false
+                id in dismissedSubscriptionPaymentIds || _paymentRequestHistory.value.any { it.id == id } ||
+                    _subscriptions.value.none {
+                        it.id == PaykitSubscriptionId(id.paymentRequestId, id.counterparty) &&
+                            it.isActive(subscriptionClock.now())
+                    }
+            }
+        }
+    }
+
     fun synchronizeSubscriptionNotifications(enabled: Boolean) {
         val identity = activeIdentity ?: return
         subscriptionNotificationScheduler.synchronize(
@@ -380,14 +489,18 @@ class PaykitPaymentRequestRepo @Inject constructor(
         )
     }
 
-    suspend fun markPresented(request: PaykitPaymentRequest): Boolean = withContext(ioDispatcher) {
-        operationMutex.withLock {
-            if (_pendingRequests.value.none { it.id == request.id }) return@withLock false
-            val identity = activeIdentity ?: return@withLock false
-            presentedRequestIds = presentedRequestIds + request.id
-            runSuspendCatching { presentationStore.save(identity, presentedRequestIds) }
-                .onFailure { Logger.warn("Failed to persist surfaced Paykit payment requests", it, context = TAG) }
-            true
+    suspend fun markPresented(request: PaykitPaymentRequest): Boolean {
+        val generation = stateGeneration.get()
+        val identity = activeIdentity ?: return false
+        return withContext(ioDispatcher) {
+            operationMutex.withLock {
+                if (!isCurrentState(generation, identity)) return@withLock false
+                if (_pendingRequests.value.none { it.id == request.id }) return@withLock false
+                presentedRequestIds = presentedRequestIds + request.id
+                runSuspendCatching { presentationStore.save(identity, presentedRequestIds) }
+                    .onFailure { Logger.warn("Failed to persist surfaced Paykit payment requests", it, context = TAG) }
+                true
+            }
         }
     }
 
@@ -441,19 +554,64 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    suspend fun refresh(syncPrivateMessages: Boolean = true): Result<Unit> {
+    suspend fun refresh(mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL): Result<Unit> =
+        refresh(mode, forceFresh = false)
+
+    internal suspend fun refresh(mode: PaykitPaymentRequestRefreshMode, messagePriority: Priority): Result<Unit> =
+        refresh(mode, forceFresh = false, messagePriority = messagePriority)
+
+    suspend fun refreshAfterStateChange(
+        mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
+    ): Result<Unit> = refresh(mode, forceFresh = true)
+
+    private suspend fun refresh(
+        mode: PaykitPaymentRequestRefreshMode,
+        forceFresh: Boolean,
+        messagePriority: Priority = Priority.Ordered,
+    ): Result<Unit> {
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity
+        val refreshVersion = completedRefreshVersion.get()
         return withContext(ioDispatcher) {
             runSuspendCatching {
-                operationMutex.withLock {
-                    if (!isAvailable()) {
-                        clearStateLocked()
-                        return@withLock
+                refreshMutex.withLock refresh@{
+                    val checkpoint = operationMutex.withLock operation@{
+                        if (!isAvailable()) {
+                            clearStateLocked()
+                            return@operation null
+                        }
+                        if (!isCurrentState(generation, expectedIdentity)) return@operation null
+                        val proofVersion = paymentProofStore.backupStateVersion.value
+                        val hasFreshSnapshot = completedRefreshVersion.get() != refreshVersion &&
+                            completedRefreshGeneration == generation && completedRefreshProofVersion == proofVersion &&
+                            completedRefreshActionVersion == actionVersion
+                        if (!forceFresh && hasFreshSnapshot && mode <= completedRefreshMode) return@operation null
+                        completedRefreshGeneration = -1L
+                        RefreshCheckpoint(actionVersion, proofVersion)
+                    } ?: return@refresh
+                    val snapshot = runSuspendCatching {
+                        val priority = if (forceFresh) Priority.Ordered else Priority.Background
+                        fetchRequestSnapshot(expectedIdentity, mode, priority, messagePriority, observationOnly = true)
                     }
-                    runSuspendCatching { synchronizeLocked(generation, expectedIdentity, syncPrivateMessages) }
-                        .onFailure { discardExpiredRequestsLocked() }
-                        .getOrThrow()
+                    operationMutex.withLock {
+                        if (!isCurrentState(generation, expectedIdentity)) return@withLock
+                        val proofVersion = paymentProofStore.backupStateVersion.value
+                        runSuspendCatching {
+                            val records = snapshot.getOrThrow()
+                            if (checkpoint != RefreshCheckpoint(actionVersion, proofVersion)) {
+                                synchronizeLocked(generation, expectedIdentity, PaykitPaymentRequestRefreshMode.STORED)
+                            } else {
+                                applyRequestSnapshotLocked(records, generation, expectedIdentity, proofVersion)
+                            }
+                        }.onFailure { discardExpiredRequestsLocked() }.getOrThrow()
+                        if (isCurrentState(generation, expectedIdentity)) {
+                            completedRefreshMode = mode
+                            completedRefreshGeneration = generation
+                            completedRefreshProofVersion = proofVersion
+                            completedRefreshActionVersion = actionVersion
+                            completedRefreshVersion.incrementAndGet()
+                        }
+                    }
                 }
             }.onFailure {
                 Logger.warn("Failed to refresh incoming Paykit payment requests", it, context = TAG)
@@ -483,10 +641,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         return@discovery
                     }
                     val ticket = targetRefreshTicket.incrementAndGet()
-                    val context = targetContext(savedPublicKeys, expectedIdentity)
+                    val context = targetContext(savedPublicKeys, expectedIdentity, Priority.Background)
                     if (!force && context == cachedTargetContext) return@discovery
                     val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
-                    val discovery = context?.let { eligibleTargets(it, previousTargets) }
+                    val discovery = context?.let { eligibleTargets(it, previousTargets, PaykitReadLane.Bulk) }
                         ?: PaykitPaymentRequestTargetDiscovery(emptyList(), isComplete = true)
                     operationMutex.withLock operation@{
                         if (!isCurrentState(generation, expectedIdentity)) return@operation
@@ -526,7 +684,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 if (!isAvailable() || expectedIdentity == null) return@runSuspendCatching unavailable
                 val ticket = targetRefreshTicket.incrementAndGet()
                 val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
-                val discovery = targetContext(listOf(publicKey), expectedIdentity)
+                val discovery = targetContext(listOf(publicKey), expectedIdentity, Priority.Interactive)
                     ?.let { eligibleTargets(it, previousTargets) }
                     ?: PaykitPaymentRequestTargetDiscovery(emptyList(), isComplete = true)
                 val target = discovery.targets.firstOrNull()
@@ -566,42 +724,43 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     val generation = stateGeneration.get()
                     val expectedIdentity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
                     val proposalDate = clock.now()
-                    if (draft.amountSats == 0uL || !isAvailable()) throw PaykitPaymentRequestError.RequestUnavailable
+                    if (draft.amount.atomic == 0uL || !isAvailable()) throw PaykitPaymentRequestError.RequestUnavailable
                     if (draft.expiresAt <= proposalDate) throw PaykitPaymentRequestError.RequestExpired
 
                     val selectedSavedKey = savedPublicKeys.firstOrNull {
                         PubkyPublicKeyFormat.matches(it, target.publicKey)
                     }
                     val targets = selectedSavedKey?.let {
-                        targetContext(listOf(it), expectedIdentity)
+                        targetContext(listOf(it), expectedIdentity, Priority.Interactive)
                     }?.let { eligibleTargets(it).targets }.orEmpty()
                     if (target !in targets) throw PaykitPaymentRequestError.RequestUnavailable
                     val settings = settingsStore.data.first()
                     if (!settings.sharesPrivatePaykitEndpoints) throw PaykitPaymentRequestError.RequestUnavailable
-                    val endpointIdentifiers = acceptedPaymentEndpointIdentifiers(settings)
+                    val endpointIdentifiers = acceptedPaymentEndpointIdentifiers(settings).filter {
+                        draft.acceptedPaymentEndpointIdentifiers?.contains(it) != false
+                    }
                     if (endpointIdentifiers.isEmpty()) throw PaykitPaymentRequestError.RequestUnavailable
 
                     val note = draft.note.trim().take(256)
-                    val proposal = PaykitPaymentRequestProposalTerms(
-                        amountValue = draft.amountSats.toBitcoinAmount(),
-                        paymentReference = "bitkit-${UUID.randomUUID()}",
-                        proposalExpiresAt = draft.expiresAt.toString(),
-                        acceptedPaymentEndpointIdentifiers = endpointIdentifiers,
-                        metadataJson = JsonObject(mapOf("note" to JsonPrimitive(note))).toString(),
+                    val proposal = buildPaymentRequestProposal(
+                        draft.copy(note = note),
+                        endpointIdentifiers,
+                        proposalDate
                     )
+                    actionVersion++
                     val record = paykitSdkService.proposePaymentRequest(
                         counterparty = target.publicKey,
                         proposal = proposal,
                         expectedIdentity = expectedIdentity,
                     )
-                    val reports = processPendingMessages()
+                    val reports = processPendingMessages(target.publicKey)
 
                     val request = record.toCreatedPaykitPaymentRequest(
                         draft = draft.copy(note = note),
                         target = target,
                         endpointIdentifiers = endpointIdentifiers,
                         createdAt = proposalDate,
-                        reports = reports,
+                        wasSent = proposalWasSent(record, reports, generation, expectedIdentity),
                     )
                     publishCreatedRequest(request, generation, expectedIdentity)
                 }
@@ -612,6 +771,29 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }.onFailure {
             Logger.warn("Failed to create Paykit payment request", it, context = TAG)
         }
+    }
+
+    private fun buildPaymentRequestProposal(
+        draft: PaykitPaymentRequestDraft,
+        endpointIdentifiers: List<String>,
+        proposalDate: Instant,
+    ): PaykitPaymentRequestProposalTerms {
+        val rates = PaykitRequestPricing.rates(
+            draft.amount.asset,
+            endpointIdentifiers,
+            currencyRepo.currencyState.value.paykitRate,
+            proposalDate
+        )
+        return PaykitPaymentRequestProposalTerms(
+            amountValue = draft.amount.value,
+            amountAsset = draft.amount.asset.code,
+            conversion = rates.takeIf { it.isNotEmpty() }?.let(PaymentConversion::Fixed),
+            paymentDeadline = PaymentDeadline.At(draft.expiresAt.toString()),
+            paymentReference = "bitkit-${UUID.randomUUID()}",
+            proposalExpiresAt = draft.expiresAt.toString(),
+            acceptedPaymentEndpointIdentifiers = endpointIdentifiers,
+            metadataJson = JsonObject(mapOf("note" to JsonPrimitive(draft.note))).toString(),
+        )
     }
 
     suspend fun proposeSubscription(
@@ -647,7 +829,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val description = draft.description.trim()
         validateSubscriptionDraft(draft, name, validationDate)
 
-        val endpoints = subscriptionProposalEndpoints(target, savedPublicKeys, expectedIdentity)
+        val endpoints = subscriptionProposalEndpoints(draft, target, savedPublicKeys, expectedIdentity)
         val reservedIconUri = PaykitSubscriptionProposal.reservedIconUri.takeIf { draft.iconBytes != null }
         val preflight = buildSubscriptionProposal(draft, name, description, reservedIconUri, endpoints, clock.now())
         PaykitSubscriptionProposal.validate(preflight)
@@ -662,12 +844,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
         // The published recurrence start and anchor stay on real time, so the offset never leaves this device.
         val proposal = buildSubscriptionProposal(draft, name, description, iconUri, endpoints, clock.now())
         PaykitSubscriptionProposal.validate(proposal)
+        actionVersion++
         val record = paykitSdkService.proposePaymentRequest(
             counterparty = target.publicKey,
             proposal = proposal,
             expectedIdentity = expectedIdentity,
         )
-        val deliveryStatus = if (proposalWasSent(record, processPendingMessages())) {
+        val reports = processPendingMessages(target.publicKey)
+        val deliveryStatus = if (proposalWasSent(record, reports, generation, expectedIdentity)) {
             PaykitPaymentRequestDeliveryStatus.Sent
         } else {
             PaykitPaymentRequestDeliveryStatus.Queued
@@ -683,7 +867,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         name: String,
         proposalDate: Instant,
     ) {
-        val hasValidContent = draft.amountSats != 0uL && name.isNotEmpty()
+        val hasValidContent = draft.amount.atomic != 0uL && name.isNotEmpty()
         val canPropose = draft.frequency.isSupported && isAvailable()
         if (!hasValidContent || !canPropose) {
             throw PaykitPaymentRequestError.RequestUnavailable
@@ -696,6 +880,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     private suspend fun subscriptionProposalEndpoints(
+        draft: PaykitSubscriptionDraft,
         target: PaykitPaymentRequestTarget,
         savedPublicKeys: List<String>,
         expectedIdentity: String,
@@ -704,11 +889,15 @@ class PaykitPaymentRequestRepo @Inject constructor(
             PubkyPublicKeyFormat.matches(it, target.publicKey)
         }
         val targets = selectedSavedKey?.let { savedKey ->
-            targetContext(listOf(savedKey), expectedIdentity)?.let { eligibleTargets(it).targets }
+            targetContext(listOf(savedKey), expectedIdentity, Priority.Interactive)?.let { eligibleTargets(it).targets }
         }
             .orEmpty()
         val settings = settingsStore.data.first()
-        val endpoints = acceptedPaymentEndpointIdentifiers(settings)
+        val endpoints = PaykitRequestPricing.subscriptionEndpoints(
+            draft.amount.asset,
+            acceptedPaymentEndpointIdentifiers(settings),
+            draft.acceptedPaymentEndpointIdentifiers,
+        )
         if (target !in targets || !settings.sharesPrivatePaykitEndpoints || endpoints.isEmpty()) {
             throw PaykitPaymentRequestError.RequestUnavailable
         }
@@ -729,9 +918,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
             "benefits" to JsonArray(emptyList()),
         )
         iconUri?.let { subscriptionMetadata["icon_uri"] = JsonPrimitive(it) }
+        val rates = PaykitRequestPricing.rates(draft.amount.asset, endpointIdentifiers, null, startsAt)
         val timestamp = Instant.fromEpochSeconds(startsAt.epochSeconds).toString()
         return PaykitPaymentRequestProposalTerms(
-            amountValue = draft.amountSats.toBitcoinAmount(),
+            amountValue = draft.amount.value,
+            amountAsset = draft.amount.asset.code,
+            conversion = rates.takeIf { it.isNotEmpty() }?.let(PaymentConversion::Fixed),
             paymentReference = "bitkit-${UUID.randomUUID()}",
             proposalExpiresAt = draft.expiresAt.toString(),
             acceptedPaymentEndpointIdentifiers = endpointIdentifiers,
@@ -750,16 +942,35 @@ class PaykitPaymentRequestRepo @Inject constructor(
         )
     }
 
-    private fun proposalWasSent(
+    private suspend fun proposalWasSent(
         record: PaymentRequestRecord,
         reports: List<OutboundPrivateCounterpartySendReport>,
+        generation: Long,
+        expectedIdentity: String,
     ): Boolean {
         if (record.proposalOutboundStatus == OutboundPrivateMessageStatus.SENT) return true
         val messageId = record.proposalOutboundMessageId ?: return false
-        return reports.any {
+        val sentByDrain = reports.any {
             PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
                 messageId in it.report?.sent.orEmpty()
         }
+        if (sentByDrain) return true
+        val failedByDrain = reports.any {
+            PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
+                it.report?.failed.orEmpty().any { failure -> failure.outboundMessageId == messageId }
+        }
+        if (failedByDrain || !isCurrentState(generation, expectedIdentity)) return false
+        return runSuspendCatching {
+            paykitSdkService.allPaymentRequests(expectedIdentity, Priority.Interactive).any {
+                PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty) &&
+                    it.paymentRequestId == record.paymentRequestId &&
+                    it.localRole == PaymentRequestLocalRole.PAYEE &&
+                    it.proposalOutboundMessageId == messageId &&
+                    it.proposalOutboundStatus == OutboundPrivateMessageStatus.SENT
+            }
+        }.onFailure {
+            Logger.warn("Failed to read Paykit proposal delivery status", it, context = TAG)
+        }.getOrDefault(false)
     }
 
     private fun publishCreatedSubscription(
@@ -802,6 +1013,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         runSuspendCatching {
             val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
             val generation = stateGeneration.get()
+            if (request.isPaymentDeadlineExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
             if (!isLocallyPayable(request)) throw PaykitPaymentRequestError.RequestUnavailable
             if (forExecution && !hasCurrentExecutionContext(request)) {
                 throw PaykitPaymentRequestError.RequestUnavailable
@@ -818,13 +1030,21 @@ class PaykitPaymentRequestRepo @Inject constructor(
             if (forExecution && !hasCurrentExecutionContext(request)) {
                 throw PaykitPaymentRequestError.RequestUnavailable
             }
+            if (request.isPaymentDeadlineExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
         }
     }
 
     suspend fun claimForPayment(request: PaykitPaymentRequest): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             ensurePaymentAllowed(request, forExecution = false).getOrThrow()
-            paykitSdkService.claimPaymentRequestForExecution(request.counterparty, request.paymentRequestId)
+            val record = paykitSdkService.claimPaymentRequestForExecution(
+                request.counterparty,
+                request.paymentRequestId,
+            )
+            request.billingPeriod?.let { period ->
+                val subscription = record.toPaykitSubscription() ?: throw PaykitPaymentRequestError.RequestUnavailable
+                if (period in subscription.paidPeriods) throw PaykitPaymentRequestError.RequestUnavailable
+            }
             Unit
         }
     }
@@ -839,11 +1059,17 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                 }
             } else {
+                val proposalStreamItemId = request.proposalStreamItemId
+                    ?: throw PaykitPaymentRequestError.RequestUnavailable
                 updateRequest(request, PaymentRequestLifecycleState.ACCEPTED) {
+                    if (it.proposalStreamItemId != proposalStreamItemId) {
+                        throw PaykitPaymentRequestError.RequestUnavailable
+                    }
                     withAcceptanceIntent(it) {
                         paykitSdkService.acceptPaymentRequest(
                             counterparty = it.counterparty,
                             paymentRequestId = it.paymentRequestId,
+                            expectedProposalStreamItemId = proposalStreamItemId,
                         )
                     }
                 }.getOrThrow()
@@ -942,17 +1168,21 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 val current = _subscriptions.value.firstOrNull { it.id == subscription.id }
                     ?.takeIf { it == subscription && it.isPayer && it.isProposalActionable(validationDate) }
                     ?: throw PaykitPaymentRequestError.RequestUnavailable
+                val proposalStreamItemId = subscription.proposalStreamItemId
+                    ?: throw PaykitPaymentRequestError.RequestUnavailable
+                actionVersion++
                 val record = paykitSdkService.acceptPaymentRequest(
                     current.counterparty,
                     current.paymentRequestId,
+                    proposalStreamItemId,
                 )
-                processPendingMessages()
                 // Stored on real time, so a period the offset made due is not dropped when it turns Off.
                 val acceptanceDate = clock.now()
                 subscriptionAcceptedAt = subscriptionAcceptedAt + (current.id to acceptanceDate)
                 persistSubscriptionState(identity)
                 applySubscriptionRecordLocked(record, subscriptionClock.now())
                 synchronizeAfterSubscriptionAction(identity)
+                scheduleAcceptedResponse(current.counterparty)
                 _pendingRequests.value
                     .filter { it.belongsTo(current) }
                     .minByOrNull { it.billingPeriod?.startsAt ?: Instant.DISTANT_FUTURE }
@@ -968,7 +1198,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 identity = identity,
                 subscriptionId = it.id,
             ).getOrThrow()
-            if (protectedRequestIds.isNotEmpty()) {
+            val protectedUsdtRequestIds = usdtPayments.protectedRequestIdsForSubscriptionCancellation(
+                identity = identity,
+                subscriptionId = it.id,
+            ).getOrThrow()
+            if (protectedRequestIds.isNotEmpty() || protectedUsdtRequestIds.isNotEmpty()) {
                 throw PaykitPaymentRequestError.OperationInProgress
             }
         }
@@ -1000,23 +1234,53 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun synchronizeLocked(
         generation: Long,
         expectedIdentity: String?,
-        syncPrivateMessages: Boolean = true,
+        mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
     ) {
-        if (syncPrivateMessages) {
-            processPendingMessages()
-            paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
+        val proofVersion = paymentProofStore.backupStateVersion.value
+        val snapshot = fetchRequestSnapshot(expectedIdentity, mode)
+        applyRequestSnapshotLocked(snapshot, generation, expectedIdentity, proofVersion)
+    }
+
+    private suspend fun fetchRequestSnapshot(
+        expectedIdentity: String?,
+        mode: PaykitPaymentRequestRefreshMode,
+        priority: Priority = Priority.Ordered,
+        messagePriority: Priority = Priority.Ordered,
+        observationOnly: Boolean = false,
+    ): RequestSnapshot {
+        if (mode == PaykitPaymentRequestRefreshMode.FULL) processPendingMessages(priority = messagePriority)
+        if (mode != PaykitPaymentRequestRefreshMode.STORED) {
+            paykitSdkService.receivePrivateMessagesFromLinkedPeers(messagePriority).also(::logIntakeFailures)
         }
+        if (observationOnly) {
+            val observation = paykitSdkService.observeState(requireNotNull(expectedIdentity), priority)
+            return RequestSnapshot(
+                observation.paymentRequests,
+                observation.linkedPeers.filter { it.state == LinkedPeerState.BLOCKED },
+            )
+        }
+        return RequestSnapshot(
+            paykitSdkService.allPaymentRequests(expectedIdentity, priority),
+            paykitSdkService.linkedPeers(priority).filter { it.state == LinkedPeerState.BLOCKED },
+        )
+    }
+
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    private suspend fun applyRequestSnapshotLocked(
+        snapshot: RequestSnapshot,
+        generation: Long,
+        expectedIdentity: String?,
+        proofVersion: Long,
+    ) {
         val now = clock.now()
         val subscriptionNow = subscriptionClock.now()
-        receivedContacts = null
-        val allRecords = paykitSdkService.allPaymentRequests(expectedIdentity)
+        val allRecords = snapshot.records
         val contacts = PaykitReceivedPaymentContacts.from(allRecords, Env.network)
         val records = allRecords.filter(::isBitkitPaymentRequest)
-        val blockedPeers = paykitSdkService.linkedPeers().filter { it.state == LinkedPeerState.BLOCKED }
+        val blockedPeers = snapshot.blockedPeers
         val availableRecords = records.filterNot { record ->
             blockedPeers.any {
                 PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty)
@@ -1029,7 +1293,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val locallyInFlightRequestIds = expectedIdentity
             ?.let(paymentProofStore::inFlightRequestIds)
             .orEmpty()
-        val allSubscriptions = records.mapNotNull(PaymentRequestRecord::toPaykitSubscription)
+        val reopenableHardwareProofs = expectedIdentity?.let { identity ->
+            paymentProofStore.load().filter { it.isReopenableHardwareReceipt(identity) }
+        }.orEmpty()
+        val receipts = expectedIdentity?.let { usdtPayments.verifiedReceipts(it).getOrThrow() }.orEmpty()
+        val allSubscriptions = records.mapNotNull { it.toPaykitSubscription(verifiedUsdtReceipts = receipts) }
             .map { it.withExpiredLifecycle(subscriptionNow) }
         val blockedSubscriptionIds = allSubscriptions.mapNotNull { subscription ->
             subscription.id.takeIf {
@@ -1043,7 +1311,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             subscription.id in blockedSubscriptionIds && (
                 subscription.paidPeriods.isEmpty() ||
                     subscription.isProposalVisible(subscriptionNow) ||
-                    subscription.isActive(subscriptionNow)
+                    subscription.runsUntilPaidThrough(subscriptionNow)
                 )
         }
         val restoredAcceptances = allSubscriptions
@@ -1072,7 +1340,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .mapTo(mutableSetOf()) { it.id }
         val updatedDismissedPaymentIds = dismissedSubscriptionPaymentIds.intersect(activeRecurringRequestIds)
         val dueRequests = recurringRequestsBySubscription
-            .filterKeys { it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING && !it.hasPaymentDeadline }
+            .filterKeys { it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING }
             .values
             .flatten()
             .filter {
@@ -1106,9 +1374,16 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 }
             }
         }.filter {
-            isLocallyPayable(it) && it.id !in locallyCompletedRequestIds && it.id !in locallyInFlightRequestIds
+            isLocallyPayable(it) && it.id !in locallyCompletedRequestIds &&
+                (
+                    it.id !in locallyInFlightRequestIds || reopenableHardwareProofs.any { proof ->
+                        proof.matchesHardwareRetryRequest(it)
+                    }
+                    )
         }
-        val incoming = (dueRequests + oneTimeIncoming).sortedBy { it.createdAt }
+        val incoming = (dueRequests + oneTimeIncoming)
+            .map { it.copy(isPaymentInFlight = it.id in locallyInFlightRequestIds) }
+            .sortedBy { it.createdAt }
         val oneTimeHistory = records.mapNotNull { it.toPaykitPaymentRequestHistory(now) }.map { request ->
             val proofKind = locallyCompletedProofKinds[request.id] ?: return@map request
             request.copy(
@@ -1117,17 +1392,26 @@ class PaykitPaymentRequestRepo @Inject constructor(
             )
         }
         val history = (recurringHistory + oneTimeHistory)
+            .map {
+                it.copy(
+                    isPaymentInFlight = it.direction == PaykitPaymentRequestDirection.Incoming &&
+                        it.id in locallyInFlightRequestIds,
+                )
+            }
             .sortedByDescending { it.createdAt }
         if (!isCurrentState(generation, expectedIdentity) || expectedIdentity == null) return
         pruneAcceptedOneTimeRequestIds(records, expectedIdentity, generation)
         if (!isCurrentState(generation, expectedIdentity)) return
-        receivedContacts = ReceivedContactsSnapshot(generation, expectedIdentity, contacts)
         val subscriptionStateChanged =
             subscriptionAcceptedAt != updatedSubscriptionAcceptedAt ||
                 dismissedSubscriptionPaymentIds != updatedDismissedPaymentIds
         subscriptionAcceptedAt = updatedSubscriptionAcceptedAt
         dismissedSubscriptionPaymentIds = updatedDismissedPaymentIds
         if (subscriptionStateChanged) persistSubscriptionState(expectedIdentity)
+        if (proofVersion != paymentProofStore.backupStateVersion.value) {
+            throw PaykitPaymentRequestError.RequestUnavailable
+        }
+        receivedContacts = ReceivedContactsSnapshot(generation, expectedIdentity, contacts)
         _pendingRequests.update { incoming }
         _paymentRequestHistory.update { history }
         _subscriptions.update { subscriptions }
@@ -1157,12 +1441,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun targetContext(
         savedPublicKeys: List<String>,
         expectedIdentity: String,
+        priority: Priority,
     ): PaykitPaymentRequestTargetContext? {
         val settings = settingsStore.data.first()
         val endpointIdentifiers = acceptedPaymentEndpointIdentifiers(settings)
         if (!settings.sharesPrivatePaykitEndpoints || endpointIdentifiers.isEmpty()) return null
         val savedKeys = savedPublicKeys.mapNotNull(PubkyPublicKeyFormat::normalized).distinct()
-        val identityStatus = paykitSdkService.identityStatus()
+        val identityStatus = paykitSdkService.identityStatus(priority)
         if (
             savedKeys.isEmpty() ||
             identityStatus?.capability != PubkyIdentityCapability.PRIVATE_LINK_CAPABLE ||
@@ -1170,7 +1455,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         ) {
             return null
         }
-        val linkedPublicKeys = paykitSdkService.linkedPeers()
+        val linkedPublicKeys = paykitSdkService.linkedPeers(priority)
             .filter { it.state == LinkedPeerState.LINKED }
             .mapNotNull { PubkyPublicKeyFormat.normalized(it.counterparty) }
             .toSet()
@@ -1184,12 +1469,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun eligibleTargets(
         context: PaykitPaymentRequestTargetContext,
         previousTargets: Map<String, PaykitPaymentRequestTarget> = emptyMap(),
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
     ): PaykitPaymentRequestTargetDiscovery {
         var isComplete = true
         val failedPublicKeys = mutableSetOf<String>()
-        val targets = context.savedPublicKeys.mapNotNull { publicKey ->
-            if (publicKey !in context.linkedPublicKeys) return@mapNotNull null
-            val lookup = runSuspendCatching { paykitSdkService.canReceivePaymentRequests(publicKey) }
+        val linkedKeys = context.savedPublicKeys.filter { it in context.linkedPublicKeys }
+        val targets = paymentRequestCapabilities(linkedKeys, lane).mapNotNull { (publicKey, lookup) ->
             val capable = lookup
                 .onFailure {
                     Logger.warn(
@@ -1223,8 +1508,30 @@ class PaykitPaymentRequestRepo @Inject constructor(
         )
     }
 
-    private fun acceptedPaymentEndpointIdentifiers(settings: SettingsData): List<String> = buildList {
-        if (PublicPaykitRepo.isLightningPaymentOptionEnabled(settings)) add(MethodId.Bolt11.rawValue)
+    private suspend fun paymentRequestCapabilities(publicKeys: List<String>, lane: PaykitReadLane) = coroutineScope {
+        val permits = Semaphore(PAYMENT_REQUEST_DISCOVERY_CONCURRENCY)
+        publicKeys.map { publicKey ->
+            async {
+                permits.withPermit {
+                    publicKey to runSuspendCatching { paykitSdkService.canReceivePaymentRequests(publicKey, lane) }
+                }
+            }
+        }.awaitAll()
+    }
+
+    fun acceptedPaymentEndpointIdentifiers(settings: SettingsData): List<String> = buildList {
+        if (PublicPaykitRepo.isUsdtPaymentOptionEnabled(
+                settings,
+                usdtRepo.state.value
+            )
+        ) {
+            add(MethodId.UsdtArbitrum.rawValue)
+        }
+        if (lightningRepo.canReceive() && PublicPaykitRepo.isLightningPaymentOptionEnabled(settings)) {
+            add(
+                MethodId.Bolt11.rawValue
+            )
+        }
         if (PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) {
             addAll(MethodId.entries.filter { it.isOnchain }.map(MethodId::rawValue))
         }
@@ -1241,6 +1548,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
         activatedGeneration == stateGeneration.get() && request.id in acceptedOneTimeRequestIds
 
     private fun hasCurrentExecutionContext(request: PaykitPaymentRequest): Boolean {
+        if (synchronized(processingLock) {
+                PaykitSubscriptionId(request.paymentRequestId, request.counterparty) in processingSubscriptionIds
+            }
+        ) {
+            return false
+        }
         if (request.billingPeriod == null) {
             return hasLocalAcceptance(request) && _paymentRequestHistory.value.any {
                 it.id == request.id && it.lifecycleState == PaymentRequestLifecycleState.ACCEPTED
@@ -1269,14 +1582,25 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     val current = _pendingRequests.value.firstOrNull { it.id == request.id }
                         ?: throw PaykitPaymentRequestError.RequestUnavailable
 
+                    if (resultingState in listOf(
+                            PaymentRequestLifecycleState.CANCELED,
+                            PaymentRequestLifecycleState.REJECTED,
+                        ) && activeIdentity?.let { current.id in paymentProofStore.inFlightRequestIds(it) } == true
+                    ) {
+                        throw PaykitPaymentRequestError.OperationInProgress
+                    }
+                    actionVersion++
                     operation(current)
-                    processPendingMessages()
+                    if (resultingState != PaymentRequestLifecycleState.ACCEPTED) processPendingMessages()
                     val updatedRequest = current.copy(lifecycleState = resultingState)
                     _paymentRequestHistory.update { requests ->
                         listOf(updatedRequest) + requests.filterNot { it.id == current.id }
                     }
                     _pendingRequests.update { requests -> requests.filterNot { it.id == current.id } }
                     discardExpiredRequestsLocked()
+                    if (resultingState == PaymentRequestLifecycleState.ACCEPTED) {
+                        scheduleAcceptedResponse(current.counterparty)
+                    }
                     Unit
                 }
             } finally {
@@ -1285,19 +1609,38 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
+    private fun scheduleAcceptedResponse(counterparty: String) {
+        val identity = activeIdentity ?: return
+        val generation = stateGeneration.get()
+        repoScope.launch {
+            isPaymentSubmissionActive.first { !it }
+            if (!isCurrentState(generation, identity)) return@launch
+            runSuspendCatching {
+                paykitSdkService.processOutboundPrivateMessages(counterparty, Priority.Background, identity)
+            }.onFailure { Logger.warn("Failed to deliver accepted Paykit payment request", it, context = TAG) }
+        }
+    }
+
     private suspend fun updateSubscription(
         subscription: PaykitSubscription,
         operation: suspend (PaykitSubscription) -> PaymentRequestRecord,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            operationMutex.withLock {
-                val current = _subscriptions.value.firstOrNull { it.id == subscription.id }
-                    ?: throw PaykitPaymentRequestError.RequestUnavailable
-                val record = operation(current)
-                processPendingMessages()
-                val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
-                applySubscriptionRecordLocked(record, subscriptionClock.now())
-                synchronizeAfterSubscriptionAction(identity)
+            val isNewAction = synchronized(processingLock) { processingSubscriptionIds.add(subscription.id) }
+            if (!isNewAction) throw PaykitPaymentRequestError.OperationInProgress
+            try {
+                operationMutex.withLock {
+                    val current = _subscriptions.value.firstOrNull { it.id == subscription.id }
+                        ?: throw PaykitPaymentRequestError.RequestUnavailable
+                    actionVersion++
+                    val record = operation(current)
+                    processPendingMessages()
+                    val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
+                    applySubscriptionRecordLocked(record, subscriptionClock.now())
+                    synchronizeAfterSubscriptionAction(identity)
+                }
+            } finally {
+                synchronized(processingLock) { processingSubscriptionIds.remove(subscription.id) }
             }
         }.onFailure { Logger.warn("Failed to update Paykit subscription", it, context = TAG) }
     }
@@ -1314,7 +1657,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     private suspend fun applySubscriptionRecordLocked(record: PaymentRequestRecord, now: Instant) {
-        val subscription = record.toPaykitSubscription()?.withExpiredLifecycle(now) ?: return
+        val receipts = activeIdentity?.let { usdtPayments.verifiedReceipts(it).getOrThrow() }.orEmpty()
+        val subscription = record.toPaykitSubscription(verifiedUsdtReceipts = receipts)
+            ?.withExpiredLifecycle(now) ?: return
         _subscriptions.update { subscriptions ->
             subscriptions.filterNot { it.id == subscription.id } + subscription
         }
@@ -1334,8 +1679,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
         val recurringRequests = requestsThroughAcceptance(subscription, now)
         val unpaidRequests = if (
-            subscription.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING &&
-            !subscription.hasPaymentDeadline
+            subscription.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING
         ) {
             recurringRequests.filter { it.lifecycleState != PaymentRequestLifecycleState.PROOF_SUBMITTED }
         } else {
@@ -1364,8 +1708,23 @@ class PaykitPaymentRequestRepo @Inject constructor(
         scheduleExpirationLocked()
     }
 
-    private suspend fun processPendingMessages(): List<OutboundPrivateCounterpartySendReport> =
-        runSuspendCatching { paykitSdkService.processPendingPrivateMessages() }
+    private suspend fun processPendingMessages(
+        counterparty: String? = null,
+        priority: Priority = Priority.Ordered,
+    ): List<OutboundPrivateCounterpartySendReport> =
+        runSuspendCatching {
+            if (counterparty == null) {
+                paykitSdkService.processPendingPrivateMessages(priority)
+            } else {
+                listOf(
+                    OutboundPrivateCounterpartySendReport(
+                        counterparty = counterparty,
+                        report = paykitSdkService.processOutboundPrivateMessages(counterparty, Priority.Interactive),
+                        error = null,
+                    ),
+                )
+            }
+        }
             .onSuccess(::logOutboundFailures)
             .onFailure { Logger.warn("Failed to deliver pending Paykit private messages", it, context = TAG) }
             .getOrDefault(emptyList())
@@ -1464,6 +1823,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     private fun clearStateLocked() {
+        completedRefreshGeneration = -1L
         receivedContacts = null
         expirationJob?.cancel()
         expirationJob = null
@@ -1486,6 +1846,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .filter { it.lifecycleState == PaymentRequestLifecycleState.PROPOSED }
             .mapNotNull { it.expiresAt }
             .map { it - now }
+        val paymentDeadlineDelays = _pendingRequests.value
+            .mapNotNull { it.paymentDeadlineAt }
+            .map { it - now + 1.nanoseconds }
         // Subscription dates run on the subscription clock, which the offset can move ahead of real time.
         val subscriptionDelays = _subscriptions.value
             .filter {
@@ -1495,7 +1858,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .flatMap { listOfNotNull(it.proposalExpiresAt, it.recurrence.endsAt) }
             .filter { it > subscriptionNow }
             .map { it - subscriptionNow }
-        val delayDuration = (requestDelays + subscriptionDelays).minOrNull()?.coerceAtLeast(Duration.ZERO)
+        val delayDuration = (requestDelays + paymentDeadlineDelays + subscriptionDelays)
+            .minOrNull()?.coerceAtLeast(Duration.ZERO)
             ?: return
         expirationJob = repoScope.launch {
             delay(delayDuration)
@@ -1508,7 +1872,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
 }
 
 private fun List<PaykitPaymentRequest>.withExpiredLifecycle(now: Instant): List<PaykitPaymentRequest> = map { request ->
-    if (request.lifecycleState == PaymentRequestLifecycleState.PROPOSED && request.isExpired(now)) {
+    if (request.isProposalExpired(now)) {
         request.copy(lifecycleState = PaymentRequestLifecycleState.PROPOSAL_EXPIRED)
     } else {
         request
@@ -1576,21 +1940,33 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
             },
         )
     }
-    if (requiresActionableRequest && requestTerms.paymentDeadline != null) {
+    val paymentDeadlineAt = (requestTerms.paymentDeadline as? PaymentDeadline.At)?.timestamp
+        ?.takeIf { it.endsWith('Z') }
+        ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+    if (requiresActionableRequest && requestTerms.paymentDeadline != null && paymentDeadlineAt == null) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedPaymentDeadline)
     }
-    if (requestTerms.amount.asset != PaykitIssuerInterop.BITCOIN_ASSET) {
-        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
+    if (requiresActionableRequest && paymentDeadlineAt?.let { now > it } == true) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.Expired)
     }
-    val amountSats = requestTerms.amount.value.toPaykitSats()
-        ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidAmount)
-    if (amountSats > ULong.MAX_VALUE / 1000uL) {
-        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.AmountOutOfRange)
-    }
-    val endpoints = PaykitIssuerInterop.supportedEndpointIdentifiers(
+    val supportedEndpoints = PaykitIssuerInterop.supportedEndpointIdentifiers(
         requestTerms.acceptedPaymentEndpointIdentifiers,
         network,
     )
+    val asset = PaykitAsset.entries.firstOrNull { it.code == requestTerms.amount.asset }
+    val bitcoinPayment = if (asset == null) {
+        PaykitBitcoinRequestPricing.bitcoinPayment(requestTerms, supportedEndpoints.filter { it.startsWith("btc-") })
+            ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
+    } else {
+        null
+    }
+    val amount = bitcoinPayment?.let { PaykitAmount(PaykitAsset.BTC, it.amountSats) }
+        ?: runCatching { PaykitAmount.parse(requireNotNull(asset), requestTerms.amount.value) }.getOrNull()
+        ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidAmount)
+    if (amount.asset == PaykitAsset.BTC && amount.atomic > ULong.MAX_VALUE / 1000uL) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.AmountOutOfRange)
+    }
+    val endpoints = bitcoinPayment?.endpointIdentifiers ?: supportedEndpoints
     if (requiresActionableRequest && endpoints.isEmpty()) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.NoSupportedEndpoint)
     }
@@ -1604,7 +1980,14 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.Expired)
     }
 
-    val parsedTerms = ParsedPaykitPaymentRequestTerms(requestTerms, amountSats, endpoints, expiresAt)
+    val parsedTerms = ParsedPaykitPaymentRequestTerms(
+        requestTerms,
+        amount,
+        endpoints,
+        expiresAt,
+        paymentDeadlineAt,
+        bitcoinPayment != null,
+    )
     return PaykitPaymentRequestParseResult.Parsed(toPaykitPaymentRequest(expectedRole, parsedTerms, now))
 }
 
@@ -1614,12 +1997,19 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
     now: Instant,
 ) = PaykitPaymentRequest(
     paymentRequestId = paymentRequestId,
+    proposalStreamItemId = proposalStreamItemId,
     counterparty = counterparty,
-    amountValue = parsedTerms.terms.amount.value,
-    amountSats = parsedTerms.amountSats,
+    amount = parsedTerms.amount,
+    paymentReference = parsedTerms.terms.paymentReference.exportText(),
+    pricing = PaykitRequestPricing(
+        parsedTerms.terms.conversion.takeUnless { parsedTerms.convertedToBitcoin },
+        parsedTerms.terms.paymentDeadline,
+        conversionQuotes,
+    ),
     note = parsedTerms.terms.metadata.note(),
     createdAt = lastEventAt?.let { runCatching { Instant.parse(it) }.getOrNull() },
     expiresAt = parsedTerms.expiresAt,
+    paymentDeadlineAt = parsedTerms.paymentDeadlineAt,
     acceptedPaymentEndpointIdentifiers = parsedTerms.endpoints,
     deliveryStatus = if (expectedRole == PaymentRequestLocalRole.PAYEE) {
         if (proposalOutboundStatus == OutboundPrivateMessageStatus.SENT) {
@@ -1642,12 +2032,13 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
     } else {
         state
     },
+    paymentProofEventId = paymentProofs.lastOrNull()?.eventId,
     paymentProofKind = paymentProofs.lastOrNull()?.let {
         PaykitPaymentProofKind.fromPaymentEndpointIdentifier(it.paymentEndpointIdentifier)
     },
 )
 
-private fun PaymentRequestRecord.toPaykitPaymentRequestHistory(now: Instant): PaykitPaymentRequest? {
+internal fun PaymentRequestRecord.toPaykitPaymentRequestHistory(now: Instant): PaykitPaymentRequest? {
     val role = localRole ?: return null
     if (role == PaymentRequestLocalRole.UNKNOWN) return null
     return when (val result = parsePaykitPaymentRequest(role, now, requiresActionableRequest = false)) {
@@ -1661,19 +2052,15 @@ private fun PaymentRequestRecord.toCreatedPaykitPaymentRequest(
     target: PaykitPaymentRequestTarget,
     endpointIdentifiers: List<String>,
     createdAt: Instant,
-    reports: List<OutboundPrivateCounterpartySendReport>,
+    wasSent: Boolean,
 ): PaykitPaymentRequest {
-    val wasSent = proposalOutboundMessageId?.let { messageId ->
-        reports.any { report ->
-            PubkyPublicKeyFormat.matches(report.counterparty, counterparty) &&
-                messageId in report.report?.sent.orEmpty()
-        }
-    } == true
     return PaykitPaymentRequest(
         paymentRequestId = paymentRequestId,
         counterparty = target.publicKey,
-        amountValue = draft.amountSats.toBitcoinAmount(),
-        amountSats = draft.amountSats,
+        amount = draft.amount,
+        paymentReference = terms?.paymentReference?.exportText().orEmpty(),
+        pricing = PaykitRequestPricing(terms?.conversion, terms?.paymentDeadline, conversionQuotes),
+        paymentDeadlineAt = PaykitRequestPricing(deadline = terms?.paymentDeadline).paymentDeadline(null),
         note = draft.note.takeIf(String::isNotBlank),
         createdAt = lastEventAt?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: createdAt,
         expiresAt = draft.expiresAt,
@@ -1696,9 +2083,6 @@ internal fun PrivateJsonObject.note(): String? = runCatching {
         ?.trim()
         ?.takeIf(String::isNotEmpty)
 }.getOrNull()
-
-private fun ULong.toBitcoinAmount(): String =
-    BigDecimal(toString()).movePointLeft(8).stripTrailingZeros().toPlainString()
 
 internal fun String.toPaykitSats(): ULong? {
     if (!bitcoinAmountPattern.matches(this)) return null

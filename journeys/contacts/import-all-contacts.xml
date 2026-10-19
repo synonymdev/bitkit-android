@@ -5,6 +5,9 @@
     Include the identity's own key in the following list.
     Repeat with a spelling of that key that changes only the final z-base32 padding bits.
     Repeat with a large list (for example 62 contacts).
+    Repeat after deleting this profile and selecting the same Ring identity again.
+    Measure Import All to Let Your Contacts Pay You and check logs for a terminal error
+    or an uncertain-write safety wait.
   </description>
   <actions>
     <action>Note the friend count shown in the import preview</action>

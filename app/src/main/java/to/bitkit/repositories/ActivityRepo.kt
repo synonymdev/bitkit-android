@@ -209,6 +209,31 @@ class ActivityRepo @Inject constructor(
         walletId: String = WalletScope.default,
     ): OnchainActivity? = coreService.activity.getOnchainActivityByTxId(txid, walletId)
 
+    /** Local follow-up after the original hardware wallet independently observed this exact outgoing tx. */
+    suspend fun completeObservedHardwarePayment(
+        walletId: String,
+        txid: String,
+        address: String,
+        amountSats: ULong,
+        fee: ULong,
+        feeRate: ULong,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            require(walletId != WalletScope.default)
+            coreService.activity.createSentOnchainActivityFromSendResult(
+                txid = txid, address = address, amount = amountSats, fee = fee, feeRate = feeRate,
+                isTransfer = false, channelId = null, walletId = walletId,
+            )
+            // The Core writer logs storage errors internally. Read back before completing the proof.
+            val activity = getOnchainActivityByTxId(txid, walletId)
+            check(activity?.walletId == walletId && activity.txId.equals(txid, true) &&
+                activity.txType == PaymentType.SENT) { "Original hardware payment activity is not durable" }
+            val tagsChanged = coreService.activity.restoreSentOnchainTags(txid, walletId)
+            notifyPaymentActivityChanged()
+            if (tagsChanged) notifyActivitiesChanged(tagsChanged = true)
+        }
+    }
+
     /**
      * Checks if a transaction is inbound (received) by looking up the payment direction.
      */
@@ -504,14 +529,15 @@ class ActivityRepo @Inject constructor(
                 )
                 return@runCatching
             }
-            if (PubkyPublicKeyFormat.matches(activity.contact(), normalizedKey)) {
-                return@runCatching
-            }
-
-            cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = false)
             val updatedAt = nowTimestamp().epochSecond.toULong()
-            val updatedActivity = activity.withContact(normalizedKey, updatedAt)
-            updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
+            val updatedActivity = if (PubkyPublicKeyFormat.matches(activity.contact(), normalizedKey)) {
+                activity
+            } else {
+                activity.withContact(normalizedKey, updatedAt).also {
+                    updateActivity(it.rawId(), it).getOrThrow()
+                }
+            }
+            cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = false)
             updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt, walletId)
         }.onFailure {
             Logger.error("Failed to set contact for payment '$forPaymentId'", it, context = TAG)

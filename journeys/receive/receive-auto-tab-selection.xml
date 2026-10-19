@@ -35,7 +35,7 @@
       (testTag "Tab-auto" absent) while the Lightning node starts
     </action>
     <action>
-      Tap the Trezor tab (testTag "Tab-trezor") if present, then tap the Savings tab (testTag
+      Tap the hardware wallet tab (testTag "Tab-hardware") if present, then tap the Savings tab (testTag
       "Tab-savings")
     </action>
     <action>

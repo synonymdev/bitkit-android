@@ -1,5 +1,7 @@
 package to.bitkit.utils
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import to.bitkit.env.Env.derivationName
@@ -8,15 +10,66 @@ import to.bitkit.ext.fromHex
 import to.bitkit.ext.toBase64
 import to.bitkit.ext.toHex
 import to.bitkit.fcm.EncryptedNotification
+import java.security.Provider
+import java.security.Security
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class CryptoTest {
+    private companion object {
+        const val BC = BouncyCastleProvider.PROVIDER_NAME
+    }
+
     private lateinit var sut: Crypto
+    private var baselineProvider: Provider? = null
+    private var baselinePosition = 0
 
     @Before
     fun setUp() {
+        baselineProvider = Security.getProvider(BC)
+        baselinePosition = positionOf(baselineProvider)
         sut = Crypto()
+    }
+
+    @After
+    fun tearDown() {
+        // The provider list is shared by the whole JVM, so restore BC as it was before this test started
+        Security.removeProvider(BC)
+        baselineProvider?.let { Security.insertProviderAt(it, baselinePosition) }
+    }
+
+    @Test
+    fun `it should preserve registered providers while using its own provider`() {
+        val originalProviders = Security.getProviders()
+        val originalProvider = Security.getProvider("BC")
+        val originalPosition = originalProviders.indexOf(originalProvider) + 1
+        val platformProvider = object : Provider("BC", 1.0, "Test platform provider") {}
+
+        try {
+            Security.removeProvider("BC")
+            Security.insertProviderAt(platformProvider, 1)
+            val providersBefore = Security.getProviders()
+
+            val crypto = Crypto()
+            val keys = crypto.generateKeyPair()
+            assertContentEquals(keys.publicKey, crypto.getPublicKey(keys.privateKey))
+            val secret = crypto.generateSharedSecret(keys.privateKey, keys.publicKey.toHex(), derivationName)
+            val plaintext = "Provider preservation".toByteArray()
+            val encrypted = crypto.encrypt(plaintext, secret)
+            assertContentEquals(plaintext, crypto.decrypt(encrypted, secret))
+
+            assertSame(platformProvider, Security.getProvider("BC"))
+            val providersAfter = Security.getProviders()
+            assertEquals(providersBefore.size, providersAfter.size)
+            providersBefore.forEachIndexed { index, provider -> assertSame(provider, providersAfter[index]) }
+        } finally {
+            Security.removeProvider("BC")
+            if (originalProvider != null) Security.insertProviderAt(originalProvider, originalPosition)
+        }
     }
 
     @Test
@@ -52,6 +105,8 @@ class CryptoTest {
         // Step 4: Server encrypts data using the shared secret
         val dataToEncrypt = "Hello from the server!"
         val encrypted = sut.encrypt(dataToEncrypt.toByteArray(), serverSecret)
+        assertEquals(12, encrypted.iv.size)
+        assertEquals(16, encrypted.tag.size)
         val response = EncryptedNotification(
             cipher = encrypted.cipher.toBase64(),
             iv = encrypted.iv.toHex(),
@@ -106,5 +161,57 @@ class CryptoTest {
         val value = sut.decrypt(encryptedPayload, sharedHash)
 
         assertEquals(decryptedPayload, value.decodeToString())
+
+        val invalidTag = encryptedPayload.tag.copyOf().apply { this[0] = (this[0].toInt() xor 1).toByte() }
+        assertFailsWith<CryptoError.DecryptionFailed> {
+            sut.decrypt(encryptedPayload.copy(tag = invalidTag), sharedHash)
+        }
+        assertFailsWith<CryptoError.DecryptionFailed> {
+            sut.decrypt(encryptedPayload.copy(tag = encryptedPayload.tag.copyOf(15)), sharedHash)
+        }
     }
+
+    @Test
+    fun `installSecurityProvider adds BouncyCastle when no BC provider is registered`() {
+        Security.removeProvider(BC)
+
+        Crypto.installSecurityProvider()
+
+        assertIs<BouncyCastleProvider>(Security.getProvider(BC))
+    }
+
+    @Test
+    fun `installSecurityProvider replaces an outdated BC provider at position 1`() {
+        val outdated = OutdatedBcProvider()
+        Security.removeProvider(BC)
+        Security.addProvider(outdated)
+
+        Crypto.installSecurityProvider()
+
+        val installed = assertIs<BouncyCastleProvider>(Security.getProviders().first())
+        assertSame(installed, Security.getProvider(BC))
+        assertTrue(Security.getProviders().none { it === outdated })
+    }
+
+    @Test
+    fun `installSecurityProvider keeps the installed provider on later calls`() {
+        Security.removeProvider(BC)
+        Security.addProvider(OutdatedBcProvider())
+        Crypto.installSecurityProvider()
+        val installed = Security.getProviders().toList()
+
+        Crypto.installSecurityProvider()
+        Crypto()
+
+        assertSameProviders(installed, Security.getProviders().toList())
+    }
+
+    private fun positionOf(provider: Provider?) = Security.getProviders().indexOfFirst { it === provider } + 1
+
+    private fun assertSameProviders(expected: List<Provider>, actual: List<Provider>) {
+        assertEquals(expected.size, actual.size)
+        expected.zip(actual).forEach { (want, got) -> assertSame(want, got) }
+    }
+
+    private class OutdatedBcProvider : Provider(BC, 1.0, "Stub for the BC provider that Android registers")
 }

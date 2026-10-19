@@ -98,6 +98,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.UsdtTransferStatus
+import com.synonym.bitkitcore.usdtFormatAmount
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
@@ -116,12 +118,14 @@ import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.data.isUsdtEnabled
 import to.bitkit.env.Env
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BannerItem
 import to.bitkit.models.HwWallet
 import to.bitkit.models.MoneyType
+import to.bitkit.models.PaykitExchangeRate
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransportType
 import to.bitkit.models.WidgetSize
@@ -131,8 +135,12 @@ import to.bitkit.models.effectiveSize
 import to.bitkit.models.toBalance
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlockModel
+import to.bitkit.repositories.UsdtWalletState
+import to.bitkit.repositories.paykitRate
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.Routes
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
@@ -155,6 +163,7 @@ import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
+import to.bitkit.ui.components.usdtDisplaySats
 import to.bitkit.ui.navToActivityDetail
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToAllActivity
@@ -164,6 +173,9 @@ import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.screens.wallets.usdt.UsdtRefreshEffect
+import to.bitkit.ui.screens.wallets.usdt.UsdtViewModel
+import to.bitkit.ui.screens.wallets.usdt.UsdtWalletBalance
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
 import to.bitkit.ui.screens.widgets.blocks.BlockCardSmall
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
@@ -199,6 +211,7 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import java.math.BigInteger
 
 private const val SMALL_SCREEN_HEIGHT_DP = 800
 private const val SMALL_SCREEN_SLOT_CAPACITY = 3
@@ -394,6 +407,7 @@ fun HomeScreen(
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
         onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },
+        onClickUsdt = { walletNavController.navigateTo(Routes.UsdtWallet) },
         onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
     )
 }
@@ -435,6 +449,7 @@ private fun Content(
     onNavigateToSavings: () -> Unit = {},
     onNavigateToSpending: () -> Unit = {},
     onClickHardwareWallet: (String) -> Unit = {},
+    onClickUsdt: () -> Unit = {},
     onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
     hazeState: HazeState = rememberHazeState(),
     balances: BalanceState = LocalBalances.current,
@@ -491,6 +506,7 @@ private fun Content(
         }
     }
 
+    UsdtHomeRefreshEffect()
     val density = LocalDensity.current
     val screenHeightDp = with(density) { LocalWindowInfo.current.containerSize.height.toDp().value.toInt() }
     val isSmallScreen = screenHeightDp < SMALL_SCREEN_HEIGHT_DP
@@ -571,6 +587,7 @@ private fun Content(
                     onNavigateToSavings = onNavigateToSavings,
                     onNavigateToSpending = onNavigateToSpending,
                     onClickHardwareWallet = onClickHardwareWallet,
+                    onClickUsdt = onClickUsdt,
                 )
 
                 1 -> WidgetsPage(
@@ -596,6 +613,19 @@ private fun countNonItemSlots(homeUiState: HomeUiState): Int {
     return bannerSlot + widgetsHintSlot
 }
 
+@Composable
+private fun UsdtHomeRefreshEffect() {
+    if (LocalInspectionMode.current || !Env.isUsdtEnabled) return
+    val viewModel = hiltViewModel<UsdtViewModel>()
+    val wallet by viewModel.wallet.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    if (!viewModel.shouldRefresh(settings.isUsdtEnabled)) return
+    UsdtRefreshEffect(viewModel, pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING })
+}
+
+private fun usdtHeadlineSats(balance: ULong?, visible: Boolean, rate: PaykitExchangeRate?): Long? =
+    if (visible && balance != 0uL) balance?.let { usdtDisplaySats(usdtFormatAmount(it), rate) } else 0L
+
 @Suppress("MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -613,10 +643,20 @@ private fun WalletPage(
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
     onClickHardwareWallet: (String) -> Unit,
+    onClickUsdt: () -> Unit,
 ) {
+    val usdt by appViewModel?.usdtWallet?.collectAsStateWithLifecycle()
+        ?: remember { mutableStateOf(UsdtWalletState()) }
+    val slotCapacity = if (isSmallScreen) SMALL_SCREEN_SLOT_CAPACITY else LARGE_SCREEN_SLOT_CAPACITY
+    val showUsdt = appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true
+    val rate = LocalCurrencies.current.paykitRate
+    val usdtSats = usdtHeadlineSats(usdt.balance, showUsdt, rate)
+    val headlineSats = BigInteger(
+        balances.totalWithHardwareSats.toString()
+    ).add(BigInteger.valueOf(usdtSats ?: 0L)).min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()
     val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val pullToRefreshState = rememberPullToRefreshState()
-    val hasActivity = !latestActivities.isNullOrEmpty()
+    val hasActivity = !latestActivities.isNullOrEmpty() || usdt.transfers.isNotEmpty()
 
     PullToRefreshBox(
         state = pullToRefreshState,
@@ -645,7 +685,8 @@ private fun WalletPage(
             VerticalSpacer(16.dp)
 
             BalanceHeaderView(
-                sats = balances.totalWithHardwareSats.toLong(),
+                sats = headlineSats,
+                isUnavailable = usdtSats == null,
                 showEyeIcon = true,
                 testTag = "TotalBalance",
                 modifier = Modifier
@@ -659,6 +700,7 @@ private fun WalletPage(
                 onNavigateToSavings = onNavigateToSavings,
                 onNavigateToSpending = onNavigateToSpending,
                 onClickHardwareWallet = onClickHardwareWallet,
+                onClickUsdt = onClickUsdt,
             )
             VerticalSpacer(32.dp)
 
@@ -690,6 +732,8 @@ private fun WalletPage(
 
                     ActivityListSimple(
                         items = latestActivities,
+                        maxItems = (slotCapacity - countNonItemSlots(homeUiState)).coerceAtLeast(0),
+                        usdtItems = usdt.transfers,
                         onAllActivityClick = onNavigateToAllActivity,
                         onActivityItemClick = onNavigateToActivityItem,
                         hardwareIds = hardwareIds,
@@ -724,9 +768,11 @@ private fun BalancesSection(
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
     onClickHardwareWallet: (String) -> Unit,
+    onClickUsdt: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
@@ -741,7 +787,6 @@ private fun BalancesSection(
                     .testTag("ActivitySavings")
             )
             VerticalDivider(color = Colors.Gray4)
-            HorizontalSpacer(16.dp)
             WalletBalanceView(
                 title = stringResource(R.string.wallet__spending__title),
                 sats = balances.totalLightningSats.toLong(),
@@ -753,34 +798,40 @@ private fun BalancesSection(
             )
         }
 
-        HwDevices(wallets = hardwareWallets, onClick = onClickHardwareWallet)
+        AdditionalWallets(
+            wallets = hardwareWallets,
+            showUsdt = !LocalInspectionMode.current &&
+                (appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true),
+            onClickHardwareWallet = onClickHardwareWallet,
+            onClickUsdt = onClickUsdt,
+        )
     }
 }
 
-/**
- * Hardware wallets flow into a 2-column grid below the Savings/Spending tiles:
- * a second device fills the bottom-right column, additional devices wrap onto new rows.
- */
 @Composable
-private fun HwDevices(
+private fun AdditionalWallets(
     wallets: ImmutableList<HwWallet>,
-    onClick: (String) -> Unit,
+    showUsdt: Boolean,
+    onClickHardwareWallet: (String) -> Unit,
+    onClickUsdt: () -> Unit,
 ) {
-    wallets.chunked(2).forEach { rowWallets ->
-        VerticalSpacer(16.dp)
+    val count = wallets.size + if (showUsdt) 1 else 0
+    for (rowStart in 0 until count step 2) {
+        VerticalSpacer(if (wallets.isEmpty()) 24.dp else 16.dp)
         Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
         ) {
-            HwDeviceCell(wallet = rowWallets[0], onClick = onClick)
-            VerticalDivider(color = Colors.Gray4)
-            HorizontalSpacer(16.dp)
-            val second = rowWallets.getOrNull(1)
-            if (second != null) {
-                HwDeviceCell(wallet = second, onClick = onClick)
-            } else {
-                FillWidth()
+            for (index in rowStart..rowStart + 1) {
+                if (index > rowStart) VerticalDivider(color = Colors.Gray4)
+                val wallet = wallets.getOrNull(index)
+                when {
+                    wallet != null -> HwDeviceCell(wallet = wallet, onClick = onClickHardwareWallet)
+                    showUsdt && index == wallets.size -> UsdtWalletBalance(onClick = onClickUsdt)
+                    else -> FillWidth()
+                }
             }
         }
     }

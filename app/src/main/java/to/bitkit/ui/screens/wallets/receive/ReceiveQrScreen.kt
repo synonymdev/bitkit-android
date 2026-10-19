@@ -27,8 +27,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,7 +52,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -63,6 +68,7 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
@@ -76,8 +82,10 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.rememberQrBitmap
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
+import to.bitkit.ui.screens.wallets.usdt.UsdtDepositReceiveScreen
 import to.bitkit.ui.shared.effects.SetMaxBrightness
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -97,13 +105,19 @@ fun ReceiveQrScreen(
     lightningState: LightningState,
     onClickEditInvoice: (ReceiveTab) -> Unit,
     onClickReceiveCjit: () -> Unit,
-    onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.TREZOR) },
+    onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.HARDWARE) },
     modifier: Modifier = Modifier,
     initialTab: ReceiveTab? = null,
+    onClose: () -> Unit = {},
+    onBlockingChange: (Boolean) -> Unit = {},
+    onUsdtSelected: (Boolean) -> Unit = {},
     hardwareWalletId: String? = null,
+    /** Vendor name shown on the hardware tab, e.g. "Trezor" or "Jade". */
+    hardwareTabLabel: String? = null,
     hardwareReceiveState: HwReceiveUiState = HwReceiveUiState(),
     onLoadHardwareAddress: (String) -> Unit = {},
     onRetryHardwareAddress: () -> Unit = {},
+    onRetryInvoice: () -> Unit = {},
     onVerifyHardwareAddress: () -> Unit = {},
     showPaymentRequestContacts: Boolean = false,
     onClickPaymentRequestContacts: () -> Unit = {},
@@ -129,16 +143,19 @@ fun ReceiveQrScreen(
 
     var showDetails by remember { mutableStateOf(false) }
 
-    val visibleTabs = remember(canCreateLightningInvoice, cjitInvoice, hardwareWalletId) {
+    val usdtEnabled by appViewModel?.isUsdtEnabled?.collectAsStateWithLifecycle()
+        ?: remember { mutableStateOf(false) }
+    val visibleTabs = remember(canCreateLightningInvoice, cjitInvoice, hardwareWalletId, usdtEnabled) {
         buildList {
             if (hardwareWalletId != null) {
-                add(ReceiveTab.TREZOR)
+                add(ReceiveTab.HARDWARE)
             }
             add(ReceiveTab.SAVINGS)
             if (canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
                 add(ReceiveTab.AUTO)
             }
             add(ReceiveTab.SPENDING)
+            if (usdtEnabled && cjitInvoice == null) add(ReceiveTab.USDT)
         }.toImmutableList()
     }
     val defaultTab = remember(visibleTabs, initialTab) {
@@ -155,6 +172,7 @@ fun ReceiveQrScreen(
         hardwareReceiveState.address,
         walletState.bip21AmountSats,
         walletState.bip21Description,
+        walletState.isReceiveInvoiceUpdating,
     ) {
         visibleTabs.associateWith { tab ->
             getInvoiceForTab(
@@ -168,6 +186,7 @@ fun ReceiveQrScreen(
                 hardwareAddress = hardwareReceiveState.address?.address.orEmpty(),
                 hardwareAmountSats = walletState.bip21AmountSats,
                 hardwareMessage = walletState.bip21Description,
+                isReceiveInvoiceUpdating = walletState.isReceiveInvoiceUpdating,
             )
         }
     }
@@ -211,7 +230,9 @@ fun ReceiveQrScreen(
     }
 
     LaunchedEffect(canCreateLightningInvoice, cjitInvoice, initialTab) {
-        if (initialTab == ReceiveTab.TREZOR) return@LaunchedEffect
+        if (initialTab == ReceiveTab.HARDWARE || initialTab == ReceiveTab.USDT || selectedTab == ReceiveTab.USDT) {
+            return@LaunchedEffect
+        }
         if (!canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
             selectedTab = ReceiveTab.SAVINGS
             lazyListState.scrollToItem(visibleTabs.indexOf(ReceiveTab.SAVINGS).coerceAtLeast(0))
@@ -222,7 +243,7 @@ fun ReceiveQrScreen(
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .collect { index ->
-                if (index < visibleTabs.size && index > -1) {
+                if (selectedTab != ReceiveTab.USDT && index < visibleTabs.size && index > -1) {
                     val tab = visibleTabs[index]
                     selectedTab = tab
                 }
@@ -264,7 +285,7 @@ fun ReceiveQrScreen(
 
     LaunchedEffect(selectedTab, hardwareWalletId) {
         showDetails = false
-        if (selectedTab == ReceiveTab.TREZOR && hardwareWalletId != null) {
+        if (selectedTab == ReceiveTab.HARDWARE && hardwareWalletId != null) {
             onLoadHardwareAddress(hardwareWalletId)
         }
     }
@@ -273,6 +294,35 @@ fun ReceiveQrScreen(
         !canCreateLightningInvoice &&
             lightningState.nodeLifecycleState.isRunning() &&
             cjitInvoice.isNullOrEmpty()
+    }
+
+    fun selectReceiveTab(tab: ReceiveTab) {
+        selectedTab = tab
+        hasUserSelectedTab = true
+        scope.launch { lazyListState.scrollToItem(visibleTabs.indexOf(tab)) }
+    }
+
+    DisposableEffect(selectedTab) {
+        onUsdtSelected(selectedTab == ReceiveTab.USDT)
+        onDispose { onUsdtSelected(false) }
+    }
+
+    if (selectedTab == ReceiveTab.USDT) {
+        Column(
+            modifier = modifier.fillMaxSize().background(
+                Colors.Gray7
+            ).navigationBarsPadding().padding(horizontal = 16.dp)
+        ) {
+            UsdtDepositReceiveScreen(
+                viewModel = hiltViewModel(),
+                tabs = visibleTabs,
+                onSelectTab = ::selectReceiveTab,
+                onBack = onClose,
+                onBlockingChange = onBlockingChange,
+                onContacts = onClickPaymentRequestContacts.takeIf { showPaymentRequestContacts },
+            )
+        }
+        return
     }
 
     Column(
@@ -309,6 +359,9 @@ fun ReceiveQrScreen(
             CustomTabRowWithSpacing(
                 tabs = visibleTabs,
                 currentTabIndex = visibleTabs.indexOf(selectedTab),
+                labelOverrides = remember(hardwareTabLabel) {
+                    hardwareTabLabel?.let { persistentMapOf(ReceiveTab.HARDWARE to it) } ?: persistentMapOf()
+                },
                 onTabChange = { tab ->
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val newIndex = visibleTabs.indexOf(tab)
@@ -339,6 +392,13 @@ fun ReceiveQrScreen(
                     items = visibleTabs,
                     key = { _, tab -> tab.name }
                 ) { _, tab ->
+                    val displayMode = getReceiveInvoiceDisplayMode(
+                        tab = tab,
+                        cjitInvoice = cjitInvoice,
+                        hasInvoiceError = walletState.hasReceiveInvoiceError,
+                        isUpdating = walletState.isReceiveInvoiceUpdating,
+                        showDetails = showDetails,
+                    )
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
@@ -352,7 +412,7 @@ fun ReceiveQrScreen(
                                 )
                             }
 
-                            tab == ReceiveTab.TREZOR && hardwareReceiveState.address == null -> {
+                            tab == ReceiveTab.HARDWARE && hardwareReceiveState.address == null -> {
                                 HardwareAddressLoadingView(
                                     isLoading = hardwareReceiveState.isLoadingAddress,
                                     hasFailed = hardwareReceiveState.addressLoadFailed,
@@ -361,7 +421,15 @@ fun ReceiveQrScreen(
                                 )
                             }
 
-                            showDetails -> {
+                            displayMode == ReceiveInvoiceDisplayMode.ERROR -> {
+                                ReceiveInvoiceErrorView(
+                                    onRetry = onRetryInvoice,
+                                    onEdit = { onClickEditInvoice(tab) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            displayMode == ReceiveInvoiceDisplayMode.DETAILS -> {
                                 ReceiveDetailsView(
                                     tab = tab,
                                     walletState = walletState,
@@ -370,7 +438,7 @@ fun ReceiveQrScreen(
                                     onClickEditInvoice = { onClickEditInvoice(tab) },
                                     onClickHardwareEditInvoice = onClickHardwareEditInvoice,
                                     hardwareAddress = hardwareReceiveState.address?.address,
-                                    hardwareInvoice = invoicesByTab[ReceiveTab.TREZOR].orEmpty(),
+                                    hardwareInvoice = invoicesByTab[ReceiveTab.HARDWARE].orEmpty(),
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -383,24 +451,26 @@ fun ReceiveQrScreen(
                                         walletState.onchainAddress,
                                     )
 
-                                    ReceiveTab.TREZOR -> invoice.takeIf { '?' in it }
+                                    ReceiveTab.HARDWARE -> invoice.takeIf { '?' in it }
                                         ?: hardwareReceiveState.address?.address.orEmpty()
 
                                     else -> invoice
                                 }
 
-                                ReceiveQrView(
-                                    uri = invoice,
-                                    copyText = copyText,
-                                    qrLogoPainter = painterResource(getQrLogoResource(tab)),
-                                    onClickEditInvoice = if (tab == ReceiveTab.TREZOR) {
-                                        onClickHardwareEditInvoice
-                                    } else {
-                                        { onClickEditInvoice(tab) }
-                                    },
-                                    tab = tab,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                key(displayMode, invoice) {
+                                    ReceiveQrView(
+                                        uri = invoice,
+                                        copyText = copyText,
+                                        qrLogoPainter = painterResource(getQrLogoResource(tab)),
+                                        onClickEditInvoice = if (tab == ReceiveTab.HARDWARE) {
+                                            onClickHardwareEditInvoice
+                                        } else {
+                                            { onClickEditInvoice(tab) }
+                                        },
+                                        accentColor = tab.accentColor,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
                     }
@@ -443,7 +513,7 @@ fun ReceiveQrScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.padding(horizontal = 16.dp)
                     ) {
-                        if (selectedTab == ReceiveTab.TREZOR) {
+                        if (selectedTab == ReceiveTab.HARDWARE) {
                             SecondaryButton(
                                 text = stringResource(R.string.hardware__verify_address),
                                 enabled = hardwareReceiveState.address != null,
@@ -472,7 +542,7 @@ fun ReceiveQrScreen(
                     BottomButtonVariant.SHOW_DETAILS -> PrimaryButton(
                         text = stringResource(R.string.wallet__receive_show_details),
                         onClick = { showDetails = true },
-                        enabled = selectedTab != ReceiveTab.TREZOR || hardwareReceiveState.address != null,
+                        enabled = selectedTab != ReceiveTab.HARDWARE || hardwareReceiveState.address != null,
                         fullWidth = true,
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
@@ -504,13 +574,14 @@ internal fun shouldAutoSwitchToAuto(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReceiveQrView(
+fun ReceiveQrView(
     uri: String,
     copyText: String,
-    qrLogoPainter: Painter,
-    onClickEditInvoice: () -> Unit,
-    tab: ReceiveTab,
+    qrLogoPainter: Painter?,
+    onClickEditInvoice: (() -> Unit)?,
+    accentColor: Color,
     modifier: Modifier = Modifier,
+    shareContent: String = copyText,
 ) {
     val context = LocalContext.current
     val qrButtonTooltipState = rememberTooltipState()
@@ -536,23 +607,25 @@ private fun ReceiveQrView(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            PrimaryButton(
-                text = stringResource(R.string.common__edit),
-                size = ButtonSize.Small,
-                onClick = onClickEditInvoice,
-                fullWidth = false,
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_pencil_simple),
-                        contentDescription = null,
-                        tint = tab.accentColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("SpecifyInvoiceButton")
-            )
+            if (onClickEditInvoice != null) {
+                PrimaryButton(
+                    text = stringResource(R.string.common__edit),
+                    size = ButtonSize.Small,
+                    onClick = onClickEditInvoice,
+                    fullWidth = false,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_pencil_simple),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("SpecifyInvoiceButton")
+                )
+            }
             Box(modifier = Modifier.weight(1f)) {
                 Tooltip(
                     text = stringResource(R.string.wallet__receive_copied),
@@ -561,6 +634,7 @@ private fun ReceiveQrView(
                     PrimaryButton(
                         text = stringResource(R.string.common__copy),
                         size = ButtonSize.Small,
+                        enabled = copyText.isNotBlank(),
                         onClick = {
                             context.setClipboardText(copyText)
                             coroutineScope.launch { qrButtonTooltipState.show() }
@@ -570,7 +644,7 @@ private fun ReceiveQrView(
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
                                 contentDescription = null,
-                                tint = tab.accentColor,
+                                tint = accentColor,
                                 modifier = Modifier.size(18.dp)
                             )
                         },
@@ -582,17 +656,18 @@ private fun ReceiveQrView(
             PrimaryButton(
                 text = stringResource(R.string.common__share),
                 size = ButtonSize.Small,
+                enabled = copyText.isNotBlank(),
                 onClick = {
                     qrBitmap?.let { bitmap ->
-                        shareQrCode(context, bitmap, copyText)
-                    } ?: shareText(context, copyText)
+                        shareQrCode(context, bitmap, shareContent)
+                    } ?: shareText(context, shareContent)
                 },
                 fullWidth = false,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_share),
                         contentDescription = null,
-                        tint = tab.accentColor,
+                        tint = accentColor,
                         modifier = Modifier.size(18.dp)
                     )
                 },
@@ -732,7 +807,8 @@ private fun ReceiveDetailsView(
                     }
                 }
 
-                ReceiveTab.TREZOR -> {
+                ReceiveTab.USDT -> Unit
+                ReceiveTab.HARDWARE -> {
                     hardwareAddress?.let { address ->
                         CopyAddressCard(
                             title = stringResource(R.string.wallet__receive_bitcoin_invoice),
@@ -779,22 +855,52 @@ private fun HardwareAddressLoadingView(
     }
 }
 
+@Composable
+private fun ReceiveInvoiceErrorView(
+    onRetry: () -> Unit,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        BodyM(text = stringResource(R.string.wallet__error_invoice_update))
+        VerticalSpacer(16.dp)
+        PrimaryButton(
+            text = stringResource(R.string.common__try_again),
+            onClick = onRetry,
+            modifier = Modifier.testTag("ReceiveInvoiceRetry")
+        )
+        VerticalSpacer(16.dp)
+        SecondaryButton(
+            text = stringResource(R.string.common__edit),
+            onClick = onEdit,
+            modifier = Modifier.testTag("SpecifyInvoiceButton")
+        )
+    }
+}
+
 private enum class BottomButtonVariant { CJIT, SHOW_QR, SHOW_DETAILS }
 
 enum class CopyAddressType { ONCHAIN, LIGHTNING }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CopyAddressCard(
+fun CopyAddressCard(
     title: String,
     address: String,
     type: CopyAddressType,
-    onClickEditInvoice: () -> Unit,
+    onClickEditInvoice: (() -> Unit)?,
     body: String? = null,
     testTag: String? = null,
     accentColor: Color? = null,
+    shareContent: String = address,
+    shareQrContent: String? = null,
 ) {
     val context = LocalContext.current
+    val shareBitmap = shareQrContent?.let { rememberQrBitmap(it, 400.dp) }
 
     val tooltipState = rememberTooltipState()
     val coroutineScope = rememberCoroutineScope()
@@ -819,51 +925,58 @@ private fun CopyAddressCard(
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            PrimaryButton(
-                text = stringResource(R.string.common__edit),
-                size = ButtonSize.Small,
-                onClick = onClickEditInvoice,
-                fullWidth = false,
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_pencil_simple),
-                        contentDescription = null,
-                        tint = buttonAccentColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("SpecifyInvoiceButton")
-            )
-            Tooltip(
-                text = stringResource(R.string.wallet__receive_copied),
-                tooltipState = tooltipState,
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    PrimaryButton(
-                        text = stringResource(R.string.common__copy),
-                        size = ButtonSize.Small,
-                        onClick = {
-                            context.setClipboardText(address)
-                            coroutineScope.launch { tooltipState.show() }
-                        },
-                        fullWidth = false,
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_copy),
-                                contentDescription = null,
-                                tint = buttonAccentColor,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        },
-                    )
+            if (onClickEditInvoice != null) {
+                PrimaryButton(
+                    text = stringResource(R.string.common__edit),
+                    size = ButtonSize.Small,
+                    onClick = onClickEditInvoice,
+                    fullWidth = false,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_pencil_simple),
+                            contentDescription = null,
+                            tint = buttonAccentColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("SpecifyInvoiceButton")
+                )
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                Tooltip(
+                    text = stringResource(R.string.wallet__receive_copied),
+                    tooltipState = tooltipState
+                ) {
+                    Box {
+                        PrimaryButton(
+                            text = stringResource(R.string.common__copy),
+                            size = ButtonSize.Small,
+                            onClick = {
+                                context.setClipboardText(address)
+                                coroutineScope.launch { tooltipState.show() }
+                            },
+                            fullWidth = true,
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_copy),
+                                    contentDescription = null,
+                                    tint = buttonAccentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                        )
+                    }
                 }
             }
             PrimaryButton(
                 text = stringResource(R.string.common__share),
                 size = ButtonSize.Small,
-                onClick = { shareText(context, address) },
+                enabled = shareQrContent == null || shareBitmap != null,
+                onClick = {
+                    shareBitmap?.let { shareQrCode(context, it, shareContent) } ?: shareText(context, shareContent)
+                },
                 fullWidth = false,
                 icon = {
                     Icon(

@@ -32,8 +32,10 @@ import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.isBluetoothEnabled
 import to.bitkit.ext.startActivityAppSettings
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.components.modelNameRes
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -155,18 +157,21 @@ fun HardwareSheet(
             }
             composableWithDefaultTransitions<HardwareRoute.Found> { backStackEntry ->
                 val route = backStackEntry.toRoute<HardwareRoute.Found>()
-                LaunchedEffect(route.deviceId, route.deviceModel) {
+                LaunchedEffect(route.deviceId, route.deviceModel, route.vendor) {
                     viewModel.onFoundRoute(
                         deviceId = route.deviceId,
                         deviceModel = route.deviceModel,
+                        vendor = route.vendor,
                     )
                 }
                 val deviceModel = uiState.deviceModel.ifBlank {
-                    route.deviceModel.ifBlank { stringResource(R.string.hardware__device_model_trezor) }
+                    route.deviceModel.ifBlank { stringResource(route.vendor.modelNameRes()) }
                 }
                 HwFoundSheet(
                     deviceModel = deviceModel,
+                    vendor = uiState.vendor,
                     isConnecting = uiState.isConnecting,
+                    isUnlocking = uiState.isUnlocking,
                     errorMessage = uiState.errorMessage,
                     onConnect = { viewModel.onConnectClick(route.deviceId) },
                     onCancel = {
@@ -247,6 +252,7 @@ private fun ConnectEffectHandler(
                     HardwareRoute.Found(
                         deviceId = effect.deviceId,
                         deviceModel = effect.deviceModel,
+                        vendor = effect.vendor,
                     ),
                 )
                 is HwConnectEffect.NavigateToPairCode -> navController.navigateTo(
@@ -281,6 +287,7 @@ sealed interface HardwareRoute {
     data class Found(
         val deviceId: String? = null,
         val deviceModel: String = "",
+        val vendor: HwWalletVendor = HwWalletVendor.TREZOR,
     ) : InternalOnly
 
     @Serializable

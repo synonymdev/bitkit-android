@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -177,10 +178,21 @@ fun ToastView(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                BodyMSB(
-                    text = toast.title,
-                    color = tintColor,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (toast.isLoading) {
+                        GradientCircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    BodyMSB(
+                        text = toast.title,
+                        color = tintColor,
+                    )
+                }
                 toast.description?.let { description ->
                     Caption(
                         text = description,
@@ -309,6 +321,16 @@ private fun ToastViewPreview() {
                     title = "General Message",
                     description = "Used for neutral content to inform the user.",
                     autoHide = false,
+                ),
+                onDismiss = {},
+            )
+            ToastView(
+                toast = Toast(
+                    type = Toast.ToastType.INFO,
+                    title = "Loading Your Pubky Profile",
+                    description = "Your sign-in request opens when your profile is ready.",
+                    autoHide = false,
+                    isLoading = true,
                 ),
                 onDismiss = {},
             )

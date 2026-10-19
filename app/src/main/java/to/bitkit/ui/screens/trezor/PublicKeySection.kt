@@ -78,12 +78,15 @@ internal fun PublicKeySection(
 
         AnimatedVisibility(visible = trezorState.lastPublicKey != null) {
             trezorState.lastPublicKey?.let { response ->
-                val onCopyXpub = copyToClipboard(text = response.xpub, label = "xpub")
+                val onCopyAccountKey = copyToClipboard(
+                    text = response.displayablePublicKey,
+                    label = "Account public key",
+                )
                 val onCopyPublicKey = copyToClipboard(text = response.publicKey, label = "Public Key")
                 Column {
                     VerticalSpacer(16.dp)
                     Caption(
-                        text = "xpub:",
+                        text = "Account public key:",
                         color = Colors.White50,
                     )
                     VerticalSpacer(4.dp)
@@ -96,18 +99,18 @@ internal fun PublicKeySection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Caption(
-                            text = response.xpub,
+                            text = response.displayablePublicKey,
                             color = Colors.Brand,
                             modifier = Modifier.weight(1f),
                         )
                         HorizontalSpacer(8.dp)
                         Icon(
                             painter = painterResource(R.drawable.ic_copy),
-                            contentDescription = "Copy xpub",
+                            contentDescription = "Copy account public key",
                             tint = Colors.Brand,
                             modifier = Modifier
                                 .size(20.dp)
-                                .clickableAlpha(onClick = onCopyXpub)
+                                .clickableAlpha(onClick = onCopyAccountKey)
                         )
                     }
 

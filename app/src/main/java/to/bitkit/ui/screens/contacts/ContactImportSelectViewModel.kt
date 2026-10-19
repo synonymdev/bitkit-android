@@ -1,11 +1,9 @@
 package to.bitkit.ui.screens.contacts
 
-import android.content.Context
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -16,23 +14,14 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.R
 import to.bitkit.models.PubkyProfile
-import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
-import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
 class ContactImportSelectViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
 ) : ViewModel() {
-
-    companion object {
-        private const val TAG = "ContactImportSelectVM"
-    }
 
     private val _uiState = MutableStateFlow(ContactImportSelectUiState())
     val uiState: StateFlow<ContactImportSelectUiState> = _uiState.asStateFlow()
@@ -54,6 +43,11 @@ class ContactImportSelectViewModel @Inject constructor(
                         SelectableContact(profile = profile, isSelected = true)
                     }.toImmutableList(),
                 )
+            }
+        }
+        viewModelScope.launch {
+            pubkyRepo.isImportingContacts.collect { isImporting ->
+                _uiState.update { it.copy(isImporting = isImporting) }
             }
         }
     }
@@ -98,16 +92,7 @@ class ContactImportSelectViewModel @Inject constructor(
 
                 pubkyRepo.importContacts(selected.map { it.profile })
                     .onSuccess {
-                        pubkyRepo.clearPendingImport()
                         _effects.emit(ContactImportSelectEffect.ImportComplete)
-                    }
-                    .onFailure {
-                        Logger.error("Failed to import selected contacts", it, context = TAG)
-                        ToastEventBus.send(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.common__error),
-                            description = it.message,
-                        )
                     }
             } finally {
                 _uiState.update { it.copy(isImporting = false) }

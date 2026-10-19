@@ -199,42 +199,42 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         return lightningRepo.getAddressBalance(address).getOrDefault(0u) > 0u
     }
 
-    suspend fun clearContactAssignment(publicKey: String) = withContext(ioDispatcher) {
-        val normalizedKey = normalizedPublicKey(publicKey)
+    suspend fun clearContactAssignments(
+        excludingPublicKeys: Collection<String>,
+        isStillCurrent: (() -> Boolean)? = null,
+    ) = withContext(ioDispatcher) {
+        val savedKeys = excludingPublicKeys.mapNotNull { normalizedPublicKeyOrNull(it) }.toSet()
         locked { current ->
-            val hadAssignment = current.contactAssignments.keys.any {
-                it == normalizedKey
-            }
-            val hadHistory = current.contactAssignmentHistory.keys.any {
-                it == normalizedKey
-            }
-            if (!hadAssignment && !hadHistory) return@locked
+            if (isStillCurrent?.invoke() == false) return@locked
             val next = current.copy(
                 contactAssignments = current.contactAssignments.filterKeys {
-                    it != normalizedKey
+                    it in savedKeys
                 },
                 contactAssignmentHistory = current.contactAssignmentHistory.filterKeys {
-                    it != normalizedKey
+                    it in savedKeys
                 },
             )
+            // Keep failed deletion hidden immediately, but retry the durable write even when
+            // the filtered in-memory ledger already matches the requested cleanup.
             ledger = next
             persist(next)
             notifyBackupStateChanged()
         }
     }
 
-    suspend fun clearContactAssignments(excludingPublicKeys: Collection<String>) = withContext(ioDispatcher) {
-        val savedKeys = excludingPublicKeys.mapNotNull { normalizedPublicKeyOrNull(it) }.toSet()
+    suspend fun removeContactAssignments(
+        publicKeys: Collection<String>,
+        isStillCurrent: (() -> Boolean)? = null,
+    ) = withContext(ioDispatcher) {
+        val removedKeys = publicKeys.mapNotNull { normalizedPublicKeyOrNull(it) }.toSet()
         locked { current ->
+            if (isStillCurrent?.invoke() == false) return@locked
             val next = current.copy(
-                contactAssignments = current.contactAssignments.filterKeys {
-                    it in savedKeys
-                },
-                contactAssignmentHistory = current.contactAssignmentHistory.filterKeys {
-                    it in savedKeys
-                },
+                contactAssignments = current.contactAssignments.filterKeys { it !in removedKeys },
+                contactAssignmentHistory = current.contactAssignmentHistory.filterKeys { it !in removedKeys },
             )
-            if (next == current) return@locked
+            // Keep failed deletion hidden immediately, but retry the durable write even when
+            // the filtered in-memory ledger already matches the requested cleanup.
             ledger = next
             persist(next)
             notifyBackupStateChanged()

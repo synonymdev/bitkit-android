@@ -3,6 +3,8 @@ package to.bitkit.ui.screens.paymentrequests
 import com.synonym.paykit.PaymentRequestLifecycleState
 import org.junit.Test
 import to.bitkit.R
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDirection
@@ -71,8 +73,8 @@ class PaymentRequestPresentationTest {
     ) = PaykitPaymentRequest(
         paymentRequestId = "request-id",
         counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-        amountValue = "0.000025",
-        amountSats = 2_500uL,
+        amount = PaykitAmount(PaykitAsset.BTC, 2_500uL),
+        paymentReference = "fixture-reference",
         expiresAt = null,
         acceptedPaymentEndpointIdentifiers = listOf("lightning-bolt11"),
         direction = direction,

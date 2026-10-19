@@ -6,4 +6,10 @@
     <usb-device vendor-id="4617" product-id="21440" />
     <!-- Trezor Model One (SatoshiLabs legacy HID) -->
     <usb-device vendor-id="21324" product-id="1" />
+    <!-- Blockstream Jade v1 (Silicon Labs CP210x USB-serial bridge, 0x10c4:0xea60) -->
+    <usb-device vendor-id="4292" product-id="60000" />
+    <!-- Blockstream Jade Plus (Espressif native USB CDC, 0x303a:0x4001) -->
+    <usb-device vendor-id="12346" product-id="16385" />
+    <!-- Blockstream Jade Plus (Espressif USB serial/JTAG, 0x303a:0x1001) -->
+    <usb-device vendor-id="12346" product-id="4097" />
 </resources>

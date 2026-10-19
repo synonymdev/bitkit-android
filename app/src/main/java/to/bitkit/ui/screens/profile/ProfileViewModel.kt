@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -22,6 +24,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
@@ -52,6 +55,9 @@ class ProfileViewModel @Inject constructor(
     private var hideCopiedPopupJob: Job? = null
     private var profileLoadJob: Job? = null
     private val _isRefreshing = MutableStateFlow(true)
+    private val displayProfile = combine(pubkyRepo.profile, pubkyRepo.readOnlyProfile) { profile, readOnly ->
+        profile ?: readOnly
+    }
     private val isLoading = combine(
         pubkyRepo.isLoadingProfile,
         pubkyRepo.isRestoringSession,
@@ -66,37 +72,57 @@ class ProfileViewModel @Inject constructor(
         ProfileControls(showSignOutDialog, isSigningOut, showAddTagSheet, copiedPublicKey)
     }
 
+    init {
+        if (pubkyRepo.isLoadingProfile.value) loadProfileAfterInFlightLoad() else loadProfile()
+    }
+
     val uiState: StateFlow<ProfileUiState> = combine(
-        pubkyRepo.profile,
+        displayProfile,
         pubkyRepo.publicKey,
         isLoading,
+        pubkyRepo.cachedProfile,
         controls,
-    ) { profile, publicKey, isLoading, controls ->
-        ProfileUiState(
-            profile = profile,
-            publicKey = publicKey,
-            isLoading = isLoading,
-            showSignOutDialog = controls.showSignOutDialog,
-            isSigningOut = controls.isSigningOut,
-            showAddTagSheet = controls.showAddTagSheet,
-            copiedPublicKey = controls.copiedPublicKey,
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileUiState())
+    ) { profile, publicKey, isLoading, cachedProfile, controls ->
+        profileUiState(profile, publicKey, isLoading, cachedProfile, controls)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        profileUiState(
+            profile = pubkyRepo.profile.value ?: pubkyRepo.readOnlyProfile.value,
+            publicKey = pubkyRepo.publicKey.value,
+            isLoading = pubkyRepo.isLoadingProfile.value || pubkyRepo.isRestoringSession.value || _isRefreshing.value,
+            cachedProfile = pubkyRepo.cachedProfile.value,
+            controls = ProfileControls(),
+        ),
+    )
 
     private val _effects = MutableSharedFlow<ProfileEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
-    init {
-        loadProfile()
+    fun loadProfile() = launchProfileLoad {
+        if (pubkyRepo.publicKey.value == null) {
+            coroutineScope {
+                launch { pubkyRepo.loadProfile() }
+                pubkyRepo.restoreSessionIfNeeded()
+            }
+        } else {
+            val restored = pubkyRepo.restoreSessionIfNeeded()
+            if (!restored) pubkyRepo.loadProfile()
+        }
     }
 
-    fun loadProfile() {
+    private fun loadProfileAfterInFlightLoad() = launchProfileLoad {
+        pubkyRepo.isLoadingProfile.first { !it }
+        val publicKey = pubkyRepo.publicKey.value ?: return@launchProfileLoad
+        if (pubkyRepo.profile.value?.publicKey != publicKey) pubkyRepo.loadProfile()
+    }
+
+    private fun launchProfileLoad(load: suspend () -> Unit) {
         if (profileLoadJob?.isActive == true) return
         profileLoadJob = viewModelScope.launch {
             _isRefreshing.update { true }
             try {
-                val restored = pubkyRepo.restoreSessionIfNeeded()
-                if (!restored) pubkyRepo.loadProfile()
+                load()
             } finally {
                 _isRefreshing.update { false }
             }
@@ -161,7 +187,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun copyPublicKey() {
-        val pk = pubkyRepo.publicKey.value ?: return
+        val pk = pubkyRepo.publicKey.value ?: pubkyRepo.readOnlyProfile.value?.publicKey ?: return
         context.setClipboardText(pk, context.getString(R.string.profile__public_key))
         _copiedPublicKey.update { pk }
         hideCopiedPopupJob?.cancel()
@@ -175,6 +201,24 @@ class ProfileViewModel @Inject constructor(
         hideCopiedPopupJob?.cancel()
         _copiedPublicKey.update { null }
     }
+
+    private fun profileUiState(
+        profile: PubkyProfile?,
+        publicKey: String?,
+        isLoading: Boolean,
+        cachedProfile: PubkyCachedProfile?,
+        controls: ProfileControls,
+    ) = ProfileUiState(
+        profile = profile,
+        cachedProfile = cachedProfile?.takeIf { isLoading && it.publicKey == publicKey },
+        publicKey = publicKey ?: profile?.publicKey,
+        canEdit = publicKey != null && publicKey == pubkyRepo.profile.value?.publicKey,
+        isLoading = isLoading,
+        showSignOutDialog = controls.showSignOutDialog,
+        isSigningOut = controls.isSigningOut,
+        showAddTagSheet = controls.showAddTagSheet,
+        copiedPublicKey = controls.copiedPublicKey,
+    )
 
     private fun updateTags(
         transform: (List<String>) -> List<String>,
@@ -213,7 +257,9 @@ class ProfileViewModel @Inject constructor(
 @Stable
 data class ProfileUiState(
     val profile: PubkyProfile? = null,
+    val cachedProfile: PubkyCachedProfile? = null,
     val publicKey: String? = null,
+    val canEdit: Boolean = false,
     val isLoading: Boolean = true,
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,
@@ -222,10 +268,10 @@ data class ProfileUiState(
 )
 
 private data class ProfileControls(
-    val showSignOutDialog: Boolean,
-    val isSigningOut: Boolean,
-    val showAddTagSheet: Boolean,
-    val copiedPublicKey: String?,
+    val showSignOutDialog: Boolean = false,
+    val isSigningOut: Boolean = false,
+    val showAddTagSheet: Boolean = false,
+    val copiedPublicKey: String? = null,
 )
 
 sealed interface ProfileEffect {

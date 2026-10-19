@@ -3,9 +3,14 @@
 package to.bitkit.repositories
 
 import com.synonym.paykit.BillingPeriod
+import com.synonym.paykit.ConversionRate
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.OutboundPrivateMessageStatus
+import com.synonym.paykit.OutboundPrivateSendReport
+import com.synonym.paykit.PaykitStateObservation
+import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentDeadline
 import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
@@ -20,6 +25,9 @@ import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -41,10 +49,14 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -76,6 +88,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     private val diagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val paymentProofStore = mock<PaykitPaymentProofStore>()
     private val paymentProofRepo = mock<PaykitPaymentProofRepo>()
+    private val usdtPayments = mock<PaykitUsdtPaymentRepo>()
     private val notificationScheduler = mock<PaykitSubscriptionNotificationScheduler>()
     private var schedulerOriginMillis = 0L
     private val clock = object : Clock {
@@ -93,9 +106,20 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     fun setUp() = test {
         schedulerOriginMillis = testDispatcher.scheduler.currentTime
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
+        whenever(paykitSdkService.processOutboundPrivateMessages(any())).thenReturn(
+            OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
+        )
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(emptyList())
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(emptyList())
-        whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
+        whenever(paykitSdkService.processPendingPrivateMessages(any())).doSuspendableAnswer {
+            paykitSdkService.processPendingPrivateMessages()
+        }
+        whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers(any())).doSuspendableAnswer {
+            paykitSdkService.receivePrivateMessagesFromLinkedPeers()
+        }
+        stubRequestReads()
+        whenever(paykitSdkService.processOutboundPrivateMessages(any(), any())).doSuspendableAnswer {
+            paykitSdkService.processOutboundPrivateMessages(it.getArgument(0))
+        }
         whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
         whenever(presentationStore.load(LOCAL_IDENTITY)).thenReturn(emptySet())
@@ -104,7 +128,11 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         ).thenReturn(PaykitSubscriptionPresentationState())
         whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY)).thenReturn(emptyMap())
         whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
+        whenever(paymentProofStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
+            .thenReturn(Result.success(emptySet()))
+        whenever(usdtPayments.verifiedReceipts(any())).thenReturn(Result.success(emptyList()))
+        whenever(usdtPayments.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
         sut = PaykitPaymentRequestRepo(
             testDispatcher,
@@ -114,16 +142,107 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             diagnostics,
             paymentProofStore,
             paymentProofRepo,
+            usdtPayments,
             notificationScheduler,
             clock,
             subscriptionClock,
+            mock { on { canReceive() }.thenReturn(true) },
+            mock { on { currencyState }.thenReturn(MutableStateFlow(CurrencyState())) },
+            mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
         )
         sut.activate(LOCAL_IDENTITY)
+    }
+
+    private fun stubRequestReads() {
+        whenever { paykitSdkService.allPaymentRequests(anyOrNull()) }.thenReturn(emptyList())
+        whenever { paykitSdkService.linkedPeers() }.thenReturn(emptyList())
+        whenever { paykitSdkService.identityStatus(any()) }.doSuspendableAnswer { paykitSdkService.identityStatus() }
+        whenever { paykitSdkService.linkedPeers(any()) }.doSuspendableAnswer { paykitSdkService.linkedPeers() }
+        whenever { paykitSdkService.allPaymentRequests(anyOrNull(), any()) }.doSuspendableAnswer {
+            paykitSdkService.allPaymentRequests(it.getArgument(0))
+        }
+        whenever { paykitSdkService.observeState(any(), any()) }.doSuspendableAnswer {
+            val records = paykitSdkService.allPaymentRequests(it.getArgument(0))
+            PaykitStateObservation(
+                publicKey = it.getArgument(0),
+                keyGeneration = 0uL,
+                observedAt = clock.now().toString(),
+                contacts = emptyList(),
+                linkedPeers = paykitSdkService.linkedPeers(),
+                paymentRequests = records,
+                receipts = emptyList(),
+            )
+        }
     }
 
     @After
     fun tearDown() = test {
         sut.clear()
+    }
+
+    @Test
+    fun `dollar subscription requires usdt receiving and fixes parity for future payments`() = test {
+        val target = PaykitPaymentRequestTarget(COUNTERPARTY)
+        whenever(
+            paykitSdkService.identityStatus()
+        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED)),
+        )
+        whenever(paykitSdkService.canReceivePaymentRequests(COUNTERPARTY)).thenReturn(true)
+        val captured = argumentCaptor<PaykitPaymentRequestProposalTerms>()
+        whenever(paykitSdkService.proposePaymentRequest(any(), captured.capture(), eq(LOCAL_IDENTITY)))
+            .thenReturn(paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE))
+        for (enabled in listOf(false, true)) {
+            val settings = SettingsData(sharesPrivatePaykitEndpoints = true, publicPaykitUsdtEnabled = enabled)
+            whenever(settingsStore.data).thenReturn(flowOf(settings))
+            val result = sut.proposeSubscription(
+                PaykitSubscriptionDraft(
+                    amount = PaykitAmount(PaykitAsset.USD, 500uL),
+                    name = "Monthly support",
+                    description = "",
+                    frequency = PaykitRecurrenceUnit.Month,
+                    expiresAt = clock.now() + 60.seconds,
+                ),
+                target,
+                listOf(COUNTERPARTY),
+            )
+            if (!PublicPaykitRepo.isUsdtPaymentOptionEnabled(settings, UsdtWalletState())) {
+                assertEquals(PaykitPaymentRequestError.RequestUnavailable, result.exceptionOrNull())
+                assertTrue(captured.allValues.isEmpty())
+                continue
+            }
+            result.getOrThrow()
+            val terms = captured.lastValue
+            assertEquals(listOf(MethodId.UsdtArbitrum.rawValue), terms.acceptedPaymentEndpointIdentifiers)
+            assertEquals(PaymentConversion.Fixed(listOf(ConversionRate("usdt", "1"))), terms.conversion)
+            val later = clock.now() + (40 * 86400).seconds
+            val period = PaykitBillingPeriod(later, later + (30 * 86400).seconds)
+            val pricing = PaykitRequestPricing(terms.conversion, terms.paymentDeadline)
+            val payment = pricing.payment(
+                PaykitAmount.parse(PaykitAsset.USD, terms.amountValue),
+                MethodId.UsdtArbitrum.rawValue,
+                period,
+                later,
+            )
+            assertEquals("5", payment.amount.value)
+            assertEquals(null, payment.quoteId)
+            assertTrue(payment.isValid(later))
+            assertTrue(pricing.quotes.isEmpty())
+        }
+    }
+
+    @Test
+    fun `refresh preserves all supported subscription denominations`() = test {
+        val records = PaykitAsset.entries.map { asset ->
+            val record = paymentRequestRecord(id = asset.code, state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
+            record.copy(terms = requireNotNull(record.terms).copy(amount = PaymentRequestAmount("1", asset.code)))
+        }
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(records)
+        sut.refresh().getOrThrow()
+        assertEquals(PaykitAsset.entries.toSet(), sut.subscriptions.value.map { it.amount.asset }.toSet())
+        assertEquals(PaykitAsset.entries.toSet(), sut.pendingRequests.value.map { it.amount.asset }.toSet())
+        assertTrue(sut.pendingRequests.value.all { it.amount.value == "1" })
     }
 
     @Test
@@ -144,7 +263,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             ),
         )
 
-        sut.refresh(syncPrivateMessages = false).getOrThrow()
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
 
         verify(paykitSdkService, never()).processPendingPrivateMessages()
         verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
@@ -212,7 +331,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         checking.await()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
             .thenReturn(listOf(record.copy(state = PaymentRequestLifecycleState.CANCELED)))
-        sut.refresh(syncPrivateMessages = false).getOrThrow()
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
         checked.complete(Unit)
 
         assertTrue(authorization.await().isFailure)
@@ -233,15 +352,22 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         val proof = mock<PaymentProofRecord> {
             on { billingPeriod } doReturn requireNotNull(firstPeriod.billingPeriod).sdkValue
             on { paymentEndpointIdentifier } doReturn MethodId.P2wpkh.rawValue
+            on { outboundStatus } doReturn OutboundPrivateMessageStatus.PENDING
         }
+        val paidRecord = record.copy(paymentProofs = listOf(proof))
+        whenever(paykitSdkService.claimPaymentRequestForExecution(COUNTERPARTY, PAYMENT_REQUEST_ID))
+            .thenReturn(paidRecord)
+        assertTrue(sut.subscriptions.value.single().paidPeriods.isEmpty())
+        assertTrue(sut.claimForPayment(firstPeriod).exceptionOrNull() is PaykitPaymentRequestError.RequestUnavailable)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
-            .thenReturn(listOf(record.copy(paymentProofs = listOf(proof))))
+            .thenReturn(listOf(paidRecord))
         subscriptionOffset = 31.days
         sut.refresh().getOrThrow()
 
         assertTrue(sut.ensurePaymentAllowed(firstPeriod).isFailure)
         val nextPeriod = sut.pendingRequests.value.single()
         assertEquals(Instant.parse("2027-02-01T08:00:00Z"), nextPeriod.billingPeriod?.startsAt)
+        sut.claimForPayment(nextPeriod).getOrThrow()
         sut.ensurePaymentAllowed(nextPeriod).getOrThrow()
     }
 
@@ -312,22 +438,38 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertEquals(PaykitPaymentProofKind.Lightning, received.paymentProofKind)
     }
 
+    @Suppress("LongMethod")
     @Test
     fun `creator proposal sends recurring terms and stays queued until delivery`() = test {
         val target = stubSubscriptionProposal()
         val expiresAt = clock.now().plus(60.seconds)
+        val unrelatedDelivery = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.processPendingPrivateMessages()).doSuspendableAnswer {
+            unrelatedDelivery.await()
+            emptyList()
+        }
 
-        val creation = sut.proposeSubscription(
-            draft = PaykitSubscriptionDraft(
-                amountSats = 100_000uL,
-                name = " Monthly support ",
-                description = " Thank you ",
-                frequency = PaykitRecurrenceUnit.Month,
-                expiresAt = expiresAt,
-            ),
-            target = target,
-            savedPublicKeys = listOf(COUNTERPARTY),
-        ).getOrThrow()
+        val proposal = async {
+            sut.proposeSubscription(
+                draft = PaykitSubscriptionDraft(
+                    amount = PaykitAmount(PaykitAsset.BTC, 100_000uL),
+                    name = " Monthly support ",
+                    description = " Thank you ",
+                    frequency = PaykitRecurrenceUnit.Month,
+                    expiresAt = expiresAt,
+                    acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
+                ),
+                target = target,
+                savedPublicKeys = listOf(COUNTERPARTY),
+            )
+        }
+        runCurrent()
+        val completedBeforeUnrelatedDelivery = proposal.isCompleted
+        unrelatedDelivery.complete(Unit)
+        val creation = proposal.await().getOrThrow()
+        assertTrue(completedBeforeUnrelatedDelivery)
+        verify(paykitSdkService).processOutboundPrivateMessages(COUNTERPARTY)
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
 
         val captured = argumentCaptor<PaykitPaymentRequestProposalTerms>()
         verifyBlocking(paykitSdkService) {
@@ -339,6 +481,8 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         }
         with(captured.firstValue) {
             assertEquals("0.001", amountValue)
+            assertEquals(listOf(MethodId.P2wpkh.rawValue), acceptedPaymentEndpointIdentifiers)
+            assertEquals(null, conversion)
             assertEquals(expiresAt.toString(), proposalExpiresAt)
             assertEquals(1u, recurrence?.every)
             assertEquals("month", recurrence?.unit)
@@ -354,13 +498,40 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `creator proposal reports delivery completed by another drain`() = test {
+        val target = stubSubscriptionProposal()
+        val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalOutboundMessageId = 7uL)
+        whenever(paykitSdkService.proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))).thenReturn(record)
+        whenever(paykitSdkService.allPaymentRequests(LOCAL_IDENTITY)).thenReturn(
+            listOf(record.copy(proposalOutboundStatus = OutboundPrivateMessageStatus.SENT)),
+        )
+
+        val creation = sut.proposeSubscription(
+            draft = PaykitSubscriptionDraft(
+                amount = PaykitAmount(PaykitAsset.BTC, 100_000uL),
+                name = "Monthly support",
+                description = "Thank you",
+                frequency = PaykitRecurrenceUnit.Month,
+                expiresAt = clock.now().plus(60.seconds),
+            ),
+            target = target,
+            savedPublicKeys = listOf(COUNTERPARTY),
+        ).getOrThrow()
+
+        assertEquals(PaykitPaymentRequestDeliveryStatus.Sent, creation.subscription.deliveryStatus)
+        assertEquals(listOf(creation.subscription), sut.subscriptions.value)
+        verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY)
+        verify(paykitSdkService).proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))
+    }
+
+    @Test
     fun `creator proposal publishes real time while the subscription clock offset is on`() = test {
         val target = stubSubscriptionProposal()
         subscriptionOffset = 31.days
 
         sut.proposeSubscription(
             draft = PaykitSubscriptionDraft(
-                amountSats = 100_000uL,
+                amount = PaykitAmount(PaykitAsset.BTC, 100_000uL),
                 name = "Monthly support",
                 description = "Thank you",
                 frequency = PaykitRecurrenceUnit.Month,
@@ -387,13 +558,13 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED)),
         )
-        whenever(paykitSdkService.canReceivePaymentRequests(COUNTERPARTY))
+        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any()))
             .thenReturn(true)
 
         listOf(null, byteArrayOf(0, 1, 2)).forEach { icon ->
             val result = sut.proposeSubscription(
                 draft = PaykitSubscriptionDraft(
-                    amountSats = 1000uL,
+                    amount = PaykitAmount(PaykitAsset.BTC, 1000uL),
                     name = "Support",
                     description = "💜".repeat(256),
                     frequency = PaykitRecurrenceUnit.Month,
@@ -516,19 +687,20 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
     @Test
     fun `accepting subscription returns current period and preserves payment targets`() = test {
-        val proposal = paymentRequestRecord()
-        val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
+        val proposal = paymentRequestRecord().copy(proposalStreamItemId = 41uL)
+        val active = proposal.copy(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposal), listOf(active))
         whenever(
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                41uL,
             )
         ).thenReturn(active)
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED)),
         )
-        whenever(paykitSdkService.canReceivePaymentRequests(COUNTERPARTY))
+        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any()))
             .thenReturn(true)
         whenever(
             paykitSdkService.identityStatus()
@@ -550,7 +722,36 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
-    fun `subscription clock offset makes the next billing period due`() = test {
+    fun `subscription acceptance rejects a replaced proposal with matching terms`() = test {
+        val original = paymentRequestRecord().copy(proposalStreamItemId = 41uL)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(original))
+        sut.refresh().getOrThrow()
+        val reviewed = sut.subscriptions.value.single()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+            .thenReturn(listOf(original.copy(proposalStreamItemId = 42uL)))
+        sut.refresh().getOrThrow()
+
+        assertFailsWith<PaykitPaymentRequestError.RequestUnavailable> { sut.accept(reviewed).getOrThrow() }
+
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any(), any())
+        assertEquals(42uL, sut.subscriptions.value.single().proposalStreamItemId)
+    }
+
+    @Test
+    fun `subscription acceptance refuses a missing proposal stream item`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
+            .thenReturn(listOf(paymentRequestRecord().copy(proposalStreamItemId = null)))
+        sut.refresh().getOrThrow()
+
+        assertFailsWith<PaykitPaymentRequestError.RequestUnavailable> {
+            sut.accept(sut.subscriptions.value.single()).getOrThrow()
+        }
+
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any(), any())
+    }
+
+    @Test
+    fun `subscription clock change refreshes periods after an overlapping refresh`() = test {
         val proposal = paymentRequestRecord()
         val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposal), listOf(active))
@@ -558,6 +759,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                1uL,
             )
         ).thenReturn(active)
         sut.refresh().getOrThrow()
@@ -567,8 +769,21 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             sut.pendingRequests.value.mapNotNull { it.billingPeriod?.startsAt },
         )
 
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            reading.complete(Unit)
+            resume.await()
+            listOf(active)
+        }
+        val first = async { sut.refresh() }
+        reading.await()
         subscriptionOffset = 31.days
-        sut.refresh().getOrThrow()
+        val afterClockChange = async { sut.refreshAfterStateChange() }
+        runCurrent()
+        resume.complete(Unit)
+        first.await().getOrThrow()
+        afterClockChange.await().getOrThrow()
 
         assertEquals(
             listOf(Instant.parse("2027-01-01T08:00:00Z"), Instant.parse("2027-02-01T08:00:00Z")),
@@ -585,6 +800,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                1uL,
             )
         ).thenReturn(active)
         sut.refresh().getOrThrow()
@@ -617,6 +833,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                1uL,
             )
         ).thenReturn(active)
         sut.refresh().getOrThrow()
@@ -655,7 +872,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         val result = sut.accept(reviewedSubscription)
 
         assertTrue(result.exceptionOrNull() is PaykitPaymentRequestError.RequestUnavailable)
-        verifyBlocking(paykitSdkService, never()) { acceptPaymentRequest(any(), any()) }
+        verifyBlocking(paykitSdkService, never()) { acceptPaymentRequest(any(), any(), any()) }
     }
 
     @Test
@@ -669,6 +886,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
                 PAYMENT_REQUEST_ID,
+                1uL,
             )
         ).thenReturn(active)
         sut.refresh().getOrThrow()
@@ -694,6 +912,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         sut.refresh().getOrThrow()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.isSubscriptionNotificationHandled(request.id, LOCAL_IDENTITY))
         verifyBlocking(presentationStore) {
             saveSubscriptionState(eq(LOCAL_IDENTITY), argThat { dismissedPaymentIds == setOf(request.id) })
         }
@@ -754,26 +973,33 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             counterparty = COUNTERPARTY,
             billingPeriodStartsAt = "2027-01-01T08:00:00Z",
         )
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)),
+        )
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertEquals(requestId, sut.pendingRequests.value.single().id)
         whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY))
             .thenReturn(mapOf(requestId to PaykitPaymentProofKind.Onchain))
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
-            listOf(
-                paymentRequestRecord(
-                    state = PaymentRequestLifecycleState.ACTIVE_RECURRING,
-                    paymentDeadline = PaymentDeadline.PeriodStart(3600uL),
-                ),
-            ),
-        )
 
-        sut.refresh().getOrThrow()
+        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(setOf(requestId))
+        sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.automaticPendingRequests().isEmpty())
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers()
         assertEquals(requestId, sut.paymentRequestHistory.value.single().id)
+        assertTrue(sut.paymentRequestHistory.value.single().isPaymentInFlight)
+        assertFalse(sut.paymentRequestHistory.value.single().canDismiss)
         assertEquals(
             PaymentRequestLifecycleState.PROOF_SUBMITTED,
             sut.paymentRequestHistory.value.single().lifecycleState,
         )
         assertEquals(PaykitPaymentProofKind.Onchain, sut.paymentRequestHistory.value.single().paymentProofKind)
+        assertTrue(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+        val nextPeriodId = requestId.copy(billingPeriodStartsAt = "2027-02-01T08:00:00Z")
+        assertFalse(sut.isSubscriptionNotificationHandled(nextPeriodId, LOCAL_IDENTITY))
+        assertTrue(sut.pendingRequests.value.none { it.id == nextPeriodId })
     }
 
     @Test
@@ -802,7 +1028,34 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `blocking a canceled subscription hides it while its paid period runs`() = test {
+        val proof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn BillingPeriod(
+                startsAt = "2027-01-01T08:00:00Z",
+                endsAt = "2027-02-01T08:00:00Z",
+            )
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+        }
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(
+                paymentRequestRecord(
+                    state = PaymentRequestLifecycleState.CANCELED,
+                    paymentProofs = listOf(proof),
+                ),
+            ),
+        )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED)),
+        )
+
+        sut.refresh().getOrThrow()
+
+        assertTrue(sut.subscriptions.value.isEmpty())
+    }
+
+    @Test
     fun `blocking a paid payer subscription keeps payment history`() = test {
+        advanceTimeBy(20 * 24 * 60 * 60 * 1000L)
         val proof = mock<PaymentProofRecord> {
             on { billingPeriod } doReturn BillingPeriod(
                 startsAt = "2027-01-01T08:00:00Z",
@@ -835,6 +1088,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
     @Test
     fun `blocking a paid creator subscription keeps received history accessible`() = test {
+        advanceTimeBy(20 * 24 * 60 * 60 * 1000L)
         val proof = mock<PaymentProofRecord> {
             on { billingPeriod } doReturn BillingPeriod(
                 startsAt = "2027-01-01T08:00:00Z",
@@ -898,7 +1152,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
-    fun `deadline subscriptions retain paid periods and cancellation without offering payments`() = test {
+    fun `recurring payment deadlines retain paid history and bound unpaid amounts`() = test {
         advanceTimeBy(32 * 24 * 60 * 60 * 1000L)
         val proof = mock<PaymentProofRecord> {
             on { billingPeriod } doReturn BillingPeriod("2027-01-01T08:00:00Z", "2027-02-01T08:00:00Z")
@@ -918,12 +1172,14 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
         sut.refresh().getOrThrow()
 
-        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.pendingRequests.value.all { it.isPaymentDeadlineExpired(clock.now()) })
+        val unpaid = requireNotNull(sut.subscriptions.value.single { it.isPayer }.paymentDueOnAcceptance(clock.now()))
+        assertTrue(unpaid.isPaymentDeadlineExpired(clock.now()))
+        assertTrue(!unpaid.payment(MethodId.Bolt11, clock.now()).isValid(clock.now()))
         assertEquals(2, sut.subscriptions.value.size)
         sut.subscriptions.value.forEach { subscription ->
             assertEquals(1, subscription.paidPeriods.size)
             assertTrue(subscription.canCancel(clock.now()))
-            assertEquals(null, subscription.paymentDueOnAcceptance(clock.now()))
         }
         val paid = sut.paymentRequestHistory.value.single()
         assertEquals(PaymentRequestLifecycleState.PROOF_SUBMITTED, paid.lifecycleState)
@@ -932,7 +1188,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
-    fun `in flight subscription payment is neither offered nor marked paid`() = test {
+    fun `in flight subscription reminder remains unhandled until the same period returns`() = test {
         val requestId = PaykitPaymentRequestId(
             paymentRequestId = PAYMENT_REQUEST_ID,
             counterparty = COUNTERPARTY,
@@ -947,6 +1203,67 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertTrue(sut.paymentRequestHistory.value.isEmpty())
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+
+        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
+        sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+
+        assertEquals(requestId, sut.pendingRequests.value.single().id)
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+    }
+
+    @Test
+    fun `subscription reminder clears for missing or inactive subscriptions`() = test {
+        val requestId = PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY, "2027-01-01T08:00:00Z")
+        for (state in listOf(null, PaymentRequestLifecycleState.CANCELED, PaymentRequestLifecycleState.REJECTED)) {
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+                state?.let { listOf(paymentRequestRecord(state = it)) }.orEmpty(),
+            )
+
+            sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+
+            assertTrue(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY), state.toString())
+        }
+    }
+
+    @Test
+    fun `subscription reminder requires a successful snapshot for the current identity`() = test {
+        val requestId = PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY, "2027-01-01T08:00:00Z")
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertTrue(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, SECOND_IDENTITY))
+
+        whenever(settingsStore.data).thenReturn(flow { throw IllegalStateException("refresh failed") })
+        assertTrue(sut.refresh(PaykitPaymentRequestRefreshMode.STORED).isFailure)
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        val refreshStarted = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            refreshStarted.complete(Unit)
+            awaitCancellation()
+        }
+        val refresh = async { sut.refresh(PaykitPaymentRequestRefreshMode.STORED) }
+        refreshStarted.await()
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+        refresh.cancel()
+        refresh.join()
+        assertTrue(refresh.isCancelled)
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+
+        doReturn(emptyList<PaymentRequestRecord>()).whenever(paykitSdkService).allPaymentRequests(anyOrNull())
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(false))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
+
+        whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        sut.clear()
+        sut.activate(LOCAL_IDENTITY)
+        assertFalse(sut.isSubscriptionNotificationHandled(requestId, LOCAL_IDENTITY))
     }
 
     @Test
@@ -967,6 +1284,48 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertTrue(result.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress)
         assertEquals(1, sut.subscriptions.value.size)
         verifyBlocking(paykitSdkService, never()) { cancelPaymentRequest(any(), any(), anyOrNull()) }
+    }
+
+    @Test
+    fun `subscription cannot be canceled while USDT execution is unresolved`() = test {
+        val requestId = PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY, "2027-01-01T08:00:00Z")
+        whenever(usdtPayments.protectedRequestIdsForSubscriptionCancellation(eq(LOCAL_IDENTITY), any()))
+            .thenReturn(Result.success(setOf(requestId)))
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING))
+        )
+        sut.refresh().getOrThrow()
+
+        val result = sut.cancel(sut.subscriptions.value.single())
+
+        assertTrue(result.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress)
+        verifyBlocking(paykitSdkService, never()) { cancelPaymentRequest(any(), any(), anyOrNull()) }
+    }
+
+    @Test
+    fun `an in-flight cancellation prevents authorizing a newly started payment`() = test {
+        val active = paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)
+        val canceled = active.copy(state = PaymentRequestLifecycleState.CANCELED)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(active))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        sut.ensurePaymentAllowed(request).getOrThrow()
+        val started = CompletableDeferred<Unit>()
+        val finish = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.cancelPaymentRequest(COUNTERPARTY, PAYMENT_REQUEST_ID)).doSuspendableAnswer {
+            started.complete(Unit)
+            finish.await()
+            canceled
+        }
+        val cancellation = async { sut.cancel(sut.subscriptions.value.single()) }
+        started.await()
+
+        assertTrue(sut.ensurePaymentAllowed(request).isFailure)
+
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(canceled))
+        finish.complete(Unit)
+        cancellation.await().getOrThrow()
+        assertTrue(sut.ensurePaymentAllowed(request).isFailure)
     }
 
     @Test
@@ -1009,12 +1368,15 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
         val subscriptions = sut.subscriptions.value
         assertEquals(setOf("deadline", "unsupported"), subscriptions.map { it.paymentRequestId }.toSet())
-        assertTrue(subscriptions.none { it.isProposalActionable(clock.now()) })
+        assertEquals(
+            listOf("deadline"),
+            subscriptions.filter {
+                it.isProposalActionable(clock.now())
+            }.map { it.paymentRequestId }
+        )
         assertEquals(subscriptions, sut.subscriptionProposals())
         val deadlineSubscription = subscriptions.first { it.paymentRequestId == "deadline" }
-        assertEquals(null, deadlineSubscription.paymentDueOnAcceptance(clock.now()))
-        assertTrue(sut.accept(deadlineSubscription).exceptionOrNull() is PaykitPaymentRequestError.RequestUnavailable)
-        verifyBlocking(paykitSdkService, never()) { acceptPaymentRequest(any(), any()) }
+        assertTrue(deadlineSubscription.paymentDueOnAcceptance(clock.now()) != null)
     }
 
     @Test
@@ -1120,7 +1482,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED)),
         )
-        whenever(paykitSdkService.canReceivePaymentRequests(COUNTERPARTY)).thenReturn(true)
+        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any())).thenReturn(true)
         whenever(paykitSdkService.proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY)))
             .thenAnswer { invocation ->
                 val proposal = invocation.getArgument<PaykitPaymentRequestProposalTerms>(1)

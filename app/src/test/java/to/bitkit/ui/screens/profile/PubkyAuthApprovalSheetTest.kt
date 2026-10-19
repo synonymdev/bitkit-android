@@ -48,4 +48,19 @@ class PubkyAuthApprovalSheetTest {
 
         assertEquals(PubkyApprovalLocalAuthMode.None, result)
     }
+
+    @Test
+    fun `request text loses accent markup even when tags are nested`() {
+        assertEquals("evil.app", "<accent>evil</accent>.app".asLiteralRequestText())
+        assertEquals("evil.app", "<acc<accent>ent>evil</acc</accent>ent>.app".asLiteralRequestText())
+        assertEquals("app.paykit.server", "app.paykit.server".asLiteralRequestText())
+    }
+
+    @Test
+    fun `request text loses line breaks and bidi controls`() {
+        assertEquals("bank.comBitkit is safe.", "bank.com\nBitkit is safe.".asLiteralRequestText())
+        assertEquals("moc.knab", "\u202Emoc.knab\u202C".asLiteralRequestText())
+        assertEquals("abcd", "a\u2028b\u2066c\u200Bd".asLiteralRequestText())
+        assertEquals("evil", "<acc\u200Bent>evil</accent>".asLiteralRequestText())
+    }
 }

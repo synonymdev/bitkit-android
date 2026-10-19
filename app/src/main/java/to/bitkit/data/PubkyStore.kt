@@ -36,7 +36,19 @@ class PubkyStore @Inject constructor(
 @Serializable
 data class PubkyStoreData(
     val ownerPublicKey: String? = null,
+    /** Public key whose profile [cachedName] and [cachedImageUri] were cached from. */
+    val cachedProfileOwner: String? = null,
     val cachedName: String? = null,
     val cachedImageUri: String? = null,
     val contactProfileOverrides: Map<String, PubkyProfileData> = emptyMap(),
+) {
+    fun cachedProfile(): PubkyCachedProfile? = cachedProfileOwner?.let {
+        PubkyCachedProfile(publicKey = it, name = cachedName.orEmpty(), imageUri = cachedImageUri)
+    }
+}
+
+data class PubkyCachedProfile(
+    val publicKey: String,
+    val name: String,
+    val imageUri: String?,
 )

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -16,22 +15,18 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.PaymentAddressInput
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
-import to.bitkit.ui.theme.AppTextFieldDefaults
-import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
@@ -69,27 +64,11 @@ fun SendAddressScreen(
                 color = Colors.White64,
             )
             VerticalSpacer(8.dp)
-            TextInput(
-                placeholder = stringResource(R.string.wallet__send_address_placeholder),
+            PaymentAddressInput(
                 value = uiState.addressInput,
                 onValueChange = { onEvent(SendEvent.AddressChange(it)) },
-                minLines = 12,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    imeAction = ImeAction.Done,
-                    autoCorrectEnabled = false
-                ),
-                textStyle = AppTextStyles.Title,
-                colors = AppTextFieldDefaults.semiTransparent.copy(
-                    focusedContainerColor = Colors.White06,
-                    unfocusedContainerColor = Colors.White06,
-                    errorContainerColor = Colors.White06,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .weight(1f)
-                    .testTag("RecipientInput")
+                placeholder = stringResource(R.string.wallet__send_address_placeholder),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).weight(1f).testTag("RecipientInput")
             )
             VerticalSpacer(16.dp)
             PrimaryButton(

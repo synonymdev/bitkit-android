@@ -70,7 +70,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| CreatePaymentRequestScreen.kt | Payment Request (from Receive > Contacts OR Contact profile OR Payment Requests) › Request payment enter amount |
+| CreatePaymentRequestScreen.kt | Payment Request (from Receive > Contacts OR Contact profile OR Payment Requests) › Request payment enter amount / Payment Request (from Edit invoice) › Request payment details |
 | IncomingPaymentRequestDetailsScreen.kt | Subscriptions › Payment Request Details |
 | PaymentRequestsScreen.kt | Payment Requests › Payment Requests |
 
@@ -222,6 +222,14 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | - | - |
 | BuyIntroScreen.kt | Buy Bitcoin › Buy Bitcoin |
 
+## ui/screens/wallets/usdt
+
+| Android | Figma |
+| - | - |
+| UsdtDepositReceiveScreen.kt | Receive USDT › HW QR / Recipient / Specify Amount (populated) / Fee To Add Liquidity |
+| UsdtDepositsScreen.kt | Activity › Transaction Cross Network USDT / Transaction Receiving USDT Tech details |
+| UsdtWalletScreen.kt | Savings, Spending, Hardware, USDT Balances › Wallet USDT (funds & activity) / Wallet USDT (empty) |
+
 ## ui/screens/wallets/withdraw
 
 | Android | Figma |
@@ -347,3 +355,15 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | - | - |
 | CustomFeeSettingsScreen.kt | Send (Paste) (On-chain) › Set custom fee |
 | TransactionSpeedSettingsScreen.kt | Settings > General › Speed |
+
+### USDT receive
+
+[Figma](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=49861-374947):
+Receive Dollars, network selection, amount entry, estimated fees, QR and address details share the existing Receive sheet.
+Amount entry stays in dollars with a BTC equivalent; QR and shared payment amounts preserve USDT precision. See `journeys/usdt-receive-amount-and-units.xml`.
+
+### USDT opt-in and network selection
+
+`UsdtIntroSheet.kt` implements [New: USDT](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=50228-146387). `SettingsScreen.kt` includes the [USDT (Tether) switch](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=48063-277709). Both are covered by `journeys/usdt-opt-in.xml`.
+
+`UsdtNetworkPicker.kt` shares the receive network rows with the [send network sheet](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=50231-146880); all available routes remain scrollable.

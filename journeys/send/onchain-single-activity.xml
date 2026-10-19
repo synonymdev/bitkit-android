@@ -1,0 +1,29 @@
+<journey name="onchain send activity confirmation">
+  <description>
+    Verifies that one accepted Savings payment keeps one activity entry through wallet sync,
+    confirmation and restart, with the selected contact and fee preserved. Preconditions: two owned
+    regtest wallets linked as contacts, a synced sending wallet with at least 6,000 confirmed sats,
+    and access to the configured regtest backend's block-mining helper. Keep both apps running.
+  </description>
+  <actions>
+    <action>On the receiving wallet, create a fresh 5,000-sat payment request for the sending contact</action>
+    <action>On the sending wallet, open the received payment request and tap Pay</action>
+    <action>Tap Show details, then select Savings if Spending is selected</action>
+    <action>Verify the review shows 5,000 sats, Savings and the receiving contact; record the fee</action>
+    <action>Swipe the send handle fully to the right and wait for Bitcoin Sent</action>
+    <action>Open Details and record the payment's date and time, then open Explore and record the exact transaction ID from TXID</action>
+    <action>Return to the sending wallet's activity list and verify exactly one new outgoing entry shows the total amount of 5,000 sats plus the recorded fee, with the receiving contact; an unconfirmed row shows a confirmation estimate instead of the payment time</action>
+    <action>Open that outgoing entry, then Explore</action>
+    <action>Verify TXID matches the recorded transaction ID</action>
+    <action>Mine one regtest block with ./lsp POST /regtest/chain/mine '{"count":1}' from the Android checkout, using the same backend as both wallets; a successful command exits with status 0 and prints nothing</action>
+    <action>Return from Explore to the activity details and wait for the status to become Confirmed</action>
+    <action>Verify the details preserve the receiving contact, 5,000-sat recipient amount and recorded fee</action>
+    <action>Return to the activity list and verify exactly one outgoing entry has the recorded payment time and total amount, with the receiving contact</action>
+    <action>Open that outgoing entry, then Explore</action>
+    <action>Verify TXID matches the recorded transaction ID</action>
+    <action>Restart the sending app normally, open its activity list and wait for the contact profiles to load</action>
+    <action>Verify exactly one outgoing entry has the recorded payment time and total amount, with the receiving contact</action>
+    <action>Open that outgoing entry and verify its status is Confirmed and it preserves the contact, 5,000-sat recipient amount and recorded fee, then open Explore</action>
+    <action>Verify TXID matches the recorded transaction ID</action>
+  </actions>
+</journey>

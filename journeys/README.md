@@ -93,6 +93,8 @@ dotted strings such as host IPs are where the dropping shows up first.
 
 ## Backend preconditions
 
+In a build with USDT configured, resolve the introductory USDT sheet by enabling or declining it before starting an unrelated journey. The choice persists; a fresh undecided wallet can show the sheet after Home appears. USDT journeys state whether they require opt-in.
+
 The dev flavor targets the **staging regtest** backend (`Env.kt` points regtest at
 `*.stag0.blocktank.to`), so most journeys need nothing running locally beyond the app. Fund and mine
 through the `lsp` helper at the repo root, which talks to the same staging LSP:
@@ -121,6 +123,8 @@ journey PR, which is what made this file conflict on every merge.
 
 | Capability | Provided by |
 | --- | --- |
+| USDT wallet navigation without funding | an onboarded build with USDT configured; provider errors may remain visible while offline — [USDT QA](../docs/usdt-qa.md) |
+| Controlled USDT quotes, provider history, funded submission and recovery | an explicitly configured local USDT gateway/RPC/bundler fixture with owned test accounts and funds; absent from the standard journey environment. Report these steps as blocked unless that setup and transfer authorization are supplied — [USDT QA](../docs/usdt-qa.md) |
 | On-chain funds and blocks on regtest | `./lsp` deposit and mine against the staging LSP — [Backend preconditions](#backend-preconditions) |
 | Several separate on-chain UTXOs to choose between | three or more `./lsp` deposits, each mined, so manual coin selection has inputs to list — [Backend preconditions](#backend-preconditions) |
 | Lightning channels, CJIT orders and quoted maxima | the same staging LSP the dev flavor targets, plus its node as an external LN peer — [Backend preconditions](#backend-preconditions), [amount-limits](amount-limits/README.md) |
@@ -152,15 +156,29 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `coin-selection/manual-coin-selection.xml` | not ported — iOS has the screen (`SendUtxoSelectionView`) but no accessibility identifiers on it yet |
-| `payment-requests/requested-resolution-failure.xml` | not ported |
+| `coin-selection/manual-wallet-switch.xml` | same file, journey name and actions; iOS can open the picker on the wallet switch, Android on the next swipe. The iOS picker has no accessibility identifiers, so assert its visible "Coin Selection" title. |
+| `payment-requests/requested-resolution-failure.xml` | same file and journey name; both platforms keep the preparing confirmation open across retries and stop automatic retries when it closes. Native progress and request-row identifiers differ. Android's subscription-reminder preparation has no intermediate Send sheet; see `paykit-clock-changes.md`. |
+| `payment-requests/request-summary.xml` | same file and journey name; Android additionally checks the open Sent receipt's live lifecycle subtitle after payment. iOS keeps a static note/date receipt without that subtitle, so those checks are not ported. |
+| `usdt-payment-restoration.xml` | same file, journey name and actions; Android restores an unpaid amount draft after process death, while iOS may return to the wallet. A submitted payment must return to the wallet without reopening the paid draft on either platform. |
+| `payment-requests/success-dismissal.xml` | same file, journey name and actions; both platforms dismiss successful and unpaid requests without a send error or duplicate payment. |
+| `payment-requests/minimum-onchain-amount.xml` | shared — minimum amount feedback, preparation cleanup, and manual retry use the same journey and `PaymentRequestAmountTooLowToast` identifier on both platforms. |
+| No matching intermediate return route | `amount-limits/custom-fee-wallet-switch.xml` is iOS-only: Custom returns through the fee picker before confirmation. Android's `setTransactionSpeed` returns directly to confirmation. |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `restore-wallet/paste-seed-fragment.xml` | not ported — the iOS Restore screen still has the 12/24-only paste guard, so the behaviour does not exist there yet |
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
+| `send/prepared-fee-recovery.md` | Same four manual fault cases and file on both platforms; the recipe records original-send versus replacement fee retention and iOS Max/identity-flow adaptations. These faults are not journey capabilities. |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `onchain-receive/*` | port pending in synonymdev/bitkit-ios#588, which wires `onchainTransactionConfirmed` into the same received-sheet flow but carries no `journeys/` files. Two adaptations when it lands: iOS suppresses replayed historical receives with a `pendingRestoreActivitySeen` flag cleared by the first post-restore on-chain sync, not the one-hour block-timestamp guard used here, so a stale-confirmation step has to drive a restore instead of a clock; and iOS has no foreground-service path, so `confirmed-only-background-notification.xml` has no counterpart |
 | `backup/show-mnemonic-long-words.xml` | not ported — the long-word fit is an Android-only change (synonymdev/bitkit-android#633); whether iOS wraps long words at larger text sizes is unchecked |
+| `security/forgot-pin-nav-bar-inset.xml` | not ported — Android-only fix (synonymdev/bitkit-android#1572): the Android sheet host adds no navigation-bar inset, so each sheet screen pads itself. iOS sheets keep their content inside the bottom safe area |
 | `deeplinks/pubky-contact.xml` | ported — same contact routing and unlock behavior |
+| `pubky-auth/signin-cold-start.xml` | `pubky-auth/open-signin-link.xml`, adapted — iOS opens the same sign-in link on a terminated app through `bitkit://pubky-auth/signin`. Android only: the raw `pubkyauth` scheme, the "Loading Your Pubky Profile" toast while the session restores, and Authorize through to `PubkyAuthOK` |
+| `pubky-auth/signin-with-second-link.xml` | not ported — iOS still drops a pending sign-in link when a second link opens on the PIN screen (synonymdev/bitkit-ios#985); port it with that fix |
+| `pubky-profile/cached-profile-header.xml` | same file, journey name and steps — one step differs: Android adds a screenshot check of the cached avatar, which comes from the Pubky image disk cache synonymdev/bitkit-android#1399 adds |
+| `pubky-profile/ring-choice-rows.xml` | same file, journey name and steps — Android names the rows and their lookup spinners differently (see [Identifiers](#identifiers)), checks that rows are disabled by tapping another row instead of reading the snapshot's Targets, needs no second tap on the profile button, and names the import overview by its "Import" title |
+| `pubky-profile/contact-import-after-leaving.xml` | same file, journey name and steps — Android names the Ring rows differently and has no identifiers on the import overview's profile and friend count, so those steps name the screen text here; see [Identifiers](#identifiers). synonymdev/bitkit-android#1399 adds `ContactImportOverviewImportAll`, the only contact import testTag the journeys use, under its iOS name |
+| `pubky-profile/contacts-list-loading.xml` | same file, journey name and steps — only the relaunch commands differ |
 | `deeplinks/screen-deeplink.xml`, `deeplinks/sheet-deeplink.xml` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `shop/gift-card-category-titles.xml` | not ported — iOS still hardcodes the category names, and its route in has no screen deeplink |
@@ -190,6 +208,29 @@ Two mechanics differ from the Android runner, both hit while checking this corpu
   *with a usable ref*. Use that to reach an element the snapshot does not list, rather than
   concluding it is gone.
 
+### Paykit amount-entry rates
+
+`paykit-quoted-usdt.xml` preserves the originally entered amount across denomination switches until
+the user edits it. Conversion uses the current fresh BTC/USD rate on both platforms. An entered
+10 USD must return as exactly 10 USD; its BTC equivalent may change when the rate refreshes.
+Require identical converted amounts only with an unchanged rate. The same rule applies to
+subscription payment-method switches: preserve the originally entered denomination exactly.
+
+### Paykit payment-method review
+
+In `paykit-quoted-usdt.xml`, Android returns to Amount whenever a quoted request changes payment
+method. iOS keeps confirmation open when the exact amount, quote and validity window are unchanged
+and still valid; changed or expired terms return to Amount. Verify the selected method and exact
+payable amount on both platforms, and close without signing. The optional Savings/Spending
+confirmation check requires existing Bitcoin regtest funds and a usable Lightning channel.
+
+### USDT full-balance errors
+
+`usdt-payment-links-and-scans.xml` accepts either the insufficient-balance message or the paymaster
+fee-collection message when the entire balance is entered manually. Either error can occur on
+either platform; the failing validation determines the message.
+Both must keep payment review closed and allow the user to reduce the amount.
+
 ### Identifiers
 
 The vocabulary is deliberately shared, and mostly matches: the whole number pad (`N0`–`N9`, `N000`,
@@ -211,10 +252,15 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
 | Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<period>` *(`-one-time` for a one-off)* |
 | Payment Request detail screen | `PaymentRequestDetailsScreen` | `PaymentRequestDetailScreen` |
+| Hardware wallet receive tab | `Tab-hardware` | `Tab-trezor` for a Trezor wallet, `Tab-jade` for a Jade |
+| Pubky Ring choice row | `PubkyChoiceIdentity` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRing_<pubky>` |
+| Pubky Ring choice row lookup spinner | `PubkyChoiceIdentityLookup` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRingLookup_<pubky>` |
+| Contact import overview profile and friend count | — *(no tag; the "Import" title and the "N friends" text)* | `ContactImportOverviewProfile`, `ContactImportOverviewSummary` |
 
-Two of those are unreconciled rather than intentional: the Send screen emitting both
-`AvailableAmount` and `available_balance`, and the background-payments row name. Settling either is a
-code change on one side, not a journey change.
+Three of those are unreconciled rather than intentional: the Send screen emitting both
+`AvailableAmount` and `available_balance`, the background-payments row name, and the Pubky Ring choice
+row. Settling any of them is a code change on one side, not a journey change. The contact import
+row names Android testTags not added yet; adding them with the iOS names would settle it too.
 
 `SubscriptionRow-<id>` matches on both platforms. iOS appends the billing period to
 `PaymentRequestRow` because every recurring payment of one subscription shares the same id, so a

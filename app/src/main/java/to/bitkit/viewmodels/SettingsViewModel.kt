@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -21,17 +22,15 @@ import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.hasPaykitState
-import to.bitkit.data.hasPublicPaykitPublicationState
-import to.bitkit.data.paykitDisabled
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ContactPaymentSettingsRepo
-import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitError
-import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.UsdtDisableError
+import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -45,10 +44,9 @@ class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val pubkyRepo: PubkyRepo,
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
-    private val publicPaykitRepo: PublicPaykitRepo,
-    private val privatePaykitRepo: PrivatePaykitRepo,
     private val widgetsStore: WidgetsStore,
     private val widgetsRepo: WidgetsRepo,
+    private val usdtPreferences: UsdtPreferencesRepo,
 ) : ViewModel() {
     private companion object {
         const val TAG = "SettingsViewModel"
@@ -65,6 +63,49 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun reset() = viewModelScope.launch { settingsStore.reset() }
+
+    private val usdtDisableChecked = MutableStateFlow(false)
+    val canDisableUsdt = combine(usdtPreferences.canDisable, usdtDisableChecked) { canDisable, checked ->
+        canDisable && checked
+    }.asStateFlow(initialValue = false)
+    val isUsdtEnabled = usdtPreferences.enabled.asStateFlow(initialValue = false)
+    private val _isUpdatingUsdt = MutableStateFlow(false)
+    val isUpdatingUsdt = _isUpdatingUsdt.asStateFlow()
+
+    fun refreshUsdtAvailability() = viewModelScope.launch {
+        usdtDisableChecked.value = false
+        if (usdtPreferences.enabled.first()) {
+            usdtDisableChecked.value = usdtPreferences.checkCanDisable().isSuccess
+        }
+    }
+
+    fun setUsdtEnabled(enabled: Boolean, onSuccess: () -> Unit = {}) {
+        if (_isUpdatingUsdt.value) return
+        _isUpdatingUsdt.update { true }
+        viewModelScope.launch {
+            try {
+                usdtPreferences.setEnabled(enabled).onSuccess {
+                    onSuccess()
+                    refreshUsdtAvailability()
+                }.onFailure {
+                    Logger.error("Failed to update USDT preference", it, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.usdt__settings_title),
+                        description = context.getString(
+                            if (it is UsdtDisableError) {
+                                R.string.usdt__disable_pending
+                            } else {
+                                R.string.usdt__disable_unavailable
+                            }
+                        ),
+                    )
+                }
+            } finally {
+                _isUpdatingUsdt.update { false }
+            }
+        }
+    }
 
     val hasSeenSpendingIntro = settingsStore.data.map { it.hasSeenSpendingIntro }
         .asStateFlow(initialValue = false)
@@ -276,39 +317,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     private suspend fun clearPaykitState() {
-        val previousSettings = settingsStore.data.first()
-        val hadPublicPaykitState = previousSettings.hasPublicPaykitPublicationState()
-        val hadPrivatePaykitState = previousSettings.sharesPrivatePaykitEndpoints
-        settingsStore.update {
-            it.paykitDisabled(markPublicCleanupPending = it.hasPublicPaykitPublicationState())
-        }
-        removePaykitEndpoints(hadPublicPaykitState, hadPrivatePaykitState)
-    }
-
-    private suspend fun removePaykitEndpoints(hadPublicPaykitState: Boolean, hadPrivatePaykitState: Boolean) {
-        val contacts = pubkyRepo.contacts.value.map { it.publicKey }
-
-        privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
+        contactPaymentSettingsRepo.disablePaykit()
             .onFailure {
-                Logger.warn("Failed to remove private Paykit endpoints after disabling Paykit UI", it, context = TAG)
+                Logger.warn("Failed to remove Paykit endpoints after disabling Paykit UI", it, context = TAG)
             }
-
-        if (hadPublicPaykitState) {
-            publicPaykitRepo.syncPublishedEndpoints(publish = false)
-                .onSuccess {
-                    settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
-                }
-                .onFailure {
-                    settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
-                    Logger.warn("Failed to remove public Paykit endpoints after disabling Paykit UI", it, context = TAG)
-                }
-        } else if (hadPrivatePaykitState) {
-            publicPaykitRepo.syncPaykitApp(privateSharingEnabled = false)
-                .onFailure {
-                    settingsStore.update { settings -> settings.copy(publicPaykitCleanupPending = true) }
-                    Logger.warn("Failed to update Paykit app capabilities after disabling Paykit UI", it, context = TAG)
-                }
-        }
     }
 
     val isPinEnabled = settingsStore.data.map { it.isPinEnabled }

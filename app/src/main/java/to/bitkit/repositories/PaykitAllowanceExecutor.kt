@@ -24,11 +24,11 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.PaykitAllowanceLocalState.JournalEntry
@@ -36,7 +36,6 @@ import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ServiceError
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -78,7 +77,7 @@ class PaykitAllowancePayer @Inject constructor(
     ): Result<Unit> {
         val kind = PaykitPaymentProofKind.fromPaymentEndpointIdentifier(paymentEndpointIdentifier)
             ?: return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
-        return paymentProofRepo.prepare(request, paymentEndpointIdentifier, paymentAppId, kind, allowanceId)
+        return paymentProofRepo.prepare(request, paymentEndpointIdentifier, paymentAppId, kind, allowanceId = allowanceId)
     }
 
     suspend fun associateLightningPayment(
@@ -89,39 +88,64 @@ class PaykitAllowancePayer @Inject constructor(
     ): Result<Unit> =
         paymentProofRepo.associateLightningPayment(request, paymentHash, paymentEndpointIdentifier, paymentAppId)
 
-    suspend fun markOnchainPaymentStarted(request: PaykitPaymentRequest, address: String): Result<Unit> =
-        paymentProofRepo.markOnchainPaymentStarted(request, address)
+    suspend fun markOnchainPaymentStarted(
+        request: PaykitPaymentRequest,
+        address: String,
+        sats: ULong,
+        context: PrivatePaykitPaymentContext,
+    ): Result<Unit> = paymentProofRepo.markOnchainPaymentStarted(
+        request,
+        address,
+        sats,
+        privatePaymentListVersion = context.paymentListVersion,
+        previousPrivatePaymentListVersion = context.previousPaymentListVersion,
+    )
+
+    /** The identity the prepared on-chain proof pays from; read before the payment is marked started. */
+    suspend fun captureOnchainPayer(request: PaykitPaymentRequest): Result<String> =
+        paymentProofRepo.captureOriginalOnchainPayer(request)
+
+    /** True while an earlier on-chain send is unresolved; the node refuses the next one until it settles. */
+    suspend fun isOnchainSendBlocked(): Boolean =
+        runSuspendCatching { lightningRepo.currentOnchainSendAttempt()?.blocksNextSend == true }.getOrDefault(true)
 
     suspend fun payLightning(bolt11: String, sats: ULong?): Result<String> = lightningRepo.payInvoice(bolt11, sats)
 
-    /** Sends at the medium fee rate. A failure is a [PaykitAllowanceOnchainSendError]. */
-    suspend fun payOnchain(address: String, sats: ULong): Result<String> {
+    /**
+     * Sends at the medium fee rate, bound to [request] like a manual payment of it. A failure is a
+     * [PaykitAllowanceOnchainSendError].
+     */
+    suspend fun payOnchain(
+        request: PaykitPaymentRequest,
+        address: String,
+        sats: ULong,
+        payerIdentity: String,
+    ): Result<OnchainSendOutcome> {
         var sendAttempted = false
-        var broadcastTxid: String? = null
         val result = lightningRepo.sendOnChain(
             address = address,
             sats = sats,
             speed = TransactionSpeed.Medium,
             beforeSendAttempt = { sendAttempted = true },
-            onBroadcast = { broadcastTxid = it },
+            requestId = request.id,
+            payerIdentity = payerIdentity,
+            contactPublicKey = request.counterparty,
+            paymentDeadlineAt = request.submissionDeadline(null),
         )
-        broadcastTxid?.let { return Result.success(it) }
         val error = result.exceptionOrNull() ?: return result
-        return Result.failure(
-            PaykitAllowanceOnchainSendError(
-                isDefinitelyNotBroadcast = !sendAttempted || error.isDefiniteOnchainPreBroadcastFailure(),
-                cause = error,
-            ),
-        )
+        val isUnresolved = error is OnchainSendPendingError || error is OnchainSendBlockedError ||
+            error is OnchainSendAttemptUnreadableError ||
+            (sendAttempted && error !is OnchainSendNotDispatchedError)
+        return Result.failure(PaykitAllowanceOnchainSendError(isDefinitelyNotBroadcast = !isUnresolved, cause = error))
     }
 
     suspend fun completeOnchainPayment(
         request: PaykitPaymentRequest,
-        txid: String,
+        outcome: OnchainSendOutcome.Accepted,
         paymentEndpointIdentifier: String,
         paymentAppId: String,
     ) {
-        paymentProofRepo.completeOnchainPayment(request, txid, paymentEndpointIdentifier, paymentAppId)
+        paymentProofRepo.completeOnchainPayment(request, outcome.txid, paymentEndpointIdentifier, paymentAppId, outcome)
     }
 
     /** Clears the proof when [error] proves the payment never left; returns whether it did. */
@@ -377,6 +401,11 @@ class PaykitAllowanceExecutor @Inject constructor(
         allowances: List<PaykitAllowance>,
         identity: String,
     ): PaykitAllowanceAutoPayResult {
+        val amountSats = request.allowanceSats()
+        if (amountSats == null) {
+            Logger.info("Kept an incoming request manual: allowances pay only bitcoin amounts", context = TAG)
+            return PaykitAllowanceAutoPayResult.MANUAL
+        }
         val scope = request.scope()
         val selectionTime = trustedTime(identity)
         val candidates = paykitSdkService.evaluateAllowanceCandidates(scope, selectionTime)
@@ -388,7 +417,7 @@ class PaykitAllowanceExecutor @Inject constructor(
             return PaykitAllowanceAutoPayResult.MANUAL
         }
 
-        if (!PaykitAllowanceCapacity.fits(request.amountSats, allowance, automaticAttempts(), clock.now())) {
+        if (!PaykitAllowanceCapacity.fits(amountSats, allowance, automaticAttempts(), clock.now())) {
             Logger.info("Kept an incoming request manual: the allowance limit is reached", context = TAG)
             notifyLimitReached(request, identity)
             return PaykitAllowanceAutoPayResult.MANUAL
@@ -401,6 +430,10 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
         if (payment == null) {
             Logger.info("Kept an incoming request manual: no payable private endpoint", context = TAG)
+            return PaykitAllowanceAutoPayResult.MANUAL
+        }
+        if (payment.lightningPaymentHash == null && payer.isOnchainSendBlocked()) {
+            Logger.info("Kept an incoming request manual: an earlier on-chain send is unresolved", context = TAG)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
 
@@ -438,7 +471,7 @@ class PaykitAllowanceExecutor @Inject constructor(
 
         liveAttemptIds.add(prepared.attemptId)
         try {
-            return executeAutomaticAttempt(request, payment, prepared, identity)
+            return executeAutomaticAttempt(request, amountSats, payment, prepared, identity)
         } finally {
             liveAttemptIds.remove(prepared.attemptId)
         }
@@ -446,6 +479,7 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     private suspend fun executeAutomaticAttempt(
         request: PaykitPaymentRequest,
+        amountSats: ULong,
         payment: PrivatePaykitAllowancePayment,
         prepared: PaymentAttemptRecord,
         identity: String,
@@ -457,7 +491,7 @@ class PaykitAllowanceExecutor @Inject constructor(
                 isAutomatic = true,
                 requestId = request.id,
                 allowanceId = prepared.allowanceId,
-                amountSats = request.amountSats,
+                amountSats = amountSats,
                 paymentEndpointIdentifier = endpointIdentifier,
                 paymentHash = payment.lightningPaymentHash,
                 onchainAddress = payment.endpoint.value.takeIf { payment.endpoint.methodId.isOnchain },
@@ -494,12 +528,13 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
 
         val paymentHash = payment.lightningPaymentHash
-            ?: return payOnchain(request, payment, submitted.attemptId, identity)
-        return payLightning(request, payment, paymentHash, submitted.attemptId, identity)
+            ?: return payOnchain(request, amountSats, payment, submitted.attemptId, identity)
+        return payLightning(request, amountSats, payment, paymentHash, submitted.attemptId, identity)
     }
 
     private suspend fun payLightning(
         request: PaykitPaymentRequest,
+        amountSats: ULong,
         payment: PrivatePaykitAllowancePayment,
         paymentHash: String,
         attemptId: String,
@@ -517,7 +552,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
 
         setStage(Stage.SENDING, attemptId, identity)
-        val sats = request.amountSats.takeUnless { payment.lightningInvoiceHasAmount }
+        val sats = amountSats.takeUnless { payment.lightningInvoiceHasAmount }
         payer.payLightning(payment.endpoint.value, sats).onFailure {
             // Only an error that proves the payment never left releases the reservation; anything else stays open.
             val neverSent = payer.failLightningPayment(paymentHash, it)
@@ -532,19 +567,22 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     private suspend fun payOnchain(
         request: PaykitPaymentRequest,
+        amountSats: ULong,
         payment: PrivatePaykitAllowancePayment,
         attemptId: String,
         identity: String,
     ): PaykitAllowanceAutoPayResult {
         val address = payment.endpoint.value
-        payer.markOnchainPaymentStarted(request, address).onFailure {
-            payer.cancelProofPreparation(request)
-            record(attemptId, PaymentOutcome.FAILED, identity)
-            throw it
-        }
+        val payerIdentity = payer.captureOnchainPayer(request)
+            .onSuccess { payer.markOnchainPaymentStarted(request, address, amountSats, payment.context).getOrThrow() }
+            .getOrElse {
+                payer.cancelProofPreparation(request)
+                record(attemptId, PaymentOutcome.FAILED, identity)
+                throw it
+            }
 
         setStage(Stage.SENDING, attemptId, identity)
-        val txid = payer.payOnchain(address, request.amountSats).getOrElse {
+        val outcome = payer.payOnchain(request, address, amountSats, payerIdentity).getOrElse {
             if ((it as? PaykitAllowanceOnchainSendError)?.isDefinitelyNotBroadcast == true) {
                 payer.failOnchainPayment(request)
                 record(attemptId, PaymentOutcome.FAILED, identity)
@@ -554,10 +592,17 @@ class PaykitAllowanceExecutor @Inject constructor(
             throw it
         }
 
+        val txid = outcome.txid
         updateJournalEntry(attemptId, identity) { it.copy(transactionId = txid) }
-        payer.completeOnchainPayment(request, txid, payment.endpoint.methodId.rawValue, payment.appId)
+        if (outcome !is OnchainSendOutcome.Accepted) {
+            // The wallet's recovery of the send attempt owns the request from here, as for a manual payment.
+            Logger.warn("Left an allowance payment on-chain outcome unresolved: '$outcome'", context = TAG)
+            record(attemptId, PaymentOutcome.UNKNOWN, identity)
+            return PaykitAllowanceAutoPayResult.STARTED
+        }
+        payer.completeOnchainPayment(request, outcome, payment.endpoint.methodId.rawValue, payment.appId)
         record(attemptId, PaymentOutcome.SUCCEEDED, identity)
-        _events.tryEmit(PaykitAllowanceEvent.PaidAutomatically(request.counterparty, request.amountSats, txid))
+        _events.tryEmit(PaykitAllowanceEvent.PaidAutomatically(request.counterparty, amountSats, txid))
         Logger.info("Paid an allowance payment on-chain", context = TAG)
         return PaykitAllowanceAutoPayResult.COMPLETED
     }
@@ -601,14 +646,16 @@ class PaykitAllowanceExecutor @Inject constructor(
         paymentEndpointIdentifier: String,
     ): Result<String?> = withContext(ioDispatcher) {
         val identity = activeIdentity
+        val amountSats = request.allowanceSats()
         if (
             identity == null ||
+            amountSats == null ||
             request.billingPeriod != null ||
             request.direction != PaykitPaymentRequestDirection.Incoming
         ) {
             return@withContext Result.success(null)
         }
-        val result = runSuspendCatching { reportManualPayment(request, paymentEndpointIdentifier, identity) }
+        val result = runSuspendCatching { reportManualPayment(request, amountSats, paymentEndpointIdentifier, identity) }
         val error = result.exceptionOrNull() ?: return@withContext result
         if (error is PaykitAllowanceError.PaymentAlreadyRecorded) return@withContext result
         Logger.warn("Failed to report a manual payment to the allowance ledger", error, context = TAG)
@@ -617,6 +664,7 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     private suspend fun reportManualPayment(
         request: PaykitPaymentRequest,
+        amountSats: ULong,
         paymentEndpointIdentifier: String,
         identity: String,
     ): String? {
@@ -637,7 +685,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         // Recovery leaves the attempt alone until finishManualPayment reports its outcome.
         liveAttemptIds.add(prepared.attemptId)
         val attemptId = runSuspendCatching {
-            beginManualAttempt(request, paymentEndpointIdentifier, prepared, identity)
+            beginManualAttempt(request, amountSats, paymentEndpointIdentifier, prepared, identity)
         }
         if (attemptId.getOrNull() == null) liveAttemptIds.remove(prepared.attemptId)
         return attemptId.getOrThrow()
@@ -645,6 +693,7 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     private suspend fun beginManualAttempt(
         request: PaykitPaymentRequest,
+        amountSats: ULong,
         paymentEndpointIdentifier: String,
         prepared: PaymentAttemptRecord,
         identity: String,
@@ -655,7 +704,7 @@ class PaykitAllowanceExecutor @Inject constructor(
                 isAutomatic = false,
                 requestId = request.id,
                 allowanceId = null,
-                amountSats = request.amountSats,
+                amountSats = amountSats,
                 paymentEndpointIdentifier = paymentEndpointIdentifier,
                 stage = Stage.PREPARED,
                 createdAtMillis = clock.now().toEpochMilliseconds(),
@@ -755,7 +804,7 @@ class PaykitAllowanceExecutor @Inject constructor(
             isNew = request.paymentRequestId !in state.notifiedRequestIds
             state.copy(notifiedRequestIds = state.notifiedRequestIds + request.paymentRequestId)
         }
-        if (isNew) _events.tryEmit(PaykitAllowanceEvent.LimitReached(request.counterparty, request.amountSats))
+        if (isNew) _events.tryEmit(PaykitAllowanceEvent.LimitReached(request.counterparty, request.amount.atomic))
     }
 
     // endregion
@@ -763,21 +812,6 @@ class PaykitAllowanceExecutor @Inject constructor(
 
 private fun PaykitPaymentRequest.scope() = PaymentRequestScope(counterparty, paymentRequestId)
 
-private fun Throwable.isDefiniteOnchainPreBroadcastFailure(): Boolean =
-    generateSequence(this as Throwable?) { it.cause }
-        .any {
-            it is ServiceError.NodeNotSetup ||
-                it is ServiceError.NodeNotStarted ||
-                it is NodeException.NotRunning ||
-                it is NodeException.OnchainTxCreationFailed ||
-                it is NodeException.OnchainTxSigningFailed ||
-                it is NodeException.WalletOperationFailed ||
-                it is NodeException.PersistenceFailed ||
-                it is NodeException.InvalidAddress ||
-                it is NodeException.InvalidAmount ||
-                it is NodeException.InvalidNetwork ||
-                it is NodeException.InvalidFeeRate ||
-                it is NodeException.InsufficientFunds ||
-                it is NodeException.CoinSelectionFailed ||
-                it is NodeException.NoSpendableOutputs
-        }
+/** Allowances pay only bitcoin-denominated requests without a conversion; null for any other request. */
+internal fun PaykitPaymentRequest.allowanceSats(): ULong? =
+    amount.atomic.takeIf { amount.asset == PaykitAsset.BTC && pricing.conversion == null }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -76,7 +77,7 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
                 )
             )
         )
-        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any()) }
+        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any(), any(), anyOrNull()) }
             .thenReturn(Result.success(Unit))
     }
 

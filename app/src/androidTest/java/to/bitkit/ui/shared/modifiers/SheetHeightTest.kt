@@ -51,7 +51,7 @@ class SheetHeightTest {
                 val windowHeight = LocalWindowInfo.current.containerSize.height
                 val topInset = Insets.Top
                 val expected = with(density) {
-                    (windowHeight.toDp() - topInset - TopBarHeight + 6.dp).roundToPx()
+                    (windowHeight.toDp() - topInset - TopBarHeight - 16.dp).roundToPx()
                 }
 
                 SideEffect {

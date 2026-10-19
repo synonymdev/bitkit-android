@@ -1,5 +1,6 @@
 package to.bitkit.models
 
+import kotlinx.serialization.json.Json
 import to.bitkit.models.PubkyAuthClaim.Item
 import java.net.URLEncoder
 import kotlin.test.Test
@@ -11,6 +12,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PubkyAuthRequestTest {
+
+    @Test
+    fun `optional USDT omission preserves delegated Paykit authority`() {
+        val claim = requireNotNull(PubkyAuthClaim.fromWireValue("paykit-access-v1.usdt-address-v1"))
+        val payload = PubkyAuthClaimCodec.encode(claim, "{}".encodeToByteArray(), 3uL, ByteArray(32) { 11 })
+        val actual = Json.parseToJsonElement(payload.decodeToString())
+        val expected = Json.parseToJsonElement(
+            """{"paykit_access":{"key_generation":3,"secret":"CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws"}}"""
+        )
+        assertEquals(expected, actual)
+        assertTrue(claim.sharesUsdt)
+        assertFalse(claim.sharesBitcoin)
+    }
 
     @Test
     fun `parse preserves each companion selection and received item order`() {
@@ -127,6 +141,43 @@ class PubkyAuthRequestTest {
             assertEquals("", request.relay)
             assertEquals("", request.capabilities)
             assertNull(request.authorizationUrl)
+        }
+    }
+
+    @Test
+    fun `grant signup preserves the requesting app and creates only a missing identity`() {
+        val url = "pubkyauth://signup_grant?hs=homeserver&st=invite%20code&cid=shop.pubky.app"
+        val request = PubkyAuthRequest.parseGrantSignup(
+            rawUrl = url,
+            clientId = "shop.pubky.app",
+            relay = "https://relay.example/inbox/",
+            capabilities = "/pub/pubky.app/:rw",
+            homeserverPublicKey = "homeserver",
+        ).getOrThrow()
+
+        assertTrue(request.isSignup)
+        assertTrue(request.isGrantSignup)
+        assertTrue(request.requiresIdentityCreation(hasIdentity = false))
+        assertFalse(request.requiresIdentityCreation(hasIdentity = true))
+        assertEquals("homeserver", request.homeserverPublicKey)
+        assertEquals("invite code", request.signupToken)
+        assertEquals("shop.pubky.app", request.clientId)
+        assertEquals(url, request.authorizationUrl)
+        assertEquals(listOf(PubkyAuthPermission("/pub/pubky.app/", "rw")), request.permissions)
+    }
+
+    @Test
+    fun `grant signup rejects ambiguous registration parameters`() {
+        listOf("", "hs=homeserver&hs=other", "hs=homeserver&st=one&st=two").forEach { query ->
+            assertIs<PubkyAuthRequestError.InvalidUrl>(
+                PubkyAuthRequest.parseGrantSignup(
+                    rawUrl = "pubkyauth://signup_grant?$query",
+                    clientId = "shop.pubky.app",
+                    relay = "https://relay.example/inbox/",
+                    capabilities = "/pub/pubky.app/:rw",
+                    homeserverPublicKey = "homeserver",
+                ).exceptionOrNull(),
+            )
         }
     }
 

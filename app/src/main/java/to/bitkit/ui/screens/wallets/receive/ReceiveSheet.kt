@@ -28,6 +28,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PaykitPaymentRequest
@@ -36,6 +38,7 @@ import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ConnectionIssuesView
+import to.bitkit.ui.components.modelNameRes
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestAmountScreen
@@ -65,6 +68,9 @@ fun ReceiveSheet(
     walletState: WalletState,
     isOffline: Boolean,
     startRoute: ReceiveRoute = ReceiveRoute.QR,
+    initialTab: ReceiveTab? = null,
+    onBlockingChange: (Boolean) -> Unit = {},
+    onUsdtSelected: (Boolean) -> Unit = {},
     hardwareWalletId: String? = null,
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
     paymentRequestAmountViewModel: AmountInputViewModel = hiltViewModel(key = "PaymentRequestAmount"),
@@ -92,7 +98,7 @@ fun ReceiveSheet(
     var paymentRequestDraft by remember {
         mutableStateOf(
             PaykitPaymentRequestDraft(
-                amountSats = 0uL,
+                amount = PaykitAmount(PaykitAsset.BTC, 0uL),
                 note = "",
                 expiresAt = Clock.System.now() + 7.days,
             )
@@ -148,6 +154,7 @@ fun ReceiveSheet(
             ) {
                 composableWithDefaultTransitions<ReceiveRoute.QR> {
                     ReceiveQrScreen(
+                        onUsdtSelected = onUsdtSelected,
                         cjitInvoice = cjitSessionState.cjitInvoice,
                         walletState = walletState,
                         lightningState = lightningState,
@@ -166,21 +173,27 @@ fun ReceiveSheet(
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
-                            editInvoiceSourceTab = ReceiveTab.TREZOR
+                            editInvoiceSourceTab = ReceiveTab.HARDWARE
                             invoiceEditState.beginHardwareEdit()
                             resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
-                        initialTab = invoiceEditState.initialTab(hardwareWalletId),
+                        initialTab = invoiceEditState.initialTab(hardwareWalletId) ?: initialTab,
+                        onBlockingChange = onBlockingChange,
+                        onClose = appViewModel::hideSheet,
                         hardwareWalletId = selectedHardwareWalletId,
+                        hardwareTabLabel = hardwareWallets.firstOrNull { it.id == selectedHardwareWalletId }
+                            ?.let { stringResource(it.vendor.modelNameRes()) },
                         hardwareReceiveState = hwReceiveState,
                         onLoadHardwareAddress = hwReceiveViewModel::loadAddress,
                         onRetryHardwareAddress = hwReceiveViewModel::retryAddress,
+                        onRetryInvoice = { wallet.retryReceiveInvoice() },
                         onVerifyHardwareAddress = hwReceiveViewModel::verifyAddress,
                         showPaymentRequestContacts = paymentRequestTargets.isNotEmpty(),
                         onClickPaymentRequestContacts = {
                             paymentRequestDraft = paymentRequestDraft.copy(
-                                amountSats = 0uL,
+                                amount = PaykitAmount(PaykitAsset.BTC, 0uL),
+                                acceptedPaymentEndpointIdentifiers = null,
                                 note = "",
                                 expiresAt = Clock.System.now() + 7.days,
                             )
@@ -387,7 +400,7 @@ fun ReceiveSheet(
                         showPaymentRequestButton = paymentRequestTargets.isNotEmpty(),
                         onClickPaymentRequest = { amountSats, note ->
                             paymentRequestDraft = PaykitPaymentRequestDraft(
-                                amountSats = amountSats,
+                                amount = PaykitAmount(PaykitAsset.BTC, amountSats),
                                 note = note,
                                 expiresAt = Clock.System.now() + 7.days,
                             )
@@ -482,11 +495,11 @@ internal class ReceiveInvoiceEditState {
 
     fun beginHardwareEdit() {
         isHardwareInvoice = true
-        returnTab = ReceiveTab.TREZOR
+        returnTab = ReceiveTab.HARDWARE
     }
 
     fun initialTab(hardwareWalletId: String?): ReceiveTab? =
-        returnTab ?: ReceiveTab.TREZOR.takeIf { hardwareWalletId != null }
+        returnTab ?: ReceiveTab.HARDWARE.takeIf { hardwareWalletId != null || isHardwareInvoice }
 }
 
 @Composable

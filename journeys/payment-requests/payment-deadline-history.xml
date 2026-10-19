@@ -1,11 +1,11 @@
 <journey name="Payment Deadline History">
   <description>
-    Requests with actual-payment deadlines are visible but cannot be paid by this version of Bitkit.
+    One-time requests past their actual-payment deadlines and unsupported recurring deadlines remain visible in history.
     Use a disposable Paykit test identity linked to a controlled shared-runtime peer. Prepare one-time BTC
-    requests with deadlines in proposed, accepted, rejected, canceled and proof-submitted states,
+    requests with expired absolute deadlines in proposed, accepted, rejected, canceled and proof-submitted states,
     plus an incoming, accepted monthly BTC subscription with no end date, a period-start deadline,
     one paid period and one unpaid period. Acceptance and proof submission must be prepared through the controlled
-    client because Bitkit intentionally cannot accept these terms. Use valid regtest payment proofs.
+    client to retain these expired and unsupported fixture states. Use valid regtest payment proofs.
     Do not reset or replace a funded wallet to prepare this fixture. On Android, unpaid
     history rows show status labels, while paid rows show subscription names, notes or dates.
     Record each payment request id.

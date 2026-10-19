@@ -15,6 +15,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import kotlin.time.ExperimentalTime
@@ -173,8 +176,9 @@ data class PaykitSubscriptionId(
 data class PaykitSubscription(
     val paymentRequestId: String,
     val counterparty: String,
-    val amountValue: String,
-    val amountSats: ULong,
+    val amount: PaykitAmount,
+    val paymentReference: String,
+    val pricing: PaykitRequestPricing,
     val note: String?,
     val createdAt: Instant?,
     val proposalExpiresAt: Instant?,
@@ -186,8 +190,12 @@ data class PaykitSubscription(
     val lifecycleState: PaymentRequestLifecycleState,
     val paidPeriods: List<PaykitBillingPeriod>,
     val paymentProofKinds: Map<PaykitBillingPeriod, PaykitPaymentProofKind> = emptyMap(),
-    val hasPaymentDeadline: Boolean = false,
+    val paymentProofEventIds: Map<PaykitBillingPeriod, String> = emptyMap(),
+    val submittedPeriods: List<PaykitBillingPeriod> = paidPeriods,
+    val proposalStreamItemId: ULong? = null,
 ) {
+    val amountValue: String get() = amount.value
+
     val id: PaykitSubscriptionId
         get() = PaykitSubscriptionId(paymentRequestId, counterparty)
 
@@ -204,7 +212,6 @@ data class PaykitSubscription(
 
     fun isProposalActionable(now: Instant): Boolean =
         isProposalVisible(now) &&
-            !hasPaymentDeadline &&
             recurrence.unit.isSupported &&
             recurrence.canMaterializePeriods &&
             acceptedPaymentEndpointIdentifiers.isNotEmpty()
@@ -241,9 +248,11 @@ data class PaykitSubscription(
         return recurrence.periodsThrough(date, acceptedAt).map { period ->
             PaykitPaymentRequest(
                 paymentRequestId = paymentRequestId,
+                proposalStreamItemId = proposalStreamItemId,
                 counterparty = counterparty,
-                amountValue = amountValue,
-                amountSats = amountSats,
+                amount = amount,
+                paymentReference = paymentReference,
+                pricing = pricing,
                 note = note,
                 createdAt = period.startsAt,
                 expiresAt = null,
@@ -254,23 +263,27 @@ data class PaykitSubscription(
                     PaymentRequestLifecycleState.ACTIVE_RECURRING
                 },
                 billingPeriod = period,
+                paymentDeadlineAt = pricing.paymentDeadline(period),
                 paymentProofKind = paymentProofKinds[period],
+                paymentProofEventId = paymentProofEventIds[period],
             )
         }
     }
 
     /** [now] is the subscription clock; [acceptedAt] is when accepting will store the acceptance, in real time. */
     fun paymentDueOnAcceptance(now: Instant, acceptedAt: Instant = now): PaykitPaymentRequest? =
-        if (hasPaymentDeadline) null else requestsThrough(now, acceptedAt).firstOrNull()
+        requestsThrough(now, acceptedAt).firstOrNull()
 
     fun receivedPaymentRequests(): List<PaykitPaymentRequest> {
         if (!isCreatedByUser) return emptyList()
-        return paidPeriods.map { period ->
+        return submittedPeriods.map { period ->
             PaykitPaymentRequest(
                 paymentRequestId = paymentRequestId,
+                proposalStreamItemId = proposalStreamItemId,
                 counterparty = counterparty,
-                amountValue = amountValue,
-                amountSats = amountSats,
+                amount = amount,
+                paymentReference = paymentReference,
+                pricing = pricing,
                 note = note,
                 createdAt = period.startsAt,
                 expiresAt = null,
@@ -278,21 +291,31 @@ data class PaykitSubscription(
                 direction = PaykitPaymentRequestDirection.Outgoing,
                 lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED,
                 billingPeriod = period,
+                paymentDeadlineAt = pricing.paymentDeadline(period),
                 paymentProofKind = paymentProofKinds[period],
+                paymentProofEventId = paymentProofEventIds[period],
             )
         }
     }
 }
 
+/** A canceled subscription is paid for up to its last paid period, whatever its fixed end date. */
+fun PaykitSubscription.canceledPaidThrough(): Instant? =
+    if (lifecycleState == PaymentRequestLifecycleState.CANCELED) paidPeriods.maxOfOrNull { it.endsAt } else null
+
+/** Active, or canceled with its last paid period still ahead: it keeps running until it is paid through. */
+fun PaykitSubscription.runsUntilPaidThrough(now: Instant): Boolean =
+    isActive(now) || canceledPaidThrough()?.let { it > now } == true
+
 @Suppress("CyclomaticComplexMethod", "ReturnCount")
 internal fun PaymentRequestRecord.toPaykitSubscription(
     deliveryStatusOverride: PaykitPaymentRequestDeliveryStatus? = null,
+    verifiedUsdtReceipts: List<PaykitUsdtReceipt> = emptyList(),
 ): PaykitSubscription? {
     val role = localRole.toSubscriptionRole() ?: return null
     val requestTerms = terms ?: return null
     val sdkRecurrence = requestTerms.recurrence ?: return null
     if (
-        requestTerms.amount.asset != "btc" ||
         sdkRecurrence.every == 0u ||
         sdkRecurrence.every > Int.MAX_VALUE.toUInt()
     ) {
@@ -306,9 +329,10 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
     val proposalExpiresAt = requestTerms.proposalExpiresAt?.parseInstant()
         ?: if (requestTerms.proposalExpiresAt == null) null else return null
     if (recurrenceEndsAt != null && recurrenceEndsAt <= startsAt) return null
-    val amountSats = requestTerms.amount.value.toPaykitSats()
-        ?.takeIf { it <= ULong.MAX_VALUE / 1000uL }
-        ?: return null
+    val asset = PaykitAsset.entries.firstOrNull { it.code == requestTerms.amount.asset } ?: return null
+    val amount = runCatching { PaykitAmount.parse(asset, requestTerms.amount.value) }.getOrNull() ?: return null
+    if (asset == PaykitAsset.BTC && amount.atomic > ULong.MAX_VALUE / 1000uL) return null
+
     val endpoints = requestTerms.acceptedPaymentEndpointIdentifiers
         .filter { MethodId.fromRawValue(it) != null }
         .distinct()
@@ -323,9 +347,11 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
     val payments = paymentProofs.mapNotNull { it.toSubscriptionPayment(recurrence) }
     return PaykitSubscription(
         paymentRequestId = paymentRequestId,
+        proposalStreamItemId = proposalStreamItemId,
         counterparty = counterparty,
-        amountValue = requestTerms.amount.value,
-        amountSats = amountSats,
+        amount = amount,
+        paymentReference = requestTerms.paymentReference.exportText(),
+        pricing = PaykitRequestPricing(requestTerms.conversion, requestTerms.paymentDeadline, conversionQuotes),
         note = requestTerms.metadata.note()?.take(256),
         createdAt = lastEventAt?.parseInstant(),
         proposalExpiresAt = proposalExpiresAt,
@@ -335,11 +361,28 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
         role = role,
         deliveryStatus = subscriptionDeliveryStatus(role, deliveryStatusOverride),
         lifecycleState = state,
-        paidPeriods = payments.map { it.first }.distinct(),
+        paidPeriods = paidSubscriptionPeriods(payments, role, verifiedUsdtReceipts),
+        submittedPeriods = payments.map { it.first }.distinct(),
         paymentProofKinds = payments.mapNotNull { (period, kind) -> kind?.let { period to it } }.toMap(),
-        hasPaymentDeadline = requestTerms.paymentDeadline != null,
+        paymentProofEventIds = paymentProofs.mapNotNull { proof ->
+            proof.toSubscriptionPayment(recurrence)?.first?.let { it to proof.eventId }
+        }.toMap(),
+
     )
 }
+
+private fun PaymentRequestRecord.paidSubscriptionPeriods(
+    payments: List<Pair<PaykitBillingPeriod, PaykitPaymentProofKind?>>,
+    role: PaykitSubscriptionRole,
+    receipts: List<PaykitUsdtReceipt>,
+): List<PaykitBillingPeriod> = payments.filter { (period, kind) ->
+    role == PaykitSubscriptionRole.Payer || kind != PaykitPaymentProofKind.Usdt ||
+        receipts.any { receipt ->
+            receipt.satisfied && receipt.requestId == PaykitPaymentRequestId(
+                paymentRequestId, counterparty, period.startsAt.toString(),
+            ) && paymentProofs.any { it.eventId == receipt.proofEventId }
+        }
+}.map { it.first }.distinct()
 
 @Suppress("ReturnCount")
 private fun PaymentProofRecord.toSubscriptionPayment(

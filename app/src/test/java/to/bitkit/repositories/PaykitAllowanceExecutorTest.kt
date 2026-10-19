@@ -67,6 +67,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         private const val INVOICE = "lnbcrt10u1allowancetestinvoice"
         private const val ONCHAIN_ADDRESS = "bcrt1qallowancetestaddress"
         private const val PAYMENT_APP_ID = "bitkit"
+        private const val PAYER_IDENTITY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private val PAYMENT_HASH = "ab".repeat(32)
         private val TXID = "c".repeat(64)
     }
@@ -212,9 +213,11 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(payer.consumePaymentList(any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.prepareProof(any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(payer.associateLightningPayment(any(), any(), any(), any())).thenReturn(Result.success(Unit))
-        whenever(payer.markOnchainPaymentStarted(any(), any())).thenReturn(Result.success(Unit))
+        whenever(payer.captureOnchainPayer(any())).thenReturn(Result.success(PAYER_IDENTITY))
+        whenever(payer.isOnchainSendBlocked()).thenReturn(false)
+        whenever(payer.markOnchainPaymentStarted(any(), any(), any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.payLightning(any(), anyOrNull())).thenReturn(Result.success(PAYMENT_HASH))
-        whenever(payer.payOnchain(any(), any())).thenReturn(Result.success(TXID))
+        whenever(payer.payOnchain(any(), any(), any(), any())).thenReturn(Result.success(OnchainSendOutcome.Accepted(TXID)))
         whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
         whenever(payer.lightningPaymentStatus(any())).thenAnswer { nodeStatuses[it.getArgument<String>(0)] }
     }
@@ -437,9 +440,14 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(PaykitAllowanceAutoPayResult.COMPLETED, result)
         val order = inOrder(payer, sdk)
         order.verify(payer).prepareProof(request, fixtures.onchainIdentifier, PAYMENT_APP_ID, ALLOWANCE_ID)
-        order.verify(payer).markOnchainPaymentStarted(request, ONCHAIN_ADDRESS)
-        order.verify(payer).payOnchain(eq(ONCHAIN_ADDRESS), any())
-        order.verify(payer).completeOnchainPayment(request, TXID, fixtures.onchainIdentifier, PAYMENT_APP_ID)
+        order.verify(payer).markOnchainPaymentStarted(eq(request), eq(ONCHAIN_ADDRESS), eq(1_000uL), any())
+        order.verify(payer).payOnchain(eq(request), eq(ONCHAIN_ADDRESS), eq(1_000uL), eq(PAYER_IDENTITY))
+        order.verify(payer).completeOnchainPayment(
+            request,
+            OnchainSendOutcome.Accepted(TXID),
+            fixtures.onchainIdentifier,
+            PAYMENT_APP_ID,
+        )
         order.verify(sdk).recordPaymentOutcome(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.SUCCEEDED))
         val entry = sut.localState(identity).journal.single()
         assertEquals(Stage.SUCCEEDED, entry.stage)
@@ -453,7 +461,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     @Test
     fun `on-chain send failure keeps the attempt reserved unless nothing was broadcast`() = test {
         whenever(payer.resolve(any(), any())).thenReturn(Result.success(onchainPayment()))
-        whenever(payer.payOnchain(any(), any())).thenReturn(
+        whenever(payer.payOnchain(any(), any(), any(), any())).thenReturn(
             Result.failure(PaykitAllowanceOnchainSendError(true, TestAllowanceError("funds"))),
             Result.failure(PaykitAllowanceOnchainSendError(false, TestAllowanceError("timeout"))),
         )
@@ -472,17 +480,22 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     @Test
     fun `on-chain payment completes when its caller is cancelled during the send`() = test {
         whenever(payer.resolve(any(), any())).thenReturn(Result.success(onchainPayment()))
-        val sendResult = CompletableDeferred<Result<String>>()
-        whenever(payer.payOnchain(any(), any())).doSuspendableAnswer { sendResult.await() }
+        val sendResult = CompletableDeferred<Result<OnchainSendOutcome>>()
+        whenever(payer.payOnchain(any(), any(), any(), any())).doSuspendableAnswer { sendResult.await() }
         val request = fixtures.paymentRequest()
 
         val caller = launch { sut.autoPay(request, listOf(fixtures.allowance()), identity) }
         assertEquals(Stage.SENDING, sut.localState(identity).journal.single().stage)
         caller.cancel()
-        sendResult.complete(Result.success(TXID))
+        sendResult.complete(Result.success(OnchainSendOutcome.Accepted(TXID)))
         caller.join()
 
-        verify(payer).completeOnchainPayment(request, TXID, fixtures.onchainIdentifier, PAYMENT_APP_ID)
+        verify(payer).completeOnchainPayment(
+            request,
+            OnchainSendOutcome.Accepted(TXID),
+            fixtures.onchainIdentifier,
+            PAYMENT_APP_ID,
+        )
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.SUCCEEDED)), recordedOutcomes)
         assertEquals(Stage.SUCCEEDED, sut.localState(identity).journal.single().stage)
     }
@@ -512,7 +525,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             events.filterIsInstance<PaykitAllowanceEvent.PaidAutomatically>(),
         )
         verify(payer, never()).payLightning(any(), anyOrNull())
-        verify(payer, never()).payOnchain(any(), any())
+        verify(payer, never()).payOnchain(any(), any(), any(), any())
     }
 
     @Test
@@ -578,7 +591,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             sut.localState(identity).journal.associate { it.attemptId to it.stage },
         )
         verify(payer, never()).payLightning(any(), anyOrNull())
-        verify(payer, never()).payOnchain(any(), any())
+        verify(payer, never()).payOnchain(any(), any(), any(), any())
         verify(payer, never()).resolve(any(), any())
         assertEquals(emptyList(), reconciliations)
     }
@@ -740,7 +753,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             reconciliation.outcomes,
         )
         verify(payer, never()).payLightning(any(), anyOrNull())
-        verify(payer, never()).payOnchain(any(), any())
+        verify(payer, never()).payOnchain(any(), any(), any(), any())
     }
 
     @Test
@@ -865,7 +878,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         isAutomatic = true,
         requestId = request.id,
         allowanceId = ALLOWANCE_ID,
-        amountSats = request.amountSats,
+        amountSats = request.amount.atomic,
         paymentEndpointIdentifier = fixtures.lightningIdentifier,
         paymentHash = paymentHash,
         stage = stage,

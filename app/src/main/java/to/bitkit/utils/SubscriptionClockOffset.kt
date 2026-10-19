@@ -79,7 +79,7 @@ class SubscriptionClockOffsetSync @Inject constructor(
             settingsStore.subscriptionClockOffsetDays.distinctUntilChanged().collect {
                 SubscriptionClockOffset.setOffsetDays(it)
                 if (it != 0) Logger.info("Set the subscription clock offset to '$it' days", context = TAG)
-                if (!isInitialOffset) paykitPaymentRequestRepo.get().refresh()
+                if (!isInitialOffset) paykitPaymentRequestRepo.get().refreshAfterStateChange()
                 isInitialOffset = false
             }
         }

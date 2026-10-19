@@ -1,0 +1,13 @@
+<journey name="delete newly saved contact">
+  <description>
+    Requires an authenticated disposable identity and a valid contact not already saved.
+    The contact must have no active subscription. No payment is sent.
+  </description>
+  <actions>
+    <action>Open Contacts and add the contact by its Pubky key</action>
+    <action>On the Contact Saved screen, tap Delete and confirm</action>
+    <action>Verify Contacts appears and the deleted contact is absent, with no empty contact screen</action>
+    <action>Navigate Back and verify the deleted contact screen is not restored</action>
+    <action>Add the same contact again and verify its saved details appear</action>
+  </actions>
+</journey>

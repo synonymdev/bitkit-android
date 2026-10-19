@@ -36,9 +36,14 @@ class ContactsViewModel @Inject constructor(
         profile ?: publicKey?.let { PubkyProfile.forDisplay(it, displayName, displayImageUri) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    private val isLoadingFirstContacts = combine(
+        pubkyRepo.isLoadingContacts,
+        pubkyRepo.contactsLoadVersion,
+    ) { isLoading, loadVersion -> isLoading && loadVersion == 0L }
+
     val uiState: StateFlow<ContactsUiState> = combine(
         pubkyRepo.contacts,
-        pubkyRepo.isLoadingContacts,
+        isLoadingFirstContacts,
         myProfile,
         _searchText,
     ) { contacts, isLoading, myProfileValue, search ->

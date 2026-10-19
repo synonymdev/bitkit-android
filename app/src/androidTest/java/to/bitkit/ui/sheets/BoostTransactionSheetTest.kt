@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onChild
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -97,6 +98,7 @@ class BoostTransactionContentTest {
         // Assert use suggested fee button
         composeTestRule.onNodeWithTag(BoostTransactionTestTags.USE_SUGGESTED_FEE_BUTTON)
             .assertIsDisplayed()
+            .onChild()
             .assertHasClickAction()
 
         // Assert swipe to confirm

@@ -1,0 +1,16 @@
+<journey name="unpayable payment request endpoint">
+  <description>
+    Requires a linked fixture issuer that can bind a new request to a one-time on-chain address already recorded as paid by this payer, then issue a request for a fresh address. See README.md for setup; report this journey as blocked if that fixture is unavailable. Checks rejection feedback without sending another payment.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled and the fixture issuer saved as a contact and linked as identities</action>
+    <action>Have the issuer send a new one-time BTC request with a future expiration and its bound on-chain endpoint set to the address already paid by this payer</action>
+    <action>Wait for incoming preparation to finish; verify the loading confirmation closes and the unavailable-payment toast (id "PaymentRequestUnavailableToast") appears</action>
+    <action>Open the pending-request bell (id "PaymentRequestsBell") and verify the unpaid request remains listed</action>
+    <action>Tap Pay for that request and wait for preparation to finish</action>
+    <action>Verify the unavailable-payment toast (id "PaymentRequestUnavailableToast") appears and the request list or details return without a loading confirmation</action>
+    <action>Have the issuer send a different request bound to a fresh unused address</action>
+    <action>Verify the new request reaches confirmation rather than waiting behind the rejected request</action>
+    <action>Dismiss the confirmation without paying and verify no new payment was created</action>
+  </actions>
+</journey>

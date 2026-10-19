@@ -114,8 +114,8 @@ run mode="" logs="":
     build_env=""
     if [ "$mode" = "docker" ]; then
         echo "Forwarding bitkit-docker ports via adb reverse..."
-        adb -s "$device_id" reverse tcp:9735 tcp:9735     # local lnd peer
-        adb -s "$device_id" reverse tcp:3000 tcp:3000     # local lnurl-server
+        adb -s "$device_id" reverse tcp:23735 tcp:23735   # local lnd peer
+        adb -s "$device_id" reverse tcp:23000 tcp:23000   # local lnurl-server
         build_env="E2E=true"
     fi
 

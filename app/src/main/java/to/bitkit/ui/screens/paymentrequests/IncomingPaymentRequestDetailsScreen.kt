@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -40,18 +41,19 @@ import to.bitkit.R
 import to.bitkit.ext.UiDateStyle
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitUsdtReceipt
 import to.bitkit.ui.components.AddTagButton
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
-import to.bitkit.ui.components.FillWidth
+import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
@@ -59,14 +61,11 @@ import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.ZigzagDivider
-import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.uiDateText
-import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
 import kotlin.time.ExperimentalTime
 
@@ -77,8 +76,10 @@ fun IncomingPaymentRequestDetailsScreen(
     onBack: () -> Unit,
 ) {
     val pending by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
+    val receipts by appViewModel.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()
     val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
+    val requestedPaymentRequestId by appViewModel.requestedPaymentRequestId.collectAsStateWithLifecycle()
     val request = pending.firstOrNull { it.id == id } ?: history.firstOrNull { it.id == id }
     val contact = request?.let { paymentRequest ->
         contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, paymentRequest.counterparty) }
@@ -88,8 +89,10 @@ fun IncomingPaymentRequestDetailsScreen(
 
     IncomingPaymentRequestDetailsContent(
         request = request,
+        receipt = request?.let { paymentRequest -> receipts.lastOrNull { it.matches(paymentRequest) } },
         contact = contact,
         isPending = isPending,
+        isPreparing = requestedPaymentRequestId == id,
         onBack = onBack,
         onPay = { appViewModel.openIncomingPaymentRequestWithTags(id, it) },
         onDismiss = request?.let { { appViewModel.dismissIncomingPaymentRequest(it) } },
@@ -97,10 +100,12 @@ fun IncomingPaymentRequestDetailsScreen(
 }
 
 @Composable
-private fun IncomingPaymentRequestDetailsContent(
+internal fun IncomingPaymentRequestDetailsContent(
     request: PaykitPaymentRequest?,
+    receipt: PaykitUsdtReceipt? = null,
     contact: PubkyProfile?,
     isPending: Boolean,
+    isPreparing: Boolean,
     onBack: () -> Unit,
     onPay: (List<String>) -> Unit,
     onDismiss: (suspend () -> Result<Unit>)?,
@@ -140,31 +145,25 @@ private fun IncomingPaymentRequestDetailsContent(
                 .padding(horizontal = 16.dp),
         ) {
             VerticalSpacer(16.dp)
-            rememberMoneyText(
-                sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
-                reversed = true,
-                showSymbol = true,
-            )?.let {
-                Caption13Up(text = it.removeAccentTags(), color = Colors.White64)
-            }
-            rememberMoneyText(
-                sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
-            )?.let {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Display(
-                        text = request.detailsAmountText(it).withAccent(accentColor = Colors.White64),
-                        modifier = Modifier.testTag("PaymentRequestDetailsAmount")
-                    )
-                    FillWidth()
-                    if (request.hasPaymentEvidence) {
-                        PaymentRequestDetailsIcon(request)
-                    } else {
-                        PubkyContactAvatar(profile = contact, size = 48.dp)
-                    }
+            Caption13Up(
+                text = stringResource(R.string.wallet__payment_request_requested_amount),
+                color = Colors.White64
+            )
+            VerticalSpacer(8.dp)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                PaykitAmountDisplay(
+                    request.amount,
+                    prefix = request.detailsAmountPrefix(),
+                    modifier = Modifier.weight(1f)
+                )
+                if (request.hasPaymentEvidence) {
+                    PaymentRequestDetailsIcon(request)
+                } else {
+                    PubkyContactAvatar(profile = contact, size = 48.dp)
                 }
             }
             BodyM(
-                text = paymentRequestStatus(request, isPending = isPending),
+                text = paymentRequestStatus(request, isPending = isPending, receipt = receipt),
                 color = Colors.White64,
                 modifier = Modifier.testTag("PaymentRequestDetailsStatus")
             )
@@ -175,6 +174,7 @@ private fun IncomingPaymentRequestDetailsContent(
                     value = request.createdAt?.let { uiDateText(it.epochSeconds.toULong(), UiDateStyle.DATE) }
                         ?: stringResource(R.string.wallet__payment_request_status_unavailable),
                     iconRes = R.drawable.ic_calendar,
+                    iconColor = request.dateTimeIconColor,
                     modifier = Modifier.weight(1f)
                 )
                 RequestDetailCell(
@@ -182,6 +182,7 @@ private fun IncomingPaymentRequestDetailsContent(
                     value = request.createdAt?.let { uiDateText(it.epochSeconds.toULong(), UiDateStyle.TIME) }
                         ?: stringResource(R.string.wallet__payment_request_status_unavailable),
                     iconRes = R.drawable.ic_clock,
+                    iconColor = request.dateTimeIconColor,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -228,9 +229,10 @@ private fun IncomingPaymentRequestDetailsContent(
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__payment_request_dismiss),
-                    enabled = !isDismissing,
+                    enabled = !isDismissing && request.canDismiss,
                     isLoading = isDismissing,
                     onClick = {
+                        if (!request.canDismiss) return@SecondaryButton
                         val dismiss = onDismiss ?: return@SecondaryButton
                         isDismissing = true
                         scope.launch {
@@ -250,6 +252,7 @@ private fun IncomingPaymentRequestDetailsContent(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_pay),
                     enabled = !isDismissing,
+                    isLoading = isPreparing,
                     onClick = { onPay(selectedTags) },
                     icon = {
                         Icon(
@@ -258,7 +261,9 @@ private fun IncomingPaymentRequestDetailsContent(
                             modifier = Modifier.size(16.dp)
                         )
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("PaymentRequestDetailsPay")
                 )
             }
         }
@@ -310,6 +315,9 @@ internal fun PaykitPaymentRequest.detailsAmountPrefix(): String = when {
 internal fun PaykitPaymentRequest.detailsAmountText(amount: String): String =
     "${detailsAmountPrefix()} $amount".trimStart()
 
+private val PaykitPaymentRequest.dateTimeIconColor
+    get() = if (paymentProofKind == PaykitPaymentProofKind.Usdt) Colors.Usdt else Colors.Purple
+
 @Composable
 private fun PaymentRequestDetailsIcon(request: PaykitPaymentRequest) {
     val isIncomingRequest = request.direction == PaykitPaymentRequestDirection.Incoming
@@ -328,6 +336,7 @@ private fun RequestDetailCell(
     title: String,
     value: String,
     @DrawableRes iconRes: Int,
+    iconColor: Color,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -340,7 +349,7 @@ private fun RequestDetailCell(
             Icon(
                 painter = painterResource(iconRes),
                 contentDescription = null,
-                tint = Colors.Purple,
+                tint = iconColor,
                 modifier = Modifier.size(16.dp)
             )
             BodySSB(text = value, maxLines = 1, overflow = TextOverflow.Ellipsis)

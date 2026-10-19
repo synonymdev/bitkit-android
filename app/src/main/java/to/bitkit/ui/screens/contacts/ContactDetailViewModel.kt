@@ -32,12 +32,14 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySignIn
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -79,6 +81,7 @@ class ContactDetailViewModel @Inject constructor(
     private val _effects = MutableSharedFlow<ContactDetailEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
+    private var contactLoad: Job? = null
     private var payJob: Job? = null
     private var paymentScanJob: Job? = null
     private var paymentRequestTargetRefresh: Deferred<PaykitPaymentRequestTarget?>? = null
@@ -92,7 +95,7 @@ class ContactDetailViewModel @Inject constructor(
     }
 
     fun loadContact() {
-        viewModelScope.launch {
+        contactLoad = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val cached = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
             if (cached != null) {
@@ -104,6 +107,7 @@ class ContactDetailViewModel @Inject constructor(
                         isLoading = false,
                     )
                 }
+                pubkyRepo.resolvePendingContactProfile(publicKey)
                 return@launch
             }
             pubkyRepo.fetchContactProfile(publicKey)
@@ -237,6 +241,7 @@ class ContactDetailViewModel @Inject constructor(
                                 it.paymentRequest,
                                 publicKey,
                                 it.privatePaymentContext,
+                                it.endpoints,
                             )
                         )
                     }
@@ -345,16 +350,24 @@ class ContactDetailViewModel @Inject constructor(
         transform: (ImmutableList<String>) -> ImmutableList<String>,
         onSuccess: () -> Unit = {},
     ) {
+        val signIn = pubkyRepo.currentSignIn() ?: return
         viewModelScope.launch {
             tagPersistenceMutex.withLock {
+                contactLoad?.join()
+                if (!isTagChangeCurrent(signIn)) return@withLock
+                pubkyRepo.resolvePendingContactProfile(publicKey)
+                if (!isTagChangeCurrent(signIn)) return@withLock
                 val state = _uiState.value
-                val profile = state.profile ?: return@withLock
+                val profile = pubkyRepo.contacts.value.find { it.publicKey == publicKey }
+                    ?: state.profile
+                    ?: return@withLock
                 val tags = transform(state.tags)
                 if (tags == state.tags) {
                     onSuccess()
                     return@withLock
                 }
                 pubkyRepo.updateContact(
+                    signIn = signIn,
                     publicKey = publicKey,
                     name = profile.name,
                     bio = profile.bio,
@@ -370,6 +383,7 @@ class ContactDetailViewModel @Inject constructor(
                     }
                     onSuccess()
                 }.onFailure {
+                    if (!isTagChangeCurrent(signIn)) return@onFailure
                     Logger.error("Failed to update tags for contact '$redactedPublicKey'", it, context = TAG)
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
@@ -379,6 +393,14 @@ class ContactDetailViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun isTagChangeCurrent(signIn: PubkySignIn): Boolean {
+        val isCurrent = pubkyRepo.isCurrent(signIn)
+        if (!isCurrent) {
+            Logger.info("Dropped a tag change for '$redactedPublicKey' after the Pubky sign-in ended", context = TAG)
+        }
+        return isCurrent
     }
 }
 
@@ -400,6 +422,7 @@ sealed interface ContactDetailEffect {
         val paymentRequest: String,
         val publicKey: String,
         val privatePaymentContext: PrivatePaykitPaymentContext?,
+        val endpoints: List<Endpoint> = emptyList(),
     ) : ContactDetailEffect
 
     data object ContactDeleted : ContactDetailEffect

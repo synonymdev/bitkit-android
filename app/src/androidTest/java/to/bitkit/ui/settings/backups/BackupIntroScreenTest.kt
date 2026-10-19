@@ -63,13 +63,13 @@ class BackupIntroScreenTest {
         }
 
         // Assert
-        composeTestRule.onNodeWithTag("backup_intro_screen").assertExists()
+        composeTestRule.onNodeWithTag("BackupIntroView").assertExists()
 
         // Verify buttons
-        composeTestRule.onNodeWithTag("later_button").assertExists().performClick()
+        composeTestRule.onNodeWithTag("BackupIntroViewCancel").assertExists().performClick()
         assert(closeClicked)
 
-        composeTestRule.onNodeWithTag("backup_button").assertExists().performClick()
+        composeTestRule.onNodeWithTag("BackupIntroViewContinue").assertExists().performClick()
         assert(confirmClicked)
     }
 

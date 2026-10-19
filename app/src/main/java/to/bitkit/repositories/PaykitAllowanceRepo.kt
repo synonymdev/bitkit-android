@@ -242,7 +242,8 @@ class PaykitAllowanceRepo @Inject constructor(
         }
 
     suspend fun accept(entryId: String): Result<Unit> = respond(entryId) {
-        paykitSdkService.acceptAllowance(it.counterparty, it.allowanceId)
+        val proposalStreamItemId = it.proposalStreamItemId ?: throw PaykitAllowanceError.Unavailable
+        paykitSdkService.acceptAllowance(it.counterparty, it.allowanceId, proposalStreamItemId)
     }
 
     suspend fun reject(entryId: String): Result<Unit> = respond(entryId) {
