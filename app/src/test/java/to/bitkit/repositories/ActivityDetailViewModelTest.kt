@@ -39,6 +39,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val transferRepo = mock<TransferRepo>()
+    private val swapRepo = mock<SwapRepo>()
 
     companion object Fixtures {
         const val ACTIVITY_ID = "test-activity-1"
@@ -65,6 +66,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
             settingsStore = settingsStore,
             hwWalletRepo = hwWalletRepo,
             transferRepo = transferRepo,
+            swapRepo = swapRepo,
         )
     }
 
@@ -181,6 +183,14 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         val result = sut.findOrderForTransfer(null, txId)
 
         assertEquals(order, result)
+    }
+
+    @Test
+    fun `findSwapSendPayment returns what the swap of a payment sent to its address`() = test {
+        val payment = SwapSendPayment(recipientSat = 15_000uL, swapFeeSat = 3_326uL)
+        whenever(swapRepo.findSendPayment(ACTIVITY_ID)).thenReturn(payment)
+
+        assertEquals(payment, sut.findSwapSendPayment(ACTIVITY_ID))
     }
 
     @Test

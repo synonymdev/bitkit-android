@@ -13,6 +13,7 @@ import to.bitkit.repositories.QuickPayInvoiceParser
 import to.bitkit.repositories.QuickPayPaymentLookup
 import to.bitkit.repositories.QuickPayReconcileRow
 import to.bitkit.repositories.SwapInvoiceAmountReader
+import to.bitkit.repositories.SwapInvoiceHashReader
 import javax.inject.Named
 
 @Module
@@ -37,6 +38,11 @@ abstract class RepoModule {
         @Provides
         fun provideSwapInvoiceAmountReader(): SwapInvoiceAmountReader = SwapInvoiceAmountReader { bolt11 ->
             runCatching { Bolt11Invoice.fromStr(bolt11).amountMilliSatoshis() }.getOrNull()
+        }
+
+        @Provides
+        fun provideSwapInvoiceHashReader(): SwapInvoiceHashReader = SwapInvoiceHashReader { bolt11 ->
+            runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }.getOrNull()
         }
 
         @Provides

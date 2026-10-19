@@ -66,6 +66,7 @@ import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.SwapSendPayment
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
@@ -375,12 +376,25 @@ private fun ActivityDetailContent(
     val orderServiceFee: ULong? = order?.let { it.feeSat - it.clientBalanceSat }
     val transferAmount: ULong? = order?.clientBalanceSat
 
+    // A payment to an address through a swap shows what reached the address, with the swap fees in its fee.
+    val sentPaymentHash = (item as? Activity.Lightning)?.v1?.id?.takeIf { isSent }
+    var swapPayment by remember { mutableStateOf<SwapSendPayment?>(null) }
+
+    LaunchedEffect(sentPaymentHash, detailViewModel) {
+        swapPayment = sentPaymentHash?.let { detailViewModel?.findSwapSendPayment(it) }
+    }
+
+    val swapFee: ULong? = swapPayment?.swapFeeSat
+
     val fee: ULong? = when {
         isTransferToSpending && orderServiceFee != null && baseFee != null -> baseFee + orderServiceFee
+        swapFee != null -> (baseFee ?: 0uL) + swapFee
         else -> baseFee
     }
 
-    val displayAmount: ULong = transferAmount?.takeIf { isTransferToSpending } ?: paymentValue
+    val displayAmount: ULong = transferAmount?.takeIf { isTransferToSpending }
+        ?: swapPayment?.recipientSat
+        ?: paymentValue
 
     Column(
         modifier = Modifier

@@ -27,6 +27,7 @@ import kotlin.time.Instant
  * priced and checked against the fee and amount policy here, before a swap is created, because bitkit-core does
  * not apply that policy to send terms.
  */
+@Suppress("LongParameterList")
 @OptIn(ExperimentalTime::class)
 @Singleton
 class SwapRepo @Inject constructor(
@@ -35,6 +36,7 @@ class SwapRepo @Inject constructor(
     private val pubkySwapRepo: PubkySwapRepo,
     private val walletRepo: WalletRepo,
     private val invoiceAmountReader: SwapInvoiceAmountReader,
+    private val invoiceHashReader: SwapInvoiceHashReader,
     private val clock: Clock,
 ) {
     companion object {
@@ -110,6 +112,22 @@ class SwapRepo @Inject constructor(
     /** Pays the hold invoice of a send swap once, see [PubkySwapRepo.payHoldInvoice]. */
     suspend fun paySendSwap(swap: ReverseSwapResponse): Result<HoldInvoicePayment> =
         pubkySwapRepo.payHoldInvoice(swapId = swap.id, bolt11 = swap.invoice)
+
+    /**
+     * What the swap paid through the hold invoice with [paymentHash] sent to its address, or null when that invoice
+     * paid no such swap or the swaps cannot be read.
+     */
+    suspend fun findSendPayment(paymentHash: String): SwapSendPayment? = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val swap = boltzService.listSwaps()
+                .firstOrNull { it.invoice?.let(invoiceHashReader::paymentHash) == paymentHash }
+                ?: return@runSuspendCatching null
+            val recipientSat = swap.recipientAmountSat ?: return@runSuspendCatching null
+            SwapSendPayment(recipientSat = recipientSat, swapFeeSat = swap.amountSat.safe() - recipientSat.safe())
+        }
+            .onFailure { Logger.warn("Failed to find the send swap of payment '$paymentHash'", it, context = TAG) }
+            .getOrNull()
+    }
 
     private suspend fun terms(forceRefresh: Boolean = false): Result<PubkySendTerms> = runSuspendCatching {
         if (!pubkySwapRepo.isAvailable()) throw SwapUnavailableError()
@@ -270,6 +288,11 @@ fun interface SwapInvoiceAmountReader {
     fun amountMsat(bolt11: String): ULong?
 }
 
+/** Reads the payment hash of a BOLT11 invoice, or null when it cannot be decoded. */
+fun interface SwapInvoiceHashReader {
+    fun paymentHash(bolt11: String): String?
+}
+
 /** Paying [recipientSat] to an address through a hold invoice of [invoiceSat]. */
 data class SwapSendQuote(
     val recipientSat: ULong,
@@ -285,6 +308,12 @@ data class SwapSendQuote(
 data class SwapSendLimits(
     val minRecipientSat: ULong,
     val maxRecipientSat: ULong,
+)
+
+/** A payment of [recipientSat] to an address through a swap, whose fees add [swapFeeSat] to the routing fee. */
+data class SwapSendPayment(
+    val recipientSat: ULong,
+    val swapFeeSat: ULong,
 )
 
 sealed class SwapAmountError(message: String) : AppError(message) {

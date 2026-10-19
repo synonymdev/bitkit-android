@@ -1,5 +1,9 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.BoltzNetwork
+import com.synonym.bitkitcore.BoltzSwap
+import com.synonym.bitkitcore.BoltzSwapStatus
+import com.synonym.bitkitcore.BoltzSwapType
 import com.synonym.bitkitcore.PubkySendTerms
 import com.synonym.bitkitcore.ReverseSwapResponse
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,9 +17,11 @@ import org.mockito.kotlin.whenever
 import to.bitkit.models.BalanceState
 import to.bitkit.services.BoltzService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -25,6 +31,7 @@ class SwapRepoTest : BaseUnitTest() {
     companion object {
         private const val ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
         private const val INVOICE = "lnbcrt1sendswap"
+        private const val PAYMENT_HASH = "payment-hash"
         private const val PAIR_HASH = "pair-hash"
         private const val SPENDING_SAT = 10_000_000uL
         private val TERMS = PubkySendTerms(
@@ -78,6 +85,7 @@ class SwapRepoTest : BaseUnitTest() {
             pubkySwapRepo = pubkySwapRepo,
             walletRepo = walletRepo,
             invoiceAmountReader = { invoiceAmountMsat },
+            invoiceHashReader = { bolt11 -> PAYMENT_HASH.takeIf { bolt11 == INVOICE } },
             clock = clock,
         )
     }
@@ -255,11 +263,56 @@ class SwapRepoTest : BaseUnitTest() {
         verify(pubkySwapRepo).payHoldInvoice(swapId = "send-swap", bolt11 = INVOICE)
     }
 
+    @Test
+    fun `findSendPayment finds what the swap of a payment sent to its address`() = test {
+        whenever { boltzService.listSwaps() }.thenReturn(
+            listOf(storedSwap(invoice = "lnbcrt1other", recipientAmountSat = 50_000uL), storedSwap()),
+        )
+
+        assertEquals(
+            SwapSendPayment(recipientSat = 100_000uL, swapFeeSat = 1_261uL),
+            sut.findSendPayment(PAYMENT_HASH),
+        )
+        assertNull(sut.findSendPayment("other-payment-hash"))
+    }
+
+    @Test
+    fun `findSendPayment is null for a swap to savings`() = test {
+        whenever { boltzService.listSwaps() }.thenReturn(listOf(storedSwap(recipientAmountSat = null)))
+
+        assertNull(sut.findSendPayment(PAYMENT_HASH))
+    }
+
+    @Test
+    fun `findSendPayment is null when swaps cannot be read`() = test {
+        whenever(boltzService.listSwaps()).thenAnswer { throw AppError("database unavailable") }
+
+        assertNull(sut.findSendPayment(PAYMENT_HASH))
+    }
+
     private fun sendSwap(onchainAmountSat: ULong = QUOTE.lockupSat) = ReverseSwapResponse(
         id = "send-swap",
         invoice = INVOICE,
         lockupAddress = "bcrt1qlockup",
         onchainAmountSat = onchainAmountSat,
         timeoutBlockHeight = 800uL,
+    )
+
+    private fun storedSwap(invoice: String = INVOICE, recipientAmountSat: ULong? = QUOTE.recipientSat) = BoltzSwap(
+        id = "send-swap",
+        swapType = BoltzSwapType.REVERSE,
+        status = BoltzSwapStatus.TransactionConfirmed,
+        network = BoltzNetwork.REGTEST,
+        swapIndex = 0uL,
+        amountSat = QUOTE.invoiceSat,
+        onchainAmountSat = QUOTE.lockupSat,
+        recipientAmountSat = recipientAmountSat,
+        invoice = invoice,
+        lockupAddress = "bcrt1qlockup",
+        onchainAddress = ADDRESS,
+        timeoutBlockHeight = 800uL,
+        createdAt = 0uL,
+        claimTxId = null,
+        refundTxId = null,
     )
 }

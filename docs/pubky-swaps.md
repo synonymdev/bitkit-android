@@ -68,6 +68,8 @@ Before a swap is created:
 
 After creation, the returned lockup amount and invoice amount must match the quote, or nothing is paid.
 
+The activity of a swap payment shows the amount that reached the address, and a fee that adds the swap fees to the routing fee. Both come from the swap record in bitkit-core, which keeps the recipient amount, and the record is found by the payment hash of the hold invoice.
+
 Spending is offered for an address only outside hardware wallet, USDT, LNURL, unified invoice and Paykit contact or payment request flows. Scanning an address that savings alone cannot pay selects spending when a swap can pay it, even if a hardware wallet could.
 
 When no amount can be paid through a swap, the amount screen says why: the spending balance the smallest swap needs including fees, fees above the cap at every amount the provider accepts, or a provider that did not respond. With spending selected, it shows the smallest payable amount.

@@ -169,6 +169,7 @@ class SwapsViewModelTest : BaseUnitTest() {
         swapIndex = 0uL,
         amountSat = 100_000uL,
         onchainAmountSat = 99_000uL,
+        recipientAmountSat = null,
         invoice = null,
         lockupAddress = null,
         onchainAddress = null,

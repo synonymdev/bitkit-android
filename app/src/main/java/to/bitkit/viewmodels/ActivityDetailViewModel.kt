@@ -33,6 +33,8 @@ import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.SwapRepo
+import to.bitkit.repositories.SwapSendPayment
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -47,6 +49,7 @@ class ActivityDetailViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val hwWalletRepo: HwWalletRepo,
     private val transferRepo: TransferRepo,
+    private val swapRepo: SwapRepo,
 ) : ViewModel() {
     private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
@@ -305,6 +308,9 @@ class ActivityDetailViewModel @Inject constructor(
             Logger.warn("Failed to find order for transfer: channelId='$channelId', txId='$txId'", it, context = TAG)
         }.getOrNull()
     }
+
+    /** What the Lightning payment with [paymentHash] sent to an address when it paid a swap, or null otherwise. */
+    suspend fun findSwapSendPayment(paymentHash: String): SwapSendPayment? = swapRepo.findSendPayment(paymentHash)
 
     private companion object {
         const val TAG = "ActivityDetailViewModel"
