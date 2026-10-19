@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -1378,7 +1379,10 @@ class AppViewModel @Inject constructor(
     private fun observePaymentProofChanges() {
         viewModelScope.launch {
             var changeVersion = 0L
-            paykitPaymentProofRepo.paymentRequestStateChanges(pubkyRepo.publicKey)
+            merge(
+                paykitPaymentProofRepo.paymentRequestStateChanges(pubkyRepo.publicKey),
+                paykitUsdtPayments.paymentRequestStateVersion.drop(1).map { Unit },
+            )
                 .map { ++changeVersion }
                 .combine(paykitPaymentRequestRepo.isPaymentSubmissionActive) { version, active ->
                     version.takeUnless { active }

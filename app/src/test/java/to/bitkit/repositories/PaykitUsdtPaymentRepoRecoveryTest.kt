@@ -16,6 +16,7 @@ import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -136,6 +137,42 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
             incomingPaymentRequest = request,
             endpoints = listOf(PaykitUsdt.endpoint(address))
         )
+
+    @Test
+    fun `request protection survives restart and releases only after definite failure`() = test {
+        val repo = repo()
+        repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        val original = repo.backupSnapshot().attempts.single()
+        val started = original.copy(paymentStarted = true)
+        val otherWallet = started.copy(wallet = "other-wallet", requestId = request.id.copy(paymentRequestId = "other"))
+        repo.restoreBackup(PaykitUsdtStateBackup(listOf(started, otherWallet), emptyList()))
+        val restarted = repo()
+        assertTrue(restarted.protectedPaymentAttempts(identity).getOrThrow().contains(started))
+        assertTrue(restarted.protectedPaymentAttempts(contact).getOrThrow().isEmpty())
+        stubStoredTransfer(Result.success(mock { on { status }.thenReturn(UsdtTransferStatus.PENDING) }))
+        restarted.reconcile().getOrThrow()
+        assertEquals(listOf(started), restarted.protectedPaymentAttempts(identity).getOrThrow())
+        stubStoredTransfer(Result.success(mock { on { status }.thenReturn(UsdtTransferStatus.FAILED) }))
+        val beforeFailure = restarted.paymentRequestStateVersion.value
+        restarted.reconcile().getOrThrow()
+        assertTrue(restarted.paymentRequestStateVersion.value > beforeFailure)
+        assertTrue(restarted.protectedPaymentAttempts(identity).getOrThrow().isEmpty())
+        val releasedVersion = restarted.paymentRequestStateVersion.value
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(sdk.identityStatus(any())).doSuspendableAnswer {
+            reading.complete(Unit)
+            resume.await()
+            IdentityStatus(identity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+        val refresh = async { restarted.reconcile() }
+        reading.await()
+        assertEquals(listOf(started), restarted.protectedPaymentAttempts(identity).getOrThrow())
+        resume.complete(Unit)
+        refresh.await().getOrThrow()
+        assertTrue(restarted.paymentRequestStateVersion.value > releasedVersion)
+        assertTrue(restarted.protectedPaymentAttempts(identity).getOrThrow().isEmpty())
+    }
 
     @Test
     fun `restored attempts all protect the same request regardless of order`() = test {
