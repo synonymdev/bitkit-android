@@ -199,6 +199,7 @@ import to.bitkit.repositories.SettledReceiveAddress
 import to.bitkit.repositories.SettledReceiveInvoice
 import to.bitkit.repositories.SwapQuoteExpiredError
 import to.bitkit.repositories.SwapRepo
+import to.bitkit.repositories.SwapSendBlockedError
 import to.bitkit.repositories.SwapSendLimits
 import to.bitkit.repositories.SwapSendQuote
 import to.bitkit.repositories.SwapUnavailableError
@@ -13339,6 +13340,47 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(toastManager).enqueue(toastCaptor.capture())
         assertEquals("InsufficientSavingsToast", toastCaptor.lastValue.testTag)
         assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+    }
+
+    @Test
+    fun `address that only a hardware wallet can cover switches to a swap from spending`() = test {
+        stubPlainOnchainScan()
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u, maxSendLightningSats = 200_000u)
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any())).thenReturn(Result.success(48_000uL))
+        whenever { swapRepo.sendLimits() }.thenReturn(Result.success(SWAP_LIMITS))
+        sut.setIsAuthenticated(true)
+        runCurrent()
+
+        sut.onScanResult(REGTEST_ADDRESS)
+        advanceUntilIdle()
+
+        val state = sut.sendUiState.value
+        assertEquals(SendMethod.SWAP, state.payMethod)
+        assertTrue(state.fundingOptions.any { it.source == SendFundingSource.Hardware(HARDWARE_WALLET_ID) })
+    }
+
+    @Test
+    fun `address that no swap amount can pay records why`() = test {
+        stubPlainOnchainScan()
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u, maxSendLightningSats = 20_000u)
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any())).thenReturn(Result.success(48_000uL))
+        val blocked = SwapSendBlockedError.InsufficientSpending(
+            minRecipientSat = 13_050uL,
+            requiredSpendingSat = 27_144uL,
+        )
+        whenever { swapRepo.sendLimits() }.thenReturn(Result.failure(blocked))
+        sut.setIsAuthenticated(true)
+        runCurrent()
+
+        sut.onScanResult(REGTEST_ADDRESS)
+        advanceUntilIdle()
+
+        val state = sut.sendUiState.value
+        assertEquals(SendMethod.ONCHAIN, state.payMethod)
+        assertEquals(SwapBlockedReason.InsufficientSpending(13_050uL, 27_144uL), state.swapBlockedReason)
+        assertFalse(state.fundingOptions.single { it.source == SendFundingSource.Spending }.enabled)
     }
 
     @Test

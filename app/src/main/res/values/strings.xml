@@ -1684,8 +1684,12 @@
     <string name="wallet__send_swap_amount_small">The amount is below the swap minimum of {amount}.</string>
     <string name="wallet__send_swap_amount_spending">Your spending balance cannot cover this amount and its swap fees.</string>
     <string name="wallet__send_swap_amount_title">Amount Not Supported</string>
+    <string name="wallet__send_swap_blocked_provider">Paying from spending is unavailable because Bitkit could not get the swap provider\'s terms.</string>
+    <string name="wallet__send_swap_blocked_spending">Swaps from spending start at {minimum} and need a spending balance of at least {amount}, including fees.</string>
+    <string name="wallet__send_swap_blocked_terms">Paying from spending is unavailable because the swap provider\'s fees are too high for every amount it accepts.</string>
     <string name="wallet__send_swap_fees_updated_text">The swap provider changed its fees. Review them and swipe again.</string>
     <string name="wallet__send_swap_fees_updated_title">Swap Fees Updated</string>
+    <string name="wallet__send_swap_minimum">The smallest amount you can pay from spending is {amount}.</string>
     <string name="wallet__send_swap_mismatch_text">The swap provider returned different amounts than quoted. Nothing was paid.</string>
     <string name="wallet__send_swap_network_fee">Network fee</string>
     <string name="wallet__send_swap_service_fee">Service fee</string>

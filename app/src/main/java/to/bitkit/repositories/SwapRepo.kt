@@ -67,9 +67,17 @@ class SwapRepo @Inject constructor(
         }
     }
 
-    /** The recipient amounts that can be paid now, or null when no amount can. */
-    suspend fun sendLimits(): Result<SwapSendLimits?> = withContext(ioDispatcher) {
-        runSuspendCatching { pricing(terms().getOrThrow()).limits() }
+    /**
+     * The recipient amounts that can be paid now. Fails with [SwapSendBlockedError] when no amount can, saying what
+     * the smallest swap needs.
+     */
+    suspend fun sendLimits(): Result<SwapSendLimits> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val pricing = pricing(terms().getOrThrow())
+            pricing.limits() ?: throw blockedError(pricing)
+        }
+            .onSuccess { Logger.debug("Swap send limits: $it", context = TAG) }
+            .onFailure { if (it !is SwapUnavailableError) Logger.warn("No swap send limits", it, context = TAG) }
     }
 
     /**
@@ -110,6 +118,7 @@ class SwapRepo @Inject constructor(
             cachedTerms?.takeIf { !forceRefresh && now - it.fetchedAt < TERMS_TTL }?.let { return@withLock it.terms }
             pubkySwapRepo.ensureConfigured().getOrThrow()
             val terms = withTimeoutOrNull(TERMS_TIMEOUT) { boltzService.sendTerms() } ?: throw PubkySwapError.Timeout
+            Logger.debug("Fetched swap send terms: $terms", context = TAG)
             cachedTerms = CachedTerms(terms, now)
             terms
         }
@@ -121,10 +130,19 @@ class SwapRepo @Inject constructor(
         sendableSat = sendableLightningSat(),
     )
 
-    private fun sendableLightningSat(): ULong {
-        val capacity = walletRepo.balanceState.value.maxSendLightningSats
-        val reserve = maxOf(capacity * ROUTING_RESERVE_PERCENT / 100uL, MIN_ROUTING_RESERVE_SAT)
-        return capacity.safe() - reserve.safe()
+    private fun sendableLightningSat(): ULong = sendableSat(walletRepo.balanceState.value.maxSendLightningSats)
+
+    /** The part of a Lightning [capacitySat] a swap invoice may use, keeping a routing fee reserve. */
+    private fun sendableSat(capacitySat: ULong): ULong {
+        val reserve = maxOf(capacitySat * ROUTING_RESERVE_PERCENT / 100uL, MIN_ROUTING_RESERVE_SAT)
+        return capacitySat.safe() - reserve.safe()
+    }
+
+    private fun blockedError(pricing: SwapSendPricing): SwapSendBlockedError {
+        val smallest = pricing.smallestQuoteForAnyBalance() ?: return SwapSendBlockedError.NoPayableAmount
+        var requiredSpendingSat = smallest.invoiceSat
+        while (sendableSat(requiredSpendingSat) < smallest.invoiceSat) requiredSpendingSat++
+        return SwapSendBlockedError.InsufficientSpending(smallest.recipientSat, requiredSpendingSat)
     }
 
     private data class CachedTerms(val terms: PubkySendTerms, val fetchedAt: Instant)
@@ -193,6 +211,12 @@ internal class SwapSendPricing(
             candidate++
         }
         return null
+    }
+
+    /** The smallest payable quote if the spending balance were no limit, or null when the terms allow none. */
+    fun smallestQuoteForAnyBalance(): SwapSendQuote? {
+        val unlimited = SwapSendPricing(terms, policy, sendableSat = policy.maxAmountSat)
+        return unlimited.limits()?.let { unlimited.price(it.minRecipientSat) }
     }
 
     private fun check(quote: SwapSendQuote): SwapAmountError? {
@@ -267,6 +291,16 @@ sealed class SwapAmountError(message: String) : AppError(message) {
     data object TooSmall : SwapAmountError("The amount is below the swap minimum")
     data object TooLarge : SwapAmountError("The amount is above the swap maximum")
     data object InsufficientSpending : SwapAmountError("The spending balance cannot cover this swap")
+}
+
+/** Why no amount can be paid to an address through a swap now. */
+sealed class SwapSendBlockedError(message: String) : AppError(message) {
+    /** The smallest payment the provider accepts, [minRecipientSat], needs [requiredSpendingSat] of spending. */
+    data class InsufficientSpending(val minRecipientSat: ULong, val requiredSpendingSat: ULong) :
+        SwapSendBlockedError("The smallest swap needs a spending balance of $requiredSpendingSat sats")
+
+    /** The fees and limits of the provider leave no amount within the policy. */
+    data object NoPayableAmount : SwapSendBlockedError("The swap provider terms leave no payable amount")
 }
 
 class SwapUnavailableError : AppError("No swap provider is available")

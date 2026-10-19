@@ -214,8 +214,10 @@ import to.bitkit.repositories.SwapAmountError
 import to.bitkit.repositories.SwapQuoteExpiredError
 import to.bitkit.repositories.SwapQuoteMismatchError
 import to.bitkit.repositories.SwapRepo
+import to.bitkit.repositories.SwapSendBlockedError
 import to.bitkit.repositories.SwapSendLimits
 import to.bitkit.repositories.SwapSendQuote
+import to.bitkit.repositories.SwapUnavailableError
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
@@ -4755,8 +4757,9 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        // Only savings count here: a swap from spending is preferred over a hardware wallet, which stays selectable.
         val isSavingsShort = hardwareWalletId == null && _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
-            (maxSendOnchain == 0uL || invoice.amountSatoshis > maxSendOnchain)
+            (selectedMaxSendOnchain == 0uL || invoice.amountSatoshis > selectedMaxSendOnchain)
         if (isSavingsShort && !hasOwnLightningInvoice(invoice.params) && offerSendSwap(invoice.amountSatoshis)) {
             Logger.info("Savings cannot cover the address, offering a swap from spending", context = TAG)
             navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
@@ -4980,11 +4983,26 @@ class AppViewModel @Inject constructor(
         state.usdtRecipient == null &&
         state.contactPaymentProfile == null
 
-    /** The swap limits when an address send can be paid from spending, for [amount] unless it is 0. */
+    /**
+     * The swap limits when an address send can be paid from spending, for [amount] unless it is 0. Records why no
+     * amount can be paid, for the amount screen.
+     */
     private suspend fun sendSwapLimitsFor(amount: ULong): SwapSendLimits? {
         if (!isSwapEligibleContext()) return null
-        val limits = swapRepo.sendLimits().getOrNull() ?: return null
+        val result = swapRepo.sendLimits()
+        _sendUiState.update { it.copy(swapBlockedReason = result.exceptionOrNull()?.toSwapBlockedReason()) }
+        val limits = result.getOrNull() ?: return null
         return limits.takeIf { amount == 0uL || amount in it.minRecipientSat..it.maxRecipientSat }
+    }
+
+    private fun Throwable.toSwapBlockedReason(): SwapBlockedReason? = when (this) {
+        is SwapSendBlockedError.InsufficientSpending -> SwapBlockedReason.InsufficientSpending(
+            minRecipientSat = minRecipientSat,
+            requiredSpendingSat = requiredSpendingSat,
+        )
+        is SwapSendBlockedError.NoPayableAmount -> SwapBlockedReason.NoPayableAmount
+        is SwapUnavailableError -> null
+        else -> SwapBlockedReason.TermsUnavailable
     }
 
     /** Switches an address send that savings cannot cover to a swap from spending, when it can pay [amount]. */
@@ -5010,9 +5028,15 @@ class AppViewModel @Inject constructor(
         val address = _sendUiState.value.address
         if (!canPayBySwap(_sendUiState.value)) return
         sendSwapLimitsJob = viewModelScope.launch {
-            val limits = sendSwapLimitsFor(0uL) ?: return@launch
+            if (!isSwapEligibleContext()) return@launch
+            val result = swapRepo.sendLimits()
             if (_sendUiState.value.address != address) return@launch
-            _sendUiState.update { it.copy(swapLimits = limits) }
+            _sendUiState.update {
+                it.copy(
+                    swapLimits = result.getOrNull(),
+                    swapBlockedReason = result.exceptionOrNull()?.toSwapBlockedReason(),
+                )
+            }
             updateCanSwitchWallet()
         }
     }
@@ -8277,6 +8301,7 @@ data class SendUiState(
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
     val swapLimits: SwapSendLimits? = null,
     val swapQuote: SwapSendQuote? = null,
+    val swapBlockedReason: SwapBlockedReason? = null,
 ) {
     val canSwitchBitcoinFundingSource: Boolean
         get() = fundingOptions.count { it.enabled && it.source != SendFundingSource.Usdt } > 1
@@ -8311,6 +8336,18 @@ enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
 }
 
 enum class SendMethod { ONCHAIN, LIGHTNING, SWAP }
+
+/** Why an address send cannot be paid from spending through a swap. */
+sealed interface SwapBlockedReason {
+    /** The smallest payment the provider accepts, [minRecipientSat], needs [requiredSpendingSat] of spending. */
+    data class InsufficientSpending(val minRecipientSat: ULong, val requiredSpendingSat: ULong) : SwapBlockedReason
+
+    /** The fees and limits of the provider leave no amount within the fee cap. */
+    data object NoPayableAmount : SwapBlockedReason
+
+    /** The terms of the provider could not be read. */
+    data object TermsUnavailable : SwapBlockedReason
+}
 
 sealed interface SendFundingSource {
     data object Spending : SendFundingSource

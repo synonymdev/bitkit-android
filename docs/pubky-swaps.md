@@ -51,10 +51,12 @@ These stores are not part of the backup yet.
 ## Fee policy
 
 Every swap is checked against a fee and amount policy before it is created:
-- Total provider fees of at most 10% of the locked amount.
+- Service and lockup fees of at most 20% of the locked amount, the default of pubky-swap clients.
 - At most 1,000,000 sats per swap.
 
 The same limits are passed to bitkit-core, which checks them again.
+
+The cap is 20% rather than lower because mainnet providers price their onchain cost at a fee rate floor of at least 5 sat/vB and accept lockups of at least ten times that cost. A 10% cap pushed the smallest payable swap above 25,000 sats with such terms.
 
 ## Paying addresses from spending
 
@@ -66,7 +68,9 @@ Before a swap is created:
 
 After creation, the returned lockup amount and invoice amount must match the quote, or nothing is paid.
 
-Spending is offered for an address only outside hardware wallet, USDT, LNURL, unified invoice and Paykit contact or payment request flows.
+Spending is offered for an address only outside hardware wallet, USDT, LNURL, unified invoice and Paykit contact or payment request flows. Scanning an address that savings alone cannot pay selects spending when a swap can pay it, even if a hardware wallet could.
+
+When no amount can be paid through a swap, the amount screen says why: the spending balance the smallest swap needs including fees, fees above the cap at every amount the provider accepts, or a provider that did not respond. With spending selected, it shows the smallest payable amount.
 
 ## Paying hold invoices
 

@@ -16,7 +16,6 @@ import to.bitkit.test.BaseUnitTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNull
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -36,6 +35,17 @@ class SwapRepoTest : BaseUnitTest() {
             feePpm = 5_000uL,
             lockupFeeSat = 300uL,
             claimFeeSat = 360uL,
+        )
+
+        /** Terms of a mainnet provider at its 5 sat/vB fee rate floor. */
+        private val MAINNET_TERMS = PubkySendTerms(
+            pairHash = PAIR_HASH,
+            minimumLockupSat = 13_950uL,
+            maximumLockupSat = 1_000_000uL,
+            baseFeeSat = 1_000uL,
+            feePpm = 2_000uL,
+            lockupFeeSat = 1_395uL,
+            claimFeeSat = 900uL,
         )
         private val QUOTE = SwapSendQuote(
             recipientSat = 100_000uL,
@@ -80,7 +90,8 @@ class SwapRepoTest : BaseUnitTest() {
 
     @Test
     fun `quote rejects amounts whose fees exceed the policy`() = test {
-        assertEquals(SwapAmountError.TooSmall, sut.quote(3_849uL).exceptionOrNull())
+        assertEquals(SwapAmountError.TooSmall, sut.quote(1_689uL).exceptionOrNull())
+        assertEquals(2_460uL, sut.quote(1_690uL).getOrThrow().invoiceSat)
     }
 
     @Test
@@ -108,7 +119,7 @@ class SwapRepoTest : BaseUnitTest() {
     fun `sendLimits returns the exact payable range`() = test {
         val limits = sut.sendLimits().getOrThrow()
 
-        assertEquals(SwapSendLimits(minRecipientSat = 3_850uL, maxRecipientSat = 994_267uL), limits)
+        assertEquals(SwapSendLimits(minRecipientSat = 1_690uL, maxRecipientSat = 994_267uL), limits)
         assertEquals(1_000_000uL, sut.quote(994_267uL).getOrThrow().invoiceSat)
     }
 
@@ -118,15 +129,33 @@ class SwapRepoTest : BaseUnitTest() {
 
         val limits = sut.sendLimits().getOrThrow()
 
-        assertEquals(196_257uL, limits?.maxRecipientSat)
+        assertEquals(196_257uL, limits.maxRecipientSat)
         assertEquals(198_000uL, sut.quote(196_257uL).getOrThrow().invoiceSat)
     }
 
     @Test
-    fun `sendLimits is null when no amount is payable`() = test {
-        balanceState.value = BalanceState(maxSendLightningSats = 4_000uL)
+    fun `sendLimits says how much spending the smallest swap needs`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = 2_483uL)
 
-        assertNull(sut.sendLimits().getOrThrow())
+        assertEquals(
+            SwapSendBlockedError.InsufficientSpending(minRecipientSat = 1_690uL, requiredSpendingSat = 2_484uL),
+            sut.sendLimits().exceptionOrNull(),
+        )
+        balanceState.value = BalanceState(maxSendLightningSats = 2_484uL)
+        assertEquals(SwapSendLimits(1_690uL, 1_690uL), sut.sendLimits().getOrThrow())
+    }
+
+    @Test
+    fun `sendLimits pays small amounts with mainnet provider terms`() = test {
+        whenever { boltzService.sendTerms() }.thenReturn(MAINNET_TERMS)
+        balanceState.value = BalanceState(maxSendLightningSats = 22_550uL)
+
+        assertEquals(
+            SwapSendLimits(minRecipientSat = 13_050uL, maxRecipientSat = 18_991uL),
+            sut.sendLimits().getOrThrow(),
+        )
+        assertEquals(16_372uL, sut.quote(13_050uL).getOrThrow().invoiceSat)
+        assertEquals(SwapAmountError.TooSmall, sut.quote(10_000uL).exceptionOrNull())
     }
 
     @Test
@@ -134,7 +163,7 @@ class SwapRepoTest : BaseUnitTest() {
         whenever { boltzService.sendTerms() }.thenReturn(TERMS.copy(feePpm = 2_000_000uL))
 
         assertIs<SwapUnavailableError>(sut.quote(QUOTE.recipientSat).exceptionOrNull())
-        assertNull(sut.sendLimits().getOrThrow())
+        assertEquals(SwapSendBlockedError.NoPayableAmount, sut.sendLimits().exceptionOrNull())
     }
 
     @Test

@@ -58,7 +58,7 @@ class PubkySwapRepo @Inject constructor(
         private const val TAG = "PubkySwapRepo"
 
         /** Fee and amount limits the bridge applies to every swap offer. */
-        val POLICY = PubkySwapPolicy(maxFeeBps = 1_000u, maxAmountSat = 1_000_000uL)
+        val POLICY = PubkySwapPolicy(maxFeeBps = 2_000u, maxAmountSat = 1_000_000uL)
 
         /** Upper bound for connecting to a provider and reading its terms. */
         private val CONNECT_TIMEOUT = 60.seconds

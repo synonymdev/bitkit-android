@@ -54,6 +54,7 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
+import to.bitkit.models.formatMoney
 import to.bitkit.models.safe
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalBalances
@@ -102,6 +103,7 @@ import to.bitkit.viewmodels.SendFundingOption
 import to.bitkit.viewmodels.SendFundingSource
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
+import to.bitkit.viewmodels.SwapBlockedReason
 import to.bitkit.viewmodels.previewAmountInputViewModel
 
 /** Opacity of unavailable payment sources in the balance selector. */
@@ -325,6 +327,7 @@ private fun SendAmountNodeRunning(
                     color = Colors.White64
                 )
             }
+            SwapNote(uiState, availableAmount, currencies.displayUnit)
 
             val textAvailable = when {
                 uiState.lnurl is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_max
@@ -458,6 +461,28 @@ private fun SendAmountNodeRunning(
             VerticalSpacer(16.dp)
         }
     }
+}
+
+/** Explains paying an address from spending: the smallest swap amount, or why savings must pay instead. */
+@Composable
+private fun SwapNote(uiState: SendUiState, availableAmount: Long, displayUnit: BitcoinDisplayUnit) {
+    val text = when {
+        uiState.payMethod == SendMethod.SWAP -> uiState.swapLimits?.let {
+            stringResource(R.string.wallet__send_swap_minimum)
+                .replace("{amount}", it.minRecipientSat.formatMoney(displayUnit))
+        }
+        uiState.payMethod != SendMethod.ONCHAIN || uiState.hardwareWalletId != null || availableAmount > 0L -> null
+        else -> when (val reason = uiState.swapBlockedReason) {
+            is SwapBlockedReason.InsufficientSpending -> stringResource(R.string.wallet__send_swap_blocked_spending)
+                .replace("{minimum}", reason.minRecipientSat.formatMoney(displayUnit))
+                .replace("{amount}", reason.requiredSpendingSat.formatMoney(displayUnit))
+            SwapBlockedReason.NoPayableAmount -> stringResource(R.string.wallet__send_swap_blocked_terms)
+            SwapBlockedReason.TermsUnavailable -> stringResource(R.string.wallet__send_swap_blocked_provider)
+            null -> null
+        }
+    } ?: return
+    BodyS(text, color = Colors.White64, modifier = Modifier.testTag("SendSwapNote"))
+    VerticalSpacer(8.dp)
 }
 
 @Composable
