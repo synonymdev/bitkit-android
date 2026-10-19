@@ -1,0 +1,3071 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.3.0" type="baseline" client="gradle" dependencies="false" name="AGP (9.3.0)" variant="all" version="9.3.0">
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 29 (current min is 28): `android.os.Process#SHELL_UID`"
+        errorLine1="        check(Binder.getCallingUid() == Process.SHELL_UID) { &quot;Only ADB shell callers are allowed&quot; }"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/debug/java/to/bitkit/dev/DevToolsProvider.kt"
+            line="41"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="OldTargetApi"
+        message="Not targeting the latest versions of Android; compatibility modes apply. Consider testing and updating this version. Consult the `android.os.Build.VERSION_CODES` javadoc for details."
+        errorLine1="        targetSdk = 36"
+        errorLine2="        ~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="188"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="RequiresFeature"
+        message="`addWebMessageListener` should only be called if the feature `WEB_MESSAGE_LISTENER` is present; to check call `androidx.webkit.WebViewFeature#isFeatureSupported`"
+        errorLine1="        WebViewCompat.addWebMessageListener(webView, jsObjectName, allowedOriginRules, listener)"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/shop/shopWebView/ShopWebViewInterface.kt"
+            line="28"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="RequiresFeature"
+        message="`addWebMessageListener` should only be called if the feature `WEB_MESSAGE_LISTENER` is present; to check call `androidx.webkit.WebViewFeature#isFeatureSupported`"
+        errorLine1="        WebViewCompat.addWebMessageListener(webView, jsObjectName, allowedOriginRules, listener)"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/shop/shopWebView/ShopWebViewInterface.kt"
+            line="28"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UnusedAttribute"
+        message="Attribute `usesPermissionFlags` is only used in API level 31 and higher (current min is 28)"
+        errorLine1="        android:usesPermissionFlags=&quot;neverForLocation&quot; />"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="36"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="NonObservableLocale"
+        message="Reading locale in a non-observable way in a composable function"
+        errorLine1="    val locale = Locale.getDefault()"
+        errorLine2="                 ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/paymentrequests/CreatePaymentRequestScreen.kt"
+            line="153"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="NonObservableLocale"
+        message="Reading locale in a non-observable way in a composable function"
+        errorLine1="            val weekdaySymbols = SimpleDateFormat(DatePattern.WEEKDAY_FORMAT, Locale.getDefault())"
+        errorLine2="                                                                              ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/activity/DateRangeSelectorSheet.kt"
+            line="281"
+            column="79"/>
+    </issue>
+
+    <issue
+        id="NonObservableLocale"
+        message="Reading locale in a non-observable way in a composable function"
+        errorLine1="        val locale = Locale.getDefault()"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/components/PaykitAmountView.kt"
+            line="25"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="NonObservableLocale"
+        message="Reading locale in a non-observable way in a composable function"
+        errorLine1="        val locale = Locale.getDefault()"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/components/PaykitAmountView.kt"
+            line="56"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="VectorRaster"
+        message="Limit vector icons sizes to 200×200 to keep icon drawing fast; see https://developer.android.com/studio/write/vector-asset-studio#when for more"
+        errorLine1="    android:width=&quot;279dp&quot;"
+        errorLine2="                   ~~~~~">
+        <location
+            file="src/main/res/drawable/bitkit_logo.xml"
+            line="2"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="VectorRaster"
+        message="Limit vector icons sizes to 200×200 to keep icon drawing fast; see https://developer.android.com/studio/write/vector-asset-studio#when for more"
+        errorLine1="    android:width=&quot;311dp&quot;"
+        errorLine2="                   ~~~~~">
+        <location
+            file="src/main/res/drawable/chart_preview.xml"
+            line="2"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="VectorRaster"
+        message="Limit vector icons sizes to 200×200 to keep icon drawing fast; see https://developer.android.com/studio/write/vector-asset-studio#when for more"
+        errorLine1="    android:width=&quot;600dp&quot;"
+        errorLine2="                   ~~~~~">
+        <location
+            file="src/main/res/drawable/ic_bitkit_outlined.xml"
+            line="2"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="VectorRaster"
+        message="Limit vector icons sizes to 200×200 to keep icon drawing fast; see https://developer.android.com/studio/write/vector-asset-studio#when for more"
+        errorLine1="    android:width=&quot;311dp&quot;"
+        errorLine2="                   ~~~~~">
+        <location
+            file="src/main/res/drawable/qr_placeholder.xml"
+            line="2"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="LockedOrientationActivity"
+        message="Expecting `android:screenOrientation=&quot;unspecified&quot;` or `&quot;fullSensor&quot;` for this activity so the user can use the application in any orientation and provide a great experience on Chrome OS devices"
+        errorLine1="            android:screenOrientation=&quot;portrait&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="86"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="LockedOrientationActivity"
+        message="Expecting `android:screenOrientation=&quot;unspecified&quot;` or `&quot;fullSensor&quot;` for this activity so the user can use the application in any orientation and provide a great experience on Chrome OS devices"
+        errorLine1="            android:screenOrientation=&quot;portrait&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="274"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                    title = context.getString(R.string.wallet__boost_success_title),"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/activity/ActivityDetailScreen.kt"
+            line="278"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                    description = context.getString(R.string.wallet__boost_success_msg),"
+        errorLine2="                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/activity/ActivityDetailScreen.kt"
+            line="279"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                    title = context.getString(R.string.wallet__boost_error_title),"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/activity/ActivityDetailScreen.kt"
+            line="288"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                    description = context.getString(R.string.wallet__boost_error_msg),"
+        errorLine2="                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/activity/ActivityDetailScreen.kt"
+            line="289"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                    title = context.getString(R.string.wallet__send_fee_error),"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/activity/ActivityDetailScreen.kt"
+            line="297"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                    description = context.getString(R.string.wallet__send_fee_error_max)"
+        errorLine2="                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/activity/ActivityDetailScreen.kt"
+            line="298"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                    title = context.getString(R.string.wallet__send_fee_error),"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/activity/ActivityDetailScreen.kt"
+            line="304"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                                    description = context.getString(R.string.wallet__send_fee_error_min)"
+        errorLine2="                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/activity/ActivityDetailScreen.kt"
+            line="305"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="        is AddContactValidationResult.ExistingContact -> context.getString(R.string.contacts__add_error_existing)"
+        errorLine2="                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/contacts/AddContactScreen.kt"
+            line="104"
+            column="58"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="        AddContactValidationResult.InvalidKey -> context.getString(R.string.contacts__add_error_invalid_key)"
+        errorLine2="                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/contacts/AddContactScreen.kt"
+            line="105"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="        AddContactValidationResult.OwnKey -> context.getString(R.string.contacts__add_error_self)"
+        errorLine2="                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/contacts/AddContactScreen.kt"
+            line="106"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                title = context.getString(R.string.common__copied),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/advanced/AddressViewerScreen.kt"
+            line="88"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                title = context.getString(R.string.common__copied),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/lightning/ChannelDetailScreen.kt"
+            line="114"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                            title = context.getString(R.string.common__error),"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/subscriptions/CreateSubscriptionScreen.kt"
+            line="174"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                            description = context.getString(R.string.wallet__payment_request_rate_unavailable),"
+        errorLine2="                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/subscriptions/CreateSubscriptionScreen.kt"
+            line="175"
+            column="43"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                            title = context.getString(R.string.common__error),"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/subscriptions/CreateSubscriptionScreen.kt"
+            line="201"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                            description = context.getString(R.string.subscriptions__icon_error),"
+        errorLine2="                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/subscriptions/CreateSubscriptionScreen.kt"
+            line="202"
+            column="43"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        context.getString(R.string.settings__about__shareText)"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/HomeScreen.kt"
+            line="342"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    title = context.getString(R.string.other__connection_back_title),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/components/IsOnlineTracker.kt"
+            line="35"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    description = context.getString(R.string.other__connection_back_msg),"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/components/IsOnlineTracker.kt"
+            line="36"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    title = context.getString(R.string.other__connection_issue),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/components/IsOnlineTracker.kt"
+            line="43"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    description = context.getString(R.string.other__connection_issue_explain),"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/components/IsOnlineTracker.kt"
+            line="44"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        title = context.getString(R.string.other__qr_error_header),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/scanner/QrScanningScreen.kt"
+            line="150"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        description = context.getString(R.string.other__qr_error_text),"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/scanner/QrScanningScreen.kt"
+            line="151"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                title = context.getString(R.string.other__qr_error_header),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/scanner/QrScanningScreen.kt"
+            line="214"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                description = context.getString(R.string.other__camera_init_error)"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/scanner/QrScanningScreen.kt"
+            line="215"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="            title = context.getString(R.string.wallet__receive_cjit_error_max__title),"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveAmountScreen.kt"
+            line="85"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="            description = context.getString(R.string.wallet__receive_cjit_error_max__description)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveAmountScreen.kt"
+            line="86"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    title = context.getString(R.string.other__qr_error_header),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/onboarding/RestoreWalletScreen.kt"
+            line="114"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    description = context.getString(R.string.onboarding__restore_seedqr_error),"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/onboarding/RestoreWalletScreen.kt"
+            line="115"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    title = context.getString(R.string.settings__rgs__update_success_title),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/advanced/RgsServerScreen.kt"
+            line="57"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    description = context.getString(R.string.settings__rgs__update_success_description),"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/advanced/RgsServerScreen.kt"
+            line="58"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    title = context.getString(R.string.wallet__ldk_start_error_title),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/advanced/RgsServerScreen.kt"
+            line="64"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        title = context.getString(R.string.lightning__close_error),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/transfer/SavingsProgressScreen.kt"
+            line="82"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        description = context.getString(R.string.lightning__close_error_msg),"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/transfer/SavingsProgressScreen.kt"
+            line="83"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    title = context.getString(R.string.common__error),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/transfer/SavingsProgressScreen.kt"
+            line="109"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        title = context.getString(titleRes),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/send/SendAmountScreen.kt"
+            line="166"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        description = context.getString(descriptionRes),"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/send/SendAmountScreen.kt"
+            line="167"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    title = context.getString(R.string.wallet__send_max_spending__title),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/send/SendAmountScreen.kt"
+            line="195"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    description = context.getString(R.string.wallet__send_max_spending__description)"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/send/SendAmountScreen.kt"
+            line="196"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    title = context.getString(R.string.other__qr_error_header),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/send/SendRecipientScreen.kt"
+            line="147"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    description = context.getString(R.string.other__qr_error_text),"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/send/SendRecipientScreen.kt"
+            line="148"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    title = context.getString(R.string.other__qr_error_header),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/send/SendRecipientScreen.kt"
+            line="182"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    description = context.getString(R.string.other__camera_init_error)"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/send/SendRecipientScreen.kt"
+            line="183"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    title = context.getString(R.string.common__copied),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/backups/ShowMnemonicScreen.kt"
+            line="84"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                    description = context.getString(R.string.security__mnemonic_copied),"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/backups/ShowMnemonicScreen.kt"
+            line="85"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        title = context.getString(R.string.lightning__spending_advanced__error_max__title),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/transfer/SpendingAdvancedScreen.kt"
+            line="125"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        description = context.getString(R.string.lightning__spending_advanced__error_max__description)"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/transfer/SpendingAdvancedScreen.kt"
+            line="126"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        title = context.getString(R.string.lightning__spending_amount__error_max__title),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingAmountHwScreen.kt"
+            line="105"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        description = context.getString(R.string.lightning__spending_amount__error_max__description)"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingAmountHwScreen.kt"
+            line="106"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        context.getString(R.string.lightning__spending_amount__error_max__title),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/transfer/SpendingAmountScreen.kt"
+            line="99"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        context.getString(R.string.lightning__spending_amount__error_max__description)"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/transfer/SpendingAmountScreen.kt"
+            line="100"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                context.getString(R.string.settings__about__shareText)"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/support/SupportScreen.kt"
+            line="102"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        title = context.getString("
+        errorLine2="                                ^">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/support/SupportScreen.kt"
+            line="120"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                        description = context.getString("
+        errorLine2="                                      ^">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/support/SupportScreen.kt"
+            line="127"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="                app.toast(type = Toast.ToastType.SUCCESS, title = context.getString(R.string.common__copied))"
+        errorLine2="                                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/usdt/UsdtSupportActions.kt"
+            line="44"
+            column="67"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current"
+        errorLine1="            title = context.getString(R.string.common__copied),"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/settings/advanced/WatchOnlyAccountsScreen.kt"
+            line="200"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="LocalContextResourcesRead"
+        message="Reading Resources using LocalContext.current.resources"
+        errorLine1="    val resources = LocalContext.current.resources"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/utils/Text.kt"
+            line="126"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="LocalContextResourcesRead"
+        message="Reading Resources using LocalContext.current.resources"
+        errorLine1="    val resources = LocalContext.current.resources"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/utils/Text.kt"
+            line="164"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/components/ActionButton.kt"
+            line="27"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/components/AppStatus.kt"
+            line="39"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/sheets/BTCPayConnectionSheet.kt"
+            line="66"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/sheets/BoostTransactionSheet.kt"
+            line="390"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/paymentrequests/CreatePaymentRequestScreen.kt"
+            line="353"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/receive/EditInvoiceScreen.kt"
+            line="214"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be named modifier"
+        errorLine1="    dragHandleModifier: Modifier,"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/widgets/components/EditWidgetOverlay.kt"
+            line="53"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be named modifier"
+        errorLine1="    dragHandleModifier: Modifier,"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/widgets/components/EditWidgetOverlay.kt"
+            line="101"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/sheets/ForgotPinSheet.kt"
+            line="52"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/components/IncomingTransfer.kt"
+            line="28"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/paymentrequests/PaymentRequestsScreen.kt"
+            line="234"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveQrScreen.kt"
+            line="109"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveQrScreen.kt"
+            line="734"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/screens/transfer/SavingsProgressScreen.kt"
+            line="165"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/onboarding/WalletRestoreErrorView.kt"
+            line="41"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="SuspiciousModifierThen"
+        message="Using Modifier.then with a Modifier factory function with an implicit receiver"
+        errorLine1="private fun Modifier.sheet() = this then sheetHeight(SheetSize.MEDIUM, isModal = true)"
+        errorLine2="                                         ~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/ui/sheets/ComingSoonSheet.kt"
+            line="32"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="ViewModelConstructorInComposable"
+        message="Constructing a view model in a composable"
+        errorLine1="                    amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),"
+        errorLine2="                                           ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidTest/java/to/bitkit/ui/screens/wallets/receive/EditInvoiceScreenTest.kt"
+            line="26"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="ViewModelConstructorInComposable"
+        message="Constructing a view model in a composable"
+        errorLine1="                    amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),"
+        errorLine2="                                           ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidTest/java/to/bitkit/ui/screens/wallets/receive/EditInvoiceScreenTest.kt"
+            line="52"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Fixed screen orientations will be ignored in most cases, starting from Android 16. Android is moving toward a model where apps are expected to adapt to various orientations, display sizes, and aspect ratios."
+        errorLine1="            android:screenOrientation=&quot;portrait&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="86"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Fixed screen orientations will be ignored in most cases, starting from Android 16. Android is moving toward a model where apps are expected to adapt to various orientations, display sizes, and aspect ratios."
+        errorLine1="            android:screenOrientation=&quot;portrait&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="274"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseAppTint"
+        message="Must use `app:tint` instead of `android:tint`"
+        errorLine1="            android:tint=&quot;#FFFF4400&quot; />"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/appwidget_preview_blocks.xml"
+            line="22"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseAppTint"
+        message="Must use `app:tint` instead of `android:tint`"
+        errorLine1="            android:tint=&quot;#FFFF4400&quot; />"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/appwidget_preview_blocks.xml"
+            line="55"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseAppTint"
+        message="Must use `app:tint` instead of `android:tint`"
+        errorLine1="            android:tint=&quot;#FFFF4400&quot; />"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/appwidget_preview_blocks.xml"
+            line="88"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseAppTint"
+        message="Must use `app:tint` instead of `android:tint`"
+        errorLine1="            android:tint=&quot;#FFFF4400&quot; />"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/appwidget_preview_blocks.xml"
+            line="121"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StringFormatInvalid"
+        message="Incorrect formatting string `wallet__send_dialog2`; missing conversion character in &apos;`% s`&apos;?"
+        errorLine1="    &lt;string name=&quot;wallet__send_dialog2&quot;>Wygląda na to, że wysyłasz ponad 50% swojego salda. Czy kontynuować?&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-pl/strings.xml"
+            line="964"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StringFormatInvalid"
+        message="Incorrect formatting string `wallet__send_dialog2`; missing conversion character in &apos;`% s`&apos;?"
+        errorLine1="    &lt;string name=&quot;wallet__send_dialog2&quot;>Zdá se, že posíláte více než 50 % svého celkového zůstatku. Přejete si pokračovat?&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-cs/strings.xml"
+            line="1096"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="Typos"
+        message="&quot;occured&quot; is a common misspelling; did you mean &quot;occurred&quot;?"
+        errorLine1="    &lt;string name=&quot;other__lnurl_channel_error_raw&quot;>An error occured when you tried paying: {raw}&lt;/string>"
+        errorLine2="                                                           ~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="558"
+            column="60"/>
+    </issue>
+
+    <issue
+        id="Typos"
+        message="&quot;durschnittliche&quot; is a common misspelling; did you mean &quot;durchschnittliche&quot;?"
+        errorLine1="    &lt;string name=&quot;settings__general__speed_fee_total&quot;>₿ {feeSats} für die durschnittliche Transaktion&lt;/string>"
+        errorLine2="                                                                          ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-de/strings.xml"
+            line="592"
+            column="75"/>
+    </issue>
+
+    <issue
+        id="Typos"
+        message="&quot;durschnittliche&quot; is a common misspelling; did you mean &quot;durchschnittliche&quot;?"
+        errorLine1="    &lt;string name=&quot;settings__general__speed_fee_total_fiat&quot;>₿ {feeSats} für die durschnittliche Transaktion ({fiatSymbol}{fiatFormatted})&lt;/string>"
+        errorLine2="                                                                               ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-de/strings.xml"
+            line="593"
+            column="80"/>
+    </issue>
+
+    <issue
+        id="Typos"
+        message="&quot;eletrónico&quot; is a common misspelling; did you mean &quot;electrónico&quot; or &quot;eletrônico&quot;?"
+        errorLine1="    &lt;string name=&quot;other__shop__categories__ecommerce&quot;>Comércio eletrónico&lt;/string>"
+        errorLine2="                                                               ~~~~~~~~~~">
+        <location
+            file="src/main/res/values-pt/strings.xml"
+            line="1353"
+            column="64"/>
+    </issue>
+
+    <issue
+        id="Typos"
+        message="&quot;Eletrónica&quot; is a common misspelling; did you mean &quot;Electrónica&quot; or &quot;Eletrônica&quot;?"
+        errorLine1="    &lt;string name=&quot;other__shop__categories__electronics&quot;>Eletrónica&lt;/string>"
+        errorLine2="                                                        ~~~~~~~~~~">
+        <location
+            file="src/main/res/values-pt/strings.xml"
+            line="1354"
+            column="57"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;friends&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;contacts__import_friends_count&quot;>%1$d friends&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="134"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;selected&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;contacts__import_selected_count&quot;>%1$d selected&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="142"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;payments&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;subscriptions__created_summary&quot;>1 subscriber, %1$d payments&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1121"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;days&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;subscriptions__every_days&quot;>Every %1$d days&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1133"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;months&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;subscriptions__every_months&quot;>Every %1$d months&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1134"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;weeks&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;subscriptions__every_weeks&quot;>Every %1$d weeks&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1135"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;years&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;subscriptions__every_years&quot;>Every %1$d years&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1136"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `other__node_error_starting`; found both 0 here and 1 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;other__node_error_starting&quot;>Ошибка запуска: %1\$s&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="420"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="576"
+            column="5"
+            message="Conflicting number of arguments (1) here"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `sweep__balance_format`; found both 0 here and 1 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;sweep__balance_format&quot;>%1\$s sats&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="806"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1191"
+            column="5"
+            message="Conflicting number of arguments (1) here"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `sweep__utxo_format`; found both 0 here and 2 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;sweep__utxo_format&quot;>%1\$s, %2\$d UTXO&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="837"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1221"
+            column="5"
+            message="Conflicting number of arguments (2) here"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `sweep__utxos_format`; found both 0 here and 2 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;sweep__utxos_format&quot;>%1\$s, %2\$d UTXO&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="838"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1222"
+            column="5"
+            message="Conflicting number of arguments (2) here"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `wallet__send_dialog2`; found both 0 here and 1 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;wallet__send_dialog2&quot;>يبدو أنك ترسل أكثر من 50% من إجمالي رصيدك. هل تريد المتابعة؟&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ar/strings.xml"
+            line="1074"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1618"
+            column="5"
+            message="Conflicting number of arguments (1) here"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `wallet__send_dialog3`; found both 0 here and 1 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;wallet__send_dialog3&quot;>تبدو رسوم المعاملة أكثر من 50% من المبلغ الذي ترسله. هل تريد المتابعة؟&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ar/strings.xml"
+            line="1075"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1619"
+            column="5"
+            message="Conflicting number of arguments (1) here"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `wallet__send_dialog2`; found both 0 here and 1 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;wallet__send_dialog2&quot;>Φαίνεται ότι στέλνεις πάνω από 50% του συνολικού υπολοίπου σου. Θέλεις να συνεχίσεις;&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-el/strings.xml"
+            line="1080"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1618"
+            column="5"
+            message="Conflicting number of arguments (1) here"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `wallet__send_dialog3`; found both 0 here and 1 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;wallet__send_dialog3&quot;>Το τέλος συναλλαγής φαίνεται να είναι πάνω από 50% του ποσού που στέλνεις. Θέλεις να συνεχίσεις;&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-el/strings.xml"
+            line="1081"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1619"
+            column="5"
+            message="Conflicting number of arguments (1) here"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `wallet__send_dialog3`; found both 0 here and 1 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;wallet__send_dialog3&quot;>Zdá se, že transakční poplatek přesahuje 50 % částky, kterou odesíláte. Přejete si pokračovat?&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-cs/strings.xml"
+            line="1097"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1619"
+            column="5"
+            message="Conflicting number of arguments (1) here"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `wallet__send_dialog2`; found both 0 here and 1 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;wallet__send_dialog2&quot;>Похоже, вы отправляете более 50% от общего баланса. Вы хотите продолжать?&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="1128"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1618"
+            column="5"
+            message="Conflicting number of arguments (1) here"/>
+    </issue>
+
+    <issue
+        id="StringFormatCount"
+        message="Inconsistent number of arguments in formatting string `wallet__send_dialog3`; found both 0 here and 1 in values/strings.xml"
+        errorLine1="    &lt;string name=&quot;wallet__send_dialog3&quot;>Комиссия за транзакцию составляет более 50% от суммы, которую вы отправляете. Вы хотите продолжать?&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ru/strings.xml"
+            line="1129"
+            column="5"/>
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1619"
+            column="5"
+            message="Conflicting number of arguments (1) here"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 28"
+        errorLine1="        isIgnoringBatteryOptimizations = if (VERSION.SDK_INT >= VERSION_CODES.M) {"
+        errorLine2="                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/utils/BatterySettingsSnapshot.kt"
+            line="37"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 28"
+        errorLine1="        isDeviceIdleMode = if (VERSION.SDK_INT >= VERSION_CODES.M) {"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/utils/BatterySettingsSnapshot.kt"
+            line="42"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 28"
+        errorLine1="        appStandbyBucket = if (VERSION.SDK_INT >= VERSION_CODES.P) {"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/utils/BatterySettingsSnapshot.kt"
+            line="62"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="VectorPath"
+        message="Very long vector path (3210 characters), which is bad for performance. Considering reducing precision, removing minor details or rasterizing vector."
+        errorLine1="      android:pathData=&quot;M46.55,198.88C46.49,199.43 46,199.82 45.45,199.76L36.5,198.76C35.95,198.7 35.56,198.21 35.62,197.66C35.68,197.11 36.18,196.72 36.72,196.78L44.67,197.66L45.56,189.71C45.62,189.16 46.12,188.77 46.67,188.83C47.21,188.89 47.61,189.39 47.55,189.93L46.55,198.88ZM15.01,0.42C15.92,0.84 15.92,0.84 15.92,0.84C15.92,0.84 15.92,0.84 15.92,0.84C15.92,0.84 15.92,0.84 15.92,0.84C15.92,0.84 15.92,0.84 15.92,0.84C15.92,0.84 15.92,0.84 15.92,0.84C15.92,0.84 15.92,0.84 15.92,0.84C15.91,0.85 15.91,0.86 15.9,0.87C15.89,0.9 15.87,0.94 15.85,1C15.8,1.11 15.72,1.27 15.63,1.5C15.44,1.94 15.16,2.6 14.81,3.47L13.88,3.1L12.95,2.73C13.31,1.84 13.59,1.16 13.79,0.7C13.89,0.47 13.97,0.3 14.02,0.18C14.05,0.12 14.07,0.08 14.08,0.05C14.09,0.03 14.09,0.02 14.1,0.01C14.1,0.01 14.1,0.01 14.1,0C14.1,0 14.1,0 14.1,0C14.1,0 14.1,0 14.1,0C14.1,0 14.1,-0 14.1,-0C14.1,-0 14.1,-0 14.1,-0C14.1,-0 14.1,-0 15.01,0.42ZM11.85,8.53L12.8,8.87C12.23,10.49 11.61,12.35 10.96,14.43L10.01,14.13L9.05,13.83C9.7,11.74 10.33,9.85 10.91,8.2L11.85,8.53ZM8.37,19.7L9.34,19.97C8.85,21.74 8.35,23.62 7.87,25.61L6.9,25.37L5.92,25.13C6.41,23.13 6.91,21.23 7.41,19.44L8.37,19.7ZM5.58,31.08L6.56,31.29C6.17,33.13 5.79,35.03 5.42,37L4.44,36.82L3.46,36.64C3.82,34.65 4.21,32.73 4.61,30.87L5.58,31.08ZM3.46,42.59L4.44,42.74C4.15,44.61 3.88,46.53 3.63,48.5L2.64,48.37L1.65,48.24C1.9,46.26 2.17,44.32 2.47,42.43L3.46,42.59ZM1.98,54.17L2.98,54.27C2.79,56.17 2.62,58.1 2.49,60.07L1.49,60L0.49,59.93C0.63,57.94 0.8,55.99 0.99,54.08L1.98,54.17ZM1.16,65.84L2.16,65.88C2.08,67.8 2.03,69.74 2,71.71L1,71.7L0,71.69C0.03,69.69 0.08,67.73 0.16,65.8L1.16,65.84ZM1.01,77.56L2.01,77.54C2.04,79.45 2.1,81.38 2.19,83.34L1.19,83.38L0.19,83.43C0.1,81.45 0.04,79.5 0.01,77.57L1.01,77.56ZM1.54,89.21L2.53,89.14C2.68,91.06 2.85,92.99 3.06,94.94L2.06,95.05L1.07,95.15C0.86,93.18 0.69,91.22 0.54,89.29L1.54,89.21ZM2.76,100.86L3.75,100.73C4.01,102.63 4.3,104.54 4.62,106.46L3.63,106.63L2.64,106.79C2.32,104.84 2.03,102.91 1.77,101L2.76,100.86ZM4.68,112.38L5.66,112.19C6.03,114.08 6.44,115.98 6.88,117.9L5.9,118.12L4.93,118.35C4.48,116.41 4.07,114.49 3.7,112.58L4.68,112.38ZM7.29,123.78L8.26,123.52C8.75,125.38 9.27,127.25 9.82,129.13L8.86,129.41L7.9,129.69C7.34,127.8 6.82,125.91 6.32,124.03L7.29,123.78ZM10.61,135.01L11.56,134.7C12.15,136.51 12.78,138.34 13.45,140.17L12.51,140.51L11.57,140.85C10.9,139 10.26,137.16 9.66,135.32L10.61,135.01ZM14.59,145.99L15.52,145.62C16.23,147.41 16.97,149.2 17.75,150.99L16.83,151.39L15.91,151.78C15.13,149.97 14.38,148.16 13.66,146.36L14.59,145.99ZM19.23,156.71L20.13,156.29C20.95,158.03 21.8,159.79 22.69,161.54L21.8,161.99L20.9,162.44C20.01,160.67 19.15,158.9 18.32,157.13L19.23,156.71ZM24.49,167.14L25.37,166.66C26.29,168.36 27.25,170.06 28.23,171.76L27.37,172.26L26.5,172.77C25.51,171.05 24.54,169.33 23.61,167.62L24.49,167.14ZM30.36,177.26L31.21,176.73C32.22,178.37 33.27,180.01 34.35,181.65L33.51,182.2L32.68,182.75C31.59,181.09 30.53,179.44 29.51,177.78L30.36,177.26ZM36.78,187.03L37.6,186.46C38.7,188.04 39.83,189.61 41,191.19L40.19,191.78L39.39,192.38C38.21,190.79 37.07,189.19 35.96,187.6L36.78,187.03ZM43.72,196.44L44.51,195.83C45.11,196.6 45.72,197.37 46.34,198.14L45.56,198.77L44.78,199.39C44.15,198.61 43.54,197.84 42.93,197.06L43.72,196.44Z&quot;"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/drawable/arrow.xml"
+            line="7"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="VectorPath"
+        message="Very long vector path (4195 characters), which is bad for performance. Considering reducing precision, removing minor details or rasterizing vector."
+        errorLine1="            android:pathData=&quot;M4.7507,10.8992C3.3099,10.8992 2.1417,10.5922 1.285,10.0165C0.4673,9.4025 0,8.5198 0,7.3685H2.648C2.7258,8.3663 3.4268,8.8652 4.7118,8.8652C5.1791,8.8652 5.6074,8.7885 5.919,8.5966C6.2694,8.4047 6.4252,8.136 6.4252,7.7523C6.4252,7.522 6.3084,7.2917 6.1137,7.1382C5.919,6.9463 5.6853,6.8312 5.4906,6.7545C5.257,6.7161 4.8676,6.6009 4.2835,6.4474C4.2445,6.4474 4.2056,6.4474 4.2056,6.4091C4.2056,6.4091 4.2056,6.4091 4.1666,6.4091C4.1277,6.4091 4.1277,6.4091 4.0888,6.4091C3.6604,6.2939 3.271,6.2172 2.9984,6.102C2.6869,6.0253 2.3754,5.9101 1.986,5.7183C1.6355,5.5647 1.324,5.3729 1.0903,5.181C0.8956,4.9507 0.7009,4.6821 0.5452,4.375C0.3894,4.0296 0.3115,3.6459 0.3115,3.2237C0.3115,2.1491 0.7009,1.3432 1.4797,0.8059C2.2586,0.2686 3.271,0 4.556,0C5.7632,0 6.7367,0.2686 7.5155,0.8059C8.2554,1.3816 8.6837,2.1491 8.7227,3.2237H6.1526C6.1137,2.8399 5.919,2.4945 5.6464,2.3027C5.3348,2.0724 4.9454,1.9573 4.4392,1.9573C4.0109,1.9573 3.6215,2.034 3.3489,2.2259C3.0763,2.4178 2.9205,2.6481 2.9205,2.9551C2.9205,3.2621 3.0763,3.5307 3.4268,3.6842C3.7772,3.8378 4.4003,3.9913 5.3348,4.2215C5.919,4.3367 6.3862,4.4902 6.7756,4.6053C7.165,4.7204 7.5155,4.9123 7.9049,5.181C8.2943,5.4112 8.6058,5.7183 8.8005,6.102C8.9953,6.4858 9.0731,6.9463 9.0731,7.4836C9.0731,8.5582 8.6837,9.4025 7.866,10.0165C7.0482,10.6306 5.9968,10.8992 4.7507,10.8992ZM10.0466,13.1251V11.283H10.8644C11.5264,11.283 11.8768,11.0144 11.8768,10.4771C11.8768,10.2468 11.7211,9.7095 11.4096,8.942L9.151,3.147H11.7211L12.7335,6.3707L13.2398,8.0977C13.3955,7.4069 13.5513,6.8312 13.707,6.3707L14.6806,3.147H17.1338L14.4859,10.7841C14.1743,11.6668 13.8239,12.2808 13.3955,12.6262C12.9672,12.9716 12.3831,13.1251 11.6043,13.1251H10.0466ZM17.64,10.669V3.147H19.9765V4.1832H20.0154C20.6384,3.3772 21.4173,2.9551 22.3908,2.9551C23.2085,2.9551 23.8705,3.2237 24.3378,3.7226C24.8051,4.2599 25.0387,4.9507 25.0387,5.795V10.669H22.6244V6.2555C22.6244,5.8718 22.5076,5.5264 22.3129,5.2961C22.1182,5.0658 21.8067,4.9507 21.4173,4.9507C21.0278,4.9507 20.7163,5.0658 20.4437,5.3729C20.2101,5.6799 20.0933,6.0637 20.0933,6.5242V10.669H17.64ZM28.6602,8.5966C28.9328,8.9803 29.3222,9.2106 29.8673,9.2106C30.3736,9.2106 30.763,8.9803 31.0355,8.5966C31.3471,8.1744 31.4639,7.6371 31.4639,6.9463C31.4639,6.2172 31.3471,5.6799 31.0355,5.2577C30.763,4.8356 30.3736,4.6437 29.8673,4.6437C29.3222,4.6437 28.9328,4.8356 28.6602,5.2577C28.3876,5.6799 28.2318,6.2172 28.2318,6.9463C28.2318,7.6371 28.3876,8.1744 28.6602,8.5966ZM32.7879,9.7863C32.048,10.5154 31.0745,10.8992 29.8673,10.8992C28.6602,10.8992 27.6867,10.5154 26.9079,9.7863C26.168,9.0187 25.7786,8.0593 25.7786,6.9463C25.7786,5.795 26.168,4.8356 26.9079,4.068C27.6867,3.3389 28.6602,2.9551 29.8673,2.9551C31.0745,2.9551 32.048,3.3389 32.7879,4.068C33.5667,4.8356 33.9171,5.795 33.9171,6.9463C33.9171,8.0593 33.5667,9.0187 32.7879,9.7863ZM34.7349,10.669V3.147H37.0713V4.1832H37.1103C37.6944,3.3772 38.4732,2.9551 39.4856,2.9551C40.3034,2.9551 40.9264,3.2237 41.3937,3.7226C41.8999,4.2599 42.1336,4.9507 42.1336,5.795V10.669H39.6803V6.2555C39.6803,5.8718 39.6024,5.5264 39.4077,5.2961C39.1741,5.0658 38.9015,4.9507 38.5121,4.9507C38.1227,4.9507 37.7722,5.0658 37.5386,5.3729C37.305,5.6799 37.1492,6.0637 37.1492,6.5242V10.669H34.7349ZM43.3407,13.1251V11.283H44.1585C44.8205,11.283 45.1709,11.0144 45.1709,10.4771C45.1709,10.2468 45.0152,9.7095 44.7036,8.942L42.4451,3.147H45.0152L46.0276,6.3707L46.4949,8.0977H46.5338C46.6896,7.4069 46.8064,6.8312 47.0011,6.3707L47.9746,3.147H50.389L47.7799,10.7841C47.4684,11.6668 47.118,12.2808 46.6896,12.6262C46.2613,12.9716 45.6772,13.1251 44.8984,13.1251H43.3407ZM50.9341,10.669V3.147H53.2705V4.2215H53.3095C53.8157,3.3772 54.5945,2.9551 55.607,2.9551C56.6194,2.9551 57.3204,3.3772 57.7487,4.2599H57.7876C58.3717,3.3772 59.1506,2.9551 60.163,2.9551C61.0197,2.9551 61.6427,3.1853 62.11,3.7226C62.5384,4.2215 62.772,4.9123 62.772,5.795V10.669H60.3188V6.2172C60.3188,5.3729 59.9683,4.9507 59.2674,4.9507C58.878,4.9507 58.6054,5.0658 58.3717,5.3729C58.177,5.6415 58.0602,5.9869 58.0602,6.4474V10.669H55.6459V6.2172C55.6459,5.3729 55.2955,4.9507 54.5556,4.9507C54.2051,4.9507 53.8936,5.0658 53.6989,5.3729C53.4652,5.6415 53.3484,5.9869 53.3484,6.4474V10.669H50.9341Z&quot; />"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/drawable/ic_synonym_logo.xml"
+            line="28"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="VectorPath"
+        message="Very long vector path (3698 characters), which is bad for performance. Considering reducing precision, removing minor details or rasterizing vector."
+        errorLine1="      android:pathData=&quot;M16.012,3.2C23.068,3.2 28.799,8.943 28.799,16C28.799,23.056 23.055,28.8 15.999,28.8C8.943,28.799 3.199,23.056 3.199,16C3.199,13.007 4.278,10.234 6.034,8.049L6.039,8.043C6.598,7.294 7.43,7.263 7.944,7.755C8.213,8.024 8.316,8.306 8.303,8.598C8.29,8.898 8.154,9.23 7.9,9.585C6.504,11.339 5.666,13.588 5.653,16C5.641,21.719 10.255,26.345 15.999,26.346C21.744,26.346 26.332,21.718 26.332,16C26.332,10.613 22.304,6.189 17.054,5.655L16.834,5.633V8.746C16.834,9.344 16.426,9.78 15.85,9.78C15.273,9.78 14.865,9.344 14.865,8.746V4.308C14.865,3.945 14.977,3.673 15.161,3.493C15.346,3.312 15.627,3.2 16.012,3.2ZM10.523,10.473C10.674,10.321 10.969,10.253 11.314,10.483L17.482,14.682L17.484,14.683C18.07,15.072 18.401,15.615 18.471,16.176C18.54,16.735 18.354,17.333 17.864,17.841C17.363,18.329 16.773,18.51 16.218,18.434C15.66,18.359 15.115,18.021 14.719,17.433L10.532,11.264L10.459,11.137C10.32,10.848 10.39,10.606 10.523,10.473ZM26.115,15.432C26.125,15.62 26.133,15.809 26.133,16C26.133,15.809 26.125,15.62 26.115,15.432ZM25.856,13.619C25.863,13.646 25.869,13.674 25.875,13.702C25.869,13.674 25.863,13.646 25.856,13.619ZM25.74,13.169C25.75,13.202 25.757,13.236 25.767,13.27C25.757,13.236 25.75,13.202 25.74,13.169ZM25.598,12.713C25.608,12.743 25.618,12.774 25.628,12.805C25.618,12.774 25.608,12.743 25.598,12.713ZM25.443,12.284C25.464,12.338 25.483,12.392 25.503,12.446C25.483,12.392 25.464,12.338 25.443,12.284ZM25.261,11.842C25.298,11.928 25.333,12.015 25.368,12.101C25.333,12.015 25.298,11.928 25.261,11.842ZM25.063,11.422C25.101,11.498 25.137,11.576 25.173,11.653C25.137,11.576 25.101,11.498 25.063,11.422ZM24.851,11.016C24.904,11.113 24.955,11.212 25.006,11.311C24.955,11.212 24.904,11.113 24.851,11.016ZM24.635,10.645C24.665,10.695 24.694,10.746 24.724,10.797C24.694,10.746 24.665,10.695 24.635,10.645ZM24.383,10.254C24.411,10.295 24.437,10.337 24.464,10.379C24.437,10.337 24.411,10.295 24.383,10.254ZM24.122,9.885C24.158,9.934 24.193,9.984 24.229,10.034C24.193,9.984 24.158,9.934 24.122,9.885ZM23.838,9.521C23.884,9.577 23.927,9.635 23.972,9.692C23.927,9.635 23.884,9.577 23.838,9.521ZM23.546,9.178C23.588,9.226 23.628,9.275 23.67,9.323C23.628,9.275 23.588,9.226 23.546,9.178ZM23.237,8.849C23.285,8.898 23.331,8.948 23.378,8.998C23.331,8.948 23.285,8.898 23.237,8.849ZM22.909,8.527C22.959,8.574 23.007,8.621 23.056,8.669C23.007,8.621 22.959,8.574 22.909,8.527ZM22.563,8.218C22.626,8.271 22.688,8.326 22.749,8.382C22.688,8.326 22.626,8.271 22.563,8.218ZM22.22,7.937C22.272,7.978 22.324,8.021 22.376,8.063C22.324,8.021 22.272,7.978 22.22,7.937ZM21.856,7.667C21.916,7.709 21.974,7.752 22.032,7.796C21.974,7.752 21.916,7.709 21.856,7.667ZM21.482,7.413C21.544,7.452 21.604,7.493 21.664,7.534C21.604,7.493 21.544,7.452 21.482,7.413ZM21.1,7.177C21.157,7.211 21.214,7.246 21.271,7.281C21.214,7.246 21.157,7.211 21.1,7.177ZM20.698,6.956C20.759,6.988 20.819,7.02 20.879,7.053C20.819,7.02 20.759,6.988 20.698,6.956ZM20.271,6.745C20.341,6.777 20.41,6.811 20.479,6.844C20.41,6.811 20.341,6.777 20.271,6.745ZM19.856,6.562C19.934,6.594 20.01,6.628 20.087,6.662C20.01,6.628 19.934,6.594 19.856,6.562ZM19.435,6.4C19.501,6.424 19.568,6.449 19.634,6.474C19.568,6.449 19.501,6.424 19.435,6.4ZM19.002,6.256C19.062,6.274 19.121,6.294 19.18,6.313C19.121,6.294 19.062,6.274 19.002,6.256ZM18.546,6.126C18.609,6.142 18.671,6.16 18.733,6.177C18.671,6.16 18.609,6.142 18.546,6.126ZM18.06,6.013C18.144,6.031 18.228,6.05 18.312,6.069C18.228,6.05 18.144,6.031 18.06,6.013ZM17.603,5.93C17.689,5.944 17.775,5.958 17.86,5.974C17.775,5.958 17.689,5.944 17.603,5.93ZM17.233,5.877C17.282,5.883 17.33,5.891 17.378,5.897L17.034,5.854L17.233,5.877ZM26.03,14.543C26.044,14.64 26.055,14.738 26.065,14.836C26.055,14.738 26.044,14.64 26.03,14.543Z&quot;"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/drawable/ic_timer_alt_yellow.xml"
+            line="12"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="NestedWeights"
+        message="Nested weights are bad for performance"
+        errorLine1="            android:layout_weight=&quot;1&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/appwidget_preview_weather.xml"
+            line="30"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/gray6` with a theme that also paints a background (inferred theme is `@style/Theme.App`)"
+        errorLine1="    android:background=&quot;@color/gray6&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/appwidget_preview_blocks.xml"
+            line="6"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/gray6` with a theme that also paints a background (inferred theme is `@style/Theme.App`)"
+        errorLine1="    android:background=&quot;@color/gray6&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/appwidget_preview_facts.xml"
+            line="6"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/gray6` with a theme that also paints a background (inferred theme is `@style/Theme.App`)"
+        errorLine1="    android:background=&quot;@color/gray6&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/appwidget_preview_headlines.xml"
+            line="6"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/gray6` with a theme that also paints a background (inferred theme is `@style/Theme.App`)"
+        errorLine1="    android:background=&quot;@color/gray6&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/appwidget_preview_price.xml"
+            line="6"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/gray6` with a theme that also paints a background (inferred theme is `@style/Theme.App`)"
+        errorLine1="    android:background=&quot;@color/gray6&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/appwidget_preview_weather.xml"
+            line="6"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.coin_stack_1` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/coin_stack_1.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.coin_stack_2` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/coin_stack_2.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.coin_stack_logo` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/coin_stack_logo.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.coin_transparent` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/coin_transparent.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.raw.confetti_yellow` appears to be unused">
+        <location
+            file="src/main/res/raw/confetti_yellow.json"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.crown_no_margins` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/crown_no_margins.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.empty_state_arrow_horizontal` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/empty_state_arrow_horizontal.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.folder` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/folder.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_exclamation` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_exclamation.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_launcher_fg_testnet` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/ic_launcher_fg_testnet.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.mipmap.ic_launcher_foreground` appears to be unused">
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_foreground.webp"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_launcher_monochrome` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_launcher_monochrome.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.mipmap.ic_launcher_orange` appears to be unused">
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_orange.webp"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.mipmap.ic_launcher_orange_round` appears to be unused">
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_orange_round.webp"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.mipmap.ic_launcher_testnet` appears to be unused"
+        errorLine1="&lt;adaptive-icon xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;>"
+        errorLine2="^">
+        <location
+            file="src/main/res/mipmap-anydpi/ic_launcher_testnet.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.mipmap.ic_launcher_testnet_round` appears to be unused"
+        errorLine1="&lt;adaptive-icon xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;>"
+        errorLine2="^">
+        <location
+            file="src/main/res/mipmap-anydpi/ic_launcher_testnet_round.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_settings_about` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_settings_about.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_settings_advanced` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_settings_advanced.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_settings_backup` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_settings_backup.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_settings_general` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_settings_general.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_settings_security` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_settings_security.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_sort_ascending` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_sort_ascending.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_stop_circle` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_stop_circle.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_unit_bitcoin` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_unit_bitcoin.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.magnifying_glass` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/magnifying_glass.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.padlock` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/padlock.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.pubky_ring_logo` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/pubky_ring_logo.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.question_mark` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/question_mark.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.spark` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/spark.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cards__suggestions` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cards__suggestions&quot;>Suggestions&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="51"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.lightning__transfer__custom_fee` appears to be unused"
+        errorLine1="    &lt;string name=&quot;lightning__transfer__custom_fee&quot;>Custom &amp;lt;accent&amp;gt;fee&amp;lt;/accent&amp;gt;&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="429"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.lightning__wait_text_bottom` appears to be unused"
+        errorLine1="    &lt;string name=&quot;lightning__wait_text_bottom&quot;>Connecting &amp;amp; Syncing...&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="447"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.notification__received__body_channel` appears to be unused"
+        errorLine1="    &lt;string name=&quot;notification__received__body_channel&quot;>Via new channel&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="469"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.notification__received__body_hidden` appears to be unused"
+        errorLine1="    &lt;string name=&quot;notification__received__body_hidden&quot;>Open Bitkit to see details&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="470"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.other__coming_soon` appears to be unused"
+        errorLine1="    &lt;string name=&quot;other__coming_soon&quot;>Coming soon&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="529"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.other__lnurl_channel_error_raw` appears to be unused"
+        errorLine1="    &lt;string name=&quot;other__lnurl_channel_error_raw&quot;>An error occured when you tried paying: {raw}&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="558"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.other__qr_error_network_header` appears to be unused"
+        errorLine1="    &lt;string name=&quot;other__qr_error_network_header&quot;>Incorrect Network&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="590"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.other__qr_error_network_text` appears to be unused"
+        errorLine1="    &lt;string name=&quot;other__qr_error_network_text&quot;>Bitkit is currently set to {selectedNetwork} but data is for {dataNetwork}.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="591"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.other__scan_err_interpret_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;other__scan_err_interpret_title&quot;>Unable To Interpret Provided Data&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="598"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.profile__create_restoring` appears to be unused"
+        errorLine1="    &lt;string name=&quot;profile__create_restoring&quot;>Restoring your existing profile…&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="702"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.profile__create_success` appears to be unused"
+        errorLine1="    &lt;string name=&quot;profile__create_success&quot;>Profile created successfully&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="703"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.profile__qr_scan_label` appears to be unused"
+        errorLine1="    &lt;string name=&quot;profile__qr_scan_label&quot;>Scan to add {name}&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="735"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.security__bio_no` appears to be unused"
+        errorLine1="    &lt;string name=&quot;security__bio_no&quot;>It appears that your device does not support Biometric security.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="767"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__about__text` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__about__text&quot;>Thank you for being a responsible Bitcoiner.\nChange your wallet, change the world.\n\nBitkit hands you the keys to your money, profile, contacts, and web accounts.\n\nBitkit was crafted by Synonym Software Ltd.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="861"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__about__title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__about__title&quot;>About Bitkit&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="862"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__about_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__about_title&quot;>About&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="864"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__addr__no_addrs` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__addr__no_addrs&quot;>No Addresses To Display&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="872"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__adv__cs_last_in_last_out` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__adv__cs_last_in_last_out&quot;>Last-In Last-Out&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="897"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__adv__cs_last_in_last_out_description` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__adv__cs_last_in_last_out_description&quot;>Use newer UTXOs first (by block height).&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="898"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__adv__cs_max` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__adv__cs_max&quot;>Smallest First&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="900"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__adv__cs_max_description` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__adv__cs_max_description&quot;>Sort by and use smallest UTXO first. Potentially higher fee, but hides your largest UTXOs.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="901"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__adv__section_other` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__adv__section_other&quot;>Other&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="915"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__adv__suggestions_reset` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__adv__suggestions_reset&quot;>Reset Suggestions&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="917"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__backup__category_contacts` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__backup__category_contacts&quot;>Contacts&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="921"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__backup__category_profile` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__backup__category_profile&quot;>Profile&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="922"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__bg__include_amount` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__bg__include_amount&quot;>Include amount in notifications&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="939"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__bg__privacy_header` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__bg__privacy_header&quot;>Privacy&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="948"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__security__footer` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__security__footer&quot;>When enabled, you can use {biometryTypeName} instead of your PIN code to unlock your wallet or send payments.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1043"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings__support__title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings__support__title&quot;>Support&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1092"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.slashtags__onboarding_profile1_header` appears to be unused"
+        errorLine1="    &lt;string name=&quot;slashtags__onboarding_profile1_header&quot;>Own your\n&amp;lt;accent&amp;gt;profile&amp;lt;/accent&amp;gt;&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1108"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.slashtags__onboarding_profile1_text` appears to be unused"
+        errorLine1="    &lt;string name=&quot;slashtags__onboarding_profile1_text&quot;>Set up your public profile and links, so your Bitkit contacts can reach you or pay you anytime, anywhere.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1109"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.slashtags__profile` appears to be unused"
+        errorLine1="    &lt;string name=&quot;slashtags__profile&quot;>Profile&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1110"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.slashtags__profile_create` appears to be unused"
+        errorLine1="    &lt;string name=&quot;slashtags__profile_create&quot;>Create Profile&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1111"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__balance_format` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__balance_format&quot;>%1$s sats&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1191"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__checking_description` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__checking_description&quot;>Please wait while Bitkit looks for funds in unsupported addresses (Legacy, Nested SegWit, and Taproot).&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1192"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__checking_loading` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__checking_loading&quot;>LOOKING FOR FUNDS...&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1193"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__confirm_broadcasting` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__confirm_broadcasting&quot;>BROADCASTING…&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1194"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__confirm_nav_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__confirm_nav_title&quot;>Confirm Sweep&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1195"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__confirm_preparing` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__confirm_preparing&quot;>PREPARING…&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1196"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__confirm_retry` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__confirm_retry&quot;>Retry&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1197"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__confirm_swipe` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__confirm_swipe&quot;>Swipe to confirm&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1198"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__confirm_to_address` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__confirm_to_address&quot;>To Address&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1199"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__custom_fee_nav_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__custom_fee_nav_title&quot;>Custom Fee&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1200"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__custom_fee_total` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__custom_fee_total&quot;>for this transaction&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1201"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__error_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__error_title&quot;>Error&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1202"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__fee_nav_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__fee_nav_title&quot;>Network Fee&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1203"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__found_description` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__found_description&quot;>Bitkit found funds in unsupported addresses (Legacy, Nested SegWit, and Taproot).&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1204"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__found_label` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__found_label&quot;>FUNDS FOUND&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1205"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__found_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__found_title&quot;>Found Funds&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1206"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__legacy_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__legacy_title&quot;>Legacy (P2PKH)&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1207"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__nav_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__nav_title&quot;>Sweep Funds&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1208"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__no_funds_description` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__no_funds_description&quot;>Bitkit checked unsupported address types and found no funds to sweep.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1209"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__no_funds_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__no_funds_title&quot;>No Funds To Sweep&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1210"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__prompt_description` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__prompt_description&quot;>Bitkit found funds on unsupported Bitcoin address types. Sweep to move the funds to your new wallet balance.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1211"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__prompt_sweep` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__prompt_sweep&quot;>Sweep&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1212"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__prompt_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__prompt_title&quot;>SWEEP OLD\n&amp;lt;accent&amp;gt;BITKIT FUNDS&amp;lt;/accent&amp;gt;&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1213"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__segwit_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__segwit_title&quot;>SegWit (P2SH)&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1214"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__success_description` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__success_description&quot;>Your funds have been swept and will be added to your wallet balance.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1215"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__success_nav_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__success_nav_title&quot;>Sweep Complete&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1216"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__success_wallet_overview` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__success_wallet_overview&quot;>Wallet Overview&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1217"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__taproot_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__taproot_title&quot;>Taproot (P2TR)&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1218"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__to_wallet` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__to_wallet&quot;>Sweep To Wallet&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1219"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__total` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__total&quot;>Total&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1220"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__utxo_format` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__utxo_format&quot;>%1$s, %2$d UTXO&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1221"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.sweep__utxos_format` appears to be unused"
+        errorLine1="    &lt;string name=&quot;sweep__utxos_format&quot;>%1$s, %2$d UTXOs&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1222"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__activity` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__activity&quot;>Activity&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1223"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__balance` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__balance&quot;>Balance&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1226"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__bridging` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__bridging&quot;>Delivering to destination&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1232"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__deposit_amount` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__deposit_amount&quot;>Deposit amount&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1238"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__deposit_create` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__deposit_create&quot;>Get Deposit Address&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1244"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__deposit_estimate` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__deposit_estimate&quot;>Estimated received (USDT)&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1246"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__deposit_estimate_note` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__deposit_estimate_note&quot;>Indicative price only. Costs are deducted from the USDT received and may change before conversion. The sender pays their network gas separately.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1247"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__deposit_limits` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__deposit_limits&quot;>Deposit limits&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1250"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__deposit_limits_note` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__deposit_limits_note&quot;>Live liquidity and network costs can further restrict these limits. Amounts outside the limits may be held.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1251"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__deposit_notice` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__deposit_notice&quot;>Send only USDT on the selected network. Orchestra delivers USDT0 to your Arbitrum One wallet. This address is reusable; pricing is set when each deposit is processed. Deposits may be held for review.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1257"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__deposit_refresh` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__deposit_refresh&quot;>Refresh&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1260"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__maximum_fee` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__maximum_fee&quot;>Maximum fee&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1314"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__receive` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__receive&quot;>Receive&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1322"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__receive_warning` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__receive_warning&quot;>Receive USDT on Arbitrum One only. Bridge funds from other networks before sending.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1331"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__send` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__send&quot;>Send&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1339"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.usdt__share_disabled` appears to be unused"
+        errorLine1="    &lt;string name=&quot;usdt__share_disabled&quot;>Enable USDT to share your receiving address.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1347"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.wallet__activity_transferring` appears to be unused"
+        errorLine1="    &lt;string name=&quot;wallet__activity_transferring&quot;>Transferring&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1422"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.wallet__payment_request_review_received` appears to be unused"
+        errorLine1="    &lt;string name=&quot;wallet__payment_request_review_received&quot;>Received · Review needed&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1520"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.wallet__payment_request_status_accepted` appears to be unused"
+        errorLine1="    &lt;string name=&quot;wallet__payment_request_status_accepted&quot;>Accepted&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1527"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.wallet__send_available_savings` appears to be unused"
+        errorLine1="    &lt;string name=&quot;wallet__send_available_savings&quot;>Available (savings)&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1608"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.wallet__send_max` appears to be unused"
+        errorLine1="    &lt;string name=&quot;wallet__send_max&quot;>MAX&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1636"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.wallet__send_pending__funding_description` appears to be unused"
+        errorLine1="    &lt;string name=&quot;wallet__send_pending__funding_description&quot;>Funding transaction is unresolved. Check its transaction before trying again.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1649"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.widgets__headline__preview_publisher` appears to be unused"
+        errorLine1="    &lt;string name=&quot;widgets__headline__preview_publisher&quot;>bitcoinmagazine.com&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1733"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.widgets__headline__preview_time` appears to be unused"
+        errorLine1="    &lt;string name=&quot;widgets__headline__preview_time&quot;>21 minutes ago&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1734"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.widgets__headline__preview_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;widgets__headline__preview_title&quot;>How Bitcoin changed El Salvador in more ways&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1735"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.widgets__widget__data` appears to be unused"
+        errorLine1="    &lt;string name=&quot;widgets__widget__data&quot;>DATA&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1760"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.widgets__widget__edit` appears to be unused"
+        errorLine1="    &lt;string name=&quot;widgets__widget__edit&quot;>Widget Feed&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1762"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.widgets__widget__edit_description` appears to be unused"
+        errorLine1="    &lt;string name=&quot;widgets__widget__edit_description&quot;>Please select which fields you want to display in the {name} widget.&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1765"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.widgets__widget__nav_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;widgets__widget__nav_title&quot;>Widget&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="1766"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.tether` appears to be unused">
+        <location
+            file="src/main/res/drawable-nodpi/tether.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.Theme_App_AppBarOverlay` appears to be unused"
+        errorLine1="    &lt;style name=&quot;Theme.App.AppBarOverlay&quot; parent=&quot;ThemeOverlay.Material3.Dark.ActionBar&quot; />"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/themes.xml"
+            line="14"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.Theme_App_PopupOverlayMaterial3` appears to be unused"
+        errorLine1="    &lt;style name=&quot;Theme.App.PopupOverlayMaterial3&quot; parent=&quot;ThemeOverlay.Material3.Dark&quot; />"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/themes.xml"
+            line="16"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="IconXmlAndPng"
+        message="The following images appear both as density independent `.xml` files and as bitmap files: src/main/res/drawable/ic_launcher_foreground.xml, src/main/res/mipmap-hdpi/ic_launcher_foreground.webp">
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.webp"/>
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher_foreground.webp"/>
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher_foreground.webp"/>
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher_foreground.webp"/>
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_foreground.webp"/>
+        <location
+            file="src/main/res/drawable/ic_launcher_foreground.xml"/>
+    </issue>
+
+    <issue
+        id="IconXmlAndPng"
+        message="The following images appear both as density independent `.xml` files and as bitmap files: src/main/res/mipmap-anydpi/ic_launcher_orange.xml, src/main/res/mipmap-hdpi/ic_launcher_orange.webp">
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher_orange.webp"/>
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher_orange.webp"/>
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher_orange.webp"/>
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher_orange.webp"/>
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_orange.webp"/>
+        <location
+            file="src/main/res/mipmap-anydpi/ic_launcher_orange.xml"/>
+    </issue>
+
+    <issue
+        id="IconXmlAndPng"
+        message="The following images appear both as density independent `.xml` files and as bitmap files: src/main/res/mipmap-anydpi/ic_launcher_orange_round.xml, src/main/res/mipmap-hdpi/ic_launcher_orange_round.webp">
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher_orange_round.webp"/>
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher_orange_round.webp"/>
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher_orange_round.webp"/>
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher_orange_round.webp"/>
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_orange_round.webp"/>
+        <location
+            file="src/main/res/mipmap-anydpi/ic_launcher_orange_round.xml"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/ic_recovery.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/ic_recovery.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/shopping_bag.webp` in densityless folder">
+        <location
+            file="src/main/res/drawable/shopping_bag.webp"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher_orange.webp, ic_launcher_orange_round.webp">
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_orange_round.webp"/>
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_orange.webp"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher_orange.webp, ic_launcher_orange_round.webp">
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher_orange_round.webp"/>
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher_orange.webp"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher_orange.webp, ic_launcher_orange_round.webp">
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher_orange_round.webp"/>
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher_orange.webp"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher_orange.webp, ic_launcher_orange_round.webp">
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher_orange_round.webp"/>
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher_orange.webp"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher_orange.webp, ic_launcher_orange_round.webp">
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher_orange_round.webp"/>
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher_orange.webp"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val uri = Uri.parse(data)"
+        errorLine2="                  ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/viewmodels/AppViewModel.kt"
+            line="3181"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        return if (routePubkyKeys &amp;&amp; PubkyContactLink.matches(Uri.parse(result))) {"
+        errorLine2="                                                              ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/viewmodels/AppViewModel.kt"
+            line="4258"
+            column="63"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            PubkyContactLink.publicKey(Uri.parse(result)) ?: run {"
+        errorLine2="                                       ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/viewmodels/AppViewModel.kt"
+            line="4259"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        preferences.edit().putInt(SCHEDULED_OFFSET_DAYS_KEY, days).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/repositories/PaykitSubscriptionNotificationScheduler.kt"
+            line="156"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        preferences.edit().putStringSet(SCHEDULED_WORK_NAMES_KEY, workNames).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/repositories/PaykitSubscriptionNotificationScheduler.kt"
+            line="161"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.scale` instead?"
+        errorLine1="            Bitmap.createScaledBitmap("
+        errorLine2="            ^">
+        <location
+            file="src/main/java/to/bitkit/repositories/PubkyRepo.kt"
+            line="1133"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            val uri = Uri.parse(&quot;content://$RING_AUTHORITY/$PATH_IDENTITIES&quot;)"
+        errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/data/sharedpubky/SharedPubkyClient.kt"
+            line="32"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val uri = Uri.parse(&quot;content://$RING_AUTHORITY/$PATH_IDENTITIES/$pubky/$PATH_CREDENTIAL&quot;)"
+        errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/to/bitkit/data/sharedpubky/SharedPubkyClient.kt"
+            line="56"
+            column="19"/>
+    </issue>
+
+</issues>

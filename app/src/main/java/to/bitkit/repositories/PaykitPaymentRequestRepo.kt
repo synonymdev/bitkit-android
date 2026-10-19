@@ -263,7 +263,6 @@ data class PaykitPaymentRequestCreation(
     val wasPublishedToActiveState: Boolean,
 )
 
-@Suppress("LongParameterList")
 class PaykitSubscriptionDraft(
     val amount: PaykitAmount,
     val name: String,
@@ -309,7 +308,6 @@ enum class PaykitPaymentRequestRefreshMode {
     FULL,
 }
 
-@Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 @Singleton
 class PaykitPaymentRequestRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -1244,7 +1242,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private fun paymentProofVersion(): Pair<Long, Long> =
         paymentProofStore.backupStateVersion.value to usdtPayments.paymentRequestStateVersion.value
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun applyRequestSnapshotLocked(
         snapshot: RequestSnapshot,
         generation: Long,
@@ -1879,7 +1876,7 @@ internal fun PaymentRequestRecord.toPaykitPaymentRequest(
     is PaykitPaymentRequestParseResult.Rejected -> null
 }
 
-@Suppress("CyclomaticComplexMethod", "ReturnCount", "LongMethod")
+@Suppress("CyclomaticComplexMethod")
 private fun PaymentRequestRecord.parsePaykitPaymentRequest(
     expectedRole: PaymentRequestLocalRole,
     now: Instant,

@@ -441,7 +441,7 @@ private fun PeerCard(
                 }
             }
             CaptionB(
-                text = peer.peerDetails.nodeId.ellipsisMiddle(@Suppress("MagicNumber") 24),
+                text = peer.peerDetails.nodeId.ellipsisMiddle(24),
                 color = Colors.White64,
                 maxLines = 1,
             )

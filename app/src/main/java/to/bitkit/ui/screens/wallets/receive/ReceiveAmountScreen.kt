@@ -60,7 +60,7 @@ import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
 
-@Suppress("CyclomaticComplexMethod", "ViewModelForwarding")
+@Suppress("ViewModelForwarding")
 @Composable
 fun ReceiveAmountScreen(
     onCjitCreated: (CjitEntryDetails) -> Unit,

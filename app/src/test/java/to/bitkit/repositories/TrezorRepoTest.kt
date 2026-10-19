@@ -62,7 +62,6 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
-@Suppress("LargeClass")
 class TrezorRepoTest : BaseUnitTest() {
 
     companion object Fixtures {
@@ -131,7 +130,6 @@ class TrezorRepoTest : BaseUnitTest() {
         ioDispatcher = testDispatcher,
     )
 
-    @Suppress("LongParameterList")
     private fun mockDeviceInfo(
         id: String = DEVICE_ID,
         transportType: TrezorTransportType = TrezorTransportType.USB,
@@ -206,7 +204,6 @@ class TrezorRepoTest : BaseUnitTest() {
         }
     }
 
-    @Suppress("LongParameterList")
     private fun mockKnownDevice(
         id: String = DEVICE_ID,
         name: String? = DEVICE_NAME,

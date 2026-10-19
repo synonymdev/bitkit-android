@@ -58,7 +58,6 @@ import java.text.DecimalFormatSymbols
 import java.text.NumberFormat
 import java.util.Locale
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 internal fun ColumnScope.UsdtDepositReceiveScreen(
     viewModel: UsdtViewModel,

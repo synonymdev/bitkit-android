@@ -116,7 +116,6 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
-@Suppress("LargeClass")
 class TransferViewModelTest : BaseUnitTest() {
     private lateinit var sut: TransferViewModel
 
@@ -157,7 +156,14 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever { transferRepo.findLspOrderIdByFundingTxId(any()) }.thenReturn(Result.success(null))
         whenever {
             transferRepo.createTransfer(
-                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
             )
         }
             .thenReturn(Result.success("transfer-id"))
@@ -1181,7 +1187,8 @@ class TransferViewModelTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
         )
         verify(transferRepo).persistAcceptedFunding(
-            order, TXID,
+            order,
+            TXID,
             OnchainTransferContext(
                 txTotalSats = 100_000uL,
                 preTransferOnchainSats = 100_000uL,
@@ -1391,7 +1398,8 @@ class TransferViewModelTest : BaseUnitTest() {
     fun `accepted transfer resumes after transfer storage failure without another send`() = test {
         val order = spendingOrder(feeSat = 98_000uL)
         val original = OnchainTransferContext(
-            99_000uL, 125_000uL,
+            99_000uL,
+            125_000uL,
             originalOrderClientBalanceSats = order.clientBalanceSat,
             originalOrderFeeSats = order.feeSat,
         )
@@ -1438,7 +1446,8 @@ class TransferViewModelTest : BaseUnitTest() {
     private suspend fun TestScope.assertPaidFundingSurvivesLocalFailure(resumedEvidence: OnchainSendEvidence?) {
         val order = spendingOrder(feeSat = 98_000uL)
         val original = OnchainTransferContext(
-            99_000uL, 110_000uL,
+            99_000uL,
+            110_000uL,
             originalOrderClientBalanceSats = order.clientBalanceSat,
             originalOrderFeeSats = order.feeSat,
         )
@@ -1458,7 +1467,8 @@ class TransferViewModelTest : BaseUnitTest() {
         backgroundScope.launch { sut.transferEffects.collect { effects.add(it) } }
         quoteOrder(order)
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(
-            Result.success(order), Result.success(order.copy(id = "second-order")),
+            Result.success(order),
+            Result.success(order.copy(id = "second-order")),
         )
         prepareConfirm()
         effects.clear()
@@ -1485,7 +1495,8 @@ class TransferViewModelTest : BaseUnitTest() {
     fun `accepted transfer recovery preserves original balance totals`() = test {
         val order = spendingOrder(feeSat = 98_000uL)
         val original = OnchainTransferContext(
-            99_000uL, 125_000uL,
+            99_000uL,
+            125_000uL,
             originalOrderClientBalanceSats = order.clientBalanceSat,
             originalOrderFeeSats = order.feeSat,
         )
@@ -1571,7 +1582,14 @@ class TransferViewModelTest : BaseUnitTest() {
 
         verify(cacheStore, never()).addPaidOrder(any(), any())
         verify(transferRepo, never()).createTransfer(
-            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            any(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
         )
     }
 
@@ -1609,7 +1627,10 @@ class TransferViewModelTest : BaseUnitTest() {
         quoteOrder(order)
 
         prepareConfirm()
-        val retained = acceptedFundingAttempt(order, null).copy(orderId = "previous-order", evidence = OnchainSendEvidence.Unknown)
+        val retained = acceptedFundingAttempt(
+            order,
+            null
+        ).copy(orderId = "previous-order", evidence = OnchainSendEvidence.Unknown)
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(null, retained)
         val effects = mutableListOf<TransferEffect>()
         val collector = launch { sut.transferEffects.collect { effects += it } }
@@ -1620,7 +1641,14 @@ class TransferViewModelTest : BaseUnitTest() {
 
         verify(cacheStore, never()).addPaidOrder(any(), any())
         verify(transferRepo, never()).createTransfer(
-            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            any(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
         )
     }
 
@@ -2133,9 +2161,9 @@ class TransferViewModelTest : BaseUnitTest() {
             anyOrNull(),
             anyOrNull(),
             payerIdentity = anyOrNull(),
-                paymentDeadlineAt = anyOrNull(),
-                contactPublicKey = anyOrNull(),
-            )
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
@@ -2317,9 +2345,9 @@ class TransferViewModelTest : BaseUnitTest() {
             anyOrNull(),
             anyOrNull(),
             payerIdentity = anyOrNull(),
-                paymentDeadlineAt = anyOrNull(),
-                contactPublicKey = anyOrNull(),
-            )
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
         verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
     }
 

@@ -56,7 +56,6 @@ import kotlin.time.Instant
 @OptIn(ExperimentalCoroutinesApi::class)
 @Config(application = Application::class, sdk = [34])
 @RunWith(RobolectricTestRunner::class)
-@Suppress("LargeClass")
 class QuickPayRepoTest : BaseUnitTest() {
     companion object {
         private const val TEST_BOLT11 = "lnbcrt1quickpay"
