@@ -62,9 +62,6 @@ enum class PaykitAllowanceAutoPayResult {
     /** The Lightning payment was handed to the node; the outcome arrives through the node's payment events. */
     STARTED,
 
-    /** The on-chain payment was broadcast and recorded. */
-    COMPLETED,
-
     /** The payee has not published a payment list newer than the one last paid; the next refresh tries again. */
     DEFERRED,
 }
@@ -405,7 +402,7 @@ class PaykitAllowanceRepo @Inject constructor(
             val result = executor.autoPay(request, _allowances.value, identity)
             Logger.info("Decided '$result' for an incoming request covered by an allowance", context = TAG)
             when (result) {
-                PaykitAllowanceAutoPayResult.STARTED, PaykitAllowanceAutoPayResult.COMPLETED -> handledAny = true
+                PaykitAllowanceAutoPayResult.STARTED -> handledAny = true
                 PaykitAllowanceAutoPayResult.MANUAL -> manualRequestSignatures[request.id] = signature
                 PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
             }
