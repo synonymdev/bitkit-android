@@ -305,7 +305,7 @@ class AllowancesViewModel @Inject constructor(
 
     private fun PaykitAllowanceEntry.perPaymentShort(): String? {
         val amount = limits?.perPaymentUsd?.let(AllowanceAmountText::short)
-            ?: perPaymentMaxSats?.let { USD_SYMBOL + limitValue(it) }
+            ?: perPaymentMaxSats?.let(::shortLimitValue)
             ?: return null
         return context.getString(R.string.subscriptions__allowance_per_payment_short).replace("{amount}", amount)
     }
@@ -327,6 +327,9 @@ class AllowancesViewModel @Inject constructor(
 
     private fun limitValue(sats: ULong): String = usdValue(sats)?.let(AllowanceAmountText::limit)
         ?: AllowanceAmountText.UNKNOWN
+
+    private fun shortLimitValue(sats: ULong): String = usdValue(sats)?.let(AllowanceAmountText::shortLimit)
+        ?: (USD_SYMBOL + AllowanceAmountText.UNKNOWN)
 
     private fun usdValue(sats: ULong): BigDecimal? =
         currencyRepo.convertSatsToFiat(sats.toDisplaySats(), USD).getOrNull()?.value
@@ -391,6 +394,10 @@ internal object AllowanceAmountText {
      */
     fun limit(usd: BigDecimal): String =
         formatted(if (usd >= BigDecimal.ONE) usd.setScale(0, RoundingMode.HALF_UP) else usd)
+
+    /** [limit] in the payer's short form: whole dollars without cents once it rounds to a dollar or more. */
+    fun shortLimit(usd: BigDecimal): String =
+        if (usd >= BigDecimal.ONE) short(usd.setScale(0, RoundingMode.HALF_UP).toInt()) else USD_SYMBOL + formatted(usd)
 }
 
 private fun ULong.toDisplaySats(): Long = coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
