@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.bitkitcore.UsdtDepositAddress
 import com.synonym.bitkitcore.UsdtDepositDetail
 import com.synonym.bitkitcore.UsdtDepositNetwork
 import com.synonym.bitkitcore.usdtFormatAmount
@@ -222,24 +223,9 @@ internal fun ColumnScope.UsdtDepositReceiveContent(
             onAmount,
             onCreate
         )
-        ReceivePage.FEES -> state.address?.let { address ->
-            UsdtAmountHeader(usdtFormatAmount(address.amount), displayAmount = usdtOverviewAmount(address.amount))
-            VerticalSpacer(24.dp)
-            BodyM(stringResource(R.string.usdt__deposit_fee_note), color = Colors.White64, letterSpacing = 0.sp)
-            VerticalSpacer(24.dp)
-            EstimateRow(
-                stringResource(R.string.usdt__receive_fee),
-                if (address.amount >= address.estimatedReceived) {
-                    usdtOverviewAmount(address.amount - address.estimatedReceived)
-                } else {
-                    "—"
-                }
-            )
-            EstimateRow(stringResource(R.string.usdt__receive_estimate), usdtOverviewAmount(address.estimatedReceived))
-            FillHeight()
-            PrimaryButton(stringResource(R.string.common__continue), onClick = {
-                onPage(ReceivePage.ADDRESS)
-            }, textStyle = UsdtDetailStyles.Body, modifier = Modifier.testTag("UsdtReceiveFeesContinue"))
+        ReceivePage.FEES -> {
+            val shownAddress = remember { state.address }
+            FeeEstimate(state.address ?: shownAddress, onContinue = { onPage(ReceivePage.ADDRESS) })
         }
         ReceivePage.ADDRESS -> {
             val atomic = runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, amount).atomic }.getOrNull()
@@ -256,6 +242,31 @@ internal fun ColumnScope.UsdtDepositReceiveContent(
             )
         }
     }
+}
+
+@Composable
+private fun ColumnScope.FeeEstimate(address: UsdtDepositAddress?, onContinue: () -> Unit) {
+    if (address == null) return
+    UsdtAmountHeader(usdtFormatAmount(address.amount), displayAmount = usdtOverviewAmount(address.amount))
+    VerticalSpacer(24.dp)
+    BodyM(stringResource(R.string.usdt__deposit_fee_note), color = Colors.White64, letterSpacing = 0.sp)
+    VerticalSpacer(24.dp)
+    EstimateRow(
+        stringResource(R.string.usdt__receive_fee),
+        if (address.amount >= address.estimatedReceived) {
+            usdtOverviewAmount(address.amount - address.estimatedReceived)
+        } else {
+            "—"
+        }
+    )
+    EstimateRow(stringResource(R.string.usdt__receive_estimate), usdtOverviewAmount(address.estimatedReceived))
+    FillHeight()
+    PrimaryButton(
+        stringResource(R.string.common__continue),
+        onClick = onContinue,
+        textStyle = UsdtDetailStyles.Body,
+        modifier = Modifier.testTag("UsdtReceiveFeesContinue")
+    )
 }
 
 internal enum class ReceivePage { ADDRESS, NETWORKS, AMOUNT, FEES }
