@@ -688,7 +688,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             combine(currentSheet, isAuthenticated, showForgotPinSheet) { sheet, authenticated, forgotPin ->
                 sheet == null && authenticated && !forgotPin
-            }.collect { if (it) timedSheetManager.reevaluate() }
+            }.collect { if (it && usdtSheet.shouldShow()) timedSheetManager.reevaluate() }
         }
         viewModelScope.launch {
             pubkyRepo.sessionRestorationFailed.collect { failed ->

@@ -97,6 +97,7 @@ import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.UsdtPreference
 import to.bitkit.data.dto.PlatformDetails
 import to.bitkit.data.dto.Platforms
 import to.bitkit.data.dto.ReleaseInfoDTO
@@ -222,6 +223,7 @@ import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.timedsheets.TimedSheetManager
+import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
 import java.math.BigDecimal
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -824,7 +826,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         backupSheet = mock(),
         notificationsSheet = mock(),
         quickPaySheet = mock(),
-        usdtSheet = mock(),
+        usdtSheet = UsdtTimedSheet(settingsStore),
         usdtPreferences = usdtPreferences,
         highBalanceSheet = mock(),
         formatMoneyValue = formatMoneyValue,
@@ -8252,6 +8254,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onSheetVisible(sut.currentSheet.value)
         advanceUntilIdle()
         assertTrue(settingsData.value.hasSeenUsdtIntro)
+    }
+
+    @Test
+    fun `idle sheet host only retries an unseen undecided USDT intro`() = test {
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+        for ((seen, preference) in listOf(
+            true to UsdtPreference.UNDECIDED,
+            false to UsdtPreference.ENABLED,
+            false to UsdtPreference.DISABLED,
+        )) {
+            settingsData.value = settingsData.value.copy(hasSeenUsdtIntro = seen, usdtPreference = preference)
+            sut.showSheet(Sheet.Receive())
+            advanceUntilIdle()
+            clearInvocations(timedSheetManager)
+            sut.hideSheet()
+            advanceUntilIdle()
+            verify(timedSheetManager, never()).reevaluate()
+        }
+        sut.checkTimedSheets()
+        verify(timedSheetManager).onHomeScreenEntered()
     }
 
     @Test
