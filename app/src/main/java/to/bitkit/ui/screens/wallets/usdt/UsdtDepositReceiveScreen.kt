@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -52,6 +53,7 @@ import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.receive.ReceiveTab
+import to.bitkit.ui.shared.modifiers.swipeToChangeTab
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.Colors
 import java.text.DecimalFormatSymbols
@@ -133,44 +135,58 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
         VerticalSpacer(16.dp)
     }
     walletUi.error?.let { BodyS(stringResource(it), color = Colors.Brand) }
-    Content(
-        page = page,
-        onPage = { page = it },
-        wallet = wallet,
-        receiveError = walletUi.refreshError,
-        state = state,
-        amount = if (page == ReceivePage.AMOUNT) draftAmount else amount,
-        onNetwork = {
-            if (state.network != it) {
-                amount = ""
-                draftAmount = ""
-                deposits.selectNetwork(it)
-            }
-            page = if (it == null || state.address != null && state.network == it) {
-                ReceivePage.ADDRESS
-            } else {
-                ReceivePage.AMOUNT
-            }
-        },
-        onAmount = {
-            if (draftAmount != it) deposits.clearAmountError()
-            draftAmount = it
-        },
-        onCreate = {
-            if (state.network == null) {
-                amount = draftAmount
-                page = ReceivePage.ADDRESS
-            } else {
-                deposits.prepare(draftAmount)
-            }
-        },
-        onHistory = { app?.navigateToUsdtDeposits() },
-        onRefresh = {
-            draftAmount = if (state.network == null) amount else draftAmount
-            deposits.selectNetwork(state.network)
-            page = ReceivePage.AMOUNT
-        },
-    )
+    val tabIndex = tabs.indexOf(ReceiveTab.USDT)
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .then(
+                if (page == ReceivePage.ADDRESS) {
+                    Modifier.swipeToChangeTab(tabIndex, tabs.size, { onSelectTab(tabs[it]) })
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        Content(
+            page = page,
+            onPage = { page = it },
+            wallet = wallet,
+            receiveError = walletUi.refreshError,
+            state = state,
+            amount = if (page == ReceivePage.AMOUNT) draftAmount else amount,
+            onNetwork = {
+                if (state.network != it) {
+                    amount = ""
+                    draftAmount = ""
+                    deposits.selectNetwork(it)
+                }
+                page = if (it == null || state.address != null && state.network == it) {
+                    ReceivePage.ADDRESS
+                } else {
+                    ReceivePage.AMOUNT
+                }
+            },
+            onAmount = {
+                if (draftAmount != it) deposits.clearAmountError()
+                draftAmount = it
+            },
+            onCreate = {
+                if (state.network == null) {
+                    amount = draftAmount
+                    page = ReceivePage.ADDRESS
+                } else {
+                    deposits.prepare(draftAmount)
+                }
+            },
+            onHistory = { app?.navigateToUsdtDeposits() },
+            onRefresh = {
+                draftAmount = if (state.network == null) amount else draftAmount
+                deposits.selectNetwork(state.network)
+                page = ReceivePage.AMOUNT
+            },
+        )
+    }
 }
 
 @Composable

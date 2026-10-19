@@ -1,0 +1,25 @@
+<journey name="usdt receive swipe tabs">
+  <description>
+    On the Receive sheet, swiping sideways over the QR changes tabs on every tab, USDT included.
+    With USDT selected, a swipe to the right over its QR selects the tab before it (Spending) and
+    does not copy the address; a swipe to the left does nothing, since USDT is the last tab. A single
+    tap on the USDT QR still copies the address and shows the "copied" tooltip.
+
+    Precondition: onboarded dev wallet with USDT enabled (introductory sheet or Settings, General,
+    Payments), no CJIT invoice pending, start on the wallet home screen. The USDT address loads
+    without funding; wait for the QR before swiping.
+
+    The copy shows as a tooltip over the QR for about two seconds, so a check for "no copy" reads a
+    screenshot taken right after the swipe. Swipe with `adb shell input swipe` across the middle of
+    the QR, about 60% of its width, in 300 ms.
+  </description>
+  <actions>
+    <action>Tap Receive (testTag "Receive")</action>
+    <action>Tap the USDT tab (testTag "Tab-usdt") and wait until the USDT QR is visible</action>
+    <action>Swipe right across the QR and take a screenshot right away</action>
+    <action>Verify the Spending tab (testTag "Tab-spending") is selected, the Lightning receive content or the Spending setup is shown, and the screenshot shows no "copied" tooltip</action>
+    <action>Swipe left across the QR and verify the USDT tab is selected and its QR is visible</action>
+    <action>Swipe left across the USDT QR and take a screenshot right away; verify the USDT tab stays selected and the screenshot shows no "copied" tooltip</action>
+    <action>Tap the USDT QR once and verify the "copied" tooltip appears</action>
+  </actions>
+</journey>
