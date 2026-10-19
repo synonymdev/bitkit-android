@@ -29,6 +29,7 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.UsdtQuote
+import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentRequestLifecycleState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -3560,7 +3561,24 @@ class AppViewModel @Inject constructor(
         }
         refreshPaykitRequestAmount()
         updateCanSwitchWallet()
-        navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+        val initialPayment = payment.initialUsdtSubscriptionPayment(Clock.System.now())?.takeIf { useUsdt }
+        if (initialPayment != null) {
+            paykitReviewedAmount = initialPayment.amount
+            paykitPaymentTerms = initialPayment
+            _sendUiState.update { it.copy(requiresAmountReview = false) }
+            navigateToSendRoute(fromMainScanner, SendRoute.UsdtReview, SendEffect.NavigateToUsdtReview)
+        } else {
+            navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+        }
+    }
+
+    fun takeInitialUsdtSubscriptionAuthorization(): Boolean {
+        val state = _sendUiState.value
+        if (!state.initialSubscriptionPaymentAutoStartPending || !state.paykitUsesUsdt) return false
+        _sendUiState.update { it.copy(initialSubscriptionPaymentAutoStartPending = false) }
+        val payment = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+            ?.initialUsdtSubscriptionPayment(Clock.System.now()) ?: return false
+        return state.shouldAutomaticallyPay && payment == paykitPaymentTerms && payment.amount == paykitReviewedAmount
     }
 
     private fun prefersUsdt(
@@ -8051,7 +8069,24 @@ data class ContactPaymentContext(
     val isInitialSubscriptionPayment: Boolean = false,
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val endpoints: List<Endpoint> = emptyList(),
-)
+) {
+    fun initialUsdtSubscriptionPayment(at: Instant): PaykitRequestPayment? {
+        val request = incomingPaymentRequest ?: return null
+        if (!isInitialSubscriptionPayment || request.billingPeriod == null || request.isExpired(at)) return null
+        if (endpoints.isEmpty() || endpoints.any { it.methodId != MethodId.UsdtArbitrum }) return null
+        val unchangedAmount = when (request.amount.asset) {
+            PaykitAsset.USDT -> request.pricing.conversion == null
+            PaykitAsset.USD -> {
+                val rates = (request.pricing.conversion as? PaymentConversion.Fixed)?.rates.orEmpty()
+                val rate = rates.firstOrNull { it.asset == "usdt-arbitrum" } ?: rates.firstOrNull { it.asset == "usdt" }
+                rate?.value?.toBigDecimalOrNull()?.compareTo(BigDecimal.ONE) == 0
+            }
+            else -> false
+        }
+        if (!unchangedAmount) return null
+        return runCatching { request.payment(MethodId.UsdtArbitrum, at) }.getOrNull()?.takeIf { it.isValid(at) }
+    }
+}
 
 private data class PaymentProofPreparation(
     val endpointIdentifier: String,

@@ -25,6 +25,8 @@ import com.synonym.bitkitcore.UsdtTransferStatus
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ui.scaffold.AppAlertDialog
+import to.bitkit.ui.screens.subscriptions.SubscriptionSuccess
+import to.bitkit.ui.screens.wallets.send.AutoPayOverlay
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AppViewModel
@@ -37,19 +39,21 @@ fun PaykitUsdtReview(
     app: AppViewModel,
     onBack: () -> Unit,
     onDone: () -> Unit,
-    viewModel: UsdtViewModel = hiltViewModel()
+    viewModel: UsdtViewModel = hiltViewModel(),
+    autoPayContent: (@Composable () -> Unit)? = null,
 ) {
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(state.busy, state.authenticationRequired) {
-        app.updatePaykitUsdtBusy(state.busy || state.authenticationRequired)
+    val paymentActive = state.busy || state.authenticationRequired
+    DisposableEffect(paymentActive) {
+        app.updatePaykitUsdtBusy(paymentActive)
         onDispose { app.updatePaykitUsdtBusy(false) }
     }
     var details by remember { mutableStateOf(false) }
     val back = {
-        if (!state.busy && !state.authenticationRequired) {
+        if (!paymentActive) {
             if (state.submitted) onDone() else onBack()
         }
     }
@@ -62,9 +66,7 @@ fun PaykitUsdtReview(
         }
     }
     LaunchedEffect(Unit) {
-        if (viewModel.state.value.quote == null) {
-            viewModel.quote(requireNotNull(uiState.usdtRecipient), uiState.paykitAmount, UsdtDestination.ARBITRUM)
-        }
+        preparePayment(viewModel, app, uiState)
     }
     LaunchedEffect(state.submitted, lifecycle) {
         if (state.submitted) {
@@ -85,50 +87,69 @@ fun PaykitUsdtReview(
         )
     }
     val transfer = wallet.transfers.firstOrNull { it.id == state.quote?.id }
-    if (details && transfer != null) {
+    val initialPaymentConfirmed = uiState.isInitialSubscriptionPayment &&
+        transfer?.status == UsdtTransferStatus.CONFIRMED
+    if (initialPaymentConfirmed && state.submitted && !state.busy) {
+        SubscriptionSuccess(onClose = onDone, paymentType = null, usdtAmount = transfer.amount)
+    } else if (details && transfer != null) {
         UsdtActivityDetail(transfer, settings.hideBalance, wallet.address) { details = false }
     } else {
-        Column(
-            Modifier.sheetHeight().background(Colors.Gray7)
-        ) {
-            if (state.authenticationRequired) {
-                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    UsdtAuthentication(
-                        settings.isBiometricEnabled,
-                        viewModel::cancelAuthentication,
-                        viewModel::authenticationVerified
+        Box {
+            Column(
+                Modifier.sheetHeight().background(Colors.Gray7)
+            ) {
+                if (state.authenticationRequired) {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        UsdtAuthentication(
+                            settings.isBiometricEnabled,
+                            viewModel::cancelAuthentication,
+                            viewModel::authenticationVerified
+                        )
+                    }
+                } else {
+                    UsdtPaymentContent(
+                        wallet, state, UsdtPage.AMOUNT,
+                        uiState.usdtRecipient.orEmpty(), uiState.paykitAmount, UsdtDestination.ARBITRUM,
+                        onRecipientChange = {},
+                        onAmountChange = {},
+                        onRecipientContinue = {},
+                        onPageChange = { back() },
+                        onBack = back,
+                        onReview = {
+                            viewModel.quote(
+                                requireNotNull(uiState.usdtRecipient),
+                                uiState.paykitAmount,
+                                UsdtDestination.ARBITRUM
+                            )
+                        },
+                        onConfirm = {
+                            viewModel.confirm()
+                        },
+                        onDone = onDone,
+                        onDetails = { details = true },
+                        hideBalance = settings.hideBalance,
+                        amountEditable = false,
+                        isPaymentRequest = uiState.isPaymentRequest,
+                        paymentRequestNote = uiState.paymentRequestNote,
+                        contact = uiState.contactPaymentProfile,
                     )
                 }
-            } else {
-                UsdtPaymentContent(
-                    wallet, state, UsdtPage.AMOUNT,
-                    uiState.usdtRecipient.orEmpty(), uiState.paykitAmount, UsdtDestination.ARBITRUM,
-                    onRecipientChange = {},
-                    onAmountChange = {},
-                    onRecipientContinue = {},
-                    onPageChange = { back() },
-                    onBack = back,
-                    onReview = {
-                        viewModel.quote(
-                            requireNotNull(uiState.usdtRecipient),
-                            uiState.paykitAmount,
-                            UsdtDestination.ARBITRUM
-                        )
-                    },
-                    onConfirm = {
-                        viewModel.confirm()
-                    },
-                    onDone = onDone,
-                    onDetails = { details = true },
-                    hideBalance = settings.hideBalance,
-                    amountEditable = false,
-                    isPaymentRequest = uiState.isPaymentRequest,
-                    paymentRequestNote = uiState.paymentRequestNote,
-                    contact = uiState.contactPaymentProfile,
-                )
             }
+            AutoPayOverlay(isVisible = state.busy, content = autoPayContent)
         }
     }
+}
+
+private suspend fun preparePayment(viewModel: UsdtViewModel, app: AppViewModel, uiState: SendUiState) {
+    val automaticPayment = app.takeInitialUsdtSubscriptionAuthorization()
+    if (automaticPayment || viewModel.state.value.quote == null) {
+        viewModel.quote(
+            requireNotNull(uiState.usdtRecipient),
+            uiState.paykitAmount,
+            UsdtDestination.ARBITRUM
+        ).join()
+    }
+    if (automaticPayment && viewModel.state.value.quote != null) viewModel.confirm()
 }
 
 private suspend fun reconcileSubmittedPayment(viewModel: UsdtViewModel, app: AppViewModel) {
