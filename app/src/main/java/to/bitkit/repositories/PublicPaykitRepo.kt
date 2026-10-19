@@ -488,6 +488,7 @@ class PublicPaykitRepo @Inject constructor(
 
         settingsStore.update {
             it.copy(
+                publicPaykitCleanupPending = true,
                 publicPaykitBolt11 = bolt11,
                 publicPaykitBolt11PaymentHash = invoice.paymentHash.toHex(),
                 publicPaykitBolt11ExpiresAtMillis = expiresAtMillis,

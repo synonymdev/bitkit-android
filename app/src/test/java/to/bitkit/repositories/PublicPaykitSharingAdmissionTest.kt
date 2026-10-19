@@ -13,6 +13,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
@@ -23,9 +24,11 @@ import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.UsdtPreference
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -42,6 +45,9 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
     private val coreService = mock<CoreService>()
     private val isRestoringSession = MutableStateFlow(false)
     private val settingsFlow = MutableStateFlow(SettingsData())
+    private val usdtRepo = mock<UsdtRepo> {
+        on { state }.thenReturn(MutableStateFlow(UsdtWalletState()))
+    }
     private lateinit var sut: PublicPaykitRepo
 
     @Before
@@ -55,9 +61,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             paykitSdkService = paykitSdkService,
             settingsStore = settingsStore,
             clock = Clock.System,
-            usdtRepo = mock {
-                on { state }.thenReturn(MutableStateFlow(UsdtWalletState()))
-            },
+            usdtRepo = usdtRepo,
         )
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringSession)
@@ -72,6 +76,44 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
     @After
     fun tearDown() {
         PublicPaykitRepo.lightningRouteHintsValidator = null
+    }
+
+    @Test
+    fun `invoice renewal remains pending when USDT preparation fails`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitOnchainEnabled = false,
+            publicPaykitUsdtEnabled = true,
+            usdtPreference = UsdtPreference.ENABLED,
+            publicPaykitBolt11 = "ln-old",
+            publicPaykitBolt11PaymentHash = "01",
+            publicPaykitBolt11ExpiresAtMillis = 1L,
+        )
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        PublicPaykitRepo.lightningRouteHintsValidator = { true }
+        whenever(lightningRepo.createInvoice(null, "", 86_400u)).thenReturn(Result.success("ln-new"))
+        whenever(coreService.decode("ln-new")).thenReturn(Scanner.Lightning(invoice("ln-new")))
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
+
+        assertTrue(sut.syncCurrentPublishedEndpoints().isFailure)
+        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any(), any()) }
+        assertEquals("ln-new", settingsFlow.value.publicPaykitBolt11)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+
+        val usdt = Endpoint(
+            methodId = MethodId.UsdtArbitrum,
+            value = "0x1111111111111111111111111111111111111111",
+            rawPayload = "{}",
+        )
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.success(usdt))
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any()))
+            .thenReturn(EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList()))
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
+        val endpoints = argumentCaptor<List<Endpoint>>()
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture(), any()) }
+        assertEquals(listOf("ln-new", usdt.value), endpoints.firstValue.map { it.value })
+        verifyBlocking(lightningRepo, times(1)) { createInvoice(null, "", 86_400u) }
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
     }
 
     @Test
