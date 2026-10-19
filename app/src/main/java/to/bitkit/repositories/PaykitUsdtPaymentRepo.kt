@@ -187,6 +187,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
     private val reconcileMutex = Mutex()
     private var stateGeneration = 0L
     private var sending = false
+    private var reconcilingResumableRequests = emptySet<PaykitPaymentRequestId>()
 
     private val _attempts = MutableStateFlow<List<PaykitUsdtAttempt>>(emptyList())
     val attempts = _attempts.asStateFlow()
@@ -213,6 +214,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
             activeIdentity = null
             unboundAttempts.update { emptyList() }
             _resumableRequests.update { emptySet() }
+            reconcilingResumableRequests = emptySet()
             val state = load()
             val attempts = state.attempts.associateBy { it.wallet to it.quoteId }.toMutableMap()
             for (restored in backup.attempts) {
@@ -240,6 +242,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
             activeIdentity = null
             unboundAttempts.update { emptyList() }
             _resumableRequests.update { emptySet() }
+            reconcilingResumableRequests = emptySet()
             publish(State())
             _paymentRequestStateVersion.update { it + 1 }
         }
@@ -299,8 +302,11 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                     )
                 )
                 val requestId = attempt.requestId
-                val wasResumable = requestId in _resumableRequests.value
-                if (started) _resumableRequests.update { it - setOfNotNull(requestId) }
+                val wasResumable = requestId in _resumableRequests.value || requestId in reconcilingResumableRequests
+                if (started) {
+                    _resumableRequests.update { it - setOfNotNull(requestId) }
+                    reconcilingResumableRequests -= setOfNotNull(requestId)
+                }
                 if (!started && resumable) _resumableRequests.update { it + setOfNotNull(requestId) }
                 wasResumable
             }
@@ -512,6 +518,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                     val generation = mutex.withLock snapshot@{
                         if (sending) return@snapshot null
                         unboundAttempts.update { emptyList() }
+                        reconcilingResumableRequests = _resumableRequests.value
                         _resumableRequests.update { emptySet() }
                         stateGeneration
                     } ?: return@withLock
@@ -527,6 +534,12 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                     reconcileAttempts(reconciliation, state)
                     reconcileReceipts(reconciliation)
                 } finally {
+                    withContext(NonCancellable) {
+                        mutex.withLock {
+                            _resumableRequests.update { it + reconcilingResumableRequests }
+                            reconcilingResumableRequests = emptySet()
+                        }
+                    }
                     if (previousProtection.third.isNotEmpty() ||
                         previousProtection != Triple(activeWallet, activeIdentity, _resumableRequests.value)
                     ) {
@@ -542,6 +555,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
             stateGeneration++
             unboundAttempts.update { emptyList() }
             _resumableRequests.update { emptySet() }
+            reconcilingResumableRequests = emptySet()
         }
         activeWallet = owner
         activeIdentity = identity
@@ -569,6 +583,8 @@ class PaykitUsdtPaymentRepo @Inject constructor(
                 }
                 if (current.canReleaseBinding(transfer)) {
                     unbound += current
+                } else {
+                    mutex.withLock { reconcilingResumableRequests -= requestId }
                 }
                 if (!attempt.proofQueued &&
                     (attempt.proof != null || transfer?.status == UsdtTransferStatus.CONFIRMED)
@@ -588,6 +604,7 @@ class PaykitUsdtPaymentRepo @Inject constructor(
             val resumable = unboundAttempts.value.mapNotNull { it.requestId }.toSet() -
                 protected.mapNotNull { it.requestId }.toSet()
             _resumableRequests.update { resumable }
+            reconcilingResumableRequests = emptySet()
         }
     }
 

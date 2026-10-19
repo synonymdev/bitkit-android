@@ -200,6 +200,100 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
     }
 
     @Test
+    fun `interrupted reconcile preserves failed retries but never releases a new send`() = test {
+        for (abort in listOf(true, false)) {
+            stored = null
+            val repo = repo()
+            val terms = request.payment(MethodId.UsdtArbitrum, clock.now())
+            stubStoredTransfer(Result.success(null))
+            repo.prepare(context(), quote, amount, terms).getOrThrow()
+            stubSend(Result.success(mock()))
+            repo.send(quote).getOrThrow()
+            stubStoredTransfer(Result.success(mock { on { status }.thenReturn(UsdtTransferStatus.FAILED) }))
+            repo.reconcile().getOrThrow()
+            val reading = CompletableDeferred<Unit>()
+            val resume = CompletableDeferred<Unit>()
+            val status = IdentityStatus(identity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+            whenever(sdk.identityStatus(any())).doSuspendableAnswer {
+                reading.complete(Unit)
+                resume.await()
+                status
+            }
+            val periodic = async { repo.reconcile() }
+            reading.await()
+            whenever(sdk.identityStatus(any())).thenReturn(status)
+            val retry = quote.copy(id = "retry")
+            repo.prepare(context(), retry, amount, terms).getOrThrow()
+            val result = repo.send(retry) {
+                resume.complete(Unit)
+                periodic.await().getOrThrow()
+                assertTrue(repo.protectedPaymentAttempts(identity).getOrThrow().isNotEmpty())
+                if (abort) throw PaykitPaymentRequestError.RequestUnavailable
+            }
+            assertEquals(abort, result.isFailure)
+            assertEquals(abort, repo.protectedPaymentAttempts(identity).getOrThrow().isEmpty())
+        }
+    }
+
+    @Test
+    fun `interrupted reconcile restores only the same owner failure evidence`() = test {
+        for (reason in listOf("missing", "error", "cancel", "restore", "wipe", "other-wallet", "pending")) {
+            stored = null
+            val repo = repo()
+            val status = IdentityStatus(identity, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+            whenever(sdk.identityStatus(any())).thenReturn(status)
+            val endpoint = PaykitUsdt.endpoint(address)
+            whenever(usdt.paymentEndpoint()).thenReturn(Result.success(endpoint))
+            stubStoredTransfer(Result.success(null))
+            repo.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+            stubSend(Result.success(mock()))
+            repo.send(quote).getOrThrow()
+            stubStoredTransfer(Result.success(mock { on { this.status }.thenReturn(UsdtTransferStatus.FAILED) }))
+            repo.reconcile().getOrThrow()
+            assertEquals(setOf(request.id), repo.resumableRequests.value)
+            val reading = CompletableDeferred<Unit>()
+            whenever(sdk.identityStatus(any())).doSuspendableAnswer {
+                when (reason) {
+                    "missing" -> null
+                    "error" -> error("Identity unavailable")
+                    "cancel" -> {
+                        reading.complete(Unit)
+                        awaitCancellation()
+                    }
+                    "restore" -> {
+                        repo.restoreBackup(repo.backupSnapshot())
+                        null
+                    }
+                    "wipe" -> {
+                        repo.resetForWipe()
+                        null
+                    }
+                    else -> status
+                }
+            }
+            if (reason == "other-wallet") {
+                val other = endpoint.copy(value = "0x2222222222222222222222222222222222222222")
+                whenever(usdt.paymentEndpoint()).thenReturn(Result.success(other))
+            }
+            if (reason == "pending") {
+                stubStoredTransfer(Result.success(mock { on { this.status }.thenReturn(UsdtTransferStatus.PENDING) }))
+            }
+            val periodic = launch { repo.reconcile() }
+            if (reason == "cancel") {
+                reading.await()
+                periodic.cancelAndJoin()
+            } else {
+                periodic.join()
+            }
+            assertEquals(
+                reason in listOf("missing", "error", "cancel"),
+                request.id in repo.resumableRequests.value,
+                reason
+            )
+        }
+    }
+
+    @Test
     fun `restore protects another wallet until its owner can be resolved`() = test {
         val endpoint = PaykitUsdt.endpoint(address)
         val repo = repo()
