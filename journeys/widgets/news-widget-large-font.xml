@@ -6,7 +6,8 @@
     font scale the row looks as before: source on the left, time on the right.
 
     Precondition: onboarded dev wallet, widgets enabled, widgets intro already seen, online so the
-    headlines feed loads. The headline shown comes from the live feed, so the source name may be
+    headlines feed loads. A widget saved earlier may be compact or hide its source or date, so the
+    journey re-saves it as wide with both shown. The headline shown comes from the live feed, so the source name may be
     short; the time checks hold either way, and the ellipsis check applies only when the source and
     time do not fit side by side.
 
@@ -16,7 +17,9 @@
   </description>
   <actions>
     <action>Tap the menu icon (tag "HeaderMenu") and tap "Widgets"</action>
-    <action>If no Bitcoin Headlines widget is on Home, tap "Add Widget", tap the "Bitcoin Headlines" card (tag "WidgetListItem-news"), tap "Save Widget" and go back to Home</action>
+    <action>Tap "Add Widget" and tap the "Bitcoin Headlines" card (tag "WidgetListItem-news"); this opens the widget's settings whether or not it is already on Home</action>
+    <action>Tap Widget Settings (tag "WidgetEdit"), make sure Source (tag "source_setting_row") and Date (tag "time_setting_row") are both on, and go back</action>
+    <action>Swipe the size pager (tag "widget_size_pager") until its label (tag "widget_size_label") reads "WIDE", tap "Save Widget" (tag "WidgetSave") and go back to Home</action>
     <action>Scroll Home until the Bitcoin Headlines widget's source row (tag "source_row") is visible</action>
     <action>Verify the source (tag "source_text") is at the left of the row and the time (tag "time_text") at the right, each on one line</action>
     <action>Run `adb shell settings put system font_scale 2.0`</action>
