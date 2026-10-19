@@ -1,12 +1,9 @@
 package to.bitkit.repositories
 
 import com.synonym.paykit.PaymentOutcome
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.models.WalletScope
@@ -25,18 +22,6 @@ class PaykitAllowancePayerTest : BaseUnitTest() {
     @Before
     fun setUp() = test {
         whenever(paymentProofRepo.hasVerifiedOnchainProof(any(), any())).thenReturn(false)
-    }
-
-    @Test
-    fun `automatic on-chain payment is not sent when its fee exceeds the amount`() = test {
-        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.success(2_000uL))
-
-        val result = sut.payOnchain(PaykitAllowanceFixtures.paymentRequest(amountSats = 600uL), "bcrt1qpayee", 600uL, "payer")
-
-        val error = assertIs<PaykitAllowanceOnchainSendError>(result.exceptionOrNull())
-        assertTrue(error.isDefinitelyNotBroadcast)
-        assertIs<PaykitAllowanceFeeTooHighError>(error.cause)
     }
 
     @Test

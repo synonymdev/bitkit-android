@@ -30,7 +30,6 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyPublicKeyFormat
-import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.PaykitAllowanceLocalState.JournalEntry
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
 import to.bitkit.services.PaykitSdkService
@@ -41,16 +40,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Instant
-
-/** An on-chain send failed; [isDefinitelyNotBroadcast] is true only when the transaction surely never left. */
-class PaykitAllowanceOnchainSendError(
-    val isDefinitelyNotBroadcast: Boolean,
-    cause: Throwable,
-) : AppError(cause)
-
-/** An automatic on-chain payment whose fee would exceed the amount it pays. */
-class PaykitAllowanceFeeTooHighError(feeSats: ULong, amountSats: ULong) :
-    AppError("Fee '$feeSats' exceeds the allowance payment '$amountSats'")
 
 /** The side effects of paying one request, kept apart so the admission logic is testable without a node. */
 @Singleton
@@ -96,80 +85,12 @@ class PaykitAllowancePayer @Inject constructor(
     ): Result<Unit> =
         paymentProofRepo.associateLightningPayment(request, paymentHash, paymentEndpointIdentifier, paymentAppId)
 
-    suspend fun markOnchainPaymentStarted(
-        request: PaykitPaymentRequest,
-        address: String,
-        sats: ULong,
-        context: PrivatePaykitPaymentContext,
-    ): Result<Unit> = paymentProofRepo.markOnchainPaymentStarted(
-        request,
-        address,
-        sats,
-        privatePaymentListVersion = context.paymentListVersion,
-        previousPrivatePaymentListVersion = context.previousPaymentListVersion,
-    )
-
-    /** The identity the prepared on-chain proof pays from; read before the payment is marked started. */
-    suspend fun captureOnchainPayer(request: PaykitPaymentRequest): Result<String> =
-        paymentProofRepo.captureOriginalOnchainPayer(request)
-
-    /** True while an earlier on-chain send is unresolved; the node refuses the next one until it settles. */
-    suspend fun isOnchainSendBlocked(): Boolean =
-        runSuspendCatching { lightningRepo.currentOnchainSendAttempt()?.blocksNextSend == true }.getOrDefault(true)
-
     suspend fun payLightning(bolt11: String, sats: ULong?, paymentDeadlineAt: Instant?): Result<String> =
         lightningRepo.payInvoice(bolt11, sats, paymentDeadlineAt, onBeforeSend = { true })
-
-    /**
-     * Sends at the medium fee rate, bound to [request] like a manual payment of it. A failure is a
-     * [PaykitAllowanceOnchainSendError].
-     */
-    suspend fun payOnchain(
-        request: PaykitPaymentRequest,
-        address: String,
-        sats: ULong,
-        payerIdentity: String,
-    ): Result<OnchainSendOutcome> {
-        // The SDK ledger counts the request amount only, so a fee above it would spend outside the user's limits.
-        val fee = lightningRepo.calculateTotalFee(sats, address, TransactionSpeed.Medium).getOrElse {
-            return Result.failure(PaykitAllowanceOnchainSendError(isDefinitelyNotBroadcast = true, cause = it))
-        }
-        if (fee > sats) {
-            val error = PaykitAllowanceFeeTooHighError(feeSats = fee, amountSats = sats)
-            return Result.failure(PaykitAllowanceOnchainSendError(isDefinitelyNotBroadcast = true, cause = error))
-        }
-        var sendAttempted = false
-        val result = lightningRepo.sendOnChain(
-            address = address,
-            sats = sats,
-            speed = TransactionSpeed.Medium,
-            beforeSendAttempt = { sendAttempted = true },
-            requestId = request.id,
-            payerIdentity = payerIdentity,
-            contactPublicKey = request.counterparty,
-            paymentDeadlineAt = request.submissionDeadline(null),
-        )
-        val error = result.exceptionOrNull() ?: return result
-        val isUnresolved = error is OnchainSendPendingError || error is OnchainSendBlockedError ||
-            error is OnchainSendAttemptUnreadableError ||
-            (sendAttempted && error !is OnchainSendNotDispatchedError)
-        return Result.failure(PaykitAllowanceOnchainSendError(isDefinitelyNotBroadcast = !isUnresolved, cause = error))
-    }
-
-    suspend fun completeOnchainPayment(
-        request: PaykitPaymentRequest,
-        outcome: OnchainSendOutcome.Accepted,
-        paymentEndpointIdentifier: String,
-        paymentAppId: String,
-    ) {
-        paymentProofRepo.completeOnchainPayment(request, outcome.txid, paymentEndpointIdentifier, paymentAppId, outcome)
-    }
 
     /** Clears the proof when [error] proves the payment never left; returns whether it did. */
     suspend fun failLightningPayment(paymentHash: String, error: Throwable): Boolean =
         paymentProofRepo.failLightningPayment(paymentHash, error)
-
-    suspend fun failOnchainPayment(request: PaykitPaymentRequest) = paymentProofRepo.failOnchainPayment(request)
 
     suspend fun discardLightningProof(paymentHash: String) = paymentProofRepo.failLightningPayment(paymentHash)
 
@@ -477,8 +398,9 @@ class PaykitAllowanceExecutor @Inject constructor(
             Logger.info("Kept an incoming request manual: no payable private endpoint", context = TAG)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
-        if (payment.lightningPaymentHash == null && payer.isOnchainSendBlocked()) {
-            Logger.info("Kept an incoming request manual: an earlier on-chain send is unresolved", context = TAG)
+        if (payment.lightningPaymentHash == null) {
+            // An on-chain fee falls outside every allowance limit, so only Lightning pays automatically.
+            Logger.info("Kept an incoming request manual: the payee offers no Lightning invoice", context = TAG)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
 
@@ -581,8 +503,7 @@ class PaykitAllowanceExecutor @Inject constructor(
             throw it
         }
 
-        val paymentHash = payment.lightningPaymentHash
-            ?: return payOnchain(request, amountSats, payment, submitted.attemptId, identity)
+        val paymentHash = checkNotNull(payment.lightningPaymentHash) { "Allowances pay only Lightning invoices" }
         return payLightning(request, amountSats, payment, paymentHash, submitted.attemptId, identity)
     }
 
@@ -612,65 +533,20 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
         val sats = amountSats.takeUnless { payment.lightningInvoiceHasAmount }
         payer.payLightning(payment.endpoint.value, sats, request.submissionDeadline(null)).onFailure {
-            // Only an error that proves the payment never left releases the reservation; anything else stays open.
+            // Only an error that proves the payment never left releases the reservation; anything else stays open,
+            // and the node's payment event records its outcome.
             if (payer.failLightningPayment(paymentHash, it)) {
                 failUnsent(request, payment, attemptId, identity)
-            } else {
-                record(attemptId, PaymentOutcome.UNKNOWN, identity)
+                throw it
             }
-            throw it
+            Logger.warn("Left an allowance payment with an uncertain send result to the node", it, context = TAG)
+            record(attemptId, PaymentOutcome.UNKNOWN, identity)
+            return PaykitAllowanceAutoPayResult.STARTED
         }
         // The node's payment event can settle the attempt before the send call returns; keep that outcome.
         updateJournalEntry(attemptId, identity) { if (it.stage == Stage.SENDING) it.copy(stage = Stage.SENT) else it }
         Logger.info("Handed an allowance payment to the node", context = TAG)
         return PaykitAllowanceAutoPayResult.STARTED
-    }
-
-    private suspend fun payOnchain(
-        request: PaykitPaymentRequest,
-        amountSats: ULong,
-        payment: PrivatePaykitAllowancePayment,
-        attemptId: String,
-        identity: String,
-    ): PaykitAllowanceAutoPayResult {
-        val address = payment.endpoint.value
-        val payerIdentity = payer.captureOnchainPayer(request)
-            .onSuccess { payer.markOnchainPaymentStarted(request, address, amountSats, payment.context).getOrThrow() }
-            .getOrElse {
-                payer.cancelProofPreparation(request)
-                failUnsent(request, payment, attemptId, identity)
-                throw it
-            }
-
-        runSuspendCatching { setStage(Stage.SENDING, attemptId, identity) }.onFailure {
-            // The started proof carries the consumed list version, so failing it releases the list as well.
-            payer.failOnchainPayment(request)
-            record(attemptId, PaymentOutcome.FAILED, identity)
-            throw it
-        }
-        val outcome = payer.payOnchain(request, address, amountSats, payerIdentity).getOrElse {
-            if ((it as? PaykitAllowanceOnchainSendError)?.isDefinitelyNotBroadcast == true) {
-                payer.failOnchainPayment(request)
-                record(attemptId, PaymentOutcome.FAILED, identity)
-            } else {
-                record(attemptId, PaymentOutcome.UNKNOWN, identity)
-            }
-            throw it
-        }
-
-        val txid = outcome.txid
-        updateJournalEntry(attemptId, identity) { it.copy(transactionId = txid) }
-        if (outcome !is OnchainSendOutcome.Accepted) {
-            // The wallet's recovery of the send attempt owns the request from here, as for a manual payment.
-            Logger.warn("Left an allowance payment on-chain outcome unresolved: '$outcome'", context = TAG)
-            record(attemptId, PaymentOutcome.UNKNOWN, identity)
-            return PaykitAllowanceAutoPayResult.STARTED
-        }
-        payer.completeOnchainPayment(request, outcome, payment.endpoint.methodId.rawValue, payment.appId)
-        record(attemptId, PaymentOutcome.SUCCEEDED, identity)
-        _events.tryEmit(PaykitAllowanceEvent.PaidAutomatically(request.counterparty, amountSats, txid))
-        Logger.info("Paid an allowance payment on-chain", context = TAG)
-        return PaykitAllowanceAutoPayResult.COMPLETED
     }
 
     /** Called for every settled outbound Lightning payment; only journaled ones are Allowance work. */
