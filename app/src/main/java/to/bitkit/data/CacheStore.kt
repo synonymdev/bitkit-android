@@ -27,7 +27,6 @@ private val Context.appCacheDataStore: DataStore<AppCacheData> by dataStore(
     serializer = AppCacheSerializer
 )
 
-@Suppress("TooManyFunctions")
 @Singleton
 class CacheStore internal constructor(
     private val store: DataStore<AppCacheData>,

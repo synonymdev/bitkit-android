@@ -13,6 +13,7 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -58,8 +59,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 
-@Suppress("LargeClass")
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class TransferRepoTest : BaseUnitTest() {
     private lateinit var sut: TransferRepo
 
@@ -135,9 +135,9 @@ class TransferRepoTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-                paymentDeadlineAt = anyOrNull(),
-                contactPublicKey = anyOrNull(),
-            )
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
         assertEquals(attempt, lightningRepo.currentOnchainSendAttempt())
     }
 
@@ -165,9 +165,13 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
         whenever(blocktankRepo.fetchOrders(listOf(order.id)))
             .thenReturn(Result.failure(AppError("offline")))
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(
-            nodeLifecycleState = NodeLifecycleState.Running,
-        )))
+        whenever(lightningRepo.lightningState).thenReturn(
+            MutableStateFlow(
+                LightningState(
+                    nodeLifecycleState = NodeLifecycleState.Running,
+                )
+            )
+        )
         runCurrent()
         assertTrue(sut.resumeAcceptedFunding().isFailure)
         verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
@@ -187,9 +191,9 @@ class TransferRepoTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-                paymentDeadlineAt = anyOrNull(),
-                contactPublicKey = anyOrNull(),
-            )
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
         assertNotNull(sut)
     }
 
@@ -226,9 +230,13 @@ class TransferRepoTest : BaseUnitTest() {
                 Result.success(listOf(order))
             }
         }
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(
-            nodeLifecycleState = NodeLifecycleState.Running,
-        )))
+        whenever(lightningRepo.lightningState).thenReturn(
+            MutableStateFlow(
+                LightningState(
+                    nodeLifecycleState = NodeLifecycleState.Running,
+                )
+            )
+        )
         runCurrent()
         online.value = ConnectivityState.CONNECTED
         runCurrent()
@@ -253,9 +261,9 @@ class TransferRepoTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-                paymentDeadlineAt = anyOrNull(),
-                contactPublicKey = anyOrNull(),
-            )
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
         assertNotNull(sut)
     }
 
@@ -295,7 +303,14 @@ class TransferRepoTest : BaseUnitTest() {
         val state = MutableStateFlow(LightningState())
         whenever(lightningRepo.lightningState).thenReturn(state)
         val restarted = TransferRepo(
-            testDispatcher, lightningRepo, blocktankRepo, coreService, transferDao, clock, cacheStore, connectivityRepo,
+            testDispatcher,
+            lightningRepo,
+            blocktankRepo,
+            coreService,
+            transferDao,
+            clock,
+            cacheStore,
+            connectivityRepo,
         )
         runCurrent()
         state.value = state.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
@@ -321,9 +336,9 @@ class TransferRepoTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-                paymentDeadlineAt = anyOrNull(),
-                contactPublicKey = anyOrNull(),
-            )
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
         assertNotNull(restarted)
     }
 
@@ -354,7 +369,16 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         // Construct after the saved result exists, as on process startup.
         val restarted =
-            TransferRepo(testDispatcher, lightningRepo, blocktankRepo, coreService, transferDao, clock, cacheStore, connectivityRepo)
+            TransferRepo(
+                testDispatcher,
+                lightningRepo,
+                blocktankRepo,
+                coreService,
+                transferDao,
+                clock,
+                cacheStore,
+                connectivityRepo
+            )
         runCurrent()
         lightningRepo.lightningState.value.let {
             (lightningRepo.lightningState as MutableStateFlow).value = it.copy(
@@ -375,9 +399,9 @@ class TransferRepoTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-                paymentDeadlineAt = anyOrNull(),
-                contactPublicKey = anyOrNull(),
-            )
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
         assertNotNull(restarted)
     }
 
@@ -431,9 +455,9 @@ class TransferRepoTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-                paymentDeadlineAt = anyOrNull(),
-                contactPublicKey = anyOrNull(),
-            )
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
     }
 
     @Test

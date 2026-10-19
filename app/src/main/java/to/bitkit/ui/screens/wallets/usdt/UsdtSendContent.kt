@@ -100,8 +100,8 @@ import to.bitkit.ui.utils.NumberPadInputHandler
 import java.text.DecimalFormatSymbols
 import kotlin.time.Duration.Companion.seconds
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
+@Suppress("CyclomaticComplexMethod")
 internal fun UsdtPaymentContent(
     wallet: UsdtWalletState,
     state: UsdtSendState,

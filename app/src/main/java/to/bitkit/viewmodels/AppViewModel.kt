@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -261,7 +262,6 @@ import kotlin.time.Instant
 import kotlin.time.TimeSource
 
 @OptIn(ExperimentalTime::class)
-@Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 @HiltViewModel
 class AppViewModel @Inject constructor(
     connectivityRepo: ConnectivityRepo,
@@ -1033,7 +1033,7 @@ class AppViewModel @Inject constructor(
 
     private val _resolvedHardwarePayments = MutableStateFlow<
         ImmutableMap<Pair<String, String>, PaykitOnchainPaymentProofResolution>
-    >(persistentMapOf())
+        >(persistentMapOf())
     val resolvedHardwarePayments = _resolvedHardwarePayments.asStateFlow()
 
     fun resolvedHardwarePaymentFor(walletId: String, transactionId: String): PaykitOnchainPaymentProofResolution? =
@@ -1375,7 +1375,10 @@ class AppViewModel @Inject constructor(
     private fun observePaymentProofChanges() {
         viewModelScope.launch {
             var changeVersion = 0L
-            paykitPaymentProofRepo.paymentRequestStateChanges(pubkyRepo.publicKey)
+            merge(
+                paykitPaymentProofRepo.paymentRequestStateChanges(pubkyRepo.publicKey),
+                paykitUsdtPayments.paymentRequestStateVersion.drop(1).map { Unit },
+            )
                 .map { ++changeVersion }
                 .combine(paykitPaymentRequestRepo.isPaymentSubmissionActive) { version, active ->
                     version.takeUnless { active }
@@ -1545,8 +1548,16 @@ class AppViewModel @Inject constructor(
                 if (!ownsPaymentRequestPreparation(preparation)) return true
             }
             if (reopenRetainedHardwarePayment(request, generation, preparation)) return true
+            val started = timeSource.markNow()
             val presentationResult = privatePaykitRepo.beginPaymentRequest(request)
-            return finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
+            val resolvedAfter = started.elapsedNow()
+            val result = finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
+            Logger.debug(
+                "Paykit request preparation: resolveMs=${resolvedAfter.inWholeMilliseconds} " +
+                    "dispatchMs=${(started.elapsedNow() - resolvedAfter).inWholeMilliseconds}",
+                context = TAG,
+            )
+            return result
         } finally {
             if (scheduledScan?.contactPaymentContext?.incomingPaymentRequest?.id != request.id &&
                 paymentRequestPresentationRetryJobs[request.id]?.isActive != true
@@ -1556,7 +1567,6 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    @Suppress("ReturnCount") // Keep presentation and identity guards as early exits.
     private suspend fun reopenRetainedHardwarePayment(
         request: PaykitPaymentRequest,
         generation: Long,
@@ -2034,7 +2044,6 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    @Suppress("CyclomaticComplexMethod")
     private fun handleLdkEvent(update: NodeEventUpdate) {
         val event = update.event
         if (!walletRepo.walletExists()) return
@@ -2697,7 +2706,6 @@ class AppViewModel @Inject constructor(
 
     // region send
 
-    @Suppress("CyclomaticComplexMethod")
     private fun observeSendEvents() {
         viewModelScope.launch {
             sendEvents.collect {
@@ -2895,7 +2903,6 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
 
-    @Suppress("LongMethod", "ReturnCount")
     private suspend fun validateOnChainAddress(invoice: OnChainInvoice) {
         val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
@@ -3080,7 +3087,6 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    @Suppress("LongMethod")
     private fun launchScan(
         source: ScanSource,
         data: String,
@@ -3557,7 +3563,28 @@ class AppViewModel @Inject constructor(
         }
         refreshPaykitRequestAmount()
         updateCanSwitchWallet()
-        navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+        if (!openBitcoinRequestConfirmation(fromMainScanner)) {
+            navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+        }
+    }
+
+    private suspend fun openBitcoinRequestConfirmation(fromMainScanner: Boolean): Boolean {
+        if (activeIncomingPaymentRequest() == null || _sendUiState.value.usdtRecipient != null) return false
+        if (!bindBitcoinRequestTerms()) return false
+        navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
+        refreshOnchainSendIfNeeded()
+        estimateLightningRoutingFeesIfNeeded()
+        return true
+    }
+
+    private suspend fun bindBitcoinRequestTerms(): Boolean {
+        val state = _sendUiState.value
+        if (state.paykitUsesUsdt) return false
+        val lnurl = state.lnurl as? LnurlParams.LnurlPay
+        if (state.payMethod == SendMethod.LIGHTNING && lnurl != null && state.amount < lnurl.data.minSendableSat()) {
+            return false
+        }
+        return reviewPaykitAmount()
     }
 
     private fun prefersUsdt(
@@ -3692,13 +3719,19 @@ class AppViewModel @Inject constructor(
         val current = _sendUiState.value
         if (current.isRetainedHardwarePayment) return
         val nextSource = nextFundingSource(current, requested) ?: return
-        sendStateGeneration++
+        val canReviewInPlace = canRebindBitcoinRequestTerms(current, nextSource)
+        val generation = ++sendStateGeneration
         onchainSendRefreshJob?.cancel()
         val target = if (nextSource == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
         val converted = try {
             paymentAmountForSource(current, nextSource)
         } catch (_: PaykitAmountError.RateUnavailable) {
             _sendUiState.update { it.copy(paykitRateUnavailable = true) }
+            if (canReviewInPlace) {
+                paykitPaymentTerms = null
+                paykitReviewedAmount = null
+                setSendEffect(SendEffect.NavigateToAmount)
+            }
             return
         } catch (_: PaykitAmountError) {
             _sendUiState.update { it.copy(paykitRateUnavailable = false) }
@@ -3718,6 +3751,7 @@ class AppViewModel @Inject constructor(
             )
         }
         selectFundingSource(nextSource, current)
+        if (sendStateGeneration != generation) return
         _sendUiState.update {
             it.copy(
                 isAmountInputValid = if (it.paykitUsesUsdt) {
@@ -3730,8 +3764,22 @@ class AppViewModel @Inject constructor(
             )
         }
         updateCanSwitchWallet()
-        reviewPaykitMethodChange(current)
+        reviewFundingSourceChange(current, canReviewInPlace)
     }
+
+    private suspend fun reviewFundingSourceChange(previous: SendUiState, rebindBitcoinTerms: Boolean) {
+        if (rebindBitcoinTerms && previous.paykitMethod() != _sendUiState.value.paykitMethod()) {
+            paykitPaymentTerms = null
+            paykitReviewedAmount = null
+            if (bindBitcoinRequestTerms()) return
+        }
+        reviewPaykitMethodChange(previous)
+    }
+
+    private fun canRebindBitcoinRequestTerms(state: SendUiState, source: SendFundingSource): Boolean =
+        paykitPaymentTerms != null && paykitReviewedAmount != null && !state.paykitUsesUsdt &&
+            state.hardwareWalletId == null &&
+            (source == SendFundingSource.Savings || source == SendFundingSource.Spending)
 
     private fun nextFundingSource(current: SendUiState, requested: SendFundingSource?): SendFundingSource? {
         val sources = availableFundingSources(current).filter { requested != null || it != SendFundingSource.Usdt }
@@ -4143,7 +4191,6 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod")
     private suspend fun handleScan(
         result: String,
         routePubkyKeys: Boolean,
@@ -4315,7 +4362,6 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    @Suppress("CyclomaticComplexMethod")
     private suspend fun handleDecodedScan(
         scan: Scanner?,
         input: String,
@@ -4541,7 +4587,7 @@ class AppViewModel @Inject constructor(
         } ?: PubkyProfile.placeholder(publicKey)
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
+    @Suppress("CyclomaticComplexMethod")
     private suspend fun onScanOnchain(
         invoice: OnChainInvoice,
         scanResult: String,
@@ -4897,7 +4943,6 @@ class AppViewModel @Inject constructor(
         else -> SendFundingSource.Savings
     }
 
-    @Suppress("LongMethod", "ReturnCount")
     private suspend fun onScanLightning(
         invoice: LightningInvoice,
         scanResult: String,
@@ -5320,7 +5365,6 @@ class AppViewModel @Inject constructor(
         handlePaymentPreparationFailure(PaykitPaymentRequestError.RequestUnavailable, contactPaymentContext)
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
     private suspend fun handleSanityChecks(amountSats: ULong) {
         if (_sendUiState.value.showSanityWarningDialog != null) return
 
@@ -5398,7 +5442,6 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "ReturnCount")
     private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
@@ -5555,7 +5598,12 @@ class AppViewModel @Inject constructor(
             when (outcome) {
                 is OnchainSendOutcome.Accepted -> {
                     Logger.info("Accepted on-chain send '${outcome.txid}'", context = TAG)
-                    completeOnchainPaymentProofInBackground(incomingPaymentRequest, outcome.txid, proofPreparation, outcome)
+                    completeOnchainPaymentProofInBackground(
+                        incomingPaymentRequest,
+                        outcome.txid,
+                        proofPreparation,
+                        outcome
+                    )
                     onSendSuccess(
                         NewTransactionSheetDetails(
                             type = NewTransactionSheetType.ONCHAIN,
@@ -5620,7 +5668,9 @@ class AppViewModel @Inject constructor(
             if (!sendAttempted) releasePrivatePaymentListIfNeeded(contactPaymentContext)
             if (!paymentProofStarted) cancelPaymentProofPreparation(preparedPaymentProofRequest)
             val previous = (error as? OnchainSendBlockedError)?.attempt
-            if (previous != null && (incomingPaymentRequest == null || previous.requestId != incomingPaymentRequest.id)) {
+            if (previous != null &&
+                (incomingPaymentRequest == null || previous.requestId != incomingPaymentRequest.id)
+            ) {
                 clearCancelledContactContext(contactPaymentContext)
             }
             val priorAccepted = previous?.takeIf {
@@ -5832,7 +5882,6 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun proceedWithLightningPayment(
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
@@ -5949,7 +5998,6 @@ class AppViewModel @Inject constructor(
         else -> paykitPaymentProofRepo.failLightningPayment(paymentHash, error)
     }
 
-    @Suppress("ReturnCount")
     private suspend fun prepareContactPayment(
         contactPaymentContext: ContactPaymentContext?,
         beforePrivateConsumption: suspend () -> Result<Unit> = { Result.success(Unit) },
@@ -7910,6 +7958,7 @@ class AppViewModel @Inject constructor(
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL = 120.seconds
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
+
         /** Longest wait for the saved Pubky session before a sign-in link fails. */
         internal val PUBKY_AUTH_DEEPLINK_TIMEOUT = 60.seconds
 

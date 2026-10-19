@@ -54,7 +54,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
-@Suppress("LargeClass")
 class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     private val clientId = "paykit.test"
     private val context: Context = mock()

@@ -63,7 +63,6 @@ object HttpModule {
         }
     }
 
-    @Suppress("MagicNumber")
     private fun HttpTimeoutConfig.defaultTimeoutConfig() {
         requestTimeoutMillis = 60_000
         connectTimeoutMillis = 60_000

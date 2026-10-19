@@ -73,7 +73,6 @@ import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
-@Suppress("LargeClass")
 class PaykitUsdtPaymentRepoTest : BaseUnitTest() {
     @Test
     fun `inactive missing and terminal proof free transfers release their rail`() = test {

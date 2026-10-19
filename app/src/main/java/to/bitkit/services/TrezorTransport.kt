@@ -64,7 +64,6 @@ import kotlin.time.ExperimentalTime
  *
  * USB communication uses 64-byte chunks, Bluetooth uses 244-byte chunks.
  */
-@Suppress("LargeClass")
 @OptIn(ExperimentalTime::class)
 @Singleton
 class TrezorTransport @Inject constructor(
@@ -140,7 +139,6 @@ class TrezorTransport @Inject constructor(
     @Volatile
     private var espMigrated = false
 
-    @Suppress("TooGenericExceptionCaught")
     private fun ensureEspMigration() {
         if (espMigrated) return
         synchronized(this) {
@@ -455,7 +453,7 @@ class TrezorTransport @Inject constructor(
     @Volatile
     private var pairingCodeResult: PairingCodeResult? = null
 
-    private val pairingCodeLock = Object()
+    private val pairingCodeLock = Any()
 
     private sealed interface PairingCodeResult {
         data class Submitted(val code: String) : PairingCodeResult
@@ -507,7 +505,6 @@ class TrezorTransport @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     override fun saveThpCredential(deviceId: String, credentialJson: String): Boolean {
         ensureEspMigration()
         return try {
@@ -560,7 +557,6 @@ class TrezorTransport @Inject constructor(
         TrezorDebugLog.log("RUST:$tag", message)
     }
 
-    @Suppress("TooGenericExceptionCaught")
     override fun loadThpCredential(deviceId: String): String? {
         ensureEspMigration()
         return try {
@@ -649,7 +645,6 @@ class TrezorTransport @Inject constructor(
         return UsbEndpoints(read = readEndpoint, write = writeEndpoint)
     }
 
-    @Suppress("TooGenericExceptionCaught", "LongMethod", "ReturnCount")
     private fun openUsbDevice(path: String): TrezorTransportWriteResult {
         return try {
             closeUsbDevice(path)
@@ -721,7 +716,6 @@ class TrezorTransport @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun closeUsbDevice(path: String): TrezorTransportWriteResult {
         return try {
             val openDevice = usbConnections.remove(path)
@@ -737,7 +731,6 @@ class TrezorTransport @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun readUsbChunk(path: String): TrezorTransportReadResult {
         return try {
             val openDevice = usbConnections[path]
@@ -781,7 +774,6 @@ class TrezorTransport @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun writeUsbChunk(path: String, data: ByteArray): TrezorTransportWriteResult {
         return try {
             val openDevice = usbConnections[path]
@@ -909,7 +901,6 @@ class TrezorTransport @Inject constructor(
         return null
     }
 
-    @Suppress("ReturnCount")
     @SuppressLint("MissingPermission")
     private fun openBleDevice(path: String): TrezorTransportWriteResult {
         bleConnections[path]?.takeIf { it.isConnected && it.writeCharacteristic != null }?.let {
@@ -973,7 +964,6 @@ class TrezorTransport @Inject constructor(
         return TrezorTransportWriteResult(success = true, error = "", errorCode = null)
     }
 
-    @Suppress("TooGenericExceptionCaught")
     @SuppressLint("MissingPermission")
     private fun closeBleDevice(path: String): TrezorTransportWriteResult {
         val connection = bleConnections[path]
@@ -989,7 +979,6 @@ class TrezorTransport @Inject constructor(
         return TrezorTransportWriteResult(success = true, error = "", errorCode = null)
     }
 
-    @Suppress("TooGenericExceptionCaught")
     @SuppressLint("MissingPermission")
     private fun disconnectBleDevice(path: String): TrezorTransportWriteResult {
         val connection = bleConnections[path]
@@ -1021,7 +1010,6 @@ class TrezorTransport @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun readBleChunk(path: String): TrezorTransportReadResult {
         val connection = bleConnections[path]
             ?: return TrezorTransportReadResult(
@@ -1068,14 +1056,7 @@ class TrezorTransport @Inject constructor(
         }
     }
 
-    @Suppress(
-        "TooGenericExceptionCaught",
-        "CyclomaticComplexMethod",
-        "LongMethod",
-        "NestedBlockDepth",
-        "ReturnCount",
-        "LoopWithTooManyJumpStatements",
-    )
+    @Suppress("LoopWithTooManyJumpStatements")
     @SuppressLint("MissingPermission")
     private fun writeBleChunk(path: String, data: ByteArray): TrezorTransportWriteResult {
         val connection = bleConnections[path]

@@ -108,7 +108,6 @@ fun SettingsButtonRow(
     )
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun SettingsButtonRowCore(
     title: String,

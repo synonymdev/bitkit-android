@@ -1,0 +1,27 @@
+<journey name="usdt receive swipe tabs">
+  <description>
+    On the Receive sheet, swiping sideways over the QR changes tabs on every tab, USDT included.
+    With USDT selected, a swipe to the right over its QR selects the tab before it (Spending) and
+    does not copy the address; a swipe to the left does nothing, since USDT is the last tab. A single
+    tap on the USDT QR still copies the address and shows the "copied" tooltip.
+
+    Precondition: onboarded dev wallet with USDT enabled (introductory sheet or Settings, General,
+    Payments), no CJIT invoice pending, start on the wallet home screen. The USDT address loads
+    without funding; wait for the QR before swiping.
+
+    The copy shows as a tooltip over the QR for about two seconds, so a check for "no copy" reads a
+    screenshot taken right after the swipe. Swipe with `adb shell input swipe` across the middle of
+    the QR, about 60% of its width, in 300 ms. Back from Spending to USDT goes through the tab
+    pager, which snaps back from a 300 ms synthetic swipe on the emulator; a 600 ms swipe moves it.
+    On a wallet without a Lightning channel, Spending shows its setup view instead of a QR.
+  </description>
+  <actions>
+    <action>Tap Receive (testTag "Receive")</action>
+    <action>Tap the USDT tab (testTag "Tab-usdt") and wait until the USDT QR is visible</action>
+    <action>Swipe right across the QR and take a screenshot right away</action>
+    <action>Verify the Spending tab (testTag "Tab-spending") is selected, the Lightning receive content or the Spending setup is shown, and the screenshot shows no "copied" tooltip</action>
+    <action>Swipe left across the middle of the Spending content, whether it shows a Lightning QR or the Spending setup, in 600 ms (`adb shell input swipe 900 1200 150 1200 600`); verify the USDT tab is selected and wait until its QR is visible</action>
+    <action>Swipe left across the USDT QR and take a screenshot right away; verify the USDT tab stays selected and the screenshot shows no "copied" tooltip</action>
+    <action>Tap the USDT QR once and verify the "copied" tooltip appears</action>
+  </actions>
+</journey>

@@ -560,7 +560,6 @@ private fun PreviewInvalid() {
 @Composable
 private fun Preview24Words() {
     AppThemeSurface {
-        @Suppress("MagicNumber")
         Content(
             uiState = RestoreWalletUiState(
                 is24Words = true,

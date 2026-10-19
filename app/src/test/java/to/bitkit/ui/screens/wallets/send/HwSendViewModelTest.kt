@@ -3,13 +3,6 @@ package to.bitkit.ui.screens.wallets.send
 import android.content.Context
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.bitkitcore.TrezorException
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
-import kotlin.time.Clock
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.Instant
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -51,6 +44,13 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.SignedTransactionId
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwSendViewModelTest : BaseUnitTest() {
@@ -656,12 +656,23 @@ class HwSendViewModelTest : BaseUnitTest() {
     fun `changed Shop receipt at native boundary prevents hardware submission`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
-        whenever(proofRepo.markHardwareOnchainDispatch(
-            any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(), any()
-        ))
+        whenever(
+            proofRepo.markHardwareOnchainDispatch(
+                any(),
+                any(),
+                any(),
+                org.mockito.kotlin.anyOrNull(),
+                any(),
+                any()
+            )
+        )
             .thenReturn(false)
-        sut.signAndBroadcast(request().copy(paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
-            paymentIdentity = "original-identity"))
+        sut.signAndBroadcast(
+            request().copy(
+                paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+                paymentIdentity = "original-identity"
+            )
+        )
         advanceUntilIdle()
         verify(proofRepo).markHardwareOnchainDispatch(any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(), any())
         verify(hwWalletRepo, never()).broadcastFunding(fixture.signedTx)
@@ -672,14 +683,25 @@ class HwSendViewModelTest : BaseUnitTest() {
         val fixture = stubSuccessfulPayment()
         val deadline = Instant.parse("2026-10-06T12:00:00Z")
         val requestId = PaykitPaymentRequestId("request", "counterparty")
-        val original = request().copy(paymentRequestId = requestId, paymentIdentity = "original-identity",
-            paymentDeadlineAt = deadline)
+        val original = request().copy(
+            paymentRequestId = requestId,
+            paymentIdentity = "original-identity",
+            paymentDeadlineAt = deadline
+        )
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline))
             .thenReturn(Result.failure(AppError(ServiceError.PaymentDeadlineExpired())))
         var cleared = false
-        whenever(proofRepo.clearHardwareOnchainCandidateBeforeDispatch(requestId, WALLET_ID,
-            "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e",
-            "original-identity", ADDRESS, AMOUNT_SATS, false)).doSuspendableAnswer {
+        whenever(
+            proofRepo.clearHardwareOnchainCandidateBeforeDispatch(
+                requestId,
+                WALLET_ID,
+                "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e",
+                "original-identity",
+                ADDRESS,
+                AMOUNT_SATS,
+                false
+            )
+        ).doSuspendableAnswer {
             cleared = true
             true
         }
@@ -700,9 +722,14 @@ class HwSendViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline))
             .thenReturn(Result.failure(AppError(ServiceError.PaymentDeadlineExpired())))
         var expired: Boolean? = null
-        sut.signAndBroadcast(request().copy(paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
-            paymentIdentity = "original-identity", paymentDeadlineAt = deadline),
-            onPaymentDeadlineExpired = { expired = it })
+        sut.signAndBroadcast(
+            request().copy(
+                paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+                paymentIdentity = "original-identity",
+                paymentDeadlineAt = deadline
+            ),
+            onPaymentDeadlineExpired = { expired = it }
+        )
         advanceUntilIdle()
         assertEquals(true, expired)
         assertTrue(sut.uiState.value.isBroadcastUnresolved)
@@ -839,21 +866,24 @@ class HwSendViewModelTest : BaseUnitTest() {
         stubSuccessfulPayment()
         whenever(context.getString(org.mockito.kotlin.any())).thenReturn("payment blocked")
         whenever { proofRepo.hasRetainedHardwareOnchainPayment(WALLET_ID) }.thenReturn(true)
-        for (next in listOf(request(), request().copy(
-            paymentRequestId = PaykitPaymentRequestId("foreign-request", "foreign-counterparty"),
-            paymentIdentity = "original-identity"
-        ))) {
-        sut = HwSendViewModel(
-            context = context,
-            hwWalletRepo = hwWalletRepo,
-            preActivityMetadataRepo = preActivityMetadataRepo,
-            coreService = coreService,
-            activityRepo = activityRepo,
-            paykitPaymentProofRepo = proofRepo,
-            clock = object : Clock {
-                override fun now() = now
-            },
-        )
+        for (next in listOf(
+            request(),
+            request().copy(
+                paymentRequestId = PaykitPaymentRequestId("foreign-request", "foreign-counterparty"),
+                paymentIdentity = "original-identity"
+            )
+        )) {
+            sut = HwSendViewModel(
+                context = context,
+                hwWalletRepo = hwWalletRepo,
+                preActivityMetadataRepo = preActivityMetadataRepo,
+                coreService = coreService,
+                activityRepo = activityRepo,
+                paykitPaymentProofRepo = proofRepo,
+                clock = object : Clock {
+                    override fun now() = now
+                },
+            )
             sut.signAndBroadcast(next)
             advanceUntilIdle()
         }
@@ -1119,8 +1149,16 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.hasPendingBroadcast)
         var completed: HwSendResult? = null
         assertTrue(sut.completeReconciledBroadcast(WALLET_ID, txid.uppercase()) { completed = it })
-        assertEquals(HwSendResult(WALLET_ID, txid, original.amountSats,
-            original.paymentRequestId, original.paymentIdentity), completed)
+        assertEquals(
+            HwSendResult(
+                WALLET_ID,
+                txid,
+                original.amountSats,
+                original.paymentRequestId,
+                original.paymentIdentity
+            ),
+            completed
+        )
         assertFalse(sut.uiState.value.hasPendingBroadcast)
         assertFalse(sut.uiState.value.isBroadcastUnresolved)
         assertFalse(sut.completeReconciledBroadcast(WALLET_ID, txid))
@@ -1146,6 +1184,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
     }
 
+    @Suppress("MaxLineLength")
     @Test
     fun `core completed hardware result retains original request and never rebroadcasts while proof is pending`() = test {
         val fixture = stubSuccessfulPayment()
@@ -1176,7 +1215,14 @@ class HwSendViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(fixture.broadcast.txId, sut.results.first().txId)
         verify(activityService, never()).createSentOnchainActivityFromSendResult(
-            any(), any(), any(), any(), any(), any(), org.mockito.kotlin.anyOrNull(), any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            org.mockito.kotlin.anyOrNull(),
+            any(),
         )
         verify(activityRepo, never()).notifyPaymentActivityChanged()
         verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
@@ -1188,8 +1234,14 @@ class HwSendViewModelTest : BaseUnitTest() {
         sut.signAndBroadcast(request())
         advanceUntilIdle()
         verify(activityService).createSentOnchainActivityFromSendResult(
-            fixture.broadcast.txId, ADDRESS, AMOUNT_SATS, fixture.broadcast.miningFeeSats,
-            fixture.broadcast.feeRate, false, null, WALLET_ID,
+            fixture.broadcast.txId,
+            ADDRESS,
+            AMOUNT_SATS,
+            fixture.broadcast.miningFeeSats,
+            fixture.broadcast.feeRate,
+            false,
+            null,
+            WALLET_ID,
         )
     }
 

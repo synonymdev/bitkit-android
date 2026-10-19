@@ -26,7 +26,6 @@ object NumberPadInputHandler {
         return current + key
     }
 
-    @Suppress("ReturnCount")
     private fun handleDecimalInput(
         key: String,
         current: String,
