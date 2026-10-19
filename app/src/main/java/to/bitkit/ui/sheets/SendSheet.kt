@@ -271,6 +271,11 @@ fun SendSheet(
                         is SendEffect.NavigateToFeeCustom -> navController.navigateTo(SendRoute.FeeCustom)
                         is SendEffect.NavigateToComingSoon -> navController.navigateTo(SendRoute.ComingSoon)
                         is SendEffect.NavigateToContacts -> navController.navigateTo(SendRoute.ContactSelect)
+                        is SendEffect.ResetConfirm -> {
+                            navController.currentBackStackEntry?.savedStateHandle
+                                ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
+                        }
+
                         is SendEffect.NavigateToPending -> navController.navigateToSendPending(
                             SendRoute.Pending(
                                 it.paymentHash,
@@ -922,7 +927,7 @@ private fun SendRoute.Error.failureTitle(payMethod: SendMethod): Int {
     return when (retryRoute) {
         SendRetryRoute.QuickPay -> R.string.wallet__send_instant_failed
         SendRetryRoute.Confirm -> when (payMethod) {
-            SendMethod.LIGHTNING -> R.string.wallet__send_instant_failed
+            SendMethod.LIGHTNING, SendMethod.SWAP -> R.string.wallet__send_instant_failed
             SendMethod.ONCHAIN -> R.string.wallet__send_error_tx_failed
         }
     }
@@ -965,6 +970,7 @@ private fun SendMethod.supportLabel(): String {
     return when (this) {
         SendMethod.LIGHTNING -> "lightning"
         SendMethod.ONCHAIN -> "onchain"
+        SendMethod.SWAP -> "swap"
     }
 }
 

@@ -164,6 +164,7 @@ import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.HoldInvoicePayment
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
@@ -209,6 +210,12 @@ import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayPaymentFailedError
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
+import to.bitkit.repositories.SwapAmountError
+import to.bitkit.repositories.SwapQuoteExpiredError
+import to.bitkit.repositories.SwapQuoteMismatchError
+import to.bitkit.repositories.SwapRepo
+import to.bitkit.repositories.SwapSendLimits
+import to.bitkit.repositories.SwapSendQuote
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
@@ -294,6 +301,7 @@ class AppViewModel @Inject constructor(
     private val nodeServiceFgState: NodeServiceFgState,
     private val pubkyRepo: PubkyRepo,
     private val pubkySwapRepo: PubkySwapRepo,
+    private val swapRepo: SwapRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
@@ -366,6 +374,7 @@ class AppViewModel @Inject constructor(
     private var amountContinuePending = false
     private var fundingSourceSwitchPending = false
     private var onchainSendRefreshJob: Job? = null
+    private var sendSwapLimitsJob: Job? = null
     private var sendStateGeneration = 0L
 
     fun setSendEvent(event: SendEvent) {
@@ -2952,6 +2961,10 @@ class AppViewModel @Inject constructor(
                 )
                 return
             }
+            if (sendSwapLimitsFor(invoice.amountSatoshis) != null) {
+                _sendUiState.update { it.copy(isAddressInputValid = true) }
+                return
+            }
             showAddressValidationError(
                 titleRes = R.string.other__pay_insufficient_savings,
                 descriptionRes = R.string.other__pay_insufficient_savings_description,
@@ -2961,6 +2974,10 @@ class AppViewModel @Inject constructor(
         }
 
         if (invoice.amountSatoshis > 0uL && invoice.amountSatoshis > maxSendOnchain) {
+            if (sendSwapLimitsFor(invoice.amountSatoshis) != null) {
+                _sendUiState.update { it.copy(isAddressInputValid = true) }
+                return
+            }
             val shortfall = invoice.amountSatoshis - maxSendOnchain
             showAddressValidationError(
                 titleRes = R.string.other__pay_insufficient_savings,
@@ -3784,6 +3801,8 @@ class AppViewModel @Inject constructor(
                 )
             }
 
+            SendFundingSource.Spending if isAddressOnlySend(_sendUiState.value) -> selectSwapFundingSource()
+
             SendFundingSource.Spending -> {
                 _sendUiState.update {
                     it.copy(
@@ -3808,6 +3827,7 @@ class AppViewModel @Inject constructor(
                         hardwareWalletName = null,
                         hardwareAvailableSats = 0uL,
                         selectedUtxos = null,
+                        swapQuote = null,
                         confirmedWarnings = persistentListOf(),
                     )
                 }
@@ -3917,7 +3937,7 @@ class AppViewModel @Inject constructor(
 
         _sendUiState.update { it.copy(isLoading = true) }
         try {
-            if (!prepareHardwareSendFee()) return
+            if (!prepareHardwareSendFee() || !prepareSwapQuote(reuseCurrent = false)) return
             refreshOnchainSendIfNeeded()
             estimateLightningRoutingFeesIfNeeded()
         } finally {
@@ -4009,7 +4029,7 @@ class AppViewModel @Inject constructor(
         val sheet = currentSheet.value
         if (
             state.hardwareWalletId != null ||
-            state.payMethod == SendMethod.LIGHTNING ||
+            state.payMethod != SendMethod.ONCHAIN ||
             state.selectedUtxos != null
         ) {
             return true
@@ -4060,6 +4080,11 @@ class AppViewModel @Inject constructor(
                     .takeIf { _sendUiState.value.hardwareWalletId != null }
                     ?: walletRepo.balanceState.value.maxSendOnchainSats
                 amount > Defaults.dustLimit.toULong() && amount <= maxSendable
+            }
+
+            SendMethod.SWAP -> {
+                val limits = _sendUiState.value.swapLimits
+                limits != null && amount in limits.minRecipientSat..limits.maxRecipientSat
             }
         }
     }
@@ -4730,6 +4755,14 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        val isSavingsShort = hardwareWalletId == null && _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
+            (maxSendOnchain == 0uL || invoice.amountSatoshis > maxSendOnchain)
+        if (isSavingsShort && !hasOwnLightningInvoice(invoice.params) && offerSendSwap(invoice.amountSatoshis)) {
+            Logger.info("Savings cannot cover the address, offering a swap from spending", context = TAG)
+            navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+            return
+        }
+
         // Check on-chain balance before proceeding to amount screen
         if (maxSendOnchain == 0uL && _sendUiState.value.payMethod == SendMethod.ONCHAIN) {
             if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params)) {
@@ -4778,6 +4811,7 @@ class AppViewModel @Inject constructor(
             context = TAG,
         )
 
+        refreshSendSwapLimits()
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
     }
 
@@ -4896,11 +4930,7 @@ class AppViewModel @Inject constructor(
             return@buildList
         }
         if (state.usdtRecipient != null) add(SendFundingSource.Usdt)
-        if (state.isUnified || state.decodedInvoice != null || state.lnurl is LnurlParams.LnurlPay) {
-            add(
-                SendFundingSource.Spending
-            )
-        }
+        if (canPayFromSpending(state)) add(SendFundingSource.Spending)
         if (state.address.isNotEmpty()) {
             add(SendFundingSource.Savings)
             hwWalletRepo.wallets.value.forEach { wallet ->
@@ -4925,8 +4955,86 @@ class AppViewModel @Inject constructor(
     private fun SendUiState.selectedFundingSource(): SendFundingSource = when {
         paykitUsesUsdt -> SendFundingSource.Usdt
         hardwareWalletId != null -> SendFundingSource.Hardware(hardwareWalletId)
-        payMethod == SendMethod.LIGHTNING -> SendFundingSource.Spending
+        payMethod != SendMethod.ONCHAIN -> SendFundingSource.Spending
         else -> SendFundingSource.Savings
+    }
+
+    private fun isAddressOnlySend(state: SendUiState): Boolean = state.address.isNotEmpty() &&
+        !state.isUnified &&
+        state.decodedInvoice == null &&
+        state.lnurl == null &&
+        !state.paykitUsesUsdt
+
+    private fun isSwapEligibleContext(): Boolean = activeHardwareWalletId == null &&
+        activeIncomingPaymentRequest() == null &&
+        synchronized(contactPaymentContextLock) { activeContactPaymentContext == null }
+
+    private fun canPayFromSpending(state: SendUiState): Boolean =
+        state.isUnified || state.decodedInvoice != null || state.lnurl is LnurlParams.LnurlPay ||
+            state.swapLimits != null && canPayBySwap(state)
+
+    private fun canPayBySwap(state: SendUiState): Boolean = isAddressOnlySend(state) &&
+        isSwapEligibleContext() &&
+        state.hardwareWalletId == null &&
+        !state.isPaymentRequest &&
+        state.usdtRecipient == null &&
+        state.contactPaymentProfile == null
+
+    /** The swap limits when an address send can be paid from spending, for [amount] unless it is 0. */
+    private suspend fun sendSwapLimitsFor(amount: ULong): SwapSendLimits? {
+        if (!isSwapEligibleContext()) return null
+        val limits = swapRepo.sendLimits().getOrNull() ?: return null
+        return limits.takeIf { amount == 0uL || amount in it.minRecipientSat..it.maxRecipientSat }
+    }
+
+    /** Switches an address send that savings cannot cover to a swap from spending, when it can pay [amount]. */
+    private suspend fun offerSendSwap(amount: ULong): Boolean {
+        if (!canPayBySwap(_sendUiState.value)) return false
+        val limits = sendSwapLimitsFor(amount) ?: return false
+        _sendUiState.update {
+            it.copy(
+                payMethod = SendMethod.SWAP,
+                swapLimits = limits,
+                swapQuote = null,
+                isAddressInputValid = true,
+                isAmountInputValid = amount > 0uL,
+            )
+        }
+        updateCanSwitchWallet()
+        return true
+    }
+
+    /** Loads the swap limits in the background, so spending is offered as a funding source for the address. */
+    private fun refreshSendSwapLimits() {
+        sendSwapLimitsJob?.cancel()
+        val address = _sendUiState.value.address
+        if (!canPayBySwap(_sendUiState.value)) return
+        sendSwapLimitsJob = viewModelScope.launch {
+            val limits = sendSwapLimitsFor(0uL) ?: return@launch
+            if (_sendUiState.value.address != address) return@launch
+            _sendUiState.update { it.copy(swapLimits = limits) }
+            updateCanSwitchWallet()
+        }
+    }
+
+    private suspend fun selectSwapFundingSource() {
+        _sendUiState.update {
+            it.copy(
+                payMethod = SendMethod.SWAP,
+                hardwareWalletId = null,
+                hardwareWalletName = null,
+                hardwareAvailableSats = 0uL,
+                selectedUtxos = null,
+                swapQuote = null,
+                confirmedWarnings = persistentListOf(),
+            )
+        }
+        val amount = _sendUiState.value.amount
+        if (validateAmount(amount, SendMethod.SWAP)) {
+            swapRepo.quote(amount).onSuccess { quote ->
+                _sendUiState.update { if (it.amount == amount) it.copy(swapQuote = quote) else it }
+            }
+        }
     }
 
     @Suppress("LongMethod", "ReturnCount")
@@ -5306,6 +5414,10 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             if (!prepareCoinSelection()) return@launch
             val amount = _sendUiState.value.amount
+            if (!prepareSwapQuote(reuseCurrent = true)) {
+                setSendEffect(SendEffect.ResetConfirm)
+                return@launch
+            }
 
             handleSanityChecks(amount)
             if (_sendUiState.value.showSanityWarningDialog != null) return@launch // await for dialog UI interaction
@@ -5363,7 +5475,7 @@ class AppViewModel @Inject constructor(
                     .takeIf { _sendUiState.value.hardwareWalletId != null }
                     ?: walletRepo.balanceState.value.maxSendOnchainSats
             }
-            SendMethod.LIGHTNING -> walletRepo.balanceState.value.maxSendLightningSats
+            SendMethod.LIGHTNING, SendMethod.SWAP -> walletRepo.balanceState.value.maxSendLightningSats
         }
         if (
             amountSats > BigDecimal.valueOf(balanceToCheck.toLong())
@@ -5389,12 +5501,11 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (_sendUiState.value.payMethod != SendMethod.ONCHAIN) return
-
-        val totalFee = if (_sendUiState.value.hardwareWalletId != null) {
-            _sendUiState.value.onchainFeeUi.sats?.toULong() ?: return
-        } else {
-            lightningRepo.calculateTotalFee(
+        val totalFee = when {
+            _sendUiState.value.payMethod == SendMethod.LIGHTNING -> return
+            _sendUiState.value.payMethod == SendMethod.SWAP -> _sendUiState.value.swapQuote?.totalFeeSat ?: return
+            _sendUiState.value.hardwareWalletId != null -> _sendUiState.value.onchainFeeUi.sats?.toULong() ?: return
+            else -> lightningRepo.calculateTotalFee(
                 amountSats = amountSats,
                 address = _sendUiState.value.address,
                 speed = _sendUiState.value.speed,
@@ -5535,6 +5646,8 @@ class AppViewModel @Inject constructor(
                 contactPaymentContext,
                 amount,
             )
+
+            SendMethod.SWAP -> proceedWithSwapPayment(amount)
         }
     }
 
@@ -5956,6 +6069,125 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @Suppress("ReturnCount")
+    private suspend fun proceedWithSwapPayment(amount: ULong) {
+        val state = _sendUiState.value
+        val quote = state.swapQuote?.takeIf { it.recipientSat == amount }
+        if (quote == null) {
+            setSendEffect(SendEffect.ResetConfirm)
+            return
+        }
+        val swap = swapRepo.createSendSwap(state.address, quote).getOrElse { error ->
+            Logger.error("Failed to create send swap", error, context = TAG)
+            if (error is SwapQuoteExpiredError) _sendUiState.update { it.copy(swapQuote = error.quote) }
+            showSendSwapError(error)
+            setSendEffect(SendEffect.ResetConfirm)
+            return
+        }
+        Logger.info("Created send swap '${swap.id}'", context = TAG)
+
+        val paymentHash = runCatching { Bolt11Invoice.fromStr(swap.invoice).paymentHash() }.getOrNull()
+        val createdMetadataPaymentId = paymentHash?.let { saveSendSwapTags(it, state) }
+
+        val result = swapRepo.paySendSwap(swap).mapCatching { payment ->
+            when (payment) {
+                is HoldInvoicePayment.Dispatched ->
+                    awaitLightningOutcome(payment.paymentHash, swap.invoice).getOrThrow()
+
+                HoldInvoicePayment.AlreadyStarted -> throw PaymentPendingException(paymentHash ?: swap.id)
+            }
+        }
+        val displayAmountSats = quote.invoiceSat.toLong()
+        result.onSuccess { actualPaymentHash ->
+            onSendSuccess(
+                NewTransactionSheetDetails(
+                    type = NewTransactionSheetType.LIGHTNING,
+                    direction = NewTransactionSheetDirection.SENT,
+                    paymentHashOrTxId = actualPaymentHash,
+                    sats = displayAmountSats,
+                ),
+            )
+        }.onFailure { error ->
+            if (error is PaymentPendingException) {
+                // The hold invoice settles once the claim confirms, so a pending payment is the normal outcome.
+                Logger.info("Send swap payment pending for swap '${swap.id}'", context = TAG)
+                pendingPaymentRepo.track(error.paymentHash)
+                setSendEffect(SendEffect.NavigateToPending(error.paymentHash, displayAmountSats))
+                return@onFailure
+            }
+            createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
+            Logger.error("Error paying send swap '${swap.id}'", error, context = TAG)
+            val failure = when (error) {
+                is LightningPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
+                else -> error.toSendFailureDetails(context, swap.invoice)
+            }
+            setSendEffect(SendEffect.NavigateToError(failure))
+        }
+    }
+
+    /**
+     * Quotes a swap send for the current amount, keeping the current quote when [reuseCurrent] and it still fits.
+     * Other sends need no quote.
+     */
+    private suspend fun prepareSwapQuote(reuseCurrent: Boolean): Boolean {
+        if (_sendUiState.value.payMethod != SendMethod.SWAP) return true
+        val amount = _sendUiState.value.amount
+        if (reuseCurrent && _sendUiState.value.swapQuote?.recipientSat == amount) return true
+        return swapRepo.quote(amount)
+            .onSuccess { quote -> _sendUiState.update { it.copy(swapQuote = quote) } }
+            .onFailure {
+                Logger.warn("Failed to quote send swap", it, context = TAG)
+                showSendSwapError(it)
+            }
+            .isSuccess
+    }
+
+    /** Saves the selected tags for the activity of a swap payment, returning the metadata id once saved. */
+    private suspend fun saveSendSwapTags(paymentHash: String, state: SendUiState): String? {
+        if (state.selectedTags.isEmpty()) return null
+        return preActivityMetadataRepo.savePreActivityMetadata(
+            id = paymentHash,
+            paymentHash = paymentHash,
+            address = state.address,
+            isReceive = false,
+            tags = state.selectedTags,
+        ).map { paymentHash }.getOrNull()
+    }
+
+    private suspend fun showSendSwapError(error: Throwable) {
+        val limits = _sendUiState.value.swapLimits
+        val limitSat = when (error) {
+            is SwapAmountError.TooSmall -> limits?.minRecipientSat ?: 0uL
+            is SwapAmountError.TooLarge -> limits?.maxRecipientSat ?: 0uL
+            else -> null
+        }
+        val description = context.getString(sendSwapErrorTextRes(error))
+        toast(
+            type = Toast.ToastType.WARNING,
+            title = context.getString(sendSwapErrorTitleRes(error)),
+            description = limitSat?.let { description.replace("{amount}", formatMoneyValue(it)) } ?: description,
+            testTag = "SendSwapErrorToast",
+        )
+    }
+
+    @StringRes
+    private fun sendSwapErrorTitleRes(error: Throwable): Int = when (error) {
+        is SwapQuoteExpiredError -> R.string.wallet__send_swap_fees_updated_title
+        is SwapAmountError.InsufficientSpending -> R.string.other__pay_insufficient_spending
+        is SwapAmountError -> R.string.wallet__send_swap_amount_title
+        else -> R.string.wallet__send_swap_unavailable_title
+    }
+
+    @StringRes
+    private fun sendSwapErrorTextRes(error: Throwable): Int = when (error) {
+        is SwapQuoteExpiredError -> R.string.wallet__send_swap_fees_updated_text
+        is SwapAmountError.TooSmall -> R.string.wallet__send_swap_amount_small
+        is SwapAmountError.TooLarge -> R.string.wallet__send_swap_amount_large
+        is SwapAmountError.InsufficientSpending -> R.string.wallet__send_swap_amount_spending
+        is SwapQuoteMismatchError -> R.string.wallet__send_swap_mismatch_text
+        else -> R.string.wallet__send_swap_unavailable_text
+    }
+
     private suspend fun savePendingLnurlComment(invoice: LightningInvoice, paymentHash: String): String? {
         val state = _sendUiState.value
         if (state.lnurl !is LnurlParams.LnurlPay || state.comment.isBlank()) return null
@@ -6334,21 +6566,25 @@ class AppViewModel @Inject constructor(
             paymentDeadlineAt = paymentDeadlineAt,
             onBeforeSend = onBeforeSend,
         ).onSuccess { hash ->
-            // Wait until matching payment event is received (with timeout for hold invoices)
-            val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
-                when (it) {
-                    is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
-                    is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
-                        Result.failure(
-                            LightningPaymentFailedError(reason = it.reason, paymentRequest = bolt11)
-                        )
-                    )
-
-                    else -> WatchResult.Continue()
-                }
-            }
-            return result ?: Result.failure(PaymentPendingException(hash))
+            return awaitLightningOutcome(hash, bolt11)
         }
+    }
+
+    private suspend fun awaitLightningOutcome(hash: PaymentId, bolt11: String): Result<PaymentId> {
+        // Wait until matching payment event is received (with timeout for hold invoices)
+        val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
+            when (it) {
+                is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
+                is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
+                    Result.failure(
+                        LightningPaymentFailedError(reason = it.reason, paymentRequest = bolt11)
+                    )
+                )
+
+                else -> WatchResult.Continue()
+            }
+        }
+        return result ?: Result.failure(PaymentPendingException(hash))
     }
 
     fun clearClipboardForAutoRead() {
@@ -8039,6 +8275,8 @@ data class SendUiState(
     val requiresAmountReview: Boolean = false,
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
+    val swapLimits: SwapSendLimits? = null,
+    val swapQuote: SwapSendQuote? = null,
 ) {
     val canSwitchBitcoinFundingSource: Boolean
         get() = fundingOptions.count { it.enabled && it.source != SendFundingSource.Usdt } > 1
@@ -8072,7 +8310,7 @@ enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
     // TODO SendDialog5 https://github.com/synonymdev/bitkit/blob/master/src/screens/Wallets/Send/ReviewAndSend.tsx#L457-L466
 }
 
-enum class SendMethod { ONCHAIN, LIGHTNING }
+enum class SendMethod { ONCHAIN, LIGHTNING, SWAP }
 
 sealed interface SendFundingSource {
     data object Spending : SendFundingSource
@@ -8137,6 +8375,7 @@ sealed class SendEffect {
     data object NavigateToContacts : SendEffect()
     data object NavigateToComingSoon : SendEffect()
     data object PaymentSuccess : SendEffect()
+    data object ResetConfirm : SendEffect()
     data class NavigateToError(val failure: SendFailureDetails) : SendEffect()
     data class NavigateToPending(
         val paymentHash: String,

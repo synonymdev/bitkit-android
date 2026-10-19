@@ -18,6 +18,7 @@ import com.synonym.bitkitcore.LnurlAddressData
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.OnChainInvoice
+import com.synonym.bitkitcore.ReverseSwapResponse
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtException
@@ -144,6 +145,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.HoldInvoicePayment
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
@@ -195,6 +197,11 @@ import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
 import to.bitkit.repositories.SettledReceiveInvoice
+import to.bitkit.repositories.SwapQuoteExpiredError
+import to.bitkit.repositories.SwapRepo
+import to.bitkit.repositories.SwapSendLimits
+import to.bitkit.repositories.SwapSendQuote
+import to.bitkit.repositories.SwapUnavailableError
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
@@ -275,6 +282,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val pubkySwapRepo = mock<PubkySwapRepo>()
+    private val swapRepo = mock<SwapRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val paymentSubmissionActive = MutableStateFlow(false)
@@ -632,6 +640,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
+        whenever { swapRepo.sendLimits() }.thenReturn(Result.failure(SwapUnavailableError()))
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringPubkySession)
         whenever(pubkyRepo.currentSignIn()).thenAnswer { pubkyPublicKey.value?.let { PubkySignIn(it, 0L) } }
         whenever(pubkyRepo.isCurrent(any())).thenAnswer {
@@ -831,6 +840,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
         pubkySwapRepo = pubkySwapRepo,
+        swapRepo = swapRepo,
         timeSource = testDispatcher.scheduler.timeSource,
     )
 
@@ -13276,6 +13286,138 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         ),
     )
 
+    @Test
+    fun `address that savings cannot cover switches to a swap from spending`() = test {
+        stubPlainOnchainScan()
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u, maxSendLightningSats = 200_000u)
+        whenever { swapRepo.sendLimits() }.thenReturn(Result.success(SWAP_LIMITS))
+        sut.setIsAuthenticated(true)
+        runCurrent()
+
+        sut.onScanResult(REGTEST_ADDRESS)
+        advanceUntilIdle()
+
+        val state = sut.sendUiState.value
+        assertEquals(SendMethod.SWAP, state.payMethod)
+        assertEquals(SWAP_LIMITS, state.swapLimits)
+        assertTrue(state.fundingOptions.single { it.source == SendFundingSource.Spending }.enabled)
+        verify(toastManager, never()).enqueue(check { assertEquals("InsufficientSavingsToast", it.testTag) })
+    }
+
+    @Test
+    fun `address that savings can cover also offers spending through a swap`() = test {
+        stubPlainOnchainScan()
+        balanceState.value = BalanceState(maxSendOnchainSats = 500_000u, maxSendLightningSats = 200_000u)
+        whenever { swapRepo.sendLimits() }.thenReturn(Result.success(SWAP_LIMITS))
+        sut.setIsAuthenticated(true)
+        runCurrent()
+
+        sut.onScanResult(REGTEST_ADDRESS)
+        advanceUntilIdle()
+
+        val state = sut.sendUiState.value
+        assertEquals(SendMethod.ONCHAIN, state.payMethod)
+        assertTrue(state.fundingOptions.single { it.source == SendFundingSource.Spending }.enabled)
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.SWAP, sut.sendUiState.value.payMethod)
+    }
+
+    @Test
+    fun `address without a swap provider keeps the insufficient savings toast`() = test {
+        stubPlainOnchainScan()
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u, maxSendLightningSats = 200_000u)
+        sut.setIsAuthenticated(true)
+        runCurrent()
+
+        sut.onScanResult(REGTEST_ADDRESS)
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("InsufficientSavingsToast", toastCaptor.lastValue.testTag)
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+    }
+
+    @Test
+    fun `swap payment that stays unsettled opens pending`() = test {
+        whenever { swapRepo.createSendSwap(REGTEST_ADDRESS, SWAP_QUOTE) }.thenReturn(Result.success(sendSwap()))
+        whenever { swapRepo.paySendSwap(any()) }
+            .thenReturn(Result.success(HoldInvoicePayment.Dispatched(SWAP_PAYMENT_HASH)))
+        setSendState(swapSendState())
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            assertEquals(
+                SendEffect.NavigateToPending(SWAP_PAYMENT_HASH, SWAP_QUOTE.invoiceSat.toLong()),
+                awaitItem(),
+            )
+        }
+        verify(pendingPaymentRepo).track(SWAP_PAYMENT_HASH)
+    }
+
+    @Test
+    fun `swap payment that had already started is tracked without paying again`() = test {
+        whenever { swapRepo.createSendSwap(REGTEST_ADDRESS, SWAP_QUOTE) }.thenReturn(Result.success(sendSwap()))
+        whenever { swapRepo.paySendSwap(any()) }.thenReturn(Result.success(HoldInvoicePayment.AlreadyStarted))
+        setSendState(swapSendState())
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            assertTrue(awaitItem() is SendEffect.NavigateToPending)
+        }
+        verify(swapRepo).paySendSwap(any())
+    }
+
+    @Test
+    fun `expired swap quote shows the new fees without paying`() = test {
+        val fresh = SWAP_QUOTE.copy(serviceFeeSat = 700uL, invoiceSat = 101_360uL)
+        whenever { swapRepo.createSendSwap(REGTEST_ADDRESS, SWAP_QUOTE) }
+            .thenReturn(Result.failure(SwapQuoteExpiredError(fresh)))
+        setSendState(swapSendState())
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.ResetConfirm, awaitItem())
+        }
+        assertEquals(fresh, sut.sendUiState.value.swapQuote)
+        verify(swapRepo, never()).paySendSwap(any())
+    }
+
+    private suspend fun stubPlainOnchainScan() {
+        whenever { coreService.decode(REGTEST_ADDRESS) }.thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        whenever(coreService.validateBitcoinAddress(REGTEST_ADDRESS)).thenReturn(
+            ValidationResult(REGTEST_ADDRESS, NetworkType.REGTEST, AddressType.P2WPKH),
+        )
+    }
+
+    private fun swapSendState() = SendUiState(
+        address = REGTEST_ADDRESS,
+        amount = SWAP_QUOTE.recipientSat,
+        isAmountInputValid = true,
+        payMethod = SendMethod.SWAP,
+        swapLimits = SWAP_LIMITS,
+        swapQuote = SWAP_QUOTE,
+    )
+
+    private fun sendSwap() = ReverseSwapResponse(
+        id = "send-swap",
+        invoice = "lnbcrt1sendswap",
+        lockupAddress = "bcrt1qlockup",
+        onchainAmountSat = SWAP_QUOTE.lockupSat,
+        timeoutBlockHeight = 800uL,
+    )
+
     private suspend fun stubIncomingOnchainRequest(request: PaykitPaymentRequest) {
         whenever { coreService.decode(REGTEST_ADDRESS) }.thenReturn(
             Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, emptyMap())),
@@ -13964,5 +14106,15 @@ private val PUBKY_SWAP_PROVIDER = PubkySwapProvider(
 )
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
+private const val SWAP_PAYMENT_HASH = "swap-payment-hash"
+private val SWAP_LIMITS = SwapSendLimits(minRecipientSat = 1_000uL, maxRecipientSat = 150_000uL)
+private val SWAP_QUOTE = SwapSendQuote(
+    recipientSat = 100_000uL,
+    lockupSat = 100_360uL,
+    invoiceSat = 101_261uL,
+    serviceFeeSat = 601uL,
+    networkFeeSat = 660uL,
+    pairHash = "pair-hash",
+)
 private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"
 private const val FOREIGN_NODE_ID = "03cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"

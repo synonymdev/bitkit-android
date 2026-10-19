@@ -1680,6 +1680,17 @@
     <string name="wallet__send_quickpay__title">Paying\n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Confirm</string>
     <string name="wallet__send_sent">Bitcoin Sent</string>
+    <string name="wallet__send_swap_amount_large">The amount is above the swap maximum of {amount}.</string>
+    <string name="wallet__send_swap_amount_small">The amount is below the swap minimum of {amount}.</string>
+    <string name="wallet__send_swap_amount_spending">Your spending balance cannot cover this amount and its swap fees.</string>
+    <string name="wallet__send_swap_amount_title">Amount Not Supported</string>
+    <string name="wallet__send_swap_fees_updated_text">The swap provider changed its fees. Review them and swipe again.</string>
+    <string name="wallet__send_swap_fees_updated_title">Swap Fees Updated</string>
+    <string name="wallet__send_swap_mismatch_text">The swap provider returned different amounts than quoted. Nothing was paid.</string>
+    <string name="wallet__send_swap_network_fee">Network fee</string>
+    <string name="wallet__send_swap_service_fee">Service fee</string>
+    <string name="wallet__send_swap_unavailable_text">Bitkit could not reach the swap provider. Try again later.</string>
+    <string name="wallet__send_swap_unavailable_title">Swap Unavailable</string>
     <string name="wallet__send_swipe">Swipe To Pay</string>
     <string name="wallet__send_to">To</string>
     <string name="wallet__send_yes">Yes, Send</string>

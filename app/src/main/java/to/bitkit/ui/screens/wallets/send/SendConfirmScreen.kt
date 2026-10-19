@@ -64,6 +64,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequest
+import to.bitkit.repositories.SwapSendQuote
 import to.bitkit.ui.components.AddTagButton
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
@@ -366,7 +367,7 @@ private fun ContentRunning(
         } else {
             Colors.White64
         }
-        uiState.payMethod == SendMethod.LIGHTNING -> Colors.Purple
+        uiState.payMethod != SendMethod.ONCHAIN -> Colors.Purple
         else -> Colors.Brand
     }
 
@@ -437,6 +438,16 @@ private fun ContentRunning(
                                 onClickAddTag = onClickAddTag,
                             )
                         }
+
+                        SendMethod.SWAP -> {
+                            SwapDetails(
+                                uiState = uiState,
+                                interactionsEnabled = !isLoading,
+                                onEvent = onEvent,
+                            )
+                            VerticalSpacer(16.dp)
+                            TagsSection(uiState, onClickTag, onClickAddTag)
+                        }
                     }
                 } else {
                     if (isPreparing || uiState.isOneOffPaymentRequest) {
@@ -470,7 +481,7 @@ private fun ContentRunning(
                             } else {
                                 when (uiState.payMethod) {
                                     SendMethod.ONCHAIN -> R.drawable.ic_speed_normal
-                                    SendMethod.LIGHTNING -> R.drawable.ic_lightning
+                                    SendMethod.LIGHTNING, SendMethod.SWAP -> R.drawable.ic_lightning
                                 }
                             }
                         ),
@@ -706,6 +717,99 @@ private fun OnChainDetails(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SwapDetails(
+    uiState: SendUiState,
+    interactionsEnabled: Boolean,
+    onEvent: (SendEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val quote = uiState.swapQuote
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.height(IntrinsicSize.Min)
+        ) {
+            SendCell(
+                caption = stringResource(R.string.wallet__send_from),
+                modifier = Modifier.weight(1f)
+            ) {
+                NumberPadActionButton(
+                    text = stringResource(R.string.wallet__spending__title),
+                    color = Colors.Purple,
+                    enabled = uiState.canSwitchBitcoinFundingSource && interactionsEnabled,
+                    isLoading = uiState.isFundingSourceLoading,
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchBitcoinFundingSource },
+                    onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+                    modifier = Modifier.testTag("SendConfirmAssetButton")
+                )
+            }
+            SendCell(
+                caption = stringResource(R.string.wallet__send_to),
+                modifier = Modifier.weight(1f)
+            ) {
+                BodySSB(
+                    text = uiState.address,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                    modifier = Modifier
+                        .height(28.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .clickableAlpha { onEvent(SendEvent.NavToAddress) }
+                        .testTag("ReviewUri")
+                )
+            }
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.height(IntrinsicSize.Min)
+        ) {
+            SendCell(
+                caption = stringResource(R.string.wallet__send_swap_network_fee),
+                modifier = Modifier.weight(1f)
+            ) {
+                SwapFee(sats = quote?.networkFeeSat, testTag = "SendConfirmNetworkFee")
+            }
+            SendCell(
+                caption = stringResource(R.string.wallet__send_swap_service_fee),
+                modifier = Modifier.weight(1f)
+            ) {
+                SwapFee(sats = quote?.serviceFeeSat, testTag = "SendConfirmServiceFee")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwapFee(
+    sats: ULong?,
+    testTag: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier,
+    ) {
+        Icon(
+            painterResource(R.drawable.ic_lightning),
+            contentDescription = null,
+            tint = Colors.Purple,
+            modifier = Modifier.size(16.dp)
+        )
+        BodySSB(
+            text = sats?.let { rememberMoneyText(it.toLong(), showSymbol = true) } ?: "-",
+            maxLines = 1,
+            overflow = TextOverflow.MiddleEllipsis,
+            modifier = Modifier.testTag(testTag)
+        )
     }
 }
 
@@ -1035,6 +1139,35 @@ private fun PreviewLightningDetails() {
                     payMethod = SendMethod.LIGHTNING,
                     selectedTags = persistentListOf("coffee"),
                     lightningFeeSats = 43,
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                initialShowDetails = true,
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true, group = "swap details")
+@Composable
+private fun PreviewSwapDetails() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            SendConfirmContent(
+                uiState = sendUiState().copy(
+                    amount = 100_000u,
+                    payMethod = SendMethod.SWAP,
+                    selectedTags = persistentListOf("rent"),
+                    swapQuote = SwapSendQuote(
+                        recipientSat = 100_000uL,
+                        lockupSat = 100_360uL,
+                        invoiceSat = 101_261uL,
+                        serviceFeeSat = 601uL,
+                        networkFeeSat = 660uL,
+                        pairHash = "preview",
+                    ),
                 ),
                 isNodeRunning = true,
                 isLoading = false,

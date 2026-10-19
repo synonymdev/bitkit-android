@@ -282,6 +282,7 @@ private fun SendAmountNodeRunning(
             isLnurlWithdraw -> uiState.lnurl.data.maxWithdrawableSat().toLong()
             uiState.hardwareWalletId != null -> uiState.hardwareAvailableSats.toLong()
             uiState.payMethod == SendMethod.ONCHAIN -> balances.maxSendOnchainSats.toLong()
+            uiState.payMethod == SendMethod.SWAP -> uiState.swapLimits?.maxRecipientSat?.toLong() ?: 0L
             else -> {
                 val maxLightning = balances.maxSendLightningSats
                 val routingFee = uiState.estimatedRoutingFee
@@ -331,7 +332,7 @@ private fun SendAmountNodeRunning(
                 uiState.hardwareWalletId != null -> R.string.wallet__send_available
                 uiState.isUnified -> R.string.wallet__send_available
                 uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available
-                uiState.payMethod == SendMethod.LIGHTNING -> R.string.wallet__send_available_spending
+                uiState.payMethod != SendMethod.ONCHAIN -> R.string.wallet__send_available_spending
                 else -> R.string.wallet__send_available
             }
 
@@ -612,7 +613,7 @@ private fun FundingSourceBalance(option: SendFundingOption) {
 private fun SendUiState.isSelected(source: SendFundingSource): Boolean = when (source) {
     SendFundingSource.Usdt -> paykitUsesUsdt
     SendFundingSource.Spending ->
-        !paykitUsesUsdt && hardwareWalletId == null && payMethod == SendMethod.LIGHTNING
+        !paykitUsesUsdt && hardwareWalletId == null && payMethod != SendMethod.ONCHAIN
     SendFundingSource.Savings ->
         !paykitUsesUsdt && hardwareWalletId == null && payMethod == SendMethod.ONCHAIN
     is SendFundingSource.Hardware -> hardwareWalletId == source.walletId
