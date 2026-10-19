@@ -341,6 +341,23 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `request above the per-payment limit stays manual and notifies once`() = test {
+        collectEvents()
+        candidates = listOf(candidate(blocked = AllowanceAccountingBlock.SharedRule("amount_outside_range")))
+        val request = fixtures.paymentRequest()
+        val allowances = listOf(fixtures.allowance(perPaymentMaxSats = 500uL))
+
+        val first = sut.autoPay(request, allowances, identity)
+        val second = sut.autoPay(request, allowances, identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, first)
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, second)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verifyNoInteractions(payer)
+        assertEquals(listOf<PaykitAllowanceEvent>(PaykitAllowanceEvent.LimitReached(fixtures.counterpartyKey, 1_000uL)), events)
+    }
+
+    @Test
     fun `over the monthly cap stays manual and notifies once`() = test {
         collectEvents()
         accountingState = stateNearTheMonthlyCap()

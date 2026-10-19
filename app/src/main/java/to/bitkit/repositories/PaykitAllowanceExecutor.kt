@@ -438,6 +438,14 @@ class PaykitAllowanceExecutor @Inject constructor(
         if (candidate == null || allowance == null) {
             val reasons = candidates.mapNotNull { it.blocked }
             Logger.info("Kept an incoming request manual: no eligible allowance, blocked by '$reasons'", context = TAG)
+            // The SDK blocks a request above the per-payment limit before the capacity check below can notify.
+            val now = clock.now()
+            val isAbovePerPaymentMax = allowances.any { granted ->
+                granted.isAllower && granted.status(now) == PaykitAllowance.Status.ACTIVE &&
+                    PubkyPublicKeyFormat.matches(granted.counterparty, request.counterparty) &&
+                    granted.perPaymentMaxSats?.let { amountSats > it } == true
+            }
+            if (isAbovePerPaymentMax) notifyLimitReached(request, identity)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
 
