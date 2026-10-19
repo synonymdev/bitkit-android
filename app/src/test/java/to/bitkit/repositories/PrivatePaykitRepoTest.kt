@@ -407,7 +407,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `private publication defers USDT failure and retries fresh endpoints`() = test {
+    fun `private publication refreshes Bitcoin during USDT failure and retries USDT`() = test {
         settingsData.value = SettingsData(
             publicPaykitUsdtEnabled = true,
             usdtPreference = UsdtPreference.ENABLED,
@@ -416,33 +416,71 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             publicPaykitOnchainEnabled = true,
         )
         whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
-        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
         sut.setContactPreparationActive(false)
-        assertTrue(sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).isFailure)
-        verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
+        UsdtEndpointTestWallet(testDispatcher).use { wallet ->
+            whenever(usdtRepo.paymentEndpoint()).doSuspendableAnswer { wallet.repo.paymentEndpoint() }
+            sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+            wallet.available = true
+            sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+            wallet.derivationAvailable = false
+            sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
 
-        val address = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
-        val usdt = Endpoint(
-            methodId = MethodId.UsdtArbitrum,
-            value = address,
-            rawPayload = """{"chain_id":"42161","token":"${PaykitUsdt.TOKEN}","value":"$address"}""",
-        )
-        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.success(usdt))
-        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
-        settingsData.value = settingsData.value.copy(publicPaykitUsdtEnabled = false)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
-        val updates = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
-        verify(paykitSdkService, times(2)).syncPrivatePaymentListsWithReservations(updates.capture(), eq(false))
-        assertEquals(
-            listOf(MethodId.UsdtArbitrum.rawValue, MethodId.P2wpkh.rawValue),
-            updates.firstValue.single().reservations.map { it.identifier },
-        )
-        assertEquals(listOf(MethodId.P2wpkh.rawValue), updates.secondValue.single().reservations.map { it.identifier })
+            wallet.passphrase = "other wallet"
+            sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+            wallet.derivationAvailable = true
+            sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+            settingsData.value = settingsData.value.copy(publicPaykitUsdtEnabled = false)
+            wallet.available = false
+            sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+            val updates = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+            verify(paykitSdkService, times(6)).syncPrivatePaymentListsWithReservations(updates.capture(), eq(false))
+            val reservations = updates.allValues.map { it.single().reservations }
+            assertEquals(
+                listOf(
+                    null,
+                    UsdtEndpointTestWallet.ADDRESS,
+                    UsdtEndpointTestWallet.ADDRESS,
+                    null,
+                    UsdtEndpointTestWallet.OTHER_ADDRESS,
+                    null,
+                ),
+                reservations.map { list ->
+                    list.firstOrNull { it.identifier == MethodId.UsdtArbitrum.rawValue }
+                        ?.payload?.let(PaykitUsdt::address)
+                },
+            )
+            assertTrue(reservations.all { list -> list.any { it.identifier == MethodId.P2wpkh.rawValue } })
+        }
         settingsData.value = settingsData.value.copy(publicPaykitUsdtEnabled = true)
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(CancellationException()))
         assertFailsWith<CancellationException> {
             sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
         }
+    }
+
+    @Test
+    fun `private expired Lightning invoice renews while USDT preparation fails`() = test {
+        sut.setContactPreparationActive(false)
+        preparePrivateLightningContact()
+        settingsData.value = settingsData.value.copy(
+            publicPaykitUsdtEnabled = true, usdtPreference = UsdtPreference.ENABLED,
+        )
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
+        whenever(coreService.decode(PRIVATE_BOLT11)).thenReturn(
+            Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9)).copy(isExpired = true))
+        )
+        val renewed = "lnbcrt1renewed"
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+            .thenReturn(Result.success(renewed))
+        whenever(coreService.decode(renewed))
+            .thenReturn(Scanner.Lightning(lightningInvoice(renewed, byteArrayOf(8, 8, 8))))
+        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+        val updates = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verify(paykitSdkService, times(2)).syncPrivatePaymentListsWithReservations(updates.capture(), eq(false))
+        val reservation = updates.secondValue.single().reservations.single()
+        assertEquals(MethodId.Bolt11.rawValue, reservation.identifier)
+        assertEquals(PublicPaykitRepo.serializePayload(renewed), reservation.payload)
+        verify(lightningRepo, times(2)).createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS)
     }
 
     @Test

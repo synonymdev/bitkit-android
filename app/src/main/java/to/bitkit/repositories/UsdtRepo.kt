@@ -136,7 +136,7 @@ class UsdtRepo @Inject constructor(
         } ?: Result.success(Unit)
     }
 
-    suspend fun paymentEndpoint(): Result<Endpoint> = operation { PaykitUsdt.endpoint(wallet().receiveAddress()) }
+    suspend fun paymentEndpoint(): Result<Endpoint> = operation { PaykitUsdt.endpoint(paymentAddress) }
 
     suspend fun sendDestinations() = operation {
         (Env.usdtDestinations + service.wallet().orchestraDestinations()).distinct().toImmutableList()

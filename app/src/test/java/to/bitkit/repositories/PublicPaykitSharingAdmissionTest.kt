@@ -4,6 +4,7 @@ import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.EndpointSyncReport
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -30,6 +31,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -79,7 +81,60 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
     }
 
     @Test
-    fun `invoice renewal remains pending when USDT preparation fails`() = test {
+    fun `USDT preparation failure allows Bitcoin publication and retries until recovery or disable`() = test {
+        whenever(walletRepo.refreshReusableReceiveAddress()).thenReturn(Result.success(Unit))
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any()))
+            .thenReturn(EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList()))
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+            publicPaykitUsdtEnabled = true,
+            usdtPreference = UsdtPreference.ENABLED,
+        )
+        UsdtEndpointTestWallet(testDispatcher).use { wallet ->
+            whenever(usdtRepo.paymentEndpoint()).doSuspendableAnswer { wallet.repo.paymentEndpoint() }
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+            assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+
+            wallet.available = true
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+            assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+            wallet.derivationAvailable = false
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+
+            wallet.passphrase = "other wallet"
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+            assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+            wallet.derivationAvailable = true
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+
+            settingsFlow.value = settingsFlow.value.copy(publicPaykitUsdtEnabled = false)
+            wallet.available = false
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+            assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+            val endpoints = argumentCaptor<List<Endpoint>>()
+            verifyBlocking(paykitSdkService, times(6)) { syncPublicEndpoints(endpoints.capture(), any()) }
+            assertEquals(
+                listOf(
+                    null,
+                    UsdtEndpointTestWallet.ADDRESS,
+                    UsdtEndpointTestWallet.ADDRESS,
+                    null,
+                    UsdtEndpointTestWallet.OTHER_ADDRESS,
+                    null,
+                ),
+                endpoints.allValues.map { list -> list.firstOrNull { it.methodId == MethodId.UsdtArbitrum }?.value },
+            )
+            assertTrue(endpoints.allValues.all { list -> list.any { it.methodId == MethodId.P2tr } })
+        }
+        settingsFlow.value = settingsFlow.value.copy(publicPaykitUsdtEnabled = true)
+        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(CancellationException()))
+        assertFailsWith<CancellationException> { sut.syncCurrentPublishedEndpoints() }
+    }
+
+    @Test
+    fun `Lightning renewal publishes while unavailable USDT remains pending`() = test {
         settingsFlow.value = SettingsData(
             sharesPublicPaykitEndpoints = true,
             publicPaykitOnchainEnabled = false,
@@ -95,8 +150,9 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
         whenever(coreService.decode("ln-new")).thenReturn(Scanner.Lightning(invoice("ln-new")))
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
 
-        assertTrue(sut.syncCurrentPublishedEndpoints().isFailure)
-        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any(), any()) }
+        whenever(paykitSdkService.syncPublicEndpoints(any(), any()))
+            .thenReturn(EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList()))
+        sut.syncCurrentPublishedEndpoints().getOrThrow()
         assertEquals("ln-new", settingsFlow.value.publicPaykitBolt11)
         assertTrue(settingsFlow.value.publicPaykitCleanupPending)
 
@@ -110,8 +166,9 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             .thenReturn(EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList()))
         sut.syncCurrentPublishedEndpoints().getOrThrow()
         val endpoints = argumentCaptor<List<Endpoint>>()
-        verifyBlocking(paykitSdkService) { syncPublicEndpoints(endpoints.capture(), any()) }
-        assertEquals(listOf("ln-new", usdt.value), endpoints.firstValue.map { it.value })
+        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(endpoints.capture(), any()) }
+        assertEquals(listOf("ln-new"), endpoints.firstValue.map { it.value })
+        assertEquals(listOf("ln-new", usdt.value), endpoints.secondValue.map { it.value })
         verifyBlocking(lightningRepo, times(1)) { createInvoice(null, "", 86_400u) }
         assertFalse(settingsFlow.value.publicPaykitCleanupPending)
     }

@@ -6,7 +6,6 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.PublicationStatus
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -28,8 +27,6 @@ import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.UsdtPreference
-import to.bitkit.models.PaykitUsdt
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPublicContactPaymentResolution
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
@@ -38,7 +35,6 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -97,40 +93,6 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @After
     fun tearDown() {
         PublicPaykitRepo.lightningRouteHintsValidator = null
-    }
-
-    @Test
-    fun `USDT preparation failure defers publication until recovery or explicit disable`() = test {
-        walletState.value = WalletState(onchainAddress = "bc1ptest")
-        settingsFlow.value = SettingsData(
-            sharesPublicPaykitEndpoints = true,
-            publicPaykitLightningEnabled = false,
-            publicPaykitOnchainEnabled = true,
-            publicPaykitUsdtEnabled = true,
-            usdtPreference = UsdtPreference.ENABLED,
-        )
-        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
-        assertTrue(sut.syncCurrentPublishedEndpoints().isFailure)
-        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any(), any()) }
-
-        val address = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
-        val usdt = Endpoint(
-            methodId = MethodId.UsdtArbitrum,
-            value = address,
-            rawPayload = """{"chain_id":"42161","token":"${PaykitUsdt.TOKEN}","value":"$address"}""",
-        )
-        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.success(usdt))
-        sut.syncCurrentPublishedEndpoints().getOrThrow()
-        settingsFlow.value = settingsFlow.value.copy(publicPaykitUsdtEnabled = false)
-        sut.syncCurrentPublishedEndpoints().getOrThrow()
-        val endpoints = argumentCaptor<List<Endpoint>>()
-        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(endpoints.capture(), any()) }
-        assertEquals(listOf(MethodId.P2tr, MethodId.UsdtArbitrum), endpoints.firstValue.map { it.methodId })
-        assertEquals(listOf(MethodId.P2tr), endpoints.secondValue.map { it.methodId })
-
-        settingsFlow.value = settingsFlow.value.copy(publicPaykitUsdtEnabled = true)
-        whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(CancellationException()))
-        assertFailsWith<CancellationException> { sut.syncCurrentPublishedEndpoints() }
     }
 
     @Test
