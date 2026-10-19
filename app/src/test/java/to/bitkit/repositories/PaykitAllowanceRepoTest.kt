@@ -424,6 +424,21 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `received proposal whose per-payment limit cannot be read is never presented`() = test {
+        val dust = fixtures.record(
+            localRole = AllowanceLocalRole.ALLOWER,
+            state = AllowanceLifecycleState.PROPOSED,
+            proposedByMe = false,
+            terms = fixtures.terms(perPaymentMaximum = "0.000000001"),
+        )
+        records = listOf(dust)
+        sut.activate(identity)
+
+        assertNull(sut.proposalForPresentation())
+        assertTrue(sut.accept(ALLOWANCE_ID).isFailure)
+    }
+
+    @Test
     fun `answering fails when nothing in the entry awaits an answer`() = test {
         records = listOf(fixtures.record())
         sut.activate(identity)

@@ -171,6 +171,7 @@ fun NumberPad(
                 NumberPadDeleteButton(
                     onPress = { onPressIfEnabled(KEY_DELETE) },
                     onLongPress = onDeleteLongPress,
+                    enabled = enabled,
                     height = buttonHeight,
                     modifier = Modifier.testTag("NRemove"),
                 )
@@ -195,8 +196,9 @@ fun NumberPad(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     NumberPad(
-        onPress = { key -> if (enabled) viewModel.handleNumberPadInput(key, currencies) },
-        modifier = modifier.alpha(if (enabled) 1f else 0.5f),
+        onPress = { key -> viewModel.handleNumberPadInput(key, currencies) },
+        modifier = modifier,
+        enabled = enabled,
         type = type,
         availableHeight = availableHeight,
         decimalSeparator = decimalSeparator,
@@ -264,12 +266,18 @@ internal fun NumberPadDeleteButton(
     height: Dp,
     modifier: Modifier = Modifier,
     onLongPress: (() -> Unit)? = null,
+    enabled: Boolean = true,
 ) {
+    val onLongPressIfEnabled: (() -> Unit)? = onLongPress?.let { action ->
+        {
+            if (enabled) action()
+        }
+    }
     NumberPadKeyIcon(
         icon = R.drawable.ic_backspace,
         contentDescription = stringResource(R.string.common__delete),
         onClick = onPress,
-        onLongClick = onLongPress,
+        onLongClick = onLongPressIfEnabled,
         height = height,
         modifier = modifier
     )

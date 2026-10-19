@@ -46,6 +46,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.PublicKey
+import org.lightningdevkit.ldknode.RouteParametersConfig
 import org.lightningdevkit.ldknode.ScoringFeeParameters
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
@@ -166,6 +167,11 @@ class LightningService internal constructor(
         /** A small fixed payment to a new wallet address; the rest returns as change, which pays the fee. */
         private const val RELEASE_AMOUNT_SATS = 1_000uL
         private const val NODE_ID_PREVIEW_LEN = 20
+
+        /** LDK's defaults for route parameters, kept when only the routing fee is capped. */
+        private const val DEFAULT_MAX_TOTAL_CLTV_EXPIRY_DELTA = 1008u
+        private const val DEFAULT_MAX_PATH_COUNT: UByte = 10u
+        private const val DEFAULT_MAX_CHANNEL_SATURATION_POWER_OF_HALF: UByte = 2u
 
         private const val SCORING_BASE_PENALTY_MSAT = 40_000uL
         private const val SCORING_LIQUIDITY_PENALTY_MULTIPLIER_MSAT = 10_000uL
@@ -1114,7 +1120,12 @@ class LightningService internal constructor(
     internal suspend fun <T> callOnchainSend(block: suspend () -> T): T =
         ServiceQueue.LDK.background(ldkQueue) { runSuspendCatching { block() } }.getOrThrow()
 
-    suspend fun send(bolt11: String, sats: ULong? = null, paymentDeadlineAt: Instant? = null): PaymentId {
+    suspend fun send(
+        bolt11: String,
+        sats: ULong? = null,
+        paymentDeadlineAt: Instant? = null,
+        maxTotalRoutingFeeMsat: ULong? = null,
+    ): PaymentId {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         Logger.debug("Paying bolt11: $bolt11", context = TAG)
@@ -1125,15 +1136,24 @@ class LightningService internal constructor(
         return ServiceQueue.LDK.background(ldkQueue) {
             ensurePaymentDeadline(paymentDeadlineAt)
             runCatching {
+                val routeParameters = maxTotalRoutingFeeMsat?.let(::routeParametersWithFeeCap)
                 when (sats != null) {
-                    true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats * 1000u, null)
-                    else -> node.bolt11Payment().send(bolt11Invoice, null)
+                    true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats * 1000u, routeParameters)
+                    else -> node.bolt11Payment().send(bolt11Invoice, routeParameters)
                 }
             }
         }.onFailure {
             loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
         }.getOrThrow()
     }
+
+    /** LDK's default route parameters with the total routing fee capped at [maxTotalRoutingFeeMsat]. */
+    private fun routeParametersWithFeeCap(maxTotalRoutingFeeMsat: ULong) = RouteParametersConfig(
+        maxTotalRoutingFeeMsat = maxTotalRoutingFeeMsat,
+        maxTotalCltvExpiryDelta = DEFAULT_MAX_TOTAL_CLTV_EXPIRY_DELTA,
+        maxPathCount = DEFAULT_MAX_PATH_COUNT,
+        maxChannelSaturationPowerOfHalf = DEFAULT_MAX_CHANNEL_SATURATION_POWER_OF_HALF,
+    )
 
     private fun ensurePaymentDeadline(paymentDeadlineAt: Instant?) {
         if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) {

@@ -109,17 +109,21 @@ data class PaykitAllowance(
             val terms = record.terms ?: return null
             if (terms.asset() != PaykitIssuerInterop.BITCOIN_ASSET) return null
             val monthly = terms.periodLimits().firstOrNull { isMonthly(it.period()) }
-            // This wallet pays only under limits it can show: terms without a per-payment and a monthly cap are dropped.
-            val isBounded = terms.perPaymentAmount() != null && monthly?.amountLimit() != null
+            val perPaymentMaxSats = terms.perPaymentAmount()?.let { satsFromBitcoinAmount(it.maximum()) }
+            val monthlyLimitSats = monthly?.amountLimit()?.let(::satsFromBitcoinAmount)
+            val monthlyAnchor = monthly?.period()?.anchor()?.let(PaykitAllowanceTime::parse)
+            // This wallet pays only under limits it can show: terms without a readable per-payment and monthly cap
+            // are dropped.
+            val isBounded = perPaymentMaxSats != null && monthlyLimitSats != null && monthlyAnchor != null
             if (role == Role.ALLOWER && !isBounded) return null
             return PaykitAllowance(
                 id = Id(record.counterparty, record.allowanceId),
                 role = role,
                 lifecycleState = record.state,
                 isProposedByMe = record.proposalOutboundMessageId != null,
-                perPaymentMaxSats = terms.perPaymentAmount()?.let { satsFromBitcoinAmount(it.maximum()) },
-                monthlyLimitSats = monthly?.amountLimit()?.let(::satsFromBitcoinAmount),
-                monthlyAnchor = monthly?.period()?.anchor()?.let(PaykitAllowanceTime::parse),
+                perPaymentMaxSats = perPaymentMaxSats,
+                monthlyLimitSats = monthlyLimitSats,
+                monthlyAnchor = monthlyAnchor,
                 activeFrom = terms.activeFrom()?.let(PaykitAllowanceTime::parse),
                 expiresAt = terms.expiresAt()?.let(PaykitAllowanceTime::parse),
                 allowedPaymentEndpointIdentifiers = terms.allowedPaymentEndpointIdentifiers(),
