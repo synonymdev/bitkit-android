@@ -76,7 +76,6 @@ import kotlin.time.ExperimentalTime
  * action (pairing, verifying an address, signing) puts the PIN screen on the device.
  */
 @OptIn(ExperimentalTime::class)
-@Suppress("TooManyFunctions", "LargeClass")
 @Singleton
 class JadeRepo @Inject constructor(
     @ApplicationContext private val context: Context,

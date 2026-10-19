@@ -63,6 +63,15 @@ data class PaykitAmount(val asset: PaykitAsset, val atomic: ULong) {
 
     val value: String get() = decimalValue().stripTrailingZeros().toPlainString()
 
+    val inputValue: String
+        get() = if (asset == PaykitAsset.BTC) {
+            value
+        } else {
+            decimalValue().stripTrailingZeros().let {
+                it.setScale(maxOf(2, it.scale())).toPlainString()
+            }
+        }
+
     fun convertedTo(paymentAsset: PaykitAsset, rate: PaykitExchangeRate?, nowMillis: Long): PaykitAmount {
         val value = valueIn(paymentAsset, rate, nowMillis, paymentAsset.decimals)
         return PaykitAmount(paymentAsset, atomic(value.movePointRight(paymentAsset.decimals)))

@@ -51,7 +51,9 @@ class OriginalSendFeeTest {
         val original = many.inputs.map { OnchainSendInput(it.txid, it.vout) }
         assertFailsWith<IllegalStateException> {
             exactOriginalSendFee(many, original) {
-                parent.copy(outputs = listOf(output(Long.MAX_VALUE, 1u), output(Long.MAX_VALUE, 2u), output(Long.MAX_VALUE, 3u)))
+                parent.copy(
+                    outputs = listOf(output(Long.MAX_VALUE, 1u), output(Long.MAX_VALUE, 2u), output(Long.MAX_VALUE, 3u))
+                )
             }
         }
     }

@@ -5,9 +5,9 @@ import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
-import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -68,11 +68,21 @@ class SendPendingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `exact prepared fee and warnings precede original retry payment authentication`() = test {
-        val receipt = OnchainPreparedReceipt("ab".repeat(32), emptyList(), "original", 1_000uL,
-            feeRateSatsPerVByte = 10uL, miningFeeSats = 600uL)
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32),
+            emptyList(),
+            "original",
+            1_000uL,
+            feeRateSatsPerVByte = 10uL,
+            miningFeeSats = 600uL
+        )
         val authorization = async {
-            sut.approveRecoveryFee(receipt, listOf(SanityWarning.FEE_OVER_HALF_VALUE, SanityWarning.FEE_OVER_10_USD),
-                requiresPin = true, useBiometrics = true)
+            sut.approveRecoveryFee(
+                receipt,
+                listOf(SanityWarning.FEE_OVER_HALF_VALUE, SanityWarning.FEE_OVER_10_USD),
+                requiresPin = true,
+                useBiometrics = true
+            )
         }
         advanceUntilIdle()
         assertEquals(RecoveryApproval.Fee(receipt), sut.uiState.value.recoveryApproval)
@@ -145,8 +155,10 @@ class SendPendingViewModelTest : BaseUnitTest() {
         sut.initOnchain(original.txid, amount)
         advanceUntilIdle()
         val accepted = original.copy(
-            txid = winner, candidateTxids = original.candidateTxids + winner,
-            evidence = OnchainSendEvidence.Accepted, localFollowupComplete = false,
+            txid = winner,
+            candidateTxids = original.candidateTxids + winner,
+            evidence = OnchainSendEvidence.Accepted,
+            localFollowupComplete = false,
         )
         sut.retryOriginal(2uL) { _, _ ->
             whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(accepted)

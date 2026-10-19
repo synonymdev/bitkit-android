@@ -44,7 +44,6 @@ import to.bitkit.ui.shared.modifiers.swipeToHide
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun BalanceHeaderView(
     sats: Long,

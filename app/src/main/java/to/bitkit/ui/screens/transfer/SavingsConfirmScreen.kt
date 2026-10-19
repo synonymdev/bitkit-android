@@ -137,7 +137,6 @@ fun SavingsConfirmScreen(
     }
 }
 
-@Suppress("MagicNumber", "LongParameterList")
 @Composable
 private fun SavingsConfirmContent(
     fallbackAmount: ULong,

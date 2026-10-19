@@ -12,7 +12,6 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 
 /** Shared v1: one active operation; integer strings avoid cross-platform precision loss. */
 @Serializable
-@Suppress("LongParameterList")
 data class ActiveOnchainAttemptBackup(
     val version: Int = 1,
     val wallet: Wallet,
@@ -58,7 +57,6 @@ data class ActiveOnchainAttemptBackup(
         val originalOrderFeeSats: String,
     )
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
     fun restored(network: String, binding: String, walletId: String, destinationIndex: Int): OnchainSendAttempt {
         require(version == 1 && wallet.kind == "software")
         require(wallet.network in setOf("bitcoin", "testnet", "signet", "regtest") && wallet.network == network)
@@ -131,7 +129,7 @@ data class ActiveOnchainAttemptBackup(
             requestId = requestId, orderId = orderId, payerIdentity = payerIdentity,
             address = address, amountSats = unsigned(amountSats), isMaxAmount = isMaxAmount,
             feeRateSatsPerVByte = unsigned(feeRateSatsPerVByte), isTransfer = orderId != null,
-            channelId = followup?.channelId, tags = followup?.tags.orEmpty(), evidence = evidence,
+            channelId = followup.channelId, tags = followup.tags, evidence = evidence,
             txid = txid, refusalReason = rejectionReason, localFollowupComplete = false,
             originalInputs = inputs, candidateTxids = candidateTxids, candidateFeeRates = restoredFeeRates,
             candidateMiningFees = restoredMiningFees,

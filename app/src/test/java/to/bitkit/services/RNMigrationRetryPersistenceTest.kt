@@ -59,7 +59,7 @@ class RNMigrationRetryPersistenceTest : BaseUnitTest() {
             val preferences = store.data.first()
             assertEquals(metadata.tags, json.decodeFromString<RNMetadata>(assertNotNull(preferences[metadataKey])).tags)
             savedSchedule = json.decodeFromString<RNMigrationRetrySchedule>(assertNotNull(preferences[scheduleKey]))
-            assertEquals(60_000L, savedSchedule?.delayMillis)
+            assertEquals(60_000L, savedSchedule.delayMillis)
             assertFalse(service.canCleanupAfterMigration)
         }
 

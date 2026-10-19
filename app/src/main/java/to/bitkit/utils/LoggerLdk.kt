@@ -24,7 +24,6 @@ class LoggerLdk @Inject constructor(
         private const val TAG = "LogDumperLdk"
     }
 
-    @Suppress("LongMethod")
     fun dumpNetworkGraphInfo(node: Node, trustedPeers: List<PeerDetails>, bolt11: String) {
         val nodeIdPreviewLen = 20
 

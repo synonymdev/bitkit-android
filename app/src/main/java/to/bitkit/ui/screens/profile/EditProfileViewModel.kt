@@ -29,7 +29,6 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class EditProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -269,7 +268,7 @@ class EditProfileViewModel @Inject constructor(
         }
         try {
             privatePaykitRepo.beginProfileDeletion()
-            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
+            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG, deferAppSync = true)
             val result = pubkyRepo.deleteProfileWithSessionRetry()
             if (result.isSuccess) {
                 privatePaykitRepo.closeAndClear()

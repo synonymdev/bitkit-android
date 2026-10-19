@@ -5,16 +5,15 @@ import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.paykit.PaykitException
 import com.synonym.vssclient.VssItem
-import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
@@ -79,11 +78,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
-@Suppress("LargeClass")
 class BackupRepoTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val cacheStore = mock<CacheStore>()
@@ -130,7 +129,8 @@ class BackupRepoTest : BaseUnitTest() {
     fun setUp() = test {
         whenever(coreService.validateBitcoinAddress(any())).thenAnswer {
             com.synonym.bitkitcore.ValidationResult(
-                address = it.getArgument(0), network = com.synonym.bitkitcore.NetworkType.REGTEST,
+                address = it.getArgument(0),
+                network = com.synonym.bitkitcore.NetworkType.REGTEST,
                 addressType = com.synonym.bitkitcore.AddressType.P2WPKH,
             )
         }
@@ -377,7 +377,10 @@ class BackupRepoTest : BaseUnitTest() {
         val originalWire = requireNotNull(state.activeOnchainAttempt)
         val original = originalWire.restored("regtest", originalWire.wallet.binding, WalletScope.default, 0)
         val ordinary = original.copy(
-            requestId = null, payerIdentity = null, orderId = null, isTransfer = false,
+            requestId = null,
+            payerIdentity = null,
+            orderId = null,
+            isTransfer = false,
             evidence = OnchainSendEvidence.Accepted,
             candidateFeeRates = mapOf(requireNotNull(original.txid) to 4uL),
         )
@@ -387,11 +390,18 @@ class BackupRepoTest : BaseUnitTest() {
         stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire))
         sut.performFullRestoreFromLatestBackup().getOrThrow()
         val ordered = org.mockito.kotlin.inOrder(onchainSendAttemptStore, privatePaykitRepo, lightningRepo)
-        ordered.verify(onchainSendAttemptStore).restoreActive(wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0))
+        ordered.verify(
+            onchainSendAttemptStore
+        ).restoreActive(wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0))
         ordered.verify(privatePaykitRepo).restoreBackup(anyOrNull())
         ordered.verify(lightningRepo).completeAcceptedOrdinaryFollowup(requireNotNull(ordinary.txid))
         whenever(onchainSendAttemptStore.current()).thenReturn(ordinary.copy(evidence = OnchainSendEvidence.Unknown))
-        stubWalletBackup(paykitPaymentState = state.copy(pendingProofs = emptyList(), activeOnchainAttempt = wire.copy(status = "unknown")))
+        stubWalletBackup(
+            paykitPaymentState = state.copy(
+                pendingProofs = emptyList(),
+                activeOnchainAttempt = wire.copy(status = "unknown")
+            )
+        )
         sut.performFullRestoreFromLatestBackup().getOrThrow()
         verify(lightningRepo, times(1)).completeAcceptedOrdinaryFollowup(any())
     }
@@ -422,8 +432,11 @@ class BackupRepoTest : BaseUnitTest() {
     @Test
     fun `wallet backup captures transfer completed before locked attempt snapshot`() = test {
         val transfer = TransferEntity(
-            id = "original-transfer", type = to.bitkit.models.TransferType.TO_SPENDING,
-            amountSats = 1000, fundingTxId = "ab".repeat(32), createdAt = 1,
+            id = "original-transfer",
+            type = to.bitkit.models.TransferType.TO_SPENDING,
+            amountSats = 1000,
+            fundingTxId = "ab".repeat(32),
+            createdAt = 1,
         )
         var savedTransfers = emptyList<TransferEntity>()
         whenever(transferDao.getAll()).thenAnswer { savedTransfers }
@@ -621,9 +634,13 @@ class BackupRepoTest : BaseUnitTest() {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val originalWire = requireNotNull(state.activeOnchainAttempt)
-        val wire = originalWire.copy(status = "accepted",
-            candidateFeeRates = mapOf(requireNotNull(originalWire.txid) to "4"))
-        whenever(onchainSendAttemptStore.current()).thenReturn(wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0))
+        val wire = originalWire.copy(
+            status = "accepted",
+            candidateFeeRates = mapOf(requireNotNull(originalWire.txid) to "4")
+        )
+        whenever(
+            onchainSendAttemptStore.current()
+        ).thenReturn(wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0))
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
         stubWalletBackup(paykitPaymentState = state.copy(activeOnchainAttempt = wire))
         sut.performFullRestoreFromLatestBackup().getOrThrow()
@@ -639,9 +656,13 @@ class BackupRepoTest : BaseUnitTest() {
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         val attempt = wire.restored("regtest", wire.wallet.binding, WalletScope.default, 0).copy(
-            evidence = OnchainSendEvidence.Pending, txid = null, originalInputs = null,
-            candidateTxids = emptyList(), candidateFeeRates = emptyMap(),
-            preparationPending = true, restoredFromBackup = false,
+            evidence = OnchainSendEvidence.Pending,
+            txid = null,
+            originalInputs = null,
+            candidateTxids = emptyList(),
+            candidateFeeRates = emptyMap(),
+            preparationPending = true,
+            restoredFromBackup = false,
         )
         val original = state.pendingProofs.single().copy(paymentIdentifier = null)
         val unrelated = original.copy(paymentAppId = "unrelated-app", identity = "other-payer")
@@ -707,7 +728,9 @@ class BackupRepoTest : BaseUnitTest() {
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         val invalid = state.pendingProofs.first().copy(
-            requestId = state.pendingProofs.first().requestId.copy(paymentRequestId = "550e8400-e29b-41d4-a716-446655440099"),
+            requestId = state.pendingProofs.first().requestId.copy(
+                paymentRequestId = "550e8400-e29b-41d4-a716-446655440099"
+            ),
             kind = "unsupported-proof",
         )
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
@@ -743,7 +766,9 @@ class BackupRepoTest : BaseUnitTest() {
         val wire = requireNotNull(state.activeOnchainAttempt)
         val conflicting = requireNotNull(wire.candidateFeeRates) + (wire.candidateTxids.first() to "3")
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
-        stubWalletBackup(paykitPaymentState = state.copy(activeOnchainAttempt = wire.copy(candidateFeeRates = conflicting)))
+        stubWalletBackup(
+            paykitPaymentState = state.copy(activeOnchainAttempt = wire.copy(candidateFeeRates = conflicting))
+        )
         assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
         verify(onchainSendAttemptStore, never()).restoreActive(any())
         verify(paykitPaymentProofRepo, never()).restoreBackup(any())
@@ -789,9 +814,15 @@ class BackupRepoTest : BaseUnitTest() {
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
-        stubWalletBackup(paykitPaymentState = state.copy(activeOnchainAttempt = wire.copy(
-            followup = requireNotNull(wire.followup).copy(contact = kotlinx.serialization.json.JsonPrimitive(123)),
-        )))
+        stubWalletBackup(
+            paykitPaymentState = state.copy(
+                activeOnchainAttempt = wire.copy(
+                    followup = requireNotNull(wire.followup).copy(
+                        contact = kotlinx.serialization.json.JsonPrimitive(123),
+                    ),
+                )
+            )
+        )
         assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
         verify(onchainSendAttemptStore, never()).restoreActive(any())
         verify(paykitPaymentProofRepo, never()).restoreBackup(any())
@@ -828,7 +859,9 @@ class BackupRepoTest : BaseUnitTest() {
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
-        whenever(coreService.validateBitcoinAddress(wire.address)).thenThrow(IllegalArgumentException("invalid address"))
+        whenever(
+            coreService.validateBitcoinAddress(wire.address)
+        ).thenThrow(IllegalArgumentException("invalid address"))
         stubWalletBackup(paykitPaymentState = state)
         assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
         verify(onchainSendAttemptStore, never()).restoreActive(any())
@@ -843,7 +876,9 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(vssStoreIdProvider.getBackupWalletBinding(0)).thenReturn(wire.wallet.binding)
         whenever(coreService.validateBitcoinAddress(wire.address)).thenReturn(
             com.synonym.bitkitcore.ValidationResult(
-                wire.address, com.synonym.bitkitcore.NetworkType.BITCOIN, com.synonym.bitkitcore.AddressType.P2WPKH,
+                wire.address,
+                com.synonym.bitkitcore.NetworkType.BITCOIN,
+                com.synonym.bitkitcore.AddressType.P2WPKH,
             )
         )
         stubWalletBackup(paykitPaymentState = state)

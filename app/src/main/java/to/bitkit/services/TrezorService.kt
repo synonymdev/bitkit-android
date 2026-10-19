@@ -6,8 +6,8 @@ import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.EventListener
 import com.synonym.bitkitcore.SingleAddressInfoResult
-import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TransactionDetail
+import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
@@ -26,8 +26,8 @@ import com.synonym.bitkitcore.onchainBroadcastRawTx
 import com.synonym.bitkitcore.onchainComposeTransaction
 import com.synonym.bitkitcore.onchainGetAccountInfo
 import com.synonym.bitkitcore.onchainGetAddressInfo
-import com.synonym.bitkitcore.onchainGetTransactionHistory
 import com.synonym.bitkitcore.onchainGetTransactionDetail
+import com.synonym.bitkitcore.onchainGetTransactionHistory
 import com.synonym.bitkitcore.onchainStartWatcher
 import com.synonym.bitkitcore.onchainStopAllWatchers
 import com.synonym.bitkitcore.onchainStopWatcher
@@ -57,7 +57,6 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
-@Suppress("TooManyFunctions")
 @Singleton
 class TrezorService @Inject constructor(
     private val transport: TrezorTransport,

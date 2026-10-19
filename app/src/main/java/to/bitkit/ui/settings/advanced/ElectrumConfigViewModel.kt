@@ -141,7 +141,6 @@ class ElectrumConfigViewModel @Inject constructor(
         }
     }
 
-    @Suppress("ComplexCondition")
     fun connectToServer() {
         val currentState = _uiState.value
         val port = currentState.port.toIntOrNull()

@@ -80,7 +80,6 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
-@Suppress("LongParameterList", "TooManyFunctions")
 class BlocktankRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
@@ -436,7 +435,6 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun openChannel(orderId: String): Result<IBtOrder> = withContext(bgDispatcher) {
         runCatching {
             Logger.debug("Opening channel for order: '$orderId'", context = TAG)

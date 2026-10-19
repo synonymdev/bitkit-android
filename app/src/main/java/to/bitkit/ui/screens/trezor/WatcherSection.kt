@@ -39,7 +39,6 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-@Suppress("LongParameterList")
 @Composable
 internal fun WatcherSection(
     uiState: TrezorUiState,

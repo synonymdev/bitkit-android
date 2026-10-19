@@ -13,6 +13,7 @@ import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -194,7 +195,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
             verify(pubkyRepo).deleteProfileWithSessionRetry()
             verify(privatePaykitRepo).closeAndClear()
         }
@@ -215,7 +216,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
             verify(pubkyRepo).deleteProfileWithSessionRetry()
             verify(privatePaykitRepo).closeAndClear()
         }
@@ -235,6 +236,8 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
         assertTrue(sut.uiState.value.showDeleteFailureDialog)
         assertFalse(sut.uiState.value.isDeleting)
+        verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test
@@ -296,7 +299,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
     @Test
     fun `deleteProfile should continue when private cleanup fails`() = test {
         val sut = createSut()
-        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true)) }
             .thenReturn(Result.failure(TestAppError("cleanup failed")))
         whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
         advanceUntilIdle()
@@ -310,7 +313,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         assertFalse(sut.uiState.value.isDeleting)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
             verify(pubkyRepo).deleteProfileWithSessionRetry()
             verify(privatePaykitRepo).closeAndClear()
         }
@@ -338,6 +341,8 @@ class EditProfileViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true)) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
 

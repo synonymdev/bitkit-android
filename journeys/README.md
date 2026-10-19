@@ -185,6 +185,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `amount-limits/transfer-spending-preset-delete.xml` | not ported yet — the same fix shipped in synonymdev/bitkit-ios#289, so this one should port |
 | `app-update/critical-update-onboarding.xml` | not ported yet — iOS already blocks at the top level in `AppScene`, so the journey applies there once written |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
+| `home/timed-reminders-do-not-interrupt.xml` | paired draft in synonymdev/bitkit-ios#1013; the journey name and actions match, but iOS device verification is incomplete. Android resumes Home after permission prompts and background/foreground; iOS uses primary-screen lifecycle callbacks and explicit rechecks. |
 | `receive/receive-tabs-wraparound.xml` | same file and steps — on Android a swipe that starts at the screen edge is the system back gesture, which closes the sheet on every tab; start the swipes away from the edge |
 | `receive/receive-auto-tab-selection.xml` | not ported — the Auto tab override fix is Android-only so far; iOS parity not checked |
 | `security/pin-lock-on-resume.xml` | not ported yet — iOS already clears the PIN verification on entering the background, so the journey applies; it lands with the iOS side of synonymdev/bitkit-android#1298 |

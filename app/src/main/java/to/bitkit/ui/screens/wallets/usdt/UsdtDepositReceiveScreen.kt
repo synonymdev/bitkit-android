@@ -60,7 +60,6 @@ import java.text.DecimalFormatSymbols
 import java.text.NumberFormat
 import java.util.Locale
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 internal fun ColumnScope.UsdtDepositReceiveScreen(
     viewModel: UsdtViewModel,
@@ -168,7 +167,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                 }
             },
             onAmount = {
-                if (draftAmount != it) deposits.clearAmountError()
+                if (draftAmount != it) deposits.clearError()
                 draftAmount = it
             },
             onCreate = {
