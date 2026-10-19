@@ -8255,6 +8255,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `replacing a timed sheet releases its manager without closing the replacement`() = test {
+        sut.setIsAuthenticated(true)
+        assertTrue(presentTimedSheet(TimedSheetType.APP_UPDATE))
+        timedSheetType.value = TimedSheetType.APP_UPDATE
+        runCurrent()
+
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        advanceUntilIdle()
+        verify(timedSheetManager).dismissCurrentSheet()
+        timedSheetType.value = null
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+        verify(timedSheetManager, atLeastOnce()).reevaluate()
+        assertTrue(presentTimedSheet(TimedSheetType.USDT))
+    }
+
+    @Test
     fun `queued scan flushes after timed sheet dismisses`() = test {
         val bolt11 = "lnbcrt1lockedtimed"
         settingsData.value = SettingsData(isPinEnabled = true)

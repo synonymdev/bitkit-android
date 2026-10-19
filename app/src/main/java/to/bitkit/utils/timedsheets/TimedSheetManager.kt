@@ -58,11 +58,11 @@ class TimedSheetManager(
 
     fun dismissCurrentSheet() {
         val sheet = currentTimedSheet ?: return
+        currentTimedSheet = null
+        _currentSheet.update { null }
 
         scope.launch {
             sheet.onDismissed()
-            currentTimedSheet = null
-            _currentSheet.update { null }
 
             Logger.debug("Clearing timed sheet queue", context = TAG)
         }

@@ -6718,7 +6718,9 @@ class AppViewModel @Inject constructor(
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
             if (_currentSheet.value != null && !replacesSubscriptionReview(sheetType)) {
+                val replacesTimedSheet = _currentSheet.value is Sheet.TimedSheet
                 _currentSheet.update { null }
+                if (replacesTimedSheet) dismissTimedSheet()
                 delay(SCREEN_TRANSITION_DELAY)
             }
             receiveSheetContext = (sheetType as? Sheet.Receive)?.let { receiveSheet ->

@@ -7,5 +7,6 @@
     <action>Open Settings, General, Payments. Verify the USDT (Tether) switch remains available. Enable it and return Home. Verify the USDT tile appears.</action>
     <action>On another eligible unseen test profile, open Receive before the timed intro appears, wait at least three seconds, then close Receive without restarting. Verify the USDT intro appears after the screen settles.</action>
     <action>Tap No Thanks (id "UsdtIntroDecline"), relaunch, and verify the intro does not return. Repeat with Enable USDT (id "UsdtIntroEnable") on another unseen profile and verify relaunch preserves the enabled choice without repeating the intro.</action>
+    <action>On an owned test profile with App Update and an unseen USDT intro both eligible, wait for App Update, then open a Bitcoin payment link to replace it. Verify the payment sheet remains open until closed without paying, and the USDT intro can then appear after Home settles without restarting.</action>
   </actions>
 </journey>

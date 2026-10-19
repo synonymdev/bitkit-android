@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -112,6 +113,36 @@ class TimedSheetManagerTest : BaseUnitTest() {
 
         assertNull(sut.currentSheet.value)
         verify(sheet1).onDismissed()
+    }
+
+    @Test
+    fun `dismissal releases the queue before its callback finishes`() = test {
+        val dismissed = CompletableDeferred<Unit>()
+        val first = mock<TimedSheetItem> {
+            on { type } doReturn TimedSheetType.APP_UPDATE
+            on { priority } doReturn 5
+        }
+        val next = mock<TimedSheetItem> {
+            on { type } doReturn TimedSheetType.USDT
+            on { priority } doReturn 4
+        }
+        whenever(first.shouldShow()).thenReturn(true)
+        whenever(next.shouldShow()).thenReturn(true)
+        doSuspendableAnswer { dismissed.await() }
+            .whenever(first).onDismissed()
+        sut.registerSheet(first)
+        sut.registerSheet(next)
+        sut.onHomeScreenEntered()
+        testScope.advanceTimeBy(2100)
+
+        sut.dismissCurrentSheet()
+        assertNull(sut.currentSheet.value)
+        sut.reevaluate()
+        testScope.advanceTimeBy(2100)
+        assertEquals(TimedSheetType.USDT, sut.currentSheet.value)
+        dismissed.complete(Unit)
+        testScope.advanceTimeBy(100)
+        assertEquals(TimedSheetType.USDT, sut.currentSheet.value)
     }
 
     @Test
