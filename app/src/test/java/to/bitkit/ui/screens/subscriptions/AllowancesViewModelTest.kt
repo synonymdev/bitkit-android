@@ -4,6 +4,7 @@ package to.bitkit.ui.screens.subscriptions
 
 import android.content.Context
 import com.synonym.paykit.AllowanceLifecycleState
+import kotlin.test.assertNull
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -13,11 +14,14 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.USD
@@ -56,6 +60,8 @@ class AllowancesViewModelTest : BaseUnitTest() {
     private val paymentRequestRepo: PaykitPaymentRequestRepo = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val currencyRepo: CurrencyRepo = mock()
+    private val settingsStore: SettingsStore = mock()
+    private val settings = MutableStateFlow(SettingsData())
     private val clock = object : Clock {
         override fun now() = Instant.parse("2027-01-15T08:00:00Z")
     }
@@ -70,6 +76,7 @@ class AllowancesViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(allowanceRepo.entries).thenReturn(entries)
+        whenever(settingsStore.data).thenReturn(settings)
         whenever(allowanceRepo.autoPaidSats).thenReturn(autoPaidSats)
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever(paymentRequestRepo.eligibleTargets).thenReturn(targets)
@@ -107,6 +114,7 @@ class AllowancesViewModelTest : BaseUnitTest() {
             paymentRequestRepo = paymentRequestRepo,
             pubkyRepo = pubkyRepo,
             currencyRepo = currencyRepo,
+            settingsStore = settingsStore,
             clock = clock,
         )
     }
@@ -195,6 +203,64 @@ class AllowancesViewModelTest : BaseUnitTest() {
         assertEquals(false, loadedState().isWorking)
     }
 
+    @Test
+    fun `saving asks for the pin first when payments require it`() = test {
+        settings.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, isBiometricEnabled = true)
+        whenever(allowanceRepo.propose(any(), any())).thenReturn(Result.success(Unit))
+        var saved = false
+
+        sut.propose(profile(LEO_KEY, "Leo"), perPaymentUsd = 5, monthlyUsd = 100) { saved = true }
+
+        assertEquals(AllowanceAuthorization(useBiometrics = true), loadedState().authorization)
+        verify(allowanceRepo, never()).propose(any(), any())
+
+        sut.onAuthorized()
+
+        verify(allowanceRepo).propose(eq(LEO_KEY), any())
+        assertTrue(saved)
+        assertNull(loadedState().authorization)
+    }
+
+    @Test
+    fun `a cancelled check ends nothing`() = test {
+        settings.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true)
+        entries.value = listOf(entry())
+
+        sut.end("entry-1") {}
+        assertEquals(AllowanceAuthorization(useBiometrics = false), loadedState().authorization)
+        sut.onAuthorizationCancelled()
+
+        verify(allowanceRepo, never()).end(any())
+        assertNull(loadedState().authorization)
+    }
+
+    @Test
+    fun `the payee answers and the payer declines without a check`() = test {
+        settings.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true)
+        entries.value = listOf(entry(role = PaykitAllowance.Role.ALLOWEE))
+        whenever(allowanceRepo.accept(any())).thenReturn(Result.success(Unit))
+        whenever(allowanceRepo.reject(any())).thenReturn(Result.success(Unit))
+
+        sut.accept("entry-1") {}
+        sut.decline("entry-1") {}
+
+        verify(allowanceRepo).accept("entry-1")
+        verify(allowanceRepo).reject("entry-1")
+        assertNull(loadedState().authorization)
+    }
+
+    @Test
+    fun `nothing is asked when payments need no pin`() = test {
+        settings.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = false)
+        entries.value = listOf(entry())
+        whenever(allowanceRepo.end(any())).thenReturn(Result.success(Unit))
+
+        sut.end("entry-1") {}
+
+        verify(allowanceRepo).end("entry-1")
+        assertNull(loadedState().authorization)
+    }
+
     private fun TestScope.loadedState(): AllowancesUiState {
         backgroundScope.launch { sut.uiState.collect {} }
         runCurrent()
@@ -206,12 +272,13 @@ class AllowancesViewModelTest : BaseUnitTest() {
         perPaymentSats: ULong = 5_000uL,
         monthlySats: ULong = 50_000uL,
         limits: PaykitAllowanceLimits? = null,
+        role: PaykitAllowance.Role = PaykitAllowance.Role.ALLOWER,
     ) = PaykitAllowanceEntry(
         id = "entry-1",
         allowances = listOf(
             PaykitAllowance(
                 id = PaykitAllowance.Id(LEO_KEY, "allowance-1"),
-                role = PaykitAllowance.Role.ALLOWER,
+                role = role,
                 lifecycleState = state,
                 isProposedByMe = true,
                 perPaymentMaxSats = perPaymentSats,

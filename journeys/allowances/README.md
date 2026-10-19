@@ -46,6 +46,10 @@ killed right after handing the payment to the node never paid twice after relaun
   whose subtitle ends with "· Auto-paid" for an automatic payment
 - Incoming request: `PaymentRequestsBell`, `PaymentRequestsSheet`
 
+A payer who requires a PIN for payments sees the PIN pad (or biometrics) over the sheet when saving or ending
+an allowance, and when accepting an allowance a payee asked for; the payee's answers and automatic payments never
+ask. `pin-gates-allowance-changes.xml` covers it.
+
 The review sheet on the payee opens on its own about a second after the proposal arrives; no tap is
 needed to reach it. `android layout` can omit test tags applied to plain `Box` and `Column`
 containers; use the raw UI Automator hierarchy when a documented container tag is missing.
