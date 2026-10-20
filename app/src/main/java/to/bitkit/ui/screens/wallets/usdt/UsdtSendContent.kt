@@ -578,9 +578,12 @@ private fun UsdtConfirmation(
                     }
                     UsdtReviewDetailsButton(showDetails) { showDetails = !showDetails }
                 }
+                if (showDetails) {
+                    FillHeight()
+                    UsdtFeeNote()
+                }
             }
         }
-        if (showDetails) UsdtFeeNote()
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = Colors.Usdt,
