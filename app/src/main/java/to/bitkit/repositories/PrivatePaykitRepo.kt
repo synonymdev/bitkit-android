@@ -329,7 +329,7 @@ class PrivatePaykitRepo @Inject constructor(
                     runSuspendCatching {
                         paykitSdkService.checkRefreshAdmission(Priority.Background)
                         if (isContactSharingCleanupPending()) return@runSuspendCatching
-                        if (canPublishPrivateEndpoints()) {
+                        if (canPublishPrivateEndpoints(priority = Priority.Background)) {
                             addressReservationRepo.reconcileReservedIndexesWithLdk().getOrThrow()
                             if (generation != preparationGeneration) return@runSuspendCatching
                             publishLocalEndpoints(
@@ -1030,11 +1030,11 @@ class PrivatePaykitRepo @Inject constructor(
                 val publicationPriority = contactPreparationPriority(priority)
                 publicationMutex.withLock {
                     paykitSdkService.checkRefreshAdmission(publicationPriority)
-                    val status = paykitSdkService.identityStatus()
+                    val status = paykitSdkService.identityStatus(publicationPriority)
                     if (!isCurrentPublication(generation, identity, requireImmediatePublication, status)) {
                         return@withLock
                     }
-                    if (!canPublishPrivateEndpoints(status)) {
+                    if (!canPublishPrivateEndpoints(status, publicationPriority)) {
                         if (requireImmediatePublication) throw PrivatePaykitError.PrivateUnavailable
                         return@withLock
                     }
@@ -1264,7 +1264,7 @@ class PrivatePaykitRepo @Inject constructor(
         priority: Priority = Priority.Ordered,
     ) {
         if (isDeletingProfile || generation != preparationGeneration) return
-        if (isContactSharingCleanupPending() || !hasPrivatePaymentAccessForCurrentProfile()) return
+        if (isContactSharingCleanupPending() || !hasPrivatePaymentAccessForCurrentProfile(priority)) return
         if (isDeletingProfile || generation != preparationGeneration) return
         drainAndSchedulePrivateLinkRetries(reason, publicKeys.distinct(), generation, priority)
     }
@@ -2163,7 +2163,10 @@ class PrivatePaykitRepo @Inject constructor(
         return paymentHash in paymentHashes
     }
 
-    private suspend fun canPublishPrivateEndpoints(status: IdentityStatus? = null): Boolean {
+    private suspend fun canPublishPrivateEndpoints(
+        status: IdentityStatus? = null,
+        priority: Priority = Priority.Ordered,
+    ): Boolean {
         if (isDeletingProfile) return false
         val settings = settingsStore.data.first()
         val locallyEligible = settings.sharesPrivatePaykitEndpoints &&
@@ -2175,13 +2178,15 @@ class PrivatePaykitRepo @Inject constructor(
         val hasAccess = if (status?.publicKey != null) {
             status.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
         } else {
-            hasPrivatePaymentAccessForCurrentProfile()
+            hasPrivatePaymentAccessForCurrentProfile(priority)
         }
         return hasAccess && !isDeletingProfile
     }
 
-    private suspend fun hasPrivatePaymentAccessForCurrentProfile(): Boolean = runSuspendCatching {
-        paykitSdkService.hasPrivatePaymentAccess()
+    private suspend fun hasPrivatePaymentAccessForCurrentProfile(priority: Priority): Boolean = runSuspendCatching {
+        paykitSdkService.hasPrivatePaymentAccess(priority)
+    }.onFailure {
+        if (it == PaykitPaymentRequestError.OperationInProgress) throw it
     }.getOrDefault(false)
 
     private suspend fun isContactSharingCleanupPending(): Boolean =

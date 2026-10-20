@@ -1586,6 +1586,61 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `queued automatic publication reads retain contacts when payment starts`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        for (read in listOf("capability", "identity")) {
+            sut = createSut()
+            val queued = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var paymentActive = false
+            suspend fun awaitAdmission(priority: Priority) {
+                queued.complete(Unit)
+                release.await()
+                if (paymentActive && priority == Priority.Background) {
+                    throw PaykitPaymentRequestError.OperationInProgress
+                }
+            }
+            doSuspendableAnswer {
+                if (read == "capability") awaitAdmission(it.getArgument(0))
+                paykitSdkService.hasPrivatePaymentAccess()
+            }.whenever(paykitSdkService).hasPrivatePaymentAccess(any())
+            doSuspendableAnswer {
+                if (read == "identity") awaitAdmission(it.getArgument(0))
+                paykitSdkService.identityStatus()
+            }.whenever(paykitSdkService).identityStatus(any())
+            clearInvocations(paykitSdkService, addressReservationRepo)
+
+            sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            assertTrue(queued.isCompleted, read)
+            paymentActive = true
+            release.complete(Unit)
+            runCurrent()
+
+            verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any(), any())
+            verify(addressReservationRepo, never()).currentOrRotatedAddress(any())
+            assertEquals(0L, sut.backupStateVersion.value)
+            assertFalse(cacheData.value.contacts[CONTACT_KEY]?.hasPublishedPrivatePaymentList == true)
+
+            sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+            verify(paykitSdkService).identityStatus(Priority.Ordered)
+            verify(paykitSdkService).syncPrivatePaymentListsWithReservations(any(), eq(false), eq(false))
+
+            paymentActive = false
+            advanceTimeBy(1_000)
+            runCurrent()
+            verify(paykitSdkService).syncPrivatePaymentListsWithReservations(any(), eq(false), eq(true))
+            assertTrue(cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList)
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
     fun `deferred automatic publication retains contacts and releases explicit publication`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,
@@ -4141,6 +4196,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 .doSuspendableAnswer { paykitSdkService.ensureLinkWithPeer(it.getArgument(0)) }
         }
         whenever { paykitSdkService.identityStatus(any()) }.doSuspendableAnswer { paykitSdkService.identityStatus() }
+        whenever { paykitSdkService.hasPrivatePaymentAccess(any()) }
+            .doSuspendableAnswer { paykitSdkService.hasPrivatePaymentAccess() }
     }
 
     private suspend fun preparePrivateLightningContact(keys: List<String> = listOf(CONTACT_KEY)) {

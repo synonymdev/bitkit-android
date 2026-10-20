@@ -442,10 +442,14 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun hasPrivatePaymentAccess(): Boolean {
+    suspend fun hasPrivatePaymentAccess(): Boolean = hasPrivatePaymentAccess(Priority.Ordered)
+
+    internal suspend fun hasPrivatePaymentAccess(priority: Priority): Boolean {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(priority) {
+            checkRefreshAdmission(priority)
             withPaykitKey {
+                checkRefreshAdmission(priority)
                 completeSdkCall { it.identityStatus() }?.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
             }
         }

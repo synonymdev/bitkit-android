@@ -125,6 +125,7 @@ class PaykitSdkServiceTest {
             { identityStatus(it) },
             { linkedPeers(it) },
             { privateMessageSchedulingSnapshot(it) },
+            { hasPrivatePaymentAccess(it) },
         )
         for ((index, operation) in operations.withIndex()) {
             for (queued in if (index >= 2) listOf(true) else listOf(true, false)) {
@@ -274,6 +275,7 @@ class PaykitSdkServiceTest {
             { identityStatus(Priority.Background) },
             { linkedPeers(Priority.Background) },
             { privateMessageSchedulingSnapshot(Priority.Background) },
+            { hasPrivatePaymentAccess(Priority.Background) },
         )
         for (operation in operations) {
             assertSame(
