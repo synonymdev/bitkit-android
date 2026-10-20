@@ -8,7 +8,9 @@ import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -38,6 +40,7 @@ import to.bitkit.viewmodels.SanityWarning
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -102,6 +105,33 @@ class SendPendingViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         authorization.await()
         assertNull(sut.uiState.value.recoveryApproval)
+    }
+
+    @Test
+    fun `declined or cancelled recovery approval returns to idle pending`() = test {
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32),
+            emptyList(),
+            "original",
+            1_000uL,
+            feeRateSatsPerVByte = 10uL,
+            miningFeeSats = 600uL
+        )
+        for (cancelCaller in listOf(false, true)) {
+            val authorization = launch {
+                sut.approveRecoveryFee(receipt, emptyList(), requiresPin = true, useBiometrics = true)
+            }
+            runCurrent()
+            assertEquals(RecoveryApproval.Fee(receipt), sut.uiState.value.recoveryApproval)
+            if (cancelCaller) {
+                authorization.cancelAndJoin()
+            } else {
+                sut.answerRecoveryApproval(false)
+                runCurrent()
+            }
+            assertTrue(authorization.isCancelled)
+            assertNull(sut.uiState.value.recoveryApproval)
+        }
     }
 
     @Test

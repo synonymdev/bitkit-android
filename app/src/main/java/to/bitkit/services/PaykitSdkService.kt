@@ -1156,7 +1156,7 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun submitPaymentProof(
+    internal suspend fun submitPaymentProof(
         counterparty: String,
         paymentRequestId: String,
         paymentAppId: String,
@@ -1164,9 +1164,10 @@ class PaykitSdkService @Inject constructor(
         proofJson: String,
         billingPeriod: PaykitBillingPeriod? = null,
         conversionQuoteId: String? = null,
+        priority: Priority = Priority.Ordered,
     ): PaymentRequestRecord {
         isSetup.await()
-        return measuredOperation("submitPaymentProof") {
+        return measuredOperation("submitPaymentProof", priority) {
             withStateRevisionTracking { handle ->
                 completeSdkCall {
                     handle.submitPaymentProof(

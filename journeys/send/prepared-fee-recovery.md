@@ -9,6 +9,16 @@ These checks need a disposable funded regtest wallet and controlled native trans
 
 If the winning fee is not already known, an attempt without a retained candidate fee must still wait for verified transaction-history data. The private candidate-fee map is not exported in the shared backup: reset or a new installation uses the existing history fallback, not an imported fee. A retained fee is bookkeeping evidence, never payment-acceptance evidence.
 
+## Recovery review and authentication
+
+Use the retained original payment from the same controlled fixture. Keep transaction history controlled so an original confirmation cannot silently replace the approval being checked.
+
+1. Run the shared retry journey with payment PIN enabled and biometrics disabled. Check cancellation at the fee entry, exact prepared fee and PIN stages. Cancellation must not authorize a replacement or discard the original Pending payment.
+2. Repeat the fee and PIN checks while backgrounding the app, returning and unlocking normally. If the review closes, reopen the retained original Pending payment; do not start a new send. Verify the original recipient and amount before any approval. Separately close the review and reopen it without backgrounding.
+3. On a disposable device with enrolled biometrics, repeat retry authentication and cancel the system prompt. For an eligible expired, unbroadcast request, also cancel both the abandon confirmation and its release-fee approval, then exercise biometric cancellation. Verify cancellation neither authorizes a replacement nor releases the original inputs. Report these checks as blocked when biometric or controlled abandon fixtures are unavailable.
+
+With no active payment and the SDK initially idle, verify that passive refresh is deferred during each visible fee, abandon or payment-authentication review. A biometric overlay that leaves the app visible must retain this protection. Backgrounding, dismissing or cancelling the review releases its hold; an idle Pending screen must still allow passive refresh and recovery observation. Use the focused admission tests or a sanitized SDK operation trace for these checks: waiting on a screen alone cannot establish SDK admission or a latency improvement. Work already inside the SDK may finish.
+
 ## Platform adaptations
 
 Android retains candidate fees for original sends and replacements in `candidateMiningFees`. iOS already retains the original prepared fee; `candidateFeeSats` covers successors/replacements. Run the same four cases on both platforms. Use each platform's normal identity-selection flow; iOS Max recovery keeps the original rate without an editable field. The common UI actions are in [onchain-original-payment-retry.xml](onchain-original-payment-retry.xml).

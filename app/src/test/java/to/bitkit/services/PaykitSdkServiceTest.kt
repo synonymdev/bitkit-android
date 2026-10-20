@@ -23,6 +23,7 @@ import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
+import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import com.synonym.paykit.PrivatePaymentListSyncChange
@@ -987,57 +988,123 @@ class PaykitSdkServiceTest {
 
     @Test
     fun `payment mutations overtake background work without crossing signout barriers`() = runTest {
-        val payments = listOf<suspend PaykitSdkService.() -> Any?>(
-            { claimPaymentRequestForExecution(RING_PUBKY, "request") },
-            { acceptPaymentRequest(RING_PUBKY, "request", 1uL) },
-        )
-        for ((index, payment) in payments.withIndex()) {
-            for (withBarrier in listOf(false, true)) {
+        mockConstruction(PrivateJsonObject::class.java).use {
+            val payments = listOf<suspend PaykitSdkService.() -> Any?>(
+                { claimPaymentRequestForExecution(RING_PUBKY, "request") },
+                { acceptPaymentRequest(RING_PUBKY, "request", 1uL) },
+                {
+                    submitPaymentProof(
+                        RING_PUBKY,
+                        "request",
+                        "bitkit",
+                        "endpoint",
+                        "{}",
+                        priority = Priority.Interactive
+                    )
+                },
+                { submitPaymentProof(RING_PUBKY, "request", "bitkit", "endpoint", "{}") },
+            )
+            for ((index, payment) in payments.withIndex()) {
+                for (withBarrier in listOf(false, true)) {
+                    val sdk = mock<PaykitSdk>()
+                    val release = CompletableDeferred<Unit>()
+                    val events = mutableListOf<String>()
+                    whenever { sdk.contactRecords() }.doSuspendableAnswer {
+                        release.await()
+                        emptyList()
+                    }
+                    whenever { sdk.pendingOutboundPrivateCounterparties() }.thenAnswer {
+                        events += "background"
+                        emptyList<String>()
+                    }
+                    whenever { sdk.signOut() }.thenAnswer {
+                        events += "signout"
+                        IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT)
+                    }
+                    whenever { sdk.claimPaymentRequestForExecution(RING_PUBKY, "request") }.thenAnswer {
+                        events += "payment"
+                        mock<PaymentRequestRecord>()
+                    }
+                    whenever { sdk.claimAndAcceptPaymentRequest(RING_PUBKY, "request", 1uL) }.thenAnswer {
+                        events += "payment"
+                        mock<PaymentRequestRecord>()
+                    }
+                    whenever { sdk.submitPaymentProof(any(), any(), any()) }.thenAnswer {
+                        events += "payment"
+                        mock<PaymentRequestRecord>()
+                    }
+                    val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                    val active = async { service.contactRecords() }
+                    runCurrent()
+                    val background = async { service.pendingOutboundPrivateCounterparties(Priority.Background) }
+                    val barrier = if (withBarrier) async { service.signOut() } else null
+                    val foreground = async { service.payment() }
+                    runCurrent()
+                    assertTrue(events.isEmpty())
+
+                    release.complete(Unit)
+                    active.await()
+                    background.await()
+                    barrier?.await()
+                    foreground.await()
+
+                    assertEquals(
+                        when {
+                            withBarrier -> listOf("background", "signout", "payment")
+                            index == 3 -> listOf("background", "payment")
+                            else -> listOf("payment", "background")
+                        },
+                        events,
+                    )
+                    verify(sdk, times(if (index == 0) 1 else 0)).claimPaymentRequestForExecution(RING_PUBKY, "request")
+                    verify(
+                        sdk,
+                        times(if (index == 1) 1 else 0)
+                    ).claimAndAcceptPaymentRequest(RING_PUBKY, "request", 1uL)
+                    verify(sdk, times(if (index >= 2) 1 else 0)).submitPaymentProof(any(), any(), any())
+                    verify(sdk, never()).acceptPaymentRequest(any(), any(), any())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `proof enqueue cancellation preserves SDK ownership until the native call finishes`() = runTest {
+        mockConstruction(PrivateJsonObject::class.java).use {
+            for (cancelBeforeAdmission in listOf(true, false)) {
                 val sdk = mock<PaykitSdk>()
                 val release = CompletableDeferred<Unit>()
-                val events = mutableListOf<String>()
                 whenever { sdk.contactRecords() }.doSuspendableAnswer {
-                    release.await()
+                    if (cancelBeforeAdmission) release.await()
                     emptyList()
                 }
-                whenever { sdk.pendingOutboundPrivateCounterparties() }.thenAnswer {
-                    events += "background"
-                    emptyList<String>()
-                }
-                whenever { sdk.signOut() }.thenAnswer {
-                    events += "signout"
-                    IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT)
-                }
-                whenever { sdk.claimPaymentRequestForExecution(RING_PUBKY, "request") }.thenAnswer {
-                    events += "payment"
-                    mock<PaymentRequestRecord>()
-                }
-                whenever { sdk.claimAndAcceptPaymentRequest(RING_PUBKY, "request", 1uL) }.thenAnswer {
-                    events += "payment"
+                whenever { sdk.submitPaymentProof(any(), any(), any()) }.doSuspendableAnswer {
+                    release.await()
                     mock<PaymentRequestRecord>()
                 }
                 val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-                val active = async { service.contactRecords() }
+                val active = if (cancelBeforeAdmission) async { service.contactRecords() } else null
                 runCurrent()
-                val background = async { service.pendingOutboundPrivateCounterparties(Priority.Background) }
-                val barrier = if (withBarrier) async { service.signOut() } else null
-                val foreground = async { service.payment() }
+                val proof = async {
+                    service.submitPaymentProof(
+                        RING_PUBKY,
+                        "request",
+                        "bitkit",
+                        "endpoint",
+                        "{}",
+                        priority = Priority.Interactive
+                    )
+                }
                 runCurrent()
-                assertTrue(events.isEmpty())
-
+                proof.cancel()
+                val next = async { service.contactRecords() }
+                runCurrent()
+                assertFalse(next.isCompleted)
+                verify(sdk, times(if (cancelBeforeAdmission) 0 else 1)).submitPaymentProof(any(), any(), any())
                 release.complete(Unit)
-                active.await()
-                background.await()
-                barrier?.await()
-                foreground.await()
-
-                assertEquals(
-                    if (withBarrier) listOf("background", "signout", "payment") else listOf("payment", "background"),
-                    events,
-                )
-                verify(sdk, times(if (index == 0) 1 else 0)).claimPaymentRequestForExecution(RING_PUBKY, "request")
-                verify(sdk, times(if (index == 1) 1 else 0)).claimAndAcceptPaymentRequest(RING_PUBKY, "request", 1uL)
-                verify(sdk, never()).acceptPaymentRequest(any(), any(), any())
+                active?.await()
+                assertFailsWith<CancellationException> { proof.await() }
+                assertEquals(emptyList(), next.await())
             }
         }
     }

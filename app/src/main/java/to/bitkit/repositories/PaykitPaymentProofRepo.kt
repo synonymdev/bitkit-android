@@ -1386,7 +1386,10 @@ class PaykitPaymentProofRepo @Inject constructor(
         operationMutex.withLock { runSuspendCatching { submitReady(proof) } }
     }
 
-    private suspend fun submitReady(proof: PendingPaykitPaymentProof): Boolean {
+    private suspend fun submitReady(
+        proof: PendingPaykitPaymentProof,
+        priority: PaykitSdkOperationLock.Priority = PaykitSdkOperationLock.Priority.Ordered,
+    ): Boolean {
         // Missing legacy app provenance must remain readable, never guessed for delivery.
         if (proof.paymentAppId.isBlank()) return false
         if (proof.kind == PaykitPaymentProofKind.Onchain && proof.onchainAcceptanceVerified != true) return false
@@ -1414,6 +1417,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                 proofJson = proofJson,
                 conversionQuoteId = proof.conversionQuoteId,
                 billingPeriod = proof.billingPeriod,
+                priority = priority,
             )
             Logger.info("Queued a Paykit payment proof for private delivery", context = TAG)
         }
@@ -1499,7 +1503,20 @@ class PaykitPaymentProofRepo @Inject constructor(
                 operationMutex.withLock {
                     runSuspendCatching {
                         for (proof in completedProofs) {
-                            if (proof in loadProofs()) submitReady(proof)
+                            if (proof in loadProofs()) {
+                                val priority = if (
+                                    proof.kind == PaykitPaymentProofKind.Lightning ||
+                                    (
+                                        proof.kind == PaykitPaymentProofKind.Onchain &&
+                                            proof.onchainWalletId == WalletScope.default
+                                        )
+                                ) {
+                                    PaykitSdkOperationLock.Priority.Interactive
+                                } else {
+                                    PaykitSdkOperationLock.Priority.Ordered
+                                }
+                                submitReady(proof, priority)
+                            }
                         }
                     }.onFailure { Logger.warn("Failed to queue a Paykit payment proof", it, context = TAG) }
                 }
