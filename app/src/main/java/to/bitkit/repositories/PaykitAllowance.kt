@@ -12,6 +12,7 @@ import com.synonym.paykit.AllowanceTerms
 import com.synonym.paykit.PaymentExecutionMode
 import com.synonym.paykit.PaymentExecutionStatus
 import kotlinx.serialization.Serializable
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.safe
 import java.math.BigDecimal
 import java.time.ZoneOffset
@@ -70,6 +71,9 @@ data class PaykitAllowance(
 
     /** The payer side: this wallet pays the counterparty's requests automatically. */
     val isAllower: Boolean get() = role == Role.ALLOWER
+
+    /** Allowance ids are unique per contact only, so this identifies one Allowance across all contacts. */
+    val key: String get() = "${PubkyPublicKeyFormat.normalized(counterparty) ?: counterparty}/$allowanceId"
 
     val canEnd: Boolean
         get() = when (lifecycleState) {

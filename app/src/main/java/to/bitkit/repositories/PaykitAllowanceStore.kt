@@ -18,6 +18,7 @@ import javax.inject.Singleton
 data class PaykitAllowanceLocalState(
     val groups: List<Group> = emptyList(),
     val journal: List<JournalEntry> = emptyList(),
+    /** [PaykitAllowance.key]s of received proposals already shown. */
     val presentedProposalIds: Set<String> = emptySet(),
     val notifiedRequestIds: Set<String> = emptySet(),
     val lastTrustedTimeMillis: Long? = null,
@@ -49,7 +50,10 @@ data class PaykitAllowanceLocalState(
         val createdAtMillis: Long,
     )
 
-    fun group(containing: String): Group? = groups.firstOrNull { containing in it.allowanceIds }
+    /** Allowance ids are unique per contact only, so a group matches on its contact as well. */
+    fun group(containing: String, counterparty: String): Group? = groups.firstOrNull {
+        containing in it.allowanceIds && PubkyPublicKeyFormat.matches(it.counterparty, counterparty)
+    }
 }
 
 @Singleton

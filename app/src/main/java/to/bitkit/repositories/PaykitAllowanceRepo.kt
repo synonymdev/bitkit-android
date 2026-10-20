@@ -274,8 +274,8 @@ class PaykitAllowanceRepo @Inject constructor(
                 response(allowance)
                 sendQueuedMessages(allowance.counterparty)
             }
-            val ids = entry.allowances.map { it.allowanceId }
-            executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + ids) }
+            val keys = entry.allowances.map { it.key }
+            executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + keys) }
             refresh()
             Unit
         }
@@ -294,15 +294,15 @@ class PaykitAllowanceRepo @Inject constructor(
     fun proposalForPresentation(): PaykitAllowanceEntry? {
         val presented = _localState.value.presentedProposalIds
         return _entries.value.firstOrNull { entry ->
-            entry.isAnswerable && entry.allowances.none { it.allowanceId in presented }
+            entry.isAnswerable && entry.allowances.none { it.key in presented }
         }
     }
 
     suspend fun markProposalPresented(entryId: String) {
         val identity = activeIdentity ?: return
-        val ids = entry(entryId)?.allowances?.map { it.allowanceId } ?: return
+        val keys = entry(entryId)?.allowances?.map { it.key } ?: return
         val state = withContext(ioDispatcher) {
-            executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + ids) }
+            executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + keys) }
         }
         if (activeIdentity == identity) publish(_allowances.value, state)
     }
@@ -465,7 +465,7 @@ class PaykitAllowanceRepo @Inject constructor(
         state: PaykitAllowanceLocalState,
     ) = synchronized(publishLock) {
         val entries = allowances
-            .groupBy { state.group(containing = it.allowanceId)?.id ?: it.allowanceId }
+            .groupBy { state.group(containing = it.allowanceId, counterparty = it.counterparty)?.id ?: it.key }
             .map { (id, members) ->
                 PaykitAllowanceEntry(
                     id = id,

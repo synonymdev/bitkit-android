@@ -28,6 +28,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.PaykitAllowanceFixtures.ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
@@ -51,6 +52,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
     private val fixtures = PaykitAllowanceFixtures
     private val identity = fixtures.identityKey
+    private val entryKey = "${PubkyPublicKeyFormat.normalized(fixtures.counterpartyKey)}/$ALLOWANCE_ID"
     private val sdk = mock<PaykitSdkService>()
     private val executor = mock<PaykitAllowanceExecutor>()
     private val lightningRepo = mock<LightningRepo>()
@@ -301,15 +303,38 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.activate(identity)
 
         val proposal = checkNotNull(sut.proposalForPresentation())
-        assertEquals(ALLOWANCE_ID, proposal.id)
+        assertEquals(entryKey, proposal.id)
         sut.markProposalPresented(proposal.id)
         assertNull(sut.proposalForPresentation())
-        assertEquals(setOf(ALLOWANCE_ID), localState.presentedProposalIds)
+        assertEquals(setOf(entryKey), localState.presentedProposalIds)
 
         assertTrue(sut.accept(proposal.id).isSuccess)
 
         verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
         verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
+    }
+
+    @Test
+    fun `accepting a proposal never answers another contact's proposal with the same id`() = test {
+        val offer = receivedProposal()
+        val ask = fixtures.record(
+            counterparty = fixtures.otherCounterpartyKey,
+            localRole = AllowanceLocalRole.ALLOWER,
+            state = AllowanceLifecycleState.PROPOSED,
+            proposedByMe = false,
+            lastEventAt = "2026-09-01T10:00:00Z",
+        )
+        records = listOf(offer, ask)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(offer)
+        sut.activate(identity)
+
+        val presented = checkNotNull(sut.proposalForPresentation())
+        assertEquals(PaykitAllowance.Role.ALLOWEE, presented.role)
+        assertEquals(fixtures.counterpartyKey, presented.counterparty)
+        assertTrue(sut.accept(presented.id).isSuccess)
+
+        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
+        verify(sdk, never()).acceptAllowance(eq(fixtures.otherCounterpartyKey), any(), any())
     }
 
     @Test
@@ -325,7 +350,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.activate(identity)
 
         assertNull(sut.proposalForPresentation())
-        assertTrue(sut.accept(ALLOWANCE_ID).isFailure)
+        assertTrue(sut.accept(entryKey).isFailure)
         verify(sdk, never()).acceptAllowance(any(), any(), any())
     }
 
@@ -341,7 +366,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.activate(identity)
 
         assertNull(sut.proposalForPresentation())
-        assertTrue(sut.accept(ALLOWANCE_ID).isFailure)
+        assertTrue(sut.accept(entryKey).isFailure)
     }
 
     @Test
@@ -349,7 +374,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         records = listOf(fixtures.record())
         sut.activate(identity)
 
-        assertIs<PaykitAllowanceError.Unavailable>(sut.reject(ALLOWANCE_ID).exceptionOrNull())
+        assertIs<PaykitAllowanceError.Unavailable>(sut.reject(entryKey).exceptionOrNull())
         assertIs<PaykitAllowanceError.Unavailable>(sut.accept("missing").exceptionOrNull())
         verify(sdk, never()).rejectAllowance(any(), any())
     }
@@ -477,7 +502,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         executorEvents.emit(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, TXID))
 
         verify(activityRepo).setContact(eq(fixtures.counterpartyKey), eq(TXID), any(), any())
-        assertEquals(mapOf(ALLOWANCE_ID to 1_000uL), sut.autoPaidSats.value)
+        assertEquals(mapOf(entryKey to 1_000uL), sut.autoPaidSats.value)
     }
 
     @Test
