@@ -39,7 +39,11 @@ class PaykitPaymentStateBackupTest {
     fun `allowance proof keeps its allowance id through backup`() {
         WalletScope.pushTestOverride("wallet0").use {
             val backup = Json.decodeFromString<PaykitPaymentStateBackup.Proof>(
-                """{"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob"},"paymentEndpointIdentifier":"bitcoin-bolt11","kind":"bitcoin-bolt11-preimage","paymentStarted":true,"onchainMatchingTransactionIdsBeforeAttempt":[],"allowanceId":"allowance-1"}""",
+                """
+                    {"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob"},
+                    "paymentEndpointIdentifier":"bitcoin-bolt11","kind":"bitcoin-bolt11-preimage","paymentStarted":true,
+                    "onchainMatchingTransactionIdsBeforeAttempt":[],"allowanceId":"allowance-1"}
+                """.trimIndent(),
             )
             val restored = backup.restored()
             assertEquals("allowance-1", restored.allowanceId)

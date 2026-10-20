@@ -289,8 +289,12 @@ class PaykitAllowanceTest : BaseUnitTest() {
     fun `capacity without a per payment or monthly limit never fits`() {
         val attempts = listOf(fixtures.capacityAttempt(sats = 1_000_000uL, at = "2026-09-05T10:00:00Z"))
 
-        assertFalse(PaykitAllowanceCapacity.fits(5_000uL, fixtures.allowance(monthlyLimitSats = null), attempts, fixtures.now))
-        assertFalse(PaykitAllowanceCapacity.fits(5_000uL, fixtures.allowance(perPaymentMaxSats = null), attempts, fixtures.now))
+        assertFalse(
+            PaykitAllowanceCapacity.fits(5_000uL, fixtures.allowance(monthlyLimitSats = null), attempts, fixtures.now)
+        )
+        assertFalse(
+            PaykitAllowanceCapacity.fits(5_000uL, fixtures.allowance(perPaymentMaxSats = null), attempts, fixtures.now)
+        )
     }
 
     @Test
@@ -471,7 +475,10 @@ class PaykitAllowanceTest : BaseUnitTest() {
         assertEquals(state, store.load(fixtures.identityKey))
         assertEquals(PaykitAllowanceLocalState(), store.load(fixtures.otherCounterpartyKey))
         val loaded = store.load(fixtures.identityKey)
-        assertEquals(group, loaded.group(containing = PaykitAllowanceFixtures.ALLOWANCE_ID))
+        assertEquals(
+            group,
+            loaded.group(containing = PaykitAllowanceFixtures.ALLOWANCE_ID, counterparty = group.counterparty),
+        )
 
         stored = "{not json"
         assertEquals(PaykitAllowanceLocalState(), store.load(fixtures.identityKey))

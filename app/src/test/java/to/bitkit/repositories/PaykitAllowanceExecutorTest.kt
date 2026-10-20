@@ -22,7 +22,6 @@ import com.synonym.paykit.PaymentOutcomeReport
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestScope
 import com.synonym.paykit.PrivateStreamIntakeReport
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import org.junit.After
@@ -376,7 +375,10 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, second)
         verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
         verifyNoInteractions(payer)
-        assertEquals(listOf<PaykitAllowanceEvent>(PaykitAllowanceEvent.LimitReached(fixtures.counterpartyKey, 1_000uL)), events)
+        assertEquals(
+            listOf<PaykitAllowanceEvent>(PaykitAllowanceEvent.LimitReached(fixtures.counterpartyKey, 1_000uL)),
+            events
+        )
     }
 
     @Test
@@ -488,7 +490,9 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
     @Test
     fun `lightning send failure releases only a payment that never left`() = test {
-        whenever(payer.payLightning(any(), anyOrNull(), anyOrNull(), any())).thenReturn(Result.failure(TestAllowanceError("send")))
+        whenever(
+            payer.payLightning(any(), anyOrNull(), anyOrNull(), any())
+        ).thenReturn(Result.failure(TestAllowanceError("send")))
         whenever(payer.failLightningPayment(any(), any())).thenReturn(true, false)
 
         val first = sut.autoPay(fixtures.paymentRequest(id = "request-1"), listOf(fixtures.allowance()), identity)
@@ -679,7 +683,8 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     @Test
     fun `recovery never fails a manual on-chain payment that may have left before the kill`() = test {
         sut.activate(identity)
-        val attemptId = checkNotNull(sut.beginManualPayment(fixtures.paymentRequest(), fixtures.onchainIdentifier).getOrThrow())
+        val attemptId =
+            checkNotNull(sut.beginManualPayment(fixtures.paymentRequest(), fixtures.onchainIdentifier).getOrThrow())
         accountingState = fixtures.accountingState(
             occurrences = listOf(occurrence(attemptId, PaymentExecutionStatus.SUBMITTED)),
         )

@@ -1107,7 +1107,6 @@
     <string name="subscriptions__allowance_offer_headline"><![CDATA[{name} offers\n<accent>an allowance</accent>]]></string>
     <string name="subscriptions__allowance_paid_automatically">{amount} paid automatically</string>
     <string name="subscriptions__allowance_paid_so_far">Paid automatically</string>
-    <string name="subscriptions__allowance_payment_in_progress">This request is already being paid.</string>
     <string name="subscriptions__allowance_payment_limit">Payment limit</string>
     <string name="subscriptions__allowance_per_payment">Per payment</string>
     <string name="subscriptions__allowance_per_payment_short">{amount} a payment</string>

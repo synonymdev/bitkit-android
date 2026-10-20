@@ -116,7 +116,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.activate(identity)
 
         val entries = sut.entries.value
-        assertEquals(listOf("group-1", "allowance-other"), entries.map { it.id })
+        val otherKey = "${PubkyPublicKeyFormat.normalized(fixtures.otherCounterpartyKey)}/allowance-other"
+        assertEquals(listOf("group-1", otherKey), entries.map { it.id })
         val grant = entries.first()
         assertEquals(listOf(ALLOWANCE_ID), grant.allowances.map { it.allowanceId })
         assertEquals(ALLOWANCE_ID, grant.primary.allowanceId)

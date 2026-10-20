@@ -156,6 +156,7 @@ import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
 import to.bitkit.repositories.PaykitPaymentProofKind
@@ -166,7 +167,6 @@ import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
-import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitPaymentRequestRefreshMode
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
@@ -13825,7 +13825,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
         assertFalse(sut.sendUiState.value.shouldConfirmPay)
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
-        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -13878,7 +13878,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             }
         }
         verify(paykitPaymentRequestRepo, never()).accept(request)
-        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -13936,7 +13936,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             }
         }
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
-        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull())
+        verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -14004,6 +14004,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             eq("bitkit"),
             eq(PaykitPaymentProofKind.Onchain),
             eq(request.payment(MethodId.P2wpkh, Clock.System.now())),
+            isNull(),
         )
         verify(paykitPaymentRequestRepo).accept(request)
         verify(paykitPaymentProofRepo).completeOnchainPayment(any(), eq("txid"), any(), any(), anyOrNull(), anyOrNull())

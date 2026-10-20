@@ -591,13 +591,11 @@ class PaykitPaymentProofRepo @Inject constructor(
                         it.onchainAcceptanceVerified == true && it.proofData.equals(txid, ignoreCase = true)
                 }
             }
+            val expected = proofJson(PaykitPaymentProofKind.Onchain, txid.lowercase()).proofValues()
             held || paykitSdkService.paymentRequests().any { record ->
                 record.paymentRequestId == requestId.paymentRequestId &&
                     PubkyPublicKeyFormat.matches(record.counterparty, requestId.counterparty) &&
-                    record.paymentProofs.any {
-                        it.proof.exportText().proofValues() == proofJson(PaykitPaymentProofKind.Onchain, txid.lowercase())
-                            .proofValues()
-                    }
+                    record.paymentProofs.any { it.proof.exportText().proofValues() == expected }
             }
         }
 
