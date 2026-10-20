@@ -589,6 +589,7 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
     androidTestImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.compose.ui.test.junit4)
     implementation(libs.accompanist.pager.indicators)
     implementation(libs.accompanist.permissions)
     implementation(libs.constraintlayout.compose)

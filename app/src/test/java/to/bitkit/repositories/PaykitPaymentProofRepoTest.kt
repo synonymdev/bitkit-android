@@ -3083,6 +3083,40 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `hardware retry lookup skips identity when no signed receipt belongs to the request`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val softwareProof = PendingPaykitPaymentProof(
+            identity = LOCAL_IDENTITY,
+            requestId = request.id,
+            paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+            paymentAppId = "bitkit",
+            kind = PaykitPaymentProofKind.Onchain,
+            paymentStarted = true,
+            onchainWalletId = WalletScope.default,
+        )
+        val unrelated = softwareProof.copy(
+            requestId = request.id.copy(paymentRequestId = "other-request"),
+            hardwareSignedTransaction = "retained",
+        )
+        val otherPeriod = unrelated.copy(
+            requestId = request.id.copy(billingPeriodStartsAt = "2030-01-01T00:00:00Z"),
+        )
+        whenever(paykitSdkService.identityStatus())
+            .doSuspendableAnswer { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        val repo = paymentProofRepo()
+
+        for (proofs in listOf(emptyList(), listOf(softwareProof), listOf(unrelated, otherPeriod, softwareProof))) {
+            storedProofs = proofs
+            assertNull(repo.retainedHardwareOnchainRequest(request))
+            assertEquals(proofs, storedProofs)
+        }
+        shouldFailNextLoad = true
+        assertFailsWith<IllegalStateException> { repo.retainedHardwareOnchainRequest(request) }
+        verify(paykitSdkService, never()).identityStatus()
+        verify(store, never()).save(any())
+    }
+
+    @Test
     fun `retained refused hardware reopen preserves exact receipt and blocks new preparation`() = test {
         val method = MethodId.P2wpkh.rawValue
         val request = paymentRequest(method)
@@ -3134,10 +3168,23 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertNull(reopened.retainedHardwareOnchainRequest(request))
         assertTrue(reopened.hasRetainedHardwareOnchainPayment(proof.onchainWalletId))
         storedProofs = listOf(proof)
-        whenever(paykitSdkService.identityStatus())
-            .thenReturn(IdentityStatus(COUNTERPARTY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
-        assertNull(reopened.retainedHardwareOnchainRequest(request))
-        assertEquals(listOf(proof), storedProofs)
+        for (removeReceipt in listOf(false, true)) {
+            val identityRead = CompletableDeferred<IdentityStatus>()
+            whenever(paykitSdkService.identityStatus()).doSuspendableAnswer { identityRead.await() }
+            val lookup = async { reopened.retainedHardwareOnchainRequest(request) }
+            runCurrent()
+            assertFalse(lookup.isCompleted)
+            if (removeReceipt) storedProofs = emptyList()
+            identityRead.complete(
+                IdentityStatus(
+                    if (removeReceipt) LOCAL_IDENTITY else COUNTERPARTY,
+                    PubkyIdentityCapability.PRIVATE_LINK_CAPABLE,
+                ),
+            )
+            assertNull(lookup.await())
+            assertEquals(if (removeReceipt) emptyList() else listOf(proof), storedProofs)
+            storedProofs = listOf(proof)
+        }
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
         verify(
             paykitSdkService,

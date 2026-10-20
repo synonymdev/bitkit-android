@@ -856,6 +856,9 @@ class PaykitPaymentProofRepo @Inject constructor(
     suspend fun retainedHardwareOnchainRequest(request: PaykitPaymentRequest): PendingPaykitPaymentProof? =
         withContext(ioDispatcher) {
             operationMutex.withLock {
+                if (loadProofs().none { it.requestId == request.id && it.hardwareSignedTransaction != null }) {
+                    return@withLock null
+                }
                 val identity = currentIdentity() ?: return@withLock null
                 loadProofs().singleOrNull {
                     it.isReopenableHardwareReceipt(identity) && it.matchesHardwareRetryRequest(request)
