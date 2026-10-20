@@ -608,7 +608,7 @@ internal fun PaymentRequestCard(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.weight(1f).width(IntrinsicSize.Min).align(Alignment.CenterVertically)
+                modifier = Modifier.weight(1f).width(IntrinsicSize.Max).align(Alignment.CenterVertically)
             ) {
                 if (request.showsPaymentRailIcon(isOutgoingPayment)) {
                     PaymentRailIcon(request = request, paymentWasSent = request.paymentWasSent(isOutgoingPayment))
