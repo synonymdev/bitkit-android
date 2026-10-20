@@ -503,7 +503,6 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
         verify(sdk, never()).acceptAllowance(any(), any(), any())
-        verify(sdk, never()).acceptAllowance(any(), any(), any())
     }
 
     @Test
