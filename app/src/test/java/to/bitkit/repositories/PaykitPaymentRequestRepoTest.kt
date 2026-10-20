@@ -1362,6 +1362,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.accept(sut.pendingRequests.value.single()).getOrThrow()
         runCurrent()
 
+        verify(paykitSdkService, never()).linkedPeers()
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertEquals(PaymentRequestLifecycleState.ACCEPTED, sut.paymentRequestHistory.value.single().lifecycleState)
         verify(paykitSdkService, never()).processPendingPrivateMessages(any())
@@ -1380,6 +1381,53 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background).getOrThrow()
         verify(paykitSdkService).processPendingPrivateMessages(Priority.Background)
         verify(paykitSdkService, times(1)).acceptPaymentRequest(COUNTERPARTY, PAYMENT_REQUEST_ID, 41uL)
+    }
+
+    @Test
+    fun `proposed acceptance rejects current sdk peer policy without a separate preflight`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        clearInvocations(paykitSdkService)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED)),
+        )
+        val refusal = PaykitException.Policy("policy", "counterparty is blocked")
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any(), any())).doSuspendableAnswer { throw refusal }
+
+        assertSame(refusal, sut.accept(request).exceptionOrNull())
+
+        verify(paykitSdkService, never()).linkedPeers()
+        verify(paykitSdkService).acceptPaymentRequest(
+            COUNTERPARTY,
+            PAYMENT_REQUEST_ID,
+            requireNotNull(request.proposalStreamItemId),
+        )
+        verify(presentationStore).removeAcceptedOneTimeIds(LOCAL_IDENTITY, setOf(request.id))
+        assertEquals(PaymentRequestLifecycleState.PROPOSED, sut.paymentRequestHistory.value.single().lifecycleState)
+        assertTrue(sut.ensurePaymentAllowed(request).isFailure)
+    }
+
+    @Test
+    fun `final authorization rejects a peer blocked after atomic acceptance`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any(), any()))
+            .thenReturn(record.copy(state = PaymentRequestLifecycleState.ACCEPTED))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        sut.setPaymentSubmissionActive(true)
+        sut.accept(request).getOrThrow()
+        clearInvocations(paykitSdkService)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED)),
+        )
+
+        assertEquals(PaykitPaymentRequestError.RequestUnavailable, sut.ensurePaymentAllowed(request).exceptionOrNull())
+
+        verify(paykitSdkService).linkedPeers()
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any(), any())
     }
 
     @Test

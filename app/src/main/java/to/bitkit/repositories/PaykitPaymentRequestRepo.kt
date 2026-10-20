@@ -1075,7 +1075,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                     val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
                     val generation = stateGeneration.get()
-                    ensurePaymentAllowed(it, forExecution = false).getOrThrow()
+                    if (it.isExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
+                    if (!isLocallyPayable(it)) throw PaykitPaymentRequestError.RequestUnavailable
+                    // The SDK checks the current peer while atomically claiming and queueing acceptance.
                     val alreadySaved = it.id in presentationStore.loadAcceptedOneTimeIds(identity)
                     val acceptedIds = presentationStore.addAcceptedOneTimeId(identity, it.id)
                     if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable

@@ -829,6 +829,126 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `identity and peer reads retry contention without releasing SDK ownership`() = runTest {
+        listOf(false, true).forEachCase({ if (it) "linked peers" else "identity" }) { peers ->
+            val results: List<Any?> = if (peers) {
+                listOf(listOf(contactPeer(LinkedPeerState.BLOCKED)), emptyList())
+            } else {
+                listOf(
+                    IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE),
+                    IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PUBLIC_ONLY),
+                    IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT),
+                    null,
+                )
+            }
+            for (expected in results) {
+                val sdk = mock<PaykitSdk>()
+                val events = mutableListOf<String>()
+                val answer = {
+                    events += "read"
+                    if (events.size == 1) throw PaykitException.SharedStateBusy("shared_state_busy", "Locked")
+                    expected
+                }
+                if (peers) {
+                    whenever(sdk.linkedPeers()).thenAnswer { answer() }
+                } else {
+                    whenever(sdk.identityStatus()).thenAnswer { answer() }
+                }
+                whenever(sdk.contactRecords()).thenAnswer {
+                    events += "contacts"
+                    emptyList<ContactRecord>()
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val read = async {
+                    if (peers) {
+                        service.linkedPeers(Priority.Interactive)
+                    } else {
+                        service.identityStatus(Priority.Interactive)
+                    }
+                }
+                runCurrent()
+                val contacts = async { service.contactRecords() }
+                runCurrent()
+                advanceTimeBy(249)
+                runCurrent()
+                assertEquals(listOf("read"), events)
+                assertFalse(read.isCompleted)
+                assertFalse(contacts.isCompleted)
+
+                advanceTimeBy(1)
+                runCurrent()
+                assertEquals(expected, read.await())
+                assertEquals(emptyList(), contacts.await())
+                assertEquals(listOf("read", "read", "contacts"), events)
+                if (peers) verify(sdk, times(2)).linkedPeers() else verify(sdk, times(2)).identityStatus()
+            }
+        }
+    }
+
+    @Test
+    fun `identity and peer reads retry only one shared state busy failure`() = runTest {
+        listOf(false, true).forEachCase({ if (it) "linked peers" else "identity" }) { peers ->
+            listOf(
+                PaykitException.SharedStateBusy("shared_state_busy", "Locked"),
+                PaykitException.ConcurrentUpdate("concurrent_update", "Changed"),
+                PaykitException.Identity("identity_error", "Signed out"),
+                PaykitException.Storage("storage_error", "Unavailable"),
+            ).forEachCase({ it.javaClass.simpleName }) { failure ->
+                val sdk = mock<PaykitSdk>()
+                if (peers) {
+                    whenever(sdk.linkedPeers()).thenThrow(failure)
+                } else {
+                    whenever(sdk.identityStatus()).thenThrow(failure)
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val started = currentTime
+                val result = async {
+                    runSuspendCatching { if (peers) service.linkedPeers() else service.identityStatus() }
+                }
+                advanceUntilIdle()
+                val retries = if (failure is PaykitException.SharedStateBusy) 1 else 0
+                assertSame(failure, result.await().exceptionOrNull())
+                assertEquals(250L * retries, currentTime - started)
+                if (peers) {
+                    verify(sdk, times(1 + retries)).linkedPeers()
+                } else {
+                    verify(sdk, times(1 + retries)).identityStatus()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `cancelling identity or peer backoff releases SDK ownership without retrying`() = runTest {
+        listOf(false, true).forEachCase({ if (it) "linked peers" else "identity" }) { peers ->
+            val sdk = mock<PaykitSdk>()
+            val failure = PaykitException.SharedStateBusy("shared_state_busy", "Locked")
+            if (peers) {
+                whenever(sdk.linkedPeers()).thenThrow(failure)
+            } else {
+                whenever(sdk.identityStatus()).thenThrow(failure)
+            }
+            whenever(sdk.contactRecords()).thenReturn(emptyList())
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val read = async {
+                if (peers) service.linkedPeers(Priority.Interactive) else service.identityStatus(Priority.Interactive)
+            }
+            runCurrent()
+            val contacts = async { service.contactRecords() }
+            runCurrent()
+            assertFalse(contacts.isCompleted)
+            advanceTimeBy(100)
+            read.cancel()
+            runCurrent()
+            assertFailsWith<CancellationException> { read.await() }
+            assertEquals(emptyList(), contacts.await())
+            advanceTimeBy(250)
+            runCurrent()
+            if (peers) verify(sdk).linkedPeers() else verify(sdk).identityStatus()
+        }
+    }
+
+    @Test
     fun `foreground identity read cannot overtake queued signout`() = runTest {
         val sdk = mock<PaykitSdk>()
         val release = CompletableDeferred<Unit>()

@@ -74,6 +74,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -120,6 +121,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -1075,7 +1077,7 @@ class PaykitSdkService @Inject constructor(
     internal suspend fun identityStatus(priority: Priority): IdentityStatus? {
         isSetup.await()
         return measuredOperation("identityStatus", priority) {
-            withPaykitKey { completeSdkCall { it.identityStatus() } }
+            withPaykitKey { handle -> retryContendedRead { handle.identityStatus() } }
         }
     }
 
@@ -1215,7 +1217,7 @@ class PaykitSdkService @Inject constructor(
     internal suspend fun linkedPeers(priority: Priority): List<LinkedPeerRecord> {
         isSetup.await()
         return operationLock.withLock(priority) {
-            withPaykitKey { completeSdkCall { it.linkedPeers() } }
+            withPaykitKey { handle -> retryContendedRead { handle.linkedPeers() } }
         }
     }
 
@@ -1581,6 +1583,13 @@ class PaykitSdkService @Inject constructor(
         return result.getOrThrow()
     }
 
+    private suspend fun <T> retryContendedRead(operation: suspend () -> T): T =
+        runSuspendCatching { completeSdkCall(operation) }.getOrElse {
+            if (it !is PaykitException.SharedStateBusy) throw it
+            delay(SHARED_STATE_READ_RETRY_DELAY)
+            completeSdkCall(operation)
+        }
+
     /**
      * Runs [block] on the SDK instance without [operationLock]. [block] may only call unauthenticated public
      * Pubky reads, never session, secret, state-blob or publishing APIs. Without an instance it builds one under
@@ -1654,6 +1663,9 @@ class PaykitSdkService @Inject constructor(
 
         /** Maximum time identity maintenance may delay its caller. */
         private val IDENTITY_REPUBLISH_WAIT_TIMEOUT = 5.seconds
+
+        /** Delay before the single retry of a contended shared state read. */
+        private val SHARED_STATE_READ_RETRY_DELAY = 250.milliseconds
 
         /** Maximum duration of a public payment-request capability lookup. */
         private val PAYMENT_REQUEST_DISCOVERY_TIMEOUT = 5.seconds
