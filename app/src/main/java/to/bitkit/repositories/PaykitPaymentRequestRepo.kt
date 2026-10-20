@@ -445,8 +445,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    fun automaticPendingRequests(): List<PaykitPaymentRequest> =
-        _pendingRequests.value.filterNot { it.id in presentedRequestIds }
+    // A request this install accepted is only reopened by the user,
+    // so a refresh during its payment cannot resurface it.
+    fun automaticPendingRequests(): List<PaykitPaymentRequest> {
+        val paidIds = locallyPaidRequestIds()
+        return _pendingRequests.value.filterNot {
+            it.id in presentedRequestIds || hasLocalAcceptance(it) || it.id in paidIds
+        }
+    }
 
     fun subscriptionProposals(): List<PaykitSubscription> =
         _subscriptions.value.filter { it.isPayer && it.isProposalVisible(subscriptionClock.now()) }
@@ -1181,7 +1187,18 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     fun isPending(request: PaykitPaymentRequest): Boolean =
-        !request.isExpired(clock.now()) && _pendingRequests.value.any { it.id == request.id }
+        !request.isExpired(clock.now()) && _pendingRequests.value.any { it.id == request.id } &&
+            request.id !in locallyPaidRequestIds()
+
+    // Started or completed local payments, read live: the pending list can predate them until the next refresh.
+    private fun locallyPaidRequestIds(): Set<PaykitPaymentRequestId> {
+        val identity = activeIdentity ?: return emptySet()
+        val reopenableIds = paymentProofStore.load()
+            .filter { it.isReopenableHardwareReceipt(identity) }
+            .mapTo(mutableSetOf()) { it.requestId }
+        return paymentProofStore.inFlightRequestIds(identity) - reopenableIds +
+            paymentProofStore.completedRequestProofKindsAwaitingSubmission(identity).keys
+    }
 
     fun isExpired(request: PaykitPaymentRequest): Boolean = request.isExpired(clock.now())
 
