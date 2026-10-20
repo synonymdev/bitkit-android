@@ -9167,6 +9167,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `inline request acceptance claims execution without a separate claim`() = test {
+        val address = "bcrt1qpaymentrequest"
+        val request = paymentRequest()
+        val privateContext = privatePaymentContext(null)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        stubSuccessfulOnchainSend(address, request.amount.atomic)
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(paykitPaymentRequestRepo, never()).claimForPayment(request)
+        verify(paykitPaymentRequestRepo).accept(request)
+        verify(paykitPaymentProofRepo).markOnchainPaymentStarted(
+            eq(request),
+            eq(address),
+            eq(request.amount.atomic),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+        )
+    }
+
+    @Test
     fun `duplicate payment request confirmation submits only once`() = test {
         val address = "bcrt1qpaymentrequest"
         val request = paymentRequest()
@@ -9193,8 +9229,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         advanceUntilIdle()
 
-        verify(paykitPaymentRequestRepo).accept(request)
-        verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+        inOrder(paykitPaymentRequestRepo, privatePaykitRepo) {
+            verify(paykitPaymentRequestRepo).claimForPayment(request)
+            verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+            verify(paykitPaymentRequestRepo).accept(request)
+        }
         verify(lightningRepo).sendOnChain(
             address = any(),
             sats = any(),
@@ -9392,7 +9431,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `execution claim failure blocks versionless request without consuming private details`() = test {
+    fun `atomic acceptance claim failure blocks versionless request before sending`() = test {
         val request = paymentRequest()
         val privateContext = privatePaymentContext(null)
         pubkyPublicKey.value = testPublicKey
@@ -9408,9 +9447,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 Result.success(Unit)
             }
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
-        whenever(paykitPaymentRequestRepo.claimForPayment(request))
+        whenever(paykitPaymentRequestRepo.accept(request))
             .thenReturn(Result.failure(IllegalStateException("request claimed by another app")))
-        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         stubOnchainSend(
@@ -9439,11 +9477,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentRequestRepo, never()).refresh(PaykitPaymentRequestRefreshMode.FULL)
         finishRefresh.complete(Unit)
         advanceUntilIdle()
-        verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
-        verify(paykitPaymentRequestRepo, never()).accept(request)
+        verify(paykitPaymentRequestRepo, never()).claimForPayment(request)
+        verify(paykitPaymentRequestRepo).accept(request)
         verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
         verify(paykitPaymentProofRepo).cancelPreparation(request)
-        verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
+            any(),
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+        )
     }
 
     @Test
