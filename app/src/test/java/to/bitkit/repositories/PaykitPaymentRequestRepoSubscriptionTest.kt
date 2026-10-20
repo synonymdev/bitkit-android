@@ -55,6 +55,7 @@ import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.screens.subscriptions.subscriptionPayments
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -1174,7 +1175,8 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         sut.refresh().getOrThrow()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
-        val unpaid = requireNotNull(sut.subscriptions.value.single { it.isPayer }.paymentDueOnAcceptance(clock.now()))
+        val payerSubscription = sut.subscriptions.value.single { it.isPayer }
+        val unpaid = requireNotNull(payerSubscription.paymentDueOnAcceptance(clock.now()))
         assertTrue(unpaid.isPaymentDeadlineExpired(clock.now()))
         assertTrue(!unpaid.payment(MethodId.Bolt11, clock.now()).isValid(clock.now()))
         assertEquals(2, sut.subscriptions.value.size)
@@ -1189,7 +1191,11 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         }
         assertEquals(PaymentRequestLifecycleState.PROOF_SUBMITTED, paid.lifecycleState)
         assertEquals(PaykitPaymentProofKind.Lightning, paid.paymentProofKind)
-        assertEquals(1, sut.subscriptions.value.single { it.isCreatedByUser }.receivedPaymentRequests().size)
+        assertEquals(listOf(paid), subscriptionPayments(payerSubscription, sut.paymentRequestHistory.value))
+        val creatorSubscription = sut.subscriptions.value.single { it.isCreatedByUser }
+        val received = subscriptionPayments(creatorSubscription, sut.paymentRequestHistory.value)
+        assertEquals(creatorSubscription.receivedPaymentRequests(), received)
+        assertEquals(1, received.size)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
             listOf(
                 paymentRequestRecord(
@@ -1228,11 +1234,13 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         runCurrent()
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertEquals(listOf(request), sut.paymentRequestHistory.value)
+        assertTrue(subscriptionPayments(sut.subscriptions.value.single(), sut.paymentRequestHistory.value).isEmpty())
         assertEquals(PaykitPaymentRequestError.RequestExpired, sut.ensurePaymentAllowed(request).exceptionOrNull())
 
         sut.refresh().getOrThrow()
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertEquals(listOf(request), sut.paymentRequestHistory.value)
+        assertTrue(subscriptionPayments(sut.subscriptions.value.single(), sut.paymentRequestHistory.value).isEmpty())
         sut.clear()
         assertTrue(sut.paymentRequestHistory.value.isEmpty())
         whenever(presentationStore.loadSubscriptionState(LOCAL_IDENTITY)).thenReturn(
@@ -1242,6 +1250,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         sut.refresh().getOrThrow()
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertEquals(listOf(request), sut.paymentRequestHistory.value)
+        assertTrue(subscriptionPayments(sut.subscriptions.value.single(), sut.paymentRequestHistory.value).isEmpty())
         advanceTimeBy((nextPeriod - clock.now()).inWholeMilliseconds)
         sut.refresh().getOrThrow()
         val next = sut.pendingRequests.value.single()
@@ -1249,6 +1258,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertEquals(nextPeriod, next.billingPeriod?.startsAt)
         assertFalse(next.isExpired(clock.now()))
         assertEquals(listOf(request), sut.paymentRequestHistory.value)
+        assertTrue(subscriptionPayments(sut.subscriptions.value.single(), sut.paymentRequestHistory.value).isEmpty())
     }
 
     @Test

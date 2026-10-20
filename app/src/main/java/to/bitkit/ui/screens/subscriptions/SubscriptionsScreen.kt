@@ -74,6 +74,7 @@ import to.bitkit.models.PaykitExchangeRate
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitRecurrenceUnit
@@ -107,6 +108,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.scaffold.rememberChromeHazeStyle
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestCard
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestsScreen
+import to.bitkit.ui.screens.paymentrequests.hasPaymentEvidence
 import to.bitkit.ui.screens.paymentrequests.paymentRequestDate
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
@@ -301,6 +303,15 @@ internal fun SubscriptionsContent(
             }
         }
     }
+}
+
+internal fun subscriptionPayments(
+    subscription: PaykitSubscription,
+    history: List<PaykitPaymentRequest>,
+): List<PaykitPaymentRequest> = if (subscription.isCreatedByUser) {
+    subscription.receivedPaymentRequests()
+} else {
+    history.filter { it.belongsTo(subscription) && it.hasPaymentEvidence }
 }
 
 internal data class SubscriptionSections(
@@ -502,11 +513,7 @@ fun SubscriptionDetailScreen(
                 }
             }
             item { SubscriptionDetailsGrid(subscription, now) }
-            val payments = if (subscription.isCreatedByUser) {
-                subscription.receivedPaymentRequests()
-            } else {
-                paymentHistory.filter { it.belongsTo(subscription) }
-            }
+            val payments = subscriptionPayments(subscription, paymentHistory)
             if (payments.isNotEmpty()) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
