@@ -60,9 +60,7 @@ notifications Bitkit posted for a single channel opening.
 ## Test tags / references
 
 - Foreground "Spending balance ready" toast: testTag `SpendingBalanceReadyToast`.
-- Notification strings: `notification__received__title` ("Payment Received"),
-  `notification__received__body_amount` ("Received %s"), `notification__received__body_hidden`
-  (when notification details are off). Note: `notification__received__body_channel`
-  ("Via new channel") is no longer used for the push notification.
+- Notification strings: `notification__received__title` ("Payment Received") and
+  `notification__received__body_amount` ("Received %s").
 - Amount grouping separator: `SATS_GROUPING_SEPARATOR` (a space) via `formatToModernDisplay`,
   applied inside `ReceivedNotificationContent`.

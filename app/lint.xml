@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Shown without format arguments, so the percent signs in their translations are literal. -->
+    <issue id="StringFormatCount">
+        <ignore regexp="`wallet__send_dialog[23]`" />
+    </issue>
+    <issue id="StringFormatInvalid">
+        <ignore regexp="`wallet__send_dialog[23]`" />
+    </issue>
+    <!-- European Portuguese spells these without the c since the 1990 spelling agreement. -->
+    <issue id="Typos">
+        <ignore regexp="[Ee]letrónic" />
+    </issue>
+</lint>
