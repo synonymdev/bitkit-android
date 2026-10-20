@@ -952,6 +952,7 @@
     <string name="wallet__payment_invoice_request_rejected">Der Empfänger hat diese Lightning-Rechnungsanfrage abgelehnt.</string>
     <string name="wallet__payment_recipient_rejected">Der Empfänger hat diese Lightning-Zahlung abgelehnt. Bitte prüfe die Rechnung und versuche es erneut.</string>
     <string name="wallet__payment_request_contact">Kontakt</string>
+    <string name="wallet__payment_request_seller">Verkäufer</string>
     <string name="wallet__payment_request_date">Datum</string>
     <string name="wallet__payment_request_note">Notiz</string>
     <string name="wallet__payment_request_sent_title">Gesendet</string>

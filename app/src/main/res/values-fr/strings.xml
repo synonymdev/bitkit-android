@@ -1552,6 +1552,7 @@
     <string name="wallet__payment_request_amount">Montant</string>
     <string name="wallet__payment_request_choose_recipient">Choisir le destinataire</string>
     <string name="wallet__payment_request_contact">Contact</string>
+    <string name="wallet__payment_request_seller">Vendeur</string>
     <string name="wallet__payment_request_date">Date</string>
     <string name="wallet__payment_request_dismiss">Ignorer</string>
     <string name="wallet__payment_request_enter_pubky">Saisir un pubky</string>

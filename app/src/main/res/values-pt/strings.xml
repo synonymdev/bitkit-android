@@ -818,6 +818,7 @@
     <string name="wallet__payment_invoice_request_rejected">O destinatário rejeitou este pedido de fatura Lightning.</string>
     <string name="wallet__payment_recipient_rejected">O destinatário rejeitou este pagamento Lightning. Verifique a fatura e tente novamente.</string>
     <string name="wallet__payment_request_contact">Contato</string>
+    <string name="wallet__payment_request_seller">Vendedor</string>
     <string name="wallet__payment_request_date">Data</string>
     <string name="wallet__payment_request_note">Nota</string>
     <string name="wallet__payment_request_sent_title">Enviado</string>

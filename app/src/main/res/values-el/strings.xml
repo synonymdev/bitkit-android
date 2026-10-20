@@ -1065,6 +1065,7 @@
     <string name="wallet__payment_invoice_request_rejected">Ο παραλήπτης απέρριψε αυτό το αίτημα τιμολογίου Lightning.</string>
     <string name="wallet__payment_recipient_rejected">Ο παραλήπτης απέρριψε αυτήν την πληρωμή Lightning. Ελέγξτε το τιμολόγιο και δοκιμάστε ξανά.</string>
     <string name="wallet__payment_request_contact">Επαφή</string>
+    <string name="wallet__payment_request_seller">Πωλητής</string>
     <string name="wallet__payment_request_date">Ημερομηνία</string>
     <string name="wallet__payment_request_note">Σημείωση</string>
     <string name="wallet__payment_request_sent_title">Στάλθηκε</string>

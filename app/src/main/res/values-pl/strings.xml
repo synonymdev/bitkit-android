@@ -952,6 +952,7 @@
     <string name="wallet__payment_invoice_request_rejected">Odbiorca odrzucił to żądanie faktury Lightning.</string>
     <string name="wallet__payment_recipient_rejected">Odbiorca odrzucił tę płatność Lightning. Sprawdź fakturę i spróbuj ponownie.</string>
     <string name="wallet__payment_request_contact">Kontakt</string>
+    <string name="wallet__payment_request_seller">Sprzedawca</string>
     <string name="wallet__payment_request_date">Data</string>
     <string name="wallet__payment_request_note">Notatka</string>
     <string name="wallet__payment_request_sent_title">Wysłano</string>

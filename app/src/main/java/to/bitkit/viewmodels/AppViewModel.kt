@@ -1623,6 +1623,7 @@ class AppViewModel @Inject constructor(
         resetSendState(
             isPaymentRequest = true,
             paymentRequestNote = request.note,
+            isMerchantPaymentRequest = request.isMerchantRequest,
             hardwareWalletId = proof.onchainWalletId,
             incomingPaymentRequestId = request.id,
             selectedTags = requestedPaymentRequestTags,
@@ -4246,6 +4247,7 @@ class AppViewModel @Inject constructor(
             contactPaymentProfile = contactPaymentProfile,
             isPaymentRequest = isPaymentRequest,
             paymentRequestNote = incomingPaymentRequest?.note,
+            isMerchantPaymentRequest = incomingPaymentRequest?.isMerchantRequest == true,
             isSubscriptionPayment = incomingPaymentRequest?.billingPeriod != null,
             isInitialSubscriptionPayment = synchronized(contactPaymentContextLock) {
                 activeContactPaymentContext?.isInitialSubscriptionPayment == true
@@ -6601,6 +6603,7 @@ class AppViewModel @Inject constructor(
         contactPaymentProfile: PubkyProfile? = null,
         isPaymentRequest: Boolean = false,
         paymentRequestNote: String? = null,
+        isMerchantPaymentRequest: Boolean = false,
         hardwareWalletId: String? = activeHardwareWalletId,
         isSubscriptionPayment: Boolean = false,
         isInitialSubscriptionPayment: Boolean = false,
@@ -6627,6 +6630,7 @@ class AppViewModel @Inject constructor(
                 contactPaymentProfile = contactPaymentProfile,
                 isPaymentRequest = isPaymentRequest,
                 paymentRequestNote = paymentRequestNote,
+                isMerchantPaymentRequest = isMerchantPaymentRequest,
                 hardwareWalletId = hardwareWalletId,
                 hardwareWalletName = hardwareWalletId?.let { walletId ->
                     hwWalletRepo.wallets.value.find { it.id == walletId }?.name
@@ -8088,6 +8092,7 @@ data class SendUiState(
     val contactPaymentProfile: PubkyProfile? = null,
     val isPaymentRequest: Boolean = false,
     val paymentRequestNote: String? = null,
+    val isMerchantPaymentRequest: Boolean = false,
     val paykitUsesUsdt: Boolean = false,
     val paykitRateUnavailable: Boolean = false,
     val paykitAmount: String = "",

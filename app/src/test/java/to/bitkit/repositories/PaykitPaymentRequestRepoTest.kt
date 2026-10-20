@@ -985,6 +985,16 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `requests created by a paykit server are merchant requests`() {
+        fun parse(record: PaymentRequestRecord) =
+            (record.parseIncomingPaykitPaymentRequest(START_TIME) as PaykitPaymentRequestParseResult.Parsed).request
+
+        assertFalse(parse(paymentRequestRecord()).isMerchantRequest)
+        assertTrue(parse(paymentRequestRecord().copy(proposalAppId = "paykit-server")).isMerchantRequest)
+        assertFalse(parse(paymentRequestRecord().copy(proposalAppId = "marketplace")).isMerchantRequest)
+    }
+
+    @Test
     fun `absolute payment deadlines preserve fractional seconds and include the deadline instant`() {
         val deadline = START_TIME + 123.milliseconds
         val record = paymentRequestRecord(paymentDeadline = PaymentDeadline.At(deadline.toString()))
