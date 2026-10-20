@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
@@ -3271,7 +3272,7 @@ class AppViewModel @Inject constructor(
         allowPubkyAuth: Boolean,
     ): Boolean {
         if (source != ScanSource.DEEPLINK) return true
-        val uri = Uri.parse(data)
+        val uri = data.toUri()
         val isContactLink = PubkyContactLink.matches(uri)
         if (isContactLink) {
             if (PubkyContactLink.publicKey(uri) == null) return true
@@ -4390,8 +4391,8 @@ class AppViewModel @Inject constructor(
     }
 
     private fun normalizedScanInput(result: String, routePubkyKeys: Boolean): String? {
-        return if (routePubkyKeys && PubkyContactLink.matches(Uri.parse(result))) {
-            PubkyContactLink.publicKey(Uri.parse(result)) ?: run {
+        return if (routePubkyKeys && PubkyContactLink.matches(result.toUri())) {
+            PubkyContactLink.publicKey(result.toUri()) ?: run {
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.other__scan_err_decoding),

@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Launcher icons are picked per flavor through manifestPlaceholders, so each variant's lint sees the other flavors' icons as unused. -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@mipmap/ic_launcher_regtest*,@mipmap/ic_launcher_orange*,@mipmap/ic_launcher_testnet*,@mipmap/ic_launcher_foreground,@drawable/ic_launcher_fg_regtest,@drawable/ic_launcher_fg_testnet,@drawable/ic_launcher_monochrome" />
+    tools:keep="@mipmap/ic_launcher_regtest*,@mipmap/ic_launcher_orange*,@mipmap/ic_launcher_testnet*,@mipmap/ic_launcher_fg_orange,@drawable/ic_launcher_fg_regtest,@drawable/ic_launcher_fg_testnet,@drawable/ic_launcher_monochrome" />

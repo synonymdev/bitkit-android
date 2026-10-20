@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -23,6 +24,7 @@ import to.bitkit.ui.components.PrimaryButton
 internal fun UsdtSupportActions(details: String, enabled: Boolean = true) {
     val app = appViewModel ?: return
     val context = LocalContext.current
+    val resources = LocalResources.current
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -41,7 +43,7 @@ internal fun UsdtSupportActions(details: String, enabled: Boolean = true) {
             text = stringResource(R.string.usdt__copy_details),
             onClick = {
                 context.setClipboardText(details)
-                app.toast(type = Toast.ToastType.SUCCESS, title = context.getString(R.string.common__copied))
+                app.toast(type = Toast.ToastType.SUCCESS, title = resources.getString(R.string.common__copied))
             },
             enabled = enabled,
             size = ButtonSize.Small,

@@ -200,6 +200,7 @@ private fun ReceiveTab.toReceiveLiquiditySource(): ReceiveLiquiditySource {
 fun EditInvoiceContent(
     amountInputViewModel: AmountInputViewModel,
     noteText: String,
+    modifier: Modifier = Modifier,
     onchainOnly: Boolean = false,
     keyboardVisible: Boolean,
     tags: ImmutableList<String>,
@@ -211,7 +212,6 @@ fun EditInvoiceContent(
     onClickAddTag: () -> Unit,
     onTextChanged: (String) -> Unit,
     onClickTag: (String) -> Unit,
-    modifier: Modifier = Modifier,
     showPaymentRequestButton: Boolean = false,
     onClickPaymentRequest: () -> Unit = {},
     isLoading: Boolean = false,

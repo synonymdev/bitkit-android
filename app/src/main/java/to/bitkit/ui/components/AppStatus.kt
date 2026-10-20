@@ -35,8 +35,8 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun AppStatus(
-    healthStatus: HealthState = rememberHealthState(),
     modifier: Modifier = Modifier,
+    healthStatus: HealthState = rememberHealthState(),
     showText: Boolean = false,
     showReady: Boolean = false,
     color: Color? = null,

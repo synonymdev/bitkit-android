@@ -11,4 +11,31 @@
     <issue id="Typos">
         <ignore regexp="[Ee]letrónic" />
     </issue>
+    <!-- Widget layouts are inflated as RemoteViews: no app theme paints their background, and only framework attributes such as android:tint apply. -->
+    <issue id="Overdraw">
+        <ignore path="src/main/res/layout/appwidget_*.xml" />
+    </issue>
+    <issue id="UseAppTint">
+        <ignore path="src/main/res/layout/appwidget_*.xml" />
+    </issue>
+    <!-- Rendered once as the widget picker preview. -->
+    <issue id="NestedWeights">
+        <ignore path="src/main/res/layout/appwidget_preview_weather.xml" />
+    </issue>
+    <!-- Exported artwork drawn at its design size; simplifying the paths or shrinking the canvas would change it. -->
+    <issue id="VectorRaster">
+        <ignore path="src/main/res/drawable/bitkit_logo.xml" />
+        <ignore path="src/main/res/drawable/chart_preview.xml" />
+        <ignore path="src/main/res/drawable/qr_placeholder.xml" />
+    </issue>
+    <issue id="VectorPath">
+        <ignore path="src/main/res/drawable/arrow.xml" />
+        <ignore path="src/main/res/drawable/ic_synonym_logo.xml" />
+        <ignore path="src/main/res/drawable/ic_timer_alt_yellow.xml" />
+    </issue>
+    <!-- Densityless bitmaps scale as mdpi, which sets their on-screen size next to their density-free peers. -->
+    <issue id="IconLocation">
+        <ignore path="src/main/res/drawable/ic_recovery.png" />
+        <ignore path="src/main/res/drawable/shopping_bag.webp" />
+    </issue>
 </lint>

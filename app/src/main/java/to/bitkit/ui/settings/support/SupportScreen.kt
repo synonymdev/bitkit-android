@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -77,6 +78,7 @@ fun SupportScreen(
     navController: NavController,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
     val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
@@ -99,7 +101,7 @@ fun SupportScreen(
         onClickShare = {
             shareText(
                 context,
-                context.getString(R.string.settings__about__shareText)
+                resources.getString(R.string.settings__about__shareText)
                     .replace("{appStoreUrl}", Env.APP_STORE_URL)
                     .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
             )
@@ -117,14 +119,14 @@ fun SupportScreen(
                     settings.setIsDevModeEnabled(newValue)
                     app.toast(
                         type = Toast.ToastType.SUCCESS,
-                        title = context.getString(
+                        title = resources.getString(
                             if (newValue) {
                                 R.string.settings__dev_enabled_title
                             } else {
                                 R.string.settings__dev_disabled_title
                             }
                         ),
-                        description = context.getString(
+                        description = resources.getString(
                             if (newValue) {
                                 R.string.settings__dev_enabled_message
                             } else {
