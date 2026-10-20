@@ -12,8 +12,9 @@ class UsdtTimedSheet @Inject constructor(private val settingsStore: SettingsStor
     override val type = TimedSheetType.USDT
     override val priority = type.priority
 
-    override suspend fun shouldShow() = Env.isUsdtEnabled &&
-        settingsStore.data.first().usdtPreference == UsdtPreference.UNDECIDED
+    override suspend fun shouldShow() = Env.isUsdtEnabled && settingsStore.data.first().let {
+        it.usdtPreference == UsdtPreference.UNDECIDED && !it.hasSeenUsdtIntro
+    }
 
     override suspend fun onShown() = Unit
     override suspend fun onDismissed() = Unit
