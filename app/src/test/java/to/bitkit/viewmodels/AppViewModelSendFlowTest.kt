@@ -13306,7 +13306,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         isProfileDeletionInProgress.update { false }
         sut.onHomeResumed()
         runCurrent()
-        verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Ordered)
+        verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background)
     }
 
     @Test

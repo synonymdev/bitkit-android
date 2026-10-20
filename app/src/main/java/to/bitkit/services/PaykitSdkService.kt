@@ -109,6 +109,7 @@ import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PaykitBillingPeriod
+import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.services.PaykitSdkOperationLock.Priority
@@ -932,7 +933,8 @@ class PaykitSdkService @Inject constructor(
     ): List<PrivateStreamCounterpartyIntakeReport> {
         isSetup.await()
         return operationLock.withLock(priority) {
-            withStateRevisionTracking { handle ->
+            checkRefreshAdmission(priority)
+            withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(priority) }) { handle ->
                 completeSdkCall { handle.receivePrivateMessagesFromLinkedPeers() }
             }
         }
@@ -994,7 +996,8 @@ class PaykitSdkService @Inject constructor(
     ): List<OutboundPrivateCounterpartySendReport> {
         isSetup.await()
         return operationLock.withLock(priority) {
-            withStateRevisionTracking { handle ->
+            checkRefreshAdmission(priority)
+            withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(priority) }) { handle ->
                 completeSdkCall { handle.processPendingPrivateMessages() }
             }
         }
@@ -1011,7 +1014,9 @@ class PaykitSdkService @Inject constructor(
         val generation = runtimeGeneration
         return operationLock.withLock(priority) {
             check(runtimeGeneration == generation) { "Paykit runtime changed before observation" }
+            checkRefreshAdmission(priority)
             withPaykitKey { handle ->
+                checkRefreshAdmission(priority)
                 val observation = completeSdkCall { handle.observeState() }
                 check(PubkyPublicKeyFormat.matches(observation.publicKey, expectedIdentity)) {
                     "Paykit observation identity changed"
@@ -1517,7 +1522,16 @@ class PaykitSdkService @Inject constructor(
         cachedBackupState = null
     }
 
-    private suspend fun <T> withStateRevisionTracking(block: suspend (PaykitSdk) -> T): T = withPaykitKey { handle ->
+    private fun checkRefreshAdmission(priority: Priority) {
+        if (priority == Priority.Background && isPaymentSubmissionActive.value) {
+            throw PaykitPaymentRequestError.OperationInProgress
+        }
+    }
+
+    private suspend fun <T> withStateRevisionTracking(
+        beforeOperation: suspend () -> Unit = {},
+        block: suspend (PaykitSdk) -> T,
+    ): T = withPaykitKey { handle ->
         withPaykitBackupStateTracking(
             readRevision = {
                 val started = TimeSource.Monotonic.markNow()
@@ -1540,6 +1554,7 @@ class PaykitSdkService @Inject constructor(
             cachedSnapshot = cachedBackupState,
             onSnapshot = { cachedBackupState = it },
             onChange = ::notifyBackupStateChanged,
+            beforeOperation = beforeOperation,
         ) {
             block(handle)
         }
@@ -1681,10 +1696,12 @@ internal suspend fun <T> withPaykitBackupStateTracking(
     cachedSnapshot: PaykitBackupStateSnapshot? = null,
     onSnapshot: (PaykitBackupStateSnapshot?) -> Unit = {},
     onChange: () -> Unit,
+    beforeOperation: suspend () -> Unit = {},
     operation: suspend () -> T,
 ): T {
     val previousRevision = cachedSnapshot?.backupRevision
         ?: runSuspendCatching { readRevision() }.getOrNull()
+    beforeOperation()
     var succeeded = false
     return try {
         operation().also { succeeded = true }

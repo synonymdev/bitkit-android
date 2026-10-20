@@ -88,6 +88,7 @@ import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.test.forEachCase
@@ -110,6 +111,73 @@ class PaykitSdkServiceTest {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private const val FILE_URI = "pubky://$RING_PUBKY/pub/pubky.app/files/avatar"
         private val READ_TIMEOUT = 10.seconds
+    }
+
+    @Test
+    fun `passive refresh yields at admission and after backup preparation without dirtying backup`() = runTest {
+        val operations = listOf<suspend PaykitSdkService.(Priority) -> Any?>(
+            { receivePrivateMessagesFromLinkedPeers(it) },
+            { processPendingPrivateMessages(it) },
+            { observeState(RING_PUBKY, it) },
+        )
+        for ((index, operation) in operations.withIndex()) {
+            for (queued in if (index == 2) listOf(true) else listOf(true, false)) {
+                val sdk = mock<PaykitSdk>()
+                val release = CompletableDeferred<Unit>()
+                var reached = false
+                var nativeCalls = 0
+                whenever(sdk.contactRecords()).doSuspendableAnswer {
+                    reached = true
+                    release.await()
+                    emptyList()
+                }
+                whenever(sdk.backupStateRevision()).doSuspendableAnswer {
+                    if (!queued) {
+                        reached = true
+                        release.await()
+                    }
+                    "revision"
+                }
+                whenever(sdk.receivePrivateMessagesFromLinkedPeers()).thenAnswer {
+                    nativeCalls++
+                    emptyList<PrivateStreamCounterpartyIntakeReport>()
+                }
+                whenever(sdk.processPendingPrivateMessages()).thenAnswer {
+                    nativeCalls++
+                    emptyList<OutboundPrivateCounterpartySendReport>()
+                }
+                whenever(sdk.observeState()).thenAnswer {
+                    nativeCalls++
+                    PaykitStateObservation(
+                        RING_PUBKY,
+                        0uL,
+                        "2026-10-19T00:00:00Z",
+                        emptyList(),
+                        emptyList(),
+                        emptyList(),
+                        emptyList(),
+                    )
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val holder = if (queued) async { service.contactRecords() } else null
+                runCurrent()
+                val refresh = async { runSuspendCatching { service.operation(Priority.Background) } }
+                runCurrent()
+                assertTrue(reached)
+                service.setPaymentSubmissionActive(true)
+                release.complete(Unit)
+                holder?.await()
+                assertSame(PaykitPaymentRequestError.OperationInProgress, refresh.await().exceptionOrNull())
+                assertEquals(0, nativeCalls)
+                assertEquals(0L, service.backupStateVersion.value)
+                // Recovery reads must complete without waiting for the enclosing payment to finish.
+                service.operation(Priority.Ordered)
+                assertEquals(1, nativeCalls)
+                service.setPaymentSubmissionActive(false)
+                service.operation(Priority.Background)
+                assertEquals(2, nativeCalls)
+            }
+        }
     }
 
     @Test

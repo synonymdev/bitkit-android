@@ -1241,7 +1241,9 @@ class PubkyRepo @Inject constructor(
                     shouldMarkLoadCompleted = true
                 }.onFailure {
                     shouldMarkLoadCompleted = isCurrent(signIn)
-                    Logger.error("Failed to load contacts", it, context = TAG)
+                    if (it != PaykitPaymentRequestError.OperationInProgress) {
+                        Logger.error("Failed to load contacts", it, context = TAG)
+                    }
                 }
             } while (reload && isCurrent(signIn))
         } finally {
