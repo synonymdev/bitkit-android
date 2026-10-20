@@ -462,7 +462,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
         verify(sdk, never()).acceptAllowance(any(), any(), any())
-        assertEquals(ALLOWANCE_ID, sut.proposalForPresentation()?.id)
+        assertEquals(entryKey, sut.proposalForPresentation()?.id)
         assertEquals(PaykitAllowance.Status.AWAITING_MY_ANSWER, sut.entries.value.single().status(fixtures.now))
     }
 
