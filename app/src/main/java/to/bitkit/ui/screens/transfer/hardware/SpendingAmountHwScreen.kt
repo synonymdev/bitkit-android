@@ -18,7 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
@@ -72,7 +72,7 @@ fun SpendingAmountHwScreen(
     val uiState by viewModel.spendingUiState.collectAsStateWithLifecycle()
     val isNodeRunning by viewModel.isNodeRunning.collectAsStateWithLifecycle()
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val currentMaxAllowedToSend by rememberUpdatedState(uiState.maxAllowedToSend)
     val currentCurrencies by rememberUpdatedState(currencies)
 
@@ -102,8 +102,8 @@ fun SpendingAmountHwScreen(
                     amountInputViewModel.setSats(currentMaxAllowedToSend, currentCurrencies)
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.lightning__spending_amount__error_max__title),
-                        description = context.getString(R.string.lightning__spending_amount__error_max__description)
+                        title = resources.getString(R.string.lightning__spending_amount__error_max__title),
+                        description = resources.getString(R.string.lightning__spending_amount__error_max__description)
                             .replace("{amount}", currentMaxAllowedToSend.formatToModernDisplay()),
                     )
                 }

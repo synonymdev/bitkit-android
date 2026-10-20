@@ -20,11 +20,11 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun ActionButton(
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     @DrawableRes iconRes: Int? = null,
     imageVector: ImageVector? = null,
     enabled: Boolean = true,
     isLoading: Boolean = false,
-    modifier: Modifier = Modifier,
 ) {
     IconButton(
         onClick = rememberDebouncedClick(onClick = onClick),

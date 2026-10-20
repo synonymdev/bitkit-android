@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -98,6 +99,7 @@ fun SendRecipientScreen(
 
     // Context & lifecycle
     val context = LocalContext.current
+    val resources = LocalResources.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
@@ -144,8 +146,8 @@ fun SendRecipientScreen(
                 Logger.error("Scan failed", error, context = TAG)
                 app?.toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.other__qr_error_text),
+                    title = resources.getString(R.string.other__qr_error_header),
+                    description = resources.getString(R.string.other__qr_error_text),
                 )
             }
         }
@@ -179,8 +181,8 @@ fun SendRecipientScreen(
                 Logger.error("Camera initialization failed", it, context = TAG)
                 app?.toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.other__camera_init_error)
+                    title = resources.getString(R.string.other__qr_error_header),
+                    description = resources.getString(R.string.other__camera_init_error)
                         .replace("{message}", it.message.orEmpty())
                 )
                 isCameraInitialized = false

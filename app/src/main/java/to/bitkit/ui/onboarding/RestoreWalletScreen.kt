@@ -45,8 +45,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -98,7 +98,7 @@ fun RestoreWalletScreen(
     BlockScreenshots()
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val app = appViewModel
     var isScanningSeedQr by rememberSaveable { mutableStateOf(false) }
 
@@ -111,8 +111,8 @@ fun RestoreWalletScreen(
             when (effect) {
                 RestoreWalletEffect.InvalidSeedQr -> app?.toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.onboarding__restore_seedqr_error),
+                    title = resources.getString(R.string.other__qr_error_header),
+                    description = resources.getString(R.string.onboarding__restore_seedqr_error),
                 )
 
                 RestoreWalletEffect.SeedQrDecoded -> isScanningSeedQr = false
