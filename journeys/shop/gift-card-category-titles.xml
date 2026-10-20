@@ -11,7 +11,7 @@
     an `other__shop__categories__*` key yet, so every row reads English in every shipped locale
     either way. A pseudolocale cannot close the gap: `androidResources.localeFilters`
     (`app/build.gradle.kts:276`) keeps only the 16 shipped locales, so `en-XA` resources are
-    stripped. Once the Transifex pull lands the German strings, replace the German step below with
+    stripped. Once the German strings land, replace the German step below with
     assertions on concrete translated titles ("Food Delivery" and "Health &amp; Beauty" rows plus
     the web view top bar) and drop the English fallback allowance; that is what makes this journey
     discriminate. "VoIP" is not translatable and stays "VoIP" in every locale.
