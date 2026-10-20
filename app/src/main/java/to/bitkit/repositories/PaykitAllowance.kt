@@ -73,7 +73,7 @@ data class PaykitAllowance(
     val isAllower: Boolean get() = role == Role.ALLOWER
 
     /** Allowance ids are unique per contact only, so this identifies one Allowance across all contacts. */
-    val key: String get() = "${PubkyPublicKeyFormat.normalized(counterparty) ?: counterparty}/$allowanceId"
+    val key: String get() = key(counterparty, allowanceId)
 
     val canEnd: Boolean
         get() = when (lifecycleState) {
@@ -97,6 +97,9 @@ data class PaykitAllowance(
     }
 
     companion object {
+        fun key(counterparty: String, allowanceId: String?): String =
+            "${PubkyPublicKeyFormat.normalized(counterparty) ?: counterparty}/$allowanceId"
+
         fun from(record: AllowanceRecord): PaykitAllowance? {
             val role = when (record.localRole) {
                 AllowanceLocalRole.ALLOWER -> Role.ALLOWER
@@ -244,17 +247,28 @@ object PaykitAllowanceTime {
  * Allowance's live automatic attempts in the current month first and keeps an over-cap request on the manual flow.
  */
 object PaykitAllowanceCapacity {
+    /** Allowance ids are unique per contact only, so an attempt keeps the contact it paid. */
     data class Attempt(
+        val counterparty: String,
         val allowanceId: String,
         val amountSats: ULong,
         val admittedAt: Instant,
         val isLive: Boolean,
     )
 
-    fun usedSats(allowanceId: String, attempts: List<Attempt>, anchor: Instant, now: Instant): ULong {
+    fun usedSats(
+        counterparty: String,
+        allowanceId: String,
+        attempts: List<Attempt>,
+        anchor: Instant,
+        now: Instant,
+    ): ULong {
         val (start, end) = PaykitAllowanceTime.monthlyWindow(anchor, now)
         return attempts
-            .filter { it.allowanceId == allowanceId && it.isLive && it.admittedAt >= start && it.admittedAt < end }
+            .filter {
+                it.allowanceId == allowanceId && PubkyPublicKeyFormat.matches(it.counterparty, counterparty) &&
+                    it.isLive && it.admittedAt >= start && it.admittedAt < end
+            }
             .fold(0uL) { total, attempt -> total.safe() + attempt.amountSats.safe() }
     }
 
@@ -263,17 +277,19 @@ object PaykitAllowanceCapacity {
         if (amountSats > perPaymentMax) return false
         val monthlyLimit = allowance.monthlyLimitSats ?: return false
         val anchor = allowance.monthlyAnchor ?: return false
-        return usedSats(allowance.allowanceId, attempts, anchor, now).safe() + amountSats.safe() <= monthlyLimit
+        val used = usedSats(allowance.counterparty, allowance.allowanceId, attempts, anchor, now)
+        return used.safe() + amountSats.safe() <= monthlyLimit
     }
 
     fun attempts(history: AllowanceAccountingHistory): List<Attempt> = history.occurrences
-        .flatMap { it.attempts }
-        .mapNotNull { attempt ->
+        .flatMap { occurrence -> occurrence.attempts.map { occurrence.key.request.counterparty to it } }
+        .mapNotNull { (counterparty, attempt) ->
             if (attempt.mode != PaymentExecutionMode.AUTOMATIC) return@mapNotNull null
             val allowanceId = attempt.allowanceId ?: return@mapNotNull null
             val admittedAt = PaykitAllowanceTime.parse(attempt.admittedAt) ?: return@mapNotNull null
             val amountSats = PaykitAllowance.satsFromBitcoinAmount(attempt.amount.value()) ?: return@mapNotNull null
             Attempt(
+                counterparty = counterparty,
                 allowanceId = allowanceId,
                 amountSats = amountSats,
                 admittedAt = admittedAt,

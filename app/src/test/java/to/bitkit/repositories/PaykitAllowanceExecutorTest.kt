@@ -9,6 +9,7 @@ import com.synonym.paykit.AllowanceCandidate
 import com.synonym.paykit.AllowanceLifecycleState
 import com.synonym.paykit.AllowanceSelectionInput
 import com.synonym.paykit.OutboundPrivateSendReport
+import com.synonym.paykit.PaymentAccountingScope
 import com.synonym.paykit.PaymentAttemptDecision
 import com.synonym.paykit.PaymentDisposition
 import com.synonym.paykit.PaymentExecutionChecks
@@ -397,6 +398,36 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         verify(sdk, never()).reserveAutomaticPayment(any(), any(), any())
         verifyNoInteractions(payer)
         assertEquals(listOf(limitReached), events)
+    }
+
+    @Test
+    fun `another contact's payments under the same allowance id never fill this contact's cap`() = test {
+        collectEvents()
+        val otherScope = PaymentAccountingScope(
+            localPublicKey = fixtures.identityKey,
+            counterparty = fixtures.otherCounterpartyKey,
+            paymentRequestId = "other-paid",
+        )
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(
+                PaymentOccurrenceRecord(
+                    key = PaymentOccurrenceKey(request = otherScope, billingPeriod = null),
+                    disposition = PaymentDisposition.Automatic,
+                    allowanceId = ALLOWANCE_ID,
+                    associationRevision = 1uL,
+                    attempts = listOf(paidAttempt("other-paid", "0.000495", "2026-09-05T10:00:00Z")),
+                ),
+            ),
+        )
+        val allowances = listOf(
+            fixtures.allowance(counterparty = fixtures.otherCounterpartyKey),
+            fixtures.allowance(),
+        )
+
+        val result = sut.autoPay(fixtures.paymentRequest(), allowances, identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.STARTED, result)
+        assertTrue(events.none { it is PaykitAllowanceEvent.LimitReached })
     }
 
     @Test

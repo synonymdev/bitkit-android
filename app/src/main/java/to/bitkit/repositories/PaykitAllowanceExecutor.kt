@@ -386,7 +386,12 @@ class PaykitAllowanceExecutor @Inject constructor(
         val selectionTime = trustedTime(identity)
         val candidates = paykitSdkService.evaluateAllowanceCandidates(scope, selectionTime)
         val candidate = candidates.firstOrNull { it.blocked == null }
-        val allowance = candidate?.let { eligible -> allowances.firstOrNull { it.allowanceId == eligible.allowanceId } }
+        val allowance = candidate?.let { eligible ->
+            allowances.firstOrNull {
+                it.allowanceId == eligible.allowanceId &&
+                    PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
+            }
+        }
         if (candidate == null || allowance == null) {
             val reasons = candidates.mapNotNull { it.blocked }
             Logger.info("Kept an incoming request manual: no eligible allowance, blocked by '$reasons'", context = TAG)

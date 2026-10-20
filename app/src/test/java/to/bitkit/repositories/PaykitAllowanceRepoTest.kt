@@ -174,6 +174,23 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertFalse(sut.isAutoPaid(fixtures.paymentRequest(id = "manual").id))
     }
 
+    @Test
+    fun `auto-paid sats never count another contact's payments under the same allowance id`() = test {
+        records = listOf(
+            fixtures.record(),
+            fixtures.record(counterparty = fixtures.otherCounterpartyKey),
+        )
+        val otherPaid = fixtures.paymentRequest(id = "other-paid", counterparty = fixtures.otherCounterpartyKey)
+        localState = PaykitAllowanceLocalState(
+            journal = listOf(journalEntry("a", otherPaid, ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED)),
+        )
+
+        sut.activate(identity)
+
+        val otherKey = "${PubkyPublicKeyFormat.normalized(fixtures.otherCounterpartyKey)}/$ALLOWANCE_ID"
+        assertEquals(mapOf(entryKey to 0uL, otherKey to 1_000uL), sut.autoPaidSats.value)
+    }
+
     // endregion
 
     // region Coverage
