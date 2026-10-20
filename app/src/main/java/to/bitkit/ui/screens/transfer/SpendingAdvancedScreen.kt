@@ -17,7 +17,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
@@ -66,7 +66,7 @@ fun SpendingAdvancedScreen(
 ) {
     val currentOnQuoteReady by rememberUpdatedState(onQuoteReady)
     val app = appViewModel ?: return
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
     if (state.feeSat == 0uL) return
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
@@ -122,8 +122,8 @@ fun SpendingAdvancedScreen(
                     amountInputViewModel.setSats(currentMaxLspBalance.toLong(), currentCurrencies)
                     app.toast(
                         type = Toast.ToastType.WARNING,
-                        title = context.getString(R.string.lightning__spending_advanced__error_max__title),
-                        description = context.getString(R.string.lightning__spending_advanced__error_max__description)
+                        title = resources.getString(R.string.lightning__spending_advanced__error_max__title),
+                        description = resources.getString(R.string.lightning__spending_advanced__error_max__description)
                             .replace("{amount}", currentMaxLspBalance.formatToModernDisplay()),
                         visibilityTime = Toast.VISIBILITY_TIME_SHORT,
                     )

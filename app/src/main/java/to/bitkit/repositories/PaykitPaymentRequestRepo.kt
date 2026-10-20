@@ -263,7 +263,6 @@ data class PaykitPaymentRequestCreation(
     val wasPublishedToActiveState: Boolean,
 )
 
-@Suppress("LongParameterList")
 class PaykitSubscriptionDraft(
     val amount: PaykitAmount,
     val name: String,
@@ -309,7 +308,6 @@ enum class PaykitPaymentRequestRefreshMode {
     FULL,
 }
 
-@Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 @Singleton
 class PaykitPaymentRequestRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -344,7 +342,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val stateGeneration = AtomicLong()
     private val completedRefreshVersion = AtomicLong()
     private var completedRefreshGeneration = -1L
-    private var completedRefreshProofVersion = -1L
+    private var completedRefreshProofVersion: Pair<Long, Long>? = null
     private var completedRefreshActionVersion = -1L
     private var actionVersion = 0L
     private var completedRefreshMode = PaykitPaymentRequestRefreshMode.STORED
@@ -388,7 +386,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val contacts: PaykitReceivedPaymentContacts,
     )
 
-    private data class RefreshCheckpoint(val actionVersion: Long, val proofVersion: Long)
+    private data class RefreshCheckpoint(val actionVersion: Long, val proofVersion: Pair<Long, Long>)
 
     private data class RequestSnapshot(
         val records: List<PaymentRequestRecord>,
@@ -581,7 +579,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                             return@operation null
                         }
                         if (!isCurrentState(generation, expectedIdentity)) return@operation null
-                        val proofVersion = paymentProofStore.backupStateVersion.value
+                        val proofVersion = paymentProofVersion()
                         val hasFreshSnapshot = completedRefreshVersion.get() != refreshVersion &&
                             completedRefreshGeneration == generation && completedRefreshProofVersion == proofVersion &&
                             completedRefreshActionVersion == actionVersion
@@ -595,7 +593,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                     operationMutex.withLock {
                         if (!isCurrentState(generation, expectedIdentity)) return@withLock
-                        val proofVersion = paymentProofStore.backupStateVersion.value
+                        val proofVersion = paymentProofVersion()
                         runSuspendCatching {
                             val records = snapshot.getOrThrow()
                             if (checkpoint != RefreshCheckpoint(actionVersion, proofVersion)) {
@@ -1239,7 +1237,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         expectedIdentity: String?,
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
     ) {
-        val proofVersion = paymentProofStore.backupStateVersion.value
+        val proofVersion = paymentProofVersion()
         val snapshot = fetchRequestSnapshot(expectedIdentity, mode)
         applyRequestSnapshotLocked(snapshot, generation, expectedIdentity, proofVersion)
     }
@@ -1268,12 +1266,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
         )
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    private fun paymentProofVersion(): Pair<Long, Long> =
+        paymentProofStore.backupStateVersion.value to usdtPayments.paymentRequestStateVersion.value
+
     private suspend fun applyRequestSnapshotLocked(
         snapshot: RequestSnapshot,
         generation: Long,
         expectedIdentity: String?,
-        proofVersion: Long,
+        proofVersion: Pair<Long, Long>,
     ) {
         val now = clock.now()
         val subscriptionNow = subscriptionClock.now()
@@ -1286,13 +1286,15 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 PubkyPublicKeyFormat.matches(it.counterparty, record.counterparty)
             }
         }
+        val usdtAttempts = expectedIdentity?.let { usdtPayments.protectedPaymentAttempts(it).getOrThrow() }.orEmpty()
         val locallyCompletedProofKinds = expectedIdentity
             ?.let(paymentProofStore::completedRequestProofKindsAwaitingSubmission)
-            .orEmpty()
+            .orEmpty() + usdtAttempts.filter { it.proof != null }
+            .mapNotNull { it.requestId?.let { id -> id to PaykitPaymentProofKind.Usdt } }.toMap()
         val locallyCompletedRequestIds = locallyCompletedProofKinds.keys
         val locallyInFlightRequestIds = expectedIdentity
             ?.let(paymentProofStore::inFlightRequestIds)
-            .orEmpty()
+            .orEmpty() + usdtAttempts.mapNotNull { it.requestId }
         val reopenableHardwareProofs = expectedIdentity?.let { identity ->
             paymentProofStore.load().filter { it.isReopenableHardwareReceipt(identity) }
         }.orEmpty()
@@ -1408,7 +1410,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         subscriptionAcceptedAt = updatedSubscriptionAcceptedAt
         dismissedSubscriptionPaymentIds = updatedDismissedPaymentIds
         if (subscriptionStateChanged) persistSubscriptionState(expectedIdentity)
-        if (proofVersion != paymentProofStore.backupStateVersion.value) {
+        if (proofVersion != paymentProofVersion()) {
             throw PaykitPaymentRequestError.RequestUnavailable
         }
         receivedContacts = ReceivedContactsSnapshot(generation, expectedIdentity, contacts)
@@ -1901,7 +1903,7 @@ internal fun PaymentRequestRecord.toPaykitPaymentRequest(
     is PaykitPaymentRequestParseResult.Rejected -> null
 }
 
-@Suppress("CyclomaticComplexMethod", "ReturnCount", "LongMethod")
+@Suppress("CyclomaticComplexMethod")
 private fun PaymentRequestRecord.parsePaykitPaymentRequest(
     expectedRole: PaymentRequestLocalRole,
     now: Instant,

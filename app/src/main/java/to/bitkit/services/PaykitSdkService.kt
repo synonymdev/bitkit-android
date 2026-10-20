@@ -242,7 +242,6 @@ private class PaykitPublicReadSlots(slots: Int) {
 }
 
 @Singleton
-@Suppress("TooManyFunctions", "LargeClass")
 class PaykitSdkService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val keychain: Keychain,
@@ -300,7 +299,6 @@ class PaykitSdkService @Inject constructor(
         )
     }
 
-    @Suppress("LongParameterList")
     internal constructor(
         context: Context,
         keychain: Keychain,
@@ -337,7 +335,6 @@ class PaykitSdkService @Inject constructor(
         return imported ?: runSuspendCatching { importSession(secret) }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private suspend fun initialize(activate: suspend () -> Unit) {
         setupMutex.withLock {
             if (isSetup.isCompleted && !setupFailed) return
@@ -673,7 +670,6 @@ class PaykitSdkService @Inject constructor(
      * under, right before it, so no session can be installed between the checks and the write. A save whose
      * [isStillCurrent] returns false writes nothing and fails with [PubkyContactError.SignInChanged].
      */
-    @Suppress("LongParameterList")
     suspend fun saveContact(
         publicKey: String,
         label: String?,
@@ -1159,7 +1155,6 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    @Suppress("LongParameterList")
     suspend fun submitPaymentProof(
         counterparty: String,
         paymentRequestId: String,
@@ -1813,7 +1808,6 @@ internal data class PaykitBackupStateSnapshot(val stateRevision: String, val bac
 
 internal data class PaykitSdkBackupExport(val state: String, val version: Long)
 
-@Suppress("LongParameterList")
 internal suspend fun <T> withPaykitBackupStateTracking(
     readRevision: suspend () -> String,
     readStateRevision: () -> String? = { null },

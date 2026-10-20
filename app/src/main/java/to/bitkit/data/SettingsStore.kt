@@ -35,7 +35,6 @@ private val Context.settingsDataStore: DataStore<SettingsData> by dataStore(
 private val Context.localSettingsDataStore: DataStore<Preferences> by preferencesDataStore("local_settings")
 
 @Singleton
-@Suppress("TooManyFunctions")
 class SettingsStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
@@ -177,6 +176,7 @@ data class SettingsData(
     val publicPaykitOnchainEnabled: Boolean = true,
     val publicPaykitUsdtEnabled: Boolean = true,
     val usdtPreference: UsdtPreference = UsdtPreference.UNDECIDED,
+    val hasSeenUsdtIntro: Boolean = false,
     val publicPaykitBolt11: String = "",
     val publicPaykitBolt11PaymentHash: String = "",
     val publicPaykitBolt11ExpiresAtMillis: Long = 0,

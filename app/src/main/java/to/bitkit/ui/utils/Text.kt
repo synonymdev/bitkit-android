@@ -6,7 +6,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -123,7 +123,7 @@ fun String.isValidEmail() = this.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(
 
 @Composable
 fun localizedRandom(@StringRes id: Int): String {
-    val resources = LocalContext.current.resources
+    val resources = LocalResources.current
 
     return remember(id) {
         val localizedString = resources.getString(id)
@@ -161,7 +161,7 @@ enum class BlockExplorerType { ADDRESS, TX }
  */
 @Composable
 fun localizedPlural(@StringRes id: Int, argMap: ImmutableMap<Any, Any>): String {
-    val resources = LocalContext.current.resources
+    val resources = LocalResources.current
 
     return remember(id, argMap) {
         val pattern = resources.getString(id)

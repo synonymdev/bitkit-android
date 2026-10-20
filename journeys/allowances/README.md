@@ -39,7 +39,7 @@ killed right after handing the payment to the node never paid twice after relaun
 - Set sheet: `SetAllowance`, sliders `AllowancePerPayment` and `AllowanceMonthly` with stops
   `AllowancePerPaymentStop-<index>` and `AllowanceMonthlyStop-<index>`, `AllowanceSummary`,
   `AllowanceSave`
-- List row: `AllowanceRow-<allowanceId>` with its status line `AllowanceRowStatus`
+- List row: `AllowanceRow-<entryId>` with its status line `AllowanceRowStatus`; the entry id is the payer's grant id, or the contact key and allowance id on the payee
 - Offer notification (payee): the toast `AllowanceOfferAcceptedToast` when notifications are off
 - Review sheet: `AllowanceReview`, `AllowanceCounterparty`, `AllowancePerPaymentValue`,
   `AllowanceMonthlyValue`, `AllowanceAccept`, `AllowanceDecline`; it opens only on the allower's wallet

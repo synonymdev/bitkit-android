@@ -16,7 +16,11 @@ internal object SignedTransactionId {
             require(offset < bytes.size)
             val prefix = bytes[offset++].toInt() and 255
             if (prefix < 253) return prefix
-            val length = when (prefix) { 253 -> 2; 254 -> 4; else -> 8 }
+            val length = when (prefix) {
+                253 -> 2
+                254 -> 4
+                else -> 8
+            }
             require(length <= bytes.size - offset)
             var value = 0uL
             repeat(length) { value = value or ((bytes[offset++].toInt() and 255).toULong() shl (8 * it)) }
@@ -31,10 +35,17 @@ internal object SignedTransactionId {
         val baseStart = offset
         val inputCount = compactSize()
         require(inputCount > 0 && inputCount <= bytes.size / 41)
-        repeat(inputCount) { skip(36); skip(compactSize()); skip(4) }
+        repeat(inputCount) {
+            skip(36)
+            skip(compactSize())
+            skip(4)
+        }
         val outputCount = compactSize()
         require(outputCount > 0 && outputCount <= bytes.size / 9)
-        repeat(outputCount) { skip(8); skip(compactSize()) }
+        repeat(outputCount) {
+            skip(8)
+            skip(compactSize())
+        }
         val baseEnd = offset
         if (hasWitness) {
             repeat(inputCount) {

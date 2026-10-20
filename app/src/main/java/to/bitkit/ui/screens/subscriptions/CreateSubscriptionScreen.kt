@@ -48,6 +48,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -56,7 +57,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.collections.immutable.ImmutableList
@@ -123,6 +124,7 @@ fun CreateSubscriptionSheet(
     amountInputViewModel: AmountInputViewModel = hiltViewModel(key = "SubscriptionAmount"),
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val currencies = LocalCurrencies.current
     val scope = rememberCoroutineScope()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
@@ -171,8 +173,8 @@ fun CreateSubscriptionSheet(
                     }.onFailure {
                         appViewModel.toast(
                             type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.common__error),
-                            description = context.getString(R.string.wallet__payment_request_rate_unavailable),
+                            title = resources.getString(R.string.common__error),
+                            description = resources.getString(R.string.wallet__payment_request_rate_unavailable),
                         )
                     }
                 } else {
@@ -198,8 +200,8 @@ fun CreateSubscriptionSheet(
                     }.onFailure {
                         appViewModel.toast(
                             type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.common__error),
-                            description = context.getString(R.string.subscriptions__icon_error),
+                            title = resources.getString(R.string.common__error),
+                            description = resources.getString(R.string.subscriptions__icon_error),
                         )
                     }
                     isLoadingIcon = false

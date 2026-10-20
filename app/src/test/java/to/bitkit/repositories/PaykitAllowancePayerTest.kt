@@ -45,7 +45,9 @@ class PaykitAllowancePayerTest : BaseUnitTest() {
     @Test
     fun `accepted attempt for another request proves nothing`() = test {
         whenever(lightningRepo.currentOnchainSendAttempt())
-            .thenReturn(attempt(OnchainSendEvidence.Accepted).copy(requestId = requestId.copy(paymentRequestId = "req-2")))
+            .thenReturn(
+                attempt(OnchainSendEvidence.Accepted).copy(requestId = requestId.copy(paymentRequestId = "req-2"))
+            )
 
         assertNull(sut.onchainPaymentOutcome(requestId, txid))
     }

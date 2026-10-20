@@ -1,6 +1,7 @@
 package to.bitkit.ui.components
 
 import android.graphics.Bitmap
+import android.util.LruCache
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -49,6 +50,14 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+
+/** Memory budget for generated QR bitmaps kept for reuse */
+private const val QR_BITMAP_CACHE_BYTES = 16 * 1024 * 1024
+
+/** Generated QR bitmaps by size and content, so a code composed again draws at once instead of loading */
+private val qrBitmapCache = object : LruCache<String, Bitmap>(QR_BITMAP_CACHE_BYTES) {
+    override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+}
 
 private const val QUIET_ZONE_MIN = 2
 private const val QUIET_ZONE_MAX = 4
@@ -160,10 +169,15 @@ fun QrCodeImage(
 internal fun rememberQrBitmap(content: String, size: Dp): Bitmap? {
     if (content.isEmpty()) return null
 
-    var bitmap by remember(content) { mutableStateOf<Bitmap?>(null) }
     val sizePx = with(LocalDensity.current) { size.roundToPx() }
+    val cacheKey = "$sizePx:$content"
+    var bitmap by remember(content) { mutableStateOf<Bitmap?>(qrBitmapCache.get(cacheKey)) }
 
     LaunchedEffect(content, size) {
+        qrBitmapCache.get(cacheKey)?.let {
+            bitmap = it
+            return@LaunchedEffect
+        }
         bitmap = null // Always reset to show loading indicator
 
         launch(Dispatchers.Default) {
@@ -204,6 +218,7 @@ internal fun rememberQrBitmap(content: String, size: Dp): Bitmap? {
 
             newBitmap.setPixels(pixels, 0, matrixWidth, 0, 0, matrixWidth, matrixHeight)
 
+            qrBitmapCache.put(cacheKey, newBitmap)
             bitmap = newBitmap
         }
     }

@@ -16,6 +16,7 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 class PaykitPaymentStateBackupTest {
+    @Suppress("MaxLineLength")
     @Test
     fun `proofs without an app id remain readable without inventing provenance`() {
         WalletScope.pushTestOverride("wallet0").use {
@@ -33,11 +34,16 @@ class PaykitPaymentStateBackupTest {
             assertFalse(backup.restored().onchainAcceptanceVerified)
         }
     }
+
     @Test
     fun `allowance proof keeps its allowance id through backup`() {
         WalletScope.pushTestOverride("wallet0").use {
             val backup = Json.decodeFromString<PaykitPaymentStateBackup.Proof>(
-                """{"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob"},"paymentEndpointIdentifier":"bitcoin-bolt11","kind":"bitcoin-bolt11-preimage","paymentStarted":true,"onchainMatchingTransactionIdsBeforeAttempt":[],"allowanceId":"allowance-1"}""",
+                """
+                    {"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob"},
+                    "paymentEndpointIdentifier":"bitcoin-bolt11","kind":"bitcoin-bolt11-preimage","paymentStarted":true,
+                    "onchainMatchingTransactionIdsBeforeAttempt":[],"allowanceId":"allowance-1"}
+                """.trimIndent(),
             )
             val restored = backup.restored()
             assertEquals("allowance-1", restored.allowanceId)
@@ -128,7 +134,9 @@ class PaykitPaymentStateBackupTest {
             val verifiedBackup = PaykitPaymentStateBackup.Proof(verifiedProof)
             val verifiedJson = Json.encodeToString(verifiedBackup)
             assertContains(verifiedJson, "\"onchainAcceptanceVerified\":true")
-            assertTrue(Json.decodeFromString<PaykitPaymentStateBackup.Proof>(verifiedJson).restored().onchainAcceptanceVerified)
+            assertTrue(
+                Json.decodeFromString<PaykitPaymentStateBackup.Proof>(verifiedJson).restored().onchainAcceptanceVerified
+            )
 
             val hardwareProof = restored.copy(onchainWalletId = "hardware-wallet")
             val hardwareBackup = PaykitPaymentStateBackup.Proof(hardwareProof)

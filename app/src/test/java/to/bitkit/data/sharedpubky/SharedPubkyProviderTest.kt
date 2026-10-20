@@ -2,6 +2,7 @@ package to.bitkit.data.sharedpubky
 
 import android.content.Context
 import android.content.pm.Signature
+import android.content.pm.SigningInfo
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import dagger.hilt.android.testing.HiltAndroidRule
@@ -50,7 +51,9 @@ class SharedPubkyProviderTest : BaseUnitTest() {
         provider.derivePublicKey = { "pubky$PUBKY" }
 
         val packageManager = Shadows.shadowOf(context.packageManager)
-        packageManager.getInternalMutablePackageInfo(context.packageName).signatures = arrayOf(Signature("beef"))
+        packageManager.getInternalMutablePackageInfo(context.packageName).signingInfo = SigningInfo().also {
+            Shadows.shadowOf(it).setSignatures(arrayOf(Signature("beef")))
+        }
         packageManager.setPackagesForUid(TRUSTED_UID, context.packageName)
         ShadowBinder.setCallingUid(TRUSTED_UID)
     }

@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -135,6 +136,7 @@ fun QrScanningScreen(
     }
 
     val context = LocalContext.current
+    val resources = LocalResources.current
     val previewView = remember { PreviewView(context) }
     val preview = remember { Preview.Builder().build() }
     val analyzer = remember(acceptsBinaryPayload) {
@@ -147,8 +149,8 @@ fun QrScanningScreen(
                     Logger.error("Failed to scan QR code", error, context = TAG)
                     app.toast(
                         type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.other__qr_error_header),
-                        description = context.getString(R.string.other__qr_error_text),
+                        title = resources.getString(R.string.other__qr_error_header),
+                        description = resources.getString(R.string.other__qr_error_text),
                     )
                 }
             },
@@ -211,8 +213,8 @@ fun QrScanningScreen(
             Logger.error("Failed to initialize camera", it, context = TAG)
             app.toast(
                 type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__qr_error_header),
-                description = context.getString(R.string.other__camera_init_error)
+                title = resources.getString(R.string.other__qr_error_header),
+                description = resources.getString(R.string.other__camera_init_error)
                     .replace("{message}", it.message.orEmpty())
             )
         }

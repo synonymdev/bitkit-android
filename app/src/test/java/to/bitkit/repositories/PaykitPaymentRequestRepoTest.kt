@@ -236,6 +236,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val diagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val paymentProofStore = mock<PaykitPaymentProofStore>()
     private val proofStateVersion = MutableStateFlow(0L)
+    private val usdtStateVersion = MutableStateFlow(0L)
     private val paymentSubmissionActive = MutableStateFlow(false)
     private val paymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val usdtPayments = mock<PaykitUsdtPaymentRepo>()
@@ -275,6 +276,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
         whenever(usdtPayments.verifiedReceipts(any())).thenReturn(Result.success(emptyList()))
+        whenever(usdtPayments.protectedPaymentAttempts(any())).thenReturn(Result.success(emptyList()))
+        whenever(usdtPayments.paymentRequestStateVersion).thenReturn(usdtStateVersion)
         whenever(usdtPayments.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
         sut = PaykitPaymentRequestRepo(
@@ -656,6 +659,66 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(failed.await().isFailure)
         retry.await().getOrThrow()
         verify(paykitSdkService, times(2)).allPaymentRequests(anyOrNull())
+    }
+
+    @Test
+    fun `usdt attempts hide payable requests until definitely released`() = test {
+        val record = paymentRequestRecord()
+        val requestId = PaykitPaymentRequestId(record.paymentRequestId, record.counterparty)
+        val started = PaykitUsdtAttempt(
+            "quote",
+            "wallet",
+            LOCAL_IDENTITY,
+            COUNTERPARTY,
+            requestId = requestId,
+            paymentStarted = true,
+        )
+        val completed = started.copy(proof = PaykitUsdtProof("erc20-transfer-eip712", "42161", "tx", "0", "signature"))
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        for (attempt in listOf(started, completed)) {
+            whenever(usdtPayments.protectedPaymentAttempts(LOCAL_IDENTITY)).thenReturn(Result.success(listOf(attempt)))
+            sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+            assertTrue(sut.pendingRequests.value.isEmpty())
+            if (attempt.proof != null) {
+                assertEquals(PaykitPaymentProofKind.Usdt, sut.paymentRequestHistory.value.single().paymentProofKind)
+            }
+        }
+        whenever(usdtPayments.protectedPaymentAttempts(LOCAL_IDENTITY)).thenReturn(Result.success(emptyList()))
+        usdtStateVersion.value++
+        sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertEquals(requestId, sut.pendingRequests.value.single().id)
+    }
+
+    @Test
+    fun `refresh reloads when a usdt payment starts during request loading`() = test {
+        val record = paymentRequestRecord()
+        val requestId = PaykitPaymentRequestId(record.paymentRequestId, record.counterparty)
+        val reading = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        var reads = 0
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+            if (reads++ == 0) {
+                reading.complete(Unit)
+                resume.await()
+            }
+            listOf(record)
+        }
+        val refresh = async { sut.refresh(PaykitPaymentRequestRefreshMode.STORED) }
+        reading.await()
+        val started = PaykitUsdtAttempt(
+            "quote",
+            "wallet",
+            LOCAL_IDENTITY,
+            COUNTERPARTY,
+            requestId = requestId,
+            paymentStarted = true,
+        )
+        whenever(usdtPayments.protectedPaymentAttempts(LOCAL_IDENTITY)).thenReturn(Result.success(listOf(started)))
+        usdtStateVersion.value++
+        resume.complete(Unit)
+        refresh.await().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(2, reads)
     }
 
     @Test
@@ -2740,7 +2803,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    @Suppress("LongMethod") // Keep the reload, original receipt and guarded variants in one regression.
     fun `refused retained hardware request remains reopenable after proof store reload`() = test {
         restoreAcceptedRequest()
         val record = paymentRequestRecord(
@@ -2825,7 +2887,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.activate(LOCAL_IDENTITY)
     }
 
-    @Suppress("LongParameterList")
     private fun paymentRequestRecord(
         id: String = PAYMENT_REQUEST_ID,
         role: PaymentRequestLocalRole? = PaymentRequestLocalRole.PAYER,

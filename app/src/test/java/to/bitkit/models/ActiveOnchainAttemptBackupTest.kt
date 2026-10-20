@@ -11,8 +11,10 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
+private val lenientJson = Json { ignoreUnknownKeys = true }
+
 class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = lenientJson
     private val binding = "fe843546f607f38ba7b1e8fe479c3103139ebea5b83628cbaa465e41cf6cb6c0"
 
     private fun golden(): WalletBackupV1 {
@@ -27,7 +29,7 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
         assertEquals("8487f073ee55b9049aeed241819055138c82af8a596104bc2eada95b6ce96aa7", hash)
-        val backup = Json { ignoreUnknownKeys = true }.decodeFromString<WalletBackupV1>(bytes.decodeToString())
+        val backup = lenientJson.decodeFromString<WalletBackupV1>(bytes.decodeToString())
         val state = requireNotNull(backup.paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
         wire.validateProofs(state.pendingProofs, "wallet0")
@@ -41,7 +43,7 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     fun `candidate fee wire survives restore and rejects foreign candidates or invalid UInt32 rates`() {
         val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt)
         val winner = requireNotNull(wire.txid)
-        val json = Json { ignoreUnknownKeys = true }
+        val json = lenientJson
         fun withRates(rates: Map<String, String>): ActiveOnchainAttemptBackup {
             val fields = json.parseToJsonElement(json.encodeToString(wire)) as kotlinx.serialization.json.JsonObject
             val candidateFees = kotlinx.serialization.json.JsonObject(
@@ -92,7 +94,10 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
     @Test
     fun `restored transfer totals must fit the activity database range`() {
         val wire = requireNotNull(golden().paykitPaymentState?.activeOnchainAttempt).copy(
-            requestId = null, payerIdentity = null, orderId = "original-order", amountSats = "1000",
+            requestId = null,
+            payerIdentity = null,
+            orderId = "original-order",
+            amountSats = "1000",
             transfer = ActiveOnchainAttemptBackup.Transfer("2000", "3000", "900", "1000"),
         )
         val overflow = (Long.MAX_VALUE.toULong() + 1uL).toString()
@@ -105,7 +110,9 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
             }
         }
         val maximum = Long.MAX_VALUE.toString()
-        val accepted = wire.copy(transfer = wire.transfer?.copy(txTotalSats = maximum, preTransferOnchainSats = maximum))
+        val accepted = wire.copy(
+            transfer = wire.transfer.copy(txTotalSats = maximum, preTransferOnchainSats = maximum)
+        )
             .restored("regtest", binding, "wallet0", 0)
         assertEquals(Long.MAX_VALUE.toULong(), accepted.transferContext?.txTotalSats)
         assertEquals(Long.MAX_VALUE.toULong(), accepted.transferContext?.preTransferOnchainSats)
@@ -170,7 +177,11 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
         val successor = wire.candidateTxids.last()
         val later = "12".repeat(32)
         for (status in listOf("pending", "unknown", "rejected", "accepted")) {
-            val candidate = wire.copy(status = status, txid = original, candidateTxids = listOf(original, successor, later))
+            val candidate = wire.copy(
+                status = status,
+                txid = original,
+                candidateTxids = listOf(original, successor, later)
+            )
             for (rates in listOf(null, emptyMap(), mapOf(successor to "4"), mapOf(later to "5"))) {
                 assertFailsWith<IllegalArgumentException> {
                     candidate.copy(candidateFeeRates = rates).restored("regtest", binding, "wallet0", 0)
@@ -232,7 +243,9 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
         val missing = wire.copy(followup = followup.copy(contact = null)).restored("regtest", binding, "wallet0", 0)
         assertNull(missing.backupFollowup?.contact)
         val validContact = kotlinx.serialization.json.JsonPrimitive("original-contact")
-        val valid = wire.copy(followup = followup.copy(contact = validContact)).restored("regtest", binding, "wallet0", 0)
+        val valid = wire.copy(
+            followup = followup.copy(contact = validContact)
+        ).restored("regtest", binding, "wallet0", 0)
         assertEquals(validContact, valid.backupFollowup?.contact)
     }
 
@@ -342,7 +355,10 @@ class ActiveOnchainAttemptBackupTest : BaseUnitTest() {
                 feeRateSatsPerVByte = "0"
             ).restored("regtest", binding, "wallet0", 0)
         }
-        val accepted = wire.copy(status = "accepted", candidateFeeRates = mapOf(requireNotNull(wire.txid) to "4")).restored("regtest", binding, "wallet0", 0)
+        val accepted = wire.copy(
+            status = "accepted",
+            candidateFeeRates = mapOf(requireNotNull(wire.txid) to "4")
+        ).restored("regtest", binding, "wallet0", 0)
         assertEquals(OnchainSendEvidence.Accepted, accepted.evidence)
         assertFalse(accepted.localFollowupComplete)
     }

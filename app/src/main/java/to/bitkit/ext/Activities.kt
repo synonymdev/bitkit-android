@@ -104,7 +104,6 @@ fun Activity.timestamp() = when (this) {
 
 enum class BoostType { RBF, CPFP }
 
-@Suppress("LongParameterList")
 fun LightningActivity.Companion.create(
     walletId: String = WalletScope.default,
     id: String,
@@ -137,7 +136,6 @@ fun LightningActivity.Companion.create(
     seenAt = seenAt,
 )
 
-@Suppress("LongParameterList")
 fun OnchainActivity.Companion.create(
     walletId: String = WalletScope.default,
     id: String,

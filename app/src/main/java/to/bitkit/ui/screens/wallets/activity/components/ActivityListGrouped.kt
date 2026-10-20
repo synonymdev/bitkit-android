@@ -194,7 +194,6 @@ private fun groupedActivityKey(index: Int, item: Any): String = when (item) {
     else -> "item_$index"
 }
 
-@Suppress("LongMethod", "LongParameterList")
 fun LazyListScope.activityListGroupedItems(
     items: ImmutableList<Activity>?,
     onActivityItemClick: (Activity) -> Unit,
@@ -287,7 +286,6 @@ fun LazyListScope.activityListGroupedItems(
 }
 
 // region utils
-@Suppress("CyclomaticComplexMethod")
 private fun groupActivityItems(activityItems: List<Activity>, usdtItems: List<UsdtTransfer> = emptyList()): List<Any> {
     val now = Instant.now()
     val zoneId = ZoneId.systemDefault()

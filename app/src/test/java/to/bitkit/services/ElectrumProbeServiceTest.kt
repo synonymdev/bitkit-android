@@ -10,7 +10,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.bouncycastle.asn1.x509.Extension
 import org.bouncycastle.asn1.x509.GeneralName
 import org.bouncycastle.asn1.x509.GeneralNames
-import org.bouncycastle.x509.X509V3CertificateGenerator
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import org.junit.After
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
@@ -405,22 +406,22 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
         return socket.localPort
     }
 
-    @Suppress("DEPRECATION") // bcprov carries no other certificate generator, and bcpkix is not a dependency
     private fun selfSignedCertificate(keyPair: KeyPair, name: GeneralName): X509Certificate {
-        val generated = X509V3CertificateGenerator().apply {
-            setSerialNumber(BigInteger.ONE)
-            setIssuerDN(X500Principal("CN=electrum-probe-test"))
-            setSubjectDN(X500Principal("CN=electrum-probe-test"))
-            setNotBefore(Date(nowMillis() - CERTIFICATE_VALIDITY.inWholeMilliseconds))
-            setNotAfter(Date(nowMillis() + CERTIFICATE_VALIDITY.inWholeMilliseconds))
-            setPublicKey(keyPair.public)
-            setSignatureAlgorithm("SHA256withRSA")
-            addExtension(Extension.subjectAlternativeName, false, GeneralNames(name))
-        }.generate(keyPair.private)
+        val subject = X500Principal("CN=electrum-probe-test")
+        val holder = JcaX509v3CertificateBuilder(
+            subject,
+            BigInteger.ONE,
+            Date(nowMillis() - CERTIFICATE_VALIDITY.inWholeMilliseconds),
+            Date(nowMillis() + CERTIFICATE_VALIDITY.inWholeMilliseconds),
+            subject,
+            keyPair.public,
+        )
+            .addExtension(Extension.subjectAlternativeName, false, GeneralNames(name))
+            .build(JcaContentSignerBuilder("SHA256withRSA").build(keyPair.private))
 
         // Re-read through the platform factory so the certificate exposes a usable public key.
         return CertificateFactory.getInstance("X.509")
-            .generateCertificate(generated.encoded.inputStream()) as X509Certificate
+            .generateCertificate(holder.encoded.inputStream()) as X509Certificate
     }
 
     /** Serves [certificate] to the probe and is the only certificate the probe is told to trust. */

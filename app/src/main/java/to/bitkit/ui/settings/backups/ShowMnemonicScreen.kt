@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -71,6 +72,7 @@ fun ShowMnemonicScreen(
     BlockScreenshots()
 
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     ShowMnemonicContent(
         mnemonic = uiState.bip39Mnemonic,
@@ -81,8 +83,8 @@ fun ShowMnemonicScreen(
             scope.launch {
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.common__copied),
-                    description = context.getString(R.string.security__mnemonic_copied),
+                    title = resources.getString(R.string.common__copied),
+                    description = resources.getString(R.string.security__mnemonic_copied),
                 )
             }
         },
@@ -269,7 +271,6 @@ private fun PreviewShown() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview24Words() {

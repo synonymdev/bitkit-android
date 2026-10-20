@@ -14,7 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -46,7 +46,7 @@ fun RgsServerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val app = appViewModel ?: return
-    val context = LocalContext.current
+    val resources = LocalResources.current
 
     // Monitor connection results
     LaunchedEffect(uiState.connectionResult) {
@@ -54,14 +54,14 @@ fun RgsServerScreen(
             if (result.isSuccess) {
                 app.toast(
                     type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.settings__rgs__update_success_title),
-                    description = context.getString(R.string.settings__rgs__update_success_description),
+                    title = resources.getString(R.string.settings__rgs__update_success_title),
+                    description = resources.getString(R.string.settings__rgs__update_success_description),
                     testTag = "RgsUpdatedToast",
                 )
             } else {
                 app.toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.wallet__ldk_start_error_title),
+                    title = resources.getString(R.string.wallet__ldk_start_error_title),
                     description = result.exceptionOrNull()?.message ?: "Unknown error",
                     testTag = "RgsErrorToast",
                 )

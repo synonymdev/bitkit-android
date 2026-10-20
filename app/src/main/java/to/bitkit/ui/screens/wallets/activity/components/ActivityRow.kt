@@ -62,7 +62,6 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
 import to.bitkit.ui.utils.uiDateText
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ActivityRow(
     item: Activity,
@@ -192,7 +191,6 @@ private fun shouldUseContactActivityTitle(
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun TransactionStatusText(
     txType: PaymentType,

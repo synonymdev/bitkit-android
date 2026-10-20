@@ -42,13 +42,13 @@ just e2e no geo
 # Build for E2E tests using network Electrum (not local; staging/mainnet based on flavor)
 just e2e network assembleTnetRelease
 
-# Lint using detekt
+# Lint using detekt and Android Lint
 just lint
 
 # Auto-format using detekt
 just format
 
-# Update detekt baseline
+# Update the Android Lint baseline
 just lint baseline
 
 # Install dev build
@@ -358,6 +358,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
+- NEVER push with lint findings: detekt and Android Lint fail CI, and Kotlin warnings fail compilation (`allWarningsAsErrors`; deprecations stay warnings). Fix the finding instead of suppressing it or adding it to `app/lint-baseline.xml`
 - ALWAYS wrap suspend functions in `withContext(ioDispatcher)` if in domain layer, using ctor injected prop `@IoDispatcher private val ioDispatcher: CoroutineDispatcher`
 - ALWAYS position `companion object` at the top of the class
 - NEVER use `Exception` directly, use `AppError` instead

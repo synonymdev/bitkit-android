@@ -28,6 +28,9 @@ class TimedSheetManager(private val scope: CoroutineScope) {
     private val registeredSheets = mutableListOf<TimedSheetItem>()
     private var currentTimedSheet: TimedSheetItem? = null
     private var checkJob: Job? = null
+    private var isOnHomeScreen = false
+    private var canShowSheet: (() -> Boolean)? = null
+    private var showSheet: ((TimedSheetType) -> Unit)? = null
 
     fun registerSheet(sheet: TimedSheetItem) {
         registeredSheets.add(sheet)
@@ -42,9 +45,17 @@ class TimedSheetManager(private val scope: CoroutineScope) {
         canShowSheet: () -> Boolean,
         showSheet: (TimedSheetType) -> Unit,
     ) {
-        cancelPendingCheck()
-        if (!canShowSheet()) return
+        isOnHomeScreen = true
+        this.canShowSheet = canShowSheet
+        this.showSheet = showSheet
+        reevaluate()
+    }
 
+    fun reevaluate() {
+        cancelPendingCheck()
+        val canShowSheet = canShowSheet ?: return
+        val showSheet = showSheet ?: return
+        if (!isOnHomeScreen || currentTimedSheet != null || !canShowSheet()) return
         Logger.debug("User entered home screen, starting timer", context = TAG)
         checkJob = scope.launch {
             delay(CHECK_DELAY)
@@ -53,6 +64,7 @@ class TimedSheetManager(private val scope: CoroutineScope) {
     }
 
     fun onHomeScreenExited() {
+        isOnHomeScreen = false
         Logger.debug("User exited home screen, cancelling timer", context = TAG)
         cancelPendingCheck()
     }
@@ -63,13 +75,11 @@ class TimedSheetManager(private val scope: CoroutineScope) {
     }
 
     fun dismissCurrentSheet() {
-        if (currentTimedSheet == null) return
-
+        val sheet = currentTimedSheet ?: return
+        currentTimedSheet = null
+        _currentSheet.update { null }
         scope.launch {
-            currentTimedSheet?.onDismissed()
-            _currentSheet.update { null }
-            currentTimedSheet = null
-
+            sheet.onDismissed()
             Logger.debug("Clearing timed sheet queue", context = TAG)
         }
     }
@@ -78,13 +88,13 @@ class TimedSheetManager(private val scope: CoroutineScope) {
         canShowSheet: () -> Boolean,
         showSheet: (TimedSheetType) -> Unit,
     ) {
-        if (!canShowSheet()) return
+        if (!isOnHomeScreen || currentTimedSheet != null || !canShowSheet()) return
 
         Logger.debug("Registered sheets: ${registeredSheets.map { it.type.name }}", context = TAG)
         for (sheet in registeredSheets.toList()) {
             val shouldShow = sheet.shouldShow()
             currentCoroutineContext().ensureActive()
-            if (!canShowSheet()) return
+            if (!isOnHomeScreen || currentTimedSheet != null || !canShowSheet()) return
 
             if (shouldShow) {
                 Logger.debug(

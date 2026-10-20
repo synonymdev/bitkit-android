@@ -77,6 +77,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
@@ -222,7 +223,6 @@ private val CALCULATOR_LIFT_SPEC = spring<Float>(
 )
 private val BOTTOM_SPACER_HEIGHT = (TAB_BAR_HEIGHT + TAB_BAR_PADDING_BOTTOM + 36).dp
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun HomeScreen(
     isRefreshing: Boolean,
@@ -241,6 +241,7 @@ fun HomeScreen(
     homeViewModel: HomeViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
@@ -340,7 +341,7 @@ fun HomeScreen(
                 Suggestion.INVITE -> {
                     shareText(
                         context,
-                        context.getString(R.string.settings__about__shareText)
+                        resources.getString(R.string.settings__about__shareText)
                             .replace("{appStoreUrl}", Env.APP_STORE_URL)
                             .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
                     )
@@ -412,7 +413,6 @@ fun HomeScreen(
     )
 }
 
-@Suppress("CyclomaticComplexMethod", "MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun Content(
@@ -626,7 +626,6 @@ private fun UsdtHomeRefreshEffect() {
 private fun usdtHeadlineSats(balance: ULong?, visible: Boolean, rate: PaykitExchangeRate?): Long? =
     if (visible && balance != 0uL) balance?.let { usdtDisplaySats(usdtFormatAmount(it), rate) } else 0L
 
-@Suppress("MagicNumber")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WalletPage(
@@ -916,7 +915,6 @@ private fun WidgetsPage(
     )
 }
 
-@Suppress("CyclomaticComplexMethod", "MagicNumber", "LongMethod")
 @Composable
 private fun WidgetsPageContent(
     homeUiState: HomeUiState,
@@ -1197,7 +1195,6 @@ private fun hasWidgetContent(type: WidgetType, state: HomeUiState): Boolean = wh
     WidgetType.SUGGESTIONS -> state.suggestions.isNotEmpty()
 }
 
-@Suppress("CyclomaticComplexMethod", "LongMethod")
 @Composable
 private fun WidgetCardContent(
     widget: WidgetWithPosition,

@@ -43,7 +43,6 @@ import kotlin.time.Duration.Companion.seconds
  * From the paired step the user can add the passphrase (hidden) wallets of the same device, each
  * becoming its own watched identity with its own label and balance.
  */
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class HwConnectViewModel @Inject constructor(
     private val hwWalletRepo: HwWalletRepo,

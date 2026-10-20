@@ -601,7 +601,6 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         assertEquals("request_expired", IncomingPaykitPaymentRequestFailureReason.RequestExpired.logValue)
     }
 
-    @Suppress("LongParameterList")
     private fun createRepo(
         pubkyRepo: PubkyRepo = this.pubkyRepo,
         walletRepo: WalletRepo = this.walletRepo,

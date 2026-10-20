@@ -28,6 +28,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.PaykitAllowanceFixtures.ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
@@ -51,6 +52,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
     private val fixtures = PaykitAllowanceFixtures
     private val identity = fixtures.identityKey
+    private val entryKey = "${PubkyPublicKeyFormat.normalized(fixtures.counterpartyKey)}/$ALLOWANCE_ID"
     private val sdk = mock<PaykitSdkService>()
     private val executor = mock<PaykitAllowanceExecutor>()
     private val lightningRepo = mock<LightningRepo>()
@@ -114,7 +116,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.activate(identity)
 
         val entries = sut.entries.value
-        assertEquals(listOf("group-1", "allowance-other"), entries.map { it.id })
+        val otherKey = "${PubkyPublicKeyFormat.normalized(fixtures.otherCounterpartyKey)}/allowance-other"
+        assertEquals(listOf("group-1", otherKey), entries.map { it.id })
         val grant = entries.first()
         assertEquals(listOf(ALLOWANCE_ID), grant.allowances.map { it.allowanceId })
         assertEquals(ALLOWANCE_ID, grant.primary.allowanceId)
@@ -169,6 +172,23 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertTrue(sut.isAutoPaid(paid.id))
         assertFalse(sut.isAutoPaid(failed.id))
         assertFalse(sut.isAutoPaid(fixtures.paymentRequest(id = "manual").id))
+    }
+
+    @Test
+    fun `auto-paid sats never count another contact's payments under the same allowance id`() = test {
+        records = listOf(
+            fixtures.record(),
+            fixtures.record(counterparty = fixtures.otherCounterpartyKey),
+        )
+        val otherPaid = fixtures.paymentRequest(id = "other-paid", counterparty = fixtures.otherCounterpartyKey)
+        localState = PaykitAllowanceLocalState(
+            journal = listOf(journalEntry("a", otherPaid, ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED)),
+        )
+
+        sut.activate(identity)
+
+        val otherKey = "${PubkyPublicKeyFormat.normalized(fixtures.otherCounterpartyKey)}/$ALLOWANCE_ID"
+        assertEquals(mapOf(entryKey to 0uL, otherKey to 1_000uL), sut.autoPaidSats.value)
     }
 
     // endregion
@@ -301,10 +321,10 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.activate(identity)
 
         val proposal = checkNotNull(sut.proposalForPresentation())
-        assertEquals(ALLOWANCE_ID, proposal.id)
+        assertEquals(entryKey, proposal.id)
         sut.markProposalPresented(proposal.id)
         assertNull(sut.proposalForPresentation())
-        assertEquals(setOf(ALLOWANCE_ID), localState.presentedProposalIds)
+        assertEquals(setOf(entryKey), localState.presentedProposalIds)
 
         assertTrue(sut.accept(proposal.id).isSuccess)
 
@@ -483,6 +503,31 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
 
         verify(sdk, never()).acceptAllowance(any(), any(), any())
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `accepting a proposal never answers another contact's proposal with the same id`() = test {
+        val offer = receivedProposal()
+        val ask = fixtures.record(
+            counterparty = fixtures.otherCounterpartyKey,
+            localRole = AllowanceLocalRole.ALLOWER,
+            state = AllowanceLifecycleState.PROPOSED,
+            proposedByMe = false,
+            lastEventAt = "2026-09-01T10:00:00Z",
+        )
+        records = listOf(offer, ask)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(ask)
+        sut.activate(identity)
+
+        // The offer is accepted automatically, so the sheet presents the other contact's ask.
+        val presented = checkNotNull(sut.proposalForPresentation())
+        assertEquals(PaykitAllowance.Role.ALLOWER, presented.role)
+        assertEquals(fixtures.otherCounterpartyKey, presented.counterparty)
+        assertTrue(sut.accept(presented.id).isSuccess)
+
+        verify(sdk).acceptAllowance(fixtures.otherCounterpartyKey, ALLOWANCE_ID, 1uL)
+        verify(sdk, never()).acceptAllowance(eq(fixtures.counterpartyKey), any(), any())
     }
 
     @Test
@@ -498,7 +543,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.activate(identity)
 
         assertNull(sut.proposalForPresentation())
-        assertTrue(sut.accept(ALLOWANCE_ID).isFailure)
+        assertTrue(sut.accept(entryKey).isFailure)
         verify(sdk, never()).acceptAllowance(any(), any(), any())
     }
 
@@ -514,7 +559,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.activate(identity)
 
         assertNull(sut.proposalForPresentation())
-        assertTrue(sut.accept(ALLOWANCE_ID).isFailure)
+        assertTrue(sut.accept(entryKey).isFailure)
     }
 
     @Test
@@ -522,7 +567,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         records = listOf(fixtures.record())
         sut.activate(identity)
 
-        assertIs<PaykitAllowanceError.Unavailable>(sut.reject(ALLOWANCE_ID).exceptionOrNull())
+        assertIs<PaykitAllowanceError.Unavailable>(sut.reject(entryKey).exceptionOrNull())
         assertIs<PaykitAllowanceError.Unavailable>(sut.accept("missing").exceptionOrNull())
         verify(sdk, never()).rejectAllowance(any(), any())
     }
@@ -650,7 +695,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         executorEvents.emit(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, TXID))
 
         verify(activityRepo).setContact(eq(fixtures.counterpartyKey), eq(TXID), any(), any())
-        assertEquals(mapOf(ALLOWANCE_ID to 1_000uL), sut.autoPaidSats.value)
+        assertEquals(mapOf(entryKey to 1_000uL), sut.autoPaidSats.value)
     }
 
     @Test

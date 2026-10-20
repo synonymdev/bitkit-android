@@ -319,8 +319,12 @@ class PaykitAllowanceTest : BaseUnitTest() {
     fun `capacity without a per payment or monthly limit never fits`() {
         val attempts = listOf(fixtures.capacityAttempt(sats = 1_000_000uL, at = "2026-09-05T10:00:00Z"))
 
-        assertFalse(PaykitAllowanceCapacity.fits(5_000uL, fixtures.allowance(monthlyLimitSats = null), attempts, fixtures.now))
-        assertFalse(PaykitAllowanceCapacity.fits(5_000uL, fixtures.allowance(perPaymentMaxSats = null), attempts, fixtures.now))
+        assertFalse(
+            PaykitAllowanceCapacity.fits(5_000uL, fixtures.allowance(monthlyLimitSats = null), attempts, fixtures.now)
+        )
+        assertFalse(
+            PaykitAllowanceCapacity.fits(5_000uL, fixtures.allowance(perPaymentMaxSats = null), attempts, fixtures.now)
+        )
     }
 
     @Test
@@ -376,9 +380,9 @@ class PaykitAllowanceTest : BaseUnitTest() {
         val walletId = PaykitAllowanceFixtures.ALLOWANCE_ID
         assertEquals(
             listOf(
-                PaykitAllowanceCapacity.Attempt(walletId, 10_000uL, Instant.parse("2026-09-02T10:00:00Z"), false),
-                PaykitAllowanceCapacity.Attempt(walletId, 10_000uL, Instant.parse("2026-09-03T10:00:00Z"), true),
-                PaykitAllowanceCapacity.Attempt(walletId, 2_000uL, Instant.parse("2026-09-05T10:00:00Z"), true),
+                attempt(walletId, 10_000uL, "2026-09-02T10:00:00Z", isLive = false),
+                attempt(walletId, 10_000uL, "2026-09-03T10:00:00Z", isLive = true),
+                attempt(walletId, 2_000uL, "2026-09-05T10:00:00Z", isLive = true),
             ),
             attempts,
         )
@@ -501,7 +505,10 @@ class PaykitAllowanceTest : BaseUnitTest() {
         assertEquals(state, store.load(fixtures.identityKey))
         assertEquals(PaykitAllowanceLocalState(), store.load(fixtures.otherCounterpartyKey))
         val loaded = store.load(fixtures.identityKey)
-        assertEquals(group, loaded.group(containing = PaykitAllowanceFixtures.ALLOWANCE_ID))
+        assertEquals(
+            group,
+            loaded.group(containing = PaykitAllowanceFixtures.ALLOWANCE_ID, counterparty = group.counterparty),
+        )
 
         stored = "{not json"
         assertEquals(PaykitAllowanceLocalState(), store.load(fixtures.identityKey))
@@ -511,6 +518,14 @@ class PaykitAllowanceTest : BaseUnitTest() {
 }
 
 /** Shared builders for the Allowance suites. */
+private fun attempt(allowanceId: String, sats: ULong, at: String, isLive: Boolean) = PaykitAllowanceCapacity.Attempt(
+    counterparty = PaykitAllowanceFixtures.counterpartyKey,
+    allowanceId = allowanceId,
+    amountSats = sats,
+    admittedAt = Instant.parse(at),
+    isLive = isLive,
+)
+
 internal object PaykitAllowanceFixtures {
     const val ALLOWANCE_ID = "allowance-1"
     const val SECOND_ALLOWANCE_ID = "allowance-second"
@@ -634,13 +649,14 @@ internal object PaykitAllowanceFixtures {
 
     fun capacityAttempt(
         allowanceId: String = ALLOWANCE_ID,
+        counterparty: String = counterpartyKey,
         sats: ULong,
         at: String,
         isLive: Boolean = true,
-    ) = PaykitAllowanceCapacity.Attempt(allowanceId, sats, Instant.parse(at), isLive)
+    ) = PaykitAllowanceCapacity.Attempt(counterparty, allowanceId, sats, Instant.parse(at), isLive)
 
     fun usedSats(attempts: List<PaykitAllowanceCapacity.Attempt>): ULong =
-        PaykitAllowanceCapacity.usedSats(ALLOWANCE_ID, attempts, septemberAnchor, now)
+        PaykitAllowanceCapacity.usedSats(counterpartyKey, ALLOWANCE_ID, attempts, septemberAnchor, now)
 
     fun accountingAmount(amount: String, currency: String = PaykitIssuerInterop.BITCOIN_ASSET): AccountingAmount =
         mock {

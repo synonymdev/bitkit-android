@@ -34,7 +34,6 @@ import to.bitkit.models.safe
 import to.bitkit.repositories.PaykitAllowanceLocalState.JournalEntry
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
 import to.bitkit.services.PaykitSdkService
-import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -75,7 +74,13 @@ class PaykitAllowancePayer @Inject constructor(
     ): Result<Unit> {
         val kind = PaykitPaymentProofKind.fromPaymentEndpointIdentifier(paymentEndpointIdentifier)
             ?: return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
-        return paymentProofRepo.prepare(request, paymentEndpointIdentifier, paymentAppId, kind, allowanceId = allowanceId)
+        return paymentProofRepo.prepare(
+            request,
+            paymentEndpointIdentifier,
+            paymentAppId,
+            kind,
+            allowanceId = allowanceId
+        )
     }
 
     suspend fun associateLightningPayment(
@@ -110,7 +115,12 @@ class PaykitAllowancePayer @Inject constructor(
         val isAttemptAccepted = attempt != null && attempt.requestId == requestId && attempt.hasPositiveEvidence &&
             (attempt.txid.equals(txid, ignoreCase = true) || txid.lowercase() in attempt.candidateTxids)
         if (isAttemptAccepted) return PaymentOutcome.SUCCEEDED
-        val hasProof = runSuspendCatching { paymentProofRepo.hasVerifiedOnchainProof(requestId, txid) }.getOrDefault(false)
+        val hasProof = runSuspendCatching {
+            paymentProofRepo.hasVerifiedOnchainProof(
+                requestId,
+                txid
+            )
+        }.getOrDefault(false)
         return PaymentOutcome.SUCCEEDED.takeIf { hasProof }
     }
 
@@ -376,7 +386,12 @@ class PaykitAllowanceExecutor @Inject constructor(
         val selectionTime = trustedTime(identity)
         val candidates = paykitSdkService.evaluateAllowanceCandidates(scope, selectionTime)
         val candidate = candidates.firstOrNull { it.blocked == null }
-        val allowance = candidate?.let { eligible -> allowances.firstOrNull { it.allowanceId == eligible.allowanceId } }
+        val allowance = candidate?.let { eligible ->
+            allowances.firstOrNull {
+                it.allowanceId == eligible.allowanceId &&
+                    PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
+            }
+        }
         if (candidate == null || allowance == null) {
             val reasons = candidates.mapNotNull { it.blocked }
             Logger.info("Kept an incoming request manual: no eligible allowance, blocked by '$reasons'", context = TAG)
@@ -542,7 +557,12 @@ class PaykitAllowanceExecutor @Inject constructor(
         val sats = amountSats.takeUnless { payment.lightningInvoiceHasAmount }
         // Routing fees fall outside the allowance's accounting, so they are capped at 1% of the requested amount.
         val maxRoutingFeeMsat = amountSats.safe() * MAX_ROUTING_FEE_MSAT_PER_SAT.safe()
-        payer.payLightning(payment.endpoint.value, sats, request.submissionDeadline(null), maxRoutingFeeMsat).onFailure {
+        payer.payLightning(
+            payment.endpoint.value,
+            sats,
+            request.submissionDeadline(null),
+            maxRoutingFeeMsat
+        ).onFailure {
             // Only an error that proves the payment never left releases the reservation; anything else stays open,
             // and the node's payment event records its outcome.
             if (payer.failLightningPayment(paymentHash, it)) {
@@ -607,7 +627,14 @@ class PaykitAllowanceExecutor @Inject constructor(
         ) {
             return@withContext Result.success(null)
         }
-        val result = runSuspendCatching { reportManualPayment(request, amountSats, paymentEndpointIdentifier, identity) }
+        val result = runSuspendCatching {
+            reportManualPayment(
+                request,
+                amountSats,
+                paymentEndpointIdentifier,
+                identity
+            )
+        }
         val error = result.exceptionOrNull() ?: return@withContext result
         if (error is PaykitAllowanceError.PaymentAlreadyRecorded) return@withContext result
         Logger.warn("Failed to report a manual payment to the allowance ledger", error, context = TAG)

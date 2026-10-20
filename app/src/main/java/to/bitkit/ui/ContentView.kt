@@ -1,4 +1,3 @@
-@file:Suppress("TooManyFunctions")
 
 package to.bitkit.ui
 
@@ -18,6 +17,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -262,9 +262,9 @@ internal fun shouldFinishWalletInitialization(
     restoreState !is RestoreState.BackupFailed &&
     !isRestoringFromRNRemoteBackup
 
-@Suppress("CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("CyclomaticComplexMethod")
 fun ContentView(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
@@ -505,6 +505,9 @@ fun ContentView(
         val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
+        val lifecycleState by lifecycle.currentStateFlow.collectAsState()
+        val isUsdtIntro = (currentSheet as? Sheet.TimedSheet)?.type == TimedSheetType.USDT
+        val isIntroUncovered = !LocalIsAppLocked.current && lifecycleState == Lifecycle.State.RESUMED
         val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
         val hwSendViewModel = hiltViewModel<HwSendViewModel>()
         val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
@@ -548,8 +551,10 @@ fun ContentView(
             SheetHost(
                 shouldExpand = currentSheet != null,
                 onDismiss = { appViewModel.hideSheet() },
-                visibilityKey = currentSheet,
-                onVisible = { appViewModel.onSheetVisible(currentSheet) },
+                visibilityKey = if (isUsdtIntro) currentSheet to isIntroUncovered else currentSheet,
+                onVisible = {
+                    if (!isUsdtIntro || isIntroUncovered) appViewModel.onSheetVisible(currentSheet)
+                },
                 dismissEnabled = !isCreatingPaymentRequest &&
                     !isAcceptingSubscription &&
                     !isRetryingInitialSubscriptionPayment &&
@@ -1219,7 +1224,6 @@ private fun RootNavHost(
 }
 
 // region destinations
-@Suppress("LongMethod", "LongParameterList")
 private fun NavGraphBuilder.home(
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
@@ -1436,7 +1440,6 @@ private fun PaykitRouteGuard(
     }
 }
 
-@Suppress("LongMethod")
 private fun NavGraphBuilder.contacts(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
@@ -1598,7 +1601,6 @@ private fun NavGraphBuilder.contacts(
     }
 }
 
-@Suppress("LongMethod")
 private fun NavGraphBuilder.profile(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,

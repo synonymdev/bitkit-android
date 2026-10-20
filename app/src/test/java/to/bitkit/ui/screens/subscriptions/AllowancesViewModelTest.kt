@@ -4,7 +4,6 @@ package to.bitkit.ui.screens.subscriptions
 
 import android.content.Context
 import com.synonym.paykit.AllowanceLifecycleState
-import kotlin.test.assertNull
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -40,6 +39,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.ServiceError
 import java.math.BigDecimal
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime

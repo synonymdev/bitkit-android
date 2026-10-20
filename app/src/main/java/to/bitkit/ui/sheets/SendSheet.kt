@@ -1,5 +1,6 @@
 package to.bitkit.ui.sheets
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -121,8 +122,8 @@ internal fun NavController.navigateToSendPending(route: SendRoute.Pending) {
     navigateTo(route) { popUpTo(graph.id) { inclusive = true } }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
+@Suppress("CyclomaticComplexMethod")
 fun SendSheet(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
@@ -200,7 +201,11 @@ fun SendSheet(
             LaunchedEffect(appViewModel, hwSendViewModel) {
                 appViewModel.resolvedHardwarePayments.collect { resolutions ->
                     resolutions.values.forEach { resolution ->
-                        if (appViewModel.resolvedHardwarePaymentFor(resolution.walletId, resolution.transactionId) == resolution &&
+                        val current = appViewModel.resolvedHardwarePaymentFor(
+                            resolution.walletId,
+                            resolution.transactionId,
+                        )
+                        if (current == resolution &&
                             hwSendViewModel.completeReconciledBroadcast(resolution.walletId, resolution.transactionId) {
                                 showHardwareSuccess(it.txId, it.amountSats, it.walletId, it.paymentRequestId != null)
                             }
@@ -218,11 +223,19 @@ fun SendSheet(
                         )
                     ) {
                         appViewModel.consumeResolvedHardwarePayment(resolved)
-                        showHardwareSuccess(result.txId, result.amountSats, result.walletId, result.paymentRequestId != null)
+                        showHardwareSuccess(
+                            result.txId,
+                            result.amountSats,
+                            result.walletId,
+                            result.paymentRequestId != null
+                        )
                         return@collect
                     }
                     val proofComplete = appViewModel.completeHardwareContactPayment(
-                        result.txId, result.walletId, result.paymentRequestId, result.paymentIdentity,
+                        result.txId,
+                        result.walletId,
+                        result.paymentRequestId,
+                        result.paymentIdentity,
                     )
                     if (!proofComplete) {
                         navController.navigateTo(
@@ -238,7 +251,12 @@ fun SendSheet(
                         // and retain the signed operation so another request cannot sign or broadcast.
                         return@collect
                     }
-                    showHardwareSuccess(result.txId, result.amountSats, result.walletId, result.paymentRequestId != null)
+                    showHardwareSuccess(
+                        result.txId,
+                        result.amountSats,
+                        result.walletId,
+                        result.paymentRequestId != null
+                    )
                     hwSendViewModel.completeBroadcast()
                 }
             }
@@ -255,7 +273,10 @@ fun SendSheet(
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
                             val details = appViewModel.successSendUiState.value
-                            hwSendViewModel.completeReconciledBroadcast(details.activityWalletId, details.paymentHashOrTxId)
+                            hwSendViewModel.completeReconciledBroadcast(
+                                details.activityWalletId,
+                                details.paymentHashOrTxId
+                            )
                             appViewModel.clearClipboardForAutoRead()
                             navController.navigateTo(SendRoute.Success) {
                                 popUpTo(navController.graph.id) { inclusive = true }
@@ -486,7 +507,12 @@ fun SendSheet(
                         },
                         beginPaymentSubmission = appViewModel::beginHardwarePaymentSubmission,
                         onPaymentDeadlineExpired = { attempted ->
-                            appViewModel.onHardwarePaymentDeadlineExpired(attempted, uiState.incomingPaymentRequestId, paymentIdentity, walletId)
+                            appViewModel.onHardwarePaymentDeadlineExpired(
+                                attempted,
+                                uiState.incomingPaymentRequestId,
+                                paymentIdentity,
+                                walletId
+                            )
                         },
                         paymentDeadlineAt = appViewModel.hardwarePaymentDeadlineAt,
                         onBack = {
@@ -553,12 +579,14 @@ fun SendSheet(
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.RecoveryPinCheck> {
+                    val cancel = {
+                        navController.previousBackStackEntry?.savedStateHandle
+                            ?.set(RECOVERY_PIN_CHECK_RESULT_KEY, false)
+                        navController.popBackStack()
+                    }
+                    BackHandler(onBack = { cancel() })
                     SendPinCheckScreen(
-                        onBack = {
-                            navController.previousBackStackEntry?.savedStateHandle
-                                ?.set(RECOVERY_PIN_CHECK_RESULT_KEY, false)
-                            navController.popBackStack()
-                        },
+                        onBack = { cancel() },
                         onSuccess = {
                             navController.previousBackStackEntry?.savedStateHandle
                                 ?.set(RECOVERY_PIN_CHECK_RESULT_KEY, true)
@@ -567,13 +595,15 @@ fun SendSheet(
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.PinCheck> {
+                    val cancel = {
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set(PIN_CHECK_RESULT_KEY, false)
+                        navController.popBackStack()
+                    }
+                    BackHandler(onBack = { cancel() })
                     SendPinCheckScreen(
-                        onBack = {
-                            navController.previousBackStackEntry
-                                ?.savedStateHandle
-                                ?.set(PIN_CHECK_RESULT_KEY, false)
-                            navController.popBackStack()
-                        },
+                        onBack = { cancel() },
                         onSuccess = {
                             navController.previousBackStackEntry
                                 ?.savedStateHandle

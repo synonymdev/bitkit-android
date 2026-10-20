@@ -308,9 +308,9 @@ class PaykitAllowanceRepo @Inject constructor(
                 response(allowance)
                 sendQueuedMessages(allowance.counterparty)
             }
-            val ids = entry.allowances.map { it.allowanceId }
+            val keys = entry.allowances.map { it.key }
             if (activeIdentity == identity) {
-                executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + ids) }
+                executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + keys) }
             }
             refresh()
             Unit
@@ -331,15 +331,15 @@ class PaykitAllowanceRepo @Inject constructor(
         val presented = _localState.value.presentedProposalIds
         return _entries.value.firstOrNull { entry ->
             entry.allowances.any { it.isAnswerable && !it.isOfferFromAllower } &&
-                entry.allowances.none { it.allowanceId in presented }
+                entry.allowances.none { it.key in presented }
         }
     }
 
     suspend fun markProposalPresented(entryId: String) {
         val identity = activeIdentity ?: return
-        val ids = entry(entryId)?.allowances?.map { it.allowanceId } ?: return
+        val keys = entry(entryId)?.allowances?.map { it.key } ?: return
         val state = withContext(ioDispatcher) {
-            executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + ids) }
+            executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + keys) }
         }
         if (activeIdentity == identity) publish(_allowances.value, state)
     }
@@ -502,7 +502,7 @@ class PaykitAllowanceRepo @Inject constructor(
         state: PaykitAllowanceLocalState,
     ) = synchronized(publishLock) {
         val entries = allowances
-            .groupBy { state.group(containing = it.allowanceId)?.id ?: it.allowanceId }
+            .groupBy { state.group(containing = it.allowanceId, counterparty = it.counterparty)?.id ?: it.key }
             .map { (id, members) ->
                 PaykitAllowanceEntry(
                     id = id,
@@ -511,9 +511,11 @@ class PaykitAllowanceRepo @Inject constructor(
                 )
             }
         val paid = state.journal.filter { it.isAutomatic && it.stage == PaykitAllowanceLocalState.Stage.SUCCEEDED }
-        val paidByAllowance = paid.groupBy { it.allowanceId }.mapValues { (_, payments) ->
-            payments.fold(0uL) { total, payment -> total.safe() + payment.amountSats.safe() }
-        }
+        // Allowance ids are unique per contact only, so payments count toward the contact's own allowance.
+        val paidByAllowance = paid.groupBy { PaykitAllowance.key(it.requestId.counterparty, it.allowanceId) }
+            .mapValues { (_, payments) ->
+                payments.fold(0uL) { total, payment -> total.safe() + payment.amountSats.safe() }
+            }
         _allowances.update { allowances }
         _localState.update { state }
         _autoPaidRequestIds.update { paid.mapTo(mutableSetOf()) { it.requestId } }
@@ -521,7 +523,7 @@ class PaykitAllowanceRepo @Inject constructor(
         _autoPaidSats.update {
             entries.associate { entry ->
                 entry.id to entry.allowances.fold(0uL) { total, allowance ->
-                    total.safe() + (paidByAllowance[allowance.allowanceId] ?: 0uL).safe()
+                    total.safe() + (paidByAllowance[allowance.key] ?: 0uL).safe()
                 }
             }
         }
