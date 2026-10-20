@@ -128,7 +128,6 @@ class PreActivityMetadataRepo @Inject constructor(
         }
     }
 
-    @Suppress("LongParameterList")
     suspend fun savePreActivityMetadata(
         id: String,
         paymentHash: String? = null,

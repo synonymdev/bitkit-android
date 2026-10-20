@@ -31,7 +31,6 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("LongParameterList")
 @HiltViewModel
 class ExternalNodeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

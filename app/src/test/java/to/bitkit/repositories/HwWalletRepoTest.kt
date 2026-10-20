@@ -13,16 +13,16 @@ import com.synonym.bitkitcore.JadeTransportKind
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
-import com.synonym.bitkitcore.TransactionDetails
 import com.synonym.bitkitcore.TransactionDetail
+import com.synonym.bitkitcore.TransactionDetails
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,8 +33,8 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -69,7 +69,6 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
-@Suppress("LargeClass")
 class HwWalletRepoTest : BaseUnitTest() {
 
     private companion object {
@@ -165,14 +164,18 @@ class HwWalletRepoTest : BaseUnitTest() {
         val started = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()
         whenever(hwWalletStore.loadKnownDevices()).thenAnswer { storeData.value.knownDevices }
-        whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
+        whenever(
+            trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        )
             .doSuspendableAnswer {
                 started.complete(Unit)
                 finish.await()
-                Result.success(mock<TransactionDetail> {
-                    on { this.txid }.thenReturn(txid)
-                    on { sent }.thenReturn(1uL)
-                })
+                Result.success(
+                    mock<TransactionDetail> {
+                        on { this.txid }.thenReturn(txid)
+                        on { sent }.thenReturn(1uL)
+                    }
+                )
             }
         val sut = createRepo()
         val result = async { sut.observeExactTransaction(HARDWARE_WALLET_ID, txid) }
@@ -196,7 +199,9 @@ class HwWalletRepoTest : BaseUnitTest() {
             on { fee }.thenReturn(1000uL)
             on { feeRate }.thenReturn(2.0)
         }
-        whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
+        whenever(
+            trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        )
             .thenReturn(Result.success(detail))
         val sut = createRepo()
         listOf(
@@ -224,7 +229,9 @@ class HwWalletRepoTest : BaseUnitTest() {
             on { feeRate }.thenReturn(2.0)
             on { outputs }.thenReturn(listOf(com.synonym.bitkitcore.TxDetailOutput(amount, "script", address, false)))
         }
-        whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
+        whenever(
+            trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        )
             .thenReturn(Result.success(detail))
         whenever(activityRepo.completeObservedHardwarePayment(HARDWARE_WALLET_ID, txid, address, amount, 1000uL, 2uL))
             .thenReturn(Result.failure(AppError("local write failed")))
@@ -245,14 +252,19 @@ class HwWalletRepoTest : BaseUnitTest() {
         val txid = "ab".repeat(32)
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
         val mismatchedDetail = mock<TransactionDetail> { on { this.txid }.thenReturn("cd".repeat(32)) }
-        whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
+        whenever(
+            trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        )
             .thenReturn(Result.success(mismatchedDetail))
             .thenReturn(Result.failure(AppError("transaction not found")))
         val sut = createRepo()
         assertFalse(sut.observeExactTransaction(HARDWARE_WALLET_ID, txid).getOrThrow())
         assertTrue(sut.observeExactTransaction(HARDWARE_WALLET_ID, txid).isFailure)
         assertTrue(sut.observeExactTransaction(HIDDEN_WALLET_ID, txid).isFailure)
-        verify(trezorRepo, times(2)).getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        verify(
+            trezorRepo,
+            times(2)
+        ).getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
         verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
     }
 
@@ -264,7 +276,9 @@ class HwWalletRepoTest : BaseUnitTest() {
             on { sent }.thenReturn(0uL)
         }
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
-        whenever(trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT))
+        whenever(
+            trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        )
             .thenReturn(Result.success(incoming))
         assertFalse(createRepo().observeExactTransaction(HARDWARE_WALLET_ID, txid).getOrThrow())
         verify(trezorRepo, never()).broadcastRawTx(any(), org.mockito.kotlin.anyOrNull())
@@ -2500,7 +2514,6 @@ class HwWalletRepoTest : BaseUnitTest() {
         nextUnusedExternalAddress = receiveAddress,
     )
 
-    @Suppress("LongParameterList")
     private fun watcherActivity(
         amount: ULong,
         txid: String = "t1",

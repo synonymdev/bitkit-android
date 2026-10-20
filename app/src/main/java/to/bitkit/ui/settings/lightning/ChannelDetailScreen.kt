@@ -128,7 +128,6 @@ fun ChannelDetailScreen(
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun Content(
     uiState: ChannelDetailUiState = ChannelDetailUiState(),
@@ -180,8 +179,8 @@ private fun Content(
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Suppress("CyclomaticComplexMethod")
 @Composable
+@Suppress("CyclomaticComplexMethod")
 private fun ChannelDetailContent(
     channel: ChannelUi,
     blocktankOrders: ImmutableList<IBtOrder> = persistentListOf(),
@@ -527,7 +526,6 @@ private fun SectionTitle(text: String) {
     VerticalSpacer(8.dp)
 }
 
-@Suppress("MagicNumber")
 @Composable
 private fun SectionRow(
     name: String,

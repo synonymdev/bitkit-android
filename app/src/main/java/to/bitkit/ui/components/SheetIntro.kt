@@ -27,7 +27,6 @@ import to.bitkit.ui.theme.Colors
 const val SHEET_INTRO_IMAGE_WIDTH_FRACTION = 0.8f
 
 @Composable
-@Suppress("LongParameterList")
 fun SheetIntro(
     navTitle: String,
     title: AnnotatedString,
@@ -102,7 +101,6 @@ fun SheetIntro(
 }
 
 @Composable
-@Suppress("LongParameterList")
 private fun SheetIntroButtons(
     continueText: String,
     onContinue: () -> Unit,

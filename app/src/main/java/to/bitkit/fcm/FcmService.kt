@@ -95,7 +95,6 @@ class FcmService : FirebaseMessagingService() {
         Logger.warn("FCM handler not implemented for: $data", context = TAG)
     }
 
-    @Suppress("ReturnCount")
     private fun decryptPayload(response: EncryptedNotification) {
         val ciphertext = runCatching { response.cipher.fromBase64() }.getOrElse {
             Logger.error("Failed to decode cipher", it, context = TAG)

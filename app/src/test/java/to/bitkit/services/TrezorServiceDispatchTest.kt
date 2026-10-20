@@ -13,9 +13,13 @@ class TrezorServiceDispatchTest : BaseUnitTest() {
     @Test
     fun `expired native queue skips the durable dispatch callback`() = test {
         val deadline = Instant.parse("2026-10-08T12:00:00Z")
-        val service = TrezorService(mock(), mock(), object : Clock {
-            override fun now() = Instant.parse("2026-10-08T12:00:01Z")
-        })
+        val service = TrezorService(
+            mock(),
+            mock(),
+            object : Clock {
+                override fun now() = Instant.parse("2026-10-08T12:00:01Z")
+            }
+        )
         var markers = 0
         val result = runCatching {
             service.broadcastRawTxAtBoundary("not-a-transaction", "unused", deadline) { markers++ }
@@ -30,9 +34,13 @@ class TrezorServiceDispatchTest : BaseUnitTest() {
     fun `expiry while the durable marker is saved skips native submission`() = test {
         val deadline = Instant.parse("2026-10-08T12:00:00Z")
         var now = Instant.parse("2026-10-08T11:59:59Z")
-        val service = TrezorService(mock(), mock(), object : Clock {
-            override fun now() = now
-        })
+        val service = TrezorService(
+            mock(),
+            mock(),
+            object : Clock {
+                override fun now() = now
+            }
+        )
         var markers = 0
         val result = runCatching {
             service.broadcastRawTxAtBoundary("not-a-transaction", "unused", deadline) {

@@ -48,8 +48,8 @@ import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.PublicKey
 import org.lightningdevkit.ldknode.ScoringFeeParameters
 import org.lightningdevkit.ldknode.SpendableUtxo
-import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.TransactionDetails
+import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
@@ -73,8 +73,8 @@ import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.repositories.OnchainPreparedReceipt
-import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.repositories.releaseInputSets
@@ -143,7 +143,6 @@ data class AddressDerivationInfo(
     val index: Int,
 )
 
-@Suppress("LargeClass", "LongParameterList", "TooManyFunctions")
 @Singleton
 class LightningService internal constructor(
     private val bgDispatcher: CoroutineDispatcher,
@@ -289,7 +288,7 @@ class LightningService internal constructor(
         )
     }
 
-    @Suppress("ForbiddenComment", "LongMethod")
+    @Suppress("ForbiddenComment")
     private suspend fun build(
         walletIndex: Int,
         customServerUrl: String?,
@@ -584,7 +583,6 @@ class LightningService internal constructor(
         return Path(Env.ldkStoragePath(walletIndex)).toFile().resolve("network_graph_cache")
     }
 
-    @Suppress("ReturnCount")
     fun aresRequiredPeersInNetworkGraph(): Boolean {
         val node = this.node ?: return true
         val graph = node.networkGraph()
@@ -865,7 +863,6 @@ class LightningService internal constructor(
         }
     }
 
-    @Suppress("ThrowsCount")
     suspend fun closeChannel(
         channel: ChannelDetails,
         force: Boolean = false,

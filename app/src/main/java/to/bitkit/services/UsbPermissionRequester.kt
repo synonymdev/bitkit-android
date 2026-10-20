@@ -28,7 +28,6 @@ class UsbPermissionRequester(
         private const val TAG = "UsbPermissionRequester"
     }
 
-    @Suppress("TooGenericExceptionCaught")
     fun request(device: UsbDevice): Boolean {
         val latch = CountDownLatch(1)
         var granted = false

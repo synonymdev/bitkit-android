@@ -99,7 +99,6 @@ import to.bitkit.ui.utils.uiDateText
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ActivityDetailScreen(
     listViewModel: ActivityListViewModel,
@@ -314,8 +313,8 @@ fun ActivityDetailScreen(
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
+@Suppress("CyclomaticComplexMethod")
 private fun ActivityDetailContent(
     item: Activity,
     assignedContact: PubkyProfile?,

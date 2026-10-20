@@ -41,7 +41,6 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
-@Suppress("TooManyFunctions")
 @Singleton
 class UsdtRepo @Inject constructor(
     private val service: UsdtService,

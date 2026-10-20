@@ -49,7 +49,6 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
-@Suppress("TooManyFunctions")
 @Singleton
 class CurrencyRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,

@@ -11,8 +11,8 @@ import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.EventListener
 import com.synonym.bitkitcore.SingleAddressInfoResult
-import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TransactionDetail
+import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
@@ -101,7 +101,6 @@ import kotlin.time.Instant
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @OptIn(ExperimentalTime::class)
-@Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 @Singleton
 class TrezorRepo @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -518,7 +517,6 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    @Suppress("LongParameterList")
     suspend fun composeTransaction(
         extendedKey: String,
         outputs: List<ComposeOutput>,
@@ -547,7 +545,6 @@ class TrezorRepo @Inject constructor(
     }
 
     /** Composes from a public account key without opening a hardware-device session. */
-    @Suppress("LongParameterList")
     suspend fun composeTransactionOffline(
         extendedKey: String,
         outputs: List<ComposeOutput>,
@@ -573,7 +570,6 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    @Suppress("LongParameterList")
     private suspend fun composeTransaction(
         extendedKey: String,
         outputs: List<ComposeOutput>,
@@ -637,7 +633,10 @@ class TrezorRepo @Inject constructor(
         runSuspendCatching {
             awaitSetup()
             trezorService.broadcastRawTxAtBoundary(
-                serializedTx, currentElectrumUrl(), paymentDeadlineAt, beforeNativeBroadcast
+                serializedTx,
+                currentElectrumUrl(),
+                paymentDeadlineAt,
+                beforeNativeBroadcast
             )
         }.onFailure {
             Logger.error("Trezor broadcastRawTx failed", it, context = TAG)

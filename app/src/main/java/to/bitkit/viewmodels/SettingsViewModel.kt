@@ -37,7 +37,6 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.SubscriptionClockOffset
 import javax.inject.Inject
 
-@Suppress("LongParameterList", "TooManyFunctions")
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
