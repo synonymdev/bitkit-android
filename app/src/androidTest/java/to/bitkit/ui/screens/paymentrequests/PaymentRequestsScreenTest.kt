@@ -367,6 +367,34 @@ class PaymentRequestsScreenTest {
     }
 
     @Test
+    fun shortWordContactKeepsFullNameBesideLongReceipt() {
+        val name = "Ann Lee"
+        val status = "Payment verified · 0.001647 USDT"
+        val width = mutableStateOf(407.dp)
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                Box(Modifier.width(width.value).padding(horizontal = 16.dp)) {
+                    PaymentRequestCard(
+                        request = request().copy(amount = PaykitAmount(PaykitAsset.USDT, 1_647u)),
+                        contact = PubkyProfile.forDisplay(request().counterparty, name, imageUrl = null),
+                        compactSubtitle = "09:41",
+                        fiatStatus = status,
+                    )
+                }
+            }
+        }
+        for (size in listOf(407.dp, 412.dp)) {
+            composeTestRule.runOnIdle { width.value = size }
+            for (text in listOf(name, status)) {
+                val results = mutableListOf<TextLayoutResult>()
+                composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                    .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+                assertFalse(results.single().hasVisualOverflow, "$text must fit without truncation at $size")
+            }
+        }
+    }
+
+    @Test
     fun shortAmountLeavesRoomForContactNameAtLargeText() {
         val name = "Alexandra Payer"
         composeTestRule.setContent {
