@@ -1173,7 +1173,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
         sut.refresh().getOrThrow()
 
-        assertTrue(sut.pendingRequests.value.all { it.isPaymentDeadlineExpired(clock.now()) })
+        assertTrue(sut.pendingRequests.value.isEmpty())
         val unpaid = requireNotNull(sut.subscriptions.value.single { it.isPayer }.paymentDueOnAcceptance(clock.now()))
         assertTrue(unpaid.isPaymentDeadlineExpired(clock.now()))
         assertTrue(!unpaid.payment(MethodId.Bolt11, clock.now()).isValid(clock.now()))
@@ -1182,10 +1182,73 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             assertEquals(1, subscription.paidPeriods.size)
             assertTrue(subscription.canCancel(clock.now()))
         }
-        val paid = sut.paymentRequestHistory.value.single()
+        assertEquals(2, sut.paymentRequestHistory.value.size)
+        assertTrue(sut.paymentRequestHistory.value.any { it.id == unpaid.id && it.isExpired(clock.now()) })
+        val paid = sut.paymentRequestHistory.value.single {
+            it.lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED
+        }
         assertEquals(PaymentRequestLifecycleState.PROOF_SUBMITTED, paid.lifecycleState)
         assertEquals(PaykitPaymentProofKind.Lightning, paid.paymentProofKind)
         assertEquals(1, sut.subscriptions.value.single { it.isCreatedByUser }.receivedPaymentRequests().size)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(
+                paymentRequestRecord(
+                    id = PaymentRequestLocalRole.PAYER.name,
+                    state = PaymentRequestLifecycleState.CANCELED,
+                    paymentDeadline = PaymentDeadline.PeriodStart(3600uL),
+                    paymentProofs = listOf(proof),
+                ),
+            ),
+        )
+        sut.refresh().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(listOf(paid.id), sut.paymentRequestHistory.value.map { it.id })
+    }
+
+    @Test
+    fun `expired recurring period stays in history across refresh and restored state`() = test {
+        val start = clock.now()
+        val nextPeriod = Instant.parse("2027-02-15T08:00:00Z")
+        val subscriptionId = PaykitSubscriptionId(PAYMENT_REQUEST_ID, COUNTERPARTY)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(
+                paymentRequestRecord(
+                    state = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+                    recurrence = PaymentRequestRecurrence(1u, "month", start.toString(), start.toString(), null),
+                    paymentDeadline = PaymentDeadline.PeriodStart(60uL),
+                ),
+            ),
+        )
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertEquals(listOf(request), sut.pendingRequests.value)
+        advanceTimeBy(1)
+        runCurrent()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(listOf(request), sut.paymentRequestHistory.value)
+        assertEquals(PaykitPaymentRequestError.RequestExpired, sut.ensurePaymentAllowed(request).exceptionOrNull())
+
+        sut.refresh().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(listOf(request), sut.paymentRequestHistory.value)
+        sut.clear()
+        assertTrue(sut.paymentRequestHistory.value.isEmpty())
+        whenever(presentationStore.loadSubscriptionState(LOCAL_IDENTITY)).thenReturn(
+            PaykitSubscriptionPresentationState(acceptedAt = mapOf(subscriptionId to start)),
+        )
+        sut.activate(LOCAL_IDENTITY)
+        sut.refresh().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(listOf(request), sut.paymentRequestHistory.value)
+        advanceTimeBy((nextPeriod - clock.now()).inWholeMilliseconds)
+        sut.refresh().getOrThrow()
+        val next = sut.pendingRequests.value.single()
+        assertTrue(next.id != request.id)
+        assertEquals(nextPeriod, next.billingPeriod?.startsAt)
+        assertFalse(next.isExpired(clock.now()))
+        assertEquals(listOf(request), sut.paymentRequestHistory.value)
     }
 
     @Test
