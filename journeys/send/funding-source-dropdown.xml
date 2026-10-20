@@ -5,9 +5,6 @@
     with confirmed Savings funds and a usable Spending channel, a fresh zero-amount unified BIP21 URI
     (on-chain address plus Lightning invoice) from another wallet, and a fresh on-chain address
     from another wallet. Close each send without paying.
-
-    With a single funding source the button shows no chevron and does not open a list. Android keeps
-    that single-source button filled; iOS keeps it outlined.
   </description>
   <actions>
     <action>Open the zero-amount unified BIP21 URI with a bitcoin: deep link</action>
@@ -16,7 +13,7 @@
     <action>Select the wallet that is not checked and verify the button shows its name in its color, orange for Savings and purple for Spending, still outlined with the downward chevron</action>
     <action>Tap the funding source button again and verify the check moved to the newly selected wallet; dismiss the dropdown</action>
     <action>Close the send sheet without paying</action>
-    <action>Open the on-chain address with a bitcoin: deep link and verify the funding source button shows Savings with no chevron</action>
+    <action>Open the on-chain address with a bitcoin: deep link and verify the funding source button shows Savings outlined in orange with no chevron or other icon</action>
     <action>Close the send sheet without paying</action>
   </actions>
 </journey>

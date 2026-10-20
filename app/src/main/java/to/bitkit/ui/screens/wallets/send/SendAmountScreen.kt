@@ -489,7 +489,7 @@ private fun PaymentMethodButton(
             } else {
                 AppTextStyles.CaptionM
             },
-            outlined = uiState.canSwitchFundingSource,
+            outlined = true,
             trailingIcon = if (uiState.canSwitchFundingSource) R.drawable.ic_chevron_down else null,
             onClick = { expanded = true },
             enabled = uiState.fundingOptions.isNotEmpty(),
