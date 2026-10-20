@@ -225,6 +225,7 @@ import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.timedsheets.TimedSheetManager
+import to.bitkit.utils.timedsheets.sheets.BackupTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
 import java.math.BigDecimal
 import java.net.URLEncoder
@@ -792,6 +793,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private fun createViewModel(
         timedSheetManagerProvider: (CoroutineScope) -> TimedSheetManager = { timedSheetManager },
         usdtSheet: UsdtTimedSheet = UsdtTimedSheet(settingsStore),
+        backupSheet: BackupTimedSheet = mock { on { type } doReturn TimedSheetType.BACKUP },
     ) = AppViewModel(
         connectivityRepo = connectivityRepo,
         healthRepo = healthRepo,
@@ -831,7 +833,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         paykitUsdtPayments = paykitUsdtPayments,
         samRockRepo = samRockRepo,
         appUpdateSheet = mock { on { type } doReturn TimedSheetType.APP_UPDATE },
-        backupSheet = mock { on { type } doReturn TimedSheetType.BACKUP },
+        backupSheet = backupSheet,
         notificationsSheet = mock { on { type } doReturn TimedSheetType.NOTIFICATIONS },
         quickPaySheet = mock { on { type } doReturn TimedSheetType.QUICK_PAY },
         usdtSheet = usdtSheet,
@@ -8364,6 +8366,57 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut = createViewModel(timedSheetManagerProvider = ::TimedSheetManager, usdtSheet = sheet)
         sut.setIsAuthenticated(true)
         return sheet
+    }
+
+    @Test
+    fun `Home entry during startup authentication still shows ordinary reminders`() = test {
+        settingsData.value = settingsData.value.copy(hasSeenUsdtIntro = true)
+        val backupSheet = mock<BackupTimedSheet> {
+            on { type } doReturn TimedSheetType.BACKUP
+            on { priority } doReturn TimedSheetType.BACKUP.priority
+        }
+        whenever(backupSheet.shouldShow()).thenReturn(true)
+        sut.viewModelScope.cancel()
+        sut = createViewModel(timedSheetManagerProvider = ::TimedSheetManager, backupSheet = backupSheet)
+        sut.checkTimedSheets()
+        advanceTimeBy(1000)
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        advanceTimeBy(2100)
+        runCurrent()
+
+        assertTrue(sut.isAuthenticated.value)
+        assertEquals(Sheet.TimedSheet(TimedSheetType.BACKUP), sut.currentSheet.value)
+        verify(backupSheet).onShown()
+    }
+
+    @Test
+    fun `unseen USDT intro retries after a scan fails without opening a sheet`() = test {
+        val sheet = useRealTimedSheets()
+        val finishScan = CompletableDeferred<Unit>()
+        whenever(coreService.decode("invalid-payment")).doSuspendableAnswer {
+            finishScan.await()
+            throw AppError("Invalid payment")
+        }
+        sut.showScannerSheet()
+        runCurrent()
+        sut.checkTimedSheets()
+        sut.onScannerSheetResult("invalid-payment")
+        advanceTimeBy(3000)
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).onShown()
+
+        finishScan.complete(Unit)
+        runCurrent()
+        advanceTimeBy(2100)
+        runCurrent()
+
+        assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        verify(sheet).onShown()
     }
 
     @Test

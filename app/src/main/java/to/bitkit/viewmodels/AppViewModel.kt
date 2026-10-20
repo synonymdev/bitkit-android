@@ -690,6 +690,11 @@ class AppViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            isAuthenticated.collect { authenticated ->
+                if (authenticated) timedSheetManager.reevaluate()
+            }
+        }
+        viewModelScope.launch {
             combine(
                 currentSheet,
                 isAuthenticated,
@@ -698,9 +703,7 @@ class AppViewModel @Inject constructor(
             ) { sheet, authenticated, forgotPin, receipt ->
                 sheet == null && authenticated && !forgotPin && receipt == NewTransactionSheetDetails.EMPTY
             }.collect {
-                if (it && !isUsdtIntroPresented && usdtSheet.shouldShow()) {
-                    timedSheetManager.reevaluate()
-                }
+                if (it) retryUsdtIntro()
             }
         }
         viewModelScope.launch {
@@ -3182,7 +3185,10 @@ class AppViewModel @Inject constructor(
         nextJob.invokeOnCompletion {
             if (scheduledScan === nextScheduledScan) scheduledScan = null
             if (nextJob.isCancelled) return@invokeOnCompletion clearCancelledContactContext(contactPaymentContext)
-            viewModelScope.launch { flushDeferredScan() }
+            viewModelScope.launch {
+                flushDeferredScan()
+                retryUsdtIntro()
+            }
         }
 
         Logger.debug("Starting scan from '${source.label}': '$scanId'", context = TAG)
@@ -7868,6 +7874,10 @@ class AppViewModel @Inject constructor(
         canShowSheet = ::canShowTimedSheet,
         showSheet = { tryShowTimedSheet(it) },
     )
+
+    private suspend fun retryUsdtIntro() {
+        if (!isUsdtIntroPresented && usdtSheet.shouldShow()) timedSheetManager.reevaluate()
+    }
 
     private fun canShowTimedSheet() = _isAuthenticated.value && !_showForgotPinSheet.value &&
         _currentSheet.value == null &&

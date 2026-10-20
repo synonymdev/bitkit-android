@@ -8,5 +8,7 @@
     <action>On another eligible unseen test profile, open Receive before the timed intro appears, wait at least three seconds, then close Receive without restarting. Verify the USDT intro appears after the screen settles.</action>
     <action>Tap No Thanks (id "UsdtIntroDecline"), relaunch, and verify the intro does not return. Repeat with Enable USDT (id "UsdtIntroEnable") on another unseen profile and verify relaunch preserves the enabled choice without repeating the intro.</action>
     <action>On an owned test profile with App Update and an unseen USDT intro both eligible, wait for App Update, then open a Bitcoin payment link to replace it. Verify the payment sheet remains open until closed without paying, and the USDT intro can then appear after Home settles without restarting.</action>
+    <action>On an owned test profile whose USDT introduction was already seen and whose Backup reminder is eligible, terminate and relaunch the app, complete startup authentication, and wait on Home. Verify Backup appears without navigating away from Home. Do not fund or reset a wallet for this check.</action>
+    <action>On an eligible unseen test profile, open the scanner before the intro appears and scan an invalid payment QR. Verify the error is shown without opening a payment. If the scanner remains open, close it. Wait at least three seconds on Home and verify the USDT intro appears without another Home visit.</action>
   </actions>
 </journey>
