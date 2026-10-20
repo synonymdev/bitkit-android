@@ -29,7 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -121,7 +121,7 @@ fun SendAmountScreen(
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
     val app = appViewModel
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val amountInputUiState: AmountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentOnEvent by rememberUpdatedState(onEvent)
 
@@ -163,8 +163,8 @@ fun SendAmountScreen(
                     val (titleRes, descriptionRes) = currentMaxExceededMessage
                     app?.toast(
                         type = Toast.ToastType.WARNING,
-                        title = context.getString(titleRes),
-                        description = context.getString(descriptionRes),
+                        title = resources.getString(titleRes),
+                        description = resources.getString(descriptionRes),
                         visibilityTime = Toast.VISIBILITY_TIME_SHORT,
                         testTag = "SendAmountExceededToast",
                     )
@@ -192,8 +192,8 @@ fun SendAmountScreen(
             if (uiState.lnurl == null && uiState.payMethod == SendMethod.LIGHTNING) {
                 app?.toast(
                     type = Toast.ToastType.INFO,
-                    title = context.getString(R.string.wallet__send_max_spending__title),
-                    description = context.getString(R.string.wallet__send_max_spending__description)
+                    title = resources.getString(R.string.wallet__send_max_spending__title),
+                    description = resources.getString(R.string.wallet__send_max_spending__description)
                 )
             }
             amountInputViewModel.setSats(maxSats, currencies)

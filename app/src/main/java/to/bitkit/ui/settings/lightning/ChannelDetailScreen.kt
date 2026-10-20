@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -95,6 +96,7 @@ fun ChannelDetailScreen(
     viewModel: ChannelDetailViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val app = appViewModel ?: return
 
     LaunchedEffect(channelId) {
@@ -111,7 +113,7 @@ fun ChannelDetailScreen(
             context.setClipboardText(text)
             app.toast(
                 type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.common__copied),
+                title = resources.getString(R.string.common__copied),
                 description = text,
             )
         },

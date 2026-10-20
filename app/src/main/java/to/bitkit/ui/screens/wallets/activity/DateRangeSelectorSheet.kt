@@ -42,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -278,7 +279,7 @@ internal fun DateRangeSelectorContent(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             calendar.firstDayOfWeek = Calendar.SUNDAY
-            val weekdaySymbols = SimpleDateFormat(DatePattern.WEEKDAY_FORMAT, Locale.getDefault())
+            val weekdaySymbols = SimpleDateFormat(DatePattern.WEEKDAY_FORMAT, LocalConfiguration.current.locales[0])
 
             for (i in 0 until CalendarConstants.DAYS_IN_WEEK) {
                 val dayOfWeek =

@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.core.graphics.scale
 import coil3.ImageLoader
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
@@ -1130,11 +1131,9 @@ class PubkyRepo @Inject constructor(
         val original = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size) ?: return imageBytes
         val scale = min(AVATAR_MAX_SIZE.toFloat() / original.width, AVATAR_MAX_SIZE.toFloat() / original.height)
         val scaled = if (scale < 1f) {
-            Bitmap.createScaledBitmap(
-                original,
+            original.scale(
                 (original.width * scale).toInt(),
                 (original.height * scale).toInt(),
-                true,
             )
         } else {
             original
