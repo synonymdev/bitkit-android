@@ -246,6 +246,14 @@ class UsdtViewModel @Inject constructor(
     fun cancelAuthentication() = _state.update { it.copy(authenticationRequired = false) }
     fun edit() = _state.update { UsdtSendState(refreshError = it.refreshError) }
 
+    /** Replaces an expired quote and keeps the review, telling the user to check the new fee and swipe again. */
+    fun requote(recipient: String, amount: String, destination: UsdtDestination) = viewModelScope.launch {
+        if (_state.value.error != R.string.usdt__error_expired) return@launch
+        _state.update { it.copy(error = null) }
+        quote(recipient, amount, destination).join()
+        _state.update { if (it.quote != null) it.copy(error = R.string.usdt__error_quote_refreshed) else it }
+    }
+
     private data class PreparedQuote(val quote: UsdtQuote, val amount: String, val sender: String)
 
     private fun send(quote: UsdtQuote) = viewModelScope.launch {

@@ -367,6 +367,41 @@ class UsdtViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `expired quote is replaced on review with a notice to swipe again`() = test {
+        val viewModel = createViewModel()
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.QuoteExpired()))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        assertNull(viewModel.state.value.quote)
+        assertEquals(R.string.usdt__error_expired, viewModel.state.value.error)
+
+        viewModel.requote(quote.recipient, "1", quote.destination).join()
+
+        assertEquals(quote, viewModel.state.value.quote)
+        assertEquals(R.string.usdt__error_quote_refreshed, viewModel.state.value.error)
+        verify(repo, times(2)).quote(any(), any(), any(), any())
+        verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
+    }
+
+    @Test
+    fun `requote leaves other errors for the user to review`() = test {
+        val viewModel = createViewModel()
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.SubmissionDeadlineExpired()))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+
+        viewModel.requote(quote.recipient, "1", quote.destination).join()
+
+        assertNull(viewModel.state.value.quote)
+        assertEquals(R.string.wallet__payment_request_expired, viewModel.state.value.error)
+        verify(repo, times(1)).quote(any(), any(), any(), any())
+    }
+
+    @Test
     fun `durably recorded send failure retains the payment and prevents resubmission`() = test {
         val retained: UsdtTransfer = mock()
         whenever(retained.id).thenReturn(quote.id)

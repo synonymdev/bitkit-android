@@ -28,6 +28,7 @@ import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendUiState
 import kotlin.time.Duration.Companion.seconds
 
@@ -37,6 +38,7 @@ fun PaykitUsdtReview(
     app: AppViewModel,
     onBack: () -> Unit,
     onDone: () -> Unit,
+    onEditAmount: () -> Unit = onBack,
     viewModel: UsdtViewModel = hiltViewModel()
 ) {
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
@@ -64,6 +66,11 @@ fun PaykitUsdtReview(
     LaunchedEffect(Unit) {
         if (viewModel.state.value.quote == null) {
             viewModel.quote(requireNotNull(uiState.usdtRecipient), uiState.paykitAmount, UsdtDestination.ARBITRUM)
+        }
+    }
+    LaunchedEffect(state.quote, state.error) {
+        if (state.quote == null && state.error == R.string.usdt__error_expired && uiState.isPaymentRequest) {
+            viewModel.requote(requireNotNull(uiState.usdtRecipient), uiState.paykitAmount, UsdtDestination.ARBITRUM)
         }
     }
     LaunchedEffect(state.submitted, lifecycle) {
@@ -106,7 +113,9 @@ fun PaykitUsdtReview(
                     onRecipientChange = {},
                     onAmountChange = {},
                     onRecipientContinue = {},
-                    onPageChange = { back() },
+                    onPageChange = {
+                        if (!state.busy && !state.authenticationRequired && !state.submitted) onEditAmount()
+                    },
                     onBack = back,
                     onReview = {
                         viewModel.quote(
@@ -125,6 +134,8 @@ fun PaykitUsdtReview(
                     isPaymentRequest = uiState.isPaymentRequest,
                     paymentRequestNote = uiState.paymentRequestNote,
                     contact = uiState.contactPaymentProfile,
+                    onSwitchAsset = { app.setSendEvent(SendEvent.PaymentMethodSwitch) }
+                        .takeIf { uiState.canSwitchConfirmFundingSource },
                 )
             }
         }
