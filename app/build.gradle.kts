@@ -303,7 +303,6 @@ android {
     lint {
         abortOnError = true
         warningsAsErrors = true
-        baseline = file("lint-baseline.xml")
         disable += setOf(
             // Crashes on ScreenDeepLinkRuntime.kt.
             "EmptyNavDeepLink",
@@ -312,6 +311,8 @@ android {
             "NewerVersionAvailable",
             "AndroidGradlePluginVersion",
             "MissingTranslation",
+            // targetSdk bumps are planned work; this check would fail CI on every new SDK release.
+            "OldTargetApi",
             // Copy style is set by the designs.
             "TypographyEllipsis",
             "TypographyDashes",

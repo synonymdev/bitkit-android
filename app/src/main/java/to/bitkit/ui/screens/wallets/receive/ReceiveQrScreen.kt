@@ -106,8 +106,8 @@ fun ReceiveQrScreen(
     lightningState: LightningState,
     onClickEditInvoice: (ReceiveTab) -> Unit,
     onClickReceiveCjit: () -> Unit,
-    onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.HARDWARE) },
     modifier: Modifier = Modifier,
+    onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.HARDWARE) },
     initialTab: ReceiveTab? = null,
     onClose: () -> Unit = {},
     onBlockingChange: (Boolean) -> Unit = {},
@@ -734,10 +734,10 @@ private fun ReceiveDetailsView(
     cjitInvoice: String?,
     isNodeRunning: Boolean,
     onClickEditInvoice: () -> Unit,
+    modifier: Modifier = Modifier,
     onClickHardwareEditInvoice: () -> Unit = onClickEditInvoice,
     hardwareAddress: String? = null,
     hardwareInvoice: String = "",
-    modifier: Modifier = Modifier,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Colors.Black),

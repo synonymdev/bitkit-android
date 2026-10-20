@@ -230,8 +230,8 @@ fun PaymentRequestsScreen(
 
 @Composable
 internal fun PaymentRequestsContent(
-    receipts: ImmutableList<PaykitUsdtReceipt> = persistentListOf(),
     modifier: Modifier = Modifier,
+    receipts: ImmutableList<PaykitUsdtReceipt> = persistentListOf(),
     requests: ImmutableList<PaykitPaymentRequest>,
     pending: ImmutableList<PaykitPaymentRequest>,
     contacts: ImmutableList<PubkyProfile>,

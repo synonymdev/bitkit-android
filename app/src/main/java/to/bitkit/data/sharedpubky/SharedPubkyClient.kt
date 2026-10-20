@@ -2,7 +2,7 @@ package to.bitkit.data.sharedpubky
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.net.Uri
+import androidx.core.net.toUri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
@@ -29,7 +29,7 @@ class SharedPubkyClient @Inject constructor(
         runSuspendCatching {
             check(isRingProviderTrusted()) { "Ring provider unavailable" }
 
-            val uri = Uri.parse("content://$RING_AUTHORITY/$PATH_IDENTITIES")
+            val uri = "content://$RING_AUTHORITY/$PATH_IDENTITIES".toUri()
             val cursor = requireNotNull(context.contentResolver.query(uri, null, null, null, null)) {
                 "Ring identities query returned no cursor"
             }
@@ -53,7 +53,7 @@ class SharedPubkyClient @Inject constructor(
     internal fun readCredential(pubky: String): String? {
         if (!isRingProviderTrusted()) return null
 
-        val uri = Uri.parse("content://$RING_AUTHORITY/$PATH_IDENTITIES/$pubky/$PATH_CREDENTIAL")
+        val uri = "content://$RING_AUTHORITY/$PATH_IDENTITIES/$pubky/$PATH_CREDENTIAL".toUri()
         val cursor = requireNotNull(context.contentResolver.query(uri, null, null, null, null)) {
             "Ring credential query returned no cursor"
         }
