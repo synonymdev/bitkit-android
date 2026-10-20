@@ -276,6 +276,7 @@ class PaykitSdkService @Inject constructor(
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
     private val _isPaymentSubmissionActive = MutableStateFlow(false)
+    private val paymentReviews = mutableSetOf<Any>()
     val isPaymentSubmissionActive: StateFlow<Boolean> = _isPaymentSubmissionActive.asStateFlow()
 
     private var sdkFactory: () -> PaykitSdk = {
@@ -313,6 +314,12 @@ class PaykitSdkService @Inject constructor(
 
     fun setPaymentSubmissionActive(active: Boolean) {
         _isPaymentSubmissionActive.update { active }
+    }
+
+    fun beginPaymentReview(): () -> Unit {
+        val review = Any()
+        synchronized(paymentReviews) { paymentReviews.add(review) }
+        return { synchronized(paymentReviews) { paymentReviews.remove(review) } }
     }
 
     suspend fun initializeAndImportSession(secret: String): Result<PubkySessionBootstrapResult> {
@@ -1523,7 +1530,8 @@ class PaykitSdkService @Inject constructor(
     }
 
     private fun checkRefreshAdmission(priority: Priority) {
-        if (priority == Priority.Background && isPaymentSubmissionActive.value) {
+        val reviewing = synchronized(paymentReviews) { paymentReviews.isNotEmpty() }
+        if (priority == Priority.Background && (isPaymentSubmissionActive.value || reviewing)) {
             throw PaykitPaymentRequestError.OperationInProgress
         }
     }

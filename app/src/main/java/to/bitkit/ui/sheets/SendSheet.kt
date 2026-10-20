@@ -30,9 +30,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -180,6 +183,22 @@ fun SendSheet(
                 .testTag("SendSheet"),
         ) {
             val navController = rememberNavController()
+            val entry by navController.currentBackStackEntryAsState()
+            val reviewing = entry?.destination?.let {
+                it.hasRoute<SendRoute.Confirm>() || it.hasRoute<SendRoute.PinCheck>() ||
+                    it.hasRoute<SendRoute.HardwareSign>()
+            } == true
+            LaunchedEffect(reviewing, lifecycle, appViewModel) {
+                if (!reviewing) return@LaunchedEffect
+                lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    val finishReview = appViewModel.beginPaymentReview()
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        finishReview()
+                    }
+                }
+            }
             fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String, isShopPayment: Boolean) {
                 appViewModel.onSendSuccess(
                     details = NewTransactionSheetDetails(

@@ -367,6 +367,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     fun setPaymentSubmissionActive(active: Boolean) = paykitSdkService.setPaymentSubmissionActive(active)
 
+    fun beginPaymentReview(): () -> Unit = paykitSdkService.beginPaymentReview()
+
     @Volatile
     private var activeIdentity: String? = null
 

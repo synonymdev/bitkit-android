@@ -7093,6 +7093,8 @@ class AppViewModel @Inject constructor(
 
     fun beginHardwarePaymentSubmission(): () -> Unit = beginPaymentSubmission()
 
+    fun beginPaymentReview(): () -> Unit = paykitPaymentRequestRepo.beginPaymentReview()
+
     private fun beginPaymentSubmission(): () -> Unit {
         val submission = Any()
         synchronized(activePaymentSubmissions) {

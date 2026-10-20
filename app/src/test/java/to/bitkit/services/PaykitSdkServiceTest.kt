@@ -181,6 +181,58 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `payment review defers only passive refresh until every review ends`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
+        whenever(sdk.exportBackupString()).thenReturn("backup")
+        val report = mock<OutboundPrivateSendReport>()
+        whenever(sdk.processOutboundPrivateMessages(RING_PUBKY)).thenReturn(report)
+        val pending = PaykitException.RecoveryRequired("recovery_required", "Handshake pending")
+        whenever(sdk.prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null, 1u)).thenThrow(pending)
+        whenever(sdk.receivePrivateMessages(RING_PUBKY)).thenReturn(
+            PrivateStreamIntakeReport(null, emptyList(), emptyList()),
+        )
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val finishFirst = service.beginPaymentReview()
+        val finishSecond = service.beginPaymentReview()
+        val operations = listOf<suspend PaykitSdkService.() -> Any?>(
+            { receivePrivateMessagesFromLinkedPeers(Priority.Background) },
+            { processPendingPrivateMessages(Priority.Background) },
+            { observeState(RING_PUBKY) },
+        )
+        for (operation in operations) {
+            assertSame(
+                PaykitPaymentRequestError.OperationInProgress,
+                runSuspendCatching { service.operation() }.exceptionOrNull(),
+            )
+        }
+        finishFirst()
+        finishFirst()
+        assertFalse(service.isPaymentSubmissionActive.value)
+        assertFailsWith<PaykitPaymentRequestError> {
+            service.processPendingPrivateMessages(Priority.Background)
+        }
+        assertSame(
+            pending,
+            assertFailsWith<PaykitException.RecoveryRequired> {
+                service.prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null)
+            },
+        )
+        service.receivePrivateMessages(RING_PUBKY, Priority.Background)
+        service.processPendingPrivateMessages(Priority.Ordered)
+        service.exportBackupState()
+        assertSame(report, service.processOutboundPrivateMessages(RING_PUBKY, Priority.Background))
+        verify(sdk).processPendingPrivateMessages()
+        verify(sdk).exportBackupString()
+        verify(sdk).prepareAndResolvePrivatePaymentRequest(RING_PUBKY, "request", null, 1u)
+        verify(sdk).receivePrivateMessages(RING_PUBKY)
+
+        finishSecond()
+        service.processPendingPrivateMessages(Priority.Background)
+        verify(sdk, times(2)).processPendingPrivateMessages()
+    }
+
+    @Test
     fun `state observation validates identity and propagates unavailable session failures`() = runTest {
         val observation = PaykitStateObservation(
             publicKey = "pubky$RING_PUBKY",
