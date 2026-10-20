@@ -6120,15 +6120,19 @@ class AppViewModel @Inject constructor(
         if (preparation == null) return
         val quoteId = paykitPaymentTerms?.quoteId
         viewModelScope.launch {
-            paykitPaymentProofRepo.completeOnchainPayment(
-                request = paymentRequest,
-                txid = txId,
-                paymentEndpointIdentifier = preparation.endpointIdentifier,
-                paymentAppId = preparation.appId,
-                acceptedOutcome = acceptedOutcome,
-                conversionQuoteId = quoteId,
-            )
-            if (paymentRequest.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
+            runSuspendCatching {
+                paykitPaymentProofRepo.completeOnchainPayment(
+                    request = paymentRequest,
+                    txid = txId,
+                    paymentEndpointIdentifier = preparation.endpointIdentifier,
+                    paymentAppId = preparation.appId,
+                    acceptedOutcome = acceptedOutcome,
+                    conversionQuoteId = quoteId,
+                )
+                if (paymentRequest.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
+            }.onFailure {
+                Logger.warn("Deferred on-chain Paykit proof completion for reconciliation", context = TAG)
+            }
         }
     }
 

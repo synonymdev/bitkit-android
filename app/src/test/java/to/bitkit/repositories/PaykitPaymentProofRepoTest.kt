@@ -1725,6 +1725,53 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `accepted onchain payment survives identity contention and reconciles once after restart`() = test {
+        val txid = "ab".repeat(32)
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(acceptedAttempt(request, txid))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        val originalProof = storedProofs.single()
+        whenever(paykitSdkService.identityStatus()).doSuspendableAnswer {
+            throw PaykitException.SharedStateBusy("shared_state_busy", "Locked")
+        }
+
+        assertFailsWith<PaykitException.SharedStateBusy> {
+            repo.completeOnchainPayment(
+                request,
+                txid,
+                MethodId.P2wpkh.rawValue,
+                "bitkit",
+                OnchainSendOutcome.Accepted(txid),
+            )
+        }
+        assertEquals(originalProof, storedProofs.single())
+        verify(lightningRepo, never()).completeAcceptedShopFollowup(any(), any())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), any())
+
+        doReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+            .whenever(paykitSdkService).identityStatus()
+        val restored = paymentProofRepo()
+        restored.reconcile()
+        restored.reconcile()
+
+        assertTrue(storedProofs.isEmpty())
+        verify(lightningRepo).completeAcceptedShopFollowup(request.id, txid)
+        verify(paykitSdkService).submitPaymentProof(
+            eq(request.counterparty),
+            eq(request.paymentRequestId),
+            eq("bitkit"),
+            eq(MethodId.P2wpkh.rawValue),
+            any(),
+            isNull(),
+            isNull(),
+            any(),
+        )
+    }
+
+    @Test
     fun `accepted Shop activity failure retains original proof for reconciliation before delivery`() = test {
         val txid = "ab".repeat(32)
         val request = paymentRequest(MethodId.P2wpkh.rawValue)

@@ -25,6 +25,7 @@ import com.synonym.bitkitcore.UsdtPaymentRequest
 import com.synonym.bitkitcore.UsdtQuote
 import com.synonym.bitkitcore.ValidationResult
 import com.synonym.paykit.ConversionRate
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentConversionQuoteRecord
 import com.synonym.paykit.PaymentDeadline
@@ -9445,6 +9446,55 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             OnchainSendOutcome.Accepted("txid")
         )
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
+    }
+
+    @Test
+    fun `accepted onchain payment survives a contended background proof completion`() = test {
+        val address = "bcrt1qpaymentrequest"
+        val request = paymentRequest()
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(
+            paykitPaymentProofRepo.completeOnchainPayment(
+                request,
+                "txid",
+                MethodId.P2wpkh.rawValue,
+                "bitkit",
+                OnchainSendOutcome.Accepted("txid"),
+            )
+        ).doSuspendableAnswer { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        stubSuccessfulOnchainSend(address, request.amount.atomic)
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+            ),
+        )
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+            expectNoEvents()
+        }
+
+        assertEquals("txid", sut.successSendUiState.value.paymentHashOrTxId)
+        assertEquals(request.amount.atomic.toLong(), sut.successSendUiState.value.sats)
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(request)
+        verify(paykitPaymentProofRepo, never()).cancelPreparation(request)
+        verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
+        verify(lightningRepo).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
     }
 
     @Test
