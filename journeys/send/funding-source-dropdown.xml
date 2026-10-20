@@ -14,6 +14,7 @@
     <action>Tap the funding source button again and verify the check moved to the newly selected wallet; dismiss the dropdown</action>
     <action>Close the send sheet without paying</action>
     <action>Open the on-chain address with a bitcoin: deep link and verify the funding source button shows Savings outlined in orange with no chevron or other icon</action>
+    <action>Tap the funding source button and verify the dropdown (testTag "SendFundingSources") opens with Savings checked and Spending dimmed with its balance; tap Spending and verify the selection does not change</action>
     <action>Close the send sheet without paying</action>
   </actions>
 </journey>
