@@ -392,7 +392,12 @@ fun ReceiveQrScreen(
                     selectedTab = tab
                     showDetails = false
                     scope.launch {
-                        lazyListState.animateScrollToItem(newIndex)
+                        // USDT replaces the pager at once; land it on the USDT page so the next swipe starts there
+                        if (tab == ReceiveTab.USDT) {
+                            lazyListState.scrollToItem(newIndex)
+                        } else {
+                            lazyListState.animateScrollToItem(newIndex)
+                        }
                     }
                 },
                 modifier = Modifier.padding(horizontal = 16.dp)
