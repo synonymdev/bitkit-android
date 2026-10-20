@@ -840,6 +840,7 @@
     <string name="usdt__payment_sent">USDT enviats</string>
     <string name="usdt__pending">Pendent</string>
     <string name="usdt__receive_amount_title">Import</string>
+    <string name="usdt__receive_copied">Adreça copiada al porta-retalls.\nAssegura’t que l’USDT només s’enviï a través de la xarxa seleccionada.</string>
     <string name="usdt__receive_estimate">Rebràs (est.)</string>
     <string name="usdt__receive_fee">Tarifes</string>
     <string name="usdt__receive_fees_title">Tarifes estimades</string>

@@ -847,6 +847,7 @@
     <string name="usdt__payment_sent">USDT Enviado</string>
     <string name="usdt__pending">Pendente</string>
     <string name="usdt__receive_amount_title">Valor</string>
+    <string name="usdt__receive_copied">Endereço copiado para a área de transferência.\nCertifique-se de enviar USDT apenas pela rede selecionada.</string>
     <string name="usdt__receive_estimate">Receber (est.)</string>
     <string name="usdt__receive_fee">Taxas</string>
     <string name="usdt__receive_fees_title">Taxas Estimadas</string>

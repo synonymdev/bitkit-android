@@ -844,6 +844,7 @@
     <string name="usdt__payment_sent">USDT envoyés</string>
     <string name="usdt__pending">En attente</string>
     <string name="usdt__receive_amount_title">Montant</string>
+    <string name="usdt__receive_copied">Adresse copiée dans le presse-papiers.\nAssurez-vous que les USDT sont envoyés uniquement sur le réseau sélectionné.</string>
     <string name="usdt__receive_estimate">Reçu (est.)</string>
     <string name="usdt__receive_fee">Frais</string>
     <string name="usdt__receive_fees_title">Frais estimés</string>

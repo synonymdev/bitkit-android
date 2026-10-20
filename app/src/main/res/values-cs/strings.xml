@@ -844,6 +844,7 @@
     <string name="usdt__payment_sent">USDT odesláno</string>
     <string name="usdt__pending">Čekající</string>
     <string name="usdt__receive_amount_title">Částka</string>
+    <string name="usdt__receive_copied">Adresa byla zkopírována do schránky.\nUjistěte se, že USDT posíláte pouze prostřednictvím vybrané sítě.</string>
     <string name="usdt__receive_estimate">Obdržíte (odhad)</string>
     <string name="usdt__receive_fee">Poplatky</string>
     <string name="usdt__receive_fees_title">Odhadované poplatky</string>
