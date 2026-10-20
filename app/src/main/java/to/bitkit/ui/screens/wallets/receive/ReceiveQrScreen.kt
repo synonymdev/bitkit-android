@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +60,7 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
@@ -88,7 +90,6 @@ import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.usdt.UsdtDepositReceiveScreen
 import to.bitkit.ui.shared.effects.SetMaxBrightness
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.shared.modifiers.swipePastEdges
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareQrCode
 import to.bitkit.ui.shared.util.shareText
@@ -192,10 +193,13 @@ fun ReceiveQrScreen(
         }
     }
 
-    // LazyRow state with snap behavior
+    // LazyRow state with snap behavior; the pages wrap each end with a copy of the tab at the other end
     val scope = rememberCoroutineScope()
+    val receivePages = remember(visibleTabs) {
+        (listOf(visibleTabs.last()) + visibleTabs + visibleTabs.first()).toImmutableList()
+    }
     val lazyListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = visibleTabs.indexOf(defaultTab).coerceAtLeast(0),
+        initialFirstVisibleItemIndex = visibleTabs.pageIndexOf(defaultTab),
     )
 
     val snapBehavior = rememberSnapFlingBehavior(
@@ -219,14 +223,14 @@ fun ReceiveQrScreen(
             appliedInitialTab = requestedTab
             requestedTab?.let {
                 selectedTab = it
-                lazyListState.scrollToItem(visibleTabs.indexOf(it))
+                lazyListState.scrollToItem(visibleTabs.pageIndexOf(it))
                 return@LaunchedEffect
             }
         }
         if (selectedTab !in visibleTabs) {
             val fallbackTab = visibleTabs.defaultReceiveTab()
             selectedTab = fallbackTab
-            lazyListState.scrollToItem(visibleTabs.indexOf(fallbackTab).coerceAtLeast(0))
+            lazyListState.scrollToItem(visibleTabs.pageIndexOf(fallbackTab))
         }
     }
 
@@ -236,7 +240,7 @@ fun ReceiveQrScreen(
         }
         if (!canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
             selectedTab = ReceiveTab.SAVINGS
-            lazyListState.scrollToItem(visibleTabs.indexOf(ReceiveTab.SAVINGS).coerceAtLeast(0))
+            lazyListState.scrollToItem(visibleTabs.pageIndexOf(ReceiveTab.SAVINGS))
         }
     }
 
@@ -244,10 +248,23 @@ fun ReceiveQrScreen(
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .collect { index ->
-                if (selectedTab != ReceiveTab.USDT && index < visibleTabs.size && index > -1) {
-                    val tab = visibleTabs[index]
-                    selectedTab = tab
+                val tab = visibleTabs.getOrNull(index - 1) ?: return@collect
+                if (selectedTab != ReceiveTab.USDT) selectedTab = tab
+            }
+    }
+
+    // Swap a settled wrap page for the tab it shows, so a swipe past either end slides on to the other end
+    LaunchedEffect(lazyListState, visibleTabs) {
+        snapshotFlow { lazyListState.isScrollInProgress }
+            .filter { !it }
+            .collect {
+                val tab = when (lazyListState.firstVisibleItemIndex) {
+                    0 -> visibleTabs.last()
+                    visibleTabs.size + 1 -> visibleTabs.first()
+                    else -> return@collect
                 }
+                selectedTab = tab
+                lazyListState.scrollToItem(visibleTabs.pageIndexOf(tab))
             }
     }
 
@@ -267,18 +284,18 @@ fun ReceiveQrScreen(
             initialTab = initialTab,
         )
         if (!shouldAutoSwitch) return@LaunchedEffect
-        val autoIndex = visibleTabs.indexOf(ReceiveTab.AUTO)
-        if (autoIndex == -1 || lazyListState.firstVisibleItemIndex == autoIndex) return@LaunchedEffect
-        lazyListState.scrollToItem(autoIndex)
+        if (ReceiveTab.AUTO !in visibleTabs) return@LaunchedEffect
+        val autoPage = visibleTabs.pageIndexOf(ReceiveTab.AUTO)
+        if (lazyListState.firstVisibleItemIndex == autoPage) return@LaunchedEffect
+        lazyListState.scrollToItem(autoPage)
         selectedTab = ReceiveTab.AUTO
     }
 
     // Auto-switch to Spending tab when CJIT is not null
     LaunchedEffect(cjitInvoice) {
         if (cjitInvoice != null) {
-            val spendingIndex = visibleTabs.indexOf(ReceiveTab.SPENDING)
-            if (spendingIndex != -1) {
-                lazyListState.animateScrollToItem(spendingIndex)
+            if (ReceiveTab.SPENDING in visibleTabs) {
+                lazyListState.animateScrollToItem(visibleTabs.pageIndexOf(ReceiveTab.SPENDING))
                 selectedTab = ReceiveTab.SPENDING
             }
         }
@@ -298,9 +315,14 @@ fun ReceiveQrScreen(
     }
 
     fun selectReceiveTab(tab: ReceiveTab) {
+        val wrapsToFirst = selectedTab == visibleTabs.last() && tab == visibleTabs.first()
         selectedTab = tab
         hasUserSelectedTab = true
-        scope.launch { lazyListState.scrollToItem(visibleTabs.indexOf(tab)) }
+        scope.launch {
+            // The pager composes again when leaving USDT; let it lay out before sliding
+            repeat(2) { withFrameNanos {} }
+            lazyListState.animateScrollToItem(if (wrapsToFirst) visibleTabs.size + 1 else visibleTabs.pageIndexOf(tab))
+        }
     }
 
     DisposableEffect(selectedTab) {
@@ -365,7 +387,7 @@ fun ReceiveQrScreen(
                 },
                 onTabChange = { tab ->
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    val newIndex = visibleTabs.indexOf(tab)
+                    val newIndex = visibleTabs.pageIndexOf(tab)
                     hasUserSelectedTab = true
                     selectedTab = tab
                     showDetails = false
@@ -388,15 +410,10 @@ fun ReceiveQrScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .swipePastEdges(
-                        state = lazyListState,
-                        onSwipePastStart = { selectReceiveTab(visibleTabs.last()) },
-                        onSwipePastEnd = { selectReceiveTab(visibleTabs.first()) },
-                    )
             ) {
                 itemsIndexed(
-                    items = visibleTabs,
-                    key = { _, tab -> tab.name }
+                    items = receivePages,
+                    key = { index, tab -> receivePageKey(index, tab, visibleTabs.size) }
                 ) { _, tab ->
                     val displayMode = getReceiveInvoiceDisplayMode(
                         tab = tab,
@@ -560,6 +577,14 @@ fun ReceiveQrScreen(
             VerticalSpacer(16.dp)
         }
     }
+}
+
+private fun List<ReceiveTab>.pageIndexOf(tab: ReceiveTab): Int = indexOf(tab).coerceAtLeast(0) + 1
+
+private fun receivePageKey(index: Int, tab: ReceiveTab, tabCount: Int): String = when (index) {
+    0 -> "wrap-start-${tab.name}"
+    tabCount + 1 -> "wrap-end-${tab.name}"
+    else -> tab.name
 }
 
 private fun List<ReceiveTab>.defaultReceiveTab(): ReceiveTab {

@@ -1,7 +1,8 @@
 <journey name="receive tabs wraparound">
   <description>
     On the Receive sheet, tab swipes wrap around: a swipe to the right on the first tab selects the
-    last tab, and a swipe to the left on the last tab selects the first. A sideways swipe never closes
+    last tab, and a swipe to the left on the last tab selects the first. The wrap slides on to the
+    other end the way a swipe between neighbouring tabs does. A sideways swipe never closes
     the Receive sheet, also when it is released above the sheet, and a tap on a QR still copies it.
 
     Precondition: onboarded dev wallet with USDT enabled (introductory sheet or Settings, General,
@@ -12,7 +13,9 @@
     Swipe with `adb shell input swipe` across the middle of the QR, about 60% of its width, in
     300 ms (`adb shell input swipe 220 1176 860 1176 300` to the right on a 1080 px wide screen). A
     swipe that starts at the screen edge is the system back gesture, which closes the sheet on every
-    tab; start the swipes at least 100 px from the edge.
+    tab; start the swipes at least 100 px from the edge. The pager behind Savings, Auto and Spending
+    snaps back from a short synthetic swipe on the emulator, so swipe across it in 1200 ms
+    (`adb shell input swipe 150 1176 900 1176 1200`); the USDT QR takes the 300 ms swipe.
   </description>
   <actions>
     <action>Tap Receive (testTag "Receive") and verify the Savings tab (testTag "Tab-savings") is selected</action>
