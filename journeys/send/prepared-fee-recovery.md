@@ -19,6 +19,8 @@ Use the retained original payment from the same controlled fixture. Keep transac
 
 With no active payment and the SDK initially idle, verify that passive refresh is deferred during each visible fee, abandon or payment-authentication review. A biometric overlay that leaves the app visible must retain this protection. Backgrounding, dismissing or cancelling the review releases its hold; an idle Pending screen must still allow passive refresh and recovery observation. Use the focused admission tests or a sanitized SDK operation trace for these checks: waiting on a screen alone cannot establish SDK admission or a latency improvement. Work already inside the SDK may finish.
 
+For an automatic full refresh that starts during a software payment, verify proof reconciliation waits until the payment finishes and then resumes. Cancelling polling must cancel the wait; restarting polling must still recover retained work. A wait from a replaced sign-in session must not reconcile for the replacement session. This entry check does not preempt a reconciliation pass admitted before payment started, and explicit payment recovery keeps its existing authority checks.
+
 ## Platform adaptations
 
 Android retains candidate fees for original sends and replacements in `candidateMiningFees`. iOS already retains the original prepared fee; `candidateFeeSats` covers successors/replacements. Run the same four cases on both platforms. Use each platform's normal identity-selection flow; iOS Max recovery keeps the original rate without an editable field. The common UI actions are in [onchain-original-payment-retry.xml](onchain-original-payment-retry.xml).

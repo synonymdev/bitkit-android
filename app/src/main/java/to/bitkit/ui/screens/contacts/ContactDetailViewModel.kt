@@ -14,7 +14,6 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -198,7 +197,7 @@ class ContactDetailViewModel @Inject constructor(
     private suspend fun awaitPaymentRequestTarget(): PaykitPaymentRequestTarget? {
         val refresh = refreshPaymentRequestTarget()
         val target = withTimeoutOrNull(PAYMENT_REQUEST_TARGET_WAIT) { refresh.await() }
-        if (refresh.isActive) refresh.cancelAndJoin()
+        if (refresh.isActive) refresh.cancel()
         return target
     }
 

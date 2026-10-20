@@ -530,6 +530,82 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `automatic proof reconciliation waits for payment completion without losing the refresh`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo)
+        paymentSubmissionActive.value = true
+
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(paykitPaymentProofRepo, never()).reconcile()
+            verify(paykitPaymentRequestRepo, never()).refresh(any())
+
+            paymentSubmissionActive.value = false
+            runCurrent()
+            verify(paykitPaymentProofRepo).reconcile()
+            verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL)
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `stopping polling cancels deferred reconciliation and a later start recovers it`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo)
+        paymentSubmissionActive.value = true
+        sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+
+        sut.stopPaykitPaymentRequestPolling()
+        paymentSubmissionActive.value = false
+        runCurrent()
+        verify(paykitPaymentProofRepo, never()).reconcile()
+        verify(paykitPaymentRequestRepo, never()).refresh(any())
+
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            verify(paykitPaymentProofRepo).reconcile()
+            verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL)
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `deferred reconciliation rejects a replaced session for the same identity`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        runCurrent()
+        var signIn = PubkySignIn(testPublicKey, 0L)
+        whenever(pubkyRepo.currentSignIn()).thenAnswer { signIn }
+        whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0) == signIn }
+        clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo)
+        paymentSubmissionActive.value = true
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            signIn = PubkySignIn(testPublicKey, 1L)
+            paymentSubmissionActive.value = false
+            runCurrent()
+            verify(paykitPaymentProofRepo, never()).reconcile()
+            verify(paykitPaymentRequestRepo, never()).refresh(any())
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
     fun `current toast is hidden only when dev mode and disable all toasts are both on`() = test {
         val toast = Toast(Toast.ToastType.SUCCESS, "Toast", null, true, Toast.VISIBILITY_TIME_DEFAULT, null)
         toastState.value = toast

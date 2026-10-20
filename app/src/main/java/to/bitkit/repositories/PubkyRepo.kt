@@ -101,7 +101,7 @@ sealed class PubkyContactError(message: String) : AppError(message) {
  */
 class PubkySignIn internal constructor(val publicKey: String, internal val generation: Long)
 
-private fun Throwable.hasCause(error: PubkyContactError): Boolean =
+private fun Throwable.hasCause(error: AppError): Boolean =
     generateSequence(this) { it.cause }.any { it == error }
 
 private fun Throwable.isPaykitReadTimeout(): Boolean =
@@ -150,6 +150,9 @@ class PubkyRepo @Inject constructor(
 
         /** Shortest time between two contact list updates of a background profile refresh. */
         internal val CONTACT_REFRESH_BATCH_WINDOW = 300.milliseconds
+
+        /** Delay before retrying a contact observation deferred by payment review or submission. */
+        private val CONTACT_LOAD_RETRY_INTERVAL = 500.milliseconds
 
         /** Maximum automatic restore attempts during one foreground recovery window. */
         private const val DEFERRED_RESTORE_ATTEMPTS = 8
@@ -1240,8 +1243,11 @@ class PubkyRepo @Inject constructor(
                     loaded = true
                     shouldMarkLoadCompleted = true
                 }.onFailure {
-                    shouldMarkLoadCompleted = isCurrent(signIn)
-                    if (it != PaykitPaymentRequestError.OperationInProgress) {
+                    if (it.hasCause(PaykitPaymentRequestError.OperationInProgress)) {
+                        reload = isCurrent(signIn)
+                        if (reload) delay(CONTACT_LOAD_RETRY_INTERVAL)
+                    } else {
+                        shouldMarkLoadCompleted = isCurrent(signIn)
                         Logger.error("Failed to load contacts", it, context = TAG)
                     }
                 }

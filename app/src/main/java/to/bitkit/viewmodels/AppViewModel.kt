@@ -1152,6 +1152,17 @@ class AppViewModel @Inject constructor(
         ) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
+        if (onlyWhileActive && reconcileProofs) {
+            val signIn = pubkyRepo.currentSignIn()
+                ?: return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+            paykitPaymentRequestRepo.isPaymentSubmissionActive.first { !it }
+            currentCoroutineContext().ensureActive()
+            if (!pubkyRepo.isCurrent(signIn) || !isPaykitEnabled.value || !walletRepo.walletExists() ||
+                isPaymentRequestPollingStopped.value || privatePaykitRepo.isProfileDeletionInProgress.value
+            ) {
+                return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+            }
+        }
         if (reconcileProofs) paykitPaymentProofRepo.reconcile()
         if (privatePaykitRepo.isProfileDeletionInProgress.value ||
             onlyWhileActive && isPaymentRequestPollingStopped.value
