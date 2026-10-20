@@ -4,6 +4,7 @@ package to.bitkit.repositories
 
 import android.content.Context
 import android.os.Bundle
+import androidx.core.content.edit
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -153,12 +154,12 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
 
     private fun updateScheduledOffsetDays(days: Int) {
         scheduledOffsetDays = days
-        preferences.edit().putInt(SCHEDULED_OFFSET_DAYS_KEY, days).apply()
+        preferences.edit { putInt(SCHEDULED_OFFSET_DAYS_KEY, days) }
     }
 
     private fun updateScheduledWorkNames(workNames: Set<String>) {
         scheduledWorkNames = workNames
-        preferences.edit().putStringSet(SCHEDULED_WORK_NAMES_KEY, workNames).apply()
+        preferences.edit { putStringSet(SCHEDULED_WORK_NAMES_KEY, workNames) }
     }
 }
 

@@ -16,7 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -55,7 +55,7 @@ fun SavingsProgressScreen(
     onContinueClick: () -> Unit = {},
     onTransferUnavailable: () -> Unit = {},
 ) {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
     val swapResult by transfer.savingsSwapResult.collectAsStateWithLifecycle()
 
@@ -79,8 +79,8 @@ fun SavingsProgressScreen(
                 onUnavailable = {
                     app.toast(
                         type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.lightning__close_error),
-                        description = context.getString(R.string.lightning__close_error_msg),
+                        title = resources.getString(R.string.lightning__close_error),
+                        description = resources.getString(R.string.lightning__close_error_msg),
                     )
                     onTransferUnavailable()
                 },
@@ -106,7 +106,7 @@ fun SavingsProgressScreen(
             is SavingsSwapResult.Failure -> {
                 app.toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.common__error),
+                    title = resources.getString(R.string.common__error),
                     description = result.reason,
                 )
                 onTransferUnavailable()
@@ -124,7 +124,6 @@ fun SavingsProgressScreen(
 }
 
 /** Legacy path: cooperatively close the selected channel(s), retrying on failure. */
-@Suppress("MagicNumber", "LongParameterList")
 private suspend fun runChannelClose(
     transfer: TransferViewModel,
     wallet: WalletViewModel,
@@ -162,8 +161,8 @@ private suspend fun runChannelClose(
 @Composable
 private fun Content(
     progressState: SavingsProgressState,
-    onContinueClick: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onContinueClick: () -> Unit = {},
 ) {
     val inProgress = progressState == SavingsProgressState.PROGRESS
     val showAnimation = inProgress || progressState == SavingsProgressState.SETTLING

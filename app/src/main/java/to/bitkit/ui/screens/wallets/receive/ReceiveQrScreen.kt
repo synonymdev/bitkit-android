@@ -88,6 +88,7 @@ import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.usdt.UsdtDepositReceiveScreen
 import to.bitkit.ui.shared.effects.SetMaxBrightness
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.modifiers.swipePastEdges
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareQrCode
 import to.bitkit.ui.shared.util.shareText
@@ -96,17 +97,17 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
-@Suppress("CyclomaticComplexMethod")
 @OptIn(FlowPreview::class)
 @Composable
+@Suppress("CyclomaticComplexMethod")
 fun ReceiveQrScreen(
     cjitInvoice: String?,
     walletState: WalletState,
     lightningState: LightningState,
     onClickEditInvoice: (ReceiveTab) -> Unit,
     onClickReceiveCjit: () -> Unit,
-    onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.HARDWARE) },
     modifier: Modifier = Modifier,
+    onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.HARDWARE) },
     initialTab: ReceiveTab? = null,
     onClose: () -> Unit = {},
     onBlockingChange: (Boolean) -> Unit = {},
@@ -391,6 +392,11 @@ fun ReceiveQrScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .swipePastEdges(
+                        state = lazyListState,
+                        onSwipePastStart = { selectReceiveTab(visibleTabs.last()) },
+                        onSwipePastEnd = { selectReceiveTab(visibleTabs.first()) },
+                    )
             ) {
                 itemsIndexed(
                     items = visibleTabs,
@@ -732,10 +738,10 @@ private fun ReceiveDetailsView(
     cjitInvoice: String?,
     isNodeRunning: Boolean,
     onClickEditInvoice: () -> Unit,
+    modifier: Modifier = Modifier,
     onClickHardwareEditInvoice: () -> Unit = onClickEditInvoice,
     hardwareAddress: String? = null,
     hardwareInvoice: String = "",
-    modifier: Modifier = Modifier,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Colors.Black),

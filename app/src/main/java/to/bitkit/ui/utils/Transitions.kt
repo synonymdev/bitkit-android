@@ -27,7 +27,6 @@ import to.bitkit.ui.utils.Transitions.defaultPopEnterTrans
 import to.bitkit.ui.utils.Transitions.defaultPopExitTrans
 import kotlin.reflect.KType
 
-@Suppress("MagicNumber")
 object Transitions {
     val slideInHorizontally = slideInHorizontally(animationSpec = tween(), initialOffsetX = { it })
     val slideOutHorizontally = slideOutHorizontally(animationSpec = tween(), targetOffsetX = { it })
@@ -77,7 +76,7 @@ object Transitions {
 /**
  * Construct a nested [NavGraph] with the default screen transitions.
  */
-@Suppress("LongParameterList", "MaxLineLength")
+@Suppress("MaxLineLength")
 inline fun <reified T : Any> NavGraphBuilder.navigationWithDefaultTransitions(
     startDestination: Any,
     typeMap: Map<KType, @JvmSuppressWildcards NavType<*>> = emptyMap(),
@@ -103,7 +102,7 @@ inline fun <reified T : Any> NavGraphBuilder.navigationWithDefaultTransitions(
 /**
  * Adds the [Composable] to the [NavGraphBuilder] with the default screen transitions.
  */
-@Suppress("LongParameterList", "MaxLineLength")
+@Suppress("MaxLineLength")
 inline fun <reified T : Any> NavGraphBuilder.composableWithDefaultTransitions(
     typeMap: Map<KType, NavType<*>> = emptyMap(),
     deepLinks: List<NavDeepLink> = emptyList(),
@@ -127,7 +126,7 @@ inline fun <reified T : Any> NavGraphBuilder.composableWithDefaultTransitions(
 /**
  * Adds a root screen that may be entered directly by URI, with the default screen transitions.
  */
-@Suppress("LongParameterList", "MaxLineLength")
+@Suppress("MaxLineLength")
 inline fun <reified T : Routes.DeepLinkable> NavGraphBuilder.deepLinkableComposable(
     typeMap: Map<KType, NavType<*>> = emptyMap(),
     deepLinks: List<NavDeepLink> = ScreenDeepLinks.linksFor(T::class),

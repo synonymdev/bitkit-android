@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -104,7 +105,6 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.AppViewModel
 import java.text.DecimalFormatSymbols
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -160,12 +160,18 @@ internal fun PaymentRequestAmountContent(
 ) {
     val currencies = LocalCurrencies.current
     val amountState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
-    val locale = Locale.getDefault()
+    val locale = LocalConfiguration.current.locales[0]
     val decimalSeparator = remember(locale) { DecimalFormatSymbols.getInstance(locale).decimalSeparator }
 
     var asset by remember(initialDraft.amount.asset) { mutableStateOf(initialDraft.amount.asset) }
     var dollars by remember(initialDraft.amount) {
-        mutableStateOf(if (initialDraft.amount.asset != PaykitAsset.BTC) initialDraft.amount.value else "")
+        mutableStateOf(
+            if (initialDraft.amount.asset != PaykitAsset.BTC && initialDraft.amount.atomic > 0uL) {
+                initialDraft.amount.inputValue
+            } else {
+                ""
+            }
+        )
     }
     var conversionError by remember { mutableStateOf(false) }
     var isNumberPadFocused by remember { mutableStateOf(false) }
@@ -252,7 +258,7 @@ internal fun PaymentRequestAmountContent(
                                     if (it.asset == PaykitAsset.BTC) {
                                         amountInputViewModel.setSats(it.atomic.toLong(), currencies)
                                     } else {
-                                        dollars = if (it.atomic == 0uL) "" else it.value
+                                        dollars = if (it.atomic == 0uL) "" else it.inputValue
                                     }
                                     conversionError = false
                                 },
@@ -409,13 +415,13 @@ fun PaymentRequestDetailsScreen(
 @Composable
 internal fun PaymentRequestDetailsContent(
     initialDraft: PaykitPaymentRequestDraft,
+    modifier: Modifier = Modifier,
     availableMethods: ImmutableList<String> = persistentListOf(),
     contact: PubkyProfile,
     isCreating: Boolean,
     onBack: () -> Unit,
     onEditAmount: (PaykitPaymentRequestDraft) -> Unit,
     onSend: (PaykitPaymentRequestDraft) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     var acceptedMethods by remember(initialDraft.acceptedPaymentEndpointIdentifiers) {
         mutableStateOf(initialDraft.acceptedPaymentEndpointIdentifiers)

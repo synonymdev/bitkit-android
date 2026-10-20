@@ -93,7 +93,6 @@ import kotlin.time.ExperimentalTime
 const val RETRY_INTERVAL_MS = 1 * 60 * 1000L // 1 minutes in ms
 const val GIVE_UP_MS = 30 * 60 * 1000L // 30 minutes in ms
 
-@Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @OptIn(ExperimentalTime::class)
 @HiltViewModel
 class TransferViewModel @Inject constructor(
@@ -1359,7 +1358,6 @@ class TransferViewModel @Inject constructor(
         return signHardwareFunding(walletId, funding)
     }
 
-    @Suppress("ThrowsCount")
     private suspend fun ensureHardwareConnected(walletId: String) {
         // Nothing has been sent to the device for signing yet, so the screen may be left while this
         // waits; a Jade may sit here for minutes waiting for its PIN.
@@ -1412,7 +1410,6 @@ class TransferViewModel @Inject constructor(
         return signHardwareFundingOnce(walletId, funding)
     }
 
-    @Suppress("ThrowsCount")
     private suspend fun signHardwareFundingOnce(
         walletId: String,
         funding: HwFundingTransaction,

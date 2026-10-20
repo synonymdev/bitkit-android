@@ -20,7 +20,6 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import com.synonym.bitkitcore.parsePubkyAuthUrl as parseLegacyPubkyAuthUrl
 
-@Suppress("TooManyFunctions")
 @Singleton
 class PubkyService @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
@@ -224,7 +223,6 @@ class PubkyService @Inject constructor(
         paykitSdkService.observeState(expectedIdentity).contacts
     }
 
-    @Suppress("LongParameterList")
     suspend fun saveContact(
         publicKey: String,
         label: String?,

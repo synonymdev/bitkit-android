@@ -132,6 +132,8 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
         whenever(usdtPayments.verifiedReceipts(any())).thenReturn(Result.success(emptyList()))
+        whenever(usdtPayments.protectedPaymentAttempts(any())).thenReturn(Result.success(emptyList()))
+        whenever(usdtPayments.paymentRequestStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(usdtPayments.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
         sut = PaykitPaymentRequestRepo(
@@ -438,7 +440,6 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertEquals(PaykitPaymentProofKind.Lightning, received.paymentProofKind)
     }
 
-    @Suppress("LongMethod")
     @Test
     fun `creator proposal sends recurring terms and stays queued until delivery`() = test {
         val target = stubSubscriptionProposal()
@@ -1188,6 +1189,32 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `usdt protection hides only its subscription billing period`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)),
+        )
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val started = PaykitUsdtAttempt(
+            "quote",
+            "wallet",
+            LOCAL_IDENTITY,
+            COUNTERPARTY,
+            requestId = request.id,
+            billingPeriod = request.billingPeriod,
+            paymentStarted = true,
+        )
+        whenever(usdtPayments.protectedPaymentAttempts(LOCAL_IDENTITY)).thenReturn(Result.success(listOf(started)))
+        sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertFalse(sut.isSubscriptionNotificationHandled(request.id, LOCAL_IDENTITY))
+        advanceTimeBy(32 * 24 * 60 * 60 * 1000L)
+        sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        assertTrue(sut.pendingRequests.value.isNotEmpty())
+        assertTrue(sut.pendingRequests.value.all { it.id != request.id })
+    }
+
+    @Test
     fun `in flight subscription reminder remains unhandled until the same period returns`() = test {
         val requestId = PaykitPaymentRequestId(
             paymentRequestId = PAYMENT_REQUEST_ID,
@@ -1500,7 +1527,6 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         return target
     }
 
-    @Suppress("LongParameterList")
     private fun paymentRequestRecord(
         id: String = PAYMENT_REQUEST_ID,
         role: PaymentRequestLocalRole = PaymentRequestLocalRole.PAYER,

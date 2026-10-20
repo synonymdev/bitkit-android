@@ -1,10 +1,13 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -21,7 +24,13 @@ import to.bitkit.ui.components.PrimaryButton
 internal fun UsdtSupportActions(details: String, enabled: Boolean = true) {
     val app = appViewModel ?: return
     val context = LocalContext.current
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    val resources = LocalResources.current
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        maxItemsInEachRow = if (LocalDensity.current.fontScale > 1.3f) 1 else 2,
+        modifier = Modifier.fillMaxWidth()
+    ) {
         PrimaryButton(
             text = stringResource(R.string.wallet__send_error_support),
             onClick = { app.navigateToReportIssue(details) },
@@ -34,7 +43,7 @@ internal fun UsdtSupportActions(details: String, enabled: Boolean = true) {
             text = stringResource(R.string.usdt__copy_details),
             onClick = {
                 context.setClipboardText(details)
-                app.toast(type = Toast.ToastType.SUCCESS, title = context.getString(R.string.common__copied))
+                app.toast(type = Toast.ToastType.SUCCESS, title = resources.getString(R.string.common__copied))
             },
             enabled = enabled,
             size = ButtonSize.Small,
@@ -60,7 +69,7 @@ internal fun UsdtTransfer.supportDetails(statusText: String): String = buildList
 internal fun UsdtDepositDetail.supportDetails(statusText: String): String = buildList {
     add("Asset: ${deposit.asset}")
     add("Bridge: Orchestra")
-    add("Source network: ${deposit.network}")
+    add("Source network: ${deposit.network.depositNetwork()?.label ?: deposit.network}")
     add("Recipient network: Arbitrum One")
     add("Deposit reference: ${deposit.id}")
     add("Status: $statusText (${order?.status ?: deposit.status})")

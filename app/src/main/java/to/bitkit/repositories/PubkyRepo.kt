@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.core.graphics.scale
 import coil3.ImageLoader
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
@@ -121,7 +122,6 @@ enum class PubkyIdentityReadiness {
 }
 
 @OptIn(ExperimentalTime::class)
-@Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 @Singleton
 class PubkyRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -1108,7 +1108,6 @@ class PubkyRepo @Inject constructor(
         Logger.info("Deleted all contacts", context = TAG)
     }
 
-    @Suppress("LongParameterList")
     private suspend fun writeProfile(
         name: String,
         bio: String,
@@ -1132,11 +1131,9 @@ class PubkyRepo @Inject constructor(
         val original = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size) ?: return imageBytes
         val scale = min(AVATAR_MAX_SIZE.toFloat() / original.width, AVATAR_MAX_SIZE.toFloat() / original.height)
         val scaled = if (scale < 1f) {
-            Bitmap.createScaledBitmap(
-                original,
+            original.scale(
                 (original.width * scale).toInt(),
                 (original.height * scale).toInt(),
-                true,
             )
         } else {
             original
@@ -1332,7 +1329,6 @@ class PubkyRepo @Inject constructor(
      * save that lands after it must not write one back, least of all for the next identity, which may have saved a
      * contact with the same key.
      */
-    @Suppress("LongParameterList")
     suspend fun updateContact(
         signIn: PubkySignIn,
         publicKey: String,

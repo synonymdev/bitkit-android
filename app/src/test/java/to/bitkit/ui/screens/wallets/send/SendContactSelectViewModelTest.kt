@@ -21,7 +21,9 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SendContactSelectViewModelTest : BaseUnitTest() {
@@ -66,9 +68,10 @@ class SendContactSelectViewModelTest : BaseUnitTest() {
 
         for (cancel in listOf(false, true)) {
             val received = CompletableDeferred<SendContactSelectEffect>()
-            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { received.complete(model.effects.first()) }
             model.payContact("alice")
             advanceUntilIdle()
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { received.complete(model.effects.first()) }
+            assertTrue(received.isCompleted, "Opening must survive a gap between screen collectors")
             assertEquals("alice", (received.await() as SendContactSelectEffect.OpenPayment).publicKey)
             model.payContact("bob")
             assertEquals("alice", model.uiState.value.resolvingPublicKey)
@@ -76,6 +79,12 @@ class SendContactSelectViewModelTest : BaseUnitTest() {
             val navigation = Job()
             model.onPaymentOpening(navigation)
             advanceUntilIdle()
+            val reopened = CompletableDeferred<SendContactSelectEffect>()
+            val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                reopened.complete(model.effects.first())
+            }
+            assertFalse(reopened.isCompleted, "Recreating the screen must not open the same payment twice")
+            collector.cancel()
             model.payContact("bob")
             assertEquals("alice", model.uiState.value.resolvingPublicKey)
             verify(payments, times(0)).beginSavedContactPayment("bob")

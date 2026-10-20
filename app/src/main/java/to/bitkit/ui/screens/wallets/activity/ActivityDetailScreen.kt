@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -99,7 +100,6 @@ import to.bitkit.ui.utils.uiDateText
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ActivityDetailScreen(
     listViewModel: ActivityListViewModel,
@@ -211,7 +211,7 @@ fun ActivityDetailScreen(
                     }
                 }
 
-                val context = LocalContext.current
+                val resources = LocalResources.current
                 val assignedContact = if (isPaykitEnabled) assignedContactProfile(item, contacts) else null
                 val blocktankInfo by blocktankViewModel?.info?.collectAsStateWithLifecycle() ?: remember {
                     mutableStateOf(null)
@@ -276,8 +276,8 @@ fun ActivityDetailScreen(
                             onSuccess = {
                                 app.toast(
                                     type = Toast.ToastType.SUCCESS,
-                                    title = context.getString(R.string.wallet__boost_success_title),
-                                    description = context.getString(R.string.wallet__boost_success_msg),
+                                    title = resources.getString(R.string.wallet__boost_success_title),
+                                    description = resources.getString(R.string.wallet__boost_success_msg),
                                     testTag = "BoostSuccessToast"
                                 )
                                 listViewModel.resync()
@@ -286,8 +286,8 @@ fun ActivityDetailScreen(
                             onFailure = {
                                 app.toast(
                                     type = Toast.ToastType.ERROR,
-                                    title = context.getString(R.string.wallet__boost_error_title),
-                                    description = context.getString(R.string.wallet__boost_error_msg),
+                                    title = resources.getString(R.string.wallet__boost_error_title),
+                                    description = resources.getString(R.string.wallet__boost_error_msg),
                                     testTag = "BoostFailureToast"
                                 )
                                 detailViewModel.onDismissBoostSheet()
@@ -295,15 +295,15 @@ fun ActivityDetailScreen(
                             onMaxFee = {
                                 app.toast(
                                     type = Toast.ToastType.ERROR,
-                                    title = context.getString(R.string.wallet__send_fee_error),
-                                    description = context.getString(R.string.wallet__send_fee_error_max)
+                                    title = resources.getString(R.string.wallet__send_fee_error),
+                                    description = resources.getString(R.string.wallet__send_fee_error_max)
                                 )
                             },
                             onMinFee = {
                                 app.toast(
                                     type = Toast.ToastType.ERROR,
-                                    title = context.getString(R.string.wallet__send_fee_error),
-                                    description = context.getString(R.string.wallet__send_fee_error_min)
+                                    title = resources.getString(R.string.wallet__send_fee_error),
+                                    description = resources.getString(R.string.wallet__send_fee_error_min)
                                 )
                             }
                         )
@@ -314,8 +314,8 @@ fun ActivityDetailScreen(
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
+@Suppress("CyclomaticComplexMethod")
 private fun ActivityDetailContent(
     item: Activity,
     assignedContact: PubkyProfile?,

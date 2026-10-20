@@ -98,7 +98,6 @@ import kotlin.time.ExperimentalTime
  *   Idle State:          running=false, synced≥required
  * ```
  */
-@Suppress("LongParameterList", "TooManyFunctions", "LargeClass")
 @OptIn(ExperimentalTime::class)
 @Singleton
 class BackupRepo @Inject constructor(
@@ -291,7 +290,6 @@ class BackupRepo @Inject constructor(
         Logger.debug("Started ${statusObserverJobs.size} backup status observers", context = TAG)
     }
 
-    @Suppress("LongMethod")
     private fun startDataStoreListeners() {
         val settingsJob = scope.launch {
             settingsStore.data
@@ -1024,7 +1022,7 @@ class BackupRepo @Inject constructor(
 
     private suspend fun getRemoteBackupTimestamp(category: BackupCategory): ULong? {
         val item = vssBackupClient.getObject(category.name).getOrNull() ?: return null
-        val data = item.value ?: return null
+        val data = item.value
 
         @Serializable
         data class BackupWithCreatedAt(val createdAt: Long? = null)

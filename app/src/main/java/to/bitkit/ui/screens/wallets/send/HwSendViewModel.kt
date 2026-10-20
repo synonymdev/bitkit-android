@@ -35,16 +35,16 @@ import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
-import to.bitkit.repositories.PreActivityMetadataRepo
-import to.bitkit.repositories.PaykitPaymentRequestId
-import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentProofRepo
-import to.bitkit.utils.SignedTransactionId
+import to.bitkit.repositories.PaykitPaymentRequestError
+import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.HwErrorPresenter
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.SignedTransactionId
 import javax.inject.Inject
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -173,8 +173,10 @@ class HwSendViewModel @Inject constructor(
                         .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
                     if (signingAttempt != attempt) return@runCatching
                     pendingResult.update {
-                        HwSendResult(request.walletId, result.txId, request.amountSats,
-                            request.paymentRequestId, request.paymentIdentity)
+                        HwSendResult(
+                            request.walletId, result.txId, request.amountSats,
+                            request.paymentRequestId, request.paymentIdentity
+                        )
                     }
                 }.onFailure {
                     if (it is CancellationException && it !is TimeoutCancellationException) throw it
@@ -264,10 +266,11 @@ class HwSendViewModel @Inject constructor(
             if (generateSequence(error) { it.cause }.any { it is ServiceError.PaymentDeadlineExpired }) {
                 val request = payment.request
                 val cleared = request.paymentRequestId?.let { requestId ->
-                    !payment.hasAttemptedBroadcast && paykitPaymentProofRepo.clearHardwareOnchainCandidateBeforeDispatch(
-                        requestId, request.walletId, SignedTransactionId.fromHex(payment.signedTx.serializedTx),
-                        request.paymentIdentity, request.address, request.amountSats, payment.hasAttemptedBroadcast,
-                    )
+                    !payment.hasAttemptedBroadcast &&
+                        paykitPaymentProofRepo.clearHardwareOnchainCandidateBeforeDispatch(
+                            requestId, request.walletId, SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                            request.paymentIdentity, request.address, request.amountSats, payment.hasAttemptedBroadcast,
+                        )
                 } ?: !payment.hasAttemptedBroadcast
                 val unresolved = payment.hasAttemptedBroadcast || !cleared
                 pendingBroadcast = payment.copy(hasAttemptedBroadcast = unresolved)
@@ -356,8 +359,10 @@ class HwSendViewModel @Inject constructor(
                 it.request.walletId == walletId &&
                 SignedTransactionId.fromHex(it.signedTx.serializedTx).equals(txid, ignoreCase = true)
         }?.let {
-            HwSendResult(it.request.walletId, requireNotNull(txid).lowercase(), it.request.amountSats,
-                it.request.paymentRequestId, it.request.paymentIdentity)
+            HwSendResult(
+                it.request.walletId, requireNotNull(txid).lowercase(), it.request.amountSats,
+                it.request.paymentRequestId, it.request.paymentIdentity
+            )
         } ?: return false
         // Exact observation owns completion; a late native response belongs to the old attempt.
         signingAttempt++

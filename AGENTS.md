@@ -6,6 +6,12 @@ This file provides guidance to Codex, Claude Code, and Cursor when working with 
 
 Durable shared agent command specs live in `.agents/commands/`. For PR creation, follow `.agents/commands/pr.md`; `.claude/commands` is a compatibility symlink to the same files.
 
+### Review Findings
+
+When addressing review feedback on any PR, release PRs included, PR babysitters and the author's agent keep the PR in scope:
+- Fix in the PR only critical and HIGH findings and reachable correctness bugs. MEDIUM findings are a judgment call.
+- PR babysitters re-triage each LOW or non-blocking finding. If it is still LOW and not a reachable correctness bug, they defer it and leave the code unchanged: file an issue in the next release's milestone, add an Out of Scope bullet linking the issue and the thread (see `.agents/commands/pr.md`), reply in the thread `out of scope: tracked in #N, because …`, and resolve it.
+
 ## Build Commands
 
 ```sh
@@ -36,13 +42,13 @@ just e2e no geo
 # Build for E2E tests using network Electrum (not local; staging/mainnet based on flavor)
 just e2e network assembleTnetRelease
 
-# Lint using detekt
+# Lint using detekt and Android Lint
 just lint
 
 # Auto-format using detekt
 just format
 
-# Update detekt baseline
+# Update the Android Lint baseline
 just lint baseline
 
 # Install dev build
@@ -352,6 +358,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
+- NEVER push with lint findings: detekt and Android Lint fail CI, and Kotlin warnings fail compilation (`allWarningsAsErrors`; deprecations stay warnings). Fix the finding instead of suppressing it or adding it to `app/lint-baseline.xml`
 - ALWAYS wrap suspend functions in `withContext(ioDispatcher)` if in domain layer, using ctor injected prop `@IoDispatcher private val ioDispatcher: CoroutineDispatcher`
 - ALWAYS position `companion object` at the top of the class
 - NEVER use `Exception` directly, use `AppError` instead

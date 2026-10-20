@@ -10,11 +10,10 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -38,8 +37,8 @@ class SendContactSelectViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SendContactSelectUiState())
     val uiState: StateFlow<SendContactSelectUiState> = _uiState.asStateFlow()
 
-    private val _effects = MutableSharedFlow<SendContactSelectEffect>(extraBufferCapacity = 1)
-    val effects = _effects.asSharedFlow()
+    private val pendingPayment = MutableStateFlow<SendContactSelectEffect?>(null)
+    val effects = pendingPayment.filterNotNull()
 
     init {
         viewModelScope.launch {
@@ -75,14 +74,14 @@ class SendContactSelectViewModel @Inject constructor(
                         when (result) {
                             is PublicPaykitPaymentResult.Opened -> {
                                 openingPayment = true
-                                _effects.emit(
+                                pendingPayment.update {
                                     SendContactSelectEffect.OpenPayment(
                                         result.paymentRequest,
                                         publicKey,
                                         result.privatePaymentContext,
                                         result.endpoints,
                                     )
-                                )
+                                }
                             }
                             PublicPaykitPaymentResult.NoEndpoint ->
                                 showPayError(R.string.slashtags__error_pay_empty_msg)
@@ -105,6 +104,7 @@ class SendContactSelectViewModel @Inject constructor(
     }
 
     fun onPaymentOpening(scanJob: Job?) {
+        pendingPayment.update { null }
         viewModelScope.launch {
             try {
                 scanJob?.join()

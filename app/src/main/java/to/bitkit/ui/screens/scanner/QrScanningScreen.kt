@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -96,6 +98,7 @@ fun QrScanningScreen(
     onBack: (() -> Unit)? = null,
     isPubkyScan: Boolean = false,
     isFullScreen: Boolean = false,
+    isEmbedded: Boolean = false,
     acceptsBinaryPayload: Boolean = false,
     showsGradientBackground: Boolean = true,
     permissionDescription: String = stringResource(R.string.other__camera_permission_description),
@@ -133,6 +136,7 @@ fun QrScanningScreen(
     }
 
     val context = LocalContext.current
+    val resources = LocalResources.current
     val previewView = remember { PreviewView(context) }
     val preview = remember { Preview.Builder().build() }
     val analyzer = remember(acceptsBinaryPayload) {
@@ -145,8 +149,8 @@ fun QrScanningScreen(
                     Logger.error("Failed to scan QR code", error, context = TAG)
                     app.toast(
                         type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.other__qr_error_header),
-                        description = context.getString(R.string.other__qr_error_text),
+                        title = resources.getString(R.string.other__qr_error_header),
+                        description = resources.getString(R.string.other__qr_error_text),
                     )
                 }
             },
@@ -209,8 +213,8 @@ fun QrScanningScreen(
             Logger.error("Failed to initialize camera", it, context = TAG)
             app.toast(
                 type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__qr_error_header),
-                description = context.getString(R.string.other__camera_init_error)
+                title = resources.getString(R.string.other__qr_error_header),
+                description = resources.getString(R.string.other__camera_init_error)
                     .replace("{message}", it.message.orEmpty())
             )
         }
@@ -226,16 +230,9 @@ fun QrScanningScreen(
     Column(
         modifier = modifier
             .then(if (showsGradientBackground) Modifier.gradientBackground() else Modifier)
-            .navigationBarsPadding()
+            .then(if (isEmbedded) Modifier else Modifier.navigationBarsPadding())
     ) {
-        if (isFullScreen) {
-            AppTopBar(
-                titleText = stringResource(R.string.other__qr_scan),
-                onBackClick = onBack,
-            )
-        } else {
-            SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
-        }
+        if (!isEmbedded) ScannerTopBar(isFullScreen, onBack)
 
         CameraPermissionView(
             permissionState = cameraPermissionState,
@@ -244,12 +241,13 @@ fun QrScanningScreen(
                     description = permissionDescription,
                     accentColor = permissionAccentColor,
                     onClickRetry = { context.startActivityAppSettings() },
-                    onClickPaste = handlePaste(context, app, setScanResult),
+                    onClickPaste = if (isEmbedded) null else handlePaste(context, app, setScanResult),
                 )
             },
             grantedContent = {
                 Content(
                     isPubkyScan = isPubkyScan,
+                    isEmbedded = isEmbedded,
                     isFlashlightOn = isFlashlightOn,
                     previewView = previewView,
                     onClickFlashlight = {
@@ -268,6 +266,15 @@ fun QrScanningScreen(
                 )
             }
         )
+    }
+}
+
+@Composable
+private fun ScannerTopBar(isFullScreen: Boolean, onBack: (() -> Unit)?) {
+    if (isFullScreen) {
+        AppTopBar(titleText = stringResource(R.string.other__qr_scan), onBackClick = onBack)
+    } else {
+        SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
     }
 }
 
@@ -300,6 +307,7 @@ internal fun textQrCodePayload(text: String) = QrCodePayload(
 @Composable
 private fun Content(
     isPubkyScan: Boolean,
+    isEmbedded: Boolean,
     isFlashlightOn: Boolean,
     previewView: PreviewView,
     onClickFlashlight: () -> Unit,
@@ -311,13 +319,13 @@ private fun Content(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
+            .then(if (isEmbedded) Modifier else Modifier.padding(horizontal = 16.dp))
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .weight(1f)
+                .then(if (isEmbedded) Modifier.height(240.dp) else Modifier.weight(1f))
         ) {
             AndroidView(
                 modifier = Modifier
@@ -383,19 +391,21 @@ private fun Content(
                 }
             }
         }
-        VerticalSpacer(16.dp)
-        PrimaryButton(
-            icon = {
-                Icon(
-                    painterResource(R.drawable.ic_clipboard_text_simple),
-                    contentDescription = stringResource(R.string.other__qr_paste),
-                )
-            },
-            text = stringResource(
-                if (isPubkyScan) R.string.contacts__scanner_paste else R.string.other__qr_paste
-            ),
-            onClick = onPasteFromClipboard,
-        )
+        if (!isEmbedded) {
+            VerticalSpacer(16.dp)
+            PrimaryButton(
+                icon = {
+                    Icon(
+                        painterResource(R.drawable.ic_clipboard_text_simple),
+                        contentDescription = stringResource(R.string.other__qr_paste),
+                    )
+                },
+                text = stringResource(
+                    if (isPubkyScan) R.string.contacts__scanner_paste else R.string.other__qr_paste
+                ),
+                onClick = onPasteFromClipboard,
+            )
+        }
 
         @Suppress("KotlinConstantConditions")
         if (Env.isE2eTest) {
@@ -432,7 +442,7 @@ private fun Content(
             }
         }
 
-        VerticalSpacer(16.dp)
+        if (!isEmbedded) VerticalSpacer(16.dp)
     }
 }
 

@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
@@ -33,17 +33,16 @@ fun SheetTopBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(54.dp)
+            .heightIn(min = 54.dp)
     ) {
         titleText?.let {
             Subtitle(
                 text = titleText,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
                 style = titleStyle,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = LocalMinimumInteractiveComponentSize.current)
+                    .padding(horizontal = LocalMinimumInteractiveComponentSize.current, vertical = 8.dp)
                     .align(Alignment.Center)
             )
         }

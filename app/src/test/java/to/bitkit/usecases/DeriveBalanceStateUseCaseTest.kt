@@ -16,7 +16,6 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.TransferEntity
@@ -45,13 +44,13 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
             whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
             whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
-            wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
-            wheneverBlocking { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
+            whenever { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
+            whenever { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
             whenever(transferRepo.resolveChannelIdForTransfer(any(), any())).thenAnswer { invocation ->
                 val transfer = invocation.getArgument<TransferEntity>(0)
                 transfer.channelId
             }
-            wheneverBlocking {
+            whenever {
                 lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
             }.thenReturn(Result.success(1000uL))
         }
@@ -114,7 +113,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
-        wheneverBlocking {
+        whenever {
             lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.success(fee))
 
@@ -140,7 +139,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
-        wheneverBlocking {
+        whenever {
             lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.failure(Exception("Fee estimation failed")))
 
@@ -178,7 +177,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         val channelBalance = newChannelBalance(channelId, amountSats)
 
         val balance = newBalanceDetails().copy(lightningBalances = listOf(channelBalance))
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
 
         val channel = mock<ChannelDetails> {
             on { this.channelId } doReturn channelId
@@ -368,7 +367,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         val closingChannelBalance = newClosingChannelBalance(channelId, amountSats)
 
         val balance = newBalanceDetails().copy(lightningBalances = listOf(closingChannelBalance))
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
 
         val transfers = listOf(
             newTransferEntity(
@@ -381,7 +380,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
-        wheneverBlocking { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenReturn(channelId)
+        whenever { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenReturn(channelId)
 
         val result = sut()
 
@@ -410,7 +409,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             lightningBalances = listOf(closingChannelBalance),
             totalLightningBalanceSats = amountSats,
         )
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
 
         val transfers = listOf(
             newTransferEntity(
@@ -423,7 +422,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
-        wheneverBlocking { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenReturn(channelId)
+        whenever { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenReturn(channelId)
 
         val result = sut()
 
@@ -500,7 +499,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     @Test
     fun `should calculate zero max send onchain when spendable balance is zero`() = test {
         val balance = newBalanceDetails().copy(totalOnchainBalanceSats = 50_000u)
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
 
         val result = sut()
@@ -518,9 +517,9 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         val balance = newBalanceDetails().copy(spendableOnchainBalanceSats = spendableAmount)
 
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        wheneverBlocking {
+        whenever {
             lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.success(feeAmount))
 
@@ -541,7 +540,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        wheneverBlocking {
+        whenever {
             lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.failure(Exception("Fee estimation failed")))
 
@@ -559,9 +558,9 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         val balance = newBalanceDetails().copy(spendableOnchainBalanceSats = spendableAmount)
 
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        wheneverBlocking {
+        whenever {
             lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.success(excessiveFee))
 
@@ -585,7 +584,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
                 newClosingChannelBalance(savingsChannelId, toSavings)
             ),
         )
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
         val spendingChannel = mock<ChannelDetails> {
             on { channelId } doReturn spendingChannelId
             on { isChannelReady } doReturn false
@@ -606,7 +605,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         )
         whenever(lightningRepo.getChannels()).thenReturn(listOf(spendingChannel))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
-        wheneverBlocking { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenAnswer { invocation ->
+        whenever { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenAnswer { invocation ->
             val transfer = invocation.getArgument<TransferEntity>(0)
             transfer.channelId
         }

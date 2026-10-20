@@ -38,7 +38,6 @@ import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.SanityWarning
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class UsdtViewModel @Inject constructor(
     private val repo: UsdtRepo,
@@ -154,7 +153,9 @@ class UsdtViewModel @Inject constructor(
         result.onSuccess { quote -> _state.update { it.copy(quote = quote, busy = false) } }
             .onFailure { error ->
                 Logger.warn("Failed to quote USDT with '${error.javaClass.simpleName}'", context = TAG)
-                _state.update { it.copy(error = error.messageResource(), busy = false) }
+                _state.update {
+                    it.copy(error = error.messageResource(), errorAmount = error.bridgeLimit(), busy = false)
+                }
             }
     }
 
@@ -173,7 +174,14 @@ class UsdtViewModel @Inject constructor(
                 _state.update { it.copy(busy = false, preparingMaximum = false) }
             }
             .onFailure { error ->
-                _state.update { it.copy(error = error.messageResource(), busy = false, preparingMaximum = false) }
+                _state.update {
+                    it.copy(
+                        error = error.messageResource(),
+                        errorAmount = error.bridgeLimit(),
+                        busy = false,
+                        preparingMaximum = false
+                    )
+                }
             }
     }
 
@@ -281,6 +289,7 @@ data class UsdtSendState(
     val warning: SanityWarning? = null,
     val confirmedWarnings: ImmutableList<SanityWarning> = persistentListOf(),
     @StringRes val error: Int? = null,
+    val errorAmount: String? = null,
     @StringRes val refreshError: Int? = null,
 ) {
     val canQuote: Boolean
@@ -296,7 +305,6 @@ private fun UsdtQuote.warnings(balance: ULong?, warnOver100: Boolean): List<Sani
 }
 
 @StringRes
-@Suppress("CyclomaticComplexMethod")
 internal fun Throwable.messageResource(): Int = when (this) {
     is PaykitPaymentRequestError.RequestExpired -> R.string.wallet__payment_request_expired
     is PaykitPaymentRequestError -> R.string.wallet__payment_request_unavailable
@@ -304,6 +312,17 @@ internal fun Throwable.messageResource(): Int = when (this) {
     is UsdtException.NotConfigured -> R.string.usdt__error_configuration
     is UsdtException.InvalidAmount -> R.string.usdt__error_amount
     is UsdtException.BridgeAmountTooSmall -> R.string.usdt__error_bridge_amount
+    is UsdtException.BridgeAmountBelowMinimum -> if (minUsdCents != null) {
+        R.string.usdt__deposit_minimum
+    } else {
+        R.string.usdt__error_bridge_minimum
+    }
+    is UsdtException.BridgeAmountAboveMaximum -> if (maxUsdCents != null) {
+        R.string.usdt__deposit_maximum
+    } else {
+        R.string.usdt__error_bridge_maximum
+    }
+    is UsdtException.BridgeLiquidityUnavailable -> R.string.usdt__error_bridge_liquidity
     is UsdtException.InvalidAddress, is UsdtException.WrongNetwork -> R.string.usdt__error_address
     is UsdtException.InsufficientBalance -> R.string.usdt__error_balance
     is UsdtException.QuoteExpired -> R.string.usdt__error_expired
@@ -327,4 +346,10 @@ internal fun Throwable.messageResource(): Int = when (this) {
         R.string.usdt__error_rejected
     }
     else -> R.string.usdt__error_network
+}
+
+private fun Throwable.bridgeLimit(): String? = when (this) {
+    is UsdtException.BridgeAmountBelowMinimum -> minUsdCents?.usdCents()
+    is UsdtException.BridgeAmountAboveMaximum -> maxUsdCents?.usdCents()
+    else -> null
 }
