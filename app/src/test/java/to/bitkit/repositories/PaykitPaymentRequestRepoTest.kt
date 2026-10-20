@@ -2451,6 +2451,31 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `deferred bulk recipient discovery preserves targets and leaves interactive refresh available`() = test {
+        val status = IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        whenever(paykitSdkService.identityStatus()).thenReturn(status)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED)))
+        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any())).thenReturn(true)
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+        val targets = sut.eligibleTargets.value
+        var deferred = true
+        doSuspendableAnswer {
+            if (deferred) throw PaykitPaymentRequestError.OperationInProgress
+            status
+        }.whenever(paykitSdkService).identityStatus(Priority.Background)
+
+        assertEquals(
+            PaykitPaymentRequestError.OperationInProgress,
+            sut.refreshEligibleTargets(emptyList()).exceptionOrNull(),
+        )
+        assertEquals(targets, sut.eligibleTargets.value)
+        assertTrue(sut.refreshEligibleTarget(COUNTERPARTY).getOrThrow().isComplete)
+        deferred = false
+        sut.refreshEligibleTargets(emptyList()).getOrThrow()
+        assertTrue(sut.eligibleTargets.value.isEmpty())
+    }
+
+    @Test
     fun `single recipient refresh removes a contact that is no longer linked`() = test {
         whenever(
             paykitSdkService.identityStatus()

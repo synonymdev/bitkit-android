@@ -668,6 +668,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                 }
             }.onFailure {
+                if (it == PaykitPaymentRequestError.OperationInProgress) return@onFailure
                 Logger.warn("Failed to refresh Paykit payment request recipients", it, context = TAG)
                 val savedKeys = savedPublicKeys.mapNotNull(PubkyPublicKeyFormat::normalized).toSet()
                 operationMutex.withLock {

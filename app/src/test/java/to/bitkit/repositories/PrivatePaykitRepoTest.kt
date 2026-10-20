@@ -46,6 +46,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -54,6 +55,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.verifyNoInteractions
+import org.mockito.kotlin.verifyNoMoreInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.App
 import to.bitkit.CurrentActivity
@@ -156,6 +158,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(Result.success(PRIVATE_ADDRESS))
         whenever { paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any()) }
             .thenReturn(privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY)))
+        whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any(), any())).doSuspendableAnswer {
+            paykitSdkService.syncPrivatePaymentListsWithReservations(it.getArgument(0), it.getArgument(1))
+        }
         whenever { paykitSdkService.linkedPeers() }.thenReturn(emptyList())
         whenever { paykitSdkService.ensureLinkWithPeer(any(), any(), eq(Priority.Ordered)) }.thenAnswer {
             LinkedPeerHandshakeReport(it.getArgument(0), LinkedPeerState.LINKED, 1uL, null)
@@ -339,7 +344,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         }
         sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
         runCurrent()
-        verifyNoInteractions(paykitSdkService, addressReservationRepo)
+        verify(paykitSdkService).checkRefreshAdmission(Priority.Background)
+        verifyNoMoreInteractions(paykitSdkService)
+        verifyNoInteractions(addressReservationRepo)
 
         val updateStarted = CompletableDeferred<Unit>()
         val resumeUpdate = CompletableDeferred<Unit>()
@@ -1091,9 +1098,15 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             advanceTimeBy(1_000)
             runCurrent()
             clearInvocations(paykitSdkService)
+            doSuspendableAnswer {
+                throw PaykitPaymentRequestError.OperationInProgress
+            }.whenever(paykitSdkService).privateMessageSchedulingSnapshot(any())
             advanceTimeBy(3_000)
             runCurrent()
             verify(paykitSdkService, atLeast(1)).privateMessageSchedulingSnapshot(Priority.Background)
+            verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any(), any())
+            verify(paykitSdkService, never()).receivePrivateMessages(any(), any())
+            verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any())
             doSuspendableAnswer {
                 PrivateMessageSchedulingSnapshot(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)), emptyList())
             }.whenever(paykitSdkService).privateMessageSchedulingSnapshot(any())
@@ -1570,6 +1583,63 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any())
         verifyNoInteractions(paymentRequestRepo)
         sut.closeAndClear()
+    }
+
+    @Test
+    fun `deferred automatic publication retains contacts and releases explicit publication`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        var automaticCalls = 0
+        whenever(paykitSdkService.syncPrivatePaymentListsWithReservations(any(), eq(false), eq(true)))
+            .doSuspendableAnswer {
+                automaticCalls++
+                if (automaticCalls == 1) throw PaykitPaymentRequestError.OperationInProgress
+                privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY))
+            }
+        sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        assertEquals(1, automaticCalls)
+        assertEquals(0L, sut.backupStateVersion.value)
+        assertFalse(cacheData.value.contacts[CONTACT_KEY]?.hasPublishedPrivatePaymentList == true)
+
+        sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
+        runCurrent()
+        verify(paykitSdkService, atLeast(1)).linkedPeers(Priority.Interactive)
+        verify(paykitSdkService).syncPrivatePaymentListsWithReservations(any(), eq(false), eq(false))
+        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
+        verify(paykitSdkService, times(2)).syncPrivatePaymentListsWithReservations(any(), eq(false), eq(false))
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(2, automaticCalls)
+        assertTrue(cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList)
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `deferred preparation cannot resume after reset or profile deletion`() = test {
+        for (close in listOf(false, true)) {
+            sut = createSut()
+            sut.setContactPreparationActive(true)
+            var blocked = true
+            doAnswer {
+                if (blocked) throw PaykitPaymentRequestError.OperationInProgress
+                Unit
+            }.whenever(paykitSdkService).checkRefreshAdmission(Priority.Background)
+            sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
+            runCurrent()
+            clearInvocations(paykitSdkService)
+            if (close) sut.closeAndClear().getOrThrow() else sut.beginProfileDeletion()
+            blocked = false
+            advanceTimeBy(1_000)
+            runCurrent()
+            verify(paykitSdkService, never()).linkedPeers(any())
+            verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any(), any())
+            sut.closeAndClear()
+        }
     }
 
     @Test

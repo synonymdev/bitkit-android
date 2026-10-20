@@ -857,6 +857,16 @@ class PaykitSdkService @Inject constructor(
     suspend fun syncPrivatePaymentListsWithReservations(
         updates: List<PrivatePaymentListReservationUpdateInput>,
         clearUnlistedLinkedPeers: Boolean,
+    ): PrivatePaymentListDeliveryReport = syncPrivatePaymentListsWithReservations(
+        updates,
+        clearUnlistedLinkedPeers,
+        deferDuringPayment = false,
+    )
+
+    internal suspend fun syncPrivatePaymentListsWithReservations(
+        updates: List<PrivatePaymentListReservationUpdateInput>,
+        clearUnlistedLinkedPeers: Boolean,
+        deferDuringPayment: Boolean,
     ): PrivatePaymentListDeliveryReport {
         isSetup.await()
         val priority = if (clearUnlistedLinkedPeers || updates.any { it.reservations.isEmpty() }) {
@@ -865,7 +875,9 @@ class PaykitSdkService @Inject constructor(
             PaykitSdkOperationLock.Priority.Background
         }
         return operationLock.withLock(priority) {
-            withStateRevisionTracking { handle ->
+            val admissionPriority = if (deferDuringPayment) priority else Priority.Ordered
+            checkRefreshAdmission(admissionPriority)
+            withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(admissionPriority) }) { handle ->
                 completeSdkCall {
                     handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
                         updates = updates,
@@ -1089,7 +1101,13 @@ class PaykitSdkService @Inject constructor(
     internal suspend fun identityStatus(priority: Priority): IdentityStatus? {
         isSetup.await()
         return measuredOperation("identityStatus", priority) {
-            withPaykitKey { handle -> retryContendedRead { handle.identityStatus() } }
+            checkRefreshAdmission(priority)
+            withPaykitKey { handle ->
+                retryContendedRead {
+                    checkRefreshAdmission(priority)
+                    handle.identityStatus()
+                }
+            }
         }
     }
 
@@ -1230,7 +1248,13 @@ class PaykitSdkService @Inject constructor(
     internal suspend fun linkedPeers(priority: Priority): List<LinkedPeerRecord> {
         isSetup.await()
         return operationLock.withLock(priority) {
-            withPaykitKey { handle -> retryContendedRead { handle.linkedPeers() } }
+            checkRefreshAdmission(priority)
+            withPaykitKey { handle ->
+                retryContendedRead {
+                    checkRefreshAdmission(priority)
+                    handle.linkedPeers()
+                }
+            }
         }
     }
 
@@ -1239,7 +1263,13 @@ class PaykitSdkService @Inject constructor(
     ): PrivateMessageSchedulingSnapshot {
         isSetup.await()
         return operationLock.withLock(priority) {
-            withPaykitKey { handle -> retryContendedRead { handle.privateMessageSchedulingSnapshot() } }
+            checkRefreshAdmission(priority)
+            withPaykitKey { handle ->
+                retryContendedRead {
+                    checkRefreshAdmission(priority)
+                    handle.privateMessageSchedulingSnapshot()
+                }
+            }
         }
     }
 
@@ -1553,7 +1583,7 @@ class PaykitSdkService @Inject constructor(
         cachedBackupState = null
     }
 
-    private fun checkRefreshAdmission(priority: Priority) {
+    internal fun checkRefreshAdmission(priority: Priority) {
         val reviewing = synchronized(paymentReviews) { paymentReviews.isNotEmpty() }
         if (priority == Priority.Background && (isPaymentSubmissionActive.value || reviewing)) {
             throw PaykitPaymentRequestError.OperationInProgress
