@@ -21,8 +21,8 @@
     <action>Tap Receive (testTag "Receive") and verify the Savings tab (testTag "Tab-savings") is selected</action>
     <action>Swipe right across the Savings QR; verify the USDT tab (testTag "Tab-usdt") is selected and wait until the USDT QR is visible</action>
     <action>Swipe left across the USDT QR; verify the Savings tab is selected</action>
-    <action>Start a screen recording, tap the USDT tab (testTag "Tab-usdt") and wait until the USDT QR is visible, then swipe left across the USDT QR; verify the Savings tab is selected and the recording shows the USDT QR sliding straight on to the Savings QR, with no Auto or Spending QR and no second USDT screen in between</action>
-    <action>Start a screen recording, tap the USDT tab and wait until the USDT QR is visible, then tap the Savings tab; verify the Savings tab is selected and the recording shows the same single slide from USDT to Savings</action>
+    <action>Start a screen recording, tap the USDT tab (testTag "Tab-usdt") and wait until the USDT QR is visible, then swipe left across the USDT QR; verify the Savings tab is selected and the recording goes straight from the USDT QR to the Savings QR, with no Auto or Spending QR and no second USDT screen in between</action>
+    <action>Start a screen recording, tap the USDT tab and wait until the USDT QR is visible, then tap the Savings tab; verify the Savings tab is selected and the recording shows the same direct change from USDT to Savings</action>
     <action>Swipe left across the Savings QR in 1200 ms (`adb shell input swipe 900 1176 150 1176 1200`); verify the Spending tab (testTag "Tab-spending") is selected</action>
     <action>Swipe left across the Spending content in 1200 ms; verify the USDT tab is selected and wait until its QR is visible</action>
     <action>Swipe left from the top right of the USDT QR to above the sheet (`adb shell input swipe 950 720 100 200 300`); verify the Receive sheet is still open and the Savings tab is selected</action>
