@@ -1141,6 +1141,7 @@ class AppViewModel @Inject constructor(
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
         forceFresh: Boolean = false,
         messagePriority: Priority = Priority.Background,
+        refreshPriority: Priority? = null,
         onlyWhileActive: Boolean = false,
         reconcileProofs: Boolean = mode == PaykitPaymentRequestRefreshMode.FULL,
     ): Result<Unit> {
@@ -1169,7 +1170,9 @@ class AppViewModel @Inject constructor(
         ) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
-        val result = if (forceFresh) {
+        val result = if (forceFresh && refreshPriority != null) {
+            paykitPaymentRequestRepo.refreshAfterStateChange(mode, refreshPriority)
+        } else if (forceFresh) {
             paykitPaymentRequestRepo.refreshAfterStateChange(mode)
         } else {
             paykitPaymentRequestRepo.refresh(mode, messagePriority)
@@ -1428,6 +1431,7 @@ class AppViewModel @Inject constructor(
                     refreshIncomingPaykitPaymentRequests(
                         PaykitPaymentRequestRefreshMode.STORED,
                         forceFresh = true,
+                        refreshPriority = Priority.Background,
                         onlyWhileActive = true,
                         reconcileProofs = true,
                     )

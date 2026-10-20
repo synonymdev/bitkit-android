@@ -751,6 +751,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isCreatingRequest).thenReturn(MutableStateFlow(false))
         whenever { paykitPaymentRequestRepo.refreshEligibleTargets(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentRequestRepo.refreshAfterStateChange(any()) }.thenReturn(Result.success(Unit))
+        whenever { paykitPaymentRequestRepo.refreshAfterStateChange(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentRequestRepo.isSubscriptionNotificationHandled(any(), any()) }.thenReturn(false)
         whenever { paykitPaymentRequestRepo.refresh(any(), any()) }.doSuspendableAnswer {
             paykitPaymentRequestRepo.refresh(it.getArgument(0))
@@ -10783,10 +10784,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             usdtStateVersion.value++
             runCurrent()
         }
-        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any(), any())
         paymentSubmissionActive.value = false
         runCurrent()
-        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(
+            PaykitPaymentRequestRefreshMode.STORED,
+            Priority.Background,
+        )
     }
 
     @Test
@@ -10800,18 +10804,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             proofStateVersion.value++
             runCurrent()
         }
-        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any(), any())
         verify(paykitPaymentProofRepo, never()).reconcile()
 
         paymentSubmissionActive.value = false
         runCurrent()
-        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(
+            PaykitPaymentRequestRefreshMode.STORED,
+            Priority.Background,
+        )
         verify(paykitPaymentProofRepo).reconcile()
         paymentSubmissionActive.value = true
         runCurrent()
         paymentSubmissionActive.value = false
         runCurrent()
-        verify(paykitPaymentRequestRepo, times(1)).refreshAfterStateChange(any())
+        verify(paykitPaymentRequestRepo, times(1)).refreshAfterStateChange(any(), any())
         verify(paykitPaymentProofRepo, times(1)).reconcile()
     }
 
@@ -10826,17 +10833,68 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             proofStateVersion.value++
             runCurrent()
         }
-        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any(), any())
 
         sut.startPaykitPaymentRequestPolling()
         runCurrent()
-        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(
+            PaykitPaymentRequestRefreshMode.STORED,
+            Priority.Background,
+        )
         sut.stopPaykitPaymentRequestPolling()
         runCurrent()
         sut.startPaykitPaymentRequestPolling()
         runCurrent()
-        verify(paykitPaymentRequestRepo, times(1)).refreshAfterStateChange(any())
+        verify(paykitPaymentRequestRepo, times(1)).refreshAfterStateChange(any(), any())
         sut.stopPaykitPaymentRequestPolling()
+    }
+
+    @Test
+    fun `proof display refresh defers after admitted reconciliation and recovers on home resume`() = test {
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        pubkyPublicKey.value = testPublicKey
+        enablePaykitUi()
+        runCurrent()
+        val reconciliation = CompletableDeferred<Unit>()
+        var reconciled = false
+        whenever(paykitPaymentProofRepo.reconcile()).doSuspendableAnswer {
+            reconciliation.await()
+            reconciled = true
+        }
+        whenever(
+            paykitPaymentRequestRepo.refreshAfterStateChange(
+                PaykitPaymentRequestRefreshMode.STORED,
+                Priority.Background,
+            ),
+        ).doSuspendableAnswer {
+            assertTrue(reconciled)
+            assertTrue(paymentSubmissionActive.value)
+            Result.failure(PaykitPaymentRequestError.OperationInProgress)
+        }
+        clearInvocations(paykitPaymentRequestRepo, paykitPaymentProofRepo)
+
+        proofStateVersion.value++
+        runCurrent()
+        verify(paykitPaymentProofRepo).reconcile()
+        assertFalse(reconciled)
+        paymentSubmissionActive.value = true
+        reconciliation.complete(Unit)
+        runCurrent()
+
+        assertTrue(reconciled)
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(
+            PaykitPaymentRequestRefreshMode.STORED,
+            Priority.Background,
+        )
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+        paymentSubmissionActive.value = false
+        runCurrent()
+        verify(paykitPaymentRequestRepo, times(1)).refreshAfterStateChange(any(), any())
+
+        sut.onHomeResumed()
+        runCurrent()
+        verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background)
+        verify(paykitPaymentProofRepo, times(2)).reconcile()
     }
 
     @Test
@@ -10888,7 +10946,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         confirmCurrentPayment()
 
         completionStarted.await()
-        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(
+            PaykitPaymentRequestRefreshMode.STORED,
+            Priority.Background,
+        )
         verify(paykitPaymentProofRepo).reconcile()
         verify(paykitPaymentRequestRepo, never()).refresh(PaykitPaymentRequestRefreshMode.FULL)
         finishCompletion.complete(Unit)
