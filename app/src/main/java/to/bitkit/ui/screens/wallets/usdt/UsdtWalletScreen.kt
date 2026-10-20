@@ -114,7 +114,6 @@ fun RowScope.UsdtWalletBalance(onClick: () -> Unit, viewModel: UsdtViewModel = h
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UsdtWalletScreen(

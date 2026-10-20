@@ -124,7 +124,6 @@ fun SavingsProgressScreen(
 }
 
 /** Legacy path: cooperatively close the selected channel(s), retrying on failure. */
-@Suppress("MagicNumber", "LongParameterList")
 private suspend fun runChannelClose(
     transfer: TransferViewModel,
     wallet: WalletViewModel,

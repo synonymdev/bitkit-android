@@ -64,7 +64,6 @@ class LogsRepo @Inject constructor(
     }
 
     /** Lists log files sorted by newest first */
-    @Suppress("NestedBlockDepth")
     suspend fun getLogs(): Result<List<LogFile>> = withContext(bgDispatcher) {
         runCatching {
             val logDir = Env.logDir

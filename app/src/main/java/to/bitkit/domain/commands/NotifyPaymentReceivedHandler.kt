@@ -26,7 +26,6 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
-@Suppress("LongParameterList")
 @Singleton
 class NotifyPaymentReceivedHandler @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,

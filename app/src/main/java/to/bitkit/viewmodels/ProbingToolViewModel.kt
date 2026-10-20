@@ -71,7 +71,6 @@ class ProbingToolViewModel @Inject constructor(
         updateInvoice(pastedInvoice)
     }
 
-    @Suppress("CyclomaticComplexMethod", "LongMethod", "ReturnCount")
     fun sendProbe() {
         val input = _uiState.value.invoice.trim()
         if (input.isEmpty()) {

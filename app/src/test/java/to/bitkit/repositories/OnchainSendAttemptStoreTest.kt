@@ -1,10 +1,12 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.serialization.json.Json
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -16,20 +18,22 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.WalletScope
-import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import java.io.FileOutputStream
-import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 
-@OptIn(kotlin.time.ExperimentalTime::class)
+private val lenientJson = Json { ignoreUnknownKeys = true }
+
+@OptIn(kotlin.time.ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class OnchainSendAttemptStoreTest : BaseUnitTest() {
     private val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
 
@@ -122,7 +126,10 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         }
         captureEntered.await()
         val receipt = OnchainPreparedReceipt(
-            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, attempt.amountSats,
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            attempt.address,
+            attempt.amountSats,
         )
         val retain = async { store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false) }
         runCurrent()
@@ -148,7 +155,10 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
             channelId = null, tags = emptyList(), beforeSendAttempt = {}, payerIdentity = "payer",
         )
         val receipt = OnchainPreparedReceipt(
-            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, attempt.amountSats,
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            attempt.address,
+            attempt.amountSats,
         )
         store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
         assertFailsWith<OnchainSendNotDispatchedError> {
@@ -165,10 +175,13 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
         assertEquals(false, reopened.releaseInterruptedShopPreparation { false })
         assertEquals(pending, reopened.current())
-        assertEquals(true, reopened.releaseInterruptedShopPreparation {
-            assertEquals(pending, it)
-            true
-        })
+        assertEquals(
+            true,
+            reopened.releaseInterruptedShopPreparation {
+                assertEquals(pending, it)
+                true
+            }
+        )
         assertNull(reopened.current())
     }
 
@@ -182,8 +195,12 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val service = mock<LightningService>()
         val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
         val original = store.admitForTest(walletId = WalletScope.default)
-        val receipt = OnchainPreparedReceipt("ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)),
-            original.address, original.amountSats)
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            original.address,
+            original.amountSats
+        )
         store.retainPreparedReceipt(original.attemptId, 0, receipt, false)
         assertEquals(receipt.txid, store.current()?.txid)
         val reopened = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
@@ -205,8 +222,12 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val service = mock<LightningService>()
         val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
         val original = store.admitForTest(walletId = WalletScope.default)
-        val receipt = OnchainPreparedReceipt("ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)),
-            original.address, original.amountSats)
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            original.address,
+            original.amountSats
+        )
         store.retainPreparedReceipt(original.attemptId, 0, receipt, false)
         failMarker = true
         var broadcasts = 0
@@ -233,7 +254,10 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val attempt = store.admitForTest()
         val receipt = OnchainPreparedReceipt(
-            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, attempt.amountSats,
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            attempt.address,
+            attempt.amountSats,
         )
         store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
         assertFailsWith<OnchainSendNotDispatchedError> {
@@ -256,7 +280,10 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val store = OnchainSendAttemptStore(testDispatcher, keychain, service, kotlin.time.Clock.System)
         val attempt = store.admitForTest()
         val receipt = OnchainPreparedReceipt(
-            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, attempt.amountSats,
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            attempt.address,
+            attempt.amountSats,
         )
         val retained = store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
         store.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) {
@@ -402,7 +429,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     @Test
     fun `unconfirmed original cannot win while a successor is retained`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
-        val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val backup = lenientJson
             .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
         val wire = requireNotNull(requireNotNull(backup.paykitPaymentState).activeOnchainAttempt)
         val original = wire.restored("regtest", wire.wallet.binding, "wallet0", 0)
@@ -429,7 +456,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     @Test
     fun `restored exact candidate with contact observes without resend and acknowledges`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
-        val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val backup = lenientJson
             .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
         val state = requireNotNull(backup.paykitPaymentState)
         val wire = requireNotNull(state.activeOnchainAttempt)
@@ -463,12 +490,15 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     fun `restoring same accepted operation preserves progressed fee and completion`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val wire = requireNotNull(
-            kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            lenientJson
                 .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
                 .paykitPaymentState?.activeOnchainAttempt,
         )
-        val accepted = wire.copy(status = "accepted", candidateFeeRates = mapOf(requireNotNull(wire.txid) to "4"),
-            followup = wire.followup?.copy(contact = null))
+        val accepted = wire.copy(
+            status = "accepted",
+            candidateFeeRates = mapOf(requireNotNull(wire.txid) to "4"),
+            followup = wire.followup?.copy(contact = null)
+        )
             .restored("regtest", wire.wallet.binding, "wallet0", 0)
         var saved: String? = null
         val keychain = mock<Keychain>()
@@ -494,11 +524,14 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     @Test
     fun `restored supported accepted context resets acknowledgement and finishes idempotently`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
-        val backup = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val backup = lenientJson
             .decodeFromString<to.bitkit.models.WalletBackupV1>(bytes.decodeToString())
         val wire = requireNotNull(backup.paykitPaymentState?.activeOnchainAttempt)
-        val accepted = wire.copy(status = "accepted", candidateFeeRates = mapOf(requireNotNull(wire.txid) to "4"),
-            followup = wire.followup?.copy(contact = null))
+        val accepted = wire.copy(
+            status = "accepted",
+            candidateFeeRates = mapOf(requireNotNull(wire.txid) to "4"),
+            followup = wire.followup?.copy(contact = null)
+        )
             .restored("regtest", wire.wallet.binding, "wallet0", 0)
         var saved: String? = null
         val keychain = mock<Keychain>()
@@ -570,7 +603,10 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
             channelId = null, tags = emptyList(), transferContext = context, beforeSendAttempt = {},
         )
         val receipt = OnchainPreparedReceipt(
-            "ab".repeat(32), listOf(OnchainSendInput("11".repeat(32), 0u)), attempt.address, 99_500uL,
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            attempt.address,
+            99_500uL,
             miningFeeSats = 500uL,
         )
         for (amount in listOf(98_999uL, 100_001uL)) {
@@ -673,7 +709,12 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         }
         assertEquals(txid, store.current()?.txid)
         assertEquals(OnchainSendEvidence.Accepted, store.current()?.evidence)
-        assertFailsWith<IllegalStateException> { store.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex) }
+        assertFailsWith<IllegalStateException> {
+            store.markLocalFollowupComplete(
+                attempt.attemptId,
+                attempt.walletIndex
+            )
+        }
         assertFailsWith<OnchainSendBlockedError> { store.admitForTest() }
         val reopened = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         assertEquals(OnchainSendEvidence.Pending, reopened.current()?.evidence)
@@ -691,7 +732,13 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val entered = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()
-        val first = async { store.admitForTest { callbacks++; entered.complete(Unit); finish.await() } }
+        val first = async {
+            store.admitForTest {
+                callbacks++
+                entered.complete(Unit)
+                finish.await()
+            }
+        }
         entered.await()
         val second = async { runCatching { store.admitForTest { callbacks++ } } }
         finish.complete(Unit)
@@ -712,7 +759,10 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         }
         val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
         val admitted = CompletableDeferred<OnchainSendAttempt>()
-        val send = launch { admitted.complete(store.admitForTest()); kotlinx.coroutines.awaitCancellation() }
+        val send = launch {
+            admitted.complete(store.admitForTest())
+            kotlinx.coroutines.awaitCancellation()
+        }
         val attempt = admitted.await()
         send.cancelAndJoin()
         failWrite = true

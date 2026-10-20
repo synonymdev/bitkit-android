@@ -107,7 +107,6 @@ data class PrivatePaykitAllowancePayment(
 )
 
 @OptIn(ExperimentalTime::class)
-@Suppress("LongParameterList")
 @Singleton
 class PublicPaykitRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,

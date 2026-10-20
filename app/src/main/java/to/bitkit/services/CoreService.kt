@@ -379,7 +379,6 @@ internal fun OnchainActivity.withConfirmation(
     timestamp = if (confirmTimestamp != null && confirmTimestamp < timestamp) confirmTimestamp else timestamp,
 )
 
-@Suppress("LargeClass", "TooManyFunctions")
 class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
     private val cacheStore: CacheStore,
@@ -574,7 +573,6 @@ class ActivityService(
     suspend fun hasOnchainActivityForTxid(txid: String): Boolean =
         getOnchainActivityByTxId(txid) != null
 
-    @Suppress("LongParameterList")
     suspend fun get(
         walletId: String? = defaultWalletId,
         filter: ActivityFilter? = null,
@@ -872,7 +870,6 @@ class ActivityService(
         }
     }
 
-    @Suppress("CyclomaticComplexMethod")
     private suspend fun processBolt11(
         kind: PaymentKind.Bolt11,
         payment: PaymentDetails,
@@ -1072,7 +1069,6 @@ class ActivityService(
         return null
     }
 
-    @Suppress("LongParameterList")
     private suspend fun searchReceivingAddressForType(
         details: BitkitCoreTransactionDetails,
         value: ULong,
@@ -1117,7 +1113,6 @@ class ActivityService(
         return null
     }
 
-    @Suppress("LongParameterList")
     private suspend fun fetchAddressSearchBatch(
         addressType: AddressType,
         isChange: Boolean,
@@ -1234,7 +1229,6 @@ class ActivityService(
         return ConfirmationData(isConfirmed, blockTimestamp, timestamp)
     }
 
-    @Suppress("LongParameterList")
     private fun buildUpdatedOnchainActivity(
         existingActivity: Activity.Onchain,
         confirmationData: ConfirmationData,
@@ -1280,7 +1274,6 @@ class ActivityService(
         return updatedOnChain
     }
 
-    @Suppress("LongParameterList")
     private fun buildNewOnchainActivity(
         payment: PaymentDetails,
         kind: PaymentKind.Onchain,
@@ -1316,7 +1309,6 @@ class ActivityService(
         )
     }
 
-    @Suppress("CyclomaticComplexMethod", "ComplexCondition", "LongMethod")
     private suspend fun processOnchainPayment(
         kind: PaymentKind.Onchain,
         payment: PaymentDetails,
@@ -1431,7 +1423,6 @@ class ActivityService(
 
     // MARK: - Test Data Generation (regtest only)
 
-    @Suppress("LongMethod")
     suspend fun generateRandomTestData(count: Int = 100) {
         if (Env.network != Network.REGTEST) {
             throw AppError(message = "Regtest only")
@@ -1518,7 +1509,6 @@ class ActivityService(
         }
     }
 
-    @Suppress("LongParameterList")
     suspend fun createSentOnchainActivityFromSendResult(
         txid: String,
         address: String,
@@ -1573,8 +1563,10 @@ class ActivityService(
     suspend fun restoreSentOnchainTags(txid: String, walletId: String): Boolean =
         ServiceQueue.CORE.background {
             val activity = requireNotNull(getActivityByTxId(walletId = walletId, txId = txid))
-            check(activity.walletId == walletId && activity.txId.equals(txid, true) &&
-                activity.txType == PaymentType.SENT)
+            check(
+                activity.walletId == walletId && activity.txId.equals(txid, true) &&
+                    activity.txType == PaymentType.SENT
+            )
             val metadata = com.synonym.bitkitcore.getAllPreActivityMetadata().filter {
                 it.walletId == walletId && !it.isReceive && it.paymentId.equals(txid, true) &&
                     it.txId?.equals(txid, true) == true && it.tags.isNotEmpty()
@@ -1596,8 +1588,10 @@ class ActivityService(
             if (existing.contact == null) {
                 upsertActivity(Activity.Onchain(existing.copy(contact = contact)))
             }
-            check(cacheStore.data.first().isContactDetached(existing.id, walletId) ||
-                requireNotNull(getOnchainActivityByTxId(txid, walletId)).contact != null)
+            check(
+                cacheStore.data.first().isContactDetached(existing.id, walletId) ||
+                    requireNotNull(getOnchainActivityByTxId(txid, walletId)).contact != null
+            )
         }
 
     /** Called only after exact original-node transaction/prevout verification, to repair an existing placeholder. */
@@ -2147,7 +2141,6 @@ class ActivityService(
 
 // region Blocktank
 
-@Suppress("TooManyFunctions")
 class BlocktankService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
     private val lightningService: LightningService,
@@ -2175,7 +2168,6 @@ class BlocktankService(
         return Result.success(fees)
     }
 
-    @Suppress("LongParameterList")
     suspend fun createCjit(
         channelSizeSat: ULong,
         invoiceSat: ULong,
@@ -2336,7 +2328,6 @@ class OnchainService {
         }
     }
 
-    @Suppress("LongParameterList")
     suspend fun deriveBitcoinAddresses(
         mnemonicPhrase: String,
         derivationPathStr: String?,
@@ -2377,7 +2368,6 @@ class OnchainService {
         }
     }
 
-    @Suppress("LongParameterList")
     suspend fun prepareLegacyRnNativeSegwitRecoverySweep(
         mnemonicPhrase: String,
         network: Network?,

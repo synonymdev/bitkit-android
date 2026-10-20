@@ -95,7 +95,6 @@ internal data class RNMigrationRetrySchedule(val attemptedAtMillis: Long, val de
     fun isDue(now: Long): Boolean = now < attemptedAtMillis || now - attemptedAtMillis >= delayMillis
 }
 
-@Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @Singleton
 class MigrationService internal constructor(
     @ApplicationContext private val context: Context,
@@ -956,7 +955,6 @@ class MigrationService internal constructor(
         }.getOrNull()
     }
 
-    @Suppress("NestedBlockDepth")
     private fun extractRNClosedChannels(mmkvData: Map<String, String>): List<RNChannel>? {
         val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
@@ -987,7 +985,6 @@ class MigrationService internal constructor(
         }.getOrNull()
     }
 
-    @Suppress("CyclomaticComplexMethod")
     private suspend fun applyRNSettings(settings: RNSettings) {
         settingsStore.update { current ->
             current.copy(
@@ -1205,7 +1202,6 @@ class MigrationService internal constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun applyRNWidgetPreferences(widgetOptions: Map<String, ByteArray>) {
         widgetOptions["price"]?.let { priceData ->
             runCatching {
@@ -1761,7 +1757,6 @@ class MigrationService internal constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     suspend fun reapplyMetadataAfterSync() {
         loadPersistedMigrationData()
 
@@ -1965,7 +1960,6 @@ class MigrationService internal constructor(
         }
     }
 
-    @Suppress("CyclomaticComplexMethod", "LongMethod")
     private suspend fun updateOnchainActivityMetadata(
         item: RNActivityItem,
         onchain: OnchainActivity,
@@ -2044,7 +2038,6 @@ class MigrationService internal constructor(
         return if (wasUpdated) updated else null
     }
 
-    @Suppress("CyclomaticComplexMethod", "NestedBlockDepth", "LongMethod")
     private suspend fun applyOnchainMetadata(items: List<RNActivityItem>) {
         val onchainItems = items.filter { it.activityType == "onchain" }
         var updatedCount = 0
@@ -2122,7 +2115,6 @@ class MigrationService internal constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     private fun convertRNWidgetPreferences(
         widgetsDict: JsonObject?,
     ): Map<String, ByteArray> {

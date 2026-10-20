@@ -73,7 +73,6 @@ import kotlin.time.Instant as KotlinInstant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @Singleton
-@Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 class PrivatePaykitRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val paykitSdkService: PaykitSdkService,
@@ -653,7 +652,6 @@ class PrivatePaykitRepo @Inject constructor(
         )
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun consumePrivatePaymentList(
         publicKey: String,
         context: PrivatePaykitPaymentContext,

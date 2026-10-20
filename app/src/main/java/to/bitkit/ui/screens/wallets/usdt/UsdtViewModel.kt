@@ -38,7 +38,6 @@ import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.SanityWarning
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class UsdtViewModel @Inject constructor(
     private val repo: UsdtRepo,
@@ -306,7 +305,6 @@ private fun UsdtQuote.warnings(balance: ULong?, warnOver100: Boolean): List<Sani
 }
 
 @StringRes
-@Suppress("CyclomaticComplexMethod")
 internal fun Throwable.messageResource(): Int = when (this) {
     is PaykitPaymentRequestError.RequestExpired -> R.string.wallet__payment_request_expired
     is PaykitPaymentRequestError -> R.string.wallet__payment_request_unavailable

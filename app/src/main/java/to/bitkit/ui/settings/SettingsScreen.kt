@@ -73,8 +73,8 @@ private enum class SettingsTab(@StringRes private val titleRes: Int) : TabItem {
     override val uiText @Composable get() = stringResource(titleRes)
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
+@Suppress("CyclomaticComplexMethod")
 fun SettingsScreen(
     navController: NavController,
     advancedViewModel: AdvancedSettingsViewModel = hiltViewModel(),

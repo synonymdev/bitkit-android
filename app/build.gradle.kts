@@ -302,16 +302,33 @@ android {
         }
     }
     lint {
-        abortOnError = false
+        abortOnError = true
+        warningsAsErrors = true
+        baseline = file("lint-baseline.xml")
+        disable += setOf(
+            // Crashes on ScreenDeepLinkRuntime.kt.
+            "EmptyNavDeepLink",
+            // Version bumps are handled by dependency updates, translations by the localization flow.
+            "GradleDependency",
+            "NewerVersionAvailable",
+            "AndroidGradlePluginVersion",
+            "MissingTranslation",
+            // Copy style is set by the designs.
+            "TypographyEllipsis",
+            "TypographyDashes",
+        )
     }
 }
 
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_11
+        allWarningsAsErrors = true
         freeCompilerArgs.addAll(
             listOf(
-                "-XXLanguage:+PropertyParamAnnotationDefaultTargetMode",
+                "-Xannotation-default-target=param-property",
+                // Library deprecations stay visible without breaking the build.
+                "-Xwarning-level=DEPRECATION:warning",
             )
         )
     }
@@ -535,6 +552,7 @@ dependencies {
     implementation(libs.camera.view)
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
+    testImplementation(libs.bouncycastle.pkix.jdk) // test certificates
     implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
     val localBitkitCoreAar = providers.gradleProperty("bitkitCoreAar").orNull
     if (localBitkitCoreAar != null) {
@@ -623,6 +641,7 @@ dependencies {
     androidTestImplementation(libs.test.espresso.core)
     androidTestImplementation(libs.test.junit.ext)
     testImplementation(libs.test.kotlin)
+    testImplementation(libs.test.kotlin.reflect)
     testImplementation(libs.test.core)
     testImplementation(libs.test.coroutines)
     testImplementation(libs.test.junit)
@@ -641,7 +660,6 @@ room {
 // region Tasks
 
 tasks.withType<Detekt>().configureEach {
-    ignoreFailures = true
     reports {
         html.required.set(true)
         sarif.required.set(true)

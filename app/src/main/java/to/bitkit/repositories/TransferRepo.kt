@@ -47,7 +47,6 @@ import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
 @Singleton
-@Suppress("LongParameterList")
 class TransferRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
@@ -159,7 +158,6 @@ class TransferRepo @Inject constructor(
         BlockTimeHelpers.getDurationForBlocks(remaining)
     }
 
-    @Suppress("LongParameterList")
     suspend fun createTransfer(
         type: TransferType,
         amountSats: Long,
@@ -208,7 +206,6 @@ class TransferRepo @Inject constructor(
         }
     }
 
-    @Suppress("LongParameterList")
     suspend fun createPendingToSpendingActivity(
         order: IBtOrder,
         txId: String,

@@ -135,7 +135,6 @@ fun SpendingConfirmScreen(
     }
 }
 
-@Suppress("MagicNumber", "LongMethod")
 @Composable
 private fun Content(
     onBackClick: () -> Unit,

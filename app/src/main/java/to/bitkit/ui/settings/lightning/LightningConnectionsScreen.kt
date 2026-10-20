@@ -107,7 +107,6 @@ fun LightningConnectionsScreen(
     )
 }
 
-@Suppress("CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Content(

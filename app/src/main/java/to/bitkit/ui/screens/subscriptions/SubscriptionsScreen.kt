@@ -1,5 +1,4 @@
 @file:OptIn(ExperimentalTime::class)
-@file:Suppress("TooManyFunctions")
 
 package to.bitkit.ui.screens.subscriptions
 

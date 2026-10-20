@@ -54,7 +54,6 @@ import to.bitkit.ui.utils.handlePinKeyPress
 import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.viewmodels.AppViewModel
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ChangePinSheet(app: AppViewModel) {
     val navController = rememberNavController()

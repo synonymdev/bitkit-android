@@ -180,7 +180,6 @@ internal class LoggerImpl(
         saver.save(message)
     }
 
-    @Suppress("LongParameterList")
     fun verbose(
         msg: String?,
         e: Throwable? = null,
@@ -339,7 +338,6 @@ internal fun getWritableLogFile(
     return file
 }
 
-@Suppress("LongParameterList")
 internal fun enforceLogRetentionLimits(
     logDir: File,
     maxTotalSizeBytes: Long = MAX_LOG_RETENTION_BYTES,
