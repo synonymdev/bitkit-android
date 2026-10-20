@@ -270,9 +270,12 @@ fun SendSheet(
                         is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
                         is SendEffect.NavigateToUsdtReview -> navController.navigateTo(SendRoute.UsdtReview)
                         is SendEffect.ShowPaykitConfirmation -> {
-                            if (!navController.popBackStack(it.route, inclusive = false)) {
-                                navController.navigateTo(it.route)
+                            // Replace the other asset's confirmation, so Back never returns to its stale terms.
+                            val replaced = when (it.route) {
+                                SendRoute.Confirm -> SendRoute.UsdtReview
+                                else -> SendRoute.Confirm
                             }
+                            navController.navigateTo(it.route) { popUpTo(replaced) { inclusive = true } }
                         }
                         is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)

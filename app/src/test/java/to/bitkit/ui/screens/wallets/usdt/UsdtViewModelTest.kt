@@ -37,6 +37,7 @@ import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -401,6 +402,24 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertNull(viewModel.state.value.quote)
         assertEquals(R.string.usdt__error_expired, viewModel.state.value.error)
         verify(repo, times(2)).quote(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `declining a warning keeps the reviewed quote and warns again on the next swipe`() = test {
+        val viewModel = createViewModel(walletState = UsdtWalletState(balance = 1u))
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        val warning = assertNotNull(viewModel.state.value.warning)
+
+        viewModel.dismissWarning()
+
+        assertEquals(quote, viewModel.state.value.quote)
+        assertNull(viewModel.state.value.warning)
+        viewModel.confirm().join()
+        assertEquals(warning, viewModel.state.value.warning)
+        verify(repo, times(1)).quote(any(), any(), any(), any())
+        verify(repo, never()).send(any(), anyOrNull(), any())
     }
 
     @Test

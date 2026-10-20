@@ -88,7 +88,7 @@ fun PaykitUsdtReview(
             confirmText = stringResource(R.string.wallet__send_yes),
             dismissText = stringResource(R.string.common__cancel),
             onConfirm = viewModel::acceptWarning,
-            onDismiss = viewModel::edit
+            onDismiss = viewModel::dismissWarning
         )
     }
     val transfer = wallet.transfers.firstOrNull { it.id == state.quote?.id }

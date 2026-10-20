@@ -246,6 +246,9 @@ class UsdtViewModel @Inject constructor(
     fun cancelAuthentication() = _state.update { it.copy(authenticationRequired = false) }
     fun edit() = _state.update { UsdtSendState(refreshError = it.refreshError) }
 
+    /** Keeps the reviewed quote when a warning is declined; the warning shows again on the next swipe. */
+    fun dismissWarning() = _state.update { it.copy(warning = null) }
+
     // One automatic requote per expired submission; a later expiry waits for the user's own retry.
     private var requotedExpiredSubmission = false
 
