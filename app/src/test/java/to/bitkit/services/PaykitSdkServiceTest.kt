@@ -126,6 +126,7 @@ class PaykitSdkServiceTest {
             { linkedPeers(it) },
             { privateMessageSchedulingSnapshot(it) },
             { hasPrivatePaymentAccess(it) },
+            { allPaymentRequests(null, it) },
         )
         for ((index, operation) in operations.withIndex()) {
             for (queued in if (index >= 2) listOf(true) else listOf(true, false)) {
@@ -176,6 +177,10 @@ class PaykitSdkServiceTest {
                 whenever(sdk.privateMessageSchedulingSnapshot()).thenAnswer {
                     nativeCalls++
                     PrivateMessageSchedulingSnapshot(emptyList(), emptyList())
+                }
+                whenever(sdk.listPaymentRequests(any())).thenAnswer {
+                    nativeCalls++
+                    emptyList<PaymentRequestRecord>()
                 }
                 val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
                 val holder = if (queued) async { service.contactRecords() } else null
@@ -276,6 +281,7 @@ class PaykitSdkServiceTest {
             { linkedPeers(Priority.Background) },
             { privateMessageSchedulingSnapshot(Priority.Background) },
             { hasPrivatePaymentAccess(Priority.Background) },
+            { allPaymentRequests(null, Priority.Background) },
         )
         for (operation in operations) {
             assertSame(
@@ -1940,6 +1946,35 @@ class PaykitSdkServiceTest {
 
         assertEquals(listOf(server, bitkit), service.allPaymentRequests(RING_PUBKY))
         assertEquals(listOf(bitkit), service.paymentRequests())
+    }
+
+    @Test
+    fun `passive request reload defers after identity check without listing and releases its lock`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val checkingIdentity = CompletableDeferred<Unit>()
+        val releaseIdentity = CompletableDeferred<Unit>()
+        whenever(sdk.identityStatus()).doSuspendableAnswer {
+            checkingIdentity.complete(Unit)
+            releaseIdentity.await()
+            IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+        val records = listOf(mock<PaymentRequestRecord>())
+        whenever(sdk.listPaymentRequests(any())).thenReturn(records)
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val refresh = async {
+            runSuspendCatching { service.allPaymentRequests(RING_PUBKY, Priority.Background) }
+        }
+        checkingIdentity.await()
+        service.setPaymentSubmissionActive(true)
+        releaseIdentity.complete(Unit)
+
+        assertSame(PaykitPaymentRequestError.OperationInProgress, refresh.await().exceptionOrNull())
+        verify(sdk, never()).listPaymentRequests(any())
+        assertEquals(0L, service.backupStateVersion.value)
+        assertEquals(records, service.allPaymentRequests(RING_PUBKY))
+        service.setPaymentSubmissionActive(false)
+        assertEquals(records, service.allPaymentRequests(RING_PUBKY, Priority.Background))
+        verify(sdk, times(2)).listPaymentRequests(any())
     }
 
     @Test

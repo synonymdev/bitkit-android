@@ -1078,13 +1078,16 @@ class PaykitSdkService @Inject constructor(
     ): List<PaymentRequestRecord> {
         isSetup.await()
         return measuredOperation("allPaymentRequests", priority) {
+            checkRefreshAdmission(priority)
             withPaykitKey { handle ->
+                checkRefreshAdmission(priority)
                 if (expectedIdentity != null) {
                     val identity = completeSdkCall { handle.identityStatus() }?.publicKey
                     check(PubkyPublicKeyFormat.matches(identity, expectedIdentity)) {
                         "Payment Request identity changed"
                     }
                 }
+                checkRefreshAdmission(priority)
                 completeSdkCall {
                     handle.listPaymentRequests(
                         PaymentRequestFilter(
