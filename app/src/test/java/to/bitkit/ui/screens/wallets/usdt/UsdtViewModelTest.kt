@@ -386,6 +386,24 @@ class UsdtViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `expired replacement quote is not requoted again until the next swipe`() = test {
+        val viewModel = createViewModel()
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.QuoteExpired()))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.failure(UsdtException.QuoteExpired()))
+
+        viewModel.requote(quote.recipient, "1", quote.destination).join()
+        viewModel.requote(quote.recipient, "1", quote.destination).join()
+
+        assertNull(viewModel.state.value.quote)
+        assertEquals(R.string.usdt__error_expired, viewModel.state.value.error)
+        verify(repo, times(2)).quote(any(), any(), any(), any())
+    }
+
+    @Test
     fun `requote leaves other errors for the user to review`() = test {
         val viewModel = createViewModel()
         settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
