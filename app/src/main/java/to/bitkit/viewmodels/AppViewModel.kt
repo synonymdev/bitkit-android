@@ -233,6 +233,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AllowanceRoute
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
+import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.pushNotification
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
@@ -408,6 +409,8 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
+    private val _transactionSheet = MutableStateFlow(NewTransactionSheetDetails.EMPTY)
+    val transactionSheet = _transactionSheet.asStateFlow()
     val pendingPaymentRequests = paykitPaymentRequestRepo.pendingRequests
     val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
@@ -421,6 +424,7 @@ class AppViewModel @Inject constructor(
     val subscriptions = paykitPaymentRequestRepo.subscriptions
     val pubkyContacts = pubkyRepo.contacts
     private var sheetTransitionJob: Job? = null
+    private var isUsdtIntroPresented = false
     private var transitionSheet: Sheet? = null
     private var paymentRequestSheetTransitionJob: Job? = null
     private var queuedPairingCodeRequestId: Long? = null
@@ -692,6 +696,23 @@ class AppViewModel @Inject constructor(
                     }
                     if (shouldFlush) flushDeferredScan()
                 }
+            }
+        }
+        viewModelScope.launch {
+            isAuthenticated.collect { authenticated ->
+                if (authenticated) timedSheetManager.reevaluate()
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                currentSheet,
+                isAuthenticated,
+                showForgotPinSheet,
+                transactionSheet,
+            ) { sheet, authenticated, forgotPin, receipt ->
+                sheet == null && authenticated && !forgotPin && receipt == NewTransactionSheetDetails.EMPTY
+            }.collect {
+                if (it) retryUsdtIntro()
             }
         }
         viewModelScope.launch {
@@ -1478,6 +1499,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun onSheetVisible(sheet: Sheet?) {
+        if (sheet is Sheet.TimedSheet && sheet.type == TimedSheetType.USDT) {
+            if (sheet === currentSheet.value && _isAuthenticated.value) {
+                viewModelScope.launch { settingsStore.update { it.copy(hasSeenUsdtIntro = true) } }
+            }
+            return
+        }
         if (sheet is Sheet.Subscription && sheet.route is SubscriptionRoute.Review) {
             subscription(sheet.route.id)?.let { subscription ->
                 viewModelScope.launch {
@@ -3248,7 +3275,10 @@ class AppViewModel @Inject constructor(
         nextJob.invokeOnCompletion {
             if (scheduledScan === nextScheduledScan) scheduledScan = null
             if (nextJob.isCancelled) return@invokeOnCompletion clearCancelledContactContext(contactPaymentContext)
-            viewModelScope.launch { flushDeferredScan() }
+            viewModelScope.launch {
+                flushDeferredScan()
+                retryUsdtIntro()
+            }
         }
 
         Logger.debug("Starting scan from '${source.label}': '$scanId'", context = TAG)
@@ -6752,9 +6782,6 @@ class AppViewModel @Inject constructor(
     // region TxSheet
     private var _isTransactionSheetEnabled = true
 
-    private val _transactionSheet = MutableStateFlow(NewTransactionSheetDetails.EMPTY)
-    val transactionSheet = _transactionSheet.asStateFlow()
-
     private val _successSendUiState = MutableStateFlow(
         NewTransactionSheetDetails(
             type = NewTransactionSheetType.LIGHTNING,
@@ -6900,7 +6927,9 @@ class AppViewModel @Inject constructor(
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
             if (_currentSheet.value != null && !replacesSubscriptionReview(sheetType)) {
+                val replacesTimedSheet = _currentSheet.value is Sheet.TimedSheet
                 _currentSheet.update { null }
+                if (replacesTimedSheet) dismissTimedSheet()
                 delay(SCREEN_TRANSITION_DELAY)
             }
             receiveSheetContext = (sheetType as? Sheet.Receive)?.let { receiveSheet ->
@@ -8018,12 +8047,24 @@ class AppViewModel @Inject constructor(
         acc.replace(regex, "")
     }
 
+    private fun tryShowTimedSheet(type: TimedSheetType): Boolean {
+        if (!canShowTimedSheet()) return false
+        _currentSheet.update { Sheet.TimedSheet(type) }
+        if (type == TimedSheetType.USDT) isUsdtIntroPresented = true
+        return true
+    }
+
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered(
         canShowSheet = ::canShowTimedSheet,
-        showSheet = { showSheet(Sheet.TimedSheet(it)) },
+        showSheet = { tryShowTimedSheet(it) },
     )
 
-    private fun canShowTimedSheet() = _currentSheet.value == null &&
+    private suspend fun retryUsdtIntro() {
+        if (!isUsdtIntroPresented && usdtSheet.shouldShow()) timedSheetManager.reevaluate()
+    }
+
+    private fun canShowTimedSheet() = _isAuthenticated.value && !_showForgotPinSheet.value &&
+        _currentSheet.value == null &&
         sheetTransitionJob?.isActive != true &&
         paymentRequestSheetTransitionJob?.isActive != true &&
         _transactionSheet.value == NewTransactionSheetDetails.EMPTY &&
