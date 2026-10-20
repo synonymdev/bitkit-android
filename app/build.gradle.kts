@@ -550,6 +550,7 @@ dependencies {
     implementation(libs.camera.view)
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
+    testImplementation(libs.bouncycastle.pkix.jdk) // test certificates
     implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
     val localBitkitCoreAar = providers.gradleProperty("bitkitCoreAar").orNull
     if (localBitkitCoreAar != null) {
