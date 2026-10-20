@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -101,6 +100,9 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
 import java.text.DecimalFormatSymbols
 import kotlin.time.Duration.Companion.seconds
+
+/** Share of the amount step's height the keypad sizes its keys from, so keys shrink before the amount gets squeezed. */
+internal const val USDT_KEYPAD_HEIGHT_RATIO = 0.4f
 
 @Composable
 @Suppress("CyclomaticComplexMethod")
@@ -441,10 +443,10 @@ private fun UsdtAmountContent(
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val maxHeight = this.maxHeight
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.weight(1f).fillMaxWidth()) {
-                UsdtAmountHeader(amount.ifEmpty { "0" }, modifier = Modifier.testTag("UsdtAmount"))
-            }
+        Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight)) {
+            FillHeight()
+            UsdtAmountHeader(amount.ifEmpty { "0" }, modifier = Modifier.testTag("UsdtAmount"))
+            FillHeight()
             state.error?.let {
                 BodyS(
                     state.errorMessage(it),
@@ -514,7 +516,7 @@ private fun UsdtAmountContent(
             NumberPad(
                 type = NumberPadType.DECIMAL,
                 decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
-                availableHeight = maxHeight,
+                availableHeight = maxHeight * USDT_KEYPAD_HEIGHT_RATIO,
                 enabled = !state.busy && amountEditable,
                 onDeleteLongPress = { onAmountChange("") },
                 onPress = { key ->

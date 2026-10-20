@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -82,6 +85,7 @@ import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceContent
 import to.bitkit.ui.components.usdtOverviewAmount
+import to.bitkit.ui.screens.wallets.usdt.USDT_KEYPAD_HEIGHT_RATIO
 import to.bitkit.ui.screens.wallets.usdt.UsdtNetworkButton
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
@@ -301,17 +305,25 @@ private fun SendAmountNodeRunning(
         }
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .then(
+                    if (uiState.paykitUsesUsdt) {
+                        Modifier.verticalScroll(rememberScrollState()).heightIn(min = maxHeight)
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
             VerticalSpacer(16.dp)
 
             if (uiState.paykitUsesUsdt) {
-                Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    UsdtAmountHeader(
-                        amount = uiState.paykitAmount.ifEmpty { "0" },
-                        modifier = Modifier.testTag("SendNumberField")
-                    )
-                }
+                FillHeight()
+                UsdtAmountHeader(
+                    amount = uiState.paykitAmount.ifEmpty { "0" },
+                    modifier = Modifier.testTag("SendNumberField")
+                )
+                FillHeight()
             } else {
                 NumberPadTextField(
                     viewModel = amountInputViewModel,
@@ -419,7 +431,7 @@ private fun SendAmountNodeRunning(
                 NumberPad(
                     type = NumberPadType.DECIMAL,
                     decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
-                    availableHeight = maxHeight,
+                    availableHeight = maxHeight * USDT_KEYPAD_HEIGHT_RATIO,
                     enabled = uiState.isAmountEditable,
                     onPress = {
                         app?.onUsdtAmountChange(
