@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -91,6 +92,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.send.HourglassAnimation
 import to.bitkit.ui.shared.UiConstants
+import to.bitkit.ui.shared.modifiers.bleedHorizontal
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.sheets.NewTransactionSheetView
 import to.bitkit.ui.theme.AppTextStyles
@@ -437,76 +439,78 @@ private fun UsdtAmountContent(
     onNetworkClick: (() -> Unit)?,
     destinations: ImmutableList<UsdtDestination>,
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        UsdtAmountHeader(amount.ifEmpty { "0" }, modifier = Modifier.testTag("UsdtAmount"))
-        VerticalSpacer(32.dp)
-        state.error?.let {
-            BodyS(
-                state.errorMessage(it),
-                color = Colors.Brand,
-                modifier = Modifier.testTag("UsdtError")
-            )
-            VerticalSpacer(16.dp)
-        }
-        FlowRow(
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(modifier = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically)) {
-                Caption13Up(
-                    stringResource(R.string.wallet__send_available),
-                    color = Colors.White64,
-                    style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
-                )
-                VerticalSpacer(4.dp)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (!hideBalance && wallet.balance != null) BodySSB("$", color = Colors.White64)
-                    BodySSB(
-                        text = if (hideBalance) {
-                            UiConstants.HIDE_BALANCE_SHORT
-                        } else {
-                            wallet.balance?.let { usdtOverviewAmount(it) } ?: "—"
-                        },
-                        style = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
-                    )
-                }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val maxHeight = this.maxHeight
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.weight(1f).fillMaxWidth()) {
+                UsdtAmountHeader(amount.ifEmpty { "0" }, modifier = Modifier.testTag("UsdtAmount"))
             }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.align(Alignment.CenterVertically),
+            state.error?.let {
+                BodyS(
+                    state.errorMessage(it),
+                    color = Colors.Brand,
+                    modifier = Modifier.testTag("UsdtError")
+                )
+                VerticalSpacer(16.dp)
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                NumberPadActionButton(
-                    text = "USDT",
-                    color = Colors.Usdt,
-                    enabled = false,
-                    textStyle = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
-                    onClick = {},
-                )
-                if (onMaximum != null && amountEditable) {
-                    NumberPadActionButton(
-                        text = stringResource(R.string.common__max),
-                        color = Colors.Usdt,
-                        onClick = onMaximum,
-                        enabled = !state.busy,
-                        isLoading = state.preparingMaximum,
-                        textStyle = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
-                        modifier = Modifier.testTag("UsdtMax")
+                Column(modifier = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically)) {
+                    Caption13Up(
+                        stringResource(R.string.wallet__send_available),
+                        color = Colors.White64,
+                        style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
                     )
+                    VerticalSpacer(4.dp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (!hideBalance && wallet.balance != null) BodySSB("$", color = Colors.White64)
+                        BodySSB(
+                            text = if (hideBalance) {
+                                UiConstants.HIDE_BALANCE_SHORT
+                            } else {
+                                wallet.balance?.let { usdtOverviewAmount(it) } ?: "—"
+                            },
+                            style = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
+                        )
+                    }
                 }
-                if (onNetworkClick != null) {
-                    UsdtNetworkButton(
-                        destination,
-                        onNetworkClick.takeUnless { state.busy },
-                        destinations,
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                ) {
+                    NumberPadActionButton(
+                        text = "USDT",
+                        color = Colors.Usdt,
+                        enabled = false,
+                        textStyle = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                        onClick = {},
                     )
+                    if (onMaximum != null && amountEditable) {
+                        NumberPadActionButton(
+                            text = stringResource(R.string.common__max),
+                            color = Colors.Usdt,
+                            onClick = onMaximum,
+                            enabled = !state.busy,
+                            isLoading = state.preparingMaximum,
+                            textStyle = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                            modifier = Modifier.testTag("UsdtMax")
+                        )
+                    }
+                    if (onNetworkClick != null) {
+                        UsdtNetworkButton(
+                            destination,
+                            onNetworkClick.takeUnless { state.busy },
+                            destinations,
+                        )
+                    }
                 }
             }
-        }
-        VerticalSpacer(16.dp)
-        HorizontalDivider(color = Colors.White10)
-        BoxWithConstraints(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            VerticalSpacer(16.dp)
+            HorizontalDivider(color = Colors.White10)
             NumberPad(
                 type = NumberPadType.DECIMAL,
                 decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
@@ -516,17 +520,18 @@ private fun UsdtAmountContent(
                 onPress = { key ->
                     onAmountChange(NumberPadInputHandler.handleInput(key, amount, maxLength = 21, maxDecimals = 6))
                 },
+                modifier = Modifier.bleedHorizontal(16.dp).fillMaxWidth()
+            )
+            VerticalSpacer(16.dp)
+            PrimaryButton(
+                text = stringResource(R.string.common__continue),
+                onClick = onReview,
+                enabled = amount.isNotEmpty() && !state.busy,
+                isLoading = state.busy && !state.preparingMaximum,
+                textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
+                modifier = Modifier.testTag("UsdtReview")
             )
         }
-        VerticalSpacer(16.dp)
-        PrimaryButton(
-            text = stringResource(R.string.common__continue),
-            onClick = onReview,
-            enabled = amount.isNotEmpty() && !state.busy,
-            isLoading = state.busy && !state.preparingMaximum,
-            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
-            modifier = Modifier.testTag("UsdtReview")
-        )
     }
 }
 

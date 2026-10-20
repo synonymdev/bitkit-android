@@ -85,6 +85,7 @@ import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.screens.wallets.usdt.UsdtNetworkButton
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
+import to.bitkit.ui.shared.modifiers.bleedHorizontal
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -305,10 +306,12 @@ private fun SendAmountNodeRunning(
             VerticalSpacer(16.dp)
 
             if (uiState.paykitUsesUsdt) {
-                UsdtAmountHeader(
-                    amount = uiState.paykitAmount.ifEmpty { "0" },
-                    modifier = Modifier.testTag("SendNumberField")
-                )
+                Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    UsdtAmountHeader(
+                        amount = uiState.paykitAmount.ifEmpty { "0" },
+                        modifier = Modifier.testTag("SendNumberField")
+                    )
+                }
             } else {
                 NumberPadTextField(
                     viewModel = amountInputViewModel,
@@ -318,7 +321,7 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            if (uiState.paykitUsesUsdt) VerticalSpacer(32.dp) else FillHeight(min = 12.dp)
+            if (!uiState.paykitUsesUsdt) FillHeight(min = 12.dp)
             if (uiState.paykitRateUnavailable) {
                 BodyS(
                     stringResource(R.string.wallet__payment_request_rate_unavailable),
@@ -413,28 +416,24 @@ private fun SendAmountNodeRunning(
             HorizontalDivider(modifier = Modifier.padding(top = if (uiState.paykitUsesUsdt) 16.dp else 12.dp))
 
             if (uiState.paykitUsesUsdt) {
-                BoxWithConstraints(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.weight(1f).fillMaxWidth()
-                ) {
-                    NumberPad(
-                        type = NumberPadType.DECIMAL,
-                        decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
-                        availableHeight = this.maxHeight,
-                        enabled = uiState.isAmountEditable,
-                        onPress = {
-                            app?.onUsdtAmountChange(
-                                NumberPadInputHandler.handleInput(
-                                    it,
-                                    uiState.paykitAmount,
-                                    maxLength = 21,
-                                    maxDecimals = 6
-                                )
+                NumberPad(
+                    type = NumberPadType.DECIMAL,
+                    decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
+                    availableHeight = maxHeight,
+                    enabled = uiState.isAmountEditable,
+                    onPress = {
+                        app?.onUsdtAmountChange(
+                            NumberPadInputHandler.handleInput(
+                                it,
+                                uiState.paykitAmount,
+                                maxLength = 21,
+                                maxDecimals = 6
                             )
-                        },
-                        onDeleteLongPress = { app?.onUsdtAmountChange("") }
-                    )
-                }
+                        )
+                    },
+                    onDeleteLongPress = { app?.onUsdtAmountChange("") },
+                    modifier = Modifier.bleedHorizontal(16.dp).fillMaxWidth()
+                )
             } else {
                 NumberPad(
                     enabled = uiState.isAmountEditable,
