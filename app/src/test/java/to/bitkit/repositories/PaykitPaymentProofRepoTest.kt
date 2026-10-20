@@ -15,6 +15,7 @@ import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
+import com.synonym.paykit.PaymentRequestRead
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
@@ -69,6 +70,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitRequestPricing
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitSdkOperationLock
@@ -137,6 +139,22 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
         whenever(paykitSdkService.paymentRequests()).thenReturn(emptyList())
+        doSuspendableAnswer { invocation ->
+            val counterparty = invocation.getArgument<String>(0)
+            val expectedIdentity = invocation.getArgument<String?>(1)
+            val status = paykitSdkService.identityStatus()
+            val records = if (
+                status?.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE &&
+                (expectedIdentity == null || PubkyPublicKeyFormat.matches(status.publicKey, expectedIdentity))
+            ) {
+                paykitSdkService.paymentRequests().filter {
+                    PubkyPublicKeyFormat.matches(it.counterparty, counterparty)
+                }
+            } else {
+                emptyList()
+            }
+            PaymentRequestRead(status, records)
+        }.whenever(paykitSdkService).readPaymentRequests(any(), org.mockito.kotlin.anyOrNull())
         whenever(store.load()).thenAnswer {
             if (shouldFailNextLoad) {
                 shouldFailNextLoad = false

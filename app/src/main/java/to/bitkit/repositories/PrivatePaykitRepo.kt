@@ -1645,26 +1645,21 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun readPrivateMessageDrainState(priority: suspend () -> Priority): PrivateMessageDrainState? {
         val generation = preparationGeneration
-        val linkedPeers = runSuspendCatching { paykitSdkService.linkedPeers(priority()) }
+        val snapshot = runSuspendCatching { paykitSdkService.privateMessageSchedulingSnapshot(priority()) }
             .getOrElse {
-                Logger.warn("Failed to inspect private Paykit link state", it, context = TAG)
+                Logger.warn("Failed to inspect private Paykit scheduling state", it, context = TAG)
                 return null
             }
+        priority()
+        if (generation != preparationGeneration) return null
+        val linkedPeers = snapshot.linkedPeers
             .mapNotNull { peer ->
                 normalizedPublicKey(peer.counterparty)?.let { publicKey ->
                     publicKey to peer.state
                 }
             }
             .toMap()
-        val pendingPriority = priority()
-        if (generation != preparationGeneration) return null
-        val pendingOutbound = runSuspendCatching {
-            paykitSdkService.pendingOutboundPrivateCounterparties(pendingPriority)
-        }
-            .getOrElse {
-                Logger.warn("Failed to inspect pending private Paykit messages", it, context = TAG)
-                return null
-            }
+        val pendingOutbound = snapshot.pendingOutboundCounterparties
             .mapNotNull(::normalizedPublicKey)
             .toSet()
 

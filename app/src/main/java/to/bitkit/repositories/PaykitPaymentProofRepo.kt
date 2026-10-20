@@ -192,12 +192,28 @@ class PaykitPaymentProofRepo @Inject constructor(
             val onchainAttempt = lightningRepo.currentOnchainSendAttempt()
             if (onchainAttempt?.requestId == request.id) throw PaykitPaymentRequestError.OperationInProgress
             operationMutex.withLock {
-                val proof = pendingProof(
-                    request,
-                    paymentEndpointIdentifier,
-                    paymentAppId,
-                    kind
-                ).copy(conversionQuoteId = paymentTerms?.quoteId)
+                if (
+                    paymentAppId.isBlank() ||
+                    paymentEndpointIdentifier !in request.acceptedPaymentEndpointIdentifiers ||
+                    !endpointSupports(paymentEndpointIdentifier, kind)
+                ) {
+                    throw PaykitPaymentRequestError.RequestUnavailable
+                }
+                val read = paykitSdkService.readPaymentRequests(request.counterparty)
+                val identityStatus = read.identityStatus
+                val identity = identityStatus?.publicKey?.let(PubkyPublicKeyFormat::normalized)
+                if (identityStatus?.capability != PubkyIdentityCapability.PRIVATE_LINK_CAPABLE || identity == null) {
+                    throw PaykitPaymentRequestError.RequestUnavailable
+                }
+                val proof = PendingPaykitPaymentProof(
+                    identity = identity,
+                    requestId = request.id,
+                    paymentEndpointIdentifier = paymentEndpointIdentifier,
+                    paymentAppId = paymentAppId,
+                    kind = kind,
+                    billingPeriod = request.billingPeriod,
+                    conversionQuoteId = paymentTerms?.quoteId,
+                )
                 val currentProofs = loadProofs()
                 if (currentProofs.any {
                         it.isStartedFor(proof.identity, request.id) ||
@@ -210,7 +226,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                 ) {
                     throw PaykitPaymentRequestError.OperationInProgress
                 }
-                val alreadyPaid = paykitSdkService.paymentRequests().any { record ->
+                val alreadyPaid = read.paymentRequests.any { record ->
                     record.paymentRequestId == request.paymentRequestId &&
                         PubkyPublicKeyFormat.matches(record.counterparty, request.counterparty) &&
                         record.paymentProofs.any { it.billingPeriod.matches(request.billingPeriod) }
@@ -1397,7 +1413,8 @@ class PaykitPaymentProofRepo @Inject constructor(
         if (proof.paymentAppId.isBlank()) return false
         if (proof.kind == PaykitPaymentProofKind.Onchain && proof.onchainAcceptanceVerified != true) return false
         val proofData = proof.proofData ?: return false
-        val identityStatus = paykitSdkService.identityStatus()
+        val read = paykitSdkService.readPaymentRequests(proof.requestId.counterparty, expectedIdentity = proof.identity)
+        val identityStatus = read.identityStatus
         if (
             identityStatus?.capability != PubkyIdentityCapability.PRIVATE_LINK_CAPABLE ||
             !PubkyPublicKeyFormat.matches(identityStatus.publicKey, proof.identity)
@@ -1405,7 +1422,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             return false
         }
 
-        val record = paykitSdkService.paymentRequests().firstOrNull {
+        val record = read.paymentRequests.firstOrNull {
             it.paymentRequestId == proof.requestId.paymentRequestId &&
                 PubkyPublicKeyFormat.matches(it.counterparty, proof.requestId.counterparty)
         } ?: return false

@@ -20,10 +20,12 @@ import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentPayload
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
+import com.synonym.paykit.PaymentRequestRead
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
+import com.synonym.paykit.PrivateMessageSchedulingSnapshot
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import com.synonym.paykit.PrivatePaymentListSyncChange
@@ -947,6 +949,157 @@ class PaykitSdkServiceTest {
             runCurrent()
             if (peers) verify(sdk).linkedPeers() else verify(sdk).identityStatus()
         }
+    }
+
+    @Test
+    fun `payment request read retains its runtime through contention and filters records`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val freshSdk = mock<PaykitSdk>()
+        val counterparty = "a3mduedw686dysw8ndr5c1dyry5h8k6i8hzbbmx9gf9k43zq4s9o"
+        val bitkit = mock<PaymentRequestRecord> {
+            on { localRole }.thenReturn(PaymentRequestLocalRole.PAYEE)
+            on { proposalAppId }.thenReturn("bitkit")
+        }
+        val server = mock<PaymentRequestRecord> {
+            on { localRole }.thenReturn(PaymentRequestLocalRole.PAYEE)
+            on { proposalAppId }.thenReturn("marketplace")
+        }
+        val status = IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        val events = mutableListOf<String>()
+        doSuspendableAnswer {
+            events += "read"
+            if (events.size == 1) throw PaykitException.SharedStateBusy("shared_state_busy", "Locked")
+            PaymentRequestRead(status, listOf(server, bitkit))
+        }.whenever(sdk).readPaymentRequests(counterparty, RING_PUBKY)
+        val freshStatus = IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT)
+        whenever(freshSdk.readPaymentRequests(counterparty, null)).thenReturn(
+            PaymentRequestRead(freshStatus, emptyList())
+        )
+        var handlesCreated = 0
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) {
+            if (handlesCreated++ == 0) sdk else freshSdk
+        }
+        val read = async { service.readPaymentRequests(counterparty, RING_PUBKY) }
+        runCurrent()
+        val reset = async {
+            service.clearState()
+            events += "reset"
+        }
+        runCurrent()
+        advanceTimeBy(249)
+        runCurrent()
+        assertEquals(listOf("read"), events)
+        assertFalse(read.isCompleted)
+        assertFalse(reset.isCompleted)
+        advanceTimeBy(1)
+        runCurrent()
+
+        val result = read.await()
+        reset.await()
+        assertEquals(status, result.identityStatus)
+        assertEquals(listOf(bitkit), result.paymentRequests)
+        assertEquals(listOf("read", "read", "reset"), events)
+        assertEquals(1, handlesCreated)
+        val freshResult = service.readPaymentRequests(counterparty)
+        assertEquals(freshStatus, freshResult.identityStatus)
+        assertTrue(freshResult.paymentRequests.isEmpty())
+        assertEquals(2, handlesCreated)
+        verify(sdk, times(2)).readPaymentRequests(counterparty, RING_PUBKY)
+        verify(freshSdk).readPaymentRequests(counterparty, null)
+        verify(sdk, never()).identityStatus()
+        verify(sdk, never()).listPaymentRequests(any())
+    }
+
+    @Test
+    fun `payment request read retries only one acquisition failure`() = runTest {
+        val busy = PaykitException.SharedStateBusy("shared_state_busy", "Locked")
+        val cases = listOf(
+            listOf<Exception>(busy, busy),
+            listOf(busy, PaykitException.Identity("identity_error", "Session changed")),
+            listOf(PaykitException.Identity("identity_error", "Session changed")),
+            listOf(PaykitException.Storage("storage_error", "State unavailable")),
+            listOf(PaykitException.Transport("transport_error", "Uncertain write")),
+            listOf(PaykitException.ConcurrentUpdate("concurrent_update", "Revision changed")),
+            listOf(CancellationException("Cancelled read")),
+        )
+        cases.forEachCase({ errors -> errors.joinToString { it.javaClass.simpleName } }) { errors ->
+            val sdk = mock<PaykitSdk>()
+            var calls = 0
+            doSuspendableAnswer {
+                val failure = errors[minOf(calls, errors.lastIndex)]
+                calls++
+                throw failure
+            }.whenever(sdk).readPaymentRequests(RING_PUBKY, null)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val started = currentTime
+            val failure = assertFailsWith<Exception> { service.readPaymentRequests(RING_PUBKY) }
+            if (errors.last() is CancellationException) {
+                assertIs<CancellationException>(failure)
+                assertEquals(errors.last().message, failure.message)
+            } else {
+                assertSame(errors.last(), failure)
+            }
+            assertEquals(errors.size, calls)
+            assertEquals(if (errors.size == 2) 250L else 0L, currentTime - started)
+        }
+    }
+
+    @Test
+    fun `cancelling payment request backoff releases SDK ownership without retrying`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        doSuspendableAnswer {
+            throw PaykitException.SharedStateBusy("shared_state_busy", "Locked")
+        }.whenever(sdk).readPaymentRequests(RING_PUBKY, null)
+        whenever(sdk.contactRecords()).thenReturn(emptyList())
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val read = async { service.readPaymentRequests(RING_PUBKY) }
+        runCurrent()
+        val contacts = async { service.contactRecords() }
+        runCurrent()
+        assertFalse(contacts.isCompleted)
+        advanceTimeBy(100)
+        read.cancel()
+        runCurrent()
+        assertFailsWith<CancellationException> { read.await() }
+        assertEquals(emptyList(), contacts.await())
+        advanceTimeBy(250)
+        runCurrent()
+        verify(sdk).readPaymentRequests(RING_PUBKY, null)
+    }
+
+    @Test
+    fun `scheduling snapshot keeps SDK admission and retries acquisition once`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val release = CompletableDeferred<Unit>()
+        whenever(sdk.contactRecords()).doSuspendableAnswer {
+            release.await()
+            emptyList()
+        }
+        val expected = PrivateMessageSchedulingSnapshot(emptyList(), listOf(RING_PUBKY))
+        var reads = 0
+        doSuspendableAnswer {
+            if (++reads == 1) throw PaykitException.SharedStateBusy("shared_state_busy", "Locked")
+            expected
+        }.whenever(sdk).privateMessageSchedulingSnapshot()
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val holder = async { service.contactRecords() }
+        runCurrent()
+        val snapshot = async { service.privateMessageSchedulingSnapshot(Priority.Background) }
+        runCurrent()
+        assertEquals(0, reads)
+        release.complete(Unit)
+        runCurrent()
+        advanceTimeBy(249)
+        runCurrent()
+        assertEquals(1, reads)
+        assertFalse(snapshot.isCompleted)
+        advanceTimeBy(1)
+        runCurrent()
+        holder.await()
+        assertSame(expected, snapshot.await())
+        assertEquals(2, reads)
+        verify(sdk, never()).linkedPeers()
+        verify(sdk, never()).pendingOutboundPrivateCounterparties()
     }
 
     @Test

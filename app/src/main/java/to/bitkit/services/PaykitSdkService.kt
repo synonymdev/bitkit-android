@@ -29,12 +29,14 @@ import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestFilter
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
+import com.synonym.paykit.PaymentRequestRead
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PaymentTarget
 import com.synonym.paykit.PrivateContactPaymentResolution
 import com.synonym.paykit.PrivateJsonObject
+import com.synonym.paykit.PrivateMessageSchedulingSnapshot
 import com.synonym.paykit.PrivatePaymentEndpointCandidate
 import com.synonym.paykit.PrivatePaymentEndpointReservationCancellation
 import com.synonym.paykit.PrivatePaymentEndpointSelectionRequest
@@ -1014,6 +1016,16 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun paymentRequests(): List<PaymentRequestRecord> = allPaymentRequests().filter(::isBitkitPaymentRequest)
 
+    suspend fun readPaymentRequests(counterparty: String, expectedIdentity: String? = null): PaymentRequestRead {
+        isSetup.await()
+        return measuredOperation("readPaymentRequests") {
+            withPaykitKey { handle ->
+                val read = retryContendedRead { handle.readPaymentRequests(counterparty, expectedIdentity) }
+                read.copy(paymentRequests = read.paymentRequests.filter(::isBitkitPaymentRequest))
+            }
+        }
+    }
+
     /** Refreshes display projections only; payment authority remains with the action APIs. */
     internal suspend fun observeState(
         expectedIdentity: String,
@@ -1219,6 +1231,15 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationLock.withLock(priority) {
             withPaykitKey { handle -> retryContendedRead { handle.linkedPeers() } }
+        }
+    }
+
+    internal suspend fun privateMessageSchedulingSnapshot(
+        priority: Priority = Priority.Ordered,
+    ): PrivateMessageSchedulingSnapshot {
+        isSetup.await()
+        return operationLock.withLock(priority) {
+            withPaykitKey { handle -> retryContendedRead { handle.privateMessageSchedulingSnapshot() } }
         }
     }
 
