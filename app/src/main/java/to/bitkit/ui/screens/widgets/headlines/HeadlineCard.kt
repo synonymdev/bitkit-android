@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -66,7 +67,7 @@ fun HeadlineCard(
             val timeVisible = showTime && time.isNotEmpty()
             if (showSource || timeVisible) {
                 Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("source_row")
@@ -75,13 +76,19 @@ fun HeadlineCard(
                         BodySSB(
                             text = source,
                             color = Colors.Brand,
-                            modifier = Modifier.testTag("source_text")
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("source_text")
                         )
                     }
                     if (timeVisible) {
                         BodySSB(
                             text = time,
                             color = Colors.White64,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.testTag("time_text")
                         )
                     }

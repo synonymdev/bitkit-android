@@ -174,6 +174,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `security/forgot-pin-nav-bar-inset.xml` | not ported — Android-only fix (synonymdev/bitkit-android#1572): the Android sheet host adds no navigation-bar inset, so each sheet screen pads itself. iOS sheets keep their content inside the bottom safe area |
 | `deeplinks/pubky-contact.xml` | ported — same contact routing and unlock behavior |
 | `pubky-auth/signin-cold-start.xml` | `pubky-auth/open-signin-link.xml`, adapted — iOS opens the same sign-in link on a terminated app through `bitkit://pubky-auth/signin`. Android only: the raw `pubkyauth` scheme, the "Loading Your Pubky Profile" toast while the session restores, and Authorize through to `PubkyAuthOK` |
+| `pubky-auth/loading-toast-long-locale.xml` | not ported — iOS has no Pubky loading toast; `settings/applying-toast-close-button.xml` checks the same close-button inset on both platforms |
 | `pubky-auth/signin-with-second-link.xml` | not ported — iOS still drops a pending sign-in link when a second link opens on the PIN screen (synonymdev/bitkit-ios#985); port it with that fix |
 | `pubky-profile/cached-profile-header.xml` | same file, journey name and steps — one step differs: Android adds a screenshot check of the cached avatar, which comes from the Pubky image disk cache synonymdev/bitkit-android#1399 adds |
 | `pubky-profile/ring-choice-rows.xml` | same file, journey name and steps — Android names the rows and their lookup spinners differently (see [Identifiers](#identifiers)), checks that rows are disabled by tapping another row instead of reading the snapshot's Targets, needs no second tap on the profile button, and names the import overview by its "Import" title |
@@ -186,6 +187,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `app-update/critical-update-onboarding.xml` | not ported yet — iOS already blocks at the top level in `AppScene`, so the journey applies there once written |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `home/timed-reminders-do-not-interrupt.xml` | paired draft in synonymdev/bitkit-ios#1013; the journey name and actions match, but iOS device verification is incomplete. Android resumes Home after permission prompts and background/foreground; iOS uses primary-screen lifecycle callbacks and explicit rechecks. |
+| `receive/receive-tabs-wraparound.xml` | same file and steps — on Android a swipe that starts at the screen edge is the system back gesture, which closes the sheet on every tab; start the swipes away from the edge |
 | `receive/receive-auto-tab-selection.xml` | not ported — the Auto tab override fix is Android-only so far; iOS parity not checked |
 | `security/pin-lock-on-resume.xml` | not ported yet — iOS already clears the PIN verification on entering the background, so the journey applies; it lands with the iOS side of synonymdev/bitkit-android#1298 |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |

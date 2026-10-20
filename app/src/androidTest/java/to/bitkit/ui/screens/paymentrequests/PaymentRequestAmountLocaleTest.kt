@@ -2,11 +2,13 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.SemanticsActions
@@ -73,7 +75,10 @@ class PaymentRequestAmountLocaleTest {
         val amountInput = AmountInputViewModel(AmountInputHandler.stub())
         composeTestRule.setContent {
             AppThemeSurface {
-                CompositionLocalProvider(LocalInspectionMode provides true) {
+                CompositionLocalProvider(
+                    LocalInspectionMode provides true,
+                    LocalConfiguration provides Configuration(LocalConfiguration.current).apply { setLocale(Locale.GERMANY) },
+                ) {
                     PaymentRequestAmountContent(
                         amountInputViewModel = amountInput,
                         initialDraft = PaykitPaymentRequestDraft(
@@ -111,7 +116,11 @@ class PaymentRequestAmountLocaleTest {
         val amountInput = AmountInputViewModel(AmountInputHandler.stub())
         composeTestRule.setContent {
             val (width, scale, asset) = configuration.value
-            CompositionLocalProvider(LocalDensity provides Density(2f, scale), LocalInspectionMode provides true) {
+            CompositionLocalProvider(
+                LocalDensity provides Density(2f, scale),
+                LocalInspectionMode provides true,
+                LocalConfiguration provides Configuration(LocalConfiguration.current).apply { setLocale(Locale.GERMANY) },
+            ) {
                 AppThemeSurface {
                     PaymentRequestAmountContent(
                         amountInputViewModel = amountInput,

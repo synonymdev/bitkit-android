@@ -20,10 +20,11 @@ class EditInvoiceScreenTest {
 
     @Test
     fun paymentRequestActionAndShowQrAreVisibleWhenEligible() {
+        val amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub())
         composeTestRule.setContent {
             AppThemeSurface {
                 EditInvoiceContent(
-                    amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),
+                    amountInputViewModel = amountInputViewModel,
                     noteText = "Dinner",
                     keyboardVisible = false,
                     tags = persistentListOf(),
@@ -46,10 +47,11 @@ class EditInvoiceScreenTest {
 
     @Test
     fun paymentRequestActionIsHiddenWithoutEligibleContact() {
+        val amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub())
         composeTestRule.setContent {
             AppThemeSurface {
                 EditInvoiceContent(
-                    amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),
+                    amountInputViewModel = amountInputViewModel,
                     noteText = "",
                     keyboardVisible = false,
                     tags = persistentListOf(),

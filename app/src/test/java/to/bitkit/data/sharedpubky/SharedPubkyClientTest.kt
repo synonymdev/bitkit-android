@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.ProviderInfo
 import android.content.pm.Signature
+import android.content.pm.SigningInfo
 import android.database.MatrixCursor
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Before
@@ -40,7 +41,7 @@ class SharedPubkyClientTest : BaseUnitTest() {
     @Before
     fun setUp() {
         Shadows.shadowOf(context.packageManager)
-            .getInternalMutablePackageInfo(context.packageName).signatures = arrayOf(Signature(TRUSTED_SIGNATURE))
+            .getInternalMutablePackageInfo(context.packageName).signingInfo = signingInfo(TRUSTED_SIGNATURE)
         ShadowContentResolver.registerProviderInternal(SharedPubkyContract.RING_AUTHORITY, ringProvider)
         whenever(ringProvider.query(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenAnswer {
             MatrixCursor(arrayOf(SharedPubkyContract.COLUMN_PUBKY)).apply {
@@ -77,7 +78,7 @@ class SharedPubkyClientTest : BaseUnitTest() {
         Shadows.shadowOf(context.packageManager).installPackage(
             PackageInfo().apply {
                 packageName = SharedPubkyContract.RING_PACKAGE
-                signatures = arrayOf(Signature(signature))
+                signingInfo = signingInfo(signature)
                 providers = arrayOf(
                     ProviderInfo().apply {
                         name = "to.pubkyring.SharedPubkyProvider"
@@ -87,5 +88,9 @@ class SharedPubkyClientTest : BaseUnitTest() {
                 )
             },
         )
+    }
+
+    private fun signingInfo(signature: String) = SigningInfo().also {
+        Shadows.shadowOf(it).setSignatures(arrayOf(Signature(signature)))
     }
 }

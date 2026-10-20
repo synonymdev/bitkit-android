@@ -145,7 +145,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
             .fillMaxWidth()
             .then(
                 if (page == ReceivePage.ADDRESS) {
-                    Modifier.swipeToChangeTab(tabIndex, tabs.size, { onSelectTab(tabs[it]) })
+                    Modifier.swipeToChangeTab(tabIndex, tabs.size, { onSelectTab(tabs[it]) }, wrapAround = true)
                 } else {
                     Modifier
                 }

@@ -11,10 +11,6 @@
         <item name="colorOnSecondary">@color/black</item>
     </style>
 
-    <style name="Theme.App.AppBarOverlay" parent="ThemeOverlay.Material3.Dark.ActionBar" />
-
-    <style name="Theme.App.PopupOverlayMaterial3" parent="ThemeOverlay.Material3.Dark" />
-
     <!-- Splash Screen Theme -->
     <style name="Theme.App.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#FF4400</item>

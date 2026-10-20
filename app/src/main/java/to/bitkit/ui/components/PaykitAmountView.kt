@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import to.bitkit.models.PaykitAmount
@@ -24,7 +25,7 @@ fun PaykitAmountDisplay(amount: PaykitAmount, modifier: Modifier = Modifier, pre
             modifier = modifier
         )
     } else {
-        val locale = Locale.getDefault()
+        val locale = LocalConfiguration.current.locales[0]
         val displayAmount = remember(amount, locale) {
             if (amount.asset == PaykitAsset.USDT) {
                 usdtOverviewAmount(amount.atomic, locale)
@@ -61,7 +62,7 @@ fun PaykitAmountCell(
             modifier = modifier
         )
     } else {
-        val locale = Locale.getDefault()
+        val locale = LocalConfiguration.current.locales[0]
         val displayAmount = remember(amount, locale) {
             if (amount.asset == PaykitAsset.USDT) {
                 usdtOverviewAmount(amount.atomic, locale)

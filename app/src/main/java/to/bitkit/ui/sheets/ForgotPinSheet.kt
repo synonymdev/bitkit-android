@@ -47,9 +47,9 @@ fun ForgotPinSheet(
 
 @Composable
 private fun Content(
+    modifier: Modifier = Modifier,
     onBackClick: (() -> Unit)? = null,
     onResetClick: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
