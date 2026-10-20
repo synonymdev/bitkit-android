@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import org.junit.After
@@ -1471,27 +1472,60 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
         restoreAcceptedRequest()
         sut.refresh().getOrThrow()
+        runCurrent()
         val request = sut.pendingRequests.value.single()
         assertTrue(sut.isPending(request))
 
         // Broadcast, proof not yet complete: the pending list still predates it.
-        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(setOf(requestId))
+        val started = onchainProof(requestId).copy(paymentStarted = true)
+        setStoredProofs(started)
         assertFalse(sut.isPending(request))
-        assertTrue(sut.automaticPendingRequests().isEmpty())
 
         // Paid, proof awaiting submission.
-        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
-        whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY))
-            .thenReturn(mapOf(requestId to PaykitPaymentProofKind.Onchain))
+        val txid = "a".repeat(64)
+        setStoredProofs(started.copy(proofData = txid, paymentIdentifier = txid, onchainAcceptanceVerified = true))
         assertFalse(sut.isPending(request))
-        assertTrue(sut.automaticPendingRequests().isEmpty())
 
         // Proof submitted and cleared locally; the record leaves the actionable states.
-        whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY))
-            .thenReturn(emptyMap())
+        setStoredProofs()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull()))
             .thenReturn(listOf(record.copy(state = PaymentRequestLifecycleState.PROOF_SUBMITTED)))
         sut.refreshAfterStateChange().getOrThrow()
+        assertFalse(sut.isPending(request))
+    }
+
+    @Test
+    fun `request with a started payment is not presented automatically before the next refresh`() = test {
+        val record = paymentRequestRecord()
+        val requestId = PaykitPaymentRequestId(record.paymentRequestId, record.counterparty)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        runCurrent()
+        assertEquals(requestId, sut.automaticPendingRequests().single().id)
+
+        setStoredProofs(onchainProof(requestId).copy(paymentStarted = true))
+
+        assertEquals(requestId, sut.pendingRequests.value.single().id)
+        assertTrue(sut.automaticPendingRequests().isEmpty())
+    }
+
+    @Test
+    fun `unread or unreadable payment proofs keep requests from being payable`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        runCurrent()
+        val request = sut.pendingRequests.value.single()
+        assertTrue(sut.isPending(request))
+
+        proofStateVersion.value += 1
+        assertFalse(sut.isPending(request))
+        assertTrue(sut.automaticPendingRequests().isEmpty())
+
+        whenever(paymentProofStore.load())
+            .thenAnswer { throw PaykitPaymentStateUnreadableError("proofs", IllegalStateException("corrupt")) }
+        proofStateVersion.value += 1
+        runCurrent()
         assertFalse(sut.isPending(request))
         assertTrue(sut.automaticPendingRequests().isEmpty())
     }
@@ -2894,6 +2928,20 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertEquals(setOf(requestId), reopened.inFlightRequestIds(LOCAL_IDENTITY))
         }
     }
+
+    private fun TestScope.setStoredProofs(vararg proofs: PendingPaykitPaymentProof) {
+        whenever(paymentProofStore.load()).thenReturn(proofs.toList())
+        proofStateVersion.value += 1
+        runCurrent()
+    }
+
+    private fun onchainProof(requestId: PaykitPaymentRequestId) = PendingPaykitPaymentProof(
+        identity = LOCAL_IDENTITY,
+        requestId = requestId,
+        paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+        paymentAppId = "bitkit",
+        kind = PaykitPaymentProofKind.Onchain,
+    )
 
     private suspend fun restoreAcceptedRequest() {
         whenever(presentationStore.loadAcceptedOneTimeIds(LOCAL_IDENTITY)).thenReturn(

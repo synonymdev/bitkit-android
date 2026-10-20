@@ -347,6 +347,22 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private var actionVersion = 0L
     private var completedRefreshMode = PaykitPaymentRequestRefreshMode.STORED
     private val repoScope = appScope(ioDispatcher, TAG)
+
+    private data class PaymentProofSnapshot(val version: Long, val proofs: List<PendingPaykitPaymentProof>?)
+
+    // Read off the main thread, so presentation checks never touch the keychain.
+    private val paymentProofSnapshot = MutableStateFlow<PaymentProofSnapshot?>(null)
+
+    init {
+        repoScope.launch {
+            paymentProofStore.backupStateVersion.collect { version ->
+                val proofs = runCatching { paymentProofStore.load() }
+                    .onFailure { Logger.warn("Failed to read Paykit payment proofs", it, context = TAG) }
+                    .getOrNull()
+                paymentProofSnapshot.value = PaymentProofSnapshot(version, proofs)
+            }
+        }
+    }
     private var expirationJob: Job? = null
     private var cachedTargetContext: PaykitPaymentRequestTargetContext? = null
     private val targetRefreshTicket = AtomicLong()
@@ -448,7 +464,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     // A request this install accepted is only reopened by the user,
     // so a refresh during its payment cannot resurface it.
     fun automaticPendingRequests(): List<PaykitPaymentRequest> {
-        val paidIds = locallyPaidRequestIds()
+        val paidIds = locallyPaidRequestIds() ?: return emptyList()
         return _pendingRequests.value.filterNot {
             it.id in presentedRequestIds || hasLocalAcceptance(it) || it.id in paidIds
         }
@@ -1188,16 +1204,26 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     fun isPending(request: PaykitPaymentRequest): Boolean =
         !request.isExpired(clock.now()) && _pendingRequests.value.any { it.id == request.id } &&
-            request.id !in locallyPaidRequestIds()
+            locallyPaidRequestIds()?.contains(request.id) == false
 
-    // Started or completed local payments, read live: the pending list can predate them until the next refresh.
-    private fun locallyPaidRequestIds(): Set<PaykitPaymentRequestId> {
+    /**
+     * Requests with a started or completed local payment; the pending list can predate them until the next refresh.
+     * Null while the proof store is unreadable or its latest change is not read yet, so callers treat it as unpaid only
+     * when it is known.
+     */
+    private fun locallyPaidRequestIds(): Set<PaykitPaymentRequestId>? {
         val identity = activeIdentity ?: return emptySet()
-        val reopenableIds = paymentProofStore.load()
-            .filter { it.isReopenableHardwareReceipt(identity) }
-            .mapTo(mutableSetOf()) { it.requestId }
-        return paymentProofStore.inFlightRequestIds(identity) - reopenableIds +
-            paymentProofStore.completedRequestProofKindsAwaitingSubmission(identity).keys
+        val snapshot = paymentProofSnapshot.value
+            ?.takeIf { it.version == paymentProofStore.backupStateVersion.value }
+            ?: return null
+        val proofs = snapshot.proofs ?: return null
+        return proofs.filter { proof ->
+            PubkyPublicKeyFormat.matches(proof.identity, identity) && (
+                proof.paymentStarted && !proof.isReopenableHardwareReceipt(identity) ||
+                    proof.proofData != null &&
+                    (proof.kind != PaykitPaymentProofKind.Onchain || proof.onchainAcceptanceVerified)
+                )
+        }.mapTo(mutableSetOf()) { it.requestId }
     }
 
     fun isExpired(request: PaykitPaymentRequest): Boolean = request.isExpired(clock.now())
