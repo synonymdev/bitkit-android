@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -112,6 +113,8 @@ class SettingsStore @Inject constructor(
     suspend fun setIsPaykitEnabled(value: Boolean) {
         localStore.edit { it[PAYKIT_ENABLED_KEY] = value }
     }
+
+    internal suspend fun isPaykitUiResetDone() = localStore.data.first()[PaykitUiResetMigration.MIGRATED_KEY] == true
 
     suspend fun setPubkyProfileSetupPending(value: Boolean) {
         localStore.edit { it[PUBKY_PROFILE_SETUP_PENDING_KEY] = value }
