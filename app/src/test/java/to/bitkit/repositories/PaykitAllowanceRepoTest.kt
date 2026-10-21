@@ -80,6 +80,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         }
         whenever(executor.autoPay(any(), any(), any())).thenReturn(PaykitAllowanceAutoPayResult.STARTED)
         whenever(executor.isHandling(any())).thenReturn(false)
+        whenever(executor.classifyAboveLimit(any(), any(), any())).thenReturn(false)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(activityRepo.setContact(any(), any(), any(), any())).thenReturn(Result.success(Unit))
@@ -587,6 +588,22 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     // endregion
 
     // region Automatic payments
+
+    @Test
+    fun `a request above the limits is never held back while channels reconnect`() = test {
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        val above = fixtures.paymentRequest(id = "above", amountSats = 5_001uL)
+        val within = fixtures.paymentRequest(id = "within")
+        whenever(executor.classifyAboveLimit(eq(above), any(), any())).thenReturn(true)
+        whenever(executor.classifyAboveLimit(eq(within), any(), any())).thenReturn(false)
+
+        assertTrue(sut.processIncomingRequests(listOf(above, within)))
+
+        assertFalse(sut.isAutomaticallyHandling(above))
+        assertTrue(sut.isAutomaticallyHandling(within))
+        verify(executor, never()).autoPay(any(), any(), any())
+    }
 
     @Test
     fun `covered request stays off the Send sheet until it is found manual`() = test {

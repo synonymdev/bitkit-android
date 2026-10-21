@@ -465,6 +465,29 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a reservation blocked for another reason keeps the request manual without Limit Reached`() = test {
+        collectEvents()
+        automaticReservation = PaymentAttemptDecision.Blocked(AllowanceAccountingBlock.SharedRule("not_active"))
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        assertTrue(events.none { it is PaykitAllowanceEvent.LimitReached })
+    }
+
+    @Test
+    fun `a failing begin call releases the reservation before anything is sent`() = test {
+        whenever(sdk.beginPaymentExecution(any(), any())).doSuspendableAnswer { throw TestAllowanceError("begin") }
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
+        verify(payer, never()).consumePaymentList(any(), any())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
     fun `blocked begin records a failed outcome`() = test {
         beginDecision = PaymentAttemptDecision.Blocked(AllowanceAccountingBlock.ManualOnly)
 
@@ -585,6 +608,34 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a failed automatic lightning payment gives the payee's payment list back`() = test {
+        sut.activate(identity)
+        val request = fixtures.paymentRequest()
+        seedJournal(
+            journalEntry("attempt-1", request, Stage.SENT, paymentHash = PAYMENT_HASH)
+                .copy(paymentListVersion = 4uL, previousPaymentListVersion = 3uL),
+        )
+
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+
+        assertEquals(listOf(PaymentOutcomeReport("attempt-1", PaymentOutcome.FAILED)), recordedOutcomes)
+        verify(payer).releasePaymentList(
+            eq(request.counterparty),
+            eq(PrivatePaykitPaymentContext(emptyMap(), paymentListVersion = 4uL, previousPaymentListVersion = 3uL)),
+        )
+        assertTrue(sut.isAutomaticPayment(PAYMENT_HASH.uppercase()))
+        assertFalse(sut.isAutomaticPayment("f".repeat(64)))
+    }
+
+    @Test
+    fun `automatic attempts journal the payment list they consume`() = test {
+        sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        val entry = sut.localState(identity).journal.single()
+        assertEquals(lightningPayment().context.paymentListVersion, entry.paymentListVersion)
+    }
+
+    @Test
     fun `open lightning attempts settle from the node's payment status`() = test {
         val paidHash = "1".repeat(64)
         val pendingHash = "2".repeat(64)
@@ -600,6 +651,37 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         sut.settleOpenLightningAttempts()
 
         assertEquals(listOf(PaymentOutcomeReport("paid", PaymentOutcome.SUCCEEDED)), recordedOutcomes)
+    }
+
+    @Test
+    fun `recovery reports an automatic payment that settled while the app was closed`() = test {
+        collectEvents()
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("sent-paid", PaymentExecutionStatus.SUBMITTED)),
+        )
+        seedJournal(journalEntry("sent-paid", request, Stage.SENT, paymentHash = PAYMENT_HASH))
+        nodeStatuses[PAYMENT_HASH] = PaymentStatus.SUCCEEDED
+
+        sut.recover(identity)
+
+        assertEquals(
+            listOf(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, PAYMENT_HASH)),
+            events.filterIsInstance<PaykitAllowanceEvent.PaidAutomatically>(),
+        )
+    }
+
+    @Test
+    fun `local capacity check flags only requests that fit no allowance`() = test {
+        collectEvents()
+        accountingState = stateNearTheMonthlyCap()
+
+        assertTrue(sut.classifyAboveLimit(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity))
+        assertFalse(
+            sut.classifyAboveLimit(fixtures.paymentRequest(amountSats = 1uL), listOf(fixtures.allowance()), identity)
+        )
+        assertFalse(sut.classifyAboveLimit(fixtures.paymentRequest(), emptyList(), identity))
+        assertEquals(1, events.count { it is PaykitAllowanceEvent.LimitReached })
     }
 
     @Test
