@@ -1396,8 +1396,11 @@
     <string name="profile__pay_contacts_error_wallet">لا تزال المحفظة قيد التشغيل. حاول مرة أخرى بعد لحظة.</string>
     <string name="profile__pay_contacts_headline">دع\nجهات اتصالك\n&lt;accent&gt;تدفع لك&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">الدفع لجهات الاتصال</string>
+    <string name="profile__private_payments_toggle">مدفوعات خاصة مع جهات الاتصال</string>
     <string name="profile__pubky_copied">تم نسخ pubky إلى الحافظة</string>
     <string name="profile__public_key">المفتاح العام</string>
+    <string name="profile__public_payments_toggle">مدفوعات عامة</string>
+    <string name="profile__public_payments_warning">ستكون تفاصيل الدفع الخاصة بك عامة ومرتبطة بملفك الشخصي. يمكن لأي شخص رؤيتها.</string>
     <string name="profile__restore_nav_title">استعادة الملف الشخصي</string>
     <string name="profile__session_expired">انتهت جلسة ملفك الشخصي. يرجى إعادة الاتصال لاستعادة ملفك الشخصي.</string>
     <string name="profile__sign_out">قطع الاتصال</string>
@@ -1444,7 +1447,6 @@
     <string name="settings__es__server_error_certificate">شهادة هذا الخادم غير موثوقة. استخدم خادمًا بشهادة موثوقة، أو اتصل بمنفذ TCP الخاص به.</string>
     <string name="settings__es__server_error_network">هذا الخادم على شبكة Bitcoin مختلفة. اختر خادمًا للشبكة التي يستخدمها Bitkit.</string>
     <string name="settings__es__server_error_protocol">فشل الاتصال الآمن. تحقق من أن البروتوكول (TCP أو TLS) يطابق منفذ الخادم.</string>
-    <string name="settings__general__enable_contact_payments">تفعيل المدفوعات مع جهات الاتصال</string>
     <string name="settings__hardware_wallets__add_button">إضافة محفظة أجهزة</string>
     <string name="settings__hardware_wallets__name_label">الاسم</string>
     <string name="settings__hardware_wallets__nav_title">محافظ الأجهزة</string>

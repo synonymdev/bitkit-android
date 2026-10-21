@@ -32,6 +32,7 @@ import javax.inject.Singleton
 private val Context.settingsDataStore: DataStore<SettingsData> by dataStore(
     fileName = "settings.json",
     serializer = SettingsSerializer,
+    produceMigrations = { listOf(PaykitSharingMigration) },
 )
 
 private val Context.localSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -63,6 +64,7 @@ class SettingsStore @Inject constructor(
                 .copy(ignoresSwitchUnitToast = false, ignoresHideBalanceToast = false)
                 .withDefaultPaykitPaymentMethods()
                 .withRequiredNativeSegwitMonitoring()
+                .withPublicSharingDisabledForRestore()
             store.updateData { current ->
                 // The received-sheet hold is armed before the backup is read, so it has to survive the
                 // settings the backup brings with it - otherwise the replayed history raises sheets.
@@ -146,7 +148,7 @@ class SettingsStore @Inject constructor(
     }
 
     suspend fun reset() {
-        store.updateData { SettingsData() }
+        store.updateData { SettingsData(hasIndependentPaykitSharing = true) }
         localStore.edit {
             it.clear()
             it[PaykitUiResetMigration.MIGRATED_KEY] = true
@@ -182,6 +184,14 @@ internal object PaykitUiResetMigration : DataMigration<Preferences> {
     override suspend fun cleanUp() = Unit
 }
 
+internal object PaykitSharingMigration : DataMigration<SettingsData> {
+    override suspend fun shouldMigrate(currentData: SettingsData) = !currentData.hasIndependentPaykitSharing
+
+    override suspend fun migrate(currentData: SettingsData) = currentData.withIndependentPaykitSharing()
+
+    override suspend fun cleanUp() = Unit
+}
+
 @Serializable
 data class SettingsData(
     val primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
@@ -197,6 +207,8 @@ data class SettingsData(
     val hasSeenProfileIntro: Boolean = false,
     val hasSeenContactsIntro: Boolean = false,
     val hasConfirmedPublicPaykitEndpoints: Boolean = false,
+    val hasIndependentPaykitSharing: Boolean = false,
+    val legacyPublicAddressQuarantinePending: Boolean = false,
     val sharesPublicPaykitEndpoints: Boolean = false,
     val sharesPrivatePaykitEndpoints: Boolean = false,
     val publicPaykitCleanupPending: Boolean = false,
@@ -280,7 +292,28 @@ fun SettingsData.resetPin() = this.copy(
 )
 
 fun SettingsData.areContactPaymentsEnabled(): Boolean =
-    sharesPublicPaykitEndpoints || sharesPrivatePaykitEndpoints
+    sharesPrivatePaykitEndpoints
+
+fun SettingsData.withIndependentPaykitSharing(): SettingsData {
+    if (hasIndependentPaykitSharing) return this
+    val hadPublicState = hasPublicPaykitPublicationState()
+    return copy(
+        hasIndependentPaykitSharing = true,
+        hasConfirmedPublicPaykitEndpoints = false,
+        sharesPublicPaykitEndpoints = false,
+        publicPaykitCleanupPending = publicPaykitCleanupPending || hadPublicState,
+        legacyPublicAddressQuarantinePending = legacyPublicAddressQuarantinePending || hadPublicState,
+    )
+}
+
+fun SettingsData.withPublicSharingDisabledForRestore(): SettingsData {
+    val migrated = withIndependentPaykitSharing()
+    return migrated.copy(
+        hasConfirmedPublicPaykitEndpoints = false,
+        sharesPublicPaykitEndpoints = false,
+        publicPaykitCleanupPending = migrated.publicPaykitCleanupPending || hasPublicPaykitPublicationState(),
+    )
+}
 
 fun SettingsData.withDefaultPaykitPaymentMethods() = copy(
     publicPaykitLightningEnabled = true,

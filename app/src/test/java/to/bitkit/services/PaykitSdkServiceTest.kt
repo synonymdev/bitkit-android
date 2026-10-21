@@ -256,6 +256,29 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `queued public withdrawal cannot delete replacement identity endpoints`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val release = CompletableDeferred<Unit>()
+        whenever(sdk.contactRecords()).doSuspendableAnswer {
+            release.await()
+            emptyList()
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val active = async { service.contactRecords() }
+        runCurrent()
+        var ownsWithdrawal = true
+        val withdrawal = async { service.syncPublicEndpoints(emptyList()) { ownsWithdrawal } }
+        runCurrent()
+        assertFalse(withdrawal.isCompleted)
+        ownsWithdrawal = false
+        release.complete(Unit)
+
+        active.await()
+        assertNull(withdrawal.await())
+        verify(sdk, never()).syncPublicEndpointsWithReceivingDetails(any())
+    }
+
+    @Test
     fun `admitted public publication finishes before cleanup despite cancellation`() = runTest {
         mockConstruction(PaymentPayload::class.java).use {
             val sdk = mock<PaykitSdk>()
@@ -582,6 +605,80 @@ class PaykitSdkServiceTest {
             assertTrue(finished)
             assertEquals(1L, service.backupStateVersion.value)
         }
+    }
+
+    @Test
+    fun `app registry withdrawal rechecks ownership at admission and after identity lookup`() = runTest {
+        for (holdIdentityLookup in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            whenever(sdk.contactRecords()).doSuspendableAnswer {
+                if (!holdIdentityLookup) {
+                    entered.complete(Unit)
+                    release.await()
+                }
+                emptyList()
+            }
+            whenever(sdk.identityStatus()).doSuspendableAnswer {
+                entered.complete(Unit)
+                release.await()
+                IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+            }
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            var ownsWithdrawal = true
+            val active = async { service.contactRecords() }
+            runCurrent()
+            val withdrawal = async {
+                service.syncPaykitApp(false, Priority.Interactive) { ownsWithdrawal }
+            }
+            entered.await()
+            runCurrent()
+            assertFalse(withdrawal.isCompleted)
+            ownsWithdrawal = false
+            release.complete(Unit)
+
+            active.await()
+            assertFalse(withdrawal.await())
+            verify(sdk, times(if (holdIdentityLookup) 1 else 0)).identityStatus()
+            verify(sdk, never()).publishPaykitApp(any(), any())
+        }
+    }
+
+    @Test
+    fun `admitted app registry withdrawal drains before releasing cancelled caller ownership`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        whenever(sdk.identityStatus())
+            .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        whenever(sdk.publishPaykitApp(any(), any())).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            events += "registry completed"
+            mock<PaykitAppRegistry>()
+        }
+        whenever(sdk.contactRecords()).thenAnswer {
+            events += "next admitted"
+            emptyList<ContactRecord>()
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        var ownsWithdrawal = true
+        val withdrawal = async { service.syncPaykitApp(false, Priority.Interactive) { ownsWithdrawal } }
+        entered.await()
+        ownsWithdrawal = false
+        withdrawal.cancel()
+        val next = async { service.contactRecords() }
+        runCurrent()
+        assertFalse(next.isCompleted)
+        assertFalse(withdrawal.isCompleted)
+        release.complete(Unit)
+
+        assertFailsWith<CancellationException> { withdrawal.await() }
+        assertEquals(emptyList(), next.await())
+        assertEquals(listOf("registry completed", "next admitted"), events)
+        verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
     }
 
     @Test

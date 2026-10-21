@@ -12,6 +12,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
@@ -40,6 +41,8 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
+import to.bitkit.data.PrivatePaykitReservationData
+import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -52,6 +55,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
+import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import java.io.IOException
 import java.util.ArrayDeque
@@ -159,7 +163,10 @@ class WalletRepoTest : BaseUnitTest() {
         sut = createSut()
     }
 
-    private fun createSut(dispatcher: CoroutineDispatcher = testDispatcher) = WalletRepo(
+    private fun createSut(
+        dispatcher: CoroutineDispatcher = testDispatcher,
+        reservationRepo: PrivatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
+    ) = WalletRepo(
         bgDispatcher = dispatcher,
         keychain = keychain,
         coreService = coreService,
@@ -169,7 +176,7 @@ class WalletRepoTest : BaseUnitTest() {
         preActivityMetadataRepo = preActivityMetadataRepo,
         deriveBalanceStateUseCase = deriveBalanceStateUseCase,
         wipeWalletUseCase = wipeWalletUseCase,
-        privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
+        privatePaykitAddressReservationRepo = reservationRepo,
         transferRepo = transferRepo,
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
@@ -229,6 +236,134 @@ class WalletRepoTest : BaseUnitTest() {
         testScheduler.runCurrent()
 
         assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `cache hydration never exposes a quarantined public Receive address`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS, bip21 = "bitcoin:$ADDRESS")))
+        whenever(privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(ADDRESS)).thenReturn(true)
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+
+        assertEquals("", sut.walletState.value.onchainAddress)
+        assertEquals("", sut.walletState.value.bip21)
+        val update = argumentCaptor<(AppCacheData) -> AppCacheData>()
+        verify(cacheStore).update(update.capture())
+        assertEquals("", update.firstValue(AppCacheData(onchainAddress = ADDRESS)).onchainAddress)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `cached balance is immediate while starting node leaves Receive unvalidated`() = test {
+        val cachedBalance = BalanceState(totalOnchainSats = 50_000uL)
+        val address = "bcrt1qterdweva9vextackckt6pjy0mmuc54g87g6lsq"
+        whenever(cacheStore.data).thenReturn(
+            flowOf(AppCacheData(balance = cachedBalance, onchainAddress = address, bip21 = "bitcoin:$address")),
+        )
+        val reservations = mock<PrivatePaykitReservationStore>()
+        whenever(reservations.data).thenReturn(
+            flowOf(
+                PrivatePaykitReservationData(reservedReceiveIndexesByAddressType = mapOf("nativeSegwit" to setOf(1))),
+            ),
+        )
+        val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting))
+        whenever(lightningRepo.lightningState).thenReturn(nodeState)
+        val lookupStarted = CompletableDeferred<Unit>()
+        val startupFailed = CompletableDeferred<Unit>()
+        val failure = AppError("node startup failed")
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 1)).doSuspendableAnswer {
+            lookupStarted.complete(Unit)
+            startupFailed.await()
+            Result.failure(failure)
+        }
+        val reservationRepo = PrivatePaykitAddressReservationRepo(
+            testDispatcher,
+            reservations,
+            settingsStore,
+            coreService,
+            lightningRepo,
+            cacheStore,
+        )
+        sut = createSut(reservationRepo = reservationRepo)
+
+        sut.loadFromCache()
+        lookupStarted.await()
+        assertEquals(0L, testScheduler.currentTime)
+        assertEquals(cachedBalance, sut.balanceState.value)
+        assertEquals("", sut.walletState.value.onchainAddress)
+        assertEquals("", sut.walletState.value.bip21)
+
+        nodeState.value = LightningState(nodeLifecycleState = NodeLifecycleState.ErrorStarting(failure))
+        startupFailed.complete(Unit)
+        testScheduler.runCurrent()
+        assertEquals(0L, testScheduler.currentTime)
+        assertEquals(cachedBalance, sut.balanceState.value)
+        assertEquals("", sut.walletState.value.onchainAddress)
+        assertEquals("", sut.walletState.value.bip21)
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `event sync releases publication only after successful activity persistence`() = test {
+        whenever(transferRepo.syncTransferStates()).thenReturn(Result.success(Unit))
+        for (success in listOf(false, true)) {
+            val persistenceStarted = CompletableDeferred<Unit>()
+            val finishPersistence = CompletableDeferred<Unit>()
+            var persisted = false
+            var publications = 0
+            whenever(activityRepo.syncActivities()).doSuspendableAnswer {
+                persistenceStarted.complete(Unit)
+                finishPersistence.await()
+                if (success) {
+                    persisted = true
+                    Result.success(Unit)
+                } else {
+                    Result.failure(AppError("activity persistence failed"))
+                }
+            }
+
+            sut.debounceSyncByEvent {
+                assertTrue(persisted)
+                publications++
+            }
+            testScheduler.advanceTimeBy(500)
+            testScheduler.runCurrent()
+            persistenceStarted.await()
+            assertEquals(0, publications)
+            finishPersistence.complete(Unit)
+            testScheduler.runCurrent()
+
+            assertEquals(if (success) 1 else 0, publications)
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `coalesced event sync retains only the latest completion and cancellation never publishes`() = test {
+        whenever(transferRepo.syncTransferStates()).thenReturn(Result.success(Unit))
+        val finishPersistence = CompletableDeferred<Unit>()
+        whenever(activityRepo.syncActivities()).doSuspendableAnswer {
+            finishPersistence.await()
+            Result.success(Unit)
+        }
+        val completed = mutableListOf<String>()
+        sut.debounceSyncByEvent { completed += "superseded" }
+        sut.debounceSyncByEvent { completed += "current" }
+        testScheduler.advanceTimeBy(500)
+        testScheduler.runCurrent()
+        assertTrue(completed.isEmpty())
+        finishPersistence.complete(Unit)
+        testScheduler.runCurrent()
+        assertEquals(listOf("current"), completed)
+        verify(activityRepo).syncActivities()
+
+        sut.debounceSyncByEvent { completed += "cancelled" }
+        sut.cancelSyncByEvent()
+        testScheduler.advanceTimeBy(500)
+        testScheduler.runCurrent()
+        assertEquals(listOf("current"), completed)
+        verify(activityRepo).syncActivities()
     }
 
     @Test
@@ -1209,10 +1344,10 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `refreshReusableReceiveAddressIfReserved replaces unavailable cached address`() = test {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS, bolt11 = INVOICE)))
-        whenever { privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(ADDRESS) }
-            .thenReturn(true)
         sut = createSut()
         sut.loadFromCache()
+        whenever { privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(ADDRESS) }
+            .thenReturn(true)
 
         val result = sut.refreshReusableReceiveAddressIfReserved()
 
@@ -1226,12 +1361,12 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `refreshReusableReceiveAddressIfReserved clears unavailable cached address when replacement fails`() = test {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS, bolt11 = INVOICE)))
-        whenever { privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(ADDRESS) }
-            .thenReturn(true)
         whenever { privatePaykitAddressReservationRepo.nextReusableReceiveAddress() }
             .thenReturn(Result.failure(error))
         sut = createSut()
         sut.loadFromCache()
+        whenever { privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(ADDRESS) }
+            .thenReturn(true)
 
         val result = sut.refreshReusableReceiveAddressIfReserved()
 

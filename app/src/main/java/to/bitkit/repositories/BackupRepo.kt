@@ -760,6 +760,8 @@ class BackupRepo @Inject constructor(
             createdAt = currentTimeMillis(),
             transfers = transfers,
             privatePaykitHighestReservedReceiveIndexByAddressType = privateReservations,
+            publicPaykitLegacyAddresses = reservationRepo
+                .quarantinedPublicAddressesSnapshot().toList().takeIf { it.isNotEmpty() },
             paykitSdkBackupState = paykitSdkBackupState.state,
             watchOnlyAccounts = watchOnlyAccountSnapshot.accounts,
             watchOnlyAccountAllocationState = watchOnlyAccountSnapshot.allocationState,
@@ -870,6 +872,7 @@ class BackupRepo @Inject constructor(
             mapOf("tagMetadata" to preActivityMetadataRepo::migrateBackupPreActivityMetadataJson),
         )
         val parsed = json.decodeFromString<MetadataBackupV1>(migration.json)
+        privatePaykitAddressReservationRepo.get().quarantinePublicAddress(parsed.cache.onchainAddress)
         val cleanCache = parsed.cache.resetBip21() // Force address rotation
         cacheStore.update { cleanCache }
         Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
@@ -950,11 +953,12 @@ class BackupRepo @Inject constructor(
             parsed.watchOnlyAccountAllocationState,
         )
         lightningService.reconcileWatchOnlyAccounts()
-        if (!parsed.privatePaykitHighestReservedReceiveIndexByAddressType.isNullOrEmpty()) {
-            cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
-        }
         val addressReservationRepo = privatePaykitAddressReservationRepo.get()
-        addressReservationRepo.restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType).getOrThrow()
+        addressReservationRepo.restoreBackup(
+            parsed.privatePaykitHighestReservedReceiveIndexByAddressType,
+            parsed.publicPaykitLegacyAddresses.orEmpty().toSet(),
+        ).getOrThrow()
+        cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
         val privateRepo = privatePaykitRepo.get()
         privateRepo.restoreBackup(parsed.paykitSdkBackupState).getOrThrow()
         addressReservationRepo.reconcileReservedIndexesWithLdk().getOrThrow()

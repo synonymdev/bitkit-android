@@ -177,7 +177,18 @@ class WalletRepo @Inject constructor(
         changePendingReceiveCacheLoads(1)
         repoScope.launch {
             receiveStateMutex.withLock {
-                val cacheData = cacheStore.data.first()
+                var cacheData = cacheStore.data.first()
+                cacheData.balance?.let { balance -> _balanceState.update { balance } }
+                val unavailable = runSuspendCatching {
+                    privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(cacheData.onchainAddress)
+                }.getOrElse {
+                    Logger.warn("Failed to validate cached receive address", it, context = TAG)
+                    return@withLock
+                }
+                if (unavailable) {
+                    cacheData = cacheData.invalidateReceiveOnchainAddress()
+                    cacheStore.update { it.invalidateReceiveOnchainAddress() }
+                }
                 committedReceiveBip21 = cacheData.bip21
                 _walletState.update {
                     it.copy(
@@ -187,9 +198,6 @@ class WalletRepo @Inject constructor(
                     )
                 }
                 synchronized(receiveUpdateStatusLock) { updateReceivePendingState() }
-                cacheData.balance?.let { balance ->
-                    _balanceState.update { balance }
-                }
             }
         }.invokeOnCompletion { changePendingReceiveCacheLoads(-1) }
     }
@@ -417,14 +425,14 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    /** Debounce syncs for [Event.SyncCompleted]. Rapid consecutive events are coalesced. */
-    fun debounceSyncByEvent() {
+    /** Coalesces event syncs, then runs [onActivitiesSynced] only after a successful activity sync. */
+    fun debounceSyncByEvent(onActivitiesSynced: suspend () -> Unit = {}) {
         eventSyncJob?.cancel()
         eventSyncJob = repoScope.launch {
             delay(EVENT_SYNC_DEBOUNCE_MS)
             syncBalances()
             transferRepo.syncTransferStates()
-            activityRepo.syncActivities()
+            activityRepo.syncActivities().onSuccess { onActivitiesSynced() }
         }
     }
 

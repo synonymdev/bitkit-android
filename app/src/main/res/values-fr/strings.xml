@@ -1408,8 +1408,11 @@
     <string name="profile__pay_contacts_error_wallet">Le portefeuille est encore en cours de démarrage. Réessayez dans un instant.</string>
     <string name="profile__pay_contacts_headline">Laissez vos\ncontacts\n&lt;accent&gt;vous payer&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Payer des contacts</string>
+    <string name="profile__private_payments_toggle">Paiements privés entre contacts</string>
     <string name="profile__pubky_copied">pubky copié dans le presse-papiers</string>
     <string name="profile__public_key">Clé publique</string>
+    <string name="profile__public_payments_toggle">Paiements publics</string>
+    <string name="profile__public_payments_warning">Vos informations de paiement seront publiques et liées à votre profil. Tout le monde pourra les voir.</string>
     <string name="profile__restore_nav_title">Restaurer le profil</string>
     <string name="profile__session_expired">La session de votre profil a expiré. Veuillez vous reconnecter pour restaurer votre profil.</string>
     <string name="profile__sign_out">Déconnecter</string>
@@ -1455,7 +1458,6 @@
     <string name="settings__es__server_error_certificate">Le certificat de ce serveur n\'est pas fiable. Utilisez un serveur avec un certificat fiable ou connectez-vous à son port TCP.</string>
     <string name="settings__es__server_error_network">Ce serveur est sur un autre réseau Bitcoin. Choisissez un serveur pour le réseau utilisé par Bitkit.</string>
     <string name="settings__es__server_error_protocol">Échec de la connexion sécurisée. Vérifiez que le protocole (TCP ou TLS) correspond au port du serveur.</string>
-    <string name="settings__general__enable_contact_payments">Activer les paiements avec les contacts</string>
     <string name="settings__hardware_wallets__add_button">Ajouter un portefeuille matériel</string>
     <string name="settings__hardware_wallets__name_label">Nom</string>
     <string name="settings__hardware_wallets__nav_title">Portefeuilles matériels</string>

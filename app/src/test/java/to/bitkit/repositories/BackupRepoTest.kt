@@ -178,7 +178,9 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(usdtRepo.state).thenReturn(MutableStateFlow(UsdtWalletState()))
         whenever(paykitUsdtPaymentRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitPresentationStore.backupSnapshot()).thenReturn(emptyMap())
-        whenever { privatePaykitAddressReservationRepo.restoreBackup(any()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitAddressReservationRepo.restoreBackup(anyOrNull(), any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitAddressReservationRepo.quarantinedPublicAddressesSnapshot() }.thenReturn(emptySet())
         whenever { privatePaykitAddressReservationRepo.backupSnapshot() }.thenReturn(Result.success(null))
         whenever(privatePaykitAddressReservationRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever {
@@ -968,7 +970,7 @@ class BackupRepoTest : BaseUnitTest() {
     @Test
     fun `full restore should fail when private Paykit reservations fail to restore`() = test {
         stubWalletBackup()
-        whenever { privatePaykitAddressReservationRepo.restoreBackup(any()) }
+        whenever { privatePaykitAddressReservationRepo.restoreBackup(anyOrNull(), any()) }
             .thenReturn(Result.failure(BackupRepoTestError("restore failed")))
 
         val result = sut.performFullRestoreFromLatestBackup()
@@ -1389,6 +1391,25 @@ class BackupRepoTest : BaseUnitTest() {
         val payload = json.decodeFromString<WalletBackupV1>(dataCaptor.firstValue.decodeToString())
         assertEquals(listOf(account), payload.watchOnlyAccounts)
         assertEquals(allocationState, payload.watchOnlyAccountAllocationState)
+    }
+
+    @Test
+    fun `wallet backup round trips public address exclusions alongside reservation floors`() = test {
+        val legacy = setOf("bcrt1qpublic")
+        val floors = mapOf("nativeSegwit" to 8)
+        whenever(privatePaykitAddressReservationRepo.quarantinedPublicAddressesSnapshot()).thenReturn(legacy)
+        whenever(privatePaykitAddressReservationRepo.backupSnapshot()).thenReturn(Result.success(floors))
+        sut.triggerBackup(BackupCategory.WALLET).getOrThrow()
+        val bytes = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), bytes.capture())
+        val payload = json.decodeFromString<WalletBackupV1>(bytes.firstValue.decodeToString())
+        assertEquals(legacy.toList(), payload.publicPaykitLegacyAddresses)
+        assertEquals(floors, payload.privatePaykitHighestReservedReceiveIndexByAddressType)
+        whenever(vssBackupClient.getObject(BackupCategory.WALLET.name)).thenReturn(
+            Result.success(VssItem(BackupCategory.WALLET.name, bytes.firstValue, 1)),
+        )
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        verify(privatePaykitAddressReservationRepo).restoreBackup(floors, legacy)
     }
 
     @Test
