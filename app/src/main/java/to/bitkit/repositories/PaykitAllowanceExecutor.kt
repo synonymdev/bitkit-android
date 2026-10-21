@@ -282,7 +282,9 @@ class PaykitAllowanceExecutor @Inject constructor(
                         val entry = localState(identity).journal.firstOrNull { it.attemptId == attempt.attemptId }
                         outcome?.let { record(attempt.attemptId, it, identity) }
                         // One that paid nothing gives the payee's list back, as a live failure does.
-                        if (outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) releasePaymentList(entry)
+                        if (outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) {
+                            releasePaymentList(entry, identity)
+                        }
                     }
                     // Reconciliation can settle an attempt in the ledger before its journal entry follows.
                     PaymentExecutionStatus.SUCCEEDED -> syncSettledJournal(attempt.attemptId, Stage.SUCCEEDED, identity)
@@ -296,7 +298,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         val current = localState(identity).journal.firstOrNull { it.attemptId == attemptId } ?: return
         if (current.stage == Stage.SUCCEEDED || current.stage == Stage.FAILED) return
         val before = applyJournalStage(attemptId, stage, identity) ?: return
-        if (stage == Stage.FAILED && before.isAutomatic) releasePaymentList(before)
+        if (stage == Stage.FAILED && before.isAutomatic) releasePaymentList(before, identity)
     }
 
     /**
@@ -667,7 +669,7 @@ class PaykitAllowanceExecutor @Inject constructor(
                     val outcome = if (succeeded) PaymentOutcome.SUCCEEDED else PaymentOutcome.FAILED
                     record(entry.attemptId, outcome, identity)
                     // A payment the node gave up on paid nothing, so the payee's list stays usable for the manual one.
-                    if (!succeeded && entry.isAutomatic) releasePaymentList(entry)
+                    if (!succeeded && entry.isAutomatic) releasePaymentList(entry, identity)
                 }.onFailure { Logger.warn("Failed to record an allowance payment outcome", it, context = TAG) }
             }
         }
@@ -853,8 +855,28 @@ class PaykitAllowanceExecutor @Inject constructor(
         attemptId: String,
         identity: String,
     ) {
+        // Taken from the journal first, so a node failure event for the same payment cannot release it a second time.
+        takePaymentListVersion(attemptId, identity)
         payer.releasePaymentList(request.counterparty, payment.context)
         record(attemptId, PaymentOutcome.FAILED, identity)
+    }
+
+    /**
+     * Clears and returns the payment list version an attempt consumed, so the list is released at most once: a second
+     * release could clear another payment's claim on the same version.
+     */
+    private suspend fun takePaymentListVersion(attemptId: String, identity: String): JournalEntry? {
+        var taken: JournalEntry? = null
+        updateLocalState(identity) { state ->
+            state.copy(
+                journal = state.journal.map {
+                    if (it.attemptId != attemptId) return@map it
+                    taken = it.takeIf { entry -> entry.paymentListVersion != null }
+                    it.copy(paymentListVersion = null, previousPaymentListVersion = null)
+                },
+            )
+        }
+        return taken
     }
 
     private suspend fun updateJournalEntry(
@@ -867,12 +889,12 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
     }
 
-    private suspend fun releasePaymentList(entry: JournalEntry) {
-        val version = entry.paymentListVersion ?: return
+    private suspend fun releasePaymentList(entry: JournalEntry, identity: String) {
+        val taken = takePaymentListVersion(entry.attemptId, identity) ?: return
         val context = PrivatePaykitPaymentContext(
             paymentAppsByEndpoint = emptyMap(),
-            paymentListVersion = version,
-            previousPaymentListVersion = entry.previousPaymentListVersion,
+            paymentListVersion = requireNotNull(taken.paymentListVersion),
+            previousPaymentListVersion = taken.previousPaymentListVersion,
         )
         payer.releasePaymentList(entry.requestId.counterparty, context)
     }

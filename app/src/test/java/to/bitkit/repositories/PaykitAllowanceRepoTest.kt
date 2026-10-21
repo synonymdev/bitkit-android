@@ -590,6 +590,20 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     // region Automatic payments
 
     @Test
+    fun `a coverage update holds until it is released once`() = test {
+        val first = sut.beginCoverageUpdate()
+        val second = sut.beginCoverageUpdate()
+        assertTrue(sut.isUpdating)
+
+        first()
+        first()
+        assertTrue(sut.isUpdating)
+
+        second()
+        assertFalse(sut.isUpdating)
+    }
+
+    @Test
     fun `only a contact this wallet grants an allowance to may be covered`() = test {
         records = listOf(fixtures.record(state = AllowanceLifecycleState.PROPOSED))
         sut.activate(identity)
