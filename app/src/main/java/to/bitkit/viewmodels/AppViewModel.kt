@@ -8131,6 +8131,7 @@ data class OnchainFeeUi(
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
     VALUE_OVER_100_USD(R.string.wallet__send_dialog1, "SendDialog1"),
     OVER_HALF_BALANCE(R.string.wallet__send_dialog2, "SendDialog2"),
+    OVER_HALF_USDT_BALANCE(R.string.wallet__send_dialog2_usdt, "SendDialog2"),
     FEE_OVER_HALF_VALUE(R.string.wallet__send_dialog3, "SendDialog3"),
     FEE_OVER_10_USD(R.string.wallet__send_dialog4, "SendDialog4"),
     // TODO SendDialog5 https://github.com/synonymdev/bitkit/blob/master/src/screens/Wallets/Send/ReviewAndSend.tsx#L457-L466
