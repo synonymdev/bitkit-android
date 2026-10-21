@@ -184,6 +184,7 @@ import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestCreation
 import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
+import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
@@ -1374,12 +1375,21 @@ class AppViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            paykitPaymentRequestRepo.pendingRequests.drop(1).collect(::onPendingPaykitRequestsChanged)
+            var previous = paykitPaymentRequestRepo.pendingRequests.value
+            paykitPaymentRequestRepo.pendingRequests.drop(1).collect { requests ->
+                onPendingPaykitRequestsChanged(requests, previous)
+                previous = requests
+            }
         }
     }
 
-    private suspend fun onPendingPaykitRequestsChanged(requests: List<PaykitPaymentRequest>) {
+    private suspend fun onPendingPaykitRequestsChanged(
+        requests: List<PaykitPaymentRequest>,
+        previous: List<PaykitPaymentRequest>,
+    ) {
+        val requestedId = requestedPaymentRequestId.value
         retainPaymentRequestPresentationState(requests)
+        toastSilentlyExpiredPaymentRequests(requests, previous, requestedId)
         val activeRequest = activeIncomingPaymentRequest()
         val isProtected = isSubmittingPaymentRequest || uncertainOnchainPaymentRequestId == activeRequest?.id ||
             isPreparedContactPayment(synchronized(contactPaymentContextLock) { activeContactPaymentContext })
@@ -1794,6 +1804,28 @@ class AppViewModel @Inject constructor(
             paymentRequestPresentationRetryJobs.remove(request.id)
             presentNextIncomingPaykitPaymentRequest()
         }
+    }
+
+    /** Tells the user when a pending incoming request expires on its own; the one they opened has its own toast. */
+    private fun toastSilentlyExpiredPaymentRequests(
+        requests: List<PaykitPaymentRequest>,
+        previous: List<PaykitPaymentRequest>,
+        requestedId: PaykitPaymentRequestId?,
+    ) {
+        if (!isPaykitEnabled.value) return
+        val remainingIds = requests.mapTo(mutableSetOf()) { it.id }
+        val expired = previous.filter {
+            it.id !in remainingIds && it.id != requestedId &&
+                it.direction == PaykitPaymentRequestDirection.Incoming && it.billingPeriod == null &&
+                !it.isPaymentInFlight && paykitPaymentRequestRepo.isExpired(it)
+        }
+        if (expired.isEmpty()) return
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.wallet__payment_request_expired),
+            testTag = "PaymentRequestExpiredToast",
+        )
     }
 
     private fun finishExpiredPaymentRequestPresentation(request: PaykitPaymentRequest) {

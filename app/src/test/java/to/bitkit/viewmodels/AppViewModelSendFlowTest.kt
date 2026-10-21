@@ -2664,6 +2664,47 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending request expiring on its own shows the expired toast`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = emptyList()
+        runCurrent()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
+        assertEquals("The payment request has expired.", toastCaptor.lastValue.description)
+    }
+
+    @Test
+    fun `pending request removed without expiring shows no expired toast`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(false)
+        pendingPaykitPaymentRequests.value = emptyList()
+        runCurrent()
+
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
     fun `expired explicit request shows the expired toast once`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
