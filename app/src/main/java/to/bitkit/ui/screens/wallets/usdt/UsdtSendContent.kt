@@ -97,7 +97,6 @@ import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
-import java.text.DecimalFormatSymbols
 import kotlin.time.Duration.Companion.seconds
 
 @Composable
@@ -509,7 +508,6 @@ private fun UsdtAmountContent(
         BoxWithConstraints(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).fillMaxWidth()) {
             NumberPad(
                 type = NumberPadType.DECIMAL,
-                decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
                 availableHeight = maxHeight,
                 enabled = !state.busy && amountEditable,
                 onDeleteLongPress = { onAmountChange("") },

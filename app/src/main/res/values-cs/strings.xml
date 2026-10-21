@@ -831,7 +831,6 @@
     <string name="usdt__fee_note">Všechny poplatky se platí v USDT. Konečný poplatek může být nižší.</string>
     <string name="usdt__from_address">Z adresy</string>
     <string name="usdt__hide_details">Skrýt podrobnosti</string>
-    <string name="usdt__history_sync">Starší aktivita se stále synchronizuje. Když je připojení k dispozici, je váš zůstatek aktuální.</string>
     <string name="usdt__intro_decline">Ne, děkuji</string>
     <string name="usdt__intro_description">V srdci bitcoin. Dolary, když je potřebujete. Zapněte USDT (Tether) a posílejte a přijímejte digitální dolary s Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLARY?&lt;/accent&gt;\nVAŠE VOLBA</string>

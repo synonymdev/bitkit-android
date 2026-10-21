@@ -1237,7 +1237,6 @@
     <string name="usdt__fee_note">All fees are paid in USDT. Final fee may be lower.</string>
     <string name="usdt__from_address">From address</string>
     <string name="usdt__hide_details">Hide details</string>
-    <string name="usdt__history_sync">Older activity is still syncing. Your balance is up to date when the connection is available.</string>
     <string name="usdt__intro_decline">No Thanks</string>
     <string name="usdt__intro_description">Bitcoin at heart. Dollars when you need them. Enable USDT (Tether) to send and receive digital dollars with Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nYOUR CALL</string>

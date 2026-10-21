@@ -1,9 +1,10 @@
 <journey name="usdt wallet navigation">
-  <description>Use an onboarded wallet in an E2E build with USDT RPC and bundler URLs configured. No chain funding or live provider is required. A network error may be visible when services are offline; no payment is submitted.</description>
+  <description>Use an onboarded wallet in an E2E build with USDT RPC and bundler URLs configured. No chain funding or live provider is required. Wallet syncing stays silent when services are offline; no payment is submitted.</description>
   <actions>
     <action>Enable USDT in the introductory sheet or Settings, General, Payments before starting this flow.</action>
     <action>On Home, verify the Savings/Spending and USDT balance dividers align vertically, including any hardware wallet rows. With an odd number of paired hardware wallets, verify USDT fills the last row’s empty cell; with an even number, it starts the next row.</action>
     <action>Verify USDT balances and activity amounts show at most two decimals; a nonzero amount below one cent shows &lt;0.01. Open USDT from Home and verify the wallet screen uses the same balance, action buttons and activity layout as the Bitcoin wallet, with its Tether coin illustration anchored at the upper right.</action>
+    <action>With an empty wallet, verify Home and the USDT wallet show $ 0.00, including before the first successful refresh. Verify no red refresh error or grey history-sync copy appears below the balance while the provider is offline.</action>
     <action>Open Receive. Verify the network is Arbitrum One. Open details, verify the address starts with 0x, and verify Details Copy contains only the address. Return to the QR and verify Copy and tapping the QR both copy only the same address, while the QR still contains the full USDT payment URI including the network and token. On Android, system Back from Details returns to the USDT QR; Back from the QR closes Receive without switching to Savings.</action>
     <action>Close Receive, open Send and manual entry. Enter an invalid Bitcoin address and verify the address error prevents continuing.</action>
     <action>Replace it with an owned valid EVM address. Continue to Amount, enter six decimal places and try a seventh; verify the amount remains limited to six. Close before requesting a quote.</action>

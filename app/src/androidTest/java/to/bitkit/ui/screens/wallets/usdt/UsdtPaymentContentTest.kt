@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -79,7 +80,7 @@ class UsdtPaymentContentTest {
     }
 
     @Test
-    fun decimalKeyMatchesAmountLocaleWithoutChangingInputEncoding() {
+    fun decimalKeyUsesDotInCommaRegionsWithoutChangingInputEncoding() {
         Locale.setDefault(Locale.GERMANY)
         val amount = mutableStateOf("5")
         composeTestRule.setContent {
@@ -97,11 +98,33 @@ class UsdtPaymentContentTest {
                 }
             }
         }
-        composeTestRule.onNodeWithText(",").assertIsDisplayed()
+        composeTestRule.onNodeWithText(".").assertIsDisplayed()
         composeTestRule.onNodeWithTag("NDecimal").performClick()
         composeTestRule.onNodeWithTag("N5").performClick()
-        composeTestRule.onNodeWithText("5,5").assertIsDisplayed()
+        composeTestRule.onNodeWithText("5.5").assertIsDisplayed()
         composeTestRule.runOnIdle { assertEquals("5.5", amount.value) }
+    }
+
+    @Test
+    fun walletShowsZeroSilentlyUntilBalanceArrivesAndKeepsBalancePrivacy() {
+        Locale.setDefault(Locale.GERMANY)
+        val wallet = mutableStateOf(UsdtWalletState())
+        val hidden = mutableStateOf(false)
+        composeTestRule.setContent {
+            AppThemeSurface {
+                UsdtWalletContent(
+                    wallet = wallet.value,
+                    hideBalance = hidden.value,
+                    onReceive = {}, onSend = {}, onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("0.00").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("UsdtHistorySync").assertDoesNotExist()
+        composeTestRule.runOnIdle { wallet.value = wallet.value.copy(balance = 1_234_567_890uL) }
+        composeTestRule.onNodeWithText("1,234.57").assertIsDisplayed()
+        composeTestRule.runOnIdle { hidden.value = true }
+        composeTestRule.onNodeWithText("1,234.57").assertDoesNotExist()
     }
 
     @Test
