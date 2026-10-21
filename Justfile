@@ -24,9 +24,6 @@ list:
         "lint" \
         "lint baseline" \
         "format" \
-        "translations pull" \
-        "translations push source" \
-        "translations push all" \
         "e2e [network|no geo|TASK] [TASK]" \
         "changelog [all|next|hotfix]" \
         "clean"
@@ -192,9 +189,6 @@ lint target="":
 
 format:
     {{ gradle }} detekt --auto-correct --rerun-tasks
-
-translations action value="":
-    {{ if action == "pull" { "./scripts/pull-translations.sh" } else if action == "push" { if value == "source" { "tx push --source" } else if value == "all" { "./scripts/push-translations.sh" } else { error("usage: just translations pull|push source|push all") } } else { error("usage: just translations pull|push source|push all") } }}
 
 e2e mode="" value="" task="assembleDevRelease":
     {{ if mode == "" { "E2E=true " + gradle + " " + task } else if mode == "network" { "E2E=true E2E_BACKEND=network " + gradle + " " + if value == "" { task } else { value } } else if mode == "no" { if value == "geo" { "GEO=false E2E=true " + gradle + " " + task } else { error("usage: just e2e no geo [TASK]") } } else { "E2E=true " + gradle + " " + mode } }}
