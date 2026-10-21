@@ -425,8 +425,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    private fun loadPaymentProofSnapshot(version: Long) {
-        val proofs = runCatching { paymentProofStore.load() }
+    private suspend fun loadPaymentProofSnapshot(version: Long) {
+        val proofs = runSuspendCatching { paymentProofStore.load() }
             .onFailure {
                 if (lastFailedPaymentProofVersion.getAndSet(version) != version) {
                     Logger.warn("Failed to read Paykit payment proofs", it, context = TAG)
