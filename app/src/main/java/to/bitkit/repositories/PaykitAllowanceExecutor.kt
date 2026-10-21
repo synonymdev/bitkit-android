@@ -278,23 +278,22 @@ class PaykitAllowanceExecutor @Inject constructor(
                             ?: PaymentOutcome.UNKNOWN.takeIf { attempt.status == PaymentExecutionStatus.SUBMITTED }
                         val entry = localState(identity).journal.firstOrNull { it.attemptId == attempt.attemptId }
                         outcome?.let { record(attempt.attemptId, it, identity) }
-                        // A payment that settled while the app was closed still links its contact and notifies.
-                        if (outcome == PaymentOutcome.SUCCEEDED && entry != null) emitRecoveredPayment(entry)
                         // One that paid nothing gives the payee's list back, as a live failure does.
                         if (outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) releasePaymentList(entry)
                     }
-                    PaymentExecutionStatus.SUCCEEDED, PaymentExecutionStatus.FAILED -> Unit
+                    // Reconciliation can settle an attempt in the ledger before its journal entry follows.
+                    PaymentExecutionStatus.SUCCEEDED -> syncSettledJournal(attempt.attemptId, Stage.SUCCEEDED, identity)
+                    PaymentExecutionStatus.FAILED -> syncSettledJournal(attempt.attemptId, Stage.FAILED, identity)
                 }
             }
         }.onFailure { Logger.warn("Failed to recover Paykit allowance attempts", it, context = TAG) }
     }
 
-    private fun emitRecoveredPayment(entry: JournalEntry) {
-        if (!entry.isAutomatic || entry.stage == Stage.SUCCEEDED) return
-        val paymentId = entry.paymentHash?.lowercase() ?: entry.transactionId ?: return
-        _events.tryEmit(
-            PaykitAllowanceEvent.PaidAutomatically(entry.requestId.counterparty, entry.amountSats, paymentId)
-        )
+    private suspend fun syncSettledJournal(attemptId: String, stage: Stage, identity: String) {
+        val current = localState(identity).journal.firstOrNull { it.attemptId == attemptId } ?: return
+        if (current.stage == Stage.SUCCEEDED || current.stage == Stage.FAILED) return
+        val before = applyJournalStage(attemptId, stage, identity) ?: return
+        if (stage == Stage.FAILED && before.isAutomatic) releasePaymentList(before)
     }
 
     /**
@@ -369,8 +368,30 @@ class PaykitAllowanceExecutor @Inject constructor(
             PaymentOutcome.FAILED -> Stage.FAILED
             PaymentOutcome.UNKNOWN -> Stage.UNKNOWN
         }
-        updateJournalEntry(attemptId, identity) { it.copy(stage = stage) }
+        applyJournalStage(attemptId, stage, identity)
         _events.tryEmit(PaykitAllowanceEvent.LedgerChanged)
+    }
+
+    /**
+     * Moves an attempt's journal entry to [stage]. The one place that announces an automatic payment as paid: only the
+     * update that moves it to SUCCEEDED does, so settlement and recovery never announce it twice.
+     */
+    private suspend fun applyJournalStage(attemptId: String, stage: Stage, identity: String): JournalEntry? {
+        var before: JournalEntry? = null
+        updateLocalState(identity) { state ->
+            before = state.journal.firstOrNull { it.attemptId == attemptId }
+            state.copy(journal = state.journal.map { if (it.attemptId == attemptId) it.copy(stage = stage) else it })
+        }
+        val entry = before ?: return null
+        if (entry.isAutomatic && entry.stage != Stage.SUCCEEDED && stage == Stage.SUCCEEDED) {
+            val paymentId = entry.paymentHash?.lowercase() ?: entry.transactionId
+            if (paymentId != null) {
+                _events.tryEmit(
+                    PaykitAllowanceEvent.PaidAutomatically(entry.requestId.counterparty, entry.amountSats, paymentId),
+                )
+            }
+        }
+        return entry
     }
 
     private suspend fun automaticAttempts(): List<PaykitAllowanceCapacity.Attempt> =
@@ -644,15 +665,6 @@ class PaykitAllowanceExecutor @Inject constructor(
                     record(entry.attemptId, outcome, identity)
                     // A payment the node gave up on paid nothing, so the payee's list stays usable for the manual one.
                     if (!succeeded && entry.isAutomatic) releasePaymentList(entry)
-                    if (succeeded && entry.isAutomatic) {
-                        _events.tryEmit(
-                            PaykitAllowanceEvent.PaidAutomatically(
-                                counterparty = entry.requestId.counterparty,
-                                amountSats = entry.amountSats,
-                                paymentId = paymentHash.lowercase(),
-                            ),
-                        )
-                    }
                 }.onFailure { Logger.warn("Failed to record an allowance payment outcome", it, context = TAG) }
             }
         }

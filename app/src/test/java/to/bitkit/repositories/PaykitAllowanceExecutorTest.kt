@@ -689,6 +689,26 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovery syncs an attempt the ledger already settled and announces it once`() = test {
+        collectEvents()
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("settled", PaymentExecutionStatus.SUCCEEDED)),
+        )
+        seedJournal(journalEntry("settled", request, Stage.SENT, paymentHash = PAYMENT_HASH))
+        sut.activate(identity)
+
+        sut.recover(identity)
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = true)
+
+        assertEquals(listOf(Stage.SUCCEEDED), sut.localState(identity).journal.map { it.stage })
+        assertEquals(
+            listOf(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, PAYMENT_HASH)),
+            events.filterIsInstance<PaykitAllowanceEvent.PaidAutomatically>(),
+        )
+    }
+
+    @Test
     fun `local capacity check flags only requests that fit no allowance`() = test {
         collectEvents()
         accountingState = stateNearTheMonthlyCap()
