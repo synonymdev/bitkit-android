@@ -351,53 +351,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     private data class PaymentProofSnapshot(val version: Long, val proofs: List<PendingPaykitPaymentProof>?)
 
-    // Read off the main thread, so presentation checks never touch the keychain.
     private val paymentProofSnapshot = MutableStateFlow<PaymentProofSnapshot?>(null)
     private val isReloadingPaymentProofs = AtomicBoolean(false)
     private val lastFailedPaymentProofVersion = AtomicLong(-1L)
 
-    init {
-        repoScope.launch {
-            paymentProofStore.backupStateVersion.collect { loadPaymentProofSnapshot(it) }
-        }
-    }
-
-    private suspend fun loadPaymentProofSnapshot(version: Long) {
-        val proofs = runCatching { paymentProofStore.load() }
-            .onFailure {
-                if (lastFailedPaymentProofVersion.getAndSet(version) != version) {
-                    Logger.warn("Failed to read Paykit payment proofs", it, context = TAG)
-                }
-            }
-            .getOrNull()
-        paymentProofSnapshot.update { current ->
-            val isNewer = current == null || current.version < version ||
-                current.version == version && current.proofs == null
-            if (isNewer) PaymentProofSnapshot(version, proofs) else current
-        }
-    }
-
-    /**
-     * Reads the proof store when the snapshot lags it, so a payment check right after a proof write sees that write.
-     */
-    suspend fun syncPaymentProofs() {
-        val version = paymentProofStore.backupStateVersion.value
-        if (paymentProofSnapshot.value?.let { it.version == version && it.proofs != null } == true) return
-        withContext(ioDispatcher) { loadPaymentProofSnapshot(version) }
-    }
-
-    // A failed read is retried on the next check, so a transient keychain error does not block requests until the
-    // next proof write.
-    private fun reloadUnreadablePaymentProofs(version: Long) {
-        if (!isReloadingPaymentProofs.compareAndSet(false, true)) return
-        repoScope.launch {
-            try {
-                loadPaymentProofSnapshot(version)
-            } finally {
-                isReloadingPaymentProofs.set(false)
-            }
-        }
-    }
     private var expirationJob: Job? = null
     private var cachedTargetContext: PaykitPaymentRequestTargetContext? = null
     private val targetRefreshTicket = AtomicLong()
@@ -461,6 +418,47 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     @Volatile
     private var dismissedSubscriptionPaymentIds = emptySet<PaykitPaymentRequestId>()
+
+    init {
+        repoScope.launch {
+            paymentProofStore.backupStateVersion.collect { loadPaymentProofSnapshot(it) }
+        }
+    }
+
+    private fun loadPaymentProofSnapshot(version: Long) {
+        val proofs = runCatching { paymentProofStore.load() }
+            .onFailure {
+                if (lastFailedPaymentProofVersion.getAndSet(version) != version) {
+                    Logger.warn("Failed to read Paykit payment proofs", it, context = TAG)
+                }
+            }
+            .getOrNull()
+        paymentProofSnapshot.update { current ->
+            val isNewer = current == null || current.version < version ||
+                current.version == version && current.proofs == null
+            if (isNewer) PaymentProofSnapshot(version, proofs) else current
+        }
+    }
+
+    /**
+     * Reads the proof store when the snapshot lags it, so a payment check right after a proof write sees that write.
+     */
+    suspend fun syncPaymentProofs() {
+        val version = paymentProofStore.backupStateVersion.value
+        if (paymentProofSnapshot.value?.let { it.version == version && it.proofs != null } == true) return
+        withContext(ioDispatcher) { loadPaymentProofSnapshot(version) }
+    }
+
+    private fun reloadUnreadablePaymentProofs(version: Long) {
+        if (!isReloadingPaymentProofs.compareAndSet(false, true)) return
+        repoScope.launch {
+            try {
+                loadPaymentProofSnapshot(version)
+            } finally {
+                isReloadingPaymentProofs.set(false)
+            }
+        }
+    }
 
     suspend fun activate(identity: String) = withContext(ioDispatcher) {
         val normalizedIdentity = PubkyPublicKeyFormat.normalized(identity) ?: return@withContext
@@ -1241,11 +1239,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
         !request.isExpired(clock.now()) && _pendingRequests.value.any { it.id == request.id } &&
             locallyPaidRequestIds()?.contains(request.id) == false
 
-    /**
-     * Requests with a started or completed local payment; the pending list can predate them until the next refresh.
-     * Null while the proof store is unreadable or its latest change is not read yet, so callers treat it as unpaid only
-     * when it is known.
-     */
     private fun locallyPaidRequestIds(): Set<PaykitPaymentRequestId>? {
         val identity = activeIdentity ?: return emptySet()
         val snapshot = paymentProofSnapshot.value
