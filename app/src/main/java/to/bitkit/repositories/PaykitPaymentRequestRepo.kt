@@ -68,6 +68,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.SubscriptionIcon
 import java.math.BigDecimal
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -352,14 +353,39 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     // Read off the main thread, so presentation checks never touch the keychain.
     private val paymentProofSnapshot = MutableStateFlow<PaymentProofSnapshot?>(null)
+    private val isReloadingPaymentProofs = AtomicBoolean(false)
+    private val lastFailedPaymentProofVersion = AtomicLong(-1L)
 
     init {
         repoScope.launch {
-            paymentProofStore.backupStateVersion.collect { version ->
-                val proofs = runCatching { paymentProofStore.load() }
-                    .onFailure { Logger.warn("Failed to read Paykit payment proofs", it, context = TAG) }
-                    .getOrNull()
-                paymentProofSnapshot.value = PaymentProofSnapshot(version, proofs)
+            paymentProofStore.backupStateVersion.collect { loadPaymentProofSnapshot(it) }
+        }
+    }
+
+    private suspend fun loadPaymentProofSnapshot(version: Long) {
+        val proofs = runCatching { paymentProofStore.load() }
+            .onFailure {
+                if (lastFailedPaymentProofVersion.getAndSet(version) != version) {
+                    Logger.warn("Failed to read Paykit payment proofs", it, context = TAG)
+                }
+            }
+            .getOrNull()
+        paymentProofSnapshot.update { current ->
+            val isNewer = current == null || current.version < version ||
+                current.version == version && current.proofs == null
+            if (isNewer) PaymentProofSnapshot(version, proofs) else current
+        }
+    }
+
+    // A failed read is retried on the next check, so a transient keychain error does not block requests until the
+    // next proof write.
+    private fun reloadUnreadablePaymentProofs(version: Long) {
+        if (!isReloadingPaymentProofs.compareAndSet(false, true)) return
+        repoScope.launch {
+            try {
+                loadPaymentProofSnapshot(version)
+            } finally {
+                isReloadingPaymentProofs.set(false)
             }
         }
     }
@@ -1216,7 +1242,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val snapshot = paymentProofSnapshot.value
             ?.takeIf { it.version == paymentProofStore.backupStateVersion.value }
             ?: return null
-        val proofs = snapshot.proofs ?: return null
+        val proofs = snapshot.proofs ?: return null.also { reloadUnreadablePaymentProofs(snapshot.version) }
         return proofs.filter { proof ->
             PubkyPublicKeyFormat.matches(proof.identity, identity) && (
                 proof.paymentStarted && !proof.isReopenableHardwareReceipt(identity) ||

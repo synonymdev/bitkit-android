@@ -1531,6 +1531,31 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `payment proofs recover after a failed read without a new proof write`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        runCurrent()
+        val request = sut.pendingRequests.value.single()
+
+        var isReadable = false
+        whenever(paymentProofStore.load()).thenAnswer {
+            if (!isReadable) throw PaykitPaymentStateUnreadableError("proofs", IllegalStateException("locked"))
+            emptyList<PendingPaykitPaymentProof>()
+        }
+        proofStateVersion.value += 1
+        runCurrent()
+        assertFalse(sut.isPending(request))
+        runCurrent()
+
+        isReadable = true
+        assertFalse(sut.isPending(request))
+        runCurrent()
+        assertTrue(sut.isPending(request))
+        assertEquals(request.id, sut.automaticPendingRequests().single().id)
+    }
+
+    @Test
     fun `acceptance cleanup removes only confirmed finished requests`() = test {
         val records = listOf(
             paymentRequestRecord(id = "paid", state = PaymentRequestLifecycleState.PROOF_SUBMITTED),
