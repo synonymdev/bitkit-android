@@ -1317,6 +1317,23 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `refresh does not report a proposal the snapshot still keeps`() = test {
+        val record = paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val reported = mutableListOf<List<PaykitPaymentRequest>>()
+        backgroundScope.launch { sut.expiredProposals.collect { reported += it } }
+        runCurrent()
+
+        clockJumpMillis = 5_000
+        sut.refresh().getOrThrow()
+        runCurrent()
+
+        assertEquals(1, sut.pendingRequests.value.size)
+        assertTrue(reported.isEmpty())
+    }
+
+    @Test
     fun `expiry timer reports the incoming proposal that expired`() = test {
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
             listOf(paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())),

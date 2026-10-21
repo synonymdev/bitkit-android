@@ -2690,7 +2690,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pending request removed without expiring shows no expired toast`() = test {
+    fun `pending request removed without the expiry signal shows no expired toast`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
         enablePaykitUi()
@@ -2707,9 +2707,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `expired proposal is not reported while a payment is being submitted`() = test {
+    fun `unrelated request expiring during a payment submission still shows the expired toast`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         runCurrent()
@@ -2719,7 +2723,38 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         expiredPaykitProposals.emit(listOf(request))
         runCurrent()
 
-        verify(toastManager, never()).enqueue(any())
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
+    }
+
+    @Test
+    fun `opened request reported by both expiry signals shows one expired toast`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.failure(PaykitPaymentRequestError.RequestExpired)
+        )
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = emptyList()
+        expiredPaykitProposals.emit(listOf(request))
+        runCurrent()
+
+        verify(toastManager, times(1)).enqueue(any())
     }
 
     @Test

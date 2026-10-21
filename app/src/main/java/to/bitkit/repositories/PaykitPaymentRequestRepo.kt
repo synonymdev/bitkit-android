@@ -1742,14 +1742,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    /** A refresh drops expired proposals while parsing, so report them from the list it replaces. */
     private fun replacePendingRequests(incoming: List<PaykitPaymentRequest>) {
-        val expired = expiredProposals(clock.now())
+        // Parsing already dropped expired proposals; report only those, not ones the snapshot keeps.
+        val keptIds = incoming.mapTo(mutableSetOf()) { it.id }
+        val expired = expiredProposals(clock.now()).filterNot { it.id in keptIds }
         _pendingRequests.update { incoming }
         if (expired.isNotEmpty()) _expiredProposals.tryEmit(expired)
     }
 
-    /** Pending incoming one-time proposals that expired before the user accepted, opened or paid them. */
     private fun expiredProposals(now: Instant, handledRequestId: PaykitPaymentRequestId? = null) =
         _pendingRequests.value.filter {
             it.id != handledRequestId && it.direction == PaykitPaymentRequestDirection.Incoming &&

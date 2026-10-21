@@ -1800,9 +1800,8 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    /** Tells the user when a pending incoming request expires unopened; an opened one has its own toast. */
     private fun toastExpiredPaymentRequests(expired: List<PaykitPaymentRequest>) {
-        if (!isPaykitEnabled.value || paykitPaymentRequestRepo.isPaymentSubmissionActive.value) return
+        if (!isPaykitEnabled.value) return
         val requestedId = requestedPaymentRequestId.value
         if (expired.none { it.id != requestedId && it.id !in expiredFeedbackRequestIds }) return
         toast(
