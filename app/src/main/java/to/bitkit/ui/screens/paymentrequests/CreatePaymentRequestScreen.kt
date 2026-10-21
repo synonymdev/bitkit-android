@@ -297,6 +297,7 @@ private fun PaymentRequestDenominationToggle(
         icon = if (nextAsset != null) R.drawable.ic_transfer else null,
         color = Colors.Brand,
         clickable = nextAsset != null,
+        debounce = Duration.ZERO,
         onClick = {
             if (nextAsset != null) {
                 runCatching {
