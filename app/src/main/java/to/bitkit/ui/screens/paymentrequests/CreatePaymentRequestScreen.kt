@@ -151,7 +151,13 @@ internal fun PaymentRequestAmountContent(
 
     var asset by remember(initialDraft.amount.asset) { mutableStateOf(initialDraft.amount.asset) }
     var dollars by remember(initialDraft.amount) {
-        mutableStateOf(if (initialDraft.amount.asset != PaykitAsset.BTC) initialDraft.amount.inputValue else "")
+        mutableStateOf(
+            if (initialDraft.amount.asset != PaykitAsset.BTC && initialDraft.amount.atomic != 0uL) {
+                initialDraft.amount.inputValue
+            } else {
+                ""
+            }
+        )
     }
     var conversionError by remember { mutableStateOf(false) }
     val entered = if (asset == PaykitAsset.BTC) {
