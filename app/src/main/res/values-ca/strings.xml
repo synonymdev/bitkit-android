@@ -1034,6 +1034,7 @@
     <string name="wallet__send_details">Detalls</string>
     <string name="wallet__send_dialog1">Sembla que estàs enviant més de 100 $. Vols continuar?</string>
     <string name="wallet__send_dialog2">Sembla que estàs enviant més del 50% del teu saldo total. Vols continuar?</string>
+    <string name="wallet__send_dialog2_usdt" formatted="false">Sembla que estàs enviant més del 50% del teu saldo de USDT. Vols continuar?</string>
     <string name="wallet__send_dialog3">La comissió de la transacció sembla ser més del 50% de l\'import que estàs enviant. Vols continuar?</string>
     <string name="wallet__send_dialog4">La comissió de la transacció sembla ser superior a 10 $. Vols continuar?</string>
     <string name="wallet__send_error_create_tx">No es pot transmetre la transacció. Si us plau, torna-ho a provar.</string>

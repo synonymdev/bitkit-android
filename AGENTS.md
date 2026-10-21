@@ -514,6 +514,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add business logic to repository layer via methods returning `Result<T>` and use it in ViewModels
 - ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice versa for downstream
 - ALWAYS add new localizable string resources in alphabetical order in `strings.xml`
+- ALWAYS give rail-specific copy of a shared message its own key with the rail as suffix (`wallet__send_dialog2_usdt` next to `wallet__send_dialog2`) and leave the shared key unchanged
 - ALWAYS add or update the translation in every `values-*/strings.xml` in the same PR when adding or changing an English string; translations live in this repository, not in Transifex
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
