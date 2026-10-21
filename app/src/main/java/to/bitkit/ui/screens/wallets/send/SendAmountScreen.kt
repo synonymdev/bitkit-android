@@ -85,11 +85,9 @@ import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceContent
 import to.bitkit.ui.components.usdtOverviewAmount
-import to.bitkit.ui.screens.wallets.usdt.USDT_KEYPAD_HEIGHT_RATIO
 import to.bitkit.ui.screens.wallets.usdt.UsdtNetworkButton
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
-import to.bitkit.ui.shared.modifiers.bleedHorizontal
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -318,12 +316,10 @@ private fun SendAmountNodeRunning(
             VerticalSpacer(16.dp)
 
             if (uiState.paykitUsesUsdt) {
-                FillHeight()
                 UsdtAmountHeader(
                     amount = uiState.paykitAmount.ifEmpty { "0" },
                     modifier = Modifier.testTag("SendNumberField")
                 )
-                FillHeight()
             } else {
                 NumberPadTextField(
                     viewModel = amountInputViewModel,
@@ -333,7 +329,7 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            if (!uiState.paykitUsesUsdt) FillHeight(min = 12.dp)
+            FillHeight(min = 12.dp)
             if (uiState.paykitRateUnavailable) {
                 BodyS(
                     stringResource(R.string.wallet__payment_request_rate_unavailable),
@@ -431,7 +427,7 @@ private fun SendAmountNodeRunning(
                 NumberPad(
                     type = NumberPadType.DECIMAL,
                     decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
-                    availableHeight = maxHeight * USDT_KEYPAD_HEIGHT_RATIO,
+                    availableHeight = maxHeight,
                     enabled = uiState.isAmountEditable,
                     onPress = {
                         app?.onUsdtAmountChange(
@@ -444,7 +440,6 @@ private fun SendAmountNodeRunning(
                         )
                     },
                     onDeleteLongPress = { app?.onUsdtAmountChange("") },
-                    modifier = Modifier.bleedHorizontal(16.dp).fillMaxWidth()
                 )
             } else {
                 NumberPad(
@@ -457,7 +452,6 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            if (uiState.paykitUsesUsdt) VerticalSpacer(16.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,

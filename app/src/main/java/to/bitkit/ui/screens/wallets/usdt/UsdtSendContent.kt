@@ -91,7 +91,6 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.send.HourglassAnimation
 import to.bitkit.ui.shared.UiConstants
-import to.bitkit.ui.shared.modifiers.bleedHorizontal
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.sheets.NewTransactionSheetView
 import to.bitkit.ui.theme.AppTextStyles
@@ -100,9 +99,6 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
 import java.text.DecimalFormatSymbols
 import kotlin.time.Duration.Companion.seconds
-
-/** Share of the amount step's height the keypad sizes its keys from, so keys shrink before the amount gets squeezed. */
-internal const val USDT_KEYPAD_HEIGHT_RATIO = 0.4f
 
 @Composable
 @Suppress("CyclomaticComplexMethod")
@@ -444,9 +440,8 @@ private fun UsdtAmountContent(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val maxHeight = this.maxHeight
         Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight)) {
-            FillHeight()
             UsdtAmountHeader(amount.ifEmpty { "0" }, modifier = Modifier.testTag("UsdtAmount"))
-            FillHeight()
+            FillHeight(min = 12.dp)
             state.error?.let {
                 BodyS(
                     state.errorMessage(it),
@@ -516,15 +511,13 @@ private fun UsdtAmountContent(
             NumberPad(
                 type = NumberPadType.DECIMAL,
                 decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
-                availableHeight = maxHeight * USDT_KEYPAD_HEIGHT_RATIO,
+                availableHeight = maxHeight,
                 enabled = !state.busy && amountEditable,
                 onDeleteLongPress = { onAmountChange("") },
                 onPress = { key ->
                     onAmountChange(NumberPadInputHandler.handleInput(key, amount, maxLength = 21, maxDecimals = 6))
                 },
-                modifier = Modifier.bleedHorizontal(16.dp).fillMaxWidth()
             )
-            VerticalSpacer(16.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onReview,

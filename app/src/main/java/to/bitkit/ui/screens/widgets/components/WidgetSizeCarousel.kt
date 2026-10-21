@@ -18,16 +18,17 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.drop
 import to.bitkit.R
 import to.bitkit.models.WidgetSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.shared.modifiers.bleedHorizontal
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -130,6 +131,14 @@ fun WidgetSizeCarousel(
                 }
             }
         }
+    }
+}
+
+private fun Modifier.bleedHorizontal(padding: Dp): Modifier = layout { measurable, constraints ->
+    val bleed = padding.roundToPx()
+    val placeable = measurable.measure(constraints.copy(maxWidth = constraints.maxWidth + bleed * 2))
+    layout(constraints.maxWidth, placeable.height) {
+        placeable.place(-bleed, 0)
     }
 }
 
