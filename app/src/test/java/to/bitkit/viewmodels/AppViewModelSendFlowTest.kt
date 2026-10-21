@@ -72,6 +72,7 @@ import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.Mockito
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.atLeastOnce
@@ -6357,6 +6358,89 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             failureReason = PaymentFailureReason.RETRIES_EXHAUSTED,
         )
         verify(pendingPaymentRepo, never()).resolve(any())
+    }
+
+    @Test
+    fun `automatic allowance payment success never reaches the send flow`() = test {
+        val paymentHash = "allowance_ok"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
+        whenever(paykitAllowanceRepo.isAutomaticPayment(paymentHash)).thenReturn(true)
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo).completeLightningPayment(paymentHash, "preimage")
+        verify(activityRepo, never()).findActivityByPaymentId(any(), any(), any(), any())
+        verify(pendingPaymentRepo, never()).resolve(any())
+    }
+
+    @Test
+    fun `automatic allowance payment failure shows no send error`() = test {
+        val paymentHash = "allowance_failed"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
+        whenever(paykitAllowanceRepo.isAutomaticPayment(paymentHash)).thenReturn(true)
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `manual retry of a failed automatic invoice still resolves as pending`() = test {
+        val paymentHash = "allowance_retry"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        whenever(paykitAllowanceRepo.isAutomaticPayment(paymentHash)).thenReturn(true)
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
+    }
+
+    @Test
+    fun `opening a request an allowance is paying shows a notice and restores the requests sheet`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val request = paymentRequest()
+        whenever { paykitAllowanceRepo.isAutomaticallyHandling(request) }.thenReturn(true)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        sut.showSheet(Sheet.PaymentRequests)
+        clearInvocations(toastManager)
+
+        sut.openIncomingPaymentRequest(request.id)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(toastManager).enqueue(argThat { testTag == "AllowancePaymentInProgressToast" })
+        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
     }
 
     @Test

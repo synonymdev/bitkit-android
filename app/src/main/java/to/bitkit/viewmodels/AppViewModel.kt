@@ -1574,16 +1574,23 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    /** A manual retry of a failed automatic invoice reuses its hash; a pending manual payment owns it then. */
+    private fun isAutomaticAllowancePayment(paymentHash: String): Boolean =
+        !pendingPaymentRepo.isPending(paymentHash) && paykitAllowanceRepo.isAutomaticPayment(paymentHash)
+
     /** A request the user opened while an allowance pays it is released, so it never holds other requests back. */
     private suspend fun finishRequestedAutomaticPayment(candidates: List<PaykitPaymentRequest>): Boolean {
         val requestedId = requestedPaymentRequestId.value ?: return false
         val request = candidates.singleOrNull { it.id == requestedId } ?: return false
         if (!paykitAllowanceRepo.isAutomaticallyHandling(request)) return false
+        val restorePaymentRequestSheet = shouldRestorePaymentRequestSheet
         clearRequestedPaymentRequest()
         toast(
             type = Toast.ToastType.INFO,
             title = context.getString(R.string.subscriptions__allowance_payment_in_progress),
+            testTag = "AllowancePaymentInProgressToast",
         )
+        if (restorePaymentRequestSheet) showSheet(Sheet.PaymentRequests)
         return true
     }
 
@@ -2582,7 +2589,7 @@ class AppViewModel @Inject constructor(
             }
             refreshPaymentActivity(paymentHash)
             // A failed automatic Allowance payment falls back to the request's manual flow without a send error.
-            if (paykitAllowanceRepo.isAutomaticPayment(paymentHash)) return
+            if (isAutomaticAllowancePayment(paymentHash)) return
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
@@ -2679,7 +2686,7 @@ class AppViewModel @Inject constructor(
         ).wasQuickPay
         refreshPaymentActivity(paymentHash)
         // An automatic Allowance payment settles headlessly; the allowance repo posts its notice and contact tag.
-        if (paykitAllowanceRepo.isAutomaticPayment(paymentHash)) return
+        if (isAutomaticAllowancePayment(paymentHash)) return
         if (!pendingPaymentRepo.isPending(paymentHash)) {
             notifyPaymentSentOnLightning(event)
             return
