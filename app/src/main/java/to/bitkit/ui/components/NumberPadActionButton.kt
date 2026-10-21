@@ -74,7 +74,7 @@ fun NumberPadActionButton(
             } else if (icon != null) {
                 Icon(
                     painter = painterResource(icon),
-                    contentDescription = text,
+                    contentDescription = null,
                     tint = color,
                     modifier = Modifier.size(16.dp)
                 )
@@ -109,7 +109,7 @@ fun NumberPadActionButton(
             if (icon != null) {
                 Icon(
                     painter = painterResource(icon),
-                    contentDescription = text,
+                    contentDescription = null,
                     tint = color,
                     modifier = Modifier.size(16.dp)
                 )
