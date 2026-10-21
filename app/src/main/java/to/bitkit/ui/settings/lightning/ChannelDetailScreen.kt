@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -95,6 +96,7 @@ fun ChannelDetailScreen(
     viewModel: ChannelDetailViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val app = appViewModel ?: return
 
     LaunchedEffect(channelId) {
@@ -111,7 +113,7 @@ fun ChannelDetailScreen(
             context.setClipboardText(text)
             app.toast(
                 type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.common__copied),
+                title = resources.getString(R.string.common__copied),
                 description = text,
             )
         },
@@ -128,7 +130,6 @@ fun ChannelDetailScreen(
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun Content(
     uiState: ChannelDetailUiState = ChannelDetailUiState(),
@@ -180,8 +181,8 @@ private fun Content(
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Suppress("CyclomaticComplexMethod")
 @Composable
+@Suppress("CyclomaticComplexMethod")
 private fun ChannelDetailContent(
     channel: ChannelUi,
     blocktankOrders: ImmutableList<IBtOrder> = persistentListOf(),
@@ -527,7 +528,6 @@ private fun SectionTitle(text: String) {
     VerticalSpacer(8.dp)
 }
 
-@Suppress("MagicNumber")
 @Composable
 private fun SectionRow(
     name: String,

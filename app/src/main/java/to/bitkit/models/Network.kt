@@ -1,8 +1,10 @@
 package to.bitkit.models
 
+import com.synonym.bitkitcore.JadeNetwork
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.TrezorCoinType
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.utils.AppError
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 fun Network.networkUiText(): String = when (this) {
@@ -17,6 +19,14 @@ fun Network.toTrezorCoinType(): TrezorCoinType = when (this) {
     Network.TESTNET -> TrezorCoinType.TESTNET
     Network.SIGNET -> TrezorCoinType.SIGNET
     Network.REGTEST -> TrezorCoinType.REGTEST
+}
+
+/** Jade has no signet; its regtest is named "localtest" on the wire and is mapped by bitkit-core. */
+fun Network.toJadeNetwork(): JadeNetwork = when (this) {
+    Network.BITCOIN -> JadeNetwork.MAINNET
+    Network.TESTNET -> JadeNetwork.TESTNET
+    Network.REGTEST -> JadeNetwork.REGTEST
+    Network.SIGNET -> throw AppError("Signet is not supported by Jade")
 }
 
 fun Network.toCoreNetwork(): BitkitCoreNetwork = when (this) {

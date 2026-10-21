@@ -186,8 +186,8 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 190
-        versionName = "2.5.0"
+        versionCode = 195
+        versionName = "3.0.1"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         bitkitAndroidTestAnnotation?.let {
             testInstrumentationRunnerArguments["annotation"] = it
@@ -297,19 +297,38 @@ android {
         unitTests {
             isReturnDefaultValues = true // mockito
             isIncludeAndroidResources = true // robolectric
+            all { it.maxHeapSize = "2g" }
         }
     }
     lint {
-        abortOnError = false
+        abortOnError = true
+        warningsAsErrors = true
+        disable += setOf(
+            // Crashes on ScreenDeepLinkRuntime.kt.
+            "EmptyNavDeepLink",
+            // Version bumps are handled by dependency updates, translations by the localization flow.
+            "GradleDependency",
+            "NewerVersionAvailable",
+            "AndroidGradlePluginVersion",
+            "MissingTranslation",
+            // targetSdk bumps are planned work; this check would fail CI on every new SDK release.
+            "OldTargetApi",
+            // Copy style is set by the designs.
+            "TypographyEllipsis",
+            "TypographyDashes",
+        )
     }
 }
 
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_11
+        allWarningsAsErrors = true
         freeCompilerArgs.addAll(
             listOf(
-                "-XXLanguage:+PropertyParamAnnotationDefaultTargetMode",
+                "-Xannotation-default-target=param-property",
+                // Library deprecations stay visible without breaking the build.
+                "-Xwarning-level=DEPRECATION:warning",
             )
         )
     }
@@ -320,6 +339,23 @@ androidComponents {
         val buildConfigFields = requireNotNull(variant.buildConfigFields) {
             "buildFeatures.buildConfig must stay enabled for '${variant.name}'."
         }
+        buildConfigFields.put(
+            "USDT_BUNDLER_URL",
+            localProp("USDT_BUNDLER_URL").orElse("https://bitkit.to/v1/usdt/rpc").stringField(),
+        )
+        buildConfigFields.put(
+            "USDT_BRIDGES_URL",
+            localProp("USDT_BRIDGES_URL").orElse("https://bitkit.to/v1/usdt/bridges").stringField(),
+        )
+        buildConfigFields.put(
+            "USDT_DEPOSITS_URL",
+            localProp("USDT_DEPOSITS_URL").orElse("https://bitkit.to/v1/usdt/deposits").stringField(),
+        )
+        buildConfigFields.put("USDT_BRIDGE_NETWORKS", localProp("USDT_BRIDGE_NETWORKS").orElse("").stringField())
+        buildConfigFields.put(
+            "USDT_RPC_URL",
+            localProp("USDT_RPC_URL").orElse("https://bitkit.to/v1/usdt/chain-rpc").stringField(),
+        )
         buildConfigFields.put("E2E", e2eEnv.booleanField())
         buildConfigFields.put("E2E_BACKEND", e2eBackendEnv.stringField())
         buildConfigFields.put("E2E_LOCAL_HOST", e2eLocalHostEnv.stringField())
@@ -515,11 +551,19 @@ dependencies {
     implementation(libs.camera.view)
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
+    testImplementation(libs.bouncycastle.pkix.jdk) // test certificates
     implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
-    implementation(libs.bitkit.core)
+    val localBitkitCoreAar = providers.gradleProperty("bitkitCoreAar").orNull
+    if (localBitkitCoreAar != null) {
+        debugImplementation(files(localBitkitCoreAar))
+        debugImplementation("org.jetbrains.kotlinx:atomicfu:0.23.1")
+        releaseImplementation(libs.bitkit.core)
+    } else {
+        implementation(libs.bitkit.core)
+    }
     implementation(libs.paykit)
     implementation(libs.vss.client)
-    nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
+    if (localBitkitCoreAar == null) nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.ldk.node.android.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.paykit.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.vss.client.nativeDebugSymbolsArtifact())
@@ -596,6 +640,7 @@ dependencies {
     androidTestImplementation(libs.test.espresso.core)
     androidTestImplementation(libs.test.junit.ext)
     testImplementation(libs.test.kotlin)
+    testImplementation(libs.test.kotlin.reflect)
     testImplementation(libs.test.core)
     testImplementation(libs.test.coroutines)
     testImplementation(libs.test.junit)
@@ -614,7 +659,6 @@ room {
 // region Tasks
 
 tasks.withType<Detekt>().configureEach {
-    ignoreFailures = true
     reports {
         html.required.set(true)
         sarif.required.set(true)

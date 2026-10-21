@@ -39,6 +39,8 @@ import androidx.compose.ui.zIndex
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.Routes
@@ -50,8 +52,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
 
-private inline fun <reified T : Any> NavController.navigateIfNotCurrent(route: T) {
-    if (currentBackStackEntry?.destination?.hasRoute<T>() != true) {
+internal fun NavController.navigateIfNotCurrent(route: Any) {
+    if (currentBackStackEntry?.destination?.hasRoute(route::class) != true) {
         navigateTo(route)
     }
 }
@@ -70,6 +72,7 @@ fun DrawerMenu(
     hasSeenShopIntro: Boolean,
     onBeforeNavigate: (Routes?) -> Unit,
     showWidgets: Boolean,
+    profileIdentityExists: Flow<Boolean?>,
     modifier: Modifier = Modifier,
     onOpenWalletHome: () -> Unit = {},
     onOpenWidgetsHome: () -> Unit = {},
@@ -152,14 +155,12 @@ fun DrawerMenu(
                         rootNavController.navigateIfNotCurrent(Routes.Contacts())
                     }
 
-                    hasSeenProfileIntro -> {
-                        onBeforeNavigate(Routes.PubkyChoice)
-                        rootNavController.navigateIfNotCurrent(Routes.PubkyChoice)
-                    }
-
-                    else -> {
-                        onBeforeNavigate(Routes.ProfileIntro)
-                        rootNavController.navigateIfNotCurrent(Routes.ProfileIntro)
+                    else -> scope.launch {
+                        rootNavController.navigateToProfile(
+                            profileIdentityExists,
+                            hasSeenProfileIntro,
+                            onBeforeNavigate,
+                        )
                     }
                 }
             },
@@ -168,17 +169,13 @@ fun DrawerMenu(
                     onBeforeNavigate(Routes.Profile)
                     rootNavController.navigateIfNotCurrent(Routes.Profile)
                 } else {
-                    onBeforeNavigate(
-                        when {
-                            isProfileAuthenticated -> Routes.Profile
-                            hasSeenProfileIntro -> Routes.PubkyChoice
-                            else -> Routes.ProfileIntro
-                        }
-                    )
-                    rootNavController.navigateToProfile(
-                        isAuthenticated = isProfileAuthenticated,
-                        hasSeenIntro = hasSeenProfileIntro,
-                    )
+                    scope.launch {
+                        rootNavController.navigateToProfile(
+                            profileIdentityExists,
+                            hasSeenProfileIntro,
+                            onBeforeNavigate,
+                        )
+                    }
                 }
             },
             onClickWallet = {
@@ -406,6 +403,7 @@ private fun Preview() {
         Box {
             DrawerMenu(
                 rootNavController = navController,
+                profileIdentityExists = flowOf(false),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Open),
                 hasSeenWidgetsIntro = false,
                 hasSeenShopIntro = false,

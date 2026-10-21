@@ -13,19 +13,21 @@ import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PaykitUsdtPaymentRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 
-@Suppress("LongParameterList")
 @Singleton
 class WipeWalletUseCase @Inject constructor(
     private val backupRepo: BackupRepo,
@@ -45,6 +47,9 @@ class WipeWalletUseCase @Inject constructor(
     private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val firebaseMessaging: FirebaseMessaging,
     private val migrationService: MigrationService,
+    private val paykitSdkService: PaykitSdkService,
+    private val usdtRepo: UsdtRepo,
+    private val paykitUsdtPaymentRepo: PaykitUsdtPaymentRepo,
 ) {
     private val wipeMutex = Mutex()
 
@@ -58,10 +63,12 @@ class WipeWalletUseCase @Inject constructor(
         lightningRepo.setWiping(true)
         val result = try {
             runSuspendCatching {
-                stopNode().getOrThrow()
-                cleanupRemote()
-                wipeLocal(walletIndex, resetWalletState).getOrThrow()
-                onSuccess()
+                paykitSdkService.withWalletWipe {
+                    stopNode().getOrThrow()
+                    cleanupRemote()
+                    wipeLocal(walletIndex, resetWalletState).getOrThrow()
+                    onSuccess()
+                }
             }
         } finally {
             lightningRepo.setWiping(false)
@@ -93,7 +100,8 @@ class WipeWalletUseCase @Inject constructor(
         step("clear migration data") { migrationService.cleanupAfterMigration() }
         step("clear Paykit address reservations") { privatePaykitAddressReservationRepo.clear() }
         step("wipe Pubky local state") { pubkyRepo.wipeLocalState() }
-        val keychainWiped = step("wipe keychain") { keychain.wipe() }
+        val keychainWiped = step("wipe USDT and keychain") { usdtRepo.wipe { keychain.wipe() } }
+        if (keychainWiped) paykitUsdtPaymentRepo.resetForWipe()
         step("delete FCM token") { firebaseMessaging.deleteToken() }
         step("wipe core data") { coreService.wipeData() }
         step("clear database") { db.clearAllTables() }

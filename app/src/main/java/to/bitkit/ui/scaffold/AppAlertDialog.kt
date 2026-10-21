@@ -34,6 +34,8 @@ fun AppAlertDialog(
     dismissText: String = stringResource(R.string.common__dialog_cancel),
     confirmTextColor: Color = Color.Unspecified,
     dismissTextColor: Color = Colors.White64,
+    confirmTestTag: String = "DialogConfirm",
+    dismissTestTag: String = "DialogCancel",
     onDismissRequest: () -> Unit = onDismiss,
     properties: DialogProperties = DialogProperties(
         dismissOnClickOutside = false,
@@ -49,6 +51,8 @@ fun AppAlertDialog(
         dismissText = dismissText,
         confirmTextColor = confirmTextColor,
         dismissTextColor = dismissTextColor,
+        confirmTestTag = confirmTestTag,
+        dismissTestTag = dismissTestTag,
         onDismissRequest = onDismissRequest,
         properties = properties,
         textContent = { BodyM(text = text, color = Colors.White64) },
@@ -65,6 +69,9 @@ fun AppAlertDialog(
     dismissText: String = stringResource(R.string.common__dialog_cancel),
     confirmTextColor: Color = Color.Unspecified,
     dismissTextColor: Color = Colors.White64,
+    confirmTestTag: String = "DialogConfirm",
+    dismissTestTag: String = "DialogCancel",
+    confirmEnabled: Boolean = true,
     onDismissRequest: () -> Unit = onDismiss,
     properties: DialogProperties = DialogProperties(
         dismissOnClickOutside = false,
@@ -78,15 +85,16 @@ fun AppAlertDialog(
         confirmButton = {
             TextButton(
                 onClick = rememberDebouncedClick(onClick = onConfirm),
-                modifier = Modifier.testTag("DialogConfirm")
+                enabled = confirmEnabled,
+                modifier = Modifier.testTag(confirmTestTag)
             ) {
-                BodyMSB(text = confirmText, color = confirmTextColor)
+                BodyMSB(text = confirmText, color = if (confirmEnabled) confirmTextColor else Colors.White32)
             }
         },
         dismissButton = {
             TextButton(
                 onClick = rememberDebouncedClick(onClick = onDismiss),
-                modifier = Modifier.testTag("DialogCancel")
+                modifier = Modifier.testTag(dismissTestTag)
             ) {
                 BodyMSB(text = dismissText, color = dismissTextColor)
             }

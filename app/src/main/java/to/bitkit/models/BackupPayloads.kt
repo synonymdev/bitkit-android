@@ -24,6 +24,7 @@ data class WalletBackupV1(
     val paykitSdkBackupState: String? = null,
     val watchOnlyAccounts: List<WatchOnlyAccountRecord>? = null,
     val watchOnlyAccountAllocationState: WatchOnlyAccountAllocationState? = null,
+    val usdtWallet: String? = null,
     val paykitPaymentState: PaykitPaymentStateBackup? = null,
 )
 
@@ -42,7 +43,6 @@ data class MetadataBackupV1(
 @Serializable
 data class PubkySessionBackupV1(
     val kind: PubkySessionBackupKind,
-    val sessionSecret: String? = null,
 )
 
 @Serializable
@@ -50,6 +50,7 @@ enum class PubkySessionBackupKind {
     @SerialName("localSeed")
     LocalSeed,
 
+    /** Legacy: sessions imported through the removed Pubky Ring relay flow; restored as no identity. */
     @SerialName("externalSession")
     ExternalSession,
 }

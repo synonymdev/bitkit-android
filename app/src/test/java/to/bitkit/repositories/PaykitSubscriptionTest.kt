@@ -4,6 +4,10 @@ package to.bitkit.repositories
 
 import com.synonym.paykit.PaymentRequestLifecycleState
 import org.junit.Test
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
+import java.util.TimeZone
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -11,6 +15,33 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 class PaykitSubscriptionTest {
+    @Test
+    fun `travel and daylight saving changes preserve UTC billing boundaries`() {
+        val original = TimeZone.getDefault()
+        try {
+            for (zone in listOf("America/New_York", "Pacific/Kiritimati", "Pacific/Pago_Pago")) {
+                TimeZone.setDefault(TimeZone.getTimeZone(zone))
+                val recurrence = PaykitSubscriptionRecurrence(
+                    every = 1,
+                    unit = PaykitRecurrenceUnit.Day,
+                    startsAt = Instant.parse("2027-03-13T08:00:00Z"),
+                    anchor = Instant.parse("2027-03-13T08:00:00Z"),
+                    endsAt = null,
+                )
+
+                val periods = recurrence.upcomingPeriodsAfter(Instant.parse("2027-03-13T09:00:00Z"), 2)
+
+                assertEquals(
+                    listOf(Instant.parse("2027-03-14T08:00:00Z"), Instant.parse("2027-03-15T08:00:00Z")),
+                    periods.map { it.startsAt },
+                    zone,
+                )
+            }
+        } finally {
+            TimeZone.setDefault(original)
+        }
+    }
+
     @Test
     fun `monthly recurrence returns to anchor day after a short month`() {
         val recurrence = PaykitSubscriptionRecurrence(
@@ -140,7 +171,7 @@ class PaykitSubscriptionTest {
     }
 
     @Test
-    fun `subscription payment matching includes counterparty and receiver path`() {
+    fun `subscription payment matching includes counterparty`() {
         val recurrence = PaykitSubscriptionRecurrence(
             every = 1,
             unit = PaykitRecurrenceUnit.Month,
@@ -151,9 +182,9 @@ class PaykitSubscriptionTest {
         val subscription = PaykitSubscription(
             paymentRequestId = "shared",
             counterparty = "counterparty-a",
-            counterpartyReceiverPath = "bitkit/server",
-            amountValue = "0.001",
-            amountSats = 100_000uL,
+            amount = PaykitAmount(PaykitAsset.BTC, 100_000uL),
+            paymentReference = "fixture-reference",
+            pricing = PaykitRequestPricing(),
             note = null,
             createdAt = null,
             proposalExpiresAt = null,
@@ -170,6 +201,5 @@ class PaykitSubscriptionTest {
 
         assertTrue(request.belongsTo(subscription))
         assertFalse(request.copy(counterparty = "counterparty-b").belongsTo(subscription))
-        assertFalse(request.copy(counterpartyReceiverPath = "bitkit/wallet").belongsTo(subscription))
     }
 }

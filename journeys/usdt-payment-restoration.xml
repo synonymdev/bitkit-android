@@ -1,0 +1,10 @@
+<journey name="usdt payment restoration">
+  <description>Use the local USDT test environment, an onboarded wallet with test funds and another owned wallet's Arbitrum address. Submit only a small local test payment. Background before terminating the app process so saved screen state can be restored. Android restores an unpaid amount draft; iOS may return to the wallet.</description>
+  <actions>
+    <action>Open an owned USDT payment link with an amount, then background, terminate and reopen the app before submitting. On Android, verify the same unpaid amount and recipient remain; on iOS, either the original draft or the wallet is acceptable. No payment occurs automatically.</action>
+    <action>Open the owned link if necessary, review the amount and fee, and submit the local test payment. While Payment submitted or USDT Sent is showing, background, terminate and reopen the app. Verify the wallet opens with no send sheet or prefilled paid amount. Verify the original transfer remains in history and pending tracking continues.</action>
+    <action>On Android, repeat with a local test payment and change the device font size while submission or the result is visible. Verify the recreated screen still shows the payment progress or result, including its Details action when available. In a separate local payment, background and terminate during submission, then reopen. Verify the wallet opens without an editable send draft and the original operation continues through pending tracking.</action>
+    <action>Tap Send from the USDT wallet. Verify recipient entry and the amount are empty. Cancel without paying.</action>
+    <action>Reopen the original payment link explicitly. Verify it opens a new send flow with that link's recipient and amount; cancel. Open a link for a different owned recipient and amount and verify only those new values appear. Cancel without paying.</action>
+  </actions>
+</journey>

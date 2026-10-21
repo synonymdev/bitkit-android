@@ -23,6 +23,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -30,7 +31,7 @@ import to.bitkit.viewmodels.SendUiState
 import javax.inject.Inject
 
 private const val MAX_DIGITS = 3
-private const val MAX_VALUE = 999u
+private val MAX_VALUE = OnchainRecoveryFeeRate.maximum.toUInt()
 private const val MAX_RATIO = 0.5
 
 @HiltViewModel

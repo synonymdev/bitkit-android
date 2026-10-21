@@ -4,23 +4,38 @@ import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.GetAddressesResponse
+import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.NetworkType
+import com.synonym.bitkitcore.OnChainInvoice
+import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
+import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
@@ -29,6 +44,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.BalanceState
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
@@ -37,6 +53,10 @@ import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.ServiceError
+import java.io.IOException
+import java.util.ArrayDeque
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -97,6 +117,9 @@ class WalletRepoTest : BaseUnitTest() {
     @Before
     fun setUp() = runBlocking {
         whenever(coreService.isGeoBlocked()).thenReturn(false)
+        whenever(coreService.decode(INVOICE)).thenReturn(Scanner.Lightning(lightningInvoice(INVOICE)))
+        whenever(coreService.decode(INVOICE_REPLACEMENT))
+            .thenReturn(Scanner.Lightning(lightningInvoice(INVOICE_REPLACEMENT)))
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(bolt11 = "", onchainAddress = ADDRESS)))
         whenever { cacheStore.update(any()) }.thenReturn(Unit)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
@@ -136,8 +159,8 @@ class WalletRepoTest : BaseUnitTest() {
         sut = createSut()
     }
 
-    private fun createSut() = WalletRepo(
-        bgDispatcher = testDispatcher,
+    private fun createSut(dispatcher: CoroutineDispatcher = testDispatcher) = WalletRepo(
+        bgDispatcher = dispatcher,
         keychain = keychain,
         coreService = coreService,
         settingsStore = settingsStore,
@@ -151,6 +174,531 @@ class WalletRepoTest : BaseUnitTest() {
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
     )
+
+    private fun lightningInvoice(bolt11: String, isExpired: Boolean = false) = LightningInvoice(
+        bolt11 = bolt11,
+        paymentHash = byteArrayOf(1, 2, 3),
+        amountSatoshis = SATS,
+        timestampSeconds = 0uL,
+        expirySeconds = 86_400uL,
+        isExpired = isExpired,
+        description = "test",
+        networkType = NetworkType.REGTEST,
+        payeeNodeId = null,
+    )
+
+    @Test
+    fun `concurrent cache loads keep receive pending until both complete`() = test {
+        val firstSnapshot = CompletableDeferred<Unit>()
+        val secondSnapshot = CompletableDeferred<Unit>()
+        val releaseFirst = CompletableDeferred<Unit>()
+        val releaseSecond = CompletableDeferred<Unit>()
+        var reads = 0
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                if (reads++ == 0) {
+                    firstSnapshot.complete(Unit)
+                    releaseFirst.await()
+                } else {
+                    secondSnapshot.complete(Unit)
+                    releaseSecond.await()
+                }
+                emit(AppCacheData(onchainAddress = ADDRESS))
+            }
+        )
+        sut.loadFromCache()
+        firstSnapshot.await()
+        sut.loadFromCache()
+        val pendingWithBothLoads = sut.walletState.value.isReceiveInvoiceUpdating
+        releaseFirst.complete(Unit)
+        secondSnapshot.await()
+        val pendingAfterFirstLoad = sut.walletState.value.isReceiveInvoiceUpdating
+        releaseSecond.complete(Unit)
+        testScheduler.runCurrent()
+
+        assertTrue(pendingWithBothLoads)
+        assertTrue(pendingAfterFirstLoad)
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `cancelled cache hydration releases its pending ownership`() = test {
+        whenever(cacheStore.data).thenReturn(flow<AppCacheData> { throw CancellationException("cancel hydration") })
+
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `buffered unrelated event cannot delay hiding a matched settled invoice`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>(extraBufferCapacity = 64)
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sut = createSut()
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        val releaseCheck = CompletableDeferred<Unit>()
+        whenever(coreService.isAddressUsed(any())).doSuspendableAnswer {
+            releaseCheck.await()
+            false
+        }
+        val maintenance = launch { sut.refreshReusableReceiveAddress() }
+        events.emit(NodeEventUpdate(Event.PaymentSuccessful("payment", "hash", "preimage", 10uL)))
+        events.emit(
+            NodeEventUpdate(
+                Event.PaymentReceived("received", "hash", 1000uL, emptyList()),
+                settledReceiveInvoice = SettledReceiveInvoice(INVOICE),
+            ),
+        )
+        testScheduler.runCurrent()
+        val pendingWhileMaintenanceSuspended = sut.walletState.value.isReceiveInvoiceUpdating
+        releaseCheck.complete(Unit)
+        maintenance.join()
+        testScheduler.runCurrent()
+
+        assertTrue(pendingWhileMaintenanceSuspended)
+        assertEquals("", sut.walletState.value.bolt11)
+    }
+
+    @Test
+    fun `failed channel refresh rejects expired and undecodable fallback invoices`() = test {
+        for (decoderMode in 0..2) {
+            val events = MutableSharedFlow<NodeEventUpdate>(extraBufferCapacity = 64)
+            whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+            whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+            whenever(lightningRepo.getChannels()).thenReturn(channels)
+            whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.failure(error))
+            when (decoderMode) {
+                0 -> whenever(coreService.decode(INVOICE))
+                    .thenReturn(Scanner.Lightning(lightningInvoice(INVOICE, true)))
+                1 -> whenever(coreService.decode(INVOICE)).thenThrow(error)
+                else -> doReturn(Scanner.OnChain(OnChainInvoice(ADDRESS, 0u, null, null, emptyMap())))
+                    .whenever(coreService).decode(INVOICE)
+            }
+            sut = createSut()
+            sut.setOnchainAddress(ADDRESS)
+            sut.setBolt11(INVOICE)
+
+            events.emit(NodeEventUpdate(channelReady))
+            testScheduler.runCurrent()
+
+            assertTrue(sut.walletState.value.hasReceiveInvoiceError)
+        }
+    }
+
+    @Test
+    fun `late expired validation cannot hide or flag a newer ready request`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>(extraBufferCapacity = 64)
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.failure(error), Result.success(INVOICE_REPLACEMENT))
+        val decodeStarted = CompletableDeferred<Unit>()
+        val releaseDecode = CompletableDeferred<Unit>()
+        var oldDecodeCalls = 0
+        whenever(coreService.decode(INVOICE)).doSuspendableAnswer {
+            if (oldDecodeCalls++ == 0) {
+                decodeStarted.complete(Unit)
+                releaseDecode.await()
+            }
+            Scanner.Lightning(lightningInvoice(INVOICE, true))
+        }
+        sut = createSut()
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        events.emit(NodeEventUpdate(channelReady))
+        decodeStarted.await()
+        val pendingDuringOldValidation = sut.walletState.value.isReceiveInvoiceUpdating
+
+        sut.updateBip21Invoice(SATS / 2uL, "new request").getOrThrow()
+        val replacementBeforeDecode = sut.walletState.value
+        releaseDecode.complete(Unit)
+        testScheduler.runCurrent()
+
+        assertTrue(pendingDuringOldValidation)
+        assertEquals(INVOICE_REPLACEMENT, replacementBeforeDecode.bolt11)
+        assertFalse(replacementBeforeDecode.isReceiveInvoiceUpdating)
+        assertFalse(replacementBeforeDecode.hasReceiveInvoiceError)
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertEquals(SATS / 2uL, sut.walletState.value.bip21AmountSats)
+        assertEquals("new request", sut.walletState.value.bip21Description)
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+        assertFalse(sut.walletState.value.hasReceiveInvoiceError)
+    }
+
+    private class DeferredReceiveDispatcher : CoroutineDispatcher() {
+        private val tasks = ArrayDeque<Runnable>()
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            tasks.addLast(block)
+        }
+
+        fun runOldestFirst() {
+            while (tasks.isNotEmpty()) tasks.removeFirst().run()
+        }
+
+        fun runNewestFirst() {
+            while (tasks.isNotEmpty()) tasks.removeLast().run()
+        }
+    }
+
+    @Test
+    fun `address usage failure keeps lightning receive and retry available`() = test {
+        sut.loadFromCache()
+        whenever(coreService.isAddressUsed(any())).thenThrow(error)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+
+        assertTrue(sut.refreshReceiveState().isSuccess)
+        assertEquals(ADDRESS, sut.walletState.value.onchainAddress)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+        assertTrue(sut.retryReceiveInvoice().isSuccess)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+        assertFalse(sut.walletState.value.hasReceiveInvoiceError)
+        verify(lightningRepo, times(2)).createInvoice(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `address-only refresh does not mark the receive invoice as updating`() = test {
+        sut.loadFromCache()
+        sut.setBolt11(INVOICE)
+        val releaseCheck = CompletableDeferred<Unit>()
+        whenever(coreService.isAddressUsed(any())).doSuspendableAnswer {
+            releaseCheck.await()
+            false
+        }
+        val job = launch { sut.refreshReusableReceiveAddress() }
+        val updatingWhileSuspended = sut.walletState.value.isReceiveInvoiceUpdating
+        val invoiceWhileSuspended = sut.walletState.value.bolt11
+        releaseCheck.complete(Unit)
+        job.join()
+
+        assertFalse(updatingWhileSuspended)
+        assertEquals(INVOICE, invoiceWhileSuspended)
+    }
+
+    @Test
+    fun `reserved address-only refresh does not mark the receive invoice as updating`() = test {
+        sut.loadFromCache()
+        sut.setBolt11(INVOICE)
+        whenever { privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(ADDRESS) }.thenReturn(true)
+        val releaseAddress = CompletableDeferred<Unit>()
+        whenever { privatePaykitAddressReservationRepo.nextReusableReceiveAddress() }.doSuspendableAnswer {
+            releaseAddress.await()
+            Result.success(ADDRESS_NEW)
+        }
+        val job = launch { sut.refreshReusableReceiveAddressIfReserved() }
+        val updatingWhileSuspended = sut.walletState.value.isReceiveInvoiceUpdating
+        val invoiceWhileSuspended = sut.walletState.value.bolt11
+        releaseAddress.complete(Unit)
+        job.join()
+
+        assertFalse(updatingWhileSuspended)
+        assertEquals(INVOICE, invoiceWhileSuspended)
+        assertEquals(ADDRESS_NEW, sut.walletState.value.onchainAddress)
+    }
+
+    @Test
+    fun `bip21-only publication does not mark the receive invoice as updating`() = test {
+        sut.loadFromCache()
+        sut.setBolt11(INVOICE)
+        val releaseCache = CompletableDeferred<Unit>()
+        whenever(cacheStore.setBip21(any())).doSuspendableAnswer { releaseCache.await() }
+        val job = launch { sut.setBip21("bitcoin:$ADDRESS?lightning=$INVOICE") }
+        val updatingWhileSuspended = sut.walletState.value.isReceiveInvoiceUpdating
+        releaseCache.complete(Unit)
+        job.join()
+
+        assertFalse(updatingWhileSuspended)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+    }
+
+    @Test
+    fun `failed channel refresh retains the existing payable invoice without error`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>()
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.failure(error))
+        sut = createSut()
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        val previousBip21 = sut.walletState.value.bip21
+
+        events.emit(NodeEventUpdate(channelReady))
+
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+        assertEquals(previousBip21, sut.walletState.value.bip21)
+        assertFalse(sut.walletState.value.hasReceiveInvoiceError)
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `failed channel refresh without an invoice still reports error`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>()
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.failure(error))
+        sut = createSut()
+        sut.setOnchainAddress(ADDRESS)
+
+        events.emit(NodeEventUpdate(channelReady))
+
+        assertTrue(sut.walletState.value.hasReceiveInvoiceError)
+        assertEquals("", sut.walletState.value.bolt11)
+    }
+
+    @Test
+    fun `address-only publication preserves another pending invoice update`() = test {
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        val releaseInvoice = CompletableDeferred<Unit>()
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            releaseInvoice.await()
+            Result.success(INVOICE)
+        }
+        val invoiceJob = launch { sut.updateBip21Invoice(SATS, "latest") }
+        val addressJob = launch { sut.setBip21("bitcoin:$ADDRESS") }
+        val updatingWhileQueued = sut.walletState.value.isReceiveInvoiceUpdating
+        releaseInvoice.complete(Unit)
+        invoiceJob.join()
+        addressJob.join()
+
+        assertTrue(updatingWhileQueued)
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `address-only refresh preserves a failed edit error`() = test {
+        sut.loadFromCache()
+        sut.setBolt11(INVOICE)
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.failure(error))
+        assertTrue(sut.updateBip21Invoice(SATS, "failed edit").isFailure)
+
+        sut.refreshReusableReceiveAddress().getOrThrow()
+        sut.setBip21(sut.walletState.value.bip21)
+
+        assertTrue(sut.walletState.value.hasReceiveInvoiceError)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+    }
+
+    @Test
+    fun `failed channel refresh preserves a failed edit error over an older invoice`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>()
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.failure(error))
+        sut = createSut()
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        assertTrue(sut.updateBip21Invoice(SATS, "failed edit").isFailure)
+
+        events.emit(NodeEventUpdate(channelReady))
+
+        assertTrue(sut.walletState.value.hasReceiveInvoiceError)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+    }
+
+    @Test
+    fun `irrelevant node events queued behind address maintenance keep invoice available`() = test {
+        val received = Event.PaymentReceived("payment", "hash", 1000uL, emptyList())
+        val onchain = Event.OnchainTransactionReceived("txid", mock<TransactionDetails>())
+        val updates = listOf(
+            NodeEventUpdate(Event.PaymentSuccessful("payment", "hash", "preimage", 10uL)),
+            NodeEventUpdate(Event.SyncCompleted(SyncType.ONCHAIN_WALLET, 100u)),
+            NodeEventUpdate(received),
+            NodeEventUpdate(received, settledReceiveInvoice = SettledReceiveInvoice(INVOICE_REPLACEMENT)),
+            NodeEventUpdate(onchain),
+            NodeEventUpdate(onchain, settledReceiveAddress = SettledReceiveAddress(ADDRESS_NEW)),
+        )
+        val pendingStates = mutableListOf<Boolean>()
+        for (update in updates) {
+            val events = MutableSharedFlow<NodeEventUpdate>()
+            whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+            whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+            sut = createSut()
+            sut.setOnchainAddress(ADDRESS)
+            sut.setBolt11(INVOICE)
+            val expectedBip21 = sut.walletState.value.bip21
+            val releaseCheck = CompletableDeferred<Unit>()
+            whenever(coreService.isAddressUsed(any())).doSuspendableAnswer {
+                releaseCheck.await()
+                false
+            }
+            val maintenance = launch { sut.refreshReusableReceiveAddress() }
+            val event = launch { events.emit(update) }
+            testScheduler.runCurrent()
+            pendingStates.add(sut.walletState.value.isReceiveInvoiceUpdating)
+            val invoiceWhileQueued = sut.walletState.value.bolt11
+            val bip21WhileQueued = sut.walletState.value.bip21
+            releaseCheck.complete(Unit)
+            maintenance.join()
+            event.join()
+
+            assertEquals(INVOICE, invoiceWhileQueued)
+            assertEquals(expectedBip21, bip21WhileQueued)
+        }
+        assertFalse(pendingStates.any { it }, updates.zip(pendingStates).joinToString())
+    }
+
+    @Test
+    fun `matched lightning settlement queued behind address maintenance stays pending`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>()
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        sut = createSut()
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        val releaseCheck = CompletableDeferred<Unit>()
+        whenever(coreService.isAddressUsed(any())).doSuspendableAnswer {
+            releaseCheck.await()
+            false
+        }
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE_REPLACEMENT))
+        val maintenance = launch { sut.refreshReusableReceiveAddress() }
+        val settlement = launch {
+            events.emit(
+                NodeEventUpdate(
+                    Event.PaymentReceived("payment", "hash", 1000uL, emptyList()),
+                    settledReceiveInvoice = SettledReceiveInvoice(INVOICE),
+                ),
+            )
+        }
+        testScheduler.runCurrent()
+        val updatingWhileSettled = sut.walletState.value.isReceiveInvoiceUpdating
+        val replacement = launch { sut.updateBip21Invoice(SATS, "latest") }
+        releaseCheck.complete(Unit)
+        maintenance.join()
+        replacement.join()
+        settlement.join()
+
+        assertTrue(updatingWhileSettled)
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertTrue(sut.walletState.value.bip21.contains(INVOICE_REPLACEMENT))
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `onchain settlement address rotation keeps the spending invoice available`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>()
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sut = createSut()
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        val releaseAddress = CompletableDeferred<Unit>()
+        whenever { privatePaykitAddressReservationRepo.nextReusableReceiveAddress() }.doSuspendableAnswer {
+            releaseAddress.await()
+            Result.success(ADDRESS_NEW)
+        }
+        val event = launch {
+            events.emit(
+                NodeEventUpdate(
+                    Event.OnchainTransactionReceived("txid", mock<TransactionDetails>()),
+                    settledReceiveAddress = SettledReceiveAddress(ADDRESS),
+                ),
+            )
+        }
+        testScheduler.runCurrent()
+        val updatingDuringRotation = sut.walletState.value.isReceiveInvoiceUpdating
+        val invoiceDuringRotation = sut.walletState.value.bolt11
+        releaseAddress.complete(Unit)
+        event.join()
+
+        assertFalse(updatingDuringRotation)
+        assertEquals(INVOICE, invoiceDuringRotation)
+        assertEquals(ADDRESS_NEW, sut.walletState.value.onchainAddress)
+    }
+
+    @Test
+    fun `latest receive invocation wins despite reversed background scheduling`() = test {
+        val dispatcher = DeferredReceiveDispatcher()
+        sut = createSut(dispatcher)
+        dispatcher.runOldestFirst()
+        sut.setOnchainAddress(ADDRESS)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer { invocation ->
+            val amount = invocation.getArgument<ULong?>(0)
+            Result.success(if (amount == SATS) INVOICE else INVOICE_REPLACEMENT)
+        }
+        val older = launch { sut.updateBip21Invoice(SATS, "older") }
+        val newer = launch { sut.updateBip21Invoice(SATS / 2uL, "latest") }
+        assertTrue(sut.walletState.value.isReceiveInvoiceUpdating)
+        dispatcher.runNewestFirst()
+        older.join()
+        newer.join()
+
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertEquals(
+            sut.buildBip21Url(ADDRESS, SATS / 2uL, "latest", INVOICE_REPLACEMENT),
+            sut.walletState.value.bip21,
+        )
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `retry must repeat the failed edited amount`() = test {
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE), Result.failure(error), Result.success(INVOICE_REPLACEMENT))
+        sut.updateBip21Invoice(SATS, "old invoice").getOrThrow()
+        val editedAmount = SATS / 2uL
+        assertTrue(sut.updateBip21Invoice(editedAmount, "old invoice").isFailure)
+        assertTrue(sut.walletState.value.hasReceiveInvoiceError)
+
+        sut.retryReceiveInvoice().getOrThrow()
+
+        assertEquals(editedAmount, sut.walletState.value.bip21AmountSats)
+        assertEquals("old invoice", sut.walletState.value.bip21Description)
+        verify(lightningRepo, times(2)).createInvoice(eq(editedAmount), eq("old invoice"), any())
+    }
+
+    @Test
+    fun `pending invoice must not erase a newer typed note`() = test {
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        val releaseInvoice = CompletableDeferred<Unit>()
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            releaseInvoice.await()
+            Result.success(INVOICE)
+        }
+        val older = launch { sut.updateBip21Invoice(SATS, "old request") }
+        sut.setBip21Description("new text typed after reopening Edit")
+        assertEquals("new text typed after reopening Edit", sut.walletState.value.bip21Description)
+        releaseInvoice.complete(Unit)
+        older.join()
+
+        assertEquals("new text typed after reopening Edit", sut.walletState.value.bip21Description)
+    }
+
+    @Test
+    fun `retry must recover a failed initial address prerequisite`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(privatePaykitAddressReservationRepo.nextReusableReceiveAddress())
+            .thenReturn(Result.failure(error), Result.success(ADDRESS_NEW))
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE))
+        assertTrue(sut.refreshReceiveState().isFailure)
+        assertTrue(sut.walletState.value.hasReceiveInvoiceError)
+
+        sut.retryReceiveInvoice().getOrThrow()
+
+        assertEquals(ADDRESS_NEW, sut.walletState.value.onchainAddress)
+        assertTrue(sut.walletState.value.bip21.startsWith("bitcoin:$ADDRESS_NEW"))
+    }
 
     @Test
     fun `walletExists should return true when mnemonic exists in keychain`() = test {
@@ -295,6 +843,48 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refreshMaxSendLightning should derive the spending limit from the published channels`() = test {
+        val syncedState = BalanceState(totalOnchainSats = 100_000u, maxSendLightningSats = 0u)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(syncedState))
+        sut.syncBalances()
+        val recovered = mock<ChannelDetails> {
+            on { isChannelReady } doReturn true
+            on { isUsable } doReturn true
+            on { nextOutboundHtlcLimitMsat } doReturn 2_000_000u
+        }
+        whenever(lightningRepo.lightningState).thenReturn(
+            MutableStateFlow(
+                LightningState(
+                    nodeLifecycleState = NodeLifecycleState.Running,
+                    channels = listOf(recovered).toImmutableList(),
+                )
+            )
+        )
+        whenever(lightningRepo.getChannels()).thenThrow(IllegalStateException("read failed"))
+
+        sut.refreshMaxSendLightning()
+
+        assertEquals(2_000u, sut.balanceState.value.maxSendLightningSats)
+        assertEquals(100_000u, sut.balanceState.value.totalOnchainSats)
+        verify(lightningRepo, never()).getChannels()
+        verify(lightningRepo, never()).getBalances()
+    }
+
+    @Test
+    fun `refreshMaxSendLightning should keep the spending limit when the node is not running`() = test {
+        val syncedState = BalanceState(maxSendLightningSats = 1_000u)
+        whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(syncedState))
+        sut.syncBalances()
+        whenever(lightningRepo.lightningState).thenReturn(
+            MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Stopped))
+        )
+
+        sut.refreshMaxSendLightning()
+
+        assertEquals(1_000u, sut.balanceState.value.maxSendLightningSats)
+    }
+
+    @Test
     fun `refreshBip21ForEvent should not refresh for other events`() = test {
         sut.refreshBip21ForEvent(
             Event.PaymentSuccessful(
@@ -307,6 +897,232 @@ class WalletRepoTest : BaseUnitTest() {
 
         verify(onchainService, never()).deriveBitcoinAddress(any(), any(), any(), anyOrNull())
         verify(lightningRepo, never()).syncState()
+    }
+
+    @Test
+    fun `older receive refresh cannot overwrite a newer invoice update`() = test {
+        sut.loadFromCache()
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        val releaseOlder = CompletableDeferred<Unit>()
+        var invoiceCalls = 0
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            if (invoiceCalls++ == 0) {
+                releaseOlder.await()
+                Result.success(INVOICE)
+            } else {
+                Result.success(INVOICE_REPLACEMENT)
+            }
+        }
+
+        val older = launch { sut.refreshBip21() }
+        val newer = launch { sut.updateBip21Invoice(description = "newer") }
+        releaseOlder.complete(Unit)
+        older.join()
+        newer.join()
+
+        val state = sut.walletState.value
+        assertEquals(INVOICE_REPLACEMENT, state.bolt11)
+        assertTrue(state.bip21.contains("lightning=$INVOICE_REPLACEMENT"))
+        assertEquals("newer", state.bip21Description)
+    }
+
+    @Test
+    fun `cache failure does not terminate the receive event collector`() = test {
+        val events = MutableSharedFlow<NodeEventUpdate>()
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE))
+        var cacheCalls = 0
+        whenever(cacheStore.update(any())).doSuspendableAnswer {
+            if (cacheCalls++ == 0) throw IOException("injected cache write failure")
+            Unit
+        }
+        sut = createSut()
+        events.emit(NodeEventUpdate(channelReady))
+        assertTrue(sut.walletState.value.hasReceiveInvoiceError)
+
+        events.emit(NodeEventUpdate(channelReady))
+
+        verify(lightningRepo, times(2)).createInvoice(anyOrNull(), any(), any())
+        assertFalse(sut.walletState.value.hasReceiveInvoiceError)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+    }
+
+    @Test
+    fun `opening refresh delayed by geo cannot replace a newer invoice edit`() = test {
+        sut.loadFromCache()
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE), Result.success(INVOICE_REPLACEMENT))
+        val releaseGeo = CompletableDeferred<Unit>()
+        whenever(lightningRepo.updateGeoBlockState()).doSuspendableAnswer { releaseGeo.await() }
+        val earlier = launch { sut.refreshReceiveState() }
+        val newer = launch { sut.updateBip21Invoice(SATS, "latest edit") }
+        releaseGeo.complete(Unit)
+        earlier.join()
+        newer.join()
+
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertEquals(SATS, sut.walletState.value.bip21AmountSats)
+        assertEquals("latest edit", sut.walletState.value.bip21Description)
+        assertTrue(sut.walletState.value.bip21.contains("lightning=$INVOICE_REPLACEMENT"))
+    }
+
+    @Test
+    fun `invoice creation failure reports terminal state and retry recovers`() = test {
+        sut.loadFromCache()
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.failure(error), Result.success(INVOICE))
+
+        assertTrue(sut.refreshReceiveState().isFailure)
+        assertTrue(sut.walletState.value.hasReceiveInvoiceError)
+
+        assertTrue(sut.updateBip21Invoice().isSuccess)
+        assertFalse(sut.walletState.value.hasReceiveInvoiceError)
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+        assertTrue(sut.walletState.value.bip21.contains("lightning=$INVOICE"))
+    }
+
+    @Test
+    fun `invoice publication uses the requested amount and description across suspension`() = test {
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        val releaseInvoice = CompletableDeferred<Unit>()
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            releaseInvoice.await()
+            Result.success(INVOICE)
+        }
+        val refresh = launch { sut.updateBip21Invoice(SATS, "requested") }
+        sut.setBip21AmountSats(SATS * 2uL)
+        sut.setBip21Description("changed during creation")
+        releaseInvoice.complete(Unit)
+        refresh.join()
+
+        val state = sut.walletState.value
+        assertEquals(SATS * 2uL, state.bip21AmountSats)
+        assertEquals("changed during creation", state.bip21Description)
+        assertEquals(sut.buildBip21Url(ADDRESS, SATS, "requested", INVOICE), state.bip21)
+        verify(lightningRepo).createInvoice(eq(SATS), eq("requested"), any())
+        assertFalse(state.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `failed invoice edit preserves the published pair and retains the request for retry`() = test {
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        sut.setBolt11(INVOICE)
+        val previous = sut.walletState.value
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.failure(error))
+
+        assertTrue(sut.updateBip21Invoice(SATS, "unsaved edit").isFailure)
+
+        val state = sut.walletState.value
+        assertEquals(previous.bolt11, state.bolt11)
+        assertEquals(previous.bip21, state.bip21)
+        assertEquals(SATS, state.bip21AmountSats)
+        assertEquals("unsaved edit", state.bip21Description)
+        assertTrue(state.hasReceiveInvoiceError)
+    }
+
+    @Test
+    fun `address refresh preserves committed invoice metadata while inputs are edited`() = test {
+        sut.loadFromCache()
+        sut.setBip21AmountSats(SATS)
+        sut.setBip21Description("committed")
+        sut.setBolt11(INVOICE)
+        sut.setBip21AmountSats(SATS * 2uL)
+        sut.setBip21Description("draft")
+        whenever(coreService.isAddressUsed(ADDRESS)).thenReturn(true)
+        whenever(privatePaykitAddressReservationRepo.nextReusableReceiveAddress())
+            .thenReturn(Result.success(ADDRESS_NEW))
+
+        sut.refreshReusableReceiveAddress().getOrThrow()
+
+        assertEquals(sut.buildBip21Url(ADDRESS_NEW, SATS, "committed", INVOICE), sut.walletState.value.bip21)
+        assertEquals("draft", sut.walletState.value.bip21Description)
+    }
+
+    @Test
+    fun `queued invoice request cannot reset note typed after its invocation`() = test {
+        sut.loadFromCache()
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE), Result.success(INVOICE_REPLACEMENT))
+        val releaseGeo = CompletableDeferred<Unit>()
+        whenever(lightningRepo.updateGeoBlockState()).doSuspendableAnswer { releaseGeo.await() }
+        val opening = launch { sut.refreshReceiveState() }
+        val queued = launch { sut.updateBip21Invoice(SATS, "requested") }
+        sut.setBip21Description("typed later")
+        assertTrue(sut.walletState.value.isReceiveInvoiceUpdating)
+        releaseGeo.complete(Unit)
+        opening.join()
+        queued.join()
+
+        assertEquals("typed later", sut.walletState.value.bip21Description)
+        assertEquals(sut.buildBip21Url(ADDRESS, SATS, "requested", INVOICE_REPLACEMENT), sut.walletState.value.bip21)
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `cancelling a queued request keeps the active invoice update pending`() = test {
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        val releaseInvoice = CompletableDeferred<Unit>()
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            releaseInvoice.await()
+            Result.success(INVOICE)
+        }
+        val active = launch { sut.updateBip21Invoice(SATS, "active") }
+        val queued = launch { sut.updateBip21Invoice(SATS, "queued") }
+        queued.cancel()
+        queued.join()
+        assertTrue(sut.walletState.value.isReceiveInvoiceUpdating)
+        releaseInvoice.complete(Unit)
+        active.join()
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `cancelled receive refresh releases the next invoice update`() = test {
+        sut.loadFromCache()
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        val neverReleased = CompletableDeferred<Unit>()
+        var invoiceCalls = 0
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            if (invoiceCalls++ == 0) neverReleased.await()
+            Result.success(INVOICE_REPLACEMENT)
+        }
+        val older = launch { sut.refreshBip21() }
+        val newer = launch { sut.updateBip21Invoice() }
+
+        older.cancel()
+        older.join()
+        newer.join()
+
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertTrue(sut.walletState.value.bip21.contains("lightning=$INVOICE_REPLACEMENT"))
+    }
+
+    @Test
+    fun `invoice publication never exposes new bolt11 with onchain only bip21`() = test {
+        sut.loadFromCache()
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+        val states = mutableListOf<WalletState>()
+        sut.walletState.onEach { states.add(it) }.launchIn(backgroundScope)
+
+        sut.updateBip21Invoice()
+
+        assertTrue(states.any { it.bolt11 == INVOICE })
+        assertTrue(states.filter { it.bolt11 == INVOICE }.all { it.bip21.contains("lightning=$INVOICE") })
     }
 
     @Test
@@ -430,7 +1246,12 @@ class WalletRepoTest : BaseUnitTest() {
         sut.setBolt11(INVOICE)
 
         assertEquals(INVOICE, sut.walletState.value.bolt11)
-        verify(cacheStore).saveBolt11(INVOICE, "")
+        val update = argumentCaptor<(AppCacheData) -> AppCacheData>()
+        verify(cacheStore).update(update.capture())
+        val cached = update.firstValue(AppCacheData())
+        assertEquals(INVOICE, cached.bolt11)
+        assertEquals(sut.walletState.value.bip21, cached.bip21)
+        assertTrue(cached.bip21.contains("lightning=$INVOICE"))
     }
 
     @Test
@@ -721,6 +1542,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21ForEvent PaymentReceived should invalidate the settled invoice`() = test {
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
         whenever(lightningRepo.canReceive()).thenReturn(true)
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
             .thenReturn(Result.success(INVOICE_REPLACEMENT))
@@ -830,6 +1652,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21 should create a fresh invoice after PaymentReceived invalidates the old one`() = test {
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
         whenever(lightningRepo.canReceive()).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
         whenever(lightningRepo.getChannels()).thenReturn(channels)

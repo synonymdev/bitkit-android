@@ -1,10 +1,17 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.AddressType
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -17,11 +24,12 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
     companion object {
@@ -60,20 +68,78 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
         )
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun `wallet assignment key keeps bare public key`() {
-        val key = ContactAssignmentKey(CONTACT_KEY, PaykitReceiverPaths.WALLET)
+    fun `contact cleanup rechecks snapshot after ledger load and lock handoff`() = test {
+        for (clearUnlisted in listOf(false, true)) {
+            val assignment = PrivatePaykitStoredAssignmentData("nativeSegwit", 1, PRIVATE_ADDRESS)
+            val initial = PrivatePaykitReservationData(
+                contactAssignments = mapOf(CONTACT_KEY to assignment),
+                contactAssignmentHistory = mapOf(CONTACT_KEY to listOf(assignment)),
+            )
+            reservationData.update { initial }
+            val loadStarted = CompletableDeferred<Unit>()
+            val resumeLoad = CompletableDeferred<Unit>()
+            whenever(reservationStore.data).thenReturn(
+                flow {
+                    loadStarted.complete(Unit)
+                    resumeLoad.await()
+                    emit(reservationData.value)
+                },
+            )
+            sut = PrivatePaykitAddressReservationRepo(
+                testDispatcher, reservationStore, settingsStore, coreService, lightningRepo,
+            )
+            var isCurrent = true
+            val loading = async { sut.backupSnapshot().getOrThrow() }
+            loadStarted.await()
+            val cleanup = async {
+                if (clearUnlisted) {
+                    sut.clearContactAssignments(emptyList()) { isCurrent }
+                } else {
+                    sut.removeContactAssignments(listOf(CONTACT_KEY)) { isCurrent }
+                }
+            }
+            runCurrent()
+            assertFalse(cleanup.isCompleted)
+            isCurrent = false
+            resumeLoad.complete(Unit)
+            loading.await()
+            cleanup.await()
 
-        assertEquals(CONTACT_KEY, key.encoded())
-        assertEquals(CONTACT_KEY, ContactAssignmentKey.publicKeyOf(key.encoded()))
+            assertEquals(initial, reservationData.value)
+            if (clearUnlisted) {
+                sut.clearContactAssignments(emptyList()) { true }
+            } else {
+                sut.removeContactAssignments(listOf(CONTACT_KEY)) { true }
+            }
+            assertTrue(reservationData.value.contactAssignments.isEmpty())
+            assertTrue(reservationData.value.contactAssignmentHistory.isEmpty())
+        }
     }
 
     @Test
-    fun `server assignment key includes receiver path`() {
-        val key = ContactAssignmentKey(CONTACT_KEY, PaykitReceiverPaths.SERVER)
+    fun `admitted assignment removal finishes when snapshot changes during persistence`() = test {
+        val assignment = PrivatePaykitStoredAssignmentData("nativeSegwit", 1, PRIVATE_ADDRESS)
+        reservationData.update {
+            PrivatePaykitReservationData(contactAssignments = mapOf(CONTACT_KEY to assignment))
+        }
+        val writeStarted = CompletableDeferred<Unit>()
+        val resumeWrite = CompletableDeferred<Unit>()
+        var isCurrent = true
+        whenever(reservationStore.update(any())).doSuspendableAnswer {
+            val transform = it.getArgument<(PrivatePaykitReservationData) -> PrivatePaykitReservationData>(0)
+            writeStarted.complete(Unit)
+            resumeWrite.await()
+            reservationData.update(transform)
+        }
+        val cleanup = async { sut.removeContactAssignments(listOf(CONTACT_KEY)) { isCurrent } }
+        writeStarted.await()
+        isCurrent = false
+        resumeWrite.complete(Unit)
+        cleanup.await()
 
-        assertEquals("$CONTACT_KEY#${PaykitReceiverPaths.SERVER}", key.encoded())
-        assertEquals(CONTACT_KEY, ContactAssignmentKey.publicKeyOf(key.encoded()))
+        assertTrue(reservationData.value.contactAssignments.isEmpty())
     }
 
     @Test
@@ -185,7 +251,52 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `clearContactAssignment removes private address attribution history`() = test {
+    fun `removeContactAssignments removes selected attribution and preserves unrelated reservations`() = test {
+        val historyOnlyKey = "pubky4rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val savedKey = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val assignment = PrivatePaykitStoredAssignmentData("nativeSegwit", 1, PRIVATE_ADDRESS)
+        val oldAssignment = assignment.copy(receiveIndex = 2, address = "bcrt1qold")
+        val historyOnlyAssignment = assignment.copy(receiveIndex = 3, address = "bcrt1qhistory")
+        val savedAssignment = assignment.copy(receiveIndex = 4, address = "bcrt1qsaved")
+        val savedHistory = assignment.copy(receiveIndex = 5, address = "bcrt1qsavedhistory")
+        val original = PrivatePaykitReservationData(
+            reservedReceiveIndexesByAddressType = mapOf("nativeSegwit" to setOf(1, 2, 3, 4, 5)),
+            contactAssignments = mapOf(CONTACT_KEY to assignment, savedKey to savedAssignment),
+            contactAssignmentHistory = mapOf(
+                CONTACT_KEY to listOf(oldAssignment),
+                historyOnlyKey to listOf(historyOnlyAssignment),
+                savedKey to listOf(savedHistory),
+            ),
+            restoredReservedReceiveIndexCeilingsByAddressType = mapOf("taproot" to 6),
+        )
+        reservationData.value = original
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 1)).thenReturn(
+            Result.success(AddressDerivationInfo(address = PRIVATE_ADDRESS, index = 1)),
+        )
+
+        sut.removeContactAssignments(listOf(CONTACT_KEY.removePrefix("pubky"), historyOnlyKey))
+
+        assertEquals(
+            original.copy(
+                contactAssignments = mapOf(savedKey to savedAssignment),
+                contactAssignmentHistory = mapOf(savedKey to listOf(savedHistory)),
+            ),
+            reservationData.value,
+        )
+        listOf(assignment, oldAssignment, historyOnlyAssignment).forEach {
+            assertNull(sut.contactPublicKeyForReservedAddress(it.address))
+            assertNull(sut.currentContactPublicKeyForReservedAddress(it.address))
+        }
+        assertEquals(savedKey, sut.currentContactPublicKeyForReservedAddress(savedAssignment.address))
+        assertEquals(savedKey, sut.contactPublicKeyForReservedAddress(savedHistory.address))
+        assertTrue(sut.isUnavailableForReusableReceive(PRIVATE_ADDRESS))
+        verify(reservationStore).update(any())
+    }
+
+    @Test
+    fun `removeContactAssignments invalidates attribution even if persistence fails`() = test {
+        val historyOnlyKey = "pubky4rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val historicalAddress = "bcrt1qhistory"
         reservationData.value = PrivatePaykitReservationData(
             contactAssignments = mapOf(
                 CONTACT_KEY to PrivatePaykitStoredAssignmentData(
@@ -202,12 +313,50 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
                         address = PRIVATE_ADDRESS,
                     ),
                 ),
+                historyOnlyKey to listOf(
+                    PrivatePaykitStoredAssignmentData("nativeSegwit", 2, historicalAddress),
+                ),
             ),
         )
 
-        sut.clearContactAssignment(CONTACT_KEY)
+        assertEquals(CONTACT_KEY, sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+        assertEquals(historyOnlyKey, sut.contactPublicKeyForReservedAddress(historicalAddress))
+        val persisted = reservationData.value
+        val version = sut.attributionVersion
+        whenever(reservationStore.update(any())).thenThrow(IllegalStateException("disk"))
+        assertFailsWith<IllegalStateException> {
+            sut.removeContactAssignments(listOf(CONTACT_KEY, historyOnlyKey))
+        }
 
+        assertTrue(sut.attributionVersion > version)
         assertNull(sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+        assertNull(sut.currentContactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+        assertNull(sut.contactPublicKeyForReservedAddress(historicalAddress))
+        assertEquals(persisted, reservationData.value)
+
+        org.mockito.kotlin.doAnswer {
+            val transform = it.getArgument<(PrivatePaykitReservationData) -> PrivatePaykitReservationData>(0)
+            reservationData.value = transform(reservationData.value)
+        }.whenever(reservationStore).update(any())
+        sut.removeContactAssignments(listOf(CONTACT_KEY, historyOnlyKey))
+        assertTrue(reservationData.value.contactAssignments.isEmpty())
+        assertTrue(reservationData.value.contactAssignmentHistory.isEmpty())
+    }
+
+    @Test
+    fun `reservation derivation failure propagates and remains retryable`() = test {
+        reservationData.value = PrivatePaykitReservationData(
+            contactAssignments = mapOf(
+                CONTACT_KEY to PrivatePaykitStoredAssignmentData(addressType = "nativeSegwit", receiveIndex = 1),
+            ),
+        )
+        whenever(lightningRepo.addressInfoForType(any(), any())).thenReturn(
+            Result.failure(IllegalStateException("unavailable")),
+            Result.success(AddressDerivationInfo(address = PRIVATE_ADDRESS, index = 1)),
+        )
+
+        assertFailsWith<IllegalStateException> { sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS) }
+        assertEquals(CONTACT_KEY, sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
     }
 
     @Test

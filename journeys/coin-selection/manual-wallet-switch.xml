@@ -1,0 +1,26 @@
+<journey name="manual wallet switch requires coin selection">
+  <description>
+    Requires an onboarded disposable regtest wallet with confirmed Savings coins, sufficient
+    Spending balance, and a fresh external unified invoice payable from either wallet. Open
+    Show Details on confirmation to change the funding source. No payment is submitted: swipe
+    only while no coins have been selected, and never authorize a payment.
+
+    iOS can open the picker immediately after switching to Savings. Android keeps confirmation
+    visible until the swipe. On both platforms, Back from this picker returns to confirmation,
+    and a further swipe without chosen coins must reopen selection before authorization.
+    Android also requires selection on Amount Continue; switching wallets on Amount stays there.
+  </description>
+  <actions>
+    <action>Note the current coin-selection setting, enable Manual, and open the external unified invoice with Spending selected</action>
+    <action>Open the send details and switch from Spending to Savings</action>
+    <action>If Savings confirmation remains visible, swipe once to open coin selection</action>
+    <action>Verify the coin selection screen is visible and no payment authorization or submission occurred</action>
+    <action>Tap Back without choosing coins and verify Savings confirmation remains visible without reopening the picker automatically</action>
+    <action>Swipe once and verify the picker reopens before any payment warning, authorization, or submission; repeat Back and swipe once more</action>
+    <action>Choose enough coins to cover the amount and fee, then tap Continue</action>
+    <action>Verify Savings confirmation shows the requested amount; open Tags and return without changes, with no coin picker reopening</action>
+    <action>Close the send sheet without paying</action>
+    <action>Enable automatic coin selection, reopen the external unified invoice with Spending selected, and switch to Savings</action>
+    <action>Verify Savings confirmation becomes ready without opening manual coin selection; close without paying and restore the original coin-selection setting</action>
+  </actions>
+</journey>

@@ -560,7 +560,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             it.extras.getString(Notification.EXTRA_TITLE) == sentTitle
         }
         assertNotNull(notification, "Pending payment success notification should be present")
-        assertEquals(sentBody, notification?.extras?.getString(Notification.EXTRA_TEXT))
+        assertEquals(sentBody, notification.extras?.getString(Notification.EXTRA_TEXT))
     }
 
     @Test
@@ -594,7 +594,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             it.extras.getString(Notification.EXTRA_TITLE) == failedTitle
         }
         assertNotNull(notification, "Pending payment failure notification should be present")
-        assertEquals(failedBody, notification?.extras?.getString(Notification.EXTRA_TEXT))
+        assertEquals(failedBody, notification.extras?.getString(Notification.EXTRA_TEXT))
     }
 
     @Test
@@ -697,7 +697,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             it.extras.getString(Notification.EXTRA_TITLE) == cjitTitle
         }
         assertNotNull(notification, "CJIT channel ready notification should be present")
-        assertEquals($$"Received ₿ 48 064 ($30.79)", notification?.extras?.getString(Notification.EXTRA_TEXT))
+        assertEquals($$"Received ₿ 48 064 ($30.79)", notification.extras?.getString(Notification.EXTRA_TEXT))
         verify(cacheStore).setBackgroundReceive(sheet)
     }
 

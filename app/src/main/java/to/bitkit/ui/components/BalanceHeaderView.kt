@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
@@ -43,7 +44,6 @@ import to.bitkit.ui.shared.modifiers.swipeToHide
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun BalanceHeaderView(
     sats: Long,
@@ -54,6 +54,7 @@ fun BalanceHeaderView(
     showBitcoinSymbol: Boolean = true,
     useSwipeToHide: Boolean = true,
     showEyeIcon: Boolean = false,
+    isUnavailable: Boolean = false,
     testTag: String = "",
 ) {
     val isPreview = LocalInspectionMode.current
@@ -99,11 +100,11 @@ fun BalanceHeaderView(
         BalanceHeader(
             isBitcoinPrimary = isBitcoinPrimary,
             smallRowSymbol = if (isBitcoinPrimary) fiat.symbol else btc.symbol,
-            smallRowText = if (isBitcoinPrimary) fiat.formatted else btc.value,
+            smallRowText = if (isUnavailable) "—" else if (isBitcoinPrimary) fiat.formatted else btc.value,
             smallRowIsSymbolSuffix = if (isBitcoinPrimary) fiat.isSymbolSuffix else false,
             smallRowModifier = Modifier.testTag("$testTag-secondary"),
             largeRowPrefix = prefix,
-            largeRowText = if (isBitcoinPrimary) btc.value else fiat.formatted,
+            largeRowText = if (isUnavailable) "—" else if (isBitcoinPrimary) btc.value else fiat.formatted,
             largeRowSymbol = if (isBitcoinPrimary) btc.symbol else fiat.symbol,
             largeRowIsSymbolSuffix = if (isBitcoinPrimary) false else fiat.isSymbolSuffix,
             largeRowModifier = Modifier.testTag("$testTag-primary"),
@@ -133,6 +134,7 @@ fun BalanceHeader(
     smallRowIsSymbolSuffix: Boolean = false,
     smallRowModifier: Modifier = Modifier,
     largeRowPrefix: String? = null,
+    prefixSpacing: Dp = 8.dp,
     largeRowIsSymbolSuffix: Boolean = false,
     largeRowModifier: Modifier = Modifier,
     hideBalance: Boolean = false,
@@ -229,6 +231,7 @@ fun BalanceHeader(
                 }
                 LargeRow(
                     prefix = state.prefix,
+                    prefixSpacing = prefixSpacing,
                     text = state.text,
                     symbol = state.symbol,
                     showSymbol = state.showSymbol,
@@ -298,6 +301,7 @@ fun LargeRow(
     modifier: Modifier = Modifier,
     isSymbolSuffix: Boolean = false,
     hideBalance: Boolean = false,
+    prefixSpacing: Dp = 8.dp,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -307,7 +311,7 @@ fun LargeRow(
             SecondaryDisplay(
                 text = prefix,
                 modifier = Modifier
-                    .padding(end = 8.dp)
+                    .padding(end = prefixSpacing)
                     .testTag("MoneySign")
             )
         }

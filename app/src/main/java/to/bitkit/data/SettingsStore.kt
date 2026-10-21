@@ -6,10 +6,12 @@ import androidx.datastore.dataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
@@ -40,10 +42,11 @@ class SettingsStore @Inject constructor(
     private val localStore = context.localSettingsDataStore
 
     val data: Flow<SettingsData> = store.data
-    val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: false }
+    val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: true }
     val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
         it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
     }
+    val subscriptionClockOffsetDays: Flow<Int> = localStore.data.map { it[SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY] ?: 0 }
 
     @Volatile
     var restoredMonitoredTypesFromBackup: Boolean = false
@@ -110,6 +113,10 @@ class SettingsStore @Inject constructor(
         localStore.edit { it[PUBKY_PROFILE_SETUP_PENDING_KEY] = value }
     }
 
+    suspend fun setSubscriptionClockOffsetDays(days: Int) {
+        localStore.edit { it[SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY] = days }
+    }
+
     suspend fun addLastUsedTag(newTag: String) {
         store.updateData { currentSettings ->
             val combinedTags = (listOf(newTag) + currentSettings.lastUsedTags).distinct()
@@ -143,6 +150,7 @@ class SettingsStore @Inject constructor(
         private const val MAX_LAST_USED_TAGS = 10
         private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
         private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
+        private val SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY = intPreferencesKey("subscription_clock_offset_days")
     }
 }
 
@@ -166,6 +174,9 @@ data class SettingsData(
     val publicPaykitCleanupPending: Boolean = false,
     val publicPaykitLightningEnabled: Boolean = true,
     val publicPaykitOnchainEnabled: Boolean = true,
+    val publicPaykitUsdtEnabled: Boolean = true,
+    val usdtPreference: UsdtPreference = UsdtPreference.UNDECIDED,
+    val hasSeenUsdtIntro: Boolean = false,
     val publicPaykitBolt11: String = "",
     val publicPaykitBolt11PaymentHash: String = "",
     val publicPaykitBolt11ExpiresAtMillis: Long = 0,
@@ -179,6 +190,7 @@ data class SettingsData(
     val isBiometricEnabled: Boolean = false,
     val isPinForPaymentsEnabled: Boolean = false,
     val isDevModeEnabled: Boolean = Env.isDebug,
+    val disableAllToasts: Boolean = false,
     val isSavingsSwapEnabled: Boolean = false,
     val showWidgets: Boolean = true,
     val lastUsedTags: List<String> = emptyList(),
@@ -272,3 +284,18 @@ fun SettingsData.paykitDisabled(markPublicCleanupPending: Boolean = false) = cop
     publicPaykitBolt11PaymentHash = "",
     publicPaykitBolt11ExpiresAtMillis = 0,
 )
+
+@Serializable
+enum class UsdtPreference {
+    @SerialName("undecided")
+    UNDECIDED,
+
+    @SerialName("disabled")
+    DISABLED,
+
+    @SerialName("enabled")
+    ENABLED,
+}
+
+val SettingsData.isUsdtEnabled: Boolean
+    get() = Env.isUsdtEnabled && usdtPreference == UsdtPreference.ENABLED

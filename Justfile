@@ -24,9 +24,6 @@ list:
         "lint" \
         "lint baseline" \
         "format" \
-        "translations pull" \
-        "translations push source" \
-        "translations push all" \
         "e2e [network|no geo|TASK] [TASK]" \
         "changelog [all|next|hotfix]" \
         "clean"
@@ -114,8 +111,8 @@ run mode="" logs="":
     build_env=""
     if [ "$mode" = "docker" ]; then
         echo "Forwarding bitkit-docker ports via adb reverse..."
-        adb -s "$device_id" reverse tcp:9735 tcp:9735     # local lnd peer
-        adb -s "$device_id" reverse tcp:3000 tcp:3000     # local lnurl-server
+        adb -s "$device_id" reverse tcp:23735 tcp:23735   # local lnd peer
+        adb -s "$device_id" reverse tcp:23000 tcp:23000   # local lnurl-server
         build_env="E2E=true"
     fi
 
@@ -188,13 +185,10 @@ test target="" value="":
     {{ if target == "" { gradle + " testDevDebugUnitTest" } else if target == "android" { gradle + " connectedDevDebugAndroidTest" } else if target == "file" { if value == "" { error("usage: just test file PATTERN") } else { gradle + " testDevDebugUnitTest --tests '" + value + "'" } } else if target == "lane" { if value == "" { error("usage: just test lane LANE") } else { gradle + " connectedDevDebug" + value + "AndroidTest" } } else { error("usage: just test [file PATTERN|android|lane LANE]") } }}
 
 lint target="":
-    {{ if target == "" { gradle + " detekt --rerun-tasks" } else if target == "baseline" { gradle + " detektBaseline --rerun-tasks" } else { error("usage: just lint [baseline]") } }}
+    {{ if target == "" { gradle + " detekt --rerun-tasks && " + gradle + " lintDevDebug" } else if target == "baseline" { gradle + " updateLintBaselineDevDebug" } else { error("usage: just lint [baseline]") } }}
 
 format:
     {{ gradle }} detekt --auto-correct --rerun-tasks
-
-translations action value="":
-    {{ if action == "pull" { "./scripts/pull-translations.sh" } else if action == "push" { if value == "source" { "tx push --source" } else if value == "all" { "./scripts/push-translations.sh" } else { error("usage: just translations pull|push source|push all") } } else { error("usage: just translations pull|push source|push all") } }}
 
 e2e mode="" value="" task="assembleDevRelease":
     {{ if mode == "" { "E2E=true " + gradle + " " + task } else if mode == "network" { "E2E=true E2E_BACKEND=network " + gradle + " " + if value == "" { task } else { value } } else if mode == "no" { if value == "geo" { "GEO=false E2E=true " + gradle + " " + task } else { error("usage: just e2e no geo [TASK]") } } else { "E2E=true " + gradle + " " + mode } }}

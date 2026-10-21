@@ -137,6 +137,12 @@ Use `Not used` when a phase had no AI involvement and `Unknown` when the model w
 never infer a model from a tool name. If no review occurred, write `Review: Not performed`.
 `Not used` and `Not performed` need no reasoning value. See `.agents/commands/pr.md` for formatting.
 
+### Review Findings
+
+When addressing review feedback on any PR, release PRs included, PR babysitters and the author's agent keep the PR in scope:
+- Fix in the PR only critical and HIGH findings and reachable correctness bugs. MEDIUM findings are a judgment call.
+- PR babysitters re-triage each LOW or non-blocking finding. If it is still LOW and not a reachable correctness bug, they defer it and leave the code unchanged: file an issue in the next release's milestone, add an Out of Scope bullet linking the issue and the thread (see `.agents/commands/pr.md`), reply in the thread `out of scope: tracked in #N, because …`, and resolve it.
+
 ## Build Commands
 
 ```sh
@@ -167,13 +173,13 @@ just e2e no geo
 # Build for E2E tests using network Electrum (not local; staging/mainnet based on flavor)
 just e2e network assembleTnetRelease
 
-# Lint using detekt
+# Lint using detekt and Android Lint
 just lint
 
 # Auto-format using detekt
 just format
 
-# Update detekt baseline
+# Update the Android Lint baseline
 just lint baseline
 
 # Install dev build
@@ -476,6 +482,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add business logic to repository layer via methods returning `Result<T>` and use it in ViewModels
 - ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice versa for downstream
 - ALWAYS add new localizable string resources in alphabetical order in `strings.xml`
+- ALWAYS add or update the translation in every `values-*/strings.xml` in the same PR when adding or changing an English string; translations live in this repository, not in Transifex
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
 - ALWAYS reference test files in PR descriptions/QA Notes by bare file name only (e.g. `HwWalletRepoTest.kt`), NEVER the full path; only when two referenced test files share the same name, prefix the shortest leading path segment(s) that disambiguate them (e.g. `repositories/FooTest.kt` vs `viewmodels/FooTest.kt`)
@@ -483,6 +490,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
+- NEVER push with lint findings: detekt and Android Lint fail CI, and Kotlin warnings fail compilation (`allWarningsAsErrors`; deprecations stay warnings). Fix the finding instead of suppressing it or adding it to `app/lint-baseline.xml`
 - ALWAYS wrap suspend functions in `withContext(ioDispatcher)` if in domain layer, using ctor injected prop `@IoDispatcher private val ioDispatcher: CoroutineDispatcher`
 - ALWAYS position `companion object` at the top of the class
 - NEVER use `Exception` directly, use `AppError` instead

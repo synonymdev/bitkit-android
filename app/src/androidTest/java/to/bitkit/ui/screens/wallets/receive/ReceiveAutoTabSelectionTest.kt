@@ -4,7 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -71,7 +72,9 @@ class ReceiveAutoTabSelectionTest {
     }
 
     private fun selectedTab(): ReceiveTab {
-        composeTestRule.onAllNodesWithTag("SpecifyInvoiceButton")[0].performClick()
+        val buttons = composeTestRule.onAllNodesWithTag("SpecifyInvoiceButton")
+        val displayedIndex = buttons.fetchSemanticsNodes().indices.first { buttons[it].isDisplayed() }
+        buttons[displayedIndex].performClick()
         composeTestRule.waitForIdle()
         return editedTabs.last()
     }

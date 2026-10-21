@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -21,11 +22,15 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthPermission
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PubkyAlreadySignedInError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.UsdtPreferencesRepo
+import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountAuthorizationStartError
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -39,6 +44,8 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
     private val watchOnlyAccountRepo: WatchOnlyAccountRepo,
+    private val usdtRepo: UsdtRepo,
+    private val usdtPreferences: UsdtPreferencesRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "PubkyAuthApprovalVM"
@@ -49,6 +56,33 @@ class PubkyAuthApprovalViewModel @Inject constructor(
 
     private val _effects = MutableSharedFlow<PubkyAuthApprovalEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
+
+    init {
+        viewModelScope.launch {
+            usdtPreferences.enabled.collect { enabled ->
+                val newlyEnabled = enabled && !_uiState.value.isUsdtEnabled
+                _uiState.update { state ->
+                    state.copy(
+                        isUsdtEnabled = enabled,
+                        shareUsdt = state.shareUsdt && enabled,
+                        usdtAddress = state.usdtAddress.takeIf { enabled },
+                        state = if (!enabled && state.state == ApprovalState.WatchOnlyConsent &&
+                            state.bitkitClaim?.sharesBitcoin != true
+                        ) {
+                            ApprovalState.Authorize
+                        } else if (newlyEnabled && state.usdtRequired &&
+                            state.state == ApprovalState.Authorize
+                        ) {
+                            ApprovalState.WatchOnlyConsent
+                        } else {
+                            state.state
+                        },
+                    )
+                }
+                if (newlyEnabled) loadUsdtAddress(_uiState.value.authUrl)
+            }
+        }
+    }
 
     private val inFlightAuthorization = AtomicReference<InFlightAuthorization?>()
     fun load(authUrl: String) {
@@ -75,35 +109,71 @@ class PubkyAuthApprovalViewModel @Inject constructor(
             }
             if (_uiState.value.authUrl != authUrl) return@launch
             val unknownService = context.getString(R.string.profile__auth_approval_service_unknown)
-            val serviceName = request.serviceNames.firstOrNull() ?: unknownService
-            val profile = pubkyRepo.profile.value ?: pubkyRepo.publicKey.value?.let { publicKey ->
-                PubkyProfile.forDisplay(
-                    publicKey = publicKey,
-                    name = pubkyRepo.displayName.value,
-                    imageUrl = pubkyRepo.displayImageUri.value,
-                )
-            }
+            val serviceName = request.serviceNames.takeIf {
+                it.isNotEmpty()
+            }?.joinToString(context.getString(R.string.profile__auth_approval_services_separator)) ?: unknownService
+            val usdtEnabled = usdtPreferences.enabled.first()
+            val identityPublicKey = pubkyRepo.publicKey.value ?: pubkyRepo.localIdentityPublicKey()
+            val profile = approvalProfile(identityPublicKey)
             _uiState.update {
                 it.copy(
-                    state = if (request.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
+                    state = if (request.bitkitClaim?.sharesBitcoin == true ||
+                        (request.bitkitClaim?.sharesUsdt == true && usdtEnabled)
+                    ) {
                         ApprovalState.WatchOnlyConsent
                     } else {
                         ApprovalState.Authorize
                     },
                     clientId = request.clientId,
                     homeserverPublicKey = request.homeserverPublicKey,
+                    createsIdentity = request.requiresIdentityCreation(identityPublicKey != null),
                     serviceName = serviceName,
                     permissions = request.permissions.toImmutableList(),
                     bitkitClaim = request.bitkitClaim,
                     profile = profile,
+                    isUsdtEnabled = usdtEnabled,
+                    shareUsdt = usdtEnabled,
                 )
+            }
+            if (usdtEnabled) loadUsdtAddress(authUrl)
+        }
+    }
+
+    fun setShareUsdt(enabled: Boolean) {
+        if (_uiState.value.state !in listOf(ApprovalState.WatchOnlyConsent, ApprovalState.Authorize) ||
+            !_uiState.value.isUsdtEnabled || _uiState.value.usdtRequired
+        ) {
+            return
+        }
+        _uiState.update { it.copy(shareUsdt = enabled) }
+    }
+
+    fun loadUsdtAddress(authUrl: String) {
+        if (_uiState.value.authUrl != authUrl || _uiState.value.bitkitClaim?.sharesUsdt != true) return
+        _uiState.update { it.copy(usdtAddress = null, usdtUnavailable = false) }
+        viewModelScope.launch {
+            if (!usdtPreferences.enabled.first()) {
+                _uiState.update { if (it.authUrl == authUrl) it.copy(shareUsdt = false) else it }
+                return@launch
+            }
+            val address = usdtRepo.paymentEndpoint().getOrNull()?.value
+            _uiState.update {
+                if (it.authUrl == authUrl && it.isUsdtEnabled) {
+                    it.copy(
+                        usdtAddress = address,
+                        usdtUnavailable = address == null,
+                        shareUsdt = (it.usdtRequired || it.shareUsdt) && address != null,
+                    )
+                } else {
+                    it
+                }
             }
         }
     }
 
     fun requestAuthorize(authUrl: String) {
         val state = _uiState.value
-        if (state.authUrl != authUrl || state.state != ApprovalState.Authorize) return
+        if (state.authUrl != authUrl || state.state != ApprovalState.Authorize || !state.canAuthorize) return
         if (!_uiState.compareAndSet(state, state.copy(state = ApprovalState.Authenticating))) return
         viewModelScope.launch {
             _effects.emit(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl))
@@ -112,7 +182,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
 
     fun approveWatchOnlyConsent(authUrl: String) {
         _uiState.update { state ->
-            if (state.authUrl == authUrl && state.state == ApprovalState.WatchOnlyConsent) {
+            if (state.authUrl == authUrl && state.state == ApprovalState.WatchOnlyConsent && state.canAuthorize) {
                 state.copy(state = ApprovalState.Authorize)
             } else {
                 state
@@ -125,7 +195,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
             if (
                 state.authUrl == authUrl &&
                 state.state == ApprovalState.Authorize &&
-                state.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1
+                state.showsReceivingDetails
             ) {
                 state.copy(state = ApprovalState.WatchOnlyConsent)
             } else {
@@ -170,10 +240,16 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         }
         val approvalState = _uiState.value
         if (approvalState.authUrl != authUrl) return
-        if (!approveRequest(request, authUrl)) return
+        if (request.bitkitClaim != approvalState.bitkitClaim || request.clientId != approvalState.clientId ||
+            request.permissions != approvalState.permissions
+        ) {
+            handleApprovalFailure(PubkyAuthRequestError.RequesterChanged, authUrl)
+            return
+        }
+        if (!approveRequest(request, authUrl, approvalState.createsIdentity)) return
 
         Logger.info("Auth approved for '${request.serviceNames.firstOrNull().orEmpty()}'", context = TAG)
-        if (request.isSignup) {
+        if (approvalState.createsIdentity) {
             _effects.emit(PubkyAuthApprovalEffect.Dismiss)
             return
         }
@@ -185,7 +261,8 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     private suspend fun approveRequest(
         request: PubkyAuthRequest,
         authUrl: String,
-    ): Boolean = if (request.isSignup) {
+        createsIdentity: Boolean,
+    ): Boolean = if (createsIdentity) {
         pubkyRepo.approveSignupAuth(request).fold(
             onSuccess = { true },
             onFailure = {
@@ -201,8 +278,15 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         request: PubkyAuthRequest,
         authUrl: String,
     ): Boolean {
+        val endpoint = runSuspendCatching {
+            validatedUsdtEndpoint(request)
+        }.getOrElse {
+            handleApprovalFailure(it, authUrl)
+            loadUsdtAddress(authUrl)
+            return false
+        }
         val preparedClaim = runSuspendCatching {
-            if (request.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
+            if (request.bitkitClaim?.sharesBitcoin == true) {
                 watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, defaultWatchOnlyAccountName(request))
             } else {
                 null
@@ -226,9 +310,17 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                 }
         }
 
-        val approvalResult = preparedClaim?.let {
-            pubkyRepo.approveAuthWithCompanionClaim(authUrl, request.clientId, it.payload)
-        } ?: pubkyRepo.approveAuth(authUrl, request.capabilities, request.clientId)
+        val approvalResult = runSuspendCatching {
+            request.bitkitClaim?.let { claimType ->
+                val sharedEndpoint = endpoint.takeIf { usdtPreferences.enabled.first() }
+                if (claimType.requiresUsdtAddress && sharedEndpoint == null) {
+                    throw PubkyAuthRequestError.InvalidPaymentDetails
+                }
+                _uiState.update { it.copy(shareUsdt = sharedEndpoint != null) }
+                val payload = claimType.unsignedPayload(preparedClaim, sharedEndpoint)
+                pubkyRepo.approveAuthWithCompanionClaim(authUrl, request.clientId, payload).getOrThrow()
+            } ?: pubkyRepo.approveAuth(authUrl, request.capabilities, request.clientId).getOrThrow()
+        }
         if (approvalResult.isFailure) {
             val approvalError = checkNotNull(approvalResult.exceptionOrNull()) { "Authorization failed" }
             preparedClaim?.let { claim ->
@@ -243,21 +335,27 @@ class PubkyAuthApprovalViewModel @Inject constructor(
             return false
         }
 
-        preparedClaim?.let { claim ->
-            runSuspendCatching { watchOnlyAccountRepo.markActive(claim.account.id) }.getOrElse {
-                handleApprovalFailure(it, authUrl)
-                return false
-            }
+        return runSuspendCatching {
+            preparedClaim?.let { watchOnlyAccountRepo.markActive(it.account.id) }
+        }.onFailure { handleApprovalFailure(it, authUrl) }.isSuccess
+    }
+
+    private suspend fun validatedUsdtEndpoint(request: PubkyAuthRequest): Endpoint? {
+        val claim = request.bitkitClaim ?: return null
+        if (!claim.sharesUsdt) return null
+        if (!_uiState.value.shareUsdt || !usdtPreferences.enabled.first()) {
+            if (claim.requiresUsdtAddress) throw PubkyAuthRequestError.InvalidPaymentDetails
+            return null
         }
-        return true
+        return usdtRepo.paymentEndpoint().getOrThrow().also {
+            if (it.value != _uiState.value.usdtAddress) throw PubkyAuthRequestError.InvalidPaymentDetails
+        }
     }
 
     private fun transitionToAuthorizing(authUrl: String): PubkyAuthApprovalUiState? {
         val initialState = _uiState.value
-        if (
-            initialState.authUrl != authUrl ||
-            (initialState.state != ApprovalState.Authorize && initialState.state != ApprovalState.Authenticating)
-        ) {
+        val ready = initialState.state in setOf(ApprovalState.Authorize, ApprovalState.Authenticating)
+        if (initialState.authUrl != authUrl || !initialState.canAuthorize || !ready) {
             return null
         }
         val authorizingState = initialState.copy(state = ApprovalState.Authorizing)
@@ -320,6 +418,16 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         return context.getString(R.string.profile__auth_approval_watch_only_account_default_name, serviceName)
     }
 
+    private fun approvalProfile(identityPublicKey: String?): PubkyProfile? {
+        pubkyRepo.profile.value?.let { return it }
+        val publicKey = identityPublicKey ?: return null
+        return PubkyProfile.forDisplay(
+            publicKey = publicKey,
+            name = pubkyRepo.displayName.value,
+            imageUrl = pubkyRepo.displayImageUri.value,
+        )
+    }
+
     fun dismiss() {
         viewModelScope.launch { _effects.emit(PubkyAuthApprovalEffect.Dismiss) }
     }
@@ -331,11 +439,24 @@ data class PubkyAuthApprovalUiState(
     val state: ApprovalState = ApprovalState.Loading,
     val clientId: String = "",
     val homeserverPublicKey: String? = null,
+    val createsIdentity: Boolean = false,
     val serviceName: String = "",
     val permissions: ImmutableList<PubkyAuthPermission> = persistentListOf(),
     val bitkitClaim: PubkyAuthClaim? = null,
     val profile: PubkyProfile? = null,
-)
+    val usdtAddress: String? = null,
+    val usdtUnavailable: Boolean = false,
+    val shareUsdt: Boolean = true,
+    val isUsdtEnabled: Boolean = false,
+) {
+    val showsUsdtDetails: Boolean get() = bitkitClaim?.sharesUsdt == true && isUsdtEnabled
+    val showsReceivingDetails: Boolean get() = bitkitClaim?.sharesBitcoin == true || showsUsdtDetails
+    val usdtRequired: Boolean get() = bitkitClaim?.requiresUsdtAddress == true
+    val canAuthorize: Boolean get() = when {
+        usdtRequired -> isUsdtEnabled && shareUsdt && usdtAddress != null
+        else -> !showsUsdtDetails || !shareUsdt || usdtAddress != null
+    }
+}
 
 sealed interface ApprovalState {
     data object Loading : ApprovalState
@@ -366,3 +487,6 @@ private fun Throwable.isPostDeliveryAuthorizationFailure(): Boolean {
     }
     return false
 }
+
+private val PubkyAuthClaim.requiresUsdtAddress: Boolean
+    get() = sharesUsdt && !sharesBitcoin && !includesPaykitAccess

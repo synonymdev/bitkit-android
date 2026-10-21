@@ -33,8 +33,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
+import to.bitkit.ui.screens.wallets.receive.ReceiveTab
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
@@ -66,9 +68,11 @@ sealed interface Sheet {
     data class Send(
         val route: SendRoute = SendRoute.Recipient,
         val hardwareWalletId: String? = null,
+        val preparingRequest: PaykitPaymentRequest? = null,
     ) : Sheet
     data class Receive(
         val route: ReceiveRoute = ReceiveRoute.QR,
+        val initialTab: ReceiveTab? = null,
         val hardwareWalletId: String? = null,
         val presentationId: String = UUID.randomUUID().toString(),
     ) : Sheet
@@ -103,7 +107,8 @@ sealed interface Sheet {
 
 /**@param priority Priority levels for timed sheets (higher number = higher priority)*/
 enum class TimedSheetType(val priority: Int) {
-    APP_UPDATE(priority = 5),
+    APP_UPDATE(priority = 6),
+    USDT(priority = 5),
     BACKUP(priority = 4),
     NOTIFICATIONS(priority = 3),
     QUICK_PAY(priority = 2),
@@ -140,8 +145,7 @@ fun SheetHost(
     var wasSheetVisible by remember { mutableStateOf(false) }
     var visibleKey by remember { mutableStateOf<Any?>(null) }
 
-    // Automatically expand or hide the bottom sheet based on bool flag
-    LaunchedEffect(shouldExpand) {
+    LaunchedEffect(shouldExpand, visibilityKey) {
         if (shouldExpand) {
             scaffoldState.bottomSheetState.expand()
         } else {

@@ -99,6 +99,14 @@ object AppSwitchDefaults {
             uncheckedIconColor = Colors.Gray4,
         )
 
+    val colorsUsdt: SwitchColors
+        @Composable
+        get() = colors.copy(
+            checkedTrackColor = Colors.Usdt,
+            checkedBorderColor = Colors.Usdt,
+            checkedIconColor = Colors.Usdt,
+        )
+
     val colorsPurple: SwitchColors
         @Composable
         get() = SwitchDefaults.colors(

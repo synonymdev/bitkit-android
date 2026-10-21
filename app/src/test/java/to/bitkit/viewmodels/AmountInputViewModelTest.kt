@@ -36,7 +36,6 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 
-@Suppress("LargeClass")
 @OptIn(ExperimentalTime::class)
 class AmountInputViewModelTest : BaseUnitTest() {
     private lateinit var viewModel: AmountInputViewModel

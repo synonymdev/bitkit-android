@@ -15,7 +15,7 @@ Twin = same Android/iOS change; Companion = coordinated non-prerequisite work (e
 
 #### Out of Scope
 
-<!-- One bullet per item this PR deliberately leaves out (`path/or/area: item`); reviewers treat them as your non-goals. `None.` when nothing is left out. Required for feat, fix, and refactor PRs; delete it for version, changelog, or dependency bumps and release PRs; other chore, docs, and test PRs at your discretion. -->
+<!-- Guards this PR's scope: one bullet per adjacent item a reviewer could expect here that this PR deliberately leaves out (`path/or/area: item`), linking its issue when it is real work; deferred review findings link their issue and thread. Reviewers treat them as your non-goals. `None.` when nothing adjacent is held back. Required for feat, fix, and refactor PRs and any PR that defers a review finding; otherwise delete it for version, changelog, or dependency bumps and release PRs; other chore, docs, and test PRs at your discretion. -->
 
 ### Design
 

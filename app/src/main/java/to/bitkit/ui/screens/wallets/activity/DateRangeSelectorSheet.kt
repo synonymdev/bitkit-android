@@ -42,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -141,7 +142,6 @@ fun DateRangeSelectorSheet() {
     )
 }
 
-@Suppress("MaxLineLength", "CyclomaticComplexMethod")
 @VisibleForTesting
 @Composable
 internal fun DateRangeSelectorContent(
@@ -279,11 +279,12 @@ internal fun DateRangeSelectorContent(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             calendar.firstDayOfWeek = Calendar.SUNDAY
-            val weekdaySymbols = SimpleDateFormat(DatePattern.WEEKDAY_FORMAT, Locale.getDefault())
+            val weekdaySymbols = SimpleDateFormat(DatePattern.WEEKDAY_FORMAT, LocalConfiguration.current.locales[0])
 
             for (i in 0 until CalendarConstants.DAYS_IN_WEEK) {
                 val dayOfWeek =
-                    (calendar.firstDayOfWeek + i - CalendarConstants.CALENDAR_WEEK_OFFSET) % CalendarConstants.DAYS_IN_WEEK_MOD + CalendarConstants.CALENDAR_WEEK_OFFSET
+                    (calendar.firstDayOfWeek + i - CalendarConstants.CALENDAR_WEEK_OFFSET) %
+                        CalendarConstants.DAYS_IN_WEEK_MOD + CalendarConstants.CALENDAR_WEEK_OFFSET
                 calendar.set(Calendar.DAY_OF_WEEK, dayOfWeek)
                 Caption13Up(
                     text = weekdaySymbols.format(calendar.time).take(CalendarConstants.WEEKDAY_ABBREVIATION_LENGTH)

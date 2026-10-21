@@ -22,7 +22,6 @@ import to.bitkit.models.addressTypeFromAddress
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toSettingsString
 import to.bitkit.services.CoreService
-import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -34,22 +33,7 @@ sealed class PrivatePaykitAddressReservationError(message: String) : AppError(me
     )
 }
 
-internal data class ContactAssignmentKey(
-    val publicKey: String,
-    val receiverPath: String,
-) {
-    fun encoded(): String =
-        if (receiverPath == PaykitReceiverPaths.WALLET) publicKey else "$publicKey$SEPARATOR$receiverPath"
-
-    companion object {
-        private const val SEPARATOR = '#'
-
-        fun publicKeyOf(encoded: String): String = encoded.substringBefore(SEPARATOR)
-    }
-}
-
 @Singleton
-@Suppress("TooManyFunctions")
 class PrivatePaykitAddressReservationRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val reservationStore: PrivatePaykitReservationStore,
@@ -62,7 +46,15 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
     }
 
     private val mutex = Mutex()
+
+    @Volatile
+    internal var attributionVersion = 0L
+        private set
     private var ledger: PrivatePaykitReservationData? = null
+        set(value) {
+            if (field != value) attributionVersion++
+            field = value
+        }
 
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
@@ -98,10 +90,9 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     suspend fun currentOrRotatedAddress(
         publicKey: String,
-        receiverPath: String,
     ): Result<String> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val assignmentKey = contactAssignmentKey(publicKey, receiverPath)
+            val assignmentKey = normalizedPublicKey(publicKey)
             val current = locked { it.contactAssignments[assignmentKey] }
             if (current != null && isAddressTypeMonitored(current.addressType)) {
                 val address = resolvedAddress(current).getOrThrow()
@@ -169,8 +160,8 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
         assignments.firstOrNull { (_, assignment) ->
             assignment.addressType == addressType &&
-                (assignment.address == address || resolvedAddress(assignment).getOrNull() == address)
-        }?.first?.publicKeyFromAssignmentKey()
+                (assignment.address == address || resolvedAddress(assignment).getOrThrow() == address)
+        }?.first
     }
 
     suspend fun currentContactPublicKeyForReservedAddress(address: String): String? = withContext(ioDispatcher) {
@@ -180,7 +171,7 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         assignments.firstOrNull { (_, assignment) ->
             assignment.addressType == addressType &&
                 (assignment.address == address || resolvedAddress(assignment).getOrNull() == address)
-        }?.first?.publicKeyFromAssignmentKey()
+        }?.first
     }
 
     suspend fun contactsWithUsedReservedAddresses(): List<String> = withContext(ioDispatcher) {
@@ -191,13 +182,13 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
                 .onFailure {
                     Logger.warn(
                         "Failed to check private Paykit address usage for " +
-                            "'${redacted(publicKey.publicKeyFromAssignmentKey())}'",
+                            "'${redacted(publicKey)}'",
                         it,
                         context = TAG,
                     )
                 }
                 .getOrDefault(false)
-            publicKey.publicKeyFromAssignmentKey().takeIf { isUsed }
+            publicKey.takeIf { isUsed }
         }.distinct()
     }
 
@@ -207,42 +198,42 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         return lightningRepo.getAddressBalance(address).getOrDefault(0u) > 0u
     }
 
-    suspend fun clearContactAssignment(publicKey: String) = withContext(ioDispatcher) {
-        val normalizedKey = normalizedPublicKey(publicKey)
+    suspend fun clearContactAssignments(
+        excludingPublicKeys: Collection<String>,
+        isStillCurrent: (() -> Boolean)? = null,
+    ) = withContext(ioDispatcher) {
+        val savedKeys = excludingPublicKeys.mapNotNull { normalizedPublicKeyOrNull(it) }.toSet()
         locked { current ->
-            val hadAssignment = current.contactAssignments.keys.any {
-                it.publicKeyFromAssignmentKey() == normalizedKey
-            }
-            val hadHistory = current.contactAssignmentHistory.keys.any {
-                it.publicKeyFromAssignmentKey() == normalizedKey
-            }
-            if (!hadAssignment && !hadHistory) return@locked
+            if (isStillCurrent?.invoke() == false) return@locked
             val next = current.copy(
                 contactAssignments = current.contactAssignments.filterKeys {
-                    it.publicKeyFromAssignmentKey() != normalizedKey
+                    it in savedKeys
                 },
                 contactAssignmentHistory = current.contactAssignmentHistory.filterKeys {
-                    it.publicKeyFromAssignmentKey() != normalizedKey
+                    it in savedKeys
                 },
             )
+            // Keep failed deletion hidden immediately, but retry the durable write even when
+            // the filtered in-memory ledger already matches the requested cleanup.
             ledger = next
             persist(next)
             notifyBackupStateChanged()
         }
     }
 
-    suspend fun clearContactAssignments(excludingPublicKeys: Collection<String>) = withContext(ioDispatcher) {
-        val savedKeys = excludingPublicKeys.mapNotNull { normalizedPublicKeyOrNull(it) }.toSet()
+    suspend fun removeContactAssignments(
+        publicKeys: Collection<String>,
+        isStillCurrent: (() -> Boolean)? = null,
+    ) = withContext(ioDispatcher) {
+        val removedKeys = publicKeys.mapNotNull { normalizedPublicKeyOrNull(it) }.toSet()
         locked { current ->
+            if (isStillCurrent?.invoke() == false) return@locked
             val next = current.copy(
-                contactAssignments = current.contactAssignments.filterKeys {
-                    it.publicKeyFromAssignmentKey() in savedKeys
-                },
-                contactAssignmentHistory = current.contactAssignmentHistory.filterKeys {
-                    it.publicKeyFromAssignmentKey() in savedKeys
-                },
+                contactAssignments = current.contactAssignments.filterKeys { it !in removedKeys },
+                contactAssignmentHistory = current.contactAssignmentHistory.filterKeys { it !in removedKeys },
             )
-            if (next == current) return@locked
+            // Keep failed deletion hidden immediately, but retry the durable write even when
+            // the filtered in-memory ledger already matches the requested cleanup.
             ledger = next
             persist(next)
             notifyBackupStateChanged()
@@ -391,11 +382,6 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     private fun normalizedPublicKeyOrNull(publicKey: String): String? =
         PubkyPublicKeyFormat.normalized(publicKey)
-
-    private fun contactAssignmentKey(publicKey: String, receiverPath: String): String =
-        ContactAssignmentKey(normalizedPublicKey(publicKey), receiverPath).encoded()
-
-    private fun String.publicKeyFromAssignmentKey(): String = ContactAssignmentKey.publicKeyOf(this)
 
     private fun redacted(publicKey: String): String =
         PubkyPublicKeyFormat.redacted(publicKey)

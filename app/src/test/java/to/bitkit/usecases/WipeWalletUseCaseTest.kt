@@ -3,6 +3,7 @@ package to.bitkit.usecases
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -28,12 +29,15 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.PaykitUsdtPaymentRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import javax.inject.Provider
 import kotlin.test.assertFailsWith
@@ -41,11 +45,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class WipeWalletUseCaseTest : BaseUnitTest() {
 
     private val backupRepo = mock<BackupRepo>()
     private val keychain = mock<Keychain>()
     private val coreService = mock<CoreService>()
+    private val usdtRepo = mock<UsdtRepo>()
+    private val paykitUsdtPaymentRepo = mock<PaykitUsdtPaymentRepo>()
     private val db = mock<AppDb>()
     private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
@@ -60,6 +67,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val firebaseMessaging = mock<FirebaseMessaging>()
     private val migrationService = mock<MigrationService>()
+    private val paykitSdkService = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() }
     private val privatePaykitRepoProvider = Provider { privatePaykitRepo }
 
     private lateinit var sut: WipeWalletUseCase
@@ -70,6 +78,10 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever { lightningRepo.stop() }.thenReturn(Result.success(Unit))
+        whenever { usdtRepo.wipe(any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(0).invoke()
+            Result.success(Unit)
+        }
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
@@ -83,6 +95,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             backupRepo = backupRepo,
             keychain = keychain,
             coreService = coreService,
+            usdtRepo = usdtRepo,
+            paykitUsdtPaymentRepo = paykitUsdtPaymentRepo,
             db = db,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
@@ -97,6 +111,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
             firebaseMessaging = firebaseMessaging,
             migrationService = migrationService,
+            paykitSdkService = paykitSdkService,
         )
     }
 
@@ -112,6 +127,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             backupRepo,
             keychain,
             coreService,
+            usdtRepo,
+            paykitUsdtPaymentRepo,
             db,
             settingsStore,
             cacheStore,
@@ -138,7 +155,9 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(migrationService).cleanupAfterMigration()
         inOrder.verify(privatePaykitAddressReservationRepo).clear()
         inOrder.verify(pubkyRepo).wipeLocalState()
+        inOrder.verify(usdtRepo).wipe(any())
         inOrder.verify(keychain).wipe()
+        inOrder.verify(paykitUsdtPaymentRepo).resetForWipe()
         inOrder.verify(coreService).wipeData()
         inOrder.verify(db).clearAllTables()
         inOrder.verify(settingsStore).reset()

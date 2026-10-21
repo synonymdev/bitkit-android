@@ -2,6 +2,7 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -53,6 +54,8 @@ import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.UiDateStyle
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.PaykitPaymentProofKind
@@ -61,6 +64,7 @@ import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitSubscription
+import to.bitkit.repositories.PaykitUsdtReceipt
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -69,11 +73,12 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
-import to.bitkit.ui.components.MoneyCell
+import to.bitkit.ui.components.PaykitAmountCell
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.usdtExactAmount
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -198,6 +203,7 @@ fun PaymentRequestsScreen(
     topPadding: Dp = 0.dp,
 ) {
     val pending by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
+    val receipts by appViewModel.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()
     val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
@@ -207,6 +213,7 @@ fun PaymentRequestsScreen(
     PaymentRequestsContent(
         requests = (pending + history).distinctBy { it.id }.toImmutableList(),
         pending = pending.toImmutableList(),
+        receipts = receipts.toImmutableList(),
         contacts = contacts.toImmutableList(),
         subscriptions = subscriptions.toImmutableList(),
         dismissingRequestIds = dismissingRequestIds.toImmutableSet(),
@@ -224,6 +231,7 @@ fun PaymentRequestsScreen(
 @Composable
 internal fun PaymentRequestsContent(
     modifier: Modifier = Modifier,
+    receipts: ImmutableList<PaykitUsdtReceipt> = persistentListOf(),
     requests: ImmutableList<PaykitPaymentRequest>,
     pending: ImmutableList<PaykitPaymentRequest>,
     contacts: ImmutableList<PubkyProfile>,
@@ -329,10 +337,15 @@ internal fun PaymentRequestsContent(
                             PaymentRequestCard(
                                 request = request,
                                 contact = contacts.contactFor(request),
-                                compactSubtitle = subscriptions.nameFor(request)
-                                    ?: request.note?.takeIf(String::isNotBlank)
-                                    ?: paymentRequestDate(request),
-                                showSignedAmount = true,
+                                compactSubtitle = if (request.hasPaymentEvidence) {
+                                    subscriptions.nameFor(request)
+                                        ?: request.note?.takeIf(String::isNotBlank)
+                                        ?: paymentRequestDate(request)
+                                } else {
+                                    paymentRequestStatus(request)
+                                },
+                                showSignedAmount = request.hasPaymentEvidence,
+                                receipt = receipts.lastOrNull { it.matches(request) },
                                 onClick = { onDetails(request.id) },
                             )
                         }
@@ -472,25 +485,33 @@ internal fun paymentRequestDate(request: PaykitPaymentRequest): String = request
 } ?: paymentRequestStatus(request)
 
 @Composable
-private fun paymentRequestStatus(request: PaykitPaymentRequest): String {
+internal fun paymentRequestStatus(
+    request: PaykitPaymentRequest,
+    isPending: Boolean = false,
+    receipt: PaykitUsdtReceipt? = null,
+): String {
+    if (request.direction == PaykitPaymentRequestDirection.Outgoing &&
+        request.paymentProofKind == PaykitPaymentProofKind.Usdt
+    ) {
+        return receipt?.takeIf { it.matches(request) }?.let { paykitUsdtReceiptText(it) }
+            ?: stringResource(R.string.wallet__payment_request_pending)
+    }
+
+    return paymentRequestLifecycleStatus(request, isPending)
+}
+
+@Composable
+private fun paymentRequestLifecycleStatus(request: PaykitPaymentRequest, isPending: Boolean): String {
     if (request.lifecycleState == PaymentRequestLifecycleState.PROPOSED && request.isExpired(Clock.System.now())) {
         return stringResource(R.string.wallet__payment_request_status_expired)
     }
 
     return when (request.lifecycleState) {
-        PaymentRequestLifecycleState.PROPOSED -> {
-            if (request.direction == PaykitPaymentRequestDirection.Incoming) {
-                stringResource(R.string.wallet__payment_request_status_unavailable)
-            } else if (request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
-                stringResource(R.string.wallet__payment_request_waiting)
-            } else {
-                stringResource(R.string.wallet__payment_request_sending)
-            }
-        }
+        PaymentRequestLifecycleState.PROPOSED -> stringResource(proposedPaymentRequestStatusRes(request, isPending))
         PaymentRequestLifecycleState.PROPOSAL_EXPIRED ->
             stringResource(R.string.wallet__payment_request_status_expired)
         PaymentRequestLifecycleState.ACCEPTED ->
-            stringResource(R.string.wallet__payment_request_status_accepted)
+            stringResource(R.string.wallet__payment_request_pending)
         PaymentRequestLifecycleState.REJECTED ->
             stringResource(R.string.wallet__payment_request_status_rejected)
         PaymentRequestLifecycleState.CANCELED ->
@@ -506,6 +527,31 @@ private fun paymentRequestStatus(request: PaykitPaymentRequest): String {
     }
 }
 
+@StringRes
+internal fun proposedPaymentRequestStatusRes(request: PaykitPaymentRequest, isPending: Boolean): Int = when {
+    request.direction == PaykitPaymentRequestDirection.Incoming && isPending ->
+        R.string.wallet__payment_request_waiting
+    request.direction == PaykitPaymentRequestDirection.Incoming ->
+        R.string.wallet__payment_request_status_unavailable
+    request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent ->
+        R.string.wallet__payment_request_waiting
+    else -> R.string.wallet__payment_request_sending
+}
+
+@Composable
+private fun paymentRequestAmountStatus(
+    request: PaykitPaymentRequest,
+    receipt: PaykitUsdtReceipt?,
+    fiatStatus: String?,
+): String? = receipt?.let { paykitUsdtReceiptText(it) } ?: fiatStatus
+    ?: if (request.direction == PaykitPaymentRequestDirection.Outgoing &&
+        request.paymentProofKind == PaykitPaymentProofKind.Usdt
+    ) {
+        stringResource(R.string.wallet__payment_request_pending)
+    } else {
+        null
+    }
+
 @Composable
 internal fun PaymentRequestCard(
     request: PaykitPaymentRequest,
@@ -516,6 +562,7 @@ internal fun PaymentRequestCard(
     showSignedAmount: Boolean = false,
     showBitcoinSymbol: Boolean = true,
     fiatStatus: String? = null,
+    receipt: PaykitUsdtReceipt? = null,
     onClick: (() -> Unit)? = null,
     isDismissing: Boolean = false,
     onPay: (() -> Unit)? = null,
@@ -573,11 +620,11 @@ internal fun PaymentRequestCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            MoneyCell(
-                sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
+            PaykitAmountCell(
+                amount = request.amount,
                 prefix = amountPrefix,
                 showBitcoinSymbol = showBitcoinSymbol,
-                fiatReplacement = fiatStatus,
+                status = paymentRequestAmountStatus(request, receipt, fiatStatus),
             )
         }
         if (onPay != null || onDismiss != null) {
@@ -591,7 +638,7 @@ internal fun PaymentRequestCard(
                 SecondaryButton(
                     text = stringResource(R.string.wallet__payment_request_dismiss),
                     onClick = {
-                        if (isBusy || onDismiss == null) return@SecondaryButton
+                        if (isBusy || onDismiss == null || !request.canDismiss) return@SecondaryButton
                         isDismissingLocally = true
                         scope.launch {
                             try {
@@ -602,7 +649,7 @@ internal fun PaymentRequestCard(
                         }
                     },
                     isLoading = isBusy,
-                    enabled = !isBusy,
+                    enabled = !isBusy && request.canDismiss && onDismiss != null,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_x),
@@ -636,7 +683,10 @@ internal fun PaymentRequestCard(
     }
 }
 
-private fun PaykitPaymentRequest.amountPrefix(isOutgoingPayment: Boolean, showSignedAmount: Boolean): String = when {
+internal val PaykitPaymentRequest.hasPaymentEvidence: Boolean
+    get() = lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED
+
+internal fun PaykitPaymentRequest.amountPrefix(isOutgoingPayment: Boolean, showSignedAmount: Boolean): String = when {
     isOutgoingPayment -> "-"
     showSignedAmount && direction == PaykitPaymentRequestDirection.Incoming -> "-"
     showSignedAmount -> "+"
@@ -654,16 +704,24 @@ private fun List<PaykitSubscription>.nameFor(request: PaykitPaymentRequest): Str
 }
 
 private val PaykitPaymentRequest.lazyListKey: String
-    get() = "$paymentRequestId|$counterparty|$counterpartyReceiverPath|${billingPeriod?.startsAt ?: ""}"
+    get() = "$paymentRequestId|$counterparty|${billingPeriod?.startsAt ?: ""}"
 
 internal val PaykitPaymentRequest.paymentRailIconColor
-    get() = if (paymentProofKind == PaykitPaymentProofKind.Lightning) Colors.Purple else Colors.Brand
+    get() = when (paymentProofKind) {
+        PaykitPaymentProofKind.Usdt -> Colors.Usdt
+        PaykitPaymentProofKind.Lightning -> Colors.Purple
+        else -> Colors.Brand
+    }
 
 internal val PaykitPaymentRequest.paymentRailBackgroundColor
-    get() = if (paymentProofKind == PaykitPaymentProofKind.Lightning) Colors.Purple16 else Colors.Brand16
+    get() = when (paymentProofKind) {
+        PaykitPaymentProofKind.Usdt -> Colors.Usdt16
+        PaykitPaymentProofKind.Lightning -> Colors.Purple16
+        else -> Colors.Brand16
+    }
 
 private fun PaykitPaymentRequest.showsPaymentRailIcon(isOutgoingPayment: Boolean): Boolean =
-    isOutgoingPayment || lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED
+    isOutgoingPayment || hasPaymentEvidence
 
 private fun PaykitPaymentRequest.paymentWasSent(isOutgoingPayment: Boolean): Boolean =
     isOutgoingPayment || direction == PaykitPaymentRequestDirection.Incoming
@@ -681,9 +739,8 @@ private fun PaymentRailIcon(request: PaykitPaymentRequest, paymentWasSent: Boole
 private val previewRequest = PaykitPaymentRequest(
     paymentRequestId = "payment-request",
     counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-    counterpartyReceiverPath = "bitkit/wallet",
-    amountValue = "0.00025",
-    amountSats = 25_000uL,
+    amount = PaykitAmount(PaykitAsset.BTC, 25_000uL),
+    paymentReference = "preview",
     note = "Dinner",
     createdAt = Instant.parse("2027-01-15T08:00:00Z"),
     expiresAt = Instant.parse("2027-01-15T09:00:00Z"),
@@ -734,4 +791,15 @@ private fun PaymentRequestsPreview() {
             onDetails = {},
         )
     }
+}
+
+@Composable
+internal fun paykitUsdtReceiptText(receipt: PaykitUsdtReceipt): String {
+    val label = when {
+        !receipt.verified -> R.string.wallet__payment_request_pending
+        receipt.underpaid -> R.string.wallet__payment_request_underpaid
+        receipt.afterExpiry -> R.string.wallet__payment_request_after_expiry
+        else -> R.string.wallet__payment_request_payment_verified
+    }
+    return stringResource(label) + " · " + usdtExactAmount(receipt.amount.atomic) + " USDT"
 }

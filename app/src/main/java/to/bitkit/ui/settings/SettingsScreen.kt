@@ -27,6 +27,7 @@ import androidx.navigation.NavController
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.transactionSpeedUiText
@@ -72,8 +73,8 @@ private enum class SettingsTab(@StringRes private val titleRes: Int) : TabItem {
     override val uiText @Composable get() = stringResource(titleRes)
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
+@Suppress("CyclomaticComplexMethod")
 fun SettingsScreen(
     navController: NavController,
     advancedViewModel: AdvancedSettingsViewModel = hiltViewModel(),
@@ -96,6 +97,10 @@ fun SettingsScreen(
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
     val contactPaymentsEnabled by settings.contactPaymentsEnabled.collectAsStateWithLifecycle()
     val isUpdatingContactPayments by settings.isUpdatingContactPayments.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { settings.refreshUsdtAvailability() }
+    val canDisableUsdt by settings.canDisableUsdt.collectAsStateWithLifecycle()
+    val isUsdtEnabled by settings.isUsdtEnabled.collectAsStateWithLifecycle()
+    val isUpdatingUsdt by settings.isUpdatingUsdt.collectAsStateWithLifecycle()
     val hardwareWallets by hwWalletViewModel.wallets.collectAsStateWithLifecycle()
     val languageUiState by languageViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -137,6 +142,9 @@ fun SettingsScreen(
             contactPaymentsEnabled = contactPaymentsEnabled,
             isUpdatingContactPayments = isUpdatingContactPayments,
             hardwareWalletCount = hardwareWallets.size,
+            isUsdtEnabled = isUsdtEnabled,
+            canDisableUsdt = canDisableUsdt,
+            isUpdatingUsdt = isUpdatingUsdt,
         ),
         securityState = SecurityTabState(
             isPinEnabled = isPinEnabled,
@@ -169,6 +177,7 @@ fun SettingsScreen(
                 SettingsEvent.ContactPaymentsClick -> {
                     settings.setContactPaymentsEnabled(!contactPaymentsEnabled)
                 }
+                SettingsEvent.UsdtClick -> settings.setUsdtEnabled(!isUsdtEnabled)
                 SettingsEvent.QuickPayClick -> navController.navigateToQuickPaySettings(quickPayIntroSeen)
                 SettingsEvent.BgPaymentsClick -> {
                     if (bgPaymentsIntroSeen || notificationsGranted) {
@@ -334,17 +343,6 @@ private fun GeneralTabContent(
             padding = PaddingValues(top = 16.dp),
         )
 
-        if (state.isPaykitEnabled && state.isPubkyAuthenticated) {
-            SettingsSwitchRow(
-                title = stringResource(R.string.settings__general__enable_contact_payments),
-                isChecked = state.contactPaymentsEnabled,
-                icon = { SettingsIcon(R.drawable.ic_coins) },
-                onClick = { onEvent(SettingsEvent.ContactPaymentsClick) },
-                enabled = !state.isUpdatingContactPayments,
-                switchTestTag = "ContactPaymentsToggle",
-                modifier = Modifier.testTag("ContactPaymentsSettings")
-            )
-        }
         SettingsButtonRow(
             title = stringResource(R.string.settings__general__speed),
             icon = {
@@ -392,6 +390,29 @@ private fun GeneralTabContent(
             modifier = Modifier.testTag("HardwareWalletsSettings")
         )
 
+        if (state.isPaykitEnabled && state.isPubkyAuthenticated) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings__general__enable_contact_payments),
+                isChecked = state.contactPaymentsEnabled,
+                icon = { SettingsIcon(R.drawable.ic_coins) },
+                onClick = { onEvent(SettingsEvent.ContactPaymentsClick) },
+                enabled = !state.isUpdatingContactPayments,
+                switchTestTag = "ContactPaymentsToggle",
+                modifier = Modifier.testTag("ContactPaymentsSettings")
+            )
+        }
+
+        if (Env.isUsdtEnabled) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.usdt__settings_title),
+                isChecked = state.isUsdtEnabled,
+                icon = { SettingsIcon(R.drawable.ic_currency_dollar) },
+                onClick = { onEvent(SettingsEvent.UsdtClick) },
+                enabled = state.canToggleUsdt,
+                switchTestTag = "UsdtSettingsToggle",
+                modifier = Modifier.testTag("UsdtSettings")
+            )
+        }
         VerticalSpacer(32.dp)
     }
 }
@@ -680,6 +701,7 @@ sealed interface SettingsEvent {
     data object TagsClick : SettingsEvent
     data object TransactionSpeedClick : SettingsEvent
     data object ContactPaymentsClick : SettingsEvent
+    data object UsdtClick : SettingsEvent
     data object QuickPayClick : SettingsEvent
     data object BgPaymentsClick : SettingsEvent
     data object HardwareWalletsClick : SettingsEvent
@@ -729,7 +751,12 @@ data class GeneralTabState(
     val contactPaymentsEnabled: Boolean = false,
     val isUpdatingContactPayments: Boolean = false,
     val hardwareWalletCount: Int = 0,
-)
+    val isUsdtEnabled: Boolean = false,
+    val canDisableUsdt: Boolean = false,
+    val isUpdatingUsdt: Boolean = false,
+) {
+    val canToggleUsdt: Boolean get() = !isUpdatingUsdt && (!isUsdtEnabled || canDisableUsdt)
+}
 
 @Immutable
 data class SecurityTabState(

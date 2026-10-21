@@ -1,0 +1,28 @@
+<journey name="Hardware Shop On-chain Proof">
+  <description>
+    Pays a linked issuer's one-time on-chain request with the paired, funded Bridge Trezor emulator.
+    Requires the hardware-wallet Bridge setup and payment-requests issuer fixture; the hardware
+    native-segwit account must cover 100,000 sats plus fees. Observe the exact returned transaction
+    in the original hardware account and match the issuer's delivered proof to that transaction.
+    If Core fails after payment has started and returns no transaction ID, dismissing and reopening
+    must keep that original request pending; this journey cannot inject that response-loss condition.
+    A recognized backend refusal or invalid transaction permits leaving the sign sheet while retaining
+    the original signed payment and durable wallet guard; reopening may retry only that payment
+    without signing again. Connectivity and unrecognized errors keep navigation guarded.
+    This journey does not inject native broadcast faults or prove physical USB/BLE behavior.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on regtest with Paykit UI enabled, a Pubky identity authenticated, the fixture issuer saved and linked on receiver path "bitkit/server", and the funded Bridge hardware wallet paired</action>
+    <action>Have the issuer publish a current regtest P2WPKH destination under identifier "btc-regtest-p2wpkh" with JSON payload {"value":"&lt;current address&gt;"}</action>
+    <action>Have the issuer send a new proposed one-time Payment Request for amount "0.001", asset "btc", and accepted identifier "btc-regtest-p2wpkh"; record its exact request ID and payer identity for the backend proof check</action>
+    <action>Verify Payment Request confirmation (testTag "PaymentRequestConfirm") shows 100,000 sats and the saved issuer contact under Show details (testTag "SendConfirmToggleDetails")</action>
+    <action>Tap the funding-source button (testTag "SendConfirmAssetButton"), waiting for balance loading between taps, until FROM shows the paired hardware wallet</action>
+    <action>Swipe to confirm; verify hardware sign shows the original issuer destination (testTag "HardwareSendAddress") and 100,000 sats (testTag "HardwareSendAmount")</action>
+    <action>Tap Open Trezor Connect (testTag "HardwareSendOpenTrezorConnect") once and approve the Bridge emulator's transaction prompts</action>
+    <action>While signing or local proof observation is running, verify another tap cannot start another payment; wait for Success (testTag "SendSuccess") or the existing Payment Pending screen</action>
+    <action>If Pending is shown, verify there is no resend action or Sent activity from the returned Core transaction ID alone; close the sheet and reopen the same request from Payment Requests and verify it cannot start a fresh hardware payment</action>
+    <action>Once the original outgoing transaction is visible to Electrum, resume Bitkit to allow existing proof reconciliation; verify the same original payment creates Sent activity in its original hardware wallet and finishes or its request leaves the pending list, without another signing prompt</action>
+    <action>Open the original hardware wallet's activity and record the exact new transaction ID; independently read that transaction from the regtest backend and verify it spends that hardware account's inputs</action>
+    <action>Inspect the fixture issuer's proof for the original request and payer identity; verify type "bitcoin-onchain-txid" contains exactly the recorded original transaction ID, and the backend contains only the original payment</action>
+  </actions>
+</journey>

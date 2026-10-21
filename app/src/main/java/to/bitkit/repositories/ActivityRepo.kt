@@ -59,7 +59,6 @@ import com.synonym.bitkitcore.TransactionDetails as BitkitCoreTransactionDetails
 
 private const val MS_SYNC_TIMEOUT = 40_000L
 
-@Suppress("LargeClass", "LongParameterList", "TooManyFunctions")
 @OptIn(ExperimentalTime::class)
 @Singleton
 class ActivityRepo @Inject constructor(
@@ -103,6 +102,12 @@ class ActivityRepo @Inject constructor(
         isSyncingLdkNodePayments.update { false }
         notifyActivitiesChanged()
         Logger.debug("Activity state reset", context = TAG)
+    }
+
+    suspend fun backfillPaykitContacts(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            if (coreService.activity.backfillPaykitContacts()) notifyActivitiesChanged()
+        }.onFailure { Logger.warn("Failed to backfill Paykit activity contacts", it, context = TAG) }
     }
 
     suspend fun syncActivities(): Result<Unit> = withContext(bgDispatcher) {
@@ -202,6 +207,39 @@ class ActivityRepo @Inject constructor(
         txid: String,
         walletId: String = WalletScope.default,
     ): OnchainActivity? = coreService.activity.getOnchainActivityByTxId(txid, walletId)
+
+    /** Local follow-up after the original hardware wallet independently observed this exact outgoing tx. */
+    suspend fun completeObservedHardwarePayment(
+        walletId: String,
+        txid: String,
+        address: String,
+        amountSats: ULong,
+        fee: ULong,
+        feeRate: ULong,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            require(walletId != WalletScope.default)
+            coreService.activity.createSentOnchainActivityFromSendResult(
+                txid = txid,
+                address = address,
+                amount = amountSats,
+                fee = fee,
+                feeRate = feeRate,
+                isTransfer = false,
+                channelId = null,
+                walletId = walletId,
+            )
+            // The Core writer logs storage errors internally. Read back before completing the proof.
+            val activity = getOnchainActivityByTxId(txid, walletId)
+            check(
+                activity?.walletId == walletId && activity.txId.equals(txid, true) &&
+                    activity.txType == PaymentType.SENT
+            ) { "Original hardware payment activity is not durable" }
+            val tagsChanged = coreService.activity.restoreSentOnchainTags(txid, walletId)
+            notifyPaymentActivityChanged()
+            if (tagsChanged) notifyActivitiesChanged(tagsChanged = true)
+        }
+    }
 
     /**
      * Checks if a transaction is inbound (received) by looking up the payment direction.
@@ -498,13 +536,15 @@ class ActivityRepo @Inject constructor(
                 )
                 return@runCatching
             }
-            if (PubkyPublicKeyFormat.matches(activity.contact(), normalizedKey)) {
-                return@runCatching
-            }
-
             val updatedAt = nowTimestamp().epochSecond.toULong()
-            val updatedActivity = activity.withContact(normalizedKey, updatedAt)
-            updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
+            val updatedActivity = if (PubkyPublicKeyFormat.matches(activity.contact(), normalizedKey)) {
+                activity
+            } else {
+                activity.withContact(normalizedKey, updatedAt).also {
+                    updateActivity(it.rawId(), it).getOrThrow()
+                }
+            }
+            cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = false)
             updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt, walletId)
         }.onFailure {
             Logger.error("Failed to set contact for payment '$forPaymentId'", it, context = TAG)
@@ -533,6 +573,7 @@ class ActivityRepo @Inject constructor(
             }
             if (activity.contact() == null) return@runCatching
 
+            cacheStore.setActivityContactDetached(activity.rawId(), walletId, detached = true)
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(null, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()

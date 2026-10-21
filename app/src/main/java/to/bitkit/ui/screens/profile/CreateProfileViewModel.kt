@@ -25,7 +25,6 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class CreateProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -48,10 +47,15 @@ class CreateProfileViewModel @Inject constructor(
     private fun deriveAndCheckRemote() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
+            pubkyRepo.publicKey.value?.let { publicKey ->
+                _uiState.update { it.copy(derivedPublicKey = publicKey) }
+                checkForExistingProfile(publicKey, isSignedUp = true)
+                return@launch
+            }
             pubkyRepo.deriveKeys()
                 .onSuccess { (publicKey, _) ->
                     _uiState.update { it.copy(derivedPublicKey = publicKey) }
-                    checkForExistingProfile(publicKey)
+                    checkForExistingProfile(publicKey, isSignedUp = pubkyRepo.hasStoredSecretKey())
                 }
                 .onFailure {
                     Logger.error("Failed to derive keys", it, context = TAG)
@@ -65,13 +69,14 @@ class CreateProfileViewModel @Inject constructor(
         }
     }
 
-    private suspend fun checkForExistingProfile(publicKey: String) {
+    private suspend fun checkForExistingProfile(publicKey: String, isSignedUp: Boolean) {
         pubkyRepo.fetchRemoteProfile(publicKey)
             .onSuccess { profile ->
                 if (profile != null) {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
+                            remoteLookupFailed = false,
                             isRestoring = true,
                             name = profile.name,
                             bio = profile.bio,
@@ -82,12 +87,22 @@ class CreateProfileViewModel @Inject constructor(
                         )
                     }
                 } else {
-                    _uiState.update { it.copy(isLoading = false) }
+                    _uiState.update { it.copy(isLoading = false, remoteLookupFailed = false) }
                 }
             }
-            .onFailure {
-                Logger.debug("No existing remote profile found for '$publicKey'", context = TAG)
-                _uiState.update { it.copy(isLoading = false) }
+            .onFailure { error ->
+                if (!isSignedUp) {
+                    Logger.debug("No existing remote profile found for '$publicKey'", context = TAG)
+                    _uiState.update { it.copy(isLoading = false) }
+                    return@onFailure
+                }
+                Logger.warn("Failed to look up the existing profile for '$publicKey'", error, context = TAG)
+                _uiState.update { it.copy(isLoading = false, remoteLookupFailed = true) }
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.common__error),
+                    description = error.message,
+                )
             }
     }
 
@@ -164,6 +179,10 @@ class CreateProfileViewModel @Inject constructor(
     }
 
     fun save() {
+        if (_uiState.value.remoteLookupFailed) {
+            deriveAndCheckRemote()
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             val state = _uiState.value
@@ -201,6 +220,7 @@ data class CreateProfileUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val isRestoring: Boolean = false,
+    val remoteLookupFailed: Boolean = false,
     val showAddLinkSheet: Boolean = false,
     val showAddTagSheet: Boolean = false,
 )

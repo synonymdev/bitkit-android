@@ -1,0 +1,50 @@
+<journey name="pubky ring choice rows">
+  <description>
+    Verifies that the Pubky Ring choice screen lists every Ring identity straight away under its
+    truncated key and fills each name in as its profile lookup finishes. While a row's lookup runs,
+    a spinner takes the place of its avatar, so a row still looking up can be told apart from a row
+    whose identity has no profile. It also verifies that tapping a row shows a spinner on that row
+    only and disables every row until adoption finishes.
+
+    Precondition (not a listed capability): Pubky Ring (package to.pubky.ring) installed on the same
+    device with at least two identities, at least one of them with a published profile name.
+    Bitkit reads Ring's shared pubky provider only when Ring is signed with the same key as the
+    Bitkit build, so a dev build needs a Ring build signed with this repository's
+    app/debug.keystore; with any other signature the choice screen offers only "Create profile with
+    Bitkit" (testTag "PubkyChoiceCreate"). Also needed: an onboarded dev wallet with Paykit enabled
+    (the default) and no active Pubky identity in Bitkit. The named identity is the one with a
+    published name. Tapping its row signs in with it, so sign out of it in Bitkit before running the
+    journey again.
+
+    A warm network can finish the lookups and the adoption before the screen is inspected; the steps
+    report that rather than failing. To catch them on an emulator, run adb emu network delay gprs and
+    adb emu network speed edge before the first step, and adb emu network delay none and adb emu
+    network speed full after the last; a physical device needs another way to slow its connection.
+
+    Android differs from iOS in identifiers and in three steps. Every row carries the same testTag,
+    and so does every lookup spinner, so tell the rows apart by their key caption; the avatar carries
+    testTag "PubkyContactAvatar" and the adoption spinner none, as the Identifiers table in
+    journeys/README.md records. On Android both spinners' accessibility description reads "Loading
+    your profile…". A disabled row ignores taps, so the disabled check taps another row rather than
+    reading the layout dump. The profile button always opens the next screen, so it needs no second
+    tap, and the import overview has no testTag, so it is named by its "Import" title. See README.md.
+  </description>
+  <actions>
+    <action>Run `adb shell am force-stop to.bitkit.dev`, then `adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity`, so no Ring row profile is remembered from earlier in the session</action>
+    <action>If the PIN screen appears, unlock the wallet</action>
+    <action>Tap the header profile button (testTag "ProfileButton")</action>
+    <action>If the Profile intro (testTag "ProfileIntro") appears, tap Continue (testTag "ProfileIntro-button")</action>
+    <action>Verify the choice screen shows one row per Ring identity (testTag "PubkyChoiceIdentity") and no create option (testTag "PubkyChoiceCreate")</action>
+    <action>Verify every row is already tappable and captioned with its truncated key in capitals: the key's first four and last four characters around "...". A row whose name has not arrived also shows that truncated key as its title. If every name is already showing, the lookups finished first: report "already resolved" rather than failing</action>
+    <action>Verify each row whose lookup is still running shows its key icon and a spinner (testTag "PubkyChoiceIdentityLookup") in place of its avatar. If every row already shows its avatar, the lookups finished first: report "already resolved" rather than failing</action>
+    <action>Wait for the row for the named identity (testTag "PubkyChoiceIdentity", told apart by its key caption) to show its published name as its title</action>
+    <action>Verify that row keeps its truncated key as its caption, and any row whose identity has no published name still shows its truncated key as its title</action>
+    <action>Wait up to a minute for each row's lookup spinner (testTag "PubkyChoiceIdentityLookup") to be gone. The lookup for an identity with no profile can take several seconds to give up</action>
+    <action>Verify no row shows the lookup spinner (testTag "PubkyChoiceIdentityLookup") any more: every row shows its avatar (testTag "PubkyContactAvatar"), either its profile picture or the first character of its title. The avatar has no text, so check it from a screenshot</action>
+    <action>Tap the row for the named identity (testTag "PubkyChoiceIdentity", told apart by its key caption)</action>
+    <action>Straight away, capture a layout dump and a screenshot before adoption finishes</action>
+    <action>Verify every Ring row is disabled while the identity is adopted. A disabled row ignores taps, so tap a different row (testTag "PubkyChoiceIdentity") and verify nothing changes: the spinner stays on the tapped row and no second adoption starts. If adoption finished before the capture, report "already adopted" rather than failing</action>
+    <action>Verify from the screenshot that only the tapped row shows a spinner, in place of its key icon, while it keeps its avatar and every other row keeps its key icon and its name or truncated key. The key-icon spinner has no testTag, so a layout dump cannot settle this. If adoption finished before the capture, report "already adopted" rather than failing</action>
+    <action>Verify the choice screen gives way to the contact import overview (no testTag; titled "Import") or Pay Contacts (testTag "PayContactsContinue")</action>
+  </actions>
+</journey>

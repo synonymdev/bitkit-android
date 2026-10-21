@@ -7,16 +7,13 @@
         <intent>
             <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
         </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="pubkyauth" />
-        </intent>
     </queries>
 
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
 
+    <uses-permission android:name="to.pubky.ring.permission.READ_SHARED_PUBKY" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_CLIPBOARD" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -28,15 +25,16 @@
         tools:ignore="ForegroundServicePermission,ForegroundServicesPolicy" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-    <!-- USB Host support for Trezor hardware wallet -->
+    <!-- USB Host support for hardware wallets (Trezor, Blockstream Jade) -->
     <uses-feature
         android:name="android.hardware.usb.host"
         android:required="false" />
 
-    <!-- Bluetooth permissions for Trezor Safe 7 (Android 12+) -->
+    <!-- Bluetooth permissions for hardware wallets (Trezor Safe 7, Blockstream Jade) on Android 12+ -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
-        android:usesPermissionFlags="neverForLocation" />
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
 
     <!-- Bluetooth permissions (legacy, Android 11 and below) -->
     <uses-permission android:name="android.permission.BLUETOOTH"
@@ -51,6 +49,11 @@
         android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="31" />
+
+    <!-- Guards the read-only pubky ContentProvider; only same-signature apps may hold it. -->
+    <permission
+        android:name="${applicationId}.permission.READ_SHARED_PUBKY"
+        android:protectionLevel="signature" />
 
     <application
         android:name=".App"
@@ -82,6 +85,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
+            tools:ignore="LockedOrientationActivity,DiscouragedApi"
             android:theme="@style/Theme.App.Splash"
             android:windowSoftInputMode="adjustResize|stateHidden">
             <intent-filter>
@@ -114,6 +118,7 @@
                 <data android:scheme="slash" />
                 <data android:scheme="slashauth" />
                 <data android:scheme="bitcoin" />
+                <data android:scheme="ethereum" />
                 <data
                     android:scheme="BITCOIN"
                     tools:ignore="AppLinkUrlError" />
@@ -137,6 +142,7 @@
                 <data android:scheme="slash" />
                 <data android:scheme="slashauth" />
                 <data android:scheme="bitcoin" />
+                <data android:scheme="ethereum" />
                 <data
                     android:scheme="BITCOIN"
                     tools:ignore="AppLinkUrlError" />
@@ -150,7 +156,7 @@
                 <data android:scheme="lnurlp" />
             </intent-filter>
 
-            <!-- USB device attached — auto-grants permission when Trezor is plugged in -->
+            <!-- USB device attached — auto-grants permission when a hardware wallet is plugged in -->
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
@@ -192,6 +198,7 @@
                 <data android:scheme="pubkyauth" />
                 <data android:host="signup" />
                 <data android:host="direct_signup" />
+                <data android:host="signup_grant" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -245,6 +252,13 @@
             android:value="@string/app_notifications_channel_id" />
 
         <provider
+            android:name=".data.sharedpubky.SharedPubkyProvider"
+            android:authorities="${applicationId}.sharedpubky"
+            android:exported="true"
+            android:grantUriPermissions="false"
+            android:readPermission="${applicationId}.permission.READ_SHARED_PUBKY" />
+
+        <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
@@ -260,6 +274,7 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:screenOrientation="portrait"
+            tools:ignore="LockedOrientationActivity,DiscouragedApi"
             android:taskAffinity=""
             android:theme="@style/Theme.App">
             <intent-filter>

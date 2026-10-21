@@ -35,36 +35,36 @@ internal data class PrivatePaykitState(
 
 internal data class ContactState(
     var remoteEndpoints: List<StoredPaymentEntry> = emptyList(),
-    var consumedPrivatePaymentListVersionsByReceiverPath: Map<String, ULong> = emptyMap(),
-    var localInvoicesByReceiverPath: Map<String, StoredInvoice> = emptyMap(),
+    var consumedPrivatePaymentListVersion: ULong? = null,
+    var localInvoice: StoredInvoice? = null,
     var receivedInvoicePaymentHashes: List<String> = emptyList(),
-    var publishedPrivatePaymentReceiverPaths: Set<String> = emptySet(),
+    var hasPublishedPrivatePaymentList: Boolean = false,
 ) {
     constructor(cache: PrivatePaykitContactCacheData) : this(
         remoteEndpoints = cache.remoteEndpoints.map { StoredPaymentEntry(it.methodId, it.endpointData) },
-        consumedPrivatePaymentListVersionsByReceiverPath = cache.consumedPrivatePaymentListVersionsByReceiverPath,
-        localInvoicesByReceiverPath = cache.localInvoicesByReceiverPath.mapValues { (_, invoice) ->
+        consumedPrivatePaymentListVersion = cache.consumedPrivatePaymentListVersion,
+        localInvoice = cache.localInvoice?.let { invoice ->
             StoredInvoice(invoice.bolt11, invoice.paymentHash, invoice.expiresAt)
         },
         receivedInvoicePaymentHashes = cache.receivedInvoicePaymentHashes,
-        publishedPrivatePaymentReceiverPaths = cache.publishedPrivatePaymentReceiverPaths,
+        hasPublishedPrivatePaymentList = cache.hasPublishedPrivatePaymentList,
     )
 
     val hasCacheState: Boolean
-        get() = publishedPrivatePaymentReceiverPaths.isNotEmpty() ||
+        get() = hasPublishedPrivatePaymentList ||
             remoteEndpoints.isNotEmpty() ||
-            consumedPrivatePaymentListVersionsByReceiverPath.isNotEmpty() ||
-            localInvoicesByReceiverPath.isNotEmpty() ||
+            (consumedPrivatePaymentListVersion != null) ||
+            (localInvoice != null) ||
             receivedInvoicePaymentHashes.isNotEmpty()
 
     fun cacheState() = PrivatePaykitContactCacheData(
         remoteEndpoints = remoteEndpoints.map { PrivatePaykitStoredPaymentEntryData(it.methodId, it.endpointData) },
-        consumedPrivatePaymentListVersionsByReceiverPath = consumedPrivatePaymentListVersionsByReceiverPath,
-        localInvoicesByReceiverPath = localInvoicesByReceiverPath.mapValues { (_, invoice) ->
+        consumedPrivatePaymentListVersion = consumedPrivatePaymentListVersion,
+        localInvoice = localInvoice?.let { invoice ->
             PrivatePaykitStoredInvoiceData(invoice.bolt11, invoice.paymentHash, invoice.expiresAt)
         },
         receivedInvoicePaymentHashes = receivedInvoicePaymentHashes,
-        publishedPrivatePaymentReceiverPaths = publishedPrivatePaymentReceiverPaths,
+        hasPublishedPrivatePaymentList = hasPublishedPrivatePaymentList,
     )
 }
 
@@ -76,7 +76,7 @@ internal data class StoredPaymentEntry(
 @Serializable
 internal data class PrivatePaykitBackup(
     val sdkState: String,
-    val consumedPrivatePaymentListVersions: Map<String, Map<String, ULong>>,
+    val consumedPrivatePaymentListVersions: Map<String, ULong>,
 )
 
 internal data class StoredInvoice(

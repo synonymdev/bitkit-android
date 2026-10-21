@@ -3,12 +3,14 @@ package to.bitkit.ui.settings.advanced
 import android.content.Context
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -26,6 +28,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AddressTypePreferenceViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val settingsStore: SettingsStore = mock()
@@ -76,7 +79,7 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
                 )
             )
         )
-        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any()) }
+        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any(), any(), anyOrNull()) }
             .thenReturn(Result.success(Unit))
     }
 

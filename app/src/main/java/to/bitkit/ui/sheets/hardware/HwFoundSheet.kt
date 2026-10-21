@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
@@ -27,6 +28,8 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.foundHeaderRes
+import to.bitkit.ui.components.illustrationRes
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -38,14 +41,18 @@ import to.bitkit.ui.utils.withAccent
 fun HwFoundSheet(
     deviceModel: String,
     modifier: Modifier = Modifier,
+    vendor: HwWalletVendor = HwWalletVendor.TREZOR,
     isConnecting: Boolean = false,
+    isUnlocking: Boolean = false,
     errorMessage: String? = null,
     onConnect: () -> Unit = {},
     onCancel: () -> Unit = {},
 ) {
     Content(
         deviceModel = deviceModel,
+        vendor = vendor,
         isConnecting = isConnecting,
+        isUnlocking = isUnlocking,
         errorMessage = errorMessage,
         onConnect = onConnect,
         onCancel = onCancel,
@@ -57,7 +64,9 @@ fun HwFoundSheet(
 private fun Content(
     deviceModel: String,
     modifier: Modifier = Modifier,
+    vendor: HwWalletVendor = HwWalletVendor.TREZOR,
     isConnecting: Boolean = false,
+    isUnlocking: Boolean = false,
     errorMessage: String? = null,
     onConnect: () -> Unit = {},
     onCancel: () -> Unit = {},
@@ -75,9 +84,19 @@ private fun Content(
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp)
         ) {
-            Display(stringResource(R.string.hardware__found_header).withAccent(accentColor = Colors.Blue))
+            Display(stringResource(vendor.foundHeaderRes()).withAccent(accentColor = Colors.Blue))
             VerticalSpacer(8.dp)
             BodyM(stringResource(R.string.hardware__found_text, deviceModel), color = Colors.White64)
+            AnimatedVisibility(visible = isUnlocking) {
+                Column {
+                    VerticalSpacer(16.dp)
+                    BodyS(
+                        text = stringResource(R.string.hardware__jade_enter_pin),
+                        color = Colors.White,
+                        modifier = Modifier.testTag("HwFoundUnlockHint")
+                    )
+                }
+            }
             AnimatedVisibility(visible = errorMessage != null) {
                 Column {
                     VerticalSpacer(16.dp)
@@ -96,7 +115,7 @@ private fun Content(
                 .weight(1f)
         ) {
             Image(
-                painter = painterResource(R.drawable.trezor),
+                painter = painterResource(vendor.illustrationRes()),
                 contentDescription = null,
                 modifier = Modifier.size(256.dp)
             )
@@ -135,6 +154,22 @@ private fun Preview() {
         BottomSheetPreview {
             Content(
                 deviceModel = "Trezor Safe 3",
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewJadeUnlocking() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                deviceModel = "Jade",
+                vendor = HwWalletVendor.BLOCKSTREAM,
+                isConnecting = true,
+                isUnlocking = true,
                 modifier = Modifier.sheetHeight()
             )
         }

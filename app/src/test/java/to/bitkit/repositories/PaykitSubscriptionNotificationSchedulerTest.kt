@@ -5,27 +5,39 @@ package to.bitkit.repositories
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ListenableWorker
 import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.synonym.paykit.PaymentRequestLifecycleState
+import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.ui.EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT
 import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY
-import to.bitkit.ui.EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH
 import to.bitkit.ui.EXTRA_PAYKIT_PAYER_IDENTITY
 import to.bitkit.ui.EXTRA_PAYKIT_PAYMENT_REQUEST_ID
+import to.bitkit.utils.SubscriptionClockOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -36,18 +48,18 @@ class PaykitSubscriptionNotificationSchedulerTest {
         const val COUNTERPARTY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         const val PAYER_IDENTITY = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         const val PAYMENT_REQUEST_ID = "request-id"
-        const val RECEIVER_PATH = "bitkit/server"
         const val WORK_TAG = "paykit-subscriptions"
         val NOW = Instant.parse("2027-01-02T08:00:00Z")
         val NEXT_PERIOD_START = Instant.parse("2027-01-08T08:00:00Z")
-        val WORK_NAME = "paykit-subscription-$PAYER_IDENTITY|$COUNTERPARTY|$RECEIVER_PATH|" +
+        val WORK_NAME = "paykit-subscription-$PAYER_IDENTITY|$COUNTERPARTY|" +
             "$PAYMENT_REQUEST_ID|$NEXT_PERIOD_START"
     }
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val workClient = mock<PaykitSubscriptionWorkClient>()
+    private var clockOffset = Duration.ZERO
     private val clock = object : Clock {
-        override fun now(): Instant = NOW
+        override fun now(): Instant = NOW + clockOffset
     }
     private lateinit var sut: PaykitSubscriptionNotificationScheduler
 
@@ -59,6 +71,7 @@ class PaykitSubscriptionNotificationSchedulerTest {
 
     @After
     fun tearDown() {
+        SubscriptionClockOffset.setOffsetDays(0)
         clearPreferences()
     }
 
@@ -81,11 +94,172 @@ class PaykitSubscriptionNotificationSchedulerTest {
         assertEquals(PAYMENT_REQUEST_ID, request.workSpec.input.getString(EXTRA_PAYKIT_PAYMENT_REQUEST_ID))
         assertEquals(PAYER_IDENTITY, request.workSpec.input.getString(EXTRA_PAYKIT_PAYER_IDENTITY))
         assertEquals(COUNTERPARTY, request.workSpec.input.getString(EXTRA_PAYKIT_COUNTERPARTY))
-        assertEquals(RECEIVER_PATH, request.workSpec.input.getString(EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH))
         assertEquals(
             NEXT_PERIOD_START.toString(),
             request.workSpec.input.getString(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT),
         )
+    }
+
+    @Test
+    fun `worker defers a reminder when clock is before the billing period`() = runTest {
+        val params = mock<WorkerParameters>()
+        whenever(params.inputData).thenReturn(
+            workDataOf(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT to NEXT_PERIOD_START.toString()),
+        )
+        val worker = PaykitSubscriptionNotificationWorker(context, params, clock)
+
+        assertEquals(ListenableWorker.Result.retry(), worker.doWork())
+    }
+
+    @Test
+    fun `worker notifies once the subscription clock reaches the billing period`() = runTest {
+        clockOffset = 7.days
+        val params = mock<WorkerParameters>()
+        whenever(params.inputData).thenReturn(
+            workDataOf(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT to NEXT_PERIOD_START.toString()),
+        )
+        val worker = PaykitSubscriptionNotificationWorker(context, params, clock)
+
+        assertEquals(ListenableWorker.Result.success(), worker.doWork())
+    }
+
+    @Test
+    fun `offset change reschedules queued work against the new subscription clock`() {
+        sut.synchronize(
+            subscriptions = listOf(subscription()),
+            acceptedAt = { NOW },
+            pendingRequestIds = emptySet(),
+            payerIdentity = PAYER_IDENTITY,
+            notificationsEnabled = true,
+        )
+        clearInvocations(workClient)
+
+        SubscriptionClockOffset.setOffsetDays(3)
+        clockOffset = 3.days
+        sut.synchronize(
+            subscriptions = listOf(subscription()),
+            acceptedAt = { NOW },
+            pendingRequestIds = emptySet(),
+            payerIdentity = PAYER_IDENTITY,
+            notificationsEnabled = true,
+        )
+
+        verify(workClient).cancelAllWorkByTag(WORK_TAG)
+        val requestCaptor = argumentCaptor<OneTimeWorkRequest>()
+        verify(workClient).enqueueUniqueWork(eq(WORK_NAME), eq(ExistingWorkPolicy.KEEP), requestCaptor.capture())
+        assertEquals(
+            (NEXT_PERIOD_START - (NOW + 3.days)).inWholeMilliseconds,
+            requestCaptor.firstValue.workSpec.initialDelay,
+        )
+    }
+
+    @Test
+    fun `offset change notifies the period it made due`() {
+        sut.synchronize(
+            subscriptions = listOf(subscription()),
+            acceptedAt = { NOW },
+            pendingRequestIds = emptySet(),
+            payerIdentity = PAYER_IDENTITY,
+            notificationsEnabled = true,
+        )
+        clearInvocations(workClient)
+
+        SubscriptionClockOffset.setOffsetDays(7)
+        clockOffset = 7.days
+        sut.synchronize(
+            subscriptions = listOf(subscription()),
+            acceptedAt = { NOW },
+            pendingRequestIds = setOf(
+                PaykitPaymentRequestId(
+                    paymentRequestId = PAYMENT_REQUEST_ID,
+                    counterparty = COUNTERPARTY,
+                    billingPeriodStartsAt = NEXT_PERIOD_START.toString(),
+                )
+            ),
+            payerIdentity = PAYER_IDENTITY,
+            notificationsEnabled = true,
+        )
+
+        val requestCaptor = argumentCaptor<OneTimeWorkRequest>()
+        verify(workClient).enqueueUniqueWork(eq(WORK_NAME), eq(ExistingWorkPolicy.KEEP), requestCaptor.capture())
+        assertEquals(0L, requestCaptor.firstValue.workSpec.initialDelay)
+    }
+
+    @Test
+    fun `offset change notifies only the latest due period per subscription`() {
+        sut.synchronize(
+            subscriptions = listOf(subscription()),
+            acceptedAt = { NOW },
+            pendingRequestIds = emptySet(),
+            payerIdentity = PAYER_IDENTITY,
+            notificationsEnabled = true,
+        )
+        clearInvocations(workClient)
+
+        SubscriptionClockOffset.setOffsetDays(100)
+        clockOffset = 100.days
+        val now = NOW + 100.days
+        val duePeriods = subscription().recurrence.periodsThrough(now, NOW)
+        sut.synchronize(
+            subscriptions = listOf(subscription()),
+            acceptedAt = { NOW },
+            pendingRequestIds = duePeriods.mapTo(mutableSetOf()) {
+                PaykitPaymentRequestId(
+                    paymentRequestId = PAYMENT_REQUEST_ID,
+                    counterparty = COUNTERPARTY,
+                    billingPeriodStartsAt = it.startsAt.toString(),
+                )
+            },
+            payerIdentity = PAYER_IDENTITY,
+            notificationsEnabled = true,
+        )
+
+        assertTrue(duePeriods.size > 2)
+        val requestCaptor = argumentCaptor<OneTimeWorkRequest>()
+        verify(workClient, atLeast(1))
+            .enqueueUniqueWork(any(), eq(ExistingWorkPolicy.KEEP), requestCaptor.capture())
+        val immediate = requestCaptor.allValues.filter { it.workSpec.initialDelay == 0L }
+        assertEquals(1, immediate.size)
+        assertEquals(
+            duePeriods.last().startsAt.toString(),
+            immediate.single().workSpec.input.getString(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT),
+        )
+        assertTrue(requestCaptor.allValues.any { it.workSpec.initialDelay > 0L })
+    }
+
+    @Test
+    fun `offset change past the subscription end still notifies the final due period`() {
+        val ending = subscription().let {
+            it.copy(recurrence = it.recurrence.copy(endsAt = Instant.parse("2027-01-12T08:00:00Z")))
+        }
+        sut.synchronize(
+            subscriptions = listOf(ending),
+            acceptedAt = { NOW },
+            pendingRequestIds = emptySet(),
+            payerIdentity = PAYER_IDENTITY,
+            notificationsEnabled = true,
+        )
+        clearInvocations(workClient)
+
+        SubscriptionClockOffset.setOffsetDays(14)
+        clockOffset = 14.days
+        sut.synchronize(
+            subscriptions = listOf(ending),
+            acceptedAt = { NOW },
+            pendingRequestIds = setOf(
+                PaykitPaymentRequestId(
+                    paymentRequestId = PAYMENT_REQUEST_ID,
+                    counterparty = COUNTERPARTY,
+                    billingPeriodStartsAt = NEXT_PERIOD_START.toString(),
+                )
+            ),
+            payerIdentity = PAYER_IDENTITY,
+            notificationsEnabled = true,
+        )
+
+        val requestCaptor = argumentCaptor<OneTimeWorkRequest>()
+        verify(workClient).enqueueUniqueWork(eq(WORK_NAME), eq(ExistingWorkPolicy.KEEP), requestCaptor.capture())
+        assertEquals(0L, requestCaptor.firstValue.workSpec.initialDelay)
     }
 
     @Test
@@ -137,9 +311,9 @@ class PaykitSubscriptionNotificationSchedulerTest {
     private fun subscription() = PaykitSubscription(
         paymentRequestId = PAYMENT_REQUEST_ID,
         counterparty = COUNTERPARTY,
-        counterpartyReceiverPath = RECEIVER_PATH,
-        amountValue = "0.00025",
-        amountSats = 25_000uL,
+        amount = PaykitAmount(PaykitAsset.BTC, 25_000uL),
+        paymentReference = "fixture-reference",
+        pricing = PaykitRequestPricing(),
         note = "Weekly coffee",
         createdAt = NOW,
         proposalExpiresAt = null,

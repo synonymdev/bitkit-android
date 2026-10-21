@@ -58,12 +58,14 @@ class PayContactsViewModel @Inject constructor(
         }
     }
 
-    private fun syncErrorMessage(error: Throwable): String = when (error) {
+    private fun syncErrorMessage(error: Throwable): String = when (
+        generateSequence(error) { it.cause }.filterIsInstance<PublicPaykitError>().firstOrNull()
+    ) {
         PublicPaykitError.InvalidPayload -> context.getString(R.string.profile__pay_contacts_error_invalid_payload)
         PublicPaykitError.NoSupportedEndpoint -> context.getString(R.string.profile__pay_contacts_error_no_endpoint)
         PublicPaykitError.SessionNotActive -> context.getString(R.string.profile__pay_contacts_error_session)
         PublicPaykitError.WalletNotReady -> context.getString(R.string.profile__pay_contacts_error_wallet)
-        else -> context.getString(R.string.common__error_body)
+        else -> context.getString(R.string.profile__pay_contacts_error_retry)
     }
 }
 

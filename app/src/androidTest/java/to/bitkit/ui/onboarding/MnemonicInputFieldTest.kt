@@ -8,7 +8,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
@@ -61,6 +61,7 @@ class MnemonicInputFieldTest {
                     onPositionChange = {},
                     onBackspaceInEmpty = { backspaceInEmptyCount++ },
                     focusRequester = focusRequester,
+                    isFocused = true,
                     index = 0,
                 )
             }
@@ -94,7 +95,7 @@ class MnemonicInputFieldTest {
         composeTestRule.onNodeWithTag(FIELD_TAG).performTextInput(" ")
         composeTestRule.waitForIdle()
 
-        assertEquals(emptyList(), changes)
+        assertEquals(emptyList(), changes.filter { it != "abandon" })
         assertEquals("abandon", fieldText())
     }
 

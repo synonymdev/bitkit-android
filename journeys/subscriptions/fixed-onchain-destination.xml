@@ -1,0 +1,17 @@
+<journey name="Subscription With A Fixed Onchain Destination">
+  <description>
+    Requires a linked regtest issuer that can propose a recurring Payment Request with an explicit
+    fixed P2WPKH endpoint, and a payer funded for two periods. Confirms that address reuse does not
+    block an unpaid period and that a paid period cannot be paid again.
+  </description>
+  <actions>
+    <action>Have the issuer propose a monthly subscription for 5,000 sats with no payment deadline, binding its regtest P2WPKH address in the request endpoints</action>
+    <action>Open the proposal in Bitkit, accept it, and complete the first on-chain payment</action>
+    <action>Wait for the first payment proof to appear in the shared request state and verify the first period appears as paid in subscription details</action>
+    <action>Advance the subscription clock offset to the next monthly period in Dev Settings, then refresh Subscriptions</action>
+    <action>Open the next unpaid period and verify the send review uses the same fixed receiving address</action>
+    <action>Complete the second payment and wait for its proof to appear in the shared request state</action>
+    <action>Refresh Subscriptions and verify both periods appear as paid with no action to pay either period again</action>
+    <action>Reset the subscription clock offset in Dev Settings</action>
+  </actions>
+</journey>

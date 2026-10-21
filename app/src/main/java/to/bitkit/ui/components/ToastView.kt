@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -64,6 +65,9 @@ private const val DRAG_RESISTANCE_FACTOR = 0.12f
 private const val TINT_ALPHA = 0.32f
 private const val SHADOW_ALPHA = 0.4f
 private const val ELEVATION_DP = 10
+
+/** End space a sticky toast keeps clear for its close icon: the 16 dp icon plus an 8 dp gap. */
+private const val CLOSE_BUTTON_INSET_DP = 24
 
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -176,11 +180,23 @@ fun ToastView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
+                    .padding(end = if (toast.autoHide) 0.dp else CLOSE_BUTTON_INSET_DP.dp)
             ) {
-                BodyMSB(
-                    text = toast.title,
-                    color = tintColor,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (toast.isLoading) {
+                        GradientCircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    BodyMSB(
+                        text = toast.title,
+                        color = tintColor,
+                    )
+                }
                 toast.description?.let { description ->
                     Caption(
                         text = description,
@@ -309,6 +325,16 @@ private fun ToastViewPreview() {
                     title = "General Message",
                     description = "Used for neutral content to inform the user.",
                     autoHide = false,
+                ),
+                onDismiss = {},
+            )
+            ToastView(
+                toast = Toast(
+                    type = Toast.ToastType.INFO,
+                    title = "Loading Your Pubky Profile",
+                    description = "Your sign-in request opens when your profile is ready.",
+                    autoHide = false,
+                    isLoading = true,
                 ),
                 onDismiss = {},
             )

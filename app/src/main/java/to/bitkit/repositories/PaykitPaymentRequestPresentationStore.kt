@@ -31,6 +31,7 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
 ) {
     companion object {
         private val KEY = Keychain.Key.PAYKIT_PRESENTED_PAYMENT_REQUESTS.name
+        private val ACCEPTED_KEY = Keychain.Key.PAYKIT_ACCEPTED_PAYMENT_REQUESTS.name
     }
 
     private val mutex = Mutex()
@@ -71,6 +72,55 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
             val state = current.copy(idsByIdentity = current.idsByIdentity + (normalizedIdentity to ids.toList()))
             keychain.upsertString(KEY, Json.encodeToString(state))
         }
+    }
+
+    fun loadAcceptedOneTimeIds(identity: String): Set<PaykitPaymentRequestId> {
+        val normalizedIdentity = PubkyPublicKeyFormat.normalized(identity) ?: return emptySet()
+        return loadAcceptedOneTimeIdsByIdentity()[normalizedIdentity].orEmpty()
+    }
+
+    suspend fun addAcceptedOneTimeId(identity: String, id: PaykitPaymentRequestId): Set<PaykitPaymentRequestId> =
+        mutex.withLock {
+            val normalizedIdentity = requireNotNull(PubkyPublicKeyFormat.normalized(identity))
+            val current = loadAcceptedOneTimeIdsByIdentity()
+            val ids = current[normalizedIdentity].orEmpty() + id
+            val state = current + (normalizedIdentity to ids)
+            keychain.upsertString(ACCEPTED_KEY, Json.encodeToString(state))
+            _backupStateVersion.update { it + 1 }
+            ids
+        }
+
+    suspend fun removeAcceptedOneTimeIds(
+        identity: String,
+        ids: Set<PaykitPaymentRequestId>,
+    ): Set<PaykitPaymentRequestId> =
+        mutex.withLock {
+            val normalizedIdentity = requireNotNull(PubkyPublicKeyFormat.normalized(identity))
+            val current = loadAcceptedOneTimeIdsByIdentity()
+            val storedIds = current[normalizedIdentity].orEmpty()
+            val remaining = storedIds - ids
+            if (remaining == storedIds) return@withLock remaining
+            val state = if (remaining.isEmpty()) {
+                current - normalizedIdentity
+            } else {
+                current + (normalizedIdentity to remaining)
+            }
+            keychain.upsertString(ACCEPTED_KEY, Json.encodeToString(state))
+            _backupStateVersion.update { it + 1 }
+            remaining
+        }
+
+    fun acceptedOneTimeBackupSnapshot(): Map<String, Set<PaykitPaymentRequestId>> = loadAcceptedOneTimeIdsByIdentity()
+
+    suspend fun restoreAcceptedOneTimeRequests(requests: Map<String, Set<PaykitPaymentRequestId>>) = mutex.withLock {
+        keychain.upsertString(ACCEPTED_KEY, Json.encodeToString(requests))
+        _backupStateVersion.update { it + 1 }
+    }
+
+    private fun loadAcceptedOneTimeIdsByIdentity(): Map<String, Set<PaykitPaymentRequestId>> {
+        val value = keychain.loadString(ACCEPTED_KEY) ?: return emptyMap()
+        return runCatching { Json.decodeFromString<Map<String, Set<PaykitPaymentRequestId>>>(value) }
+            .getOrElse { throw PaykitPaymentStateUnreadableError(ACCEPTED_KEY, it) }
     }
 
     fun loadSubscriptionState(identity: String): PaykitSubscriptionPresentationState {

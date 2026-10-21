@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
@@ -60,7 +61,7 @@ import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
 
-@Suppress("CyclomaticComplexMethod", "ViewModelForwarding")
+@Suppress("ViewModelForwarding")
 @Composable
 fun ReceiveAmountScreen(
     onCjitCreated: (CjitEntryDetails) -> Unit,
@@ -70,6 +71,7 @@ fun ReceiveAmountScreen(
 ) {
     val app = appViewModel ?: return
     val context = LocalContext.current
+    val resources = LocalResources.current
     val wallet = walletViewModel ?: return
     val blocktank = blocktankViewModel ?: return
     val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
@@ -82,8 +84,8 @@ fun ReceiveAmountScreen(
     fun showMaxExceededToast(max: ULong) {
         app.toast(
             type = Toast.ToastType.WARNING,
-            title = context.getString(R.string.wallet__receive_cjit_error_max__title),
-            description = context.getString(R.string.wallet__receive_cjit_error_max__description)
+            title = resources.getString(R.string.wallet__receive_cjit_error_max__title),
+            description = resources.getString(R.string.wallet__receive_cjit_error_max__description)
                 .replace("{amount}", max.formatToModernDisplay()),
             visibilityTime = Toast.VISIBILITY_TIME_SHORT,
             testTag = "ReceiveCjitAmountExceededToast",

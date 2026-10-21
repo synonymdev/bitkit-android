@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -31,9 +31,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -60,6 +61,11 @@ enum class ButtonSize {
         get() = when (this) {
             Small -> 40.dp
             Large -> 56.dp
+        }
+    val verticalPadding: Dp
+        get() = when (this) {
+            Small -> 8.dp
+            Large -> 12.dp
         }
     val primaryHorizontalPadding: Dp
         get() = when (this) {
@@ -112,8 +118,12 @@ fun PrimaryButton(
     color: Color? = null,
     enableGradient: Boolean = true,
     contentColor: Color = Colors.White,
+    textStyle: TextStyle? = null,
 ) {
-    val contentPadding = PaddingValues(horizontal = size.primaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
+    val contentPadding = PaddingValues(
+        horizontal = size.primaryHorizontalPadding.takeIf { text != null } ?: 0.dp,
+        vertical = size.verticalPadding,
+    )
     val buttonShape = MaterialTheme.shapes.extraLarge
 
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
@@ -129,7 +139,7 @@ fun PrimaryButton(
             shape = buttonShape,
             modifier = modifier
                 .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
-                .requiredHeight(size.height)
+                .heightIn(min = size.height)
                 .primaryButtonStyle(
                     isEnabled = enabled && !isLoading,
                     shape = buttonShape,
@@ -165,9 +175,8 @@ fun PrimaryButton(
                     text?.let {
                         Text(
                             text = text,
-                            style = size.textStyle(),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            style = textStyle ?: size.textStyle(),
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }
@@ -187,8 +196,13 @@ fun SecondaryButton(
     enabled: Boolean = true,
     fullWidth: Boolean = true,
     hazeState: HazeState? = null,
+    testTag: String? = null,
+    textStyle: TextStyle? = null,
 ) {
-    val contentPadding = PaddingValues(horizontal = size.secondaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
+    val contentPadding = PaddingValues(
+        horizontal = size.secondaryHorizontalPadding.takeIf { text != null } ?: 0.dp,
+        vertical = size.verticalPadding,
+    )
     val border = size.secondaryBorder(enabled)
     val contentColor = when (size) {
         ButtonSize.Large -> Colors.White80
@@ -201,7 +215,7 @@ fun SecondaryButton(
         propagateMinConstraints = true,
         modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
-            .requiredHeight(size.height)
+            .heightIn(min = size.height)
             .clip(buttonShape)
             .then(
                 if (hazeState != null) {
@@ -225,6 +239,7 @@ fun SecondaryButton(
                 colors = AppButtonDefaults.secondaryColors.copy(contentColor = contentColor),
                 contentPadding = contentPadding,
                 border = border,
+                modifier = testTag?.let { Modifier.testTag(it) } ?: Modifier
             ) {
                 if (isLoading) {
                     GradientCircularProgressIndicator(
@@ -252,9 +267,8 @@ fun SecondaryButton(
                         text?.let {
                             Text(
                                 text = text,
-                                style = size.textStyle(),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                style = textStyle ?: size.textStyle(),
+                                textAlign = TextAlign.Center,
                             )
                         }
                     }
@@ -281,11 +295,12 @@ fun TertiaryButton(
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
-            .requiredHeight(size.height)
+            .heightIn(min = size.height)
             .clickableAlpha(
                 enabled = enabled && !isLoading,
                 onClick = onClick,
-            ),
+            )
+            .padding(vertical = size.verticalPadding),
     ) {
         if (isLoading) {
             GradientCircularProgressIndicator(
@@ -311,8 +326,7 @@ fun TertiaryButton(
                     text = text,
                     style = size.textStyle(),
                     color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
                 )
             }
         }

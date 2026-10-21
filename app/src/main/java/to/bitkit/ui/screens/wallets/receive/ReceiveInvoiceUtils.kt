@@ -3,6 +3,20 @@ package to.bitkit.ui.screens.wallets.receive
 import to.bitkit.R
 import to.bitkit.utils.Bip21Utils
 
+internal fun getReceiveInvoiceDisplayMode(
+    tab: ReceiveTab,
+    cjitInvoice: String?,
+    hasInvoiceError: Boolean,
+    isUpdating: Boolean,
+    showDetails: Boolean,
+): ReceiveInvoiceDisplayMode {
+    if (tab.usesLightningInvoice() && cjitInvoice.isNullOrEmpty()) {
+        if (isUpdating) return ReceiveInvoiceDisplayMode.LOADING
+        if (hasInvoiceError) return ReceiveInvoiceDisplayMode.ERROR
+    }
+    return if (showDetails) ReceiveInvoiceDisplayMode.DETAILS else ReceiveInvoiceDisplayMode.QR
+}
+
 /**
  * Returns the appropriate invoice/address for the selected tab.
  *
@@ -13,7 +27,6 @@ import to.bitkit.utils.Bip21Utils
  * @param onchainAddress Pure Bitcoin address (fallback)
  * @return The invoice string to display/encode in QR
  */
-@Suppress("LongParameterList")
 fun getInvoiceForTab(
     tab: ReceiveTab,
     bip21: String,
@@ -25,7 +38,12 @@ fun getInvoiceForTab(
     hardwareAddress: String = "",
     hardwareAmountSats: ULong? = null,
     hardwareMessage: String = "",
+    isReceiveInvoiceUpdating: Boolean = false,
 ): String {
+    if (isReceiveInvoiceUpdating && cjitInvoice.isNullOrEmpty() && tab.usesLightningInvoice()) {
+        return ""
+    }
+
     return when (tab) {
         ReceiveTab.SAVINGS -> {
             // Return BIP21 without lightning parameter to preserve amount and other parameters
@@ -33,8 +51,11 @@ fun getInvoiceForTab(
         }
 
         ReceiveTab.AUTO -> {
-            bip21.takeIf { isNodeRunning && canCreateLightningInvoice && containsLightningParameter(bip21) }
-                ?: removeLightningFromBip21(bip21, onchainAddress)
+            if (isNodeRunning && canCreateLightningInvoice) {
+                bip21.takeIf { containsLightningParameter(it) }.orEmpty()
+            } else {
+                removeLightningFromBip21(bip21, onchainAddress)
+            }
         }
 
         ReceiveTab.SPENDING -> {
@@ -43,7 +64,8 @@ fun getInvoiceForTab(
                 ?: bolt11.takeIf { isNodeRunning && canCreateLightningInvoice }.orEmpty()
         }
 
-        ReceiveTab.TREZOR -> hardwareAddress.takeIf(String::isNotBlank)?.let { address ->
+        ReceiveTab.USDT -> ""
+        ReceiveTab.HARDWARE -> hardwareAddress.takeIf(String::isNotBlank)?.let { address ->
             Bip21Utils.buildBip21Url(
                 bitcoinAddress = address,
                 amountSats = hardwareAmountSats?.takeUnless { it == 0uL },
@@ -107,6 +129,9 @@ fun getQrLogoResource(tab: ReceiveTab): Int {
         ReceiveTab.SAVINGS -> R.drawable.ic_btc_circle
         ReceiveTab.AUTO -> R.drawable.ic_unified_circle
         ReceiveTab.SPENDING -> R.drawable.ic_ln_circle
-        ReceiveTab.TREZOR -> R.drawable.ic_btc_circle_blue
+        ReceiveTab.USDT -> R.drawable.tether_circle
+        ReceiveTab.HARDWARE -> R.drawable.ic_btc_circle_blue
     }
 }
+
+private fun ReceiveTab.usesLightningInvoice(): Boolean = this == ReceiveTab.AUTO || this == ReceiveTab.SPENDING

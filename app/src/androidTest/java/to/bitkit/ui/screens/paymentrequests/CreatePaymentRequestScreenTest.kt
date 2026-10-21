@@ -2,6 +2,7 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import android.os.SystemClock
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,32 +10,43 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.persistentListOf
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.USD_SYMBOL
 import to.bitkit.repositories.AmountInputHandler
 import to.bitkit.repositories.CurrencyState
+import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
+import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.AmountInputViewModel
+import kotlin.test.assertEquals
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
-import kotlin.test.assertEquals
 
 @ComposeUi
 class CreatePaymentRequestScreenTest {
@@ -60,6 +72,52 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestExpiryWeek").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestNumberPad").assertDoesNotExist()
+    }
+
+    @Test
+    fun acceptedMethodsCanBeRemovedIndependentlyAndRequireASelection() {
+        var submitted: PaykitPaymentRequestDraft? = null
+        composeTestRule.setContent {
+            AppThemeSurface {
+                PaymentRequestDetailsContent(
+                    initialDraft = draft,
+                    availableMethods = persistentListOf(
+                        MethodId.P2wpkh.rawValue,
+                        MethodId.Bolt11.rawValue,
+                        MethodId.UsdtArbitrum.rawValue
+                    ),
+                    contact = PubkyProfile.placeholder(target.publicKey),
+                    isCreating = false,
+                    onBack = {},
+                    onEditAmount = {},
+                    onSend = { submitted = it },
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-savings")
+            .performScrollTo().assertIsSelected().performClick()
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-spending").assertIsSelected()
+        composeTestRule.onNodeWithTag("PaymentRequestSend").performClick()
+        assertEquals(
+            listOf(MethodId.Bolt11.rawValue, MethodId.UsdtArbitrum.rawValue),
+            submitted?.acceptedPaymentEndpointIdentifiers
+        )
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-spending").performClick().assertIsNotSelected()
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-usdt").assertIsSelected()
+        SystemClock.sleep(600)
+        composeTestRule.onNodeWithTag("PaymentRequestSend").performClick()
+        assertEquals(listOf(MethodId.UsdtArbitrum.rawValue), submitted?.acceptedPaymentEndpointIdentifiers)
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-usdt").performClick().assertIsNotSelected()
+        composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsNotEnabled()
+        // Chip clicks use a 500 ms real-clock debounce, independent of the Compose test clock.
+        SystemClock.sleep(600)
+        composeTestRule.onNodeWithTag("PaymentRequestAccept-savings").performClick().assertIsSelected()
+        SystemClock.sleep(600)
+        composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsEnabled().performClick()
+        assertEquals(
+            listOf(MethodId.P2wpkh.rawValue),
+            submitted?.acceptedPaymentEndpointIdentifiers
+        )
     }
 
     @Test
@@ -96,7 +154,11 @@ class CreatePaymentRequestScreenTest {
 
         composeTestRule.onNodeWithTag("PaymentRequestAmountUnit").performClick()
 
-        composeTestRule.onAllNodesWithText(BITCOIN_SYMBOL, substring = true, useUnmergedTree = true).assertCountEquals(1)
+        composeTestRule.onAllNodesWithText(
+            BITCOIN_SYMBOL,
+            substring = true,
+            useUnmergedTree = true
+        ).assertCountEquals(1)
     }
 
     @Test
@@ -130,11 +192,15 @@ class CreatePaymentRequestScreenTest {
     @Test
     fun sentShowsSuccessSurface() {
         val contact = PubkyProfile.forDisplay(target.publicKey, "Anna", imageUrl = null)
-        var deliveryStatus by mutableStateOf(PaykitPaymentRequestDeliveryStatus.Queued)
+        val createdRequest = request.copy(note = null, deliveryStatus = PaykitPaymentRequestDeliveryStatus.Queued)
+        val sentRequest = createdRequest.copy(deliveryStatus = PaykitPaymentRequestDeliveryStatus.Sent)
+        val proofRequest = sentRequest.copy(lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED)
+        var history by mutableStateOf(persistentListOf<PaykitPaymentRequest>())
         composeTestRule.setContent {
             AppThemeSurface {
                 PaymentRequestSentContent(
-                    request = request.copy(deliveryStatus = deliveryStatus),
+                    request = createdRequest,
+                    history = history,
                     contact = contact,
                     onDone = {},
                 )
@@ -145,36 +211,86 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestSentCheck").assertIsDisplayed()
         composeTestRule.onNodeWithText("PAYMENT REQUESTED").assertIsDisplayed()
         composeTestRule.onNodeWithText("Anna").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Dinner").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Queued for delivery").assertIsDisplayed()
         composeTestRule.onNodeWithText("Your payment request is queued and will send automatically").assertIsDisplayed()
         composeTestRule.onNodeWithText("You have sent a payment request").assertDoesNotExist()
 
-        composeTestRule.runOnIdle { deliveryStatus = PaykitPaymentRequestDeliveryStatus.Sent }
+        composeTestRule.runOnIdle { history = persistentListOf(sentRequest) }
 
         composeTestRule.onNodeWithText("You have sent a payment request").assertIsDisplayed()
         composeTestRule.onNodeWithText("Your payment request is queued and will send automatically").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Waiting for payment").assertIsDisplayed()
+
+        composeTestRule.runOnIdle { history = persistentListOf(proofRequest) }
+
+        composeTestRule.onNodeWithText("Proof submitted").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Waiting for payment").assertDoesNotExist()
+        composeTestRule.onNodeWithText("PAYMENT REQUESTED").assertIsDisplayed()
+
+        composeTestRule.runOnIdle { history = persistentListOf(proofRequest.copy(note = "Dinner")) }
+
+        composeTestRule.onNodeWithText("Dinner").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Proof submitted").assertDoesNotExist()
+
+        composeTestRule.runOnIdle { history = persistentListOf() }
+
+        composeTestRule.onNodeWithText("Queued for delivery").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Dinner").assertDoesNotExist()
+    }
+
+    @Test
+    fun sentIgnoresHistoryForOtherRequests() {
+        val createdRequest = request.copy(note = "", deliveryStatus = PaykitPaymentRequestDeliveryStatus.Queued)
+        val proofRequest = createdRequest.copy(lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED)
+        var history by mutableStateOf(persistentListOf<PaykitPaymentRequest>())
+        composeTestRule.setContent {
+            AppThemeSurface {
+                PaymentRequestSentContent(
+                    request = createdRequest,
+                    history = history,
+                    contact = null,
+                    onDone = {},
+                )
+            }
+        }
+
+        listOf(
+            proofRequest.copy(paymentRequestId = "another-request"),
+            proofRequest.copy(counterparty = "another-counterparty"),
+            proofRequest.copy(direction = PaykitPaymentRequestDirection.Incoming),
+            proofRequest.copy(
+                billingPeriod = PaykitBillingPeriod(
+                    startsAt = Instant.parse("2027-01-15T08:00:00Z"),
+                    endsAt = Instant.parse("2027-02-15T08:00:00Z"),
+                ),
+            ),
+        ).forEach { unrelatedRequest ->
+            composeTestRule.runOnIdle { history = persistentListOf(unrelatedRequest) }
+
+            composeTestRule.onNodeWithText("Queued for delivery").assertIsDisplayed()
+            composeTestRule.onNodeWithText("Proof submitted").assertDoesNotExist()
+        }
     }
 
     private val draft = PaykitPaymentRequestDraft(
-        amountSats = 25_000uL,
+        amount = PaykitAmount(PaykitAsset.BTC, 25_000uL),
         note = "Dinner",
         expiresAt = Instant.parse("2027-01-15T09:00:00Z"),
     )
 
     private val target = PaykitPaymentRequestTarget(
         publicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-        receiverPath = "bitkit/wallet",
     )
 
     private val request = PaykitPaymentRequest(
         paymentRequestId = "payment-request",
         counterparty = target.publicKey,
-        counterpartyReceiverPath = target.receiverPath,
-        amountValue = "0.00025",
-        amountSats = draft.amountSats,
+        amount = draft.amount,
+        paymentReference = "reference",
         note = draft.note,
         createdAt = Instant.parse("2027-01-15T08:00:00Z"),
-        expiresAt = draft.expiresAt,
+        expiresAt = Instant.DISTANT_FUTURE,
         acceptedPaymentEndpointIdentifiers = listOf("btc-lightning-bolt11"),
+        direction = PaykitPaymentRequestDirection.Outgoing,
     )
 }

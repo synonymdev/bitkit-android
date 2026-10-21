@@ -18,12 +18,13 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
+import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -32,7 +33,7 @@ class AddContactViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
-    private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
+    private val refreshContactPaykitLink: RefreshContactPaykitLinkUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -96,7 +97,7 @@ class AddContactViewModel @Inject constructor(
                         )
                     }
                     if (error == PubkyContactError.AlreadyExists) {
-                        refreshContactPaykitReceivers(publicKey)
+                        refreshContactPaykitLink(publicKey)
                     }
                 }
         }
@@ -121,12 +122,16 @@ class AddContactViewModel @Inject constructor(
                 .onSuccess { result ->
                     when (result) {
                         is PublicPaykitPaymentResult.Opened ->
-                            _effects.emit(AddContactEffect.OpenPayment(result.paymentRequest, profile.publicKey))
+                            _effects.emit(
+                                AddContactEffect.OpenPayment(result.paymentRequest, profile.publicKey, result.endpoints)
+                            )
                         PublicPaykitPaymentResult.NoEndpoint ->
                             showPayError(R.string.slashtags__error_pay_empty_msg)
                         PublicPaykitPaymentResult.NotOpened ->
                             showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
+                        PublicPaykitPaymentResult.PrivateLinkPending,
+                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList,
+                        ->
                             showPayError(R.string.slashtags__error_pay_waiting_msg)
                     }
                 }
@@ -156,6 +161,7 @@ class AddContactViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             pubkyRepo.addContact(profile.publicKey, profile)
                 .onSuccess {
+                    refreshContactPaykitLink(profile.publicKey)
                     _effects.emit(AddContactEffect.ContactSaved(profile.publicKey))
                 }
                 .onFailure {
@@ -182,5 +188,9 @@ data class AddContactUiState(
 
 sealed interface AddContactEffect {
     data class ContactSaved(val publicKey: String) : AddContactEffect
-    data class OpenPayment(val paymentRequest: String, val publicKey: String) : AddContactEffect
+    data class OpenPayment(
+        val paymentRequest: String,
+        val publicKey: String,
+        val endpoints: List<Endpoint> = emptyList()
+    ) : AddContactEffect
 }

@@ -52,10 +52,14 @@ class Keychain @Inject constructor(
 
     fun loadString(key: String): String? = load(key)?.decodeToString()
 
-    @Suppress("TooGenericExceptionCaught")
-    fun load(key: String): ByteArray? {
+    fun loadString(key: String, walletIndex: Int): String? =
+        loadIndexed(key, stringPreferencesKey("${key}_$walletIndex"))?.decodeToString()
+
+    fun load(key: String): ByteArray? = loadIndexed(key, key.indexed)
+
+    private fun loadIndexed(key: String, indexedKey: Preferences.Key<String>): ByteArray? {
         try {
-            return snapshot[key.indexed]?.fromBase64()?.let {
+            return snapshot[indexedKey]?.fromBase64()?.let {
                 keyStore.decrypt(it)
             }
         } catch (c: CancellationException) {
@@ -70,7 +74,6 @@ class Keychain @Inject constructor(
         BlockingAccess().block()
 
     internal inner class BlockingAccess {
-        @Suppress("TooGenericExceptionCaught")
         fun load(key: String): ByteArray? {
             try {
                 return blockingSnapshot[key.indexedBlocking]?.fromBase64()?.let {
@@ -84,7 +87,6 @@ class Keychain @Inject constructor(
             }
         }
 
-        @Suppress("TooGenericExceptionCaught")
         fun upsert(key: String, value: ByteArray) {
             try {
                 val encryptedValue = keyStore.encrypt(value)
@@ -99,7 +101,6 @@ class Keychain @Inject constructor(
             Logger.info("Upserted value for key '$key'", context = TAG)
         }
 
-        @Suppress("TooGenericExceptionCaught")
         fun delete(key: String) {
             try {
                 runBlocking {
@@ -116,7 +117,6 @@ class Keychain @Inject constructor(
 
     suspend fun saveString(key: String, value: String) = save(key, value.toByteArray())
 
-    @Suppress("TooGenericExceptionCaught", "ThrowsCount")
     suspend fun save(key: String, value: ByteArray) {
         if (exists(key)) throw KeychainError.FailedToSaveAlreadyExists(key)
 
@@ -131,11 +131,15 @@ class Keychain @Inject constructor(
         Logger.info("Saved value for key '$key'", context = TAG)
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    suspend fun upsertString(key: String, value: String) {
+    suspend fun upsertString(key: String, value: String) = upsertIndexed(key, value, key.indexed)
+
+    suspend fun upsertString(key: String, value: String, walletIndex: Int) =
+        upsertIndexed(key, value, stringPreferencesKey("${key}_$walletIndex"))
+
+    private suspend fun upsertIndexed(key: String, value: String, indexedKey: Preferences.Key<String>) {
         try {
             val encryptedValue = keyStore.encrypt(value.toByteArray())
-            keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
+            keychain.edit { it[indexedKey] = encryptedValue.toBase64() }
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
@@ -144,10 +148,13 @@ class Keychain @Inject constructor(
         Logger.info("Upserted value for key '$key'", context = TAG)
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    suspend fun delete(key: String) {
+    suspend fun delete(key: String) = deleteIndexed(key, key.indexed)
+
+    suspend fun delete(key: String, walletIndex: Int) = deleteIndexed(key, stringPreferencesKey("${key}_$walletIndex"))
+
+    private suspend fun deleteIndexed(key: String, indexedKey: Preferences.Key<String>) {
         try {
-            keychain.edit { it.remove(key.indexed) }
+            keychain.edit { it.remove(indexedKey) }
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
@@ -232,12 +239,16 @@ class Keychain @Inject constructor(
         PIN,
         PIN_ATTEMPTS_REMAINING,
         PAYKIT_SESSION,
-        PAYKIT_RECEIVER_NOISE_SECRET_KEY,
-        PAYKIT_SDK_STATE,
+        PAYKIT_KEY_GENERATION,
+        PAYKIT_RECOVERY_BACKUP,
         PAYKIT_PENDING_BACKUP_RESTORE,
         PAYKIT_PENDING_PAYMENT_PROOFS,
+        ONCHAIN_SEND_ATTEMPT,
+        PAYKIT_ACCEPTED_PAYMENT_REQUESTS,
+        PAYKIT_USDT_PAYMENTS,
         PAYKIT_PRESENTED_PAYMENT_REQUESTS,
         PUBKY_SECRET_KEY,
+        SHARED_PUBKY_SOURCE,
     }
 }
 

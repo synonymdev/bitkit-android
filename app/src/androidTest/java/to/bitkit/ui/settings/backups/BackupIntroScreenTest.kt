@@ -1,6 +1,6 @@
 package to.bitkit.ui.settings.backups
 
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import org.junit.Rule
@@ -63,13 +63,13 @@ class BackupIntroScreenTest {
         }
 
         // Assert
-        composeTestRule.onNodeWithTag("backup_intro_screen").assertExists()
+        composeTestRule.onNodeWithTag("BackupIntroView").assertExists()
 
         // Verify buttons
-        composeTestRule.onNodeWithTag("later_button").assertExists().performClick()
+        composeTestRule.onNodeWithTag("BackupIntroViewCancel").assertExists().performClick()
         assert(closeClicked)
 
-        composeTestRule.onNodeWithTag("backup_button").assertExists().performClick()
+        composeTestRule.onNodeWithTag("BackupIntroViewContinue").assertExists().performClick()
         assert(confirmClicked)
     }
 

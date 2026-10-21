@@ -54,6 +54,7 @@ class AndroidKeyStore(
         return spec
     }
 
+    @Synchronized
     fun encrypt(data: ByteArray): ByteArray {
         val secretKey = keyStore.getKey(alias, password) as SecretKey
 
@@ -67,6 +68,7 @@ class AndroidKeyStore(
         return iv + ciphertext
     }
 
+    @Synchronized
     fun decrypt(data: ByteArray): ByteArray {
         val secretKey = keyStore.getKey(alias, password) as SecretKey
 
@@ -81,6 +83,7 @@ class AndroidKeyStore(
         return decryptedDataBytes
     }
 
+    @Synchronized
     fun resetEncryptionKey() {
         if (keyStore.containsAlias(alias)) {
             keyStore.deleteEntry(alias)
@@ -88,5 +91,6 @@ class AndroidKeyStore(
         generateKey()
     }
 
+    @Synchronized
     fun containsAlias(): Boolean = keyStore.containsAlias(alias)
 }
