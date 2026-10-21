@@ -906,6 +906,7 @@
     <string name="wallet__send_yes">Oui, Envoyer</string>
     <string name="wallet__send_dialog1">Il apparaît que vous envoyez plus de 100 $. Voulez-vous continuer ?</string>
     <string name="wallet__send_dialog2">Il apparaît que vous envoyez plus de 50 % de votre solde total. Voulez-vous continuer ?</string>
+    <string name="wallet__send_dialog2_usdt" formatted="false">Il apparaît que vous envoyez plus de 50 % de votre solde USDT. Voulez-vous continuer ?</string>
     <string name="wallet__send_dialog3">Les frais de transaction semblent être supérieurs à 50 % du montant que vous envoyez. Voulez-vous continuer ?</string>
     <string name="wallet__send_dialog4">Les frais de transaction s\'élèvent à plus de 10 $. Voulez-vous continuer ?</string>
     <string name="wallet__send_sent">Envoi de bitcoins</string>

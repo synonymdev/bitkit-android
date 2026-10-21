@@ -1031,6 +1031,7 @@
     <string name="wallet__send_details">Details</string>
     <string name="wallet__send_dialog1">Het lijkt erop dat je meer dan $100 verstuurt. Wil je doorgaan?</string>
     <string name="wallet__send_dialog2">Het lijkt erop dat je meer dan 50% van je totale saldo verstuurt. Wil je doorgaan?</string>
+    <string name="wallet__send_dialog2_usdt" formatted="false">Het lijkt erop dat je meer dan 50% van je USDT-saldo verstuurt. Wil je doorgaan?</string>
     <string name="wallet__send_dialog3">De transactievergoeding lijkt meer dan 50% van het bedrag dat je verstuurt te zijn. Wil je doorgaan?</string>
     <string name="wallet__send_dialog4">De transactievergoeding lijkt meer dan $10 te zijn. Wil je doorgaan?</string>
     <string name="wallet__send_error_create_tx">Kan de transactie niet verzenden. Probeer het opnieuw.</string>

@@ -904,6 +904,7 @@
     <string name="wallet__send_yes">Ja, senden</string>
     <string name="wallet__send_dialog1">Es scheint, dass du über $100 sendest. Möchtest du fortfahren?</string>
     <string name="wallet__send_dialog2">Es scheint, dass du über 50% deines Gesamtguthabens sendest. Möchtest du fortfahren?</string>
+    <string name="wallet__send_dialog2_usdt" formatted="false">Es scheint, dass du über 50% deines USDT-Guthabens sendest. Möchtest du fortfahren?</string>
     <string name="wallet__send_dialog3">Die Transaktionsgebühr scheint über 50% des gesendeten Betrags zu liegen. Möchtest du fortfahren?</string>
     <string name="wallet__send_dialog4">Die Transaktionsgebühr scheint über $10 zu liegen. Möchtest du fortfahren?</string>
     <string name="wallet__send_sent">Bitcoin gesendet</string>
