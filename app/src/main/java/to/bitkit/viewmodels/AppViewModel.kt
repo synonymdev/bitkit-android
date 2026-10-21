@@ -8162,10 +8162,10 @@ data class SendUiState(
 
     /** A payment request's confirm step also switches between bitcoin and USDT. */
     val canSwitchConfirmFundingSource: Boolean
-        get() = if (incomingPaymentRequestId != null && usdtRecipient != null) {
-            fundingOptions.count { it.enabled } > 1
-        } else {
-            canSwitchBitcoinFundingSource
+        get() = when {
+            incomingPaymentRequestId != null && usdtRecipient != null -> fundingOptions.count { it.enabled } > 1
+            paykitUsesUsdt -> false
+            else -> canSwitchBitcoinFundingSource
         }
 
     val fixedLightningAmount: ULong?

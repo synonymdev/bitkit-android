@@ -14305,6 +14305,40 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `contact USDT review without a request keeps the pay from chip disabled`() = test {
+        val bolt11 = "lnbcrt1contactamountless"
+        stubLightningScan(bolt11, amountSats = 0u)
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        usdtState.value = UsdtWalletState(balance = 50_000_000u)
+        usdtEnabled.value = true
+        runCurrent()
+        sut.openContactPayment(
+            paymentRequest = bolt11,
+            publicKey = testPublicKey,
+            endpoints = listOf(
+                Endpoint(MethodId.Bolt11, bolt11, rawPayload = ""),
+                Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+                Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = ""),
+            ),
+        )
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Usdt))
+        advanceUntilIdle()
+        sut.onUsdtAmountChange("5")
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            assertEquals(SendEffect.NavigateToUsdtReview, awaitItem())
+        }
+        assertTrue(sut.sendUiState.value.paykitUsesUsdt)
+        assertNull(sut.sendUiState.value.incomingPaymentRequestId)
+
+        assertFalse(sut.sendUiState.value.canSwitchConfirmFundingSource)
+    }
+
+    @Test
     fun `fixed USDT request without enough USDT opens amount`() = test {
         val endpoint = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = "")
         val request = paymentRequest().copy(
