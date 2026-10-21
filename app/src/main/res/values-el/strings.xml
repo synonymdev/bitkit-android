@@ -1481,6 +1481,8 @@
     <string name="subscriptions__allowance_monthly_allowance">Μηνιαίος προϋπολογισμός</string>
     <string name="subscriptions__allowance_monthly_limit">Μηνιαίο όριο</string>
     <string name="subscriptions__allowance_no_contacts">Πρόσθεσε πρώτα μια επαφή. Οι προϋπολογισμοί καλύπτουν αιτήματα πληρωμής από τις επαφές σου.</string>
+    <string name="subscriptions__allowance_offer_accepted_description">{name} σού όρισε έναν προϋπολογισμό</string>
+    <string name="subscriptions__allowance_offer_accepted_title">Ο προϋπολογισμός προστέθηκε</string>
     <string name="subscriptions__allowance_offer_explanation">Το πορτοφόλι της επαφής {name} θα πληρώνει τα αιτήματά σου εντός αυτών των ορίων χωρίς να ρωτά κάθε φορά. Οποιοσδήποτε από τους δύο μπορεί να τον τερματίσει.</string>
     <string name="subscriptions__allowance_offer_headline">{name} σού προσφέρει\n&lt;accent&gt;έναν προϋπολογισμό&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} πληρώθηκαν αυτόματα</string>

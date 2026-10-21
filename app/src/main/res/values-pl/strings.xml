@@ -1488,6 +1488,8 @@
     <string name="subscriptions__allowance_monthly_allowance">Budżet miesięczny</string>
     <string name="subscriptions__allowance_monthly_limit">Limit miesięczny</string>
     <string name="subscriptions__allowance_no_contacts">Najpierw dodaj kontakt. Budżety obejmują żądania płatności od Twoich kontaktów.</string>
+    <string name="subscriptions__allowance_offer_accepted_description">{name} ustawił(a) dla Ciebie budżet</string>
+    <string name="subscriptions__allowance_offer_accepted_title">Budżet dodany</string>
     <string name="subscriptions__allowance_offer_explanation">Portfel {name} będzie opłacać Twoje żądania w ramach tych limitów bez pytania za każdym razem. Każda ze stron może go zakończyć.</string>
     <string name="subscriptions__allowance_offer_headline">{name} oferuje\n&lt;accent&gt;budżet&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} opłacono automatycznie</string>

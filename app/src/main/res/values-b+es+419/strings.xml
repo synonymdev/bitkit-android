@@ -1490,6 +1490,8 @@
     <string name="subscriptions__allowance_monthly_allowance">Asignación mensual</string>
     <string name="subscriptions__allowance_monthly_limit">Límite mensual</string>
     <string name="subscriptions__allowance_no_contacts">Primero añada un contacto. Las asignaciones cubren las solicitudes de pago de sus contactos.</string>
+    <string name="subscriptions__allowance_offer_accepted_description">{name} configuró una asignación para usted</string>
+    <string name="subscriptions__allowance_offer_accepted_title">Asignación agregada</string>
     <string name="subscriptions__allowance_offer_explanation">La billetera de {name} pagará sus solicitudes dentro de estos límites sin preguntar cada vez. Cualquiera de los dos puede finalizarla.</string>
     <string name="subscriptions__allowance_offer_headline">{name} le ofrece\n&lt;accent&gt;una asignación&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pagado automáticamente</string>
