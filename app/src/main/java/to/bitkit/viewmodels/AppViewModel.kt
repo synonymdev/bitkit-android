@@ -505,6 +505,7 @@ class AppViewModel @Inject constructor(
     private var paykitAmountConversion = PaykitAmountConversion()
     private val pendingContactPaymentContexts = mutableMapOf<String, ContactPaymentContext>()
     private val _requestedPaymentRequestId = MutableStateFlow<PaykitPaymentRequestId?>(null)
+    private val expiredFeedbackRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     val requestedPaymentRequestId = _requestedPaymentRequestId.asStateFlow()
     private val paymentRequestPreparation = MutableStateFlow<PaymentRequestPreparation?>(null)
     private val dismissedPreparingRequestIds = mutableSetOf<PaykitPaymentRequestId>()
@@ -1376,6 +1377,9 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             paykitPaymentRequestRepo.pendingRequests.drop(1).collect(::onPendingPaykitRequestsChanged)
         }
+        viewModelScope.launch {
+            paykitPaymentRequestRepo.expiredProposals.collect(::toastExpiredPaymentRequests)
+        }
     }
 
     private suspend fun onPendingPaykitRequestsChanged(requests: List<PaykitPaymentRequest>) {
@@ -1796,6 +1800,22 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun toastExpiredPaymentRequests(expired: List<PaykitPaymentRequest>) {
+        if (!isPaykitEnabled.value) return
+        // The opened request and the one being paid get their own feedback.
+        val handledIds = setOfNotNull(requestedPaymentRequestId.value, activeIncomingPaymentRequest()?.id)
+        val newlyExpired = expired.filter { it.id !in handledIds && it.id !in expiredFeedbackRequestIds }
+        if (newlyExpired.isEmpty()) return
+        // A refresh that started before the expiry can restore a request, so toast each one once.
+        expiredFeedbackRequestIds += newlyExpired.map { it.id }
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.wallet__payment_request_expired),
+            testTag = "PaymentRequestExpiredToast",
+        )
+    }
+
     private fun finishExpiredPaymentRequestPresentation(request: PaykitPaymentRequest) {
         paykitPaymentRequestDiagnostics.logPresentationRejection(
             request.counterparty,
@@ -1811,6 +1831,7 @@ class AppViewModel @Inject constructor(
         }
         clearPaymentRequestPresentationRetry(request.id)
         if (!showExpiredToast) return
+        expiredFeedbackRequestIds += request.id
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.wallet__payment_request),
