@@ -60,9 +60,9 @@ Install `just` ([more options](https://github.com/casey/just#packages)):
 
 Set up local env:
 - `just init`
-- Uncomment only the values you need in the fresh `.env` file, such as `GITHUB_ACTOR`, `GITHUB_TOKEN`, `TX_TOKEN`, and E2E build settings.
+- Uncomment only the values you need in the fresh `.env` file, such as `GITHUB_ACTOR`, `GITHUB_TOKEN`, and E2E build settings.
 
-Run `just list` to see available commands. The common ones are `just init`, `just compile`, `just run`, `just build`, `just release`, `just test`, `just lint`, and `just translations pull`. `just run` prefers a physical device and falls back to an emulator.
+Run `just list` to see available commands. The common ones are `just init`, `just compile`, `just run`, `just build`, `just release`, `just test`, and `just lint`. `just run` prefers a physical device and falls back to an emulator.
 
 ### Trezor Bridge In Android Studio
 
@@ -122,43 +122,7 @@ just test android # run
 
 ## Localization
 
-### Pulling Translations
-
-To pull the latest translations from Transifex:
-
-1. **Install Transifex CLI** (if not already installed):
-   - Follow the installation instructions: [Transifex CLI Installation](https://developers.transifex.com/docs/cli)
-
-2. **Authenticate with Transifex** (if not already configured):
-   - Set the `TX_TOKEN` environment variable with your API token:
-     ```sh
-     export TX_TOKEN="YOUR_API_TOKEN_HERE"
-     ```
-   - You can get your API token from [Transifex account settings](https://www.transifex.com/user/settings/api/)
-   - Add it to `~/.zshrc` or other shell rc file to persist across sessions
-
-3. **Pull translations**:
-   ```sh
-   just translations pull
-   ```
-
-### Pushing Source Strings
-
-When you add or modify translation keys in the EN source file, push them to Transifex:
-
-```sh
-just translations push source
-```
-
-To intentionally round-trip local source and translation files back to Transifex, use `just translations push all`.
-
-### Translation Workflow
-
-1. **Add/modify strings** in `app/src/main/res/values/strings.xml`
-2. **Push to Transifex:** `just translations push source`
-3. **Translators** work on translations in Transifex
-4. **Pull translations:** `just translations pull`
-5. **Commit** the updated translation files
+Translations live in this repository, in `app/src/main/res/values-*/strings.xml`. A PR that adds or changes an English string in `app/src/main/res/values/strings.xml` updates every shipped locale in the same PR.
 
 ## Build
 

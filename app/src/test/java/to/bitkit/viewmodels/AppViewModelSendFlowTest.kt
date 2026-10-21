@@ -99,6 +99,7 @@ import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.UsdtPreference
 import to.bitkit.data.dto.PlatformDetails
 import to.bitkit.data.dto.Platforms
 import to.bitkit.data.dto.ReleaseInfoDTO
@@ -225,6 +226,7 @@ import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.timedsheets.TimedSheetManager
+import to.bitkit.utils.timedsheets.sheets.BackupTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
 import java.math.BigDecimal
 import java.net.URLEncoder
@@ -313,6 +315,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val pubkyContactsLoadCompletionVersion = MutableStateFlow(0L)
     private val pubkyContactImportFailure = MutableStateFlow<Throwable?>(null)
     private val pendingPaykitPaymentRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
+    private val expiredPaykitProposals = MutableSharedFlow<List<PaykitPaymentRequest>>(extraBufferCapacity = 8)
     private val paykitPaymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
     private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
@@ -334,6 +337,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         on { visible }.thenReturn(flowOf(true))
     }
     private val timedSheetManager = mock<TimedSheetManager>()
+    private fun presentTimedSheet(type: TimedSheetType): Boolean {
+        val method = AppViewModel::class.java.getDeclaredMethod("tryShowTimedSheet", TimedSheetType::class.java)
+        method.isAccessible = true
+        return method.invoke(sut, type) as Boolean
+    }
     private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
 
     @Before
@@ -660,6 +668,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             runCatching { beforeSend() }
         }
         whenever(paykitPaymentRequestRepo.pendingRequests).thenReturn(pendingPaykitPaymentRequests)
+        whenever(paykitPaymentRequestRepo.expiredProposals).thenReturn(expiredPaykitProposals)
         whenever(paykitPaymentRequestRepo.paymentRequestHistory).thenReturn(paykitPaymentRequestHistory)
         whenever(paykitPaymentRequestRepo.subscriptions).thenReturn(paykitSubscriptions)
         whenever(paykitPaymentRequestRepo.automaticSubscriptionProposals()).thenReturn(emptyList())
@@ -786,12 +795,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private fun createViewModel(
         timedSheetManagerProvider: (CoroutineScope) -> TimedSheetManager = { timedSheetManager },
-        usdtSheet: UsdtTimedSheet = mock(),
+        usdtSheet: UsdtTimedSheet = UsdtTimedSheet(settingsStore),
+        backupSheet: BackupTimedSheet = mock { on { type } doReturn TimedSheetType.BACKUP },
     ) = AppViewModel(
         connectivityRepo = connectivityRepo,
         healthRepo = healthRepo,
         toastManagerProvider = { toastManager },
         timedSheetManagerProvider = timedSheetManagerProvider,
+
         context = context,
         bgDispatcher = testDispatcher,
         keychain = keychain,
@@ -825,10 +836,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         paykitUsdtPayments = paykitUsdtPayments,
         samRockRepo = samRockRepo,
         appUpdateSheet = mock { on { type } doReturn TimedSheetType.APP_UPDATE },
-        backupSheet = mock { on { type } doReturn TimedSheetType.BACKUP },
+        backupSheet = backupSheet,
         notificationsSheet = mock { on { type } doReturn TimedSheetType.NOTIFICATIONS },
         quickPaySheet = mock { on { type } doReturn TimedSheetType.QUICK_PAY },
         usdtSheet = usdtSheet,
+
         usdtPreferences = usdtPreferences,
         highBalanceSheet = mock { on { type } doReturn TimedSheetType.HIGH_BALANCE },
         formatMoneyValue = formatMoneyValue,
@@ -2651,6 +2663,124 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             request.counterparty,
             IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
         )
+    }
+
+    @Test
+    fun `pending request expiring on its own shows the expired toast`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        pendingPaykitPaymentRequests.value = emptyList()
+        expiredPaykitProposals.emit(listOf(request))
+        runCurrent()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
+        assertEquals("The payment request has expired.", toastCaptor.lastValue.description)
+    }
+
+    @Test
+    fun `pending request removed without the expiry signal shows no expired toast`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = emptyList()
+        runCurrent()
+
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `unrelated request expiring during a payment submission still shows the expired toast`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        paymentSubmissionActive.value = true
+        expiredPaykitProposals.emit(listOf(request))
+        runCurrent()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
+    }
+
+    @Test
+    fun `request reported expired twice shows one expired toast`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        expiredPaykitProposals.emit(listOf(request))
+        runCurrent()
+        expiredPaykitProposals.emit(listOf(request))
+        runCurrent()
+
+        verify(toastManager, times(1)).enqueue(any())
+    }
+
+    @Test
+    fun `opened request reported by both expiry signals shows one expired toast`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList),
+        )
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = emptyList()
+        expiredPaykitProposals.emit(listOf(request))
+        runCurrent()
+        advanceTimeBy(2.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, atLeastOnce()).enqueue(toastCaptor.capture())
+        assertEquals(1, toastCaptor.allValues.count { it.testTag == "PaymentRequestExpiredToast" })
     }
 
     @Test
@@ -8225,11 +8355,110 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `timed intro waits for unlock and an idle sheet host before recording seen`() = test {
+        sut.setIsAuthenticated(false)
+        assertFalse(presentTimedSheet(TimedSheetType.USDT))
+        assertFalse(settingsData.value.hasSeenUsdtIntro)
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+        verify(timedSheetManager, atLeastOnce()).reevaluate()
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        assertFalse(presentTimedSheet(TimedSheetType.USDT))
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        assertFalse(presentTimedSheet(TimedSheetType.USDT))
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        sut.hideSheet()
+        advanceUntilIdle()
+        verify(timedSheetManager, atLeastOnce()).reevaluate()
+        assertTrue(presentTimedSheet(TimedSheetType.USDT))
+        assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        assertFalse(settingsData.value.hasSeenUsdtIntro)
+        sut.onSheetVisible(Sheet.TimedSheet(TimedSheetType.USDT))
+        assertFalse(settingsData.value.hasSeenUsdtIntro)
+        sut.setIsAuthenticated(false)
+        sut.onSheetVisible(sut.currentSheet.value)
+        advanceUntilIdle()
+        assertFalse(settingsData.value.hasSeenUsdtIntro)
+        sut.setIsAuthenticated(true)
+        sut.onSheetVisible(sut.currentSheet.value)
+        advanceUntilIdle()
+        assertTrue(settingsData.value.hasSeenUsdtIntro)
+    }
+
+    @Test
+    fun `idle sheet host only retries an unseen undecided USDT intro`() = test {
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+        for ((seen, preference) in listOf(
+            true to UsdtPreference.UNDECIDED,
+            false to UsdtPreference.ENABLED,
+            false to UsdtPreference.DISABLED,
+        )) {
+            settingsData.value = settingsData.value.copy(hasSeenUsdtIntro = seen, usdtPreference = preference)
+            sut.showSheet(Sheet.Receive())
+            advanceUntilIdle()
+            clearInvocations(timedSheetManager)
+            sut.hideSheet()
+            advanceUntilIdle()
+            verify(timedSheetManager, never()).reevaluate()
+        }
+        sut.checkTimedSheets()
+        verify(timedSheetManager).onHomeScreenEntered(any(), any())
+    }
+
+    @Test
+    fun `dismissing the USDT intro before it is visible does not rerun the timed queue`() = test {
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+        assertTrue(presentTimedSheet(TimedSheetType.USDT))
+        timedSheetType.value = TimedSheetType.USDT
+        advanceUntilIdle()
+        clearInvocations(timedSheetManager)
+
+        sut.hideSheet()
+        timedSheetType.value = null
+        advanceUntilIdle()
+        assertFalse(settingsData.value.hasSeenUsdtIntro)
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        verify(timedSheetManager, never()).reevaluate()
+    }
+
+    @Test
+    fun `replacing a timed sheet releases its manager without closing the replacement`() = test {
+        sut.setIsAuthenticated(true)
+        assertTrue(presentTimedSheet(TimedSheetType.APP_UPDATE))
+        timedSheetType.value = TimedSheetType.APP_UPDATE
+        runCurrent()
+
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        advanceUntilIdle()
+        verify(timedSheetManager).dismissCurrentSheet()
+        timedSheetType.value = null
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+        verify(timedSheetManager, atLeastOnce()).reevaluate()
+        assertTrue(presentTimedSheet(TimedSheetType.USDT))
+    }
+
+    @Test
     fun `queued scan flushes after timed sheet dismisses`() = test {
         val bolt11 = "lnbcrt1lockedtimed"
         settingsData.value = SettingsData(isPinEnabled = true)
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
 
+        sut.setIsAuthenticated(true)
+        assertTrue(presentTimedSheet(TimedSheetType.BACKUP))
+        sut.setIsAuthenticated(false)
         timedSheetType.value = TimedSheetType.BACKUP
         sut.showSheet(Sheet.TimedSheet(TimedSheetType.BACKUP))
         advanceUntilIdle()
@@ -8256,11 +8485,63 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { sheet.shouldShow() }.thenReturn(true)
         sut.viewModelScope.cancel()
         sut = createViewModel(timedSheetManagerProvider = ::TimedSheetManager, usdtSheet = sheet)
+        sut.setIsAuthenticated(true)
         return sheet
     }
 
     @Test
-    fun `USDT reminder cannot interrupt the scanner and returns on a later Home visit`() = test {
+    fun `Home entry during startup authentication still shows ordinary reminders`() = test {
+        settingsData.value = settingsData.value.copy(hasSeenUsdtIntro = true)
+        val backupSheet = mock<BackupTimedSheet> {
+            on { type } doReturn TimedSheetType.BACKUP
+            on { priority } doReturn TimedSheetType.BACKUP.priority
+        }
+        whenever(backupSheet.shouldShow()).thenReturn(true)
+        sut.viewModelScope.cancel()
+        sut = createViewModel(timedSheetManagerProvider = ::TimedSheetManager, backupSheet = backupSheet)
+        sut.checkTimedSheets()
+        advanceTimeBy(1000)
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        advanceTimeBy(2100)
+        runCurrent()
+
+        assertTrue(sut.isAuthenticated.value)
+        assertEquals(Sheet.TimedSheet(TimedSheetType.BACKUP), sut.currentSheet.value)
+        verify(backupSheet).onShown()
+    }
+
+    @Test
+    fun `unseen USDT intro retries after a scan fails without opening a sheet`() = test {
+        val sheet = useRealTimedSheets()
+        val finishScan = CompletableDeferred<Unit>()
+        whenever(coreService.decode("invalid-payment")).doSuspendableAnswer {
+            finishScan.await()
+            throw AppError("Invalid payment")
+        }
+        sut.showScannerSheet()
+        runCurrent()
+        sut.checkTimedSheets()
+        sut.onScannerSheetResult("invalid-payment")
+        advanceTimeBy(3000)
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).onShown()
+
+        finishScan.complete(Unit)
+        runCurrent()
+        advanceTimeBy(2100)
+        runCurrent()
+
+        assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        verify(sheet).onShown()
+    }
+
+    @Test
+    fun `unseen USDT intro waits until the scanner closes and Home settles`() = test {
         val sheet = useRealTimedSheets()
         sut.checkTimedSheets()
         advanceTimeBy(1000)
@@ -8273,19 +8554,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(sheet, never()).onDismissed()
 
         sut.hideSheet()
-        advanceTimeBy(3000)
         runCurrent()
+        advanceTimeBy(1000)
         assertNull(sut.currentSheet.value)
+        verify(sheet, never()).onShown()
 
-        sut.checkTimedSheets()
-        advanceTimeBy(2100)
+        advanceTimeBy(1100)
         runCurrent()
         assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
         verify(sheet).onShown()
     }
 
     @Test
-    fun `closing the scanner shortly after Home resumes keeps the USDT reminder queued`() = test {
+    fun `unseen USDT intro retries after scanner closes on an already resumed Home`() = test {
         val sheet = useRealTimedSheets()
         sut.showScannerSheet()
         runCurrent()
@@ -8294,25 +8575,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         assertTrue(sut.currentSheet.value is Sheet.QrScanner)
-        verify(sheet, never()).shouldShow()
         verify(sheet, never()).onShown()
 
         sut.hideSheet()
-        advanceTimeBy(2100)
         runCurrent()
+        advanceTimeBy(1000)
         assertNull(sut.currentSheet.value)
-        verify(sheet, never()).shouldShow()
         verify(sheet, never()).onShown()
 
-        sut.checkTimedSheets()
-        advanceTimeBy(2100)
+        advanceTimeBy(1100)
         runCurrent()
         assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
         verify(sheet).onShown()
     }
 
     @Test
-    fun `scan processing blocks a pending reminder until a later Home visit`() = test {
+    fun `scan processing and payment confirmation defer the unseen USDT intro`() = test {
         val sheet = useRealTimedSheets()
         val bolt11 = "lnbcrt1slowreminderscan"
         val finishScan = CompletableDeferred<Unit>()
@@ -8328,7 +8606,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         assertNull(sut.currentSheet.value)
-        verify(sheet, never()).shouldShow()
         verify(sheet, never()).onShown()
 
         finishScan.complete(Unit)
@@ -8337,7 +8614,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.hideSheet()
         runCurrent()
-        sut.checkTimedSheets()
         advanceTimeBy(2100)
         runCurrent()
         assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
@@ -8346,12 +8622,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `queued locked scan blocks timed sheet presentation`() = test {
+        sut.setIsAuthenticated(true)
         settingsData.value = SettingsData(isPinEnabled = true)
         runCurrent()
         val canShowSheet = argumentCaptor<() -> Boolean>()
         sut.checkTimedSheets()
         verify(timedSheetManager).onHomeScreenEntered(canShowSheet.capture(), any())
         assertTrue(canShowSheet.firstValue())
+        sut.setIsAuthenticated(false)
 
         sut.onScanResult("lnbcrt1queuedreminderscan")
         runCurrent()
@@ -8362,6 +8640,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `timed sheet presentation is blocked throughout another sheet transition`() = test {
+        sut.setIsAuthenticated(true)
         val canShowSheet = argumentCaptor<() -> Boolean>()
         sut.checkTimedSheets()
         verify(timedSheetManager).onHomeScreenEntered(canShowSheet.capture(), any())
@@ -8386,16 +8665,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `transaction receipt also defers the USDT reminder without consuming it`() = test {
+    fun `unseen USDT intro retries after a transaction receipt closes`() = test {
         val sheet = useRealTimedSheets()
         val receipt = NewTransactionSheetDetails(
             type = NewTransactionSheetType.ONCHAIN,
             direction = NewTransactionSheetDirection.RECEIVED,
             paymentHashOrTxId = "received-tx",
         )
+        sut.checkTimedSheets()
+        advanceTimeBy(1000)
         sut.showTransactionSheet(receipt)
         runCurrent()
-        sut.checkTimedSheets()
         advanceTimeBy(2100)
         runCurrent()
 
@@ -8404,10 +8684,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(sheet, never()).onShown()
 
         sut.hideNewTransactionSheet()
-        sut.checkTimedSheets()
-        advanceTimeBy(2100)
+        runCurrent()
+        advanceTimeBy(1000)
+        assertNull(sut.currentSheet.value)
+        verify(sheet, never()).onShown()
+
+        advanceTimeBy(1100)
         runCurrent()
         assertEquals(Sheet.TimedSheet(TimedSheetType.USDT), sut.currentSheet.value)
+        verify(sheet).onShown()
     }
 
     @Test

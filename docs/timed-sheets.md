@@ -5,12 +5,21 @@ Timed sheets are opportunistic prompts shown from the wallet surface when a feat
 The manager checks sheets two seconds after the home screen resumes and cancels a pending check when the home screen pauses. It shows at most one eligible sheet per check, using this priority order:
 
 1. App update
-2. Backup
-3. Background payments
-4. QuickPay
-5. High balance
+2. USDT
+3. Backup
+4. Background payments
+5. QuickPay
+6. High balance
 
-The selected sheet is removed from the manager after it is shown. It is registered again when the app creates a new manager instance. A standard dismissal calls the selected sheet's `onDismissed()` handler before clearing it.
+A busy sheet host leaves prompts queued for a later Home visit. While an unseen, undecided USDT intro has not yet been presented in this app session, becoming idle on Home also retries the queue after the same two-second delay. Once the intro is presented, closing sheets does not advance other timed prompts. Eligibility checks that finish after leaving Home or opening another flow cannot open a sheet.
+
+The selected sheet is removed from the queue when it is presented. It is registered again when the app creates a new manager instance. Dismissal releases the active sheet before calling its `onDismissed()` handler.
+
+## USDT
+
+The USDT intro requires a USDT-capable build, an undecided USDT preference, and no recorded intro appearance. The visible intro records `hasSeenUsdtIntro`; selection by the queue does not. Dismissing an intro that appeared does not repeat it on relaunch. Enable and No Thanks choices also prevent the automatic prompt from returning.
+
+Older settings without a seen flag remain eligible when undecided, including after an in-place upgrade. An undecided user who dismissed an older intro may see it once more because older builds did not record appearance. USDT can still be enabled later from Settings → General → Payments → USDT (Tether). Release regtest builds intentionally omit both the intro and setting.
 
 ## App Update
 

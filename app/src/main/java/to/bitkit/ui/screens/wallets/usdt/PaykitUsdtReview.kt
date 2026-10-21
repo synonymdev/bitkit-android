@@ -90,7 +90,9 @@ fun PaykitUsdtReview(
         UsdtActivityDetail(transfer, settings.hideBalance, wallet.address) { details = false }
     } else {
         Column(
-            Modifier.sheetHeight().background(Colors.Gray7).navigationBarsPadding()
+            Modifier.sheetHeight().background(Colors.Gray7)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
         ) {
             if (state.authenticationRequired) {
                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {

@@ -41,8 +41,10 @@ import com.synonym.bitkitcore.usdtFormatAmount
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.UiDateStyle
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.uiDateStyleFor
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -62,7 +64,9 @@ import to.bitkit.ui.screens.wallets.activity.components.AmountViewContent
 import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.uiDateText
 
 @Composable
@@ -241,8 +245,23 @@ internal val UsdtTransfer.detailTitleResource: Int get() = when {
 @Composable
 private fun UsdtTechnicalDetails(transfer: UsdtTransfer, hideBalance: Boolean, walletAddress: String) {
     transfer.txHash?.let { hash ->
-        UsdtDetailField(caption = stringResource(R.string.wallet__activity_tx_id)) {
-            SelectionContainer { BodySSB(hash, style = UsdtDetailStyles.Body) }
+        val app = appViewModel
+        val copiedText = stringResource(R.string.common__copied)
+        UsdtDetailField(
+            caption = stringResource(R.string.wallet__activity_tx_id),
+            modifier = Modifier
+                .clickableAlpha(
+                    onClick = copyToClipboard(hash) {
+                        app?.toast(
+                            type = Toast.ToastType.SUCCESS,
+                            title = copiedText,
+                            description = it.ellipsisMiddle(40),
+                        )
+                    }
+                )
+                .testTag("UsdtActivityTxId")
+        ) {
+            BodySSB(hash, style = UsdtDetailStyles.Body)
         }
     }
     val sender = transfer.sender ?: walletAddress.takeIf { !transfer.isIncoming && it.isNotEmpty() }

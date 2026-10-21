@@ -71,6 +71,7 @@ fun AppAlertDialog(
     dismissTextColor: Color = Colors.White64,
     confirmTestTag: String = "DialogConfirm",
     dismissTestTag: String = "DialogCancel",
+    confirmEnabled: Boolean = true,
     onDismissRequest: () -> Unit = onDismiss,
     properties: DialogProperties = DialogProperties(
         dismissOnClickOutside = false,
@@ -84,9 +85,10 @@ fun AppAlertDialog(
         confirmButton = {
             TextButton(
                 onClick = rememberDebouncedClick(onClick = onConfirm),
+                enabled = confirmEnabled,
                 modifier = Modifier.testTag(confirmTestTag)
             ) {
-                BodyMSB(text = confirmText, color = confirmTextColor)
+                BodyMSB(text = confirmText, color = if (confirmEnabled) confirmTextColor else Colors.White32)
             }
         },
         dismissButton = {

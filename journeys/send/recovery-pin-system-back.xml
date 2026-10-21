@@ -1,0 +1,30 @@
+<journey name="recovery pin system back">
+  <description>
+    On Payment Pending, after Retry original payment and Authorize retry, the system Back button on
+    the payment PIN screen cancels the retry the same way the header Back does. The original payment
+    stays pending, and a later Retry original payment reaches fee approval again without restarting
+    the app. Before the fix the abandoned approval held the retry lock and every later retry stopped
+    with Continue disabled.
+
+    Precondition: an onboarded funded dev wallet with PIN enabled and "Require PIN for payments" on,
+    and Payment Pending showing "Retry original payment" for an on-chain send whose broadcast timed
+    out. To get there, start an on-chain send to any regtest address and run
+    `adb shell cmd connectivity airplane-mode enable` right after the swipe, so the broadcast cannot
+    reach Electrum; turn airplane mode off again once Payment Pending shows the retry button. The
+    app's Electrum server is the staging one, so stopping a local container does not fail the
+    broadcast.
+
+    Android only: iOS has no system Back button, and its payment PIN screen answers "cancel" when it
+    disappears by any route.
+  </description>
+  <actions>
+    <action>Verify Payment Pending shows "Retry original payment" and record its transaction ID</action>
+    <action>Tap Retry original payment, keep the prefilled fee rate and tap Continue</action>
+    <action>Tap Authorize retry, accept any fee warnings, and verify the payment PIN screen appears</action>
+    <action>Press the system Back button (`adb shell input keyevent KEYCODE_BACK`) without entering the PIN</action>
+    <action>Verify Payment Pending is shown again with the same transaction ID and "Retry original payment" enabled</action>
+    <action>Tap Retry original payment, keep the prefilled fee rate and tap Continue</action>
+    <action>Verify the fee approval step with "Authorize retry" appears within 10 seconds</action>
+    <action>Tap Cancel and verify Payment Pending still shows the same transaction ID</action>
+  </actions>
+</journey>
