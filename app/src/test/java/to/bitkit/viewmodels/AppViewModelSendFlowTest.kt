@@ -78,6 +78,7 @@ import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.check
 import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -283,6 +284,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paymentSubmissionActive = MutableStateFlow(false)
     private val paykitPaymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val paykitAllowanceRepo = mock<PaykitAllowanceRepo>()
+    private val noCoverageRelease: () -> Unit = {}
     private val paykitPaymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val paykitPaymentRequestDiagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val usdtRepo = mock<UsdtRepo>()
@@ -711,6 +713,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { paykitAllowanceRepo.processIncomingRequests(any()) }.thenReturn(false)
         whenever { paykitAllowanceRepo.isAutomaticallyHandling(any()) }.thenReturn(false)
         whenever(paykitAllowanceRepo.isUpdating).thenReturn(false)
+        doReturn(noCoverageRelease).whenever(paykitAllowanceRepo).beginCoverageUpdate()
         whenever { paykitPaymentProofRepo.captureOriginalOnchainPayer(any()) }
             .thenReturn(Result.success("pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"))
         whenever { paykitPaymentProofRepo.verifyOriginalOnchainPayer(any(), any()) }.thenReturn(Result.success(Unit))
@@ -6359,6 +6362,43 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             failureReason = PaymentFailureReason.RETRIES_EXHAUSTED,
         )
         verify(pendingPaymentRepo, never()).resolve(any())
+    }
+
+    @Test
+    fun `coverage is held from the request refresh until the allowances are refreshed`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        var held = false
+        val heldDuring = mutableListOf<String>()
+        doAnswer {
+            held = true
+            val release: () -> Unit = { held = false }
+            release
+        }.whenever(paykitAllowanceRepo).beginCoverageUpdate()
+        whenever { paykitPaymentRequestRepo.refresh(any(), any()) }.doSuspendableAnswer {
+            heldDuring += "requests:$held"
+            Result.success(Unit)
+        }
+        whenever { paykitAllowanceRepo.refresh() }.doSuspendableAnswer {
+            heldDuring += "allowances:$held"
+            Result.success(Unit)
+        }
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = "unrelated_hash",
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        runCurrent()
+
+        assertTrue(heldDuring.isNotEmpty())
+        assertTrue(heldDuring.all { it.endsWith(":true") })
+        assertFalse(held)
     }
 
     @Test

@@ -1169,16 +1169,25 @@ class AppViewModel @Inject constructor(
         ) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
-        val result = if (forceFresh) {
-            paykitPaymentRequestRepo.refreshAfterStateChange(mode)
-        } else {
-            paykitPaymentRequestRepo.refresh(mode, messagePriority)
+        // New requests and an allowance's acceptance can arrive in one intake: requests an allowance may cover are
+        // held from presentation until the allowances are refreshed too.
+        val releaseCoverage = paykitAllowanceRepo.beginCoverageUpdate()
+        val result = try {
+            val refreshed = if (forceFresh) {
+                paykitPaymentRequestRepo.refreshAfterStateChange(mode)
+            } else {
+                paykitPaymentRequestRepo.refresh(mode, messagePriority)
+            }
+            refreshed.onSuccess {
+                activityRepo.backfillPaykitContacts()
+                clearHandledSubscriptionNotification()
+                if (mode == PaykitPaymentRequestRefreshMode.FULL) reconcilePaykitUsdt()
+                paykitAllowanceRepo.refresh()
+            }
+        } finally {
+            releaseCoverage()
         }
         return result.onSuccess {
-            activityRepo.backfillPaykitContacts()
-            clearHandledSubscriptionNotification()
-            if (mode == PaykitPaymentRequestRefreshMode.FULL) reconcilePaykitUsdt()
-            paykitAllowanceRepo.refresh()
             if (processAllowanceRequests()) paykitPaymentRequestRepo.refresh()
             presentNextIncomingPaykitPaymentRequest()
         }

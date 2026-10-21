@@ -40,6 +40,7 @@ import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
@@ -578,6 +579,21 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment list given back by a failed send is not given back again by the node's failure event`() = test {
+        sut.activate(identity)
+        whenever(
+            payer.payLightning(any(), anyOrNull(), anyOrNull(), any())
+        ).thenReturn(Result.failure(TestAllowanceError("send")))
+        whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
+
+        sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+
+        verify(payer, times(1)).releasePaymentList(any(), any())
+        assertNull(sut.localState(identity).journal.single().paymentListVersion)
+    }
+
+    @Test
     fun `payee offering only an on-chain endpoint stays manual before any acceptance`() = test {
         whenever(payer.resolve(any(), any())).thenReturn(Result.success(onchainPayment()))
 
@@ -726,12 +742,33 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         sut.activate(identity)
 
         sut.recover(identity)
+
+        // Recovery alone settles it, before any node event arrives.
+        val paid = PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, PAYMENT_HASH)
+        assertEquals(listOf(Stage.SUCCEEDED), sut.localState(identity).journal.map { it.stage })
+        assertEquals(listOf(paid), events.filterIsInstance<PaykitAllowanceEvent.PaidAutomatically>())
+
         sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = true)
 
-        assertEquals(listOf(Stage.SUCCEEDED), sut.localState(identity).journal.map { it.stage })
-        assertEquals(
-            listOf(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, PAYMENT_HASH)),
-            events.filterIsInstance<PaykitAllowanceEvent.PaidAutomatically>(),
+        assertEquals(listOf(paid), events.filterIsInstance<PaykitAllowanceEvent.PaidAutomatically>())
+    }
+
+    @Test
+    fun `recovery syncs an attempt the ledger already failed and gives its payment list back`() = test {
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("failed", PaymentExecutionStatus.FAILED)),
+        )
+        seedJournal(
+            journalEntry("failed", request, Stage.SENT, paymentHash = PAYMENT_HASH).copy(paymentListVersion = 5uL),
+        )
+
+        sut.recover(identity)
+
+        assertEquals(listOf(Stage.FAILED), sut.localState(identity).journal.map { it.stage })
+        verify(payer).releasePaymentList(
+            eq(request.counterparty),
+            eq(PrivatePaykitPaymentContext(emptyMap(), paymentListVersion = 5uL)),
         )
     }
 

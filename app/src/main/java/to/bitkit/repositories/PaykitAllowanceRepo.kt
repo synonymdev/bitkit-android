@@ -198,12 +198,22 @@ class PaykitAllowanceRepo @Inject constructor(
     }
 
     private suspend fun <T> whileUpdating(block: suspend () -> T): T {
-        updates.incrementAndGet()
+        val release = beginCoverageUpdate()
         return try {
             block()
         } finally {
-            updates.decrementAndGet()
+            release()
         }
+    }
+
+    /**
+     * Holds [isUpdating] until the returned function runs, for a caller whose new requests and allowance changes arrive
+     * together: a request is not shown for manual payment before the allowances it may fall under are refreshed.
+     */
+    fun beginCoverageUpdate(): () -> Unit {
+        updates.incrementAndGet()
+        val released = AtomicBoolean(false)
+        return { if (released.compareAndSet(false, true)) updates.decrementAndGet() }
     }
 
     /**
