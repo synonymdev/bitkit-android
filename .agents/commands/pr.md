@@ -181,9 +181,10 @@ When the user provides custom instructions after `--`:
   was not recorded. Use `Review: Not performed` if there has been no review. The same model is valid
   in every phase; never substitute the PR-writing model for an unknown earlier model.
 - Include each model's actual reasoning effort as `` `model-name` (reasoning: `medium`) ``. Consult
-  available session/run metadata first; use `reasoning: Unknown` if unrecorded or
-  `reasoning: Not exposed` if the tool does not expose the setting. Never infer it from the model
-  or current configuration; omit effort for `Not used` and `Not performed`.
+  the session/run records using AGENTS.md under Resolving model metadata, including separate
+  reviewer/subagent records. Use fallback values only after that lookup and add the required brief
+  metadata note. Never infer effort from the model or current configuration; omit effort for
+  `Not used` and `Not performed`.
 - Wrap the model name and reasoning value in separate inline-code spans; keep the phase label
   and `(reasoning: ...)` punctuation outside them.
 - When updating an older PR, collapse per-round rows into Review without losing known model/effort

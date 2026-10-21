@@ -97,6 +97,36 @@ The reviewer may use the same model as the implementation agent. A separate cont
 recommendation; using a different model is not required. If subagents are unavailable, use a separate
 review session when practical. Do not describe a self-review as an independent review.
 
+### Resolving model metadata
+
+Resolve the actual model and reasoning effort for each contributing session before writing a review
+footer or updating Models used. This applies to any agent, model provider or runner. Missing values
+in the prompt or a reviewer's reply do not establish that metadata is unavailable.
+
+- Check authoritative metadata tied to the actual execution: the host's run/session details,
+  provider response metadata, a recorded reviewer invocation, or structured execution logs. Use
+  whichever sources the environment exposes; no particular product, file path or log schema is
+  required. A configuration default or requested model alias alone does not prove what ran.
+- Match records to the contributing run/session and relevant turns using their recorded identity,
+  timestamps and parent/reviewer linkage where available. Record the reported model identifier and
+  reasoning setting for that work. Do not apply current settings retroactively; list each distinct
+  model/effort pair when they changed across contributing turns.
+- Ask independent reviewers/subagents to include their own model, reasoning effort and the metadata
+  source in their internal handoff. If a reply omits metadata or reports a fallback, the parent
+  should check accessible records for that reviewer before final reporting. Do not assume the
+  reviewer used the parent's or implementation agent's model or effort. A self-reported model
+  identity without supporting run metadata is not verification.
+- Read only the identifiers, linkage, timestamps, model and effort needed for this lookup. Do not
+  dump session logs, prompts, private reasoning, credentials or unrelated sessions into outputs.
+- Use `Unknown` only when the value is absent from relevant accessible records, or those records
+  cannot be located/read. Use `Not exposed` for reasoning only after checking the available sources
+  and establishing that they do not expose a setting. Add a brief metadata note explaining the
+  missing field or unavailable source; do not claim values are unexposed merely because the prompt
+  did not supply them. Never infer identity/effort from a tool name or invent a value to avoid a
+  fallback. This lookup does not require new access permissions or exposing private records.
+- Preserve verified historical pairs. Replace an earlier fallback only when records establish the
+  model/effort for that earlier work; otherwise keep it and add newly verified pairs separately.
+
 ### Review summary metadata
 
 AI reviewers should end each review summary with `Reviewer model: <model name>` and
@@ -104,10 +134,10 @@ AI reviewers should end each review summary with `Reviewer model: <model name>` 
 footer once per review, not on each inline comment. It describes that review round and complements
 the PR's Models used section; it is informational, not an approval or quality claim.
 
-Use the model and effort actually used for the review, checking available session/run metadata
-first. Use `Unknown` for an unrecorded model or effort, and `Not exposed` for a reasoning setting
-the tool does not expose. Never copy the implementation model or infer settings from tool names.
-If multiple model/effort combinations contributed, list each pair in the footer. Unassisted human
+Use the model and effort actually used for the review, following Resolving model metadata above,
+including its lookup and fallback-note requirements. Never copy the implementation model or infer
+settings from tool names. If multiple model/effort combinations contributed, list each pair in the
+footer. Unassisted human
 reviews do not need it; AI-assisted human reviews should identify the AI model and effort used.
 
 ### PR relationships
@@ -126,10 +156,10 @@ reviews with the same pair do not add entries. The same model may appear in all 
 Do not add per-round model rows. Optionally add `Review rounds: N` when the number of completed
 review passes is known; omit the count when unknown and do not count parallel reviewers as rounds.
 
-Record reasoning effort alongside each model as `` `model-name` (reasoning: `medium`) ``. Check
-available session/run metadata before using `Unknown`. Use `reasoning: Unknown` when unrecorded,
-or `reasoning: Not exposed` when the tool does not expose a setting. Do not infer effort from the
-model name or apply the current setting to earlier work. Preserve all known model/effort pairs when
+Record reasoning effort alongside each model as `` `model-name` (reasoning: `medium`) ``. Follow
+Resolving model metadata above before using `Unknown` or `reasoning: Not exposed`, and include its
+brief metadata note when a fallback remains. Do not infer effort from the model name or apply the
+current setting to earlier work. Preserve all known model/effort pairs when
 updating the section; collapse older per-round rows into the single Review entry.
 
 This section is informational, not a quality score, verification result, or approval requirement.

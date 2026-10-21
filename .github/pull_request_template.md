@@ -55,7 +55,7 @@ Twin = same Android/iOS change; Companion = coordinated non-prerequisite work (e
 
 ### Models used
 
-<!-- Informational: use the actual model/effort pairs from session metadata, with separate inline-code spans as below. Use one Review line for all passes; deduplicate pairs, and separate distinct pairs with commas. Never add per-round model rows. Optionally add `- Review rounds: N` when the completed-pass count is known, not a count of parallel reviewer agents. Use `Unknown` if unrecorded or `reasoning: Not exposed` if no setting is exposed. Use `Not used` for phases without AI, and `Review: Not performed` when no review occurred; omit effort for these values. Preserve known pairs on updates. -->
+<!-- Informational: use the actual model/effort pairs from session metadata, with separate inline-code spans as below. Use one Review line for all passes; deduplicate pairs, and separate distinct pairs with commas. Never add per-round model rows. Optionally add `- Review rounds: N` when the completed-pass count is known, not a count of parallel reviewer agents. Follow AGENTS.md under Resolving model metadata, using authoritative run/session metadata and separate reviewer records when available. Use `Unknown` or `reasoning: Not exposed` only after that lookup, with a brief metadata note explaining the remaining gap. Use `Not used` for phases without AI, and `Review: Not performed` when no review occurred; omit effort for these values. Preserve known pairs on updates. -->
 
 - Planning/scoping: `<model name>` (reasoning: `<effort>`)
 - Implementation: `<model name>` (reasoning: `<effort>`)

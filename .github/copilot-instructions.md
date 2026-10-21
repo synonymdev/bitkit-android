@@ -18,10 +18,11 @@ or present an old result as validation of changed expectations.
 
 Follow `AGENTS.md` under "Review summary metadata": end the review summary with
 `Reviewer model: <model name>` and `Reasoning effort: <effort>` on separate lines, once per review
-(including no-findings reviews), not on each inline comment. Check available session/run metadata
-for the actual model and effort; use `Unknown` if unrecorded or `Not exposed` if a reasoning setting
-is not exposed. Do not infer values from the tool name or copy the implementation model. If multiple
-model/effort combinations contributed, list each pair. This is informational and does not replace
+(including no-findings reviews), not on each inline comment. Follow AGENTS.md under Resolving
+model metadata: check available session/run records for the actual reviewer, use fallbacks only
+after that lookup, and briefly explain any unavailable metadata. Do not infer values from the tool
+name or copy the implementation model. If multiple model/effort combinations contributed, list each
+pair. This is informational and does not replace
 the PR's Models used section. Unassisted human reviews do not need this footer.
 
 ## Architecture & Patterns
