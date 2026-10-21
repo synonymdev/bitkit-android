@@ -88,6 +88,7 @@ class WalletRepo @Inject constructor(
     private val receiveUpdateStatusLock = Any()
     private var pendingReceiveUpdates = 0
     private var pendingReceiveCacheLoads = 0
+    private var receiveCacheValidationFailed = false
     private var pendingReceiveValidation: String? = null
     private var committedReceiveBip21 = ""
 
@@ -182,6 +183,7 @@ class WalletRepo @Inject constructor(
                 val unavailable = runSuspendCatching {
                     privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(cacheData.onchainAddress)
                 }.getOrElse {
+                    receiveCacheValidationFailed = true
                     Logger.warn("Failed to validate cached receive address", it, context = TAG)
                     return@withLock
                 }
@@ -198,6 +200,7 @@ class WalletRepo @Inject constructor(
                     )
                 }
                 synchronized(receiveUpdateStatusLock) { updateReceivePendingState() }
+                receiveCacheValidationFailed = false
             }
         }.invokeOnCompletion { changePendingReceiveCacheLoads(-1) }
     }
@@ -577,16 +580,32 @@ class WalletRepo @Inject constructor(
     }
 
     private suspend fun refreshReusableReceiveAddressOrThrow() {
-        val address = getOnchainAddress()
-        if (address.isEmpty()) {
-            newAddress().getOrThrow()
-        } else if (privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(address)) {
-            replaceReusableOnchainAddress().getOrThrow()
-        } else {
-            val wasUsed = checkAddressUsage(address).getOrThrow()
-            if (wasUsed) {
-                replaceReusableOnchainAddress().getOrThrow()
-            }
+        val retryCache = getOnchainAddress().isEmpty() && receiveCacheValidationFailed
+        if (retryCache) changePendingReceiveCacheLoads(1)
+        try {
+            do {
+                val address = if (retryCache) cacheStore.data.first().onchainAddress else getOnchainAddress()
+                if (address.isEmpty()) {
+                    newAddress().getOrThrow()
+                } else if (privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(address)) {
+                    replaceReusableOnchainAddress().getOrThrow()
+                } else {
+                    val wasUsed = checkAddressUsage(address).getOrThrow()
+                    if (wasUsed) {
+                        replaceReusableOnchainAddress().getOrThrow()
+                    } else if (retryCache) {
+                        cacheStore.update { current ->
+                            if (current.onchainAddress == address) {
+                                _walletState.update { it.copy(onchainAddress = address) }
+                            }
+                            current
+                        }
+                    }
+                }
+            } while (retryCache && getOnchainAddress().isEmpty())
+            receiveCacheValidationFailed = false
+        } finally {
+            if (retryCache) changePendingReceiveCacheLoads(-1)
         }
     }
 

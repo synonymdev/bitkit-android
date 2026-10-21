@@ -43,6 +43,7 @@ import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.PrivatePaykitReservationData
 import to.bitkit.data.PrivatePaykitReservationStore
+import to.bitkit.data.PrivatePaykitStoredAssignmentData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -52,6 +53,8 @@ import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.screens.wallets.receive.ReceiveTab
+import to.bitkit.ui.screens.wallets.receive.getInvoiceForTab
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
@@ -301,6 +304,200 @@ class WalletRepoTest : BaseUnitTest() {
         assertEquals("", sut.walletState.value.onchainAddress)
         assertEquals("", sut.walletState.value.bip21)
         assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+    }
+
+    @Test
+    fun `receive refresh recovers saved ordinary address after node startup with public reservations`() = test {
+        val address = "bcrt1q60d6qvf8lufpxpw6pvdnzsplxx4edspe04nyqz"
+        val publicAddress = "bcrt1qqfq4x88n5y8ce2nd9qnu2t4ktp5rdvrr2sqv06"
+        val cachedBalance = BalanceState(totalOnchainSats = 50_000uL)
+        val cache = MutableStateFlow(
+            AppCacheData(balance = cachedBalance, onchainAddress = address, bip21 = "bitcoin:$address"),
+        )
+        whenever(cacheStore.data).thenReturn(cache)
+        whenever(cacheStore.update(any())).doSuspendableAnswer { invocation ->
+            cache.value = invocation.getArgument<(AppCacheData) -> AppCacheData>(0)(cache.value)
+        }
+        whenever(cacheStore.setOnchainAddress(any())).doSuspendableAnswer { invocation ->
+            cache.value = cache.value.copy(onchainAddress = invocation.getArgument(0))
+        }
+        val reservations = mock<PrivatePaykitReservationStore>()
+        whenever(reservations.data).thenReturn(
+            flowOf(
+                PrivatePaykitReservationData(
+                    reservedReceiveIndexesByAddressType = mapOf("nativeSegwit" to setOf(1)),
+                    publicAssignments = mapOf(
+                        "profile" to PrivatePaykitStoredAssignmentData("nativeSegwit", 1, publicAddress),
+                    ),
+                ),
+            ),
+        )
+        val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Stopped))
+        whenever(lightningRepo.lightningState).thenReturn(nodeState)
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 1)).doSuspendableAnswer {
+            if (nodeState.value.nodeLifecycleState.isRunning()) {
+                Result.success(AddressDerivationInfo(publicAddress, 1))
+            } else {
+                Result.failure(NodeNotRunningError("addressInfoForType", nodeState.value.nodeLifecycleState))
+            }
+        }
+        whenever(lightningRepo.revealReceiveAddresses(any(), any())).thenReturn(Result.success(Unit))
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH))
+            .thenReturn(Result.success(AddressDerivationInfo(ADDRESS_NEW, 2)))
+        whenever(coreService.isAddressUsed(address)).thenReturn(false)
+        val reservationRepo = PrivatePaykitAddressReservationRepo(
+            testDispatcher,
+            reservations,
+            settingsStore,
+            coreService,
+            lightningRepo,
+            cacheStore,
+        )
+        sut = createSut(reservationRepo = reservationRepo)
+
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+        assertEquals(cachedBalance, sut.balanceState.value)
+        assertEquals("", sut.walletState.value.onchainAddress)
+        assertEquals("", sut.walletState.value.bip21)
+        assertEquals(address, cache.value.onchainAddress)
+
+        nodeState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+        sut.refreshBip21().getOrThrow()
+
+        assertEquals(address, sut.walletState.value.onchainAddress)
+        assertEquals("bitcoin:$address", sut.walletState.value.bip21)
+        assertEquals(address, cache.value.onchainAddress)
+        verify(lightningRepo, never()).newAddressInfoForType(any())
+    }
+
+    @Test
+    fun `cached receive recovery validates availability and usage against current storage`() = test {
+        val scenarios = listOf(
+            "unavailable", "used", "lookup failure", "usage failure", "cleared", "replacement",
+            "replacement during lookup", "promotion failure", "promotion cancellation",
+        )
+        for (scenario in scenarios) {
+            val cache = MutableStateFlow(AppCacheData(onchainAddress = ADDRESS, bip21 = "bitcoin:$ADDRESS"))
+            whenever(cacheStore.data).thenReturn(cache)
+            whenever(cacheStore.update(any())).doSuspendableAnswer { invocation ->
+                if (scenario == "promotion failure") throw AppError("cache unavailable")
+                if (scenario == "promotion cancellation") throw CancellationException("cache update cancelled")
+                cache.value = invocation.getArgument<(AppCacheData) -> AppCacheData>(0)(cache.value)
+            }
+            whenever(cacheStore.setOnchainAddress(any())).doSuspendableAnswer { invocation ->
+                cache.value = cache.value.copy(onchainAddress = invocation.getArgument(0))
+            }
+            var checks = 0
+            whenever(privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(any())).doSuspendableAnswer {
+                if (checks++ == 0 || scenario == "lookup failure") throw AppError("address lookup unavailable")
+                if (scenario == "replacement during lookup") {
+                    cache.value = cache.value.copy(onchainAddress = "replacementAddress")
+                }
+                scenario == "unavailable"
+            }
+            whenever(coreService.isAddressUsed(any())).doSuspendableAnswer {
+                if (scenario == "usage failure") throw AppError("address usage unavailable")
+                scenario == "used"
+            }
+            var allocations = 0
+            whenever(privatePaykitAddressReservationRepo.nextReusableReceiveAddress()).doSuspendableAnswer {
+                allocations++
+                Result.success(ADDRESS_NEW)
+            }
+            sut = createSut()
+            sut.loadFromCache()
+            testScheduler.runCurrent()
+            assertEquals("", sut.walletState.value.onchainAddress, scenario)
+            when (scenario) {
+                "cleared" -> cache.value = AppCacheData()
+                "replacement" -> cache.value = AppCacheData(onchainAddress = "replacementAddress")
+            }
+
+            val result = runCatching { sut.refreshReusableReceiveAddress().getOrThrow() }
+            val failed = scenario.endsWith("failure") || scenario.endsWith("cancellation")
+            val replacement = scenario.startsWith("replacement")
+            val expectedAddress = when {
+                failed -> ""
+                replacement -> "replacementAddress"
+                else -> ADDRESS_NEW
+            }
+            assertEquals(failed, result.isFailure, scenario)
+            assertEquals(scenario.endsWith("cancellation"), result.exceptionOrNull() is CancellationException, scenario)
+            assertEquals(expectedAddress, sut.walletState.value.onchainAddress, scenario)
+            assertEquals(if (failed) "" else "bitcoin:$expectedAddress", sut.walletState.value.bip21, scenario)
+            assertEquals(if (failed) ADDRESS else expectedAddress, cache.value.onchainAddress, scenario)
+            assertEquals(if (failed || replacement) 0 else 1, allocations, scenario)
+            assertFalse(sut.walletState.value.isReceiveInvoiceUpdating, scenario)
+        }
+    }
+
+    @Test
+    fun `settlement during cached receive recovery rotates before exposing the saved address`() = test {
+        val cache = MutableStateFlow(AppCacheData(onchainAddress = ADDRESS, bip21 = "bitcoin:$ADDRESS"))
+        whenever(cacheStore.data).thenReturn(cache)
+        whenever(cacheStore.update(any())).doSuspendableAnswer { invocation ->
+            cache.value = invocation.getArgument<(AppCacheData) -> AppCacheData>(0)(cache.value)
+        }
+        whenever(cacheStore.setOnchainAddress(any())).doSuspendableAnswer { invocation ->
+            cache.value = cache.value.copy(onchainAddress = invocation.getArgument(0))
+        }
+        val events = MutableSharedFlow<NodeEventUpdate>()
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(events)
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        val validationStarted = CompletableDeferred<Unit>()
+        val finishValidation = CompletableDeferred<Unit>()
+        var checks = 0
+        whenever(privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(ADDRESS)).doSuspendableAnswer {
+            if (checks++ == 0) throw AppError("node not started")
+            validationStarted.complete(Unit)
+            finishValidation.await()
+            false
+        }
+        whenever(coreService.isAddressUsed(ADDRESS)).thenReturn(false)
+        sut = createSut()
+        val states = mutableListOf<WalletState>()
+        sut.walletState.onEach { states.add(it) }.launchIn(backgroundScope)
+        sut.loadFromCache()
+        testScheduler.runCurrent()
+        val recovery = launch { sut.refreshReusableReceiveAddress().getOrThrow() }
+        validationStarted.await()
+        cache.value = cache.value.invalidateReceiveOnchainAddress()
+        val settlement = launch {
+            events.emit(
+                NodeEventUpdate(
+                    Event.OnchainTransactionReceived("txid", mock<TransactionDetails>()),
+                    settledReceiveAddress = SettledReceiveAddress(ADDRESS),
+                ),
+            )
+        }
+        testScheduler.runCurrent()
+        finishValidation.complete(Unit)
+        recovery.join()
+        settlement.join()
+        testScheduler.runCurrent()
+
+        assertEquals(ADDRESS_NEW, sut.walletState.value.onchainAddress)
+        assertEquals(ADDRESS_NEW, cache.value.onchainAddress)
+        assertTrue(states.filter { it.onchainAddress == ADDRESS }.all { it.isReceiveInvoiceUpdating })
+        assertFalse(
+            states.any {
+                getInvoiceForTab(
+                    tab = ReceiveTab.SAVINGS,
+                    bip21 = it.bip21,
+                    bolt11 = it.bolt11,
+                    cjitInvoice = null,
+                    isNodeRunning = true,
+                    onchainAddress = it.onchainAddress,
+                    isReceiveInvoiceUpdating = it.isReceiveInvoiceUpdating,
+                ).contains(ADDRESS)
+            },
+            "A settled address must never be available in Savings",
+        )
+        assertTrue(states.none { it.onchainAddress == ADDRESS })
+        verify(cacheStore, never()).setOnchainAddress(ADDRESS)
+        assertFalse(sut.walletState.value.isReceiveInvoiceUpdating)
+        verify(privatePaykitAddressReservationRepo).nextReusableReceiveAddress()
     }
 
     @Test
