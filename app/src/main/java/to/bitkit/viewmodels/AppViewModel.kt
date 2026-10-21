@@ -1562,7 +1562,8 @@ class AppViewModel @Inject constructor(
         }
         val candidates = paymentRequestsForPresentation(preparation) ?: return
         if (finishRequestedAutomaticPayment(candidates)) return
-        val requests = candidates.filterNot { paykitAllowanceRepo.isAutomaticallyHandling(it) }
+        val requests = candidates
+            .filterNot { paykitAllowanceRepo.isAutomaticallyHandling(it) || isAllowancePending(it) }
             .takeIf { it.isNotEmpty() }
             ?: return
         val generation = paymentRequestPresentationGeneration
@@ -1571,7 +1572,8 @@ class AppViewModel @Inject constructor(
         var stopped = false
         try {
             for (request in requests) {
-                if (presentIncomingPaymentRequestOrStop(request, generation)) {
+                // Checked right before the sheet shows: an allowance refresh may have started since the filter ran.
+                if (!isAllowancePending(request) && presentIncomingPaymentRequestOrStop(request, generation)) {
                     stopped = true
                     break
                 }
@@ -1585,12 +1587,16 @@ class AppViewModel @Inject constructor(
         if (
             stopped && generation != paymentRequestPresentationGeneration ||
             paymentRequestsForPresentation()
-                ?.filterNot { paykitAllowanceRepo.isAutomaticallyHandling(it) }
+                ?.filterNot { paykitAllowanceRepo.isAutomaticallyHandling(it) || isAllowancePending(it) }
                 ?.any { next -> requests.none { it.id == next.id } } == true
         ) {
             presentNextIncomingPaykitPaymentRequest()
         }
     }
+
+    /** A request an allowance may cover is held while the allowance state is updating, so it is never paid twice. */
+    private fun isAllowancePending(request: PaykitPaymentRequest): Boolean =
+        paykitAllowanceRepo.isUpdating && paykitAllowanceRepo.mayCover(request)
 
     /** A manual retry of a failed automatic invoice reuses its hash; a pending manual payment owns it then. */
     private fun isAutomaticAllowancePayment(paymentHash: String): Boolean =

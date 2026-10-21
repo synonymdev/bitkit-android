@@ -34,6 +34,7 @@ import to.bitkit.utils.Logger
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -105,6 +106,10 @@ class PaykitAllowanceRepo @Inject constructor(
     private val publishLock = Any()
     private val isProcessingRequests = AtomicBoolean(false)
     private val isAcceptingOffers = AtomicBoolean(false)
+    private val updates = AtomicInteger(0)
+
+    /** True while allowances are refreshing or requests are being admitted, when coverage may still change. */
+    val isUpdating: Boolean get() = updates.get() > 0
     private val manualRequestSignatures = ConcurrentHashMap<PaykitPaymentRequestId, Int>()
     private val _allowances = MutableStateFlow<List<PaykitAllowance>>(emptyList())
     private val _localState = MutableStateFlow(PaykitAllowanceLocalState())
@@ -182,13 +187,32 @@ class PaykitAllowanceRepo @Inject constructor(
 
     suspend fun refresh(): Result<Unit> = withContext(ioDispatcher) {
         val identity = activeIdentity ?: return@withContext Result.success(Unit)
-        refreshMutex.withLock {
-            val listing = listAllowances()
-            if (activeIdentity == identity) {
-                publish(listing.getOrDefault(_allowances.value), executor.localState(identity))
+        whileUpdating {
+            refreshMutex.withLock {
+                val listing = listAllowances()
+                if (activeIdentity == identity) {
+                    publish(listing.getOrDefault(_allowances.value), executor.localState(identity))
+                }
+                listing.map {}
             }
-            listing.map {}
         }
+    }
+
+    private suspend fun <T> whileUpdating(block: suspend () -> T): T {
+        updates.incrementAndGet()
+        return try {
+            block()
+        } finally {
+            updates.decrementAndGet()
+        }
+    }
+
+    /**
+     * True when an allowance this wallet grants, in any state, names [request]'s contact: such a request may become
+     * covered by the refresh in progress, so it is not shown for manual payment meanwhile.
+     */
+    fun mayCover(request: PaykitPaymentRequest): Boolean = request.requiresAcceptance && _allowances.value.any {
+        it.isAllower && PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
     }
 
     private suspend fun listAllowances(): Result<List<PaykitAllowance>> = runSuspendCatching {
@@ -376,7 +400,7 @@ class PaykitAllowanceRepo @Inject constructor(
         if (!isProcessingRequests.compareAndSet(false, true)) return@withContext false
 
         try {
-            payCovered(covered, identity, signature)
+            whileUpdating { payCovered(covered, identity, signature) }
         } finally {
             isProcessingRequests.set(false)
         }

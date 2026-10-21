@@ -711,6 +711,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { paykitAllowanceRepo.acceptOffersFromAllowers(any()) }.thenReturn(emptyList())
         whenever { paykitAllowanceRepo.processIncomingRequests(any()) }.thenReturn(false)
         whenever { paykitAllowanceRepo.isAutomaticallyHandling(any()) }.thenReturn(false)
+        whenever(paykitAllowanceRepo.isUpdating).thenReturn(false)
         whenever { paykitPaymentProofRepo.captureOriginalOnchainPayer(any()) }
             .thenReturn(Result.success("pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"))
         whenever { paykitPaymentProofRepo.verifyOriginalOnchainPayer(any(), any()) }.thenReturn(Result.success(Unit))
@@ -6359,6 +6360,76 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             failureReason = PaymentFailureReason.RETRIES_EXHAUSTED,
         )
         verify(pendingPaymentRepo, never()).resolve(any())
+    }
+
+    @Test
+    fun `a request an allowance may cover is held while allowances update`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val request = paymentRequest()
+        whenever(paykitAllowanceRepo.isUpdating).thenReturn(true)
+        whenever(paykitAllowanceRepo.mayCover(request)).thenReturn(true)
+
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+
+        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
+    }
+
+    @Test
+    fun `the allowance pass never takes a request whose manual sheet is being prepared`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val request = paymentRequest()
+        val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer { resolution.await() }
+        pendingPaykitPaymentRequests.value = listOf(request)
+        runCurrent()
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        clearInvocations(paykitAllowanceRepo)
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = "unrelated_hash",
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        runCurrent()
+
+        val passes = argumentCaptor<List<PaykitPaymentRequest>>()
+        verify(paykitAllowanceRepo, atLeastOnce()).processIncomingRequests(passes.capture())
+        assertTrue(passes.allValues.all { pass -> pass.none { it.id == request.id } })
+        resolution.complete(Result.success(PublicPaykitPaymentResult.NotOpened))
+        runCurrent()
+    }
+
+    @Test
+    fun `a pending covered request does not make presentation start over`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        val covered = paymentRequest().copy(paymentRequestId = "covered")
+        // A subscription period request has no preparation, so a pending link keeps it listed.
+        val manual = paymentRequest().copy(
+            paymentRequestId = "manual",
+            billingPeriod = PaykitBillingPeriod(Clock.System.now(), Clock.System.now() + 60.seconds),
+        )
+        whenever { paykitAllowanceRepo.isAutomaticallyHandling(covered) }.thenReturn(true)
+        whenever(privatePaykitRepo.beginPaymentRequest(manual))
+            .thenReturn(Result.success(PublicPaykitPaymentResult.PrivateLinkPending))
+
+        pendingPaykitPaymentRequests.value = listOf(covered, manual)
+        runCurrent()
+
+        verify(privatePaykitRepo, never()).beginPaymentRequest(covered)
+        verify(privatePaykitRepo, times(1)).beginPaymentRequest(manual)
     }
 
     @Test

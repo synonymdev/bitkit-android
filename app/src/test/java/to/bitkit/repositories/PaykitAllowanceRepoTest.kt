@@ -590,6 +590,16 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     // region Automatic payments
 
     @Test
+    fun `only a contact this wallet grants an allowance to may be covered`() = test {
+        records = listOf(fixtures.record(state = AllowanceLifecycleState.PROPOSED))
+        sut.activate(identity)
+
+        assertTrue(sut.mayCover(fixtures.paymentRequest()))
+        assertFalse(sut.mayCover(fixtures.paymentRequest(counterparty = fixtures.otherCounterpartyKey)))
+        assertFalse(sut.isUpdating)
+    }
+
+    @Test
     fun `a request above the limits is never held back while channels reconnect`() = test {
         records = listOf(fixtures.record())
         sut.activate(identity)

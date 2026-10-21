@@ -628,6 +628,18 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a later manual retry of the same invoice is not an automatic payment`() = test {
+        sut.activate(identity)
+        val request = fixtures.paymentRequest()
+        seedJournal(
+            journalEntry("automatic", request, Stage.FAILED, paymentHash = PAYMENT_HASH),
+            journalEntry("manual", request, Stage.SENT, paymentHash = PAYMENT_HASH).copy(isAutomatic = false),
+        )
+
+        assertFalse(sut.isAutomaticPayment(PAYMENT_HASH))
+    }
+
+    @Test
     fun `automatic attempts journal the payment list they consume`() = test {
         sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
@@ -685,6 +697,26 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         verify(payer).releasePaymentList(
             eq(request.counterparty),
             eq(PrivatePaykitPaymentContext(emptyMap(), paymentListVersion = 4uL)),
+        )
+    }
+
+    @Test
+    fun `recovery syncs an attempt the ledger already settled and announces it once`() = test {
+        collectEvents()
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("settled", PaymentExecutionStatus.SUCCEEDED)),
+        )
+        seedJournal(journalEntry("settled", request, Stage.SENT, paymentHash = PAYMENT_HASH))
+        sut.activate(identity)
+
+        sut.recover(identity)
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = true)
+
+        assertEquals(listOf(Stage.SUCCEEDED), sut.localState(identity).journal.map { it.stage })
+        assertEquals(
+            listOf(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, PAYMENT_HASH)),
+            events.filterIsInstance<PaykitAllowanceEvent.PaidAutomatically>(),
         )
     }
 
