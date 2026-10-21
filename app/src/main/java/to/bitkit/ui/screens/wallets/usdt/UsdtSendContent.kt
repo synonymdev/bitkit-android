@@ -728,7 +728,7 @@ private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?, isMerchan
         SendCell(
             caption = stringResource(
                 if (isMerchantRequest) {
-                    R.string.wallet__payment_request_seller
+                    R.string.wallet__send_to
                 } else {
                     R.string.wallet__payment_request_contact
                 }

@@ -190,7 +190,7 @@ internal fun IncomingPaymentRequestDetailsContent(
             Caption13Up(
                 text = stringResource(
                     if (request.isMerchantRequest) {
-                        R.string.wallet__payment_request_seller
+                        R.string.wallet__send_to
                     } else {
                         R.string.wallet__payment_request_contact
                     }

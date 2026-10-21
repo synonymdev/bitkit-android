@@ -602,10 +602,10 @@ private fun OnChainDetails(
             }
             SendCell(
                 caption = stringResource(
-                    when {
-                        !uiState.isOneOffPaymentRequest -> R.string.wallet__send_to
-                        uiState.isMerchantPaymentRequest -> R.string.wallet__payment_request_seller
-                        else -> R.string.wallet__payment_request_contact
+                    if (uiState.isOneOffPaymentRequest && !uiState.isMerchantPaymentRequest) {
+                        R.string.wallet__payment_request_contact
+                    } else {
+                        R.string.wallet__send_to
                     }
                 ),
                 modifier = Modifier.weight(1f)
@@ -748,10 +748,10 @@ private fun LightningDetails(
             }
             SendCell(
                 caption = stringResource(
-                    when {
-                        !uiState.isOneOffPaymentRequest -> R.string.wallet__send_to
-                        uiState.isMerchantPaymentRequest -> R.string.wallet__payment_request_seller
-                        else -> R.string.wallet__payment_request_contact
+                    if (uiState.isOneOffPaymentRequest && !uiState.isMerchantPaymentRequest) {
+                        R.string.wallet__payment_request_contact
+                    } else {
+                        R.string.wallet__send_to
                     }
                 ),
                 modifier = Modifier.weight(1f)

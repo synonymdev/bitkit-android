@@ -342,7 +342,7 @@ class SendConfirmScreenTest {
     }
 
     @Test
-    fun merchantRequestLabelsThePayeeAsSeller() {
+    fun merchantRequestLabelsThePayeeAsTo() {
         val seller = PubkyProfile.placeholder("seller").copy(name = "Corner Shop")
         val state = mutableStateOf(
             SendUiState(
@@ -369,11 +369,11 @@ class SendConfirmScreenTest {
         }
 
         composeTestRule.onNodeWithTag("SendConfirmToggleDetails").performClick()
-        composeTestRule.onNodeWithText("Seller", ignoreCase = true).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("To", ignoreCase = true).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Contact", ignoreCase = true).assertDoesNotExist()
 
         composeTestRule.runOnIdle { state.value = state.value.copy(isMerchantPaymentRequest = false) }
         composeTestRule.onNodeWithText("Contact", ignoreCase = true).performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Seller", ignoreCase = true).assertDoesNotExist()
+        composeTestRule.onNodeWithText("To", ignoreCase = true).assertDoesNotExist()
     }
 }

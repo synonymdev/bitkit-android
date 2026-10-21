@@ -1554,7 +1554,6 @@
     <string name="wallet__payment_request_amount">Bedrag</string>
     <string name="wallet__payment_request_choose_recipient">Ontvanger kiezen</string>
     <string name="wallet__payment_request_contact">Contact</string>
-    <string name="wallet__payment_request_seller">Verkoper</string>
     <string name="wallet__payment_request_dismiss">Negeren</string>
     <string name="wallet__payment_request_enter_pubky">Voer pubky in</string>
     <string name="wallet__payment_request_expired">Het betaalverzoek is verlopen.</string>

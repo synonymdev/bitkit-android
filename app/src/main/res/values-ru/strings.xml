@@ -1115,7 +1115,6 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__payment_invoice_request_rejected">Получатель отклонил этот запрос счета Lightning.</string>
     <string name="wallet__payment_recipient_rejected">Получатель отклонил этот платеж Lightning. Проверьте счет и попробуйте снова.</string>
     <string name="wallet__payment_request_contact">Контакт</string>
-    <string name="wallet__payment_request_seller">Продавец</string>
     <string name="wallet__payment_request_date">Дата</string>
     <string name="wallet__payment_request_note">Заметка</string>
     <string name="wallet__payment_request_sent_title">Исходящие</string>

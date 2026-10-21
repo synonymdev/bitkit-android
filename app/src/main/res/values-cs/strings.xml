@@ -1083,7 +1083,6 @@
     <string name="wallet__payment_invoice_request_rejected">Příjemce tuto žádost o Lightning fakturu odmítl.</string>
     <string name="wallet__payment_recipient_rejected">Příjemce tuto Lightning platbu odmítl. Zkontrolujte fakturu a zkuste to znovu.</string>
     <string name="wallet__payment_request_contact">Kontakt</string>
-    <string name="wallet__payment_request_seller">Prodejce</string>
     <string name="wallet__payment_request_date">Datum</string>
     <string name="wallet__payment_request_note">Poznámka</string>
     <string name="wallet__payment_request_sent_title">Posláno</string>

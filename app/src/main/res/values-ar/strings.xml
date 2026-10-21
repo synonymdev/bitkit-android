@@ -1058,7 +1058,6 @@
     <string name="wallet__payment_invoice_request_rejected">رفض المستلم طلب فاتورة Lightning هذا.</string>
     <string name="wallet__payment_recipient_rejected">رفض المستلم دفعة Lightning هذه. تحقق من الفاتورة وحاول مرة أخرى.</string>
     <string name="wallet__payment_request_contact">جهة الاتصال</string>
-    <string name="wallet__payment_request_seller">البائع</string>
     <string name="wallet__payment_request_date">التاريخ</string>
     <string name="wallet__payment_request_note">ملاحظة</string>
     <string name="wallet__payment_request_sent_title">مُرسل</string>

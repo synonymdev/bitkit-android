@@ -1078,7 +1078,6 @@
     <string name="wallet__payment_invoice_request_rejected">El destinatari ha rebutjat aquesta sol·licitud de factura Lightning.</string>
     <string name="wallet__payment_recipient_rejected">El destinatari ha rebutjat aquest pagament Lightning. Comprova la factura i torna-ho a provar.</string>
     <string name="wallet__payment_request_contact">Contacte</string>
-    <string name="wallet__payment_request_seller">Venedor</string>
     <string name="wallet__payment_request_date">Data</string>
     <string name="wallet__payment_request_note">Nota</string>
     <string name="wallet__payment_request_sent_title">Enviat</string>
