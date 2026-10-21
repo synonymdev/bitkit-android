@@ -1317,20 +1317,26 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `refresh does not report a proposal the snapshot still keeps`() = test {
+    fun `refresh crossing expiry leaves the report to the expiry timer`() = test {
         val record = paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
         sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
         val reported = mutableListOf<List<PaykitPaymentRequest>>()
         backgroundScope.launch { sut.expiredProposals.collect { reported += it } }
         runCurrent()
 
-        clockJumpMillis = 5_000
+        // The clock passes expiry after the snapshot is parsed and before the pending list is replaced.
+        // Mockito answers with Result's unboxed value, as the compiled suspend call expects.
+        whenever(usdtPayments.verifiedReceipts(any())).thenAnswer {
+            clockJumpMillis = 10_000
+            emptyList<Any>()
+        }
         sut.refresh().getOrThrow()
         runCurrent()
 
-        assertEquals(1, sut.pendingRequests.value.size)
-        assertTrue(reported.isEmpty())
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(listOf(listOf(request.id)), reported.map { list -> list.map { it.id } })
     }
 
     @Test

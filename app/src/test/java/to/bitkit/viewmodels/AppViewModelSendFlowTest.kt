@@ -2754,11 +2754,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
         whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
         whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
             "The payment request has expired."
         )
         whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
-            Result.failure(PaykitPaymentRequestError.RequestExpired)
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList),
         )
         pendingPaykitPaymentRequests.value = listOf(request)
         enablePaykitUi()
@@ -2774,8 +2775,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = emptyList()
         expiredPaykitProposals.emit(listOf(request))
         runCurrent()
+        advanceTimeBy(2.seconds.inWholeMilliseconds)
+        runCurrent()
 
-        verify(toastManager, times(1)).enqueue(any())
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, atLeastOnce()).enqueue(toastCaptor.capture())
+        assertEquals(1, toastCaptor.allValues.count { it.testTag == "PaymentRequestExpiredToast" })
     }
 
     @Test
