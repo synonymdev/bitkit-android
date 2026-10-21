@@ -1495,6 +1495,23 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `payment check right after its own unstarted proof write keeps the request payable`() = test {
+        val record = paymentRequestRecord()
+        val requestId = PaykitPaymentRequestId(record.paymentRequestId, record.counterparty)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        runCurrent()
+        val request = sut.pendingRequests.value.single()
+        assertTrue(sut.isPending(request))
+
+        whenever(paymentProofStore.load()).thenReturn(listOf(onchainProof(requestId)))
+        proofStateVersion.value += 1
+
+        sut.syncPaymentProofs()
+        assertTrue(sut.isPending(request))
+    }
+
+    @Test
     fun `request with a started payment is not presented automatically before the next refresh`() = test {
         val record = paymentRequestRecord()
         val requestId = PaykitPaymentRequestId(record.paymentRequestId, record.counterparty)

@@ -377,6 +377,15 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
+    /**
+     * Reads the proof store when the snapshot lags it, so a payment check right after a proof write sees that write.
+     */
+    suspend fun syncPaymentProofs() {
+        val version = paymentProofStore.backupStateVersion.value
+        if (paymentProofSnapshot.value?.let { it.version == version && it.proofs != null } == true) return
+        withContext(ioDispatcher) { loadPaymentProofSnapshot(version) }
+    }
+
     // A failed read is retried on the next check, so a transient keychain error does not block requests until the
     // next proof write.
     private fun reloadUnreadablePaymentProofs(version: Long) {

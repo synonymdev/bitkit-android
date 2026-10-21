@@ -6199,6 +6199,7 @@ class AppViewModel @Inject constructor(
             rejectMismatchedPaymentRequest()
             return false
         }
+        if (incomingPaymentRequest != null) paykitPaymentRequestRepo.syncPaymentProofs()
         if (incomingPaymentRequest != null && !paykitPaymentRequestRepo.isPending(incomingPaymentRequest)) {
             toast(PaykitPaymentRequestError.RequestUnavailable)
             hideSheet()
