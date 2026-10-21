@@ -1069,6 +1069,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__send_details">Подробности</string>
     <string name="wallet__send_dialog1">Похоже, вы отправляете более 100$. Вы хотите продолжать?</string>
     <string name="wallet__send_dialog2">Похоже, вы отправляете более 50% от общего баланса. Вы хотите продолжать?</string>
+    <string name="wallet__send_dialog2_usdt" formatted="false">Похоже, вы отправляете более 50% вашего баланса USDT. Вы хотите продолжать?</string>
     <string name="wallet__send_dialog3">Комиссия за транзакцию составляет более 50% от суммы, которую вы отправляете. Вы хотите продолжать?</string>
     <string name="wallet__send_dialog4">Комиссия за транзакцию составляет более 10$. Вы хотите продолжать?</string>
     <string name="wallet__send_error_create_tx">Не удалось отправить транзакцию. Пожалуйста, попробуйте снова.</string>

@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -242,9 +243,12 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val usdtPayments = mock<PaykitUsdtPaymentRepo>()
     private val subscriptionNotificationScheduler = mock<PaykitSubscriptionNotificationScheduler>()
     private var schedulerOriginMillis = 0L
+
+    /** Wall-clock jump on top of scheduler time, as after a suspend, which no scheduled job sees. */
+    private var clockJumpMillis = 0L
     private val clock = object : Clock {
         override fun now(): Instant = START_TIME.plus(
-            (testDispatcher.scheduler.currentTime - schedulerOriginMillis).milliseconds,
+            (testDispatcher.scheduler.currentTime - schedulerOriginMillis + clockJumpMillis).milliseconds,
         )
     }
     private lateinit var sut: PaykitPaymentRequestRepo
@@ -1304,6 +1308,64 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             PaymentRequestLifecycleState.PROPOSAL_EXPIRED,
             sut.paymentRequestHistory.value.single().lifecycleState,
         )
+    }
+
+    @Test
+    fun `refresh after a clock jump past expiry reports the expired proposal`() = test {
+        val record = paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val reported = mutableListOf<List<PaykitPaymentRequest>>()
+        backgroundScope.launch { sut.expiredProposals.collect { reported += it } }
+        runCurrent()
+
+        clockJumpMillis = 10_000
+        sut.refresh().getOrThrow()
+        runCurrent()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(listOf(listOf(request.id)), reported.map { list -> list.map { it.id } })
+    }
+
+    @Test
+    fun `refresh crossing expiry leaves the report to the expiry timer`() = test {
+        val record = paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val reported = mutableListOf<List<PaykitPaymentRequest>>()
+        backgroundScope.launch { sut.expiredProposals.collect { reported += it } }
+        runCurrent()
+
+        // The clock passes expiry after the refresh reads its time and before the pending list is replaced.
+        // Mockito answers with Result's unboxed value, as the compiled suspend call expects.
+        whenever(usdtPayments.verifiedReceipts(any())).thenAnswer {
+            clockJumpMillis = 10_000
+            emptyList<Any>()
+        }
+        sut.refresh().getOrThrow()
+        runCurrent()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(listOf(listOf(request.id)), reported.map { list -> list.map { it.id } })
+    }
+
+    @Test
+    fun `expiry timer reports the incoming proposal that expired`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())),
+        )
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val reported = mutableListOf<List<PaykitPaymentRequest>>()
+        backgroundScope.launch { sut.expiredProposals.collect { reported += it } }
+        runCurrent()
+
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        assertEquals(listOf(listOf(request.id)), reported.map { list -> list.map { it.id } })
     }
 
     @Test

@@ -700,7 +700,12 @@ private fun OnChainDetails(
                         tint = Colors.Brand,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(stringResource(feeUi.rate.description))
+                    val confirmationRate = if (feeUi.rate == FeeRate.CUSTOM) {
+                        FeeRate.forConfirmation(uiState.speed, uiState.feeRates)
+                    } else {
+                        feeUi.rate
+                    }
+                    BodySSB(stringResource(confirmationRate.description))
                 }
             }
         }
