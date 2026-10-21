@@ -1747,7 +1747,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val subscriptionNow = subscriptionClock.now()
         val expiredProposals = _pendingRequests.value.filter {
             it.id != handledRequestId && it.direction == PaykitPaymentRequestDirection.Incoming &&
-                it.billingPeriod == null && !it.isPaymentInFlight && it.isProposalExpired(now)
+                it.billingPeriod == null && !it.isPaymentInFlight &&
+                it.lifecycleState == PaymentRequestLifecycleState.PROPOSED && it.isExpired(now)
         }
         _pendingRequests.update { requests -> requests.filterNot { it.isExpired(now) } }
         if (expiredProposals.isNotEmpty()) _expiredProposals.tryEmit(expiredProposals)
