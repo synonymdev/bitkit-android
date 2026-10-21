@@ -891,9 +891,12 @@ class PaykitAllowanceExecutor @Inject constructor(
 
 private fun PaykitPaymentRequest.scope() = PaymentRequestScope(counterparty, paymentRequestId)
 
-/** Allowances pay only bitcoin-denominated requests without a conversion; null for any other request. */
-internal fun PaykitPaymentRequest.allowanceSats(): ULong? =
-    amount.atomic.takeIf { amount.asset == PaykitAsset.BTC && pricing.conversion == null }
+/**
+ * Allowances pay only bitcoin-denominated requests; null for any other request. A conversion offered for other rails,
+ * such as USDT, does not change the bitcoin amount a Lightning payment sends. When it prices a bitcoin rail too, the
+ * SDK blocks the automatic payment and the request stays manual.
+ */
+internal fun PaykitPaymentRequest.allowanceSats(): ULong? = amount.atomic.takeIf { amount.asset == PaykitAsset.BTC }
 
 /** SDK rule codes for a request above an allowance's per-payment, period or lifetime limit. */
 private val CAPACITY_RULE_CODES = setOf(
