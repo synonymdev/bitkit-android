@@ -855,9 +855,10 @@ class PaykitAllowanceExecutor @Inject constructor(
         attemptId: String,
         identity: String,
     ) {
-        // Taken from the journal first, so a node failure event for the same payment cannot release it a second time.
-        takePaymentListVersion(attemptId, identity)
-        payer.releasePaymentList(request.counterparty, payment.context)
+        // Released only by whichever of this and the node's failure event takes the journaled version first.
+        if (takePaymentListVersion(attemptId, identity) != null) {
+            payer.releasePaymentList(request.counterparty, payment.context)
+        }
         record(attemptId, PaymentOutcome.FAILED, identity)
     }
 
