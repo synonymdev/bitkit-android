@@ -992,6 +992,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFalse(parse(paymentRequestRecord()).isMerchantRequest)
         assertTrue(parse(paymentRequestRecord().copy(proposalAppId = "paykit-server")).isMerchantRequest)
         assertFalse(parse(paymentRequestRecord().copy(proposalAppId = "marketplace")).isMerchantRequest)
+        val outgoing = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalAppId = "paykit-server")
+        assertFalse(requireNotNull(outgoing.toPaykitPaymentRequestHistory(START_TIME)).isMerchantRequest)
     }
 
     @Test

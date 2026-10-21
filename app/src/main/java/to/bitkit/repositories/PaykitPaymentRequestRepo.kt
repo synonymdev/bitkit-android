@@ -103,7 +103,7 @@ data class PaykitPaymentRequest(
     val paymentDeadlineAt: Instant? = null,
     val isPaymentInFlight: Boolean = false,
     val proposalStreamItemId: ULong? = null,
-    /** Created by a Paykit server for a merchant, such as a Pubky Market order, not by a person's wallet. */
+    /** An incoming request a Paykit server created for a merchant, such as a Pubky Market order. */
     val isMerchantRequest: Boolean = false,
 ) {
     val amountValue: String get() = amount.value
@@ -2013,7 +2013,7 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
     paymentProofKind = paymentProofs.lastOrNull()?.let {
         PaykitPaymentProofKind.fromPaymentEndpointIdentifier(it.paymentEndpointIdentifier)
     },
-    isMerchantRequest = proposalAppId == PAYKIT_SERVER_APP_ID,
+    isMerchantRequest = expectedRole == PaymentRequestLocalRole.PAYER && proposalAppId == PAYKIT_SERVER_APP_ID,
 )
 
 /** The app id a Paykit server stamps on requests it creates for merchants. */
