@@ -105,7 +105,7 @@ class UsdtPaymentContentTest {
     }
 
     @Test
-    fun walletShowsZeroSilentlyUntilBalanceArrivesAndKeepsBalancePrivacy() {
+    fun walletDistinguishesUnknownAndConfirmedBalancesSilentlyAndKeepsPrivacy() {
         Locale.setDefault(Locale.GERMANY)
         val wallet = mutableStateOf(UsdtWalletState())
         val hidden = mutableStateOf(false)
@@ -118,8 +118,12 @@ class UsdtPaymentContentTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText("0.00").assertIsDisplayed()
+        composeTestRule.onNodeWithText("—").assertIsDisplayed()
+        composeTestRule.onNodeWithText("0.00").assertDoesNotExist()
         composeTestRule.onNodeWithTag("UsdtHistorySync").assertDoesNotExist()
+        composeTestRule.runOnIdle { wallet.value = wallet.value.copy(balance = 0uL) }
+        composeTestRule.onNodeWithText("0.00").assertIsDisplayed()
+        composeTestRule.onNodeWithText("—").assertDoesNotExist()
         composeTestRule.runOnIdle { wallet.value = wallet.value.copy(balance = 1_234_567_890uL) }
         composeTestRule.onNodeWithText("1,234.57").assertIsDisplayed()
         composeTestRule.runOnIdle { hidden.value = true }

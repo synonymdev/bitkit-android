@@ -103,7 +103,7 @@ fun RowScope.UsdtWalletBalance(onClick: () -> Unit, viewModel: UsdtViewModel = h
             if (settings.hideBalance) {
                 UiConstants.HIDE_BALANCE_SHORT
             } else {
-                "$ " + usdtOverviewAmount(wallet.balance ?: 0u)
+                wallet.balance?.let { "$ " + usdtOverviewAmount(it) } ?: "—"
             },
             style = UsdtDetailStyles.HistoryTitle
         )
@@ -342,8 +342,8 @@ internal fun UsdtWalletContent(
                 item {
                     VerticalSpacer(16.dp)
                     UsdtAmountHeader(
-                        amount = usdtFormatAmount(wallet.balance ?: 0u),
-                        displayAmount = usdtOverviewAmount(wallet.balance ?: 0u),
+                        amount = wallet.balance?.let { usdtFormatAmount(it) } ?: "—",
+                        displayAmount = wallet.balance?.let { usdtOverviewAmount(it) },
                         hideBalance = hideBalance,
                         onToggleHide = if (allowSwipe) ({ settings?.setHideBalance(!hideBalance) }) else null,
                         modifier = Modifier.testTag("UsdtBalance")

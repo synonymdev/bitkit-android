@@ -31,6 +31,7 @@ class UsdtDisplayTest {
         assertEquals(0L, usdtDisplaySats("0.000001", rate, now))
         assertNull(usdtDisplaySats("3.5", null, now))
         assertNull(usdtDisplaySats("3.5", rate.copy(timestampMillis = now - 601_000), now))
+        assertNull(usdtDisplaySats("—", rate, now))
         assertNull(usdtDisplaySats("-1", rate, now))
         assertNull(usdtDisplaySats("999999999999999999999999", rate, now))
     }

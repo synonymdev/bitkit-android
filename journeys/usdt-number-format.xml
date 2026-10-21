@@ -1,12 +1,12 @@
 <journey name="usdt number format">
-  <description>Use an onboarded unfunded test wallet with USDT enabled. Set the system region to Germany or the Netherlands, keep the app language English, and restart the app. Use the same region on both platforms. No payment is submitted; a configured offline USDT provider is sufficient for empty balances and amount entry.</description>
+  <description>Use an onboarded unfunded test wallet with USDT enabled. Set the system region to Germany or the Netherlands, keep the app language English, and restart the app. Use the same region on both platforms. No payment is submitted; a configured offline USDT provider is sufficient for unknown balances and amount entry. Confirmed empty-balance checks require a successful read from an owned local test provider.</description>
   <actions>
-    <action>Set the wallet display unit to dollars. On Home, verify Savings, Spending and USDT all use a dot decimal separator, and the USDT tile shows $ 0.00 for an empty wallet.</action>
-    <action>Open USDT. Verify the balance shows $ 0.00, no refresh-error or history-sync copy appears underneath, and Send and Receive remain available.</action>
+    <action>Set the wallet display unit to dollars. On Home with the provider offline after relaunch, verify the USDT tile shows — rather than zero. After a successful balance read, verify a confirmed empty wallet shows $ 0.00 and loaded USDT balances use the same dot decimal separator as Savings and Spending.</action>
+    <action>Open USDT. Verify an unknown balance shows $ — and a confirmed empty balance shows $ 0.00. No refresh-error or history-sync copy appears underneath, and Send and Receive remain available.</action>
     <action>Return Home and hide balances. Verify the USDT tile is masked. Open USDT and verify its balance is masked. Restore visible balances.</action>
     <action>Open Receive, then Edit amount. Verify the decimal key is a dot. Enter 3.50 and verify the entered amount retains its trailing zero. Continue and verify the QR payment URI encodes 3500000 atomic units (uint256=3500000).</action>
     <action>Open Show Details and verify the receiving address matches the QR recipient. Return to the QR and edit the amount to 0.000001. Verify all six decimals remain visible while editing and the QR payment URI encodes one atomic unit (uint256=1).</action>
     <action>Return Home. Open Send, Enter Manually, and enter 0x1111111111111111111111111111111111111111. Continue to the USDT amount screen. Verify its decimal key is a dot and entering 1.25 displays $ 1.25. Close without submitting.</action>
-    <action>Repeat the empty balance and amount-entry checks with the system region set to United States. Verify the separators and exact entered values match.</action>
+    <action>Repeat the unknown and confirmed empty-balance and amount-entry checks with the system region set to United States. Verify the separators and exact entered values match.</action>
   </actions>
 </journey>
