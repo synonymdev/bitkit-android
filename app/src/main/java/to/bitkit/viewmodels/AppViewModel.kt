@@ -184,7 +184,6 @@ import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestCreation
 import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
-import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
@@ -506,6 +505,7 @@ class AppViewModel @Inject constructor(
     private var paykitAmountConversion = PaykitAmountConversion()
     private val pendingContactPaymentContexts = mutableMapOf<String, ContactPaymentContext>()
     private val _requestedPaymentRequestId = MutableStateFlow<PaykitPaymentRequestId?>(null)
+    private val expiredFeedbackRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     val requestedPaymentRequestId = _requestedPaymentRequestId.asStateFlow()
     private val paymentRequestPreparation = MutableStateFlow<PaymentRequestPreparation?>(null)
     private val dismissedPreparingRequestIds = mutableSetOf<PaykitPaymentRequestId>()
@@ -1375,21 +1375,15 @@ class AppViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            var previous = paykitPaymentRequestRepo.pendingRequests.value
-            paykitPaymentRequestRepo.pendingRequests.drop(1).collect { requests ->
-                onPendingPaykitRequestsChanged(requests, previous)
-                previous = requests
-            }
+            paykitPaymentRequestRepo.pendingRequests.drop(1).collect(::onPendingPaykitRequestsChanged)
+        }
+        viewModelScope.launch {
+            paykitPaymentRequestRepo.expiredProposals.collect(::toastExpiredPaymentRequests)
         }
     }
 
-    private suspend fun onPendingPaykitRequestsChanged(
-        requests: List<PaykitPaymentRequest>,
-        previous: List<PaykitPaymentRequest>,
-    ) {
-        val requestedId = requestedPaymentRequestId.value
+    private suspend fun onPendingPaykitRequestsChanged(requests: List<PaykitPaymentRequest>) {
         retainPaymentRequestPresentationState(requests)
-        toastSilentlyExpiredPaymentRequests(requests, previous, requestedId)
         val activeRequest = activeIncomingPaymentRequest()
         val isProtected = isSubmittingPaymentRequest || uncertainOnchainPaymentRequestId == activeRequest?.id ||
             isPreparedContactPayment(synchronized(contactPaymentContextLock) { activeContactPaymentContext })
@@ -1806,20 +1800,11 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    /** Tells the user when a pending incoming request expires on its own; the one they opened has its own toast. */
-    private fun toastSilentlyExpiredPaymentRequests(
-        requests: List<PaykitPaymentRequest>,
-        previous: List<PaykitPaymentRequest>,
-        requestedId: PaykitPaymentRequestId?,
-    ) {
-        if (!isPaykitEnabled.value) return
-        val remainingIds = requests.mapTo(mutableSetOf()) { it.id }
-        val expired = previous.filter {
-            it.id !in remainingIds && it.id != requestedId &&
-                it.direction == PaykitPaymentRequestDirection.Incoming && it.billingPeriod == null &&
-                !it.isPaymentInFlight && paykitPaymentRequestRepo.isExpired(it)
-        }
-        if (expired.isEmpty()) return
+    /** Tells the user when a pending incoming request expires unopened; an opened one has its own toast. */
+    private fun toastExpiredPaymentRequests(expired: List<PaykitPaymentRequest>) {
+        if (!isPaykitEnabled.value || paykitPaymentRequestRepo.isPaymentSubmissionActive.value) return
+        val requestedId = requestedPaymentRequestId.value
+        if (expired.none { it.id != requestedId && it.id !in expiredFeedbackRequestIds }) return
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.wallet__payment_request),
@@ -1843,6 +1828,7 @@ class AppViewModel @Inject constructor(
         }
         clearPaymentRequestPresentationRetry(request.id)
         if (!showExpiredToast) return
+        expiredFeedbackRequestIds += request.id
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.wallet__payment_request),

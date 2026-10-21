@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -1292,6 +1293,23 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             PaymentRequestLifecycleState.PROPOSAL_EXPIRED,
             sut.paymentRequestHistory.value.single().lifecycleState,
         )
+    }
+
+    @Test
+    fun `expiry timer reports the incoming proposal that expired`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())),
+        )
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val reported = mutableListOf<List<PaykitPaymentRequest>>()
+        backgroundScope.launch { sut.expiredProposals.collect { reported += it } }
+        runCurrent()
+
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        assertEquals(listOf(listOf(request.id)), reported.map { list -> list.map { it.id } })
     }
 
     @Test

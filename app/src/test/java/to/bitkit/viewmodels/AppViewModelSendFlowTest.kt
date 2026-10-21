@@ -315,6 +315,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val pubkyContactsLoadCompletionVersion = MutableStateFlow(0L)
     private val pubkyContactImportFailure = MutableStateFlow<Throwable?>(null)
     private val pendingPaykitPaymentRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
+    private val expiredPaykitProposals = MutableSharedFlow<List<PaykitPaymentRequest>>(extraBufferCapacity = 8)
     private val paykitPaymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
     private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
@@ -667,6 +668,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             runCatching { beforeSend() }
         }
         whenever(paykitPaymentRequestRepo.pendingRequests).thenReturn(pendingPaykitPaymentRequests)
+        whenever(paykitPaymentRequestRepo.expiredProposals).thenReturn(expiredPaykitProposals)
         whenever(paykitPaymentRequestRepo.paymentRequestHistory).thenReturn(paykitPaymentRequestHistory)
         whenever(paykitPaymentRequestRepo.subscriptions).thenReturn(paykitSubscriptions)
         whenever(paykitPaymentRequestRepo.automaticSubscriptionProposals()).thenReturn(emptyList())
@@ -2677,8 +2679,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         clearInvocations(toastManager)
 
-        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
         pendingPaykitPaymentRequests.value = emptyList()
+        expiredPaykitProposals.emit(listOf(request))
         runCurrent()
 
         val toastCaptor = argumentCaptor<Toast>()
@@ -2697,8 +2699,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         clearInvocations(toastManager)
 
-        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(false)
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
         pendingPaykitPaymentRequests.value = emptyList()
+        runCurrent()
+
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `expired proposal is not reported while a payment is being submitted`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        paymentSubmissionActive.value = true
+        expiredPaykitProposals.emit(listOf(request))
         runCurrent()
 
         verify(toastManager, never()).enqueue(any())
