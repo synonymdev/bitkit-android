@@ -109,9 +109,10 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
     UsdtRefreshEffect(viewModel, receiving = true, onReceived = { !state.busy })
     BackHandler(onBack = back)
     AnimatedContent(
-        targetState = page,
+        targetState = ShownPage(page, state, if (page == ReceivePage.AMOUNT) draftAmount else amount),
+        contentKey = { it.page },
         transitionSpec = {
-            if (targetState > initialState) {
+            if (targetState.page > initialState.page) {
                 Transitions.defaultEnter togetherWith Transitions.defaultExit
             } else {
                 ContentTransform(Transitions.defaultPopEnter, Transitions.defaultPopExit, targetContentZIndex = -1f)
@@ -119,7 +120,8 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
         },
         label = "UsdtReceivePage",
         modifier = Modifier.weight(1f)
-    ) { target ->
+    ) { shown ->
+        val target = shown.page
         Column(modifier = Modifier.fillMaxSize().background(Colors.Gray7).padding(horizontal = 16.dp)) {
             SheetTopBar(
                 titleText = stringResource(
@@ -175,8 +177,8 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                     onPage = { page = it },
                     wallet = wallet,
                     receiveError = walletUi.refreshError,
-                    state = state,
-                    amount = if (target == ReceivePage.AMOUNT) draftAmount else amount,
+                    state = shown.state,
+                    amount = shown.amount,
                     onNetwork = {
                         if (state.network != it) {
                             amount = ""
@@ -239,8 +241,7 @@ internal fun ColumnScope.UsdtDepositReceiveContent(
             onCreate
         )
         ReceivePage.FEES -> {
-            val shownAddress = remember { state.address }
-            FeeEstimate(state.address ?: shownAddress, onContinue = { onPage(ReceivePage.ADDRESS) })
+            FeeEstimate(state.address, onContinue = { onPage(ReceivePage.ADDRESS) })
         }
         ReceivePage.ADDRESS -> {
             val atomic = runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, amount).atomic }.getOrNull()
@@ -285,6 +286,8 @@ private fun ColumnScope.FeeEstimate(address: UsdtDepositAddress?, onContinue: ()
 }
 
 internal enum class ReceivePage { ADDRESS, NETWORKS, AMOUNT, FEES }
+
+private data class ShownPage(val page: ReceivePage, val state: DepositUiState, val amount: String)
 
 @Composable
 private fun ColumnScope.NetworkSelector(
