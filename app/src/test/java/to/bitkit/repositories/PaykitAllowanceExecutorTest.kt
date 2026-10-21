@@ -594,6 +594,20 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment list the node's failure event gave back during the send is not given back again`() = test {
+        sut.activate(identity)
+        whenever(payer.payLightning(any(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+            Result.failure(TestAllowanceError("send"))
+        }
+        whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
+
+        sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        verify(payer, times(1)).releasePaymentList(any(), any())
+    }
+
+    @Test
     fun `payee offering only an on-chain endpoint stays manual before any acceptance`() = test {
         whenever(payer.resolve(any(), any())).thenReturn(Result.success(onchainPayment()))
 
