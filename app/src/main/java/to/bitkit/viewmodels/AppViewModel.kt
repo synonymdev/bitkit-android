@@ -1803,7 +1803,10 @@ class AppViewModel @Inject constructor(
     private fun toastExpiredPaymentRequests(expired: List<PaykitPaymentRequest>) {
         if (!isPaykitEnabled.value) return
         val requestedId = requestedPaymentRequestId.value
-        if (expired.none { it.id != requestedId && it.id !in expiredFeedbackRequestIds }) return
+        val newlyExpired = expired.filter { it.id != requestedId && it.id !in expiredFeedbackRequestIds }
+        if (newlyExpired.isEmpty()) return
+        // A refresh that started before the expiry can restore a request, so toast each one once.
+        expiredFeedbackRequestIds += newlyExpired.map { it.id }
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.wallet__payment_request),

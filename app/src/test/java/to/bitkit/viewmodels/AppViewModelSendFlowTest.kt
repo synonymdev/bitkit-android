@@ -2729,6 +2729,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `request reported expired twice shows one expired toast`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        expiredPaykitProposals.emit(listOf(request))
+        runCurrent()
+        expiredPaykitProposals.emit(listOf(request))
+        runCurrent()
+
+        verify(toastManager, times(1)).enqueue(any())
+    }
+
+    @Test
     fun `opened request reported by both expiry signals shows one expired toast`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
