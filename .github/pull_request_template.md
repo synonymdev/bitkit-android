@@ -7,7 +7,7 @@ Twin = same Android/iOS change; Companion = coordinated non-prerequisite work (e
 <!-- Changelog: For user-facing changes, add one fragment in changelog.d/next/ or changelog.d/hotfix/. Do not edit CHANGELOG.md in normal PRs. -->
 <!-- Brief summary of the PR changes, linking to the related resources (issue/design/bug/etc) if applicable. -->
 
-<!-- Keep in draft during development/fixes; mark ready only after applicable validation. Prefer returning to draft while addressing review feedback. Draft-aware reviewers skip drafts; automation must honor this separately. -->
+<!-- Open work-in-progress PRs as drafts; mark ready only after applicable validation. Do not cycle draft/ready just to suppress reviews: marking ready again can trigger another review even when ordinary pushes would not. Check configured triggers; return to draft when no longer review-ready or explicitly requested. Draft-aware reviewers skip drafts; automation must honor this separately. -->
 
 ### Description
 

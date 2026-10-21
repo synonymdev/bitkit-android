@@ -69,11 +69,13 @@ documentation checks and a justified runtime `N/A`.
 
 ### Draft status and review readiness
 
-Keep PRs in draft while development or fixes are ongoing. Mark ready for review only when the
-change is ready after applicable verification; draft status does not waive the checks above.
-Prefer returning a PR to draft while addressing review feedback, before pushing intermediate
-commits, to reduce unnecessary automated reviews. Preserve an explicit request to keep a PR draft;
-a description update alone must not undraft it.
+Open work-in-progress PRs as drafts. Mark ready for review only when the change is ready after
+applicable verification; draft status does not waive the checks above. For an already-ready PR,
+do not cycle draft/ready merely to suppress automated reviews while addressing feedback. Returning
+to ready can trigger an additional review even when an ordinary push to a ready PR would not;
+check the configured review triggers. Return to draft when the change is no longer ready for review
+or the user requests it. Preserve an explicit request to keep a PR draft; a description update
+alone must not undraft it.
 
 AI PR reviewers should check the current draft status before starting and before publishing a
 review, skip drafts, and wait until ready for review. This does not prevent author-requested local

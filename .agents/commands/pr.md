@@ -308,9 +308,11 @@ Only include if the PR template (`.github/pull_request_template.md`) contains a 
 
 ### 6b. Verification and review
 
-Keep development/fix PRs in draft; publish a non-draft PR only when ready for review after
-applicable validation. Prefer returning an existing PR to draft while addressing review feedback
-before intermediate pushes. Follow `AGENTS.md`'s Draft status and review readiness guidance;
+Open work-in-progress PRs as drafts; publish a non-draft PR only when ready for review after
+applicable validation. Do not cycle an already-ready PR through draft merely to suppress automated
+reviews during feedback fixes: returning to ready can trigger another review even when ordinary
+pushes would not. Check configured triggers, and return to draft when the change is no longer
+review-ready or the user requests it. Follow `AGENTS.md`'s Draft status and review readiness guidance;
 draft status cannot guarantee that all automation skips the PR. Keep explicitly requested drafts
 as drafts and do not undraft as a side effect of description updates.
 
