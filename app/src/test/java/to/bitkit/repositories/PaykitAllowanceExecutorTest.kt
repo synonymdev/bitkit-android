@@ -672,6 +672,23 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovery gives the payment list back when it fails an automatic attempt`() = test {
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("consumed", PaymentExecutionStatus.SUBMITTED)),
+        )
+        seedJournal(journalEntry("consumed", request, Stage.SUBMITTED).copy(paymentListVersion = 4uL))
+
+        sut.recover(identity)
+
+        assertEquals(listOf(PaymentOutcomeReport("consumed", PaymentOutcome.FAILED)), recordedOutcomes)
+        verify(payer).releasePaymentList(
+            eq(request.counterparty),
+            eq(PrivatePaykitPaymentContext(emptyMap(), paymentListVersion = 4uL)),
+        )
+    }
+
+    @Test
     fun `local capacity check flags only requests that fit no allowance`() = test {
         collectEvents()
         accountingState = stateNearTheMonthlyCap()

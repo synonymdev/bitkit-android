@@ -280,6 +280,8 @@ class PaykitAllowanceExecutor @Inject constructor(
                         outcome?.let { record(attempt.attemptId, it, identity) }
                         // A payment that settled while the app was closed still links its contact and notifies.
                         if (outcome == PaymentOutcome.SUCCEEDED && entry != null) emitRecoveredPayment(entry)
+                        // One that paid nothing gives the payee's list back, as a live failure does.
+                        if (outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) releasePaymentList(entry)
                     }
                     PaymentExecutionStatus.SUCCEEDED, PaymentExecutionStatus.FAILED -> Unit
                 }
