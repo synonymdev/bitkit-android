@@ -334,7 +334,8 @@ class PaykitAllowanceRepo @Inject constructor(
         val covered = requests.filter {
             it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature
         }
-        if (covered.isEmpty() || !canPayNow()) return@withContext false
+        if (covered.isEmpty()) return@withContext false
+        if (!canPayNow()) return@withContext markAboveLimitManual(covered, identity, signature)
         if (!isProcessingRequests.compareAndSet(false, true)) return@withContext false
 
         try {
@@ -362,6 +363,21 @@ class PaykitAllowanceRepo @Inject constructor(
     private fun canPayNow(): Boolean {
         val state = lightningRepo.lightningState.value
         return state.nodeLifecycleState.isRunning() && (state.channels.isEmpty() || state.channels.any { it.isUsable })
+    }
+
+    /** While the node cannot pay, a request that fits no allowance must not wait for channels: it asks at once. */
+    private suspend fun markAboveLimitManual(
+        covered: List<PaykitPaymentRequest>,
+        identity: String,
+        signature: Int,
+    ): Boolean {
+        var markedAny = false
+        for (request in covered) {
+            if (!executor.classifyAboveLimit(request, _allowances.value, identity)) continue
+            manualRequestSignatures[request.id] = signature
+            markedAny = true
+        }
+        return markedAny
     }
 
     /** Request ids paid automatically, for the "Auto-paid" tag in payment history. */
@@ -423,14 +439,8 @@ class PaykitAllowanceRepo @Inject constructor(
         executor.finishManualPayment(attemptId, outcome, transactionId)
     }
 
-    /** The repository already settles from the node's payment events; extra calls for the same hash are no-ops. */
-    suspend fun lightningPaymentSettled(paymentHash: String, succeeded: Boolean) =
-        executor.lightningPaymentSettled(paymentHash, succeeded)
-
-    suspend fun recover() {
-        val identity = activeIdentity ?: return
-        executor.recover(identity)
-    }
+    /** Whether [paymentHash] is an automatic Allowance payment, which no foreground send flow owns. */
+    fun isAutomaticPayment(paymentHash: String): Boolean = executor.isAutomaticPayment(paymentHash)
 
     private suspend fun onNodeEvent(event: Event) {
         when (event) {

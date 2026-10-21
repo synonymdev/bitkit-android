@@ -48,6 +48,9 @@ data class PaykitAllowanceLocalState(
         val transactionId: String? = null,
         val stage: Stage,
         val createdAtMillis: Long,
+        /** The payee's private payment list this attempt consumed, given back if the payment fails. */
+        val paymentListVersion: ULong? = null,
+        val previousPaymentListVersion: ULong? = null,
     )
 
     /** Allowance ids are unique per contact only, so a group matches on its contact as well. */

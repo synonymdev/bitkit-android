@@ -1188,7 +1188,14 @@ class AppViewModel @Inject constructor(
     private suspend fun processAllowanceRequests(): Boolean {
         val finishSubmission = beginPaymentSubmission()
         return try {
-            paykitAllowanceRepo.processIncomingRequests(paykitPaymentRequestRepo.pendingRequests.value)
+            // A request whose manual sheet is open or being prepared is the user's to pay, never the allowance's.
+            val manualIds = setOfNotNull(
+                paymentRequestPreparation.value?.request?.id,
+                activeContactPaymentContext?.incomingPaymentRequest?.id,
+            )
+            paykitAllowanceRepo.processIncomingRequests(
+                paykitPaymentRequestRepo.pendingRequests.value.filterNot { it.id in manualIds },
+            )
         } finally {
             finishSubmission()
         }
@@ -1535,9 +1542,10 @@ class AppViewModel @Inject constructor(
                 return
             }
         }
-        val requests = paymentRequestsForPresentation(preparation)
-            ?.filterNot { paykitAllowanceRepo.isAutomaticallyHandling(it) }
-            ?.takeIf { it.isNotEmpty() }
+        val candidates = paymentRequestsForPresentation(preparation) ?: return
+        if (finishRequestedAutomaticPayment(candidates)) return
+        val requests = candidates.filterNot { paykitAllowanceRepo.isAutomaticallyHandling(it) }
+            .takeIf { it.isNotEmpty() }
             ?: return
         val generation = paymentRequestPresentationGeneration
         isPresentingPaymentRequest = true
@@ -1558,10 +1566,25 @@ class AppViewModel @Inject constructor(
         if (isPaymentRequestPresentationBlocked()) return
         if (
             stopped && generation != paymentRequestPresentationGeneration ||
-            paymentRequestsForPresentation()?.any { next -> requests.none { it.id == next.id } } == true
+            paymentRequestsForPresentation()
+                ?.filterNot { paykitAllowanceRepo.isAutomaticallyHandling(it) }
+                ?.any { next -> requests.none { it.id == next.id } } == true
         ) {
             presentNextIncomingPaykitPaymentRequest()
         }
+    }
+
+    /** A request the user opened while an allowance pays it is released, so it never holds other requests back. */
+    private suspend fun finishRequestedAutomaticPayment(candidates: List<PaykitPaymentRequest>): Boolean {
+        val requestedId = requestedPaymentRequestId.value ?: return false
+        val request = candidates.singleOrNull { it.id == requestedId } ?: return false
+        if (!paykitAllowanceRepo.isAutomaticallyHandling(request)) return false
+        clearRequestedPaymentRequest()
+        toast(
+            type = Toast.ToastType.INFO,
+            title = context.getString(R.string.subscriptions__allowance_payment_in_progress),
+        )
+        return true
     }
 
     private fun paymentRequestsForPresentation(preparation: PaymentRequestPreparation?): List<PaykitPaymentRequest>? =
@@ -2558,6 +2581,8 @@ class AppViewModel @Inject constructor(
                 refreshIncomingPaykitPaymentRequests()
             }
             refreshPaymentActivity(paymentHash)
+            // A failed automatic Allowance payment falls back to the request's manual flow without a send error.
+            if (paykitAllowanceRepo.isAutomaticPayment(paymentHash)) return
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
@@ -2653,6 +2678,8 @@ class AppViewModel @Inject constructor(
             feePaidMsat = event.feePaidMsat,
         ).wasQuickPay
         refreshPaymentActivity(paymentHash)
+        // An automatic Allowance payment settles headlessly; the allowance repo posts its notice and contact tag.
+        if (paykitAllowanceRepo.isAutomaticPayment(paymentHash)) return
         if (!pendingPaymentRepo.isPending(paymentHash)) {
             notifyPaymentSentOnLightning(event)
             return
