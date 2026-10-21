@@ -214,12 +214,15 @@ class PaykitAllowanceExecutor @Inject constructor(
         return PaykitAllowanceTime.format(Instant.fromEpochMilliseconds(millis))
     }
 
-    /** Whether [paymentHash] is an automatic Allowance payment, so no foreground send flow should claim it. */
+    /**
+     * Whether [paymentHash] is an automatic Allowance payment, so no foreground send flow should claim it. The newest
+     * entry for the hash decides: a manual retry of a failed automatic invoice is journaled later and is the user's.
+     */
     fun isAutomaticPayment(paymentHash: String): Boolean {
         val identity = activeIdentity ?: return false
-        return localState(
-            identity
-        ).journal.any { it.isAutomatic && it.paymentHash.equals(paymentHash, ignoreCase = true) }
+        return localState(identity).journal
+            .lastOrNull { it.paymentHash.equals(paymentHash, ignoreCase = true) }
+            ?.isAutomatic == true
     }
 
     fun succeededAutomaticPayments(identity: String): List<JournalEntry> =

@@ -628,6 +628,18 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a later manual retry of the same invoice is not an automatic payment`() = test {
+        sut.activate(identity)
+        val request = fixtures.paymentRequest()
+        seedJournal(
+            journalEntry("automatic", request, Stage.FAILED, paymentHash = PAYMENT_HASH),
+            journalEntry("manual", request, Stage.SENT, paymentHash = PAYMENT_HASH).copy(isAutomatic = false),
+        )
+
+        assertFalse(sut.isAutomaticPayment(PAYMENT_HASH))
+    }
+
+    @Test
     fun `automatic attempts journal the payment list they consume`() = test {
         sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
