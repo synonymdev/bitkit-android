@@ -210,7 +210,7 @@ internal fun PaymentRequestAmountContent(
                     )
                 }
                 VerticalSpacer(16.dp)
-                PaymentRequestAssetSelector(
+                PaymentRequestDenominationToggle(
                     asset = asset,
                     amount = entered,
                     allowedAssets = allowedAssets,
@@ -282,7 +282,7 @@ internal fun PaymentRequestAmountContent(
 private const val MAX_USD_INPUT_LENGTH = 18
 
 @Composable
-private fun PaymentRequestAssetSelector(
+private fun PaymentRequestDenominationToggle(
     asset: PaykitAsset,
     amount: PaykitAmount?,
     onConverted: (PaykitAmount) -> Unit,
@@ -291,28 +291,26 @@ private fun PaymentRequestAssetSelector(
     conversion: PaykitAmountConversion,
 ) {
     val currencies = LocalCurrencies.current
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        allowedAssets.forEach { option ->
-            NumberPadActionButton(
-                text = option.code.uppercase(),
-                outlined = asset != option,
-                color = if (option == PaykitAsset.BTC) Colors.Brand else Colors.Usdt,
-                modifier = Modifier.testTag("PaymentRequestAsset${option.name}"),
-                onClick = {
-                    if (option != asset) {
-                        runCatching {
-                            conversion.convert(
-                                amount,
-                                option,
-                                currencies.paykitRate,
-                                Clock.System.now().toEpochMilliseconds()
-                            )
-                        }.onSuccess(onConverted).onFailure { onUnavailable() }
-                    }
-                },
-            )
-        }
-    }
+    val nextAsset = allowedAssets.firstOrNull { it != asset }
+    NumberPadActionButton(
+        text = asset.code.uppercase(),
+        icon = if (nextAsset != null) R.drawable.ic_transfer else null,
+        color = Colors.Brand,
+        clickable = nextAsset != null,
+        onClick = {
+            if (nextAsset != null) {
+                runCatching {
+                    conversion.convert(
+                        amount,
+                        nextAsset,
+                        currencies.paykitRate,
+                        Clock.System.now().toEpochMilliseconds()
+                    )
+                }.onSuccess(onConverted).onFailure { onUnavailable() }
+            }
+        },
+        modifier = Modifier.testTag("PaymentRequestDenominationToggle")
+    )
 }
 
 @Composable
