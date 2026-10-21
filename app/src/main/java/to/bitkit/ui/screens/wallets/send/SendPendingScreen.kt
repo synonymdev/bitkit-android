@@ -19,7 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.filterNotNull
@@ -50,7 +50,10 @@ import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
@@ -247,34 +250,29 @@ private fun RecoveryAuthorization(
         if (viewModel.openRecoveryPin()) onNavigateToPin()
     }
     when (val approval = uiState.recoveryApproval) {
-        is RecoveryApproval.Fee -> AlertDialog(
-            onDismissRequest = { viewModel.answerRecoveryApproval(false) },
-            title = { BodyM(stringResource(R.string.wallet__send_pending__retry_title)) },
-            text = {
-                Column {
-                    SelectionContainer { BodyM(approval.receipt.address, color = Colors.White64) }
-                    BalanceHeaderView(sats = approval.receipt.amountSats.toLong())
-                    VerticalSpacer(16.dp)
-                    BodyM(
-                        stringResource(R.string.wallet__send_fee_total)
-                            .replace("{feeSats}", requireNotNull(approval.receipt.miningFeeSats).toString())
-                    )
-                    BodyM("${approval.receipt.feeRateSatsPerVByte} " + stringResource(R.string.common__sat_vbyte))
-                }
-            },
-            confirmButton = {
-                PrimaryButton(
-                    text = stringResource(R.string.wallet__send_pending__retry_authorize),
-                    onClick = { viewModel.answerRecoveryApproval(true) }
+        is RecoveryApproval.Fee -> AppAlertDialog(
+            title = stringResource(R.string.wallet__send_pending__retry_title),
+            confirmText = stringResource(R.string.wallet__send_pending__retry_authorize),
+            dismissText = stringResource(R.string.common__cancel),
+            onConfirm = { viewModel.answerRecoveryApproval(true) },
+            onDismiss = { viewModel.answerRecoveryApproval(false) },
+            properties = DialogProperties(),
+        ) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                RecoveryRecipient(approval.receipt.address, approval.receipt.amountSats.toLong())
+                VerticalSpacer(16.dp)
+                Caption13Up(stringResource(R.string.wallet__send_fee_and_speed), color = Colors.White64)
+                VerticalSpacer(8.dp)
+                BodySSB(
+                    stringResource(R.string.wallet__send_fee_total)
+                        .replace("{feeSats}", requireNotNull(approval.receipt.miningFeeSats).toString())
                 )
-            },
-            dismissButton = {
-                SecondaryButton(
-                    text = stringResource(R.string.common__cancel),
-                    onClick = { viewModel.answerRecoveryApproval(false) }
+                BodyM(
+                    "${approval.receipt.feeRateSatsPerVByte} " + stringResource(R.string.common__sat_vbyte),
+                    color = Colors.White64,
                 )
-            },
-        )
+            }
+        }
         is RecoveryApproval.Release -> AppAlertDialog(
             title = stringResource(R.string.wallet__send_pending__abandon),
             text = stringResource(R.string.wallet__send_pending__abandon_release)
@@ -327,49 +325,47 @@ private fun RecoveryFeeDialog(
     onClose: () -> Unit,
     onAuthorize: (ULong) -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { BodyM(stringResource(R.string.wallet__send_pending__retry_title)) },
-        text = {
-            Column {
-                BodyM(stringResource(R.string.wallet__send_pending__retry_description))
-                original.let { original ->
-                    VerticalSpacer(16.dp)
-                    SelectionContainer { BodyM(original.address, color = Colors.White64) }
-                    BalanceHeaderView(sats = original.amountSats.toLong())
-                }
-                VerticalSpacer(16.dp)
-                TextInput(
-                    value = feeInput,
-                    onValueChange = onFeeChange,
-                    placeholder = stringResource(R.string.common__sat_vbyte),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    isError = feeInput.isNotBlank() && OnchainRecoveryFeeRate.parse(feeInput) == null,
-                    supportingText = {
-                        if (feeInput.isNotBlank() && OnchainRecoveryFeeRate.parse(feeInput) == null) {
-                            BodyM(stringResource(R.string.wallet__send_pending__retry_invalid_fee))
-                        }
-                    },
-                )
-            }
-        },
-        confirmButton = {
-            PrimaryButton(
-                text = stringResource(R.string.common__continue),
-                enabled = OnchainRecoveryFeeRate.parse(feeInput) != null,
-                onClick = {
-                    val rate = OnchainRecoveryFeeRate.parse(feeInput) ?: return@PrimaryButton
-                    onAuthorize(rate)
+    val feeRate = OnchainRecoveryFeeRate.parse(feeInput)
+    val isInvalid = feeInput.isNotBlank() && feeRate == null
+    AppAlertDialog(
+        title = stringResource(R.string.wallet__send_pending__retry_title),
+        confirmText = stringResource(R.string.common__continue),
+        dismissText = stringResource(R.string.common__cancel),
+        confirmEnabled = feeRate != null,
+        onConfirm = { feeRate?.let(onAuthorize) },
+        onDismiss = onClose,
+        properties = DialogProperties(),
+    ) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            BodyM(stringResource(R.string.wallet__send_pending__retry_description), color = Colors.White64)
+            VerticalSpacer(16.dp)
+            RecoveryRecipient(original.address, original.amountSats.toLong())
+            VerticalSpacer(16.dp)
+            Caption13Up(stringResource(R.string.wallet__send_fee_custom), color = Colors.White64)
+            VerticalSpacer(8.dp)
+            TextInput(
+                value = feeInput,
+                onValueChange = onFeeChange,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                suffix = { BodySSB(stringResource(R.string.common__sat_vbyte), color = Colors.White64) },
+                isError = isInvalid,
+                supportingText = {
+                    if (isInvalid) BodyS(stringResource(R.string.wallet__send_pending__retry_invalid_fee))
                 },
+                modifier = Modifier.fillMaxWidth()
             )
-        },
-        dismissButton = {
-            SecondaryButton(
-                text = stringResource(R.string.common__cancel),
-                onClick = onClose,
-            )
-        },
-    )
+        }
+    }
+}
+
+@Composable
+private fun RecoveryRecipient(address: String, amountSats: Long) {
+    Caption13Up(stringResource(R.string.wallet__send_to), color = Colors.White64)
+    VerticalSpacer(8.dp)
+    SelectionContainer { BodySSB(address) }
+    VerticalSpacer(16.dp)
+    BalanceHeaderView(sats = amountSats, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable
