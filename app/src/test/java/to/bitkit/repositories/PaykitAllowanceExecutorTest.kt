@@ -8,9 +8,11 @@ import com.synonym.paykit.AllowanceAssociationRevision
 import com.synonym.paykit.AllowanceCandidate
 import com.synonym.paykit.AllowanceLifecycleState
 import com.synonym.paykit.AllowanceSelectionInput
+import com.synonym.paykit.ConversionRate
 import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaymentAccountingScope
 import com.synonym.paykit.PaymentAttemptDecision
+import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentDisposition
 import com.synonym.paykit.PaymentExecutionChecks
 import com.synonym.paykit.PaymentExecutionMode
@@ -44,6 +46,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.repositories.PaykitAllowanceFixtures.ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceLocalState.JournalEntry
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
@@ -462,6 +465,18 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
         assertEquals(emptyList(), sut.localState(identity).journal)
         assertEquals(listOf(limitReached), events)
+    }
+
+    @Test
+    fun `a bitcoin request that also offers a USDT rail is paid automatically`() = test {
+        val request = fixtures.paymentRequest().copy(
+            pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("usdt-arbitrum", "100000")))),
+        )
+
+        val result = sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.STARTED, result)
+        verify(payer).payLightning(any(), anyOrNull(), anyOrNull(), any())
     }
 
     @Test
