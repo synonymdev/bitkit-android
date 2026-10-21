@@ -94,6 +94,13 @@ enum class FeeRate(
             }
         }
 
+        /** The tier whose confirmation time applies to [speed], so a custom rate reads like the presets. */
+        fun forConfirmation(speed: TransactionSpeed, feeRates: FeeRates?): FeeRate {
+            val custom = speed as? TransactionSpeed.Custom ?: return fromSpeed(speed)
+            if (feeRates == null || custom.satsPerVByte == 0u) return CUSTOM
+            return fromSatsPerVByte(custom.satsPerVByte.toULong(), feeRates)
+        }
+
         fun Context.getFeeShortDescription(
             feeRate: ULong,
             feeRates: FeeRates?,

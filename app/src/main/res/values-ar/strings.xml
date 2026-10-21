@@ -1016,6 +1016,7 @@
     <string name="wallet__send_details">التفاصيل</string>
     <string name="wallet__send_dialog1">يبدو أنك ترسل أكثر من 100$. هل تريد المتابعة؟</string>
     <string name="wallet__send_dialog2">يبدو أنك ترسل أكثر من 50% من إجمالي رصيدك. هل تريد المتابعة؟</string>
+    <string name="wallet__send_dialog2_usdt" formatted="false">يبدو أنك ترسل أكثر من 50% من رصيدك من USDT. هل تريد المتابعة؟</string>
     <string name="wallet__send_dialog3">تبدو رسوم المعاملة أكثر من 50% من المبلغ الذي ترسله. هل تريد المتابعة؟</string>
     <string name="wallet__send_dialog4">تبدو رسوم المعاملة أكثر من 10$. هل تريد المتابعة؟</string>
     <string name="wallet__send_error_create_tx">تعذر بث المعاملة. يرجى المحاولة مرة أخرى.</string>

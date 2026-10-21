@@ -1586,6 +1586,7 @@
     <string name="wallet__send_details">Details</string>
     <string name="wallet__send_dialog1">It appears you are sending over $100. Do you want to continue?</string>
     <string name="wallet__send_dialog2">It appears you are sending over 50% of your total balance. Do you want to continue?</string>
+    <string name="wallet__send_dialog2_usdt" formatted="false">It appears you are sending over 50% of your USDT balance. Do you want to continue?</string>
     <string name="wallet__send_dialog3">The transaction fee appears to be over 50% of the amount you are sending. Do you want to continue?</string>
     <string name="wallet__send_dialog4">The transaction fee appears to be over $10. Do you want to continue?</string>
     <string name="wallet__send_error_create_tx">Unable to broadcast the transaction. Please try again.</string>
