@@ -1395,7 +1395,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             throw PaykitPaymentRequestError.RequestUnavailable
         }
         receivedContacts = ReceivedContactsSnapshot(generation, expectedIdentity, contacts)
-        _pendingRequests.update { incoming }
+        replacePendingRequests(incoming)
         _paymentRequestHistory.update { history }
         _subscriptions.update { subscriptions }
         prunePresentedSubscriptionProposalIds(subscriptions)
@@ -1742,14 +1742,25 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    private suspend fun discardExpiredRequestsLocked(handledRequestId: PaykitPaymentRequestId? = null) {
-        val now = clock.now()
-        val subscriptionNow = subscriptionClock.now()
-        val expiredProposals = _pendingRequests.value.filter {
+    /** A refresh drops expired proposals while parsing, so report them from the list it replaces. */
+    private fun replacePendingRequests(incoming: List<PaykitPaymentRequest>) {
+        val expired = expiredProposals(clock.now())
+        _pendingRequests.update { incoming }
+        if (expired.isNotEmpty()) _expiredProposals.tryEmit(expired)
+    }
+
+    /** Pending incoming one-time proposals that expired before the user accepted, opened or paid them. */
+    private fun expiredProposals(now: Instant, handledRequestId: PaykitPaymentRequestId? = null) =
+        _pendingRequests.value.filter {
             it.id != handledRequestId && it.direction == PaykitPaymentRequestDirection.Incoming &&
                 it.billingPeriod == null && !it.isPaymentInFlight &&
                 it.lifecycleState == PaymentRequestLifecycleState.PROPOSED && it.isExpired(now)
         }
+
+    private suspend fun discardExpiredRequestsLocked(handledRequestId: PaykitPaymentRequestId? = null) {
+        val now = clock.now()
+        val subscriptionNow = subscriptionClock.now()
+        val expiredProposals = expiredProposals(now, handledRequestId)
         _pendingRequests.update { requests -> requests.filterNot { it.isExpired(now) } }
         if (expiredProposals.isNotEmpty()) _expiredProposals.tryEmit(expiredProposals)
         _paymentRequestHistory.update { requests -> requests.withExpiredLifecycle(now) }
