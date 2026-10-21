@@ -4,6 +4,7 @@
   </description>
   <actions>
     <action>On the payer, leave Bitkit unlocked and in the foreground on Home</action>
+    <action>Background and reopen the payer app, complete app unlock if needed, and leave Home visible while automatic contact and Payment Request refreshes resume</action>
     <action>On the requester, send the payer contact a Payment Request for 21,000 sats with the note "First request"</action>
     <action>While the payer prepares the request, verify the existing Payment Request confirmation sheet (id "PaymentRequestConfirm") shows the requester's contact name, 21,000 sats and "First request", with the payment swipe control (id "GRAB") disabled and showing progress</action>
     <action>Close the confirmation while preparation is still pending</action>
@@ -20,6 +21,7 @@
     <action>Close Receive</action>
     <action>Verify Payment Request confirmation (id "PaymentRequestConfirm") appears automatically with 5,000 sats and For shows "Second request"</action>
     <action>Close the confirmation without paying</action>
+    <action>Open Payment Requests and verify "First request" and "Second request" each appear once with their original amounts and remain unpaid, then close the list</action>
     <action>Open Receive and close it again</action>
     <action>Verify Home remains visible and neither reviewed request reopens automatically</action>
     <action>On the payer, open the Home menu (id "HeaderMenu") before the next request arrives</action>

@@ -602,6 +602,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                             priority,
                             if (forceFresh) priority else messagePriority,
                             observationOnly = true,
+                            combineReceiveObservation = !forceFresh,
                         )
                     }
                     operationMutex.withLock {
@@ -1245,8 +1246,21 @@ class PaykitPaymentRequestRepo @Inject constructor(
         priority: Priority = Priority.Ordered,
         messagePriority: Priority = Priority.Ordered,
         observationOnly: Boolean = false,
+        combineReceiveObservation: Boolean = false,
     ): RequestSnapshot {
         if (mode == PaykitPaymentRequestRefreshMode.FULL) processPendingMessages(priority = messagePriority)
+        if (combineReceiveObservation && observationOnly && mode != PaykitPaymentRequestRefreshMode.STORED &&
+            priority == Priority.Background && messagePriority == Priority.Background
+        ) {
+            val observation = paykitSdkService.receiveAndObserveState(
+                requireNotNull(expectedIdentity),
+                ::logIntakeFailures,
+            )
+            return RequestSnapshot(
+                observation.paymentRequests,
+                observation.linkedPeers.filter { it.state == LinkedPeerState.BLOCKED },
+            )
+        }
         if (mode != PaykitPaymentRequestRefreshMode.STORED) {
             paykitSdkService.receivePrivateMessagesFromLinkedPeers(messagePriority).also(::logIntakeFailures)
         }

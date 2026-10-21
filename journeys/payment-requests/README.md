@@ -192,3 +192,16 @@ the boundary at 546 sats, manual retry, and preparation of a new request for 547
 Closing during preparation leaves the request pending and suppresses automatic reopening for the
 current identity's app session; Pay from the request list or details explicitly retries it.
 An unfunded wallet can verify loading followed by native rejection, not an enabled payment control.
+
+## Automatic refresh during review
+
+`automatic-presentation.xml` starts after a foreground resume and checks that each received request
+appears once. `review-refresh.xml` sends a second request while the first confirmation is open,
+then checks that the original review remains usable and the second request arrives after cancellation.
+Allow ordinary foreground polling and synchronization to finish; these steps set no arrival deadline
+and do not require an immediate refresh when review closes.
+
+The exact overlap of a saved-contact callback, message receipt, and a queued SDK operation requires
+controlled callback timing outside the journey capabilities. Repository tests cover that ordering,
+automatic forced-refresh deferral, and later polling. These journeys check the visible request and
+payment safeguards without claiming that a specific callback race occurred.
