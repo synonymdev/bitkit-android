@@ -186,8 +186,8 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 190
-        versionName = "2.5.0"
+        versionCode = 195
+        versionName = "3.0.1"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         bitkitAndroidTestAnnotation?.let {
             testInstrumentationRunnerArguments["annotation"] = it
@@ -303,7 +303,6 @@ android {
     lint {
         abortOnError = true
         warningsAsErrors = true
-        baseline = file("lint-baseline.xml")
         disable += setOf(
             // Crashes on ScreenDeepLinkRuntime.kt.
             "EmptyNavDeepLink",
@@ -312,6 +311,8 @@ android {
             "NewerVersionAvailable",
             "AndroidGradlePluginVersion",
             "MissingTranslation",
+            // targetSdk bumps are planned work; this check would fail CI on every new SDK release.
+            "OldTargetApi",
             // Copy style is set by the designs.
             "TypographyEllipsis",
             "TypographyDashes",
@@ -550,6 +551,7 @@ dependencies {
     implementation(libs.camera.view)
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
+    testImplementation(libs.bouncycastle.pkix.jdk) // test certificates
     implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
     val localBitkitCoreAar = providers.gradleProperty("bitkitCoreAar").orNull
     if (localBitkitCoreAar != null) {

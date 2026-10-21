@@ -22,8 +22,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -353,6 +356,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val targetWriteTickets = mutableMapOf<String, Long>()
     private val _pendingRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     val pendingRequests: StateFlow<List<PaykitPaymentRequest>> = _pendingRequests.asStateFlow()
+
+    private val _expiredProposals = MutableSharedFlow<List<PaykitPaymentRequest>>(extraBufferCapacity = 8)
+
+    /** Incoming one-time requests that expired before the user accepted or paid them. */
+    val expiredProposals: SharedFlow<List<PaykitPaymentRequest>> = _expiredProposals.asSharedFlow()
     private val _paymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     val paymentRequestHistory: StateFlow<List<PaykitPaymentRequest>> = _paymentRequestHistory.asStateFlow()
     private val _subscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
@@ -1380,7 +1388,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             throw PaykitPaymentRequestError.RequestUnavailable
         }
         receivedContacts = ReceivedContactsSnapshot(generation, expectedIdentity, contacts)
-        _pendingRequests.update { incoming }
+        replacePendingRequests(incoming)
         _paymentRequestHistory.update { history }
         _subscriptions.update { subscriptions }
         prunePresentedSubscriptionProposalIds(subscriptions)
@@ -1562,7 +1570,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             try {
                 operationMutex.withLock {
                     if (request.isExpired(clock.now())) {
-                        discardExpiredRequestsLocked()
+                        discardExpiredRequestsLocked(handledRequestId = request.id)
                         throw PaykitPaymentRequestError.RequestExpired
                     }
                     val current = _pendingRequests.value.firstOrNull { it.id == request.id }
@@ -1746,9 +1754,25 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    private suspend fun discardExpiredRequestsLocked() {
+    private fun replacePendingRequests(incoming: List<PaykitPaymentRequest>) {
+        // Parsing already dropped expired proposals; report only those, not ones the snapshot keeps.
+        val keptIds = incoming.mapTo(mutableSetOf()) { it.id }
+        val expired = expiredProposals(clock.now()).filterNot { it.id in keptIds }
+        _pendingRequests.update { incoming }
+        if (expired.isNotEmpty()) _expiredProposals.tryEmit(expired)
+    }
+
+    private fun expiredProposals(now: Instant, handledRequestId: PaykitPaymentRequestId? = null) =
+        _pendingRequests.value.filter {
+            it.id != handledRequestId && it.direction == PaykitPaymentRequestDirection.Incoming &&
+                it.billingPeriod == null && !it.isPaymentInFlight &&
+                it.lifecycleState == PaymentRequestLifecycleState.PROPOSED && it.isExpired(now)
+        }
+
+    private suspend fun discardExpiredRequestsLocked(handledRequestId: PaykitPaymentRequestId? = null) {
         val now = clock.now()
         val subscriptionNow = subscriptionClock.now()
+        val expiredProposals = expiredProposals(now, handledRequestId)
         val expiredPeriods = _pendingRequests.value.filter { it.billingPeriod != null && it.isExpired(now) }
         _paymentRequestHistory.update { requests ->
             (requests + expiredPeriods)
@@ -1757,6 +1781,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 .sortedByDescending { it.createdAt }
         }
         _pendingRequests.update { requests -> requests.filterNot { it.isExpired(now) } }
+        if (expiredProposals.isNotEmpty()) _expiredProposals.tryEmit(expiredProposals)
         _subscriptions.update { subscriptions -> subscriptions.map { it.withExpiredLifecycle(subscriptionNow) } }
         prunePresentedRequestIds(_pendingRequests.value)
         prunePresentedSubscriptionProposalIds(_subscriptions.value)

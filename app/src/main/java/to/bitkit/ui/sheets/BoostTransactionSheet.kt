@@ -384,10 +384,10 @@ fun QuantityButton(
     icon: Painter,
     iconColor: Color,
     backgroundColor: Color,
+    modifier: Modifier = Modifier,
     enabled: Boolean = true,
     contentDescription: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
 

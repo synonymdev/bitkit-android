@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="appwidget__loading">Loading…</string>
     <string name="appwidget__price__currency">Currency</string>
     <string name="appwidget__price__day">Day</string>
@@ -48,7 +48,6 @@
     <string name="cards__shop__title">Shop</string>
     <string name="cards__slashtagsProfile__description">Add your details</string>
     <string name="cards__slashtagsProfile__title">Profile</string>
-    <string name="cards__suggestions">Suggestions</string>
     <string name="cards__support__description">Get assistance</string>
     <string name="cards__support__title">Support</string>
     <string name="coming_soon__button">Wallet overview</string>
@@ -131,7 +130,7 @@
     <string name="contacts__edit_public_note">Please note contact information is stored in public files. Changes you make to a contact in Bitkit will not update their profile.</string>
     <string name="contacts__edit_save_error">Failed to save contact</string>
     <string name="contacts__import_all">Import All</string>
-    <string name="contacts__import_friends_count">%1$d friends</string>
+    <string name="contacts__import_friends_count" tools:ignore="PluralsCandidate">%1$d friends</string>
     <string name="contacts__import_overview_headline">Found\n&lt;accent&gt;profile &amp; contacts&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit found profile and contacts data connected to pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Select</string>
@@ -139,7 +138,7 @@
     <string name="contacts__import_select_headline">Select\n&lt;accent&gt;contacts&lt;/accent&gt;</string>
     <string name="contacts__import_select_none">Select none</string>
     <string name="contacts__import_select_subtitle">Please select which friends you want to import.</string>
-    <string name="contacts__import_selected_count">%1$d selected</string>
+    <string name="contacts__import_selected_count" tools:ignore="PluralsCandidate">%1$d selected</string>
     <string name="contacts__import_title">Import</string>
     <string name="contacts__intro_add_contact">Add Contact</string>
     <string name="contacts__intro_description">Pay your contacts with just a tap. Send payments directly, to anyone, anywhere.</string>
@@ -426,7 +425,6 @@
     <string name="lightning__total_size">Total channel size</string>
     <string name="lightning__transaction">Transaction</string>
     <string name="lightning__transfer__confirm">Please\n&lt;accent&gt;confirm&lt;/accent&gt;</string>
-    <string name="lightning__transfer__custom_fee">Custom &lt;accent&gt;fee&lt;/accent&gt;</string>
     <string name="lightning__transfer__nav_title">Transfer Funds</string>
     <string name="lightning__transfer__swipe">Swipe To Transfer</string>
     <string name="lightning__transfer_hw__open_connect">Open Trezor Connect</string>
@@ -444,7 +442,6 @@
     <string name="lightning__transfer_success__text_spending">Your funds have been transferred and your spending balance is ready to use.</string>
     <string name="lightning__transfer_success__title_savings">Funds moved\n&lt;accent&gt;to savings&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__title_spending">Funds moved\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
-    <string name="lightning__wait_text_bottom">Connecting &amp; Syncing...</string>
     <string name="lightning__wait_text_top">Please wait for Bitkit to connect to the payment network (±10 seconds).</string>
     <string name="lightning__wallet_balances">Wallet Balances</string>
     <string name="migration__description">Please wait while your old wallet data migrates to this new Bitkit version. This usually takes less than a minute.</string>
@@ -466,8 +463,6 @@
     <string name="notification__payment_failed_title">Payment failed</string>
     <string name="notification__please_try_again_body">Please try again</string>
     <string name="notification__received__body_amount">Received %s</string>
-    <string name="notification__received__body_channel">Via new channel</string>
-    <string name="notification__received__body_hidden">Open Bitkit to see details</string>
     <string name="notification__received__title">Payment Received</string>
     <string name="notification__service__body">Bitkit is running in background so you can receive Lightning payments</string>
     <string name="notification__service__stop">Stop App</string>
@@ -526,7 +521,6 @@
     <string name="other__camera_scan_qr">Scan QR</string>
     <string name="other__clipboard_redirect_msg">Do you want to be redirected to the relevant screen?</string>
     <string name="other__clipboard_redirect_title">Clipboard Data Detected</string>
-    <string name="other__coming_soon">Coming soon</string>
     <string name="other__connection_back_msg">Bitkit successfully reconnected to the Internet.</string>
     <string name="other__connection_back_title">Internet Connection Restored</string>
     <string name="other__connection_issue">Internet Connectivity Issues</string>
@@ -555,7 +549,6 @@
     <string name="other__lnurl_auth_success_msg_no_domain">You successfully signed in.</string>
     <string name="other__lnurl_auth_success_title">Signed In</string>
     <string name="other__lnurl_channel_error">Unable To Open Channel (LNURL)</string>
-    <string name="other__lnurl_channel_error_raw">An error occured when you tried paying: {raw}</string>
     <string name="other__lnurl_channel_header">Lightning Connection</string>
     <string name="other__lnurl_channel_host">Host</string>
     <string name="other__lnurl_channel_lsp">Lightning service provider</string>
@@ -587,15 +580,14 @@
     <string name="other__pay_self_invoice_description">This invoice was created by your own wallet. Share it with someone else to receive a payment.</string>
     <string name="other__pay_self_invoice_title">Cannot Pay Own Invoice</string>
     <string name="other__qr_error_header">Unable To Read QR</string>
-    <string name="other__qr_error_network_header">Incorrect Network</string>
-    <string name="other__qr_error_network_text">Bitkit is currently set to {selectedNetwork} but data is for {dataNetwork}.</string>
+    <string name="other__qr_error_network_header" tools:ignore="UnusedResources">Incorrect Network</string>
+    <string name="other__qr_error_network_text" tools:ignore="UnusedResources">Bitkit is currently set to {selectedNetwork} but data is for {dataNetwork}.</string>
     <string name="other__qr_error_text">Bitkit is not able to read this QR code.</string>
     <string name="other__qr_paste">Paste QR Code</string>
     <string name="other__qr_scan">Scan QR Code</string>
     <string name="other__scan__error__expired">This Lightning invoice has expired.</string>
     <string name="other__scan__error__generic">Bitkit is unable to read the provided data.</string>
     <string name="other__scan_err_decoding">Decoding Error</string>
-    <string name="other__scan_err_interpret_title">Unable To Interpret Provided Data</string>
     <string name="other__share_qr">Share QR Code Via</string>
     <string name="other__shop__categories__apparel">Apparel</string>
     <string name="other__shop__categories__automobiles">Automobiles</string>
@@ -699,8 +691,6 @@
     <string name="profile__choice_title">Enter the\n&lt;accent&gt;freedom web&lt;/accent&gt;</string>
     <string name="profile__create_error">Failed to create profile</string>
     <string name="profile__create_nav_title">Create Profile</string>
-    <string name="profile__create_restoring">Restoring your existing profile…</string>
-    <string name="profile__create_success">Profile created successfully</string>
     <string name="profile__delete_confirm_description">Deleting your profile removes it from Pubky. Contacts may still retain profile and payment information previously shared with them.</string>
     <string name="profile__delete_confirm_title">Delete Profile?</string>
     <string name="profile__delete_error_description">We couldn\'t delete your profile data. Retry, or disconnect this pubky from Bitkit.</string>
@@ -732,7 +722,6 @@
     <string name="profile__pay_contacts_title">Pay Contacts</string>
     <string name="profile__pubky_copied">pubky copied to clipboard</string>
     <string name="profile__public_key">Public Key</string>
-    <string name="profile__qr_scan_label">Scan to add {name}</string>
     <string name="profile__restore_nav_title">Restore Profile</string>
     <string name="profile__retry_load">Try Again</string>
     <string name="profile__session_expired">Your profile session has expired. Please reconnect to restore your profile.</string>
@@ -764,7 +753,6 @@
     <string name="security__bio_ask">PIN code set. Would you like to use {biometricsName} instead of your PIN code?</string>
     <string name="security__bio_auth_with">Authenticate with {biometricsName}</string>
     <string name="security__bio_confirm">Confirm {biometricsName}</string>
-    <string name="security__bio_no">It appears that your device does not support Biometric security.</string>
     <string name="security__bio_not_available">Looks like you haven’t set up biometric security yet (or it is not supported). Try to enable it in your phone settings.</string>
     <string name="security__bio_phone_settings">Phone Settings</string>
     <string name="security__bio_use">Use {biometricsName}</string>
@@ -858,10 +846,7 @@
     <string name="settings__about__legal">Legal</string>
     <string name="settings__about__share">Share</string>
     <string name="settings__about__shareText">Change your wallet, change the world. Download Bitkit for iPhone {appStoreUrl} or Android {playStoreUrl}</string>
-    <string name="settings__about__text">Thank you for being a responsible Bitcoiner.\nChange your wallet, change the world.\n\nBitkit hands you the keys to your money, profile, contacts, and web accounts.\n\nBitkit was crafted by Synonym Software Ltd.</string>
-    <string name="settings__about__title">About Bitkit</string>
     <string name="settings__about__version">Version</string>
-    <string name="settings__about_title">About</string>
     <string name="settings__addr__addr_change">Change Addresses</string>
     <string name="settings__addr__addr_receiving">Receiving Addresses</string>
     <string name="settings__addr__check_balances">Check Balances</string>
@@ -869,7 +854,6 @@
     <string name="settings__addr__index">Index: {index}</string>
     <string name="settings__addr__load_error">Wallet is still starting. Try again in a moment.</string>
     <string name="settings__addr__loading">Loading Addresses...</string>
-    <string name="settings__addr__no_addrs">No Addresses To Display</string>
     <string name="settings__addr__no_addrs_str">No addresses found when searching for \"{searchTxt}\"</string>
     <string name="settings__addr__path">Path: {path}</string>
     <string name="settings__addr__spend_number">{count, plural, one {Spend ₿ {fundsToSpend} From # address} other {Spend ₿ {fundsToSpend} From # addresses}}</string>
@@ -894,11 +878,11 @@
     <string name="settings__adv__cs_consolidate_description">Use all available UTXOs regardless of the amount being sent. Use this method when fees are low in order to reduce fees in future transactions.</string>
     <string name="settings__adv__cs_first_in_first_out">First-In First-Out</string>
     <string name="settings__adv__cs_first_in_first_out_description">Use older UTXOs first (by block height).</string>
-    <string name="settings__adv__cs_last_in_last_out">Last-In Last-Out</string>
-    <string name="settings__adv__cs_last_in_last_out_description">Use newer UTXOs first (by block height).</string>
+    <string name="settings__adv__cs_last_in_last_out" tools:ignore="UnusedResources">Last-In Last-Out</string>
+    <string name="settings__adv__cs_last_in_last_out_description" tools:ignore="UnusedResources">Use newer UTXOs first (by block height).</string>
     <string name="settings__adv__cs_manual">Manual</string>
-    <string name="settings__adv__cs_max">Smallest First</string>
-    <string name="settings__adv__cs_max_description">Sort by and use smallest UTXO first. Potentially higher fee, but hides your largest UTXOs.</string>
+    <string name="settings__adv__cs_max" tools:ignore="UnusedResources">Smallest First</string>
+    <string name="settings__adv__cs_max_description" tools:ignore="UnusedResources">Sort by and use smallest UTXO first. Potentially higher fee, but hides your largest UTXOs.</string>
     <string name="settings__adv__cs_method">Coin Selection Method</string>
     <string name="settings__adv__cs_min">Largest First</string>
     <string name="settings__adv__cs_min_description">Sort by and use largest UTXO first. Potentially lower fee, but reveals your largest UTXOs.</string>
@@ -912,14 +896,12 @@
     <string name="settings__adv__rgs_server">Rapid-Gossip-Sync</string>
     <string name="settings__adv__section_debug">Debug</string>
     <string name="settings__adv__section_networks">Networks</string>
-    <string name="settings__adv__section_other">Other</string>
     <string name="settings__adv__section_payments">Payments</string>
-    <string name="settings__adv__suggestions_reset">Reset Suggestions</string>
     <string name="settings__advanced_title">Advanced</string>
     <string name="settings__backup__category_connection_receipts">Connection Receipts</string>
     <string name="settings__backup__category_connections">Connections</string>
-    <string name="settings__backup__category_contacts">Contacts</string>
-    <string name="settings__backup__category_profile">Profile</string>
+    <string name="settings__backup__category_contacts" tools:ignore="UnusedResources">Contacts</string>
+    <string name="settings__backup__category_profile" tools:ignore="UnusedResources">Profile</string>
     <string name="settings__backup__category_settings">Settings</string>
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_transaction_log">Transaction Log</string>
@@ -936,7 +918,6 @@
     <string name="settings__bg__customize">Customize in Android Bitkit Settings</string>
     <string name="settings__bg__disabled">Background payments are disabled, because you have denied notifications.</string>
     <string name="settings__bg__enabled">Background payments are enabled. You can receive funds even when the app is closed (if your device is connected to the internet).</string>
-    <string name="settings__bg__include_amount">Include amount in notifications</string>
     <string name="settings__bg__intro_button">Enable</string>
     <string name="settings__bg__intro_desc">Turn on notifications to get paid, even when your Bitkit app is closed.</string>
     <string name="settings__bg__intro_title">GET PAID\n&lt;accent&gt;PASSIVELY&lt;/accent&gt;</string>
@@ -945,7 +926,6 @@
     <string name="settings__bg__notifications_header">Notifications</string>
     <string name="settings__bg__off">Off</string>
     <string name="settings__bg__on">On</string>
-    <string name="settings__bg__privacy_header">Privacy</string>
     <string name="settings__bg__setup">Set up in background</string>
     <string name="settings__bg__switch_title">Get paid when Bitkit is closed</string>
     <string name="settings__bg__title">Background Payments</string>
@@ -1040,7 +1020,6 @@
     <string name="settings__security__section_backup">Back up or reset</string>
     <string name="settings__security__section_privacy">Privacy</string>
     <string name="settings__security__section_safety">Safety</string>
-    <string name="settings__security__footer">When enabled, you can use {biometryTypeName} instead of your PIN code to unlock your wallet or send payments.</string>
     <string name="settings__security__hide_balance_on_open">Hide balance on open</string>
     <string name="settings__security__pin">PIN Code</string>
     <string name="settings__security__pin_change">Change PIN</string>
@@ -1089,7 +1068,6 @@
     <string name="settings__support__text_success_button">OK</string>
     <string name="settings__support__text_unsuccess">Something went wrong while trying to send your issue or question. Please try again.</string>
     <string name="settings__support__text_unsuccess_button">Try Again</string>
-    <string name="settings__support__title">Support</string>
     <string name="settings__support__title_success">Sent Successfully</string>
     <string name="settings__support__title_unsuccess">Failed To Send</string>
     <string name="settings__support_title">Support</string>
@@ -1105,10 +1083,6 @@
     <string name="slashtags__error_pay_not_opened_msg">No compatible payment endpoint is available.</string>
     <string name="slashtags__error_pay_title">Unable To Pay Contact</string>
     <string name="slashtags__error_pay_waiting_msg">Waiting for the contact to update their payment details. Please try again shortly.</string>
-    <string name="slashtags__onboarding_profile1_header">Own your\n&lt;accent&gt;profile&lt;/accent&gt;</string>
-    <string name="slashtags__onboarding_profile1_text">Set up your public profile and links, so your Bitkit contacts can reach you or pay you anytime, anywhere.</string>
-    <string name="slashtags__profile">Profile</string>
-    <string name="slashtags__profile_create">Create Profile</string>
     <string name="subscriptions__accepted_payments">Accepted payments</string>
     <string name="subscriptions__active">Active</string>
     <string name="subscriptions__cancel">Cancel</string>
@@ -1118,7 +1092,7 @@
     <string name="subscriptions__create">Create</string>
     <string name="subscriptions__create_subscription">Create Subscription</string>
     <string name="subscriptions__created">Created</string>
-    <string name="subscriptions__created_summary">1 subscriber, %1$d payments</string>
+    <string name="subscriptions__created_summary" tools:ignore="PluralsCandidate">1 subscriber, %1$d payments</string>
     <string name="subscriptions__created_summary_single_payment">1 subscriber, 1 payment</string>
     <string name="subscriptions__custom_icon">Icon</string>
     <string name="subscriptions__custom_icon_description">Tap to upload a custom icon</string>
@@ -1130,10 +1104,10 @@
     <string name="subscriptions__details">Subscription Details</string>
     <string name="subscriptions__empty_description">At the moment, you don’t have any active subscriptions from any providers.</string>
     <string name="subscriptions__empty_headline"><![CDATA[Welcome To\n<accent>Subscriptions</accent>]]></string>
-    <string name="subscriptions__every_days">Every %1$d days</string>
-    <string name="subscriptions__every_months">Every %1$d months</string>
-    <string name="subscriptions__every_weeks">Every %1$d weeks</string>
-    <string name="subscriptions__every_years">Every %1$d years</string>
+    <string name="subscriptions__every_days" tools:ignore="PluralsCandidate">Every %1$d days</string>
+    <string name="subscriptions__every_months" tools:ignore="PluralsCandidate">Every %1$d months</string>
+    <string name="subscriptions__every_weeks" tools:ignore="PluralsCandidate">Every %1$d weeks</string>
+    <string name="subscriptions__every_years" tools:ignore="PluralsCandidate">Every %1$d years</string>
     <string name="subscriptions__expired">Expired</string>
     <string name="subscriptions__expires">Expires</string>
     <string name="subscriptions__expires_date">Expires %1$s</string>
@@ -1188,76 +1162,33 @@
     <string name="subscriptions__weekly_subscription">Weekly Subscription</string>
     <string name="subscriptions__yearly">Yearly</string>
     <string name="subscriptions__yearly_subscription">Yearly Subscription</string>
-    <string name="sweep__balance_format">%1$s sats</string>
-    <string name="sweep__checking_description">Please wait while Bitkit looks for funds in unsupported addresses (Legacy, Nested SegWit, and Taproot).</string>
-    <string name="sweep__checking_loading">LOOKING FOR FUNDS...</string>
-    <string name="sweep__confirm_broadcasting">BROADCASTING…</string>
-    <string name="sweep__confirm_nav_title">Confirm Sweep</string>
-    <string name="sweep__confirm_preparing">PREPARING…</string>
-    <string name="sweep__confirm_retry">Retry</string>
-    <string name="sweep__confirm_swipe">Swipe to confirm</string>
-    <string name="sweep__confirm_to_address">To Address</string>
-    <string name="sweep__custom_fee_nav_title">Custom Fee</string>
-    <string name="sweep__custom_fee_total">for this transaction</string>
-    <string name="sweep__error_title">Error</string>
-    <string name="sweep__fee_nav_title">Network Fee</string>
-    <string name="sweep__found_description">Bitkit found funds in unsupported addresses (Legacy, Nested SegWit, and Taproot).</string>
-    <string name="sweep__found_label">FUNDS FOUND</string>
-    <string name="sweep__found_title">Found Funds</string>
-    <string name="sweep__legacy_title">Legacy (P2PKH)</string>
-    <string name="sweep__nav_title">Sweep Funds</string>
-    <string name="sweep__no_funds_description">Bitkit checked unsupported address types and found no funds to sweep.</string>
-    <string name="sweep__no_funds_title">No Funds To Sweep</string>
-    <string name="sweep__prompt_description">Bitkit found funds on unsupported Bitcoin address types. Sweep to move the funds to your new wallet balance.</string>
-    <string name="sweep__prompt_sweep">Sweep</string>
-    <string name="sweep__prompt_title">SWEEP OLD\n&lt;accent&gt;BITKIT FUNDS&lt;/accent&gt;</string>
-    <string name="sweep__segwit_title">SegWit (P2SH)</string>
-    <string name="sweep__success_description">Your funds have been swept and will be added to your wallet balance.</string>
-    <string name="sweep__success_nav_title">Sweep Complete</string>
-    <string name="sweep__success_wallet_overview">Wallet Overview</string>
-    <string name="sweep__taproot_title">Taproot (P2TR)</string>
-    <string name="sweep__to_wallet">Sweep To Wallet</string>
-    <string name="sweep__total">Total</string>
-    <string name="sweep__utxo_format">%1$s, %2$d UTXO</string>
-    <string name="sweep__utxos_format">%1$s, %2$d UTXOs</string>
-    <string name="usdt__activity">Activity</string>
     <string name="usdt__address">Recipient address</string>
     <string name="usdt__amount">Amount</string>
-    <string name="usdt__balance">Balance</string>
     <string name="usdt__bridge_attention">Bridge needs attention</string>
     <string name="usdt__bridge_provider">Bridge</string>
     <string name="usdt__bridge_reference">Bridge reference</string>
     <string name="usdt__bridge_refunded_description">USDT was returned to your wallet. See details for the refunded amount.</string>
     <string name="usdt__bridge_submitted_description">Your payment is pending. You can track confirmation and cross-network delivery in Activity.</string>
-    <string name="usdt__bridging">Delivering to destination</string>
     <string name="usdt__camera_permission_description">Allow camera access to scan USDT payment QR codes.</string>
     <string name="usdt__confirmed">Confirmed</string>
     <string name="usdt__copy_details">Copy Details</string>
     <string name="usdt__delivering">Delivering</string>
     <string name="usdt__delivering_title">Delivering USDT</string>
-    <string name="usdt__deposit_amount">Deposit amount</string>
     <string name="usdt__deposit_amount_out_of_range">Amount outside deposit limits.</string>
     <string name="usdt__deposit_attention">This deposit needs provider assistance. Contact Bitkit support with the deposit reference.</string>
     <string name="usdt__deposit_authorization">The deposit service could not verify this request. Try again.</string>
     <string name="usdt__deposit_batch">Converted batch</string>
     <string name="usdt__deposit_cost">Estimated deduction (USDT)</string>
-    <string name="usdt__deposit_create">Get Deposit Address</string>
     <string name="usdt__deposit_empty">No deposits yet.</string>
-    <string name="usdt__deposit_estimate">Estimated received (USDT)</string>
-    <string name="usdt__deposit_estimate_note">Indicative price only. Costs are deducted from the USDT received and may change before conversion. The sender pays their network gas separately.</string>
     <string name="usdt__deposit_fee_note">Fees are deducted from the USDT you receive. The sender pays their network fees separately.</string>
     <string name="usdt__deposit_history">Cross-Network Deposits</string>
-    <string name="usdt__deposit_limits">Deposit limits</string>
-    <string name="usdt__deposit_limits_note">Live liquidity and network costs can further restrict these limits. Amounts outside the limits may be held.</string>
     <string name="usdt__deposit_maximum">Maximum amount is %1$s</string>
     <string name="usdt__deposit_minimum">Minimum amount is %1$s</string>
     <string name="usdt__deposit_more">Load more</string>
     <string name="usdt__deposit_needs_attention">Needs attention</string>
     <string name="usdt__deposit_not_found">Deposit details changed. Refresh the deposit history and select it again.</string>
-    <string name="usdt__deposit_notice">Send only USDT on the selected network. Orchestra delivers USDT0 to your Arbitrum One wallet. This address is reusable; pricing is set when each deposit is processed. Deposits may be held for review.</string>
     <string name="usdt__deposit_provider_status">Provider status</string>
     <string name="usdt__deposit_reference">Deposit reference</string>
-    <string name="usdt__deposit_refresh">Refresh</string>
     <string name="usdt__deposit_refund">Request Refund</string>
     <string name="usdt__deposit_refund_action">Request refund</string>
     <string name="usdt__deposit_refund_address">USDT address on {network}</string>
@@ -1311,7 +1242,6 @@
     <string name="usdt__intro_description">Bitcoin at heart. Dollars when you need them. Enable USDT (Tether) to send and receive digital dollars with Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nYOUR CALL</string>
     <string name="usdt__intro_title">New: USDT</string>
-    <string name="usdt__maximum_fee">Maximum fee</string>
     <string name="usdt__maximum_total">Max total debit</string>
     <string name="usdt__network">Network</string>
     <string name="usdt__network_warning">Select the network used by the recipient. Sending to an address on the wrong network can lose funds.</string>
@@ -1319,7 +1249,6 @@
     <string name="usdt__payment_received">Received USDT</string>
     <string name="usdt__payment_sent">USDT Sent</string>
     <string name="usdt__pending">Pending</string>
-    <string name="usdt__receive">Receive</string>
     <string name="usdt__receive_amount_title">Amount</string>
     <string name="usdt__receive_estimate">Receive (est)</string>
     <string name="usdt__receive_fee">Fees</string>
@@ -1328,7 +1257,6 @@
     <string name="usdt__receive_network_note">Note: Regardless of the network used to receive, your USDT will be credited as Arbitrum One balance.</string>
     <string name="usdt__receive_network_title">USDT Network</string>
     <string name="usdt__receive_title">Receive Dollars</string>
-    <string name="usdt__receive_warning">Receive USDT on Arbitrum One only. Bridge funds from other networks before sending.</string>
     <string name="usdt__received">Received</string>
     <string name="usdt__receiving_network">Receiving network</string>
     <string name="usdt__receiving_title">Receiving USDT</string>
@@ -1336,7 +1264,6 @@
     <string name="usdt__recipient_network">Recipient network</string>
     <string name="usdt__refund_tx">Refund transaction</string>
     <string name="usdt__replaced">Replaced by another payment</string>
-    <string name="usdt__send">Send</string>
     <string name="usdt__send_failed_description">Your payment was not completed. Check Activity for details.</string>
     <string name="usdt__send_network_note">Choose the network your recipient uses.</string>
     <string name="usdt__send_title">Send USDT</string>
@@ -1344,7 +1271,6 @@
     <string name="usdt__sent">Sent</string>
     <string name="usdt__sent_title">Sent USDT</string>
     <string name="usdt__settings_title">USDT (Tether)</string>
-    <string name="usdt__share_disabled">Enable USDT to share your receiving address.</string>
     <string name="usdt__submitted">Payment submitted</string>
     <string name="usdt__submitted_description">Your payment is being processed. You can track its status in Activity.</string>
     <string name="usdt__to_address">To address</string>
@@ -1419,7 +1345,6 @@
     <string name="wallet__activity_transfer_spending_pending">From Savings ({duration})</string>
     <string name="wallet__activity_transfer_to_savings">To Savings</string>
     <string name="wallet__activity_transfer_to_spending">To Spending</string>
-    <string name="wallet__activity_transferring">Transferring</string>
     <string name="wallet__activity_tx_id">Transaction ID</string>
     <string name="wallet__balance_hidden_message">Swipe your wallet balance to reveal it again.</string>
     <string name="wallet__balance_hidden_title">Wallet Balance Hidden</string>
@@ -1517,14 +1442,12 @@
     <string name="wallet__payment_request_request">Request</string>
     <string name="wallet__payment_request_request_payment">Request Payment</string>
     <string name="wallet__payment_request_requested_amount">Requested amount</string>
-    <string name="wallet__payment_request_review_received">Received · Review needed</string>
     <string name="wallet__payment_request_send">Send Payment Request</string>
     <string name="wallet__payment_request_send_request">Send Request</string>
     <string name="wallet__payment_request_sending">Queued for delivery</string>
     <string name="wallet__payment_request_sent_description">You have sent a payment request</string>
     <string name="wallet__payment_request_sent_headline"><![CDATA[Payment <accent>Requested</accent>]]></string>
     <string name="wallet__payment_request_sent_title">Sent</string>
-    <string name="wallet__payment_request_status_accepted">Accepted</string>
     <string name="wallet__payment_request_status_action_required">Action required</string>
     <string name="wallet__payment_request_status_canceled">Canceled</string>
     <string name="wallet__payment_request_status_expired">Expired</string>
@@ -1605,7 +1528,6 @@
     <string name="wallet__send_amount_exceeded__description">The amount exceeds your available balance.</string>
     <string name="wallet__send_amount_exceeded__title">Insufficient balance</string>
     <string name="wallet__send_available">Available</string>
-    <string name="wallet__send_available_savings">Available (savings)</string>
     <string name="wallet__send_available_spending">Available (spending)</string>
     <string name="wallet__send_bitcoin">Send Bitcoin</string>
     <string name="wallet__send_clipboard_empty_text">Please copy an address or an invoice.</string>
@@ -1616,6 +1538,7 @@
     <string name="wallet__send_details">Details</string>
     <string name="wallet__send_dialog1">It appears you are sending over $100. Do you want to continue?</string>
     <string name="wallet__send_dialog2">It appears you are sending over 50% of your total balance. Do you want to continue?</string>
+    <string name="wallet__send_dialog2_usdt" formatted="false">It appears you are sending over 50% of your USDT balance. Do you want to continue?</string>
     <string name="wallet__send_dialog3">The transaction fee appears to be over 50% of the amount you are sending. Do you want to continue?</string>
     <string name="wallet__send_dialog4">The transaction fee appears to be over $10. Do you want to continue?</string>
     <string name="wallet__send_error_create_tx">Unable to broadcast the transaction. Please try again.</string>
@@ -1633,7 +1556,6 @@
     <string name="wallet__send_instant_failed">Payment Failed</string>
     <string name="wallet__send_invoice">Invoice</string>
     <string name="wallet__send_invoice_expiration">Invoice expiration</string>
-    <string name="wallet__send_max">MAX</string>
     <string name="wallet__send_max_spending__description">The maximum spendable amount is a bit lower due to a required reserve balance.</string>
     <string name="wallet__send_max_spending__title">Reserve Balance</string>
     <string name="wallet__send_pending__abandon">Cancel expired payment</string>
@@ -1646,7 +1568,6 @@
     <string name="wallet__send_pending__abandon_sync">Bitkit could not sync with the network. Check your connection and try again.</string>
     <string name="wallet__send_pending__blocked_new_send">The new payment was not sent. Finish the previous payment before trying again.</string>
     <string name="wallet__send_pending__description">This payment is taking a bit longer than expected. You can continue using Bitkit.</string>
-    <string name="wallet__send_pending__funding_description">Funding transaction is unresolved. Check its transaction before trying again.</string>
     <string name="wallet__send_pending__nav_title">Payment Pending</string>
     <string name="wallet__send_pending__onchain_description">The transaction outcome is unresolved. Check its status before trying again. Other payments remain blocked. If available, use Retry original payment to authorize a fee for the same payment.</string>
     <string name="wallet__send_pending__refusal">Broadcast refused: %1$s</string>
@@ -1730,9 +1651,6 @@
     <string name="widgets__enable_in_settings">Enable in Settings</string>
     <string name="widgets__facts__description">Discover fun facts about Bitcoin, every time you open your wallet.</string>
     <string name="widgets__facts__name">Bitcoin Facts</string>
-    <string name="widgets__headline__preview_publisher">bitcoinmagazine.com</string>
-    <string name="widgets__headline__preview_time">21 minutes ago</string>
-    <string name="widgets__headline__preview_title">How Bitcoin changed El Salvador in more ways</string>
     <string name="widgets__news__description">Read the latest &amp; greatest Bitcoin headlines from various news sites.</string>
     <string name="widgets__news__name">Bitcoin Headlines</string>
     <string name="widgets__onboarding__description">Enjoy decentralized feeds from your favorite web services, by adding fun and useful widgets to your Bitkit wallet.</string>
@@ -1757,13 +1675,9 @@
     <string name="widgets__weather__name">Bitcoin Weather</string>
     <string name="widgets__weather__next_block">Next block inclusion</string>
     <string name="widgets__widget__content">CONTENT</string>
-    <string name="widgets__widget__data">DATA</string>
     <string name="widgets__widget__display">DISPLAY</string>
-    <string name="widgets__widget__edit">Widget Feed</string>
     <string name="widgets__widget__edit_custom">Custom</string>
     <string name="widgets__widget__edit_default">Default</string>
-    <string name="widgets__widget__edit_description">Please select which fields you want to display in the {name} widget.</string>
-    <string name="widgets__widget__nav_title">Widget</string>
     <string name="widgets__widget__save">Save Widget</string>
     <string name="widgets__widget__settings">Widget Settings</string>
     <string name="widgets__widget__size_small">Small</string>

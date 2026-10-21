@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -96,6 +97,8 @@ fun PaykitUsdtReview(
         Box {
             Column(
                 Modifier.sheetHeight().background(Colors.Gray7)
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp)
             ) {
                 if (state.authenticationRequired) {
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {

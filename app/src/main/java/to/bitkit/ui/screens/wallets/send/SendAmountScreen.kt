@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,7 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -121,7 +124,7 @@ fun SendAmountScreen(
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
     val app = appViewModel
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val amountInputUiState: AmountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentOnEvent by rememberUpdatedState(onEvent)
 
@@ -163,8 +166,8 @@ fun SendAmountScreen(
                     val (titleRes, descriptionRes) = currentMaxExceededMessage
                     app?.toast(
                         type = Toast.ToastType.WARNING,
-                        title = context.getString(titleRes),
-                        description = context.getString(descriptionRes),
+                        title = resources.getString(titleRes),
+                        description = resources.getString(descriptionRes),
                         visibilityTime = Toast.VISIBILITY_TIME_SHORT,
                         testTag = "SendAmountExceededToast",
                     )
@@ -192,8 +195,8 @@ fun SendAmountScreen(
             if (uiState.lnurl == null && uiState.payMethod == SendMethod.LIGHTNING) {
                 app?.toast(
                     type = Toast.ToastType.INFO,
-                    title = context.getString(R.string.wallet__send_max_spending__title),
-                    description = context.getString(R.string.wallet__send_max_spending__description)
+                    title = resources.getString(R.string.wallet__send_max_spending__title),
+                    description = resources.getString(R.string.wallet__send_max_spending__description)
                 )
             }
             amountInputViewModel.setSats(maxSats, currencies)
@@ -300,7 +303,15 @@ private fun SendAmountNodeRunning(
         }
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .then(
+                    if (uiState.paykitUsesUsdt) {
+                        Modifier.verticalScroll(rememberScrollState()).heightIn(min = maxHeight)
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
             VerticalSpacer(16.dp)
 
@@ -318,7 +329,7 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            if (uiState.paykitUsesUsdt) VerticalSpacer(32.dp) else FillHeight(min = 12.dp)
+            FillHeight(min = 12.dp)
             if (uiState.paykitRateUnavailable) {
                 BodyS(
                     stringResource(R.string.wallet__payment_request_rate_unavailable),
@@ -413,28 +424,23 @@ private fun SendAmountNodeRunning(
             HorizontalDivider(modifier = Modifier.padding(top = if (uiState.paykitUsesUsdt) 16.dp else 12.dp))
 
             if (uiState.paykitUsesUsdt) {
-                BoxWithConstraints(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.weight(1f).fillMaxWidth()
-                ) {
-                    NumberPad(
-                        type = NumberPadType.DECIMAL,
-                        decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
-                        availableHeight = this.maxHeight,
-                        enabled = uiState.isAmountEditable,
-                        onPress = {
-                            app?.onUsdtAmountChange(
-                                NumberPadInputHandler.handleInput(
-                                    it,
-                                    uiState.paykitAmount,
-                                    maxLength = 21,
-                                    maxDecimals = 6
-                                )
+                NumberPad(
+                    type = NumberPadType.DECIMAL,
+                    decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
+                    availableHeight = maxHeight,
+                    enabled = uiState.isAmountEditable,
+                    onPress = {
+                        app?.onUsdtAmountChange(
+                            NumberPadInputHandler.handleInput(
+                                it,
+                                uiState.paykitAmount,
+                                maxLength = 21,
+                                maxDecimals = 6
                             )
-                        },
-                        onDeleteLongPress = { app?.onUsdtAmountChange("") }
-                    )
-                }
+                        )
+                    },
+                    onDeleteLongPress = { app?.onUsdtAmountChange("") },
+                )
             } else {
                 NumberPad(
                     enabled = uiState.isAmountEditable,
@@ -446,7 +452,6 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            if (uiState.paykitUsesUsdt) VerticalSpacer(16.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,
@@ -489,7 +494,8 @@ private fun PaymentMethodButton(
             } else {
                 AppTextStyles.CaptionM
             },
-            icon = if (uiState.canSwitchFundingSource) R.drawable.ic_transfer else null,
+            outlined = true,
+            trailingIcon = if (uiState.canSwitchFundingSource) R.drawable.ic_chevron_down else null,
             onClick = { expanded = true },
             enabled = uiState.fundingOptions.isNotEmpty(),
             isLoading = uiState.isFundingSourceLoading,

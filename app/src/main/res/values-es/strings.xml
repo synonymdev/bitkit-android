@@ -21,7 +21,6 @@
     <string name="cards__support__title">Soporte</string>
     <string name="cards__support__description">Consiga asistencia</string>
     <string name="cards__buyBitcoin__description">Compra algo de bitcoin</string>
-    <string name="cards__suggestions">Sugerencias</string>
     <string name="coming_soon__button">Vista general del monedero</string>
     <string name="coming_soon__description">Esta función está actualmente en desarrollo y estará disponible pronto.</string>
     <string name="coming_soon__headline">Próximamente\n&lt;accent&gt;disponible&lt;/accent&gt;</string>
@@ -181,7 +180,6 @@
     <string name="lightning__total_anchor_channels_reserve">Reserva total de canales ancla</string>
     <string name="lightning__total_lightning">Total Lightning</string>
     <string name="lightning__total_onchain">Total onchain</string>
-    <string name="lightning__transfer__custom_fee">Comisión &lt;accent&gt;personalizada&lt;/accent&gt;</string>
     <string name="lightning__transfer_in_progress">TRANSFERENCIA EN PROGRESO</string>
     <string name="lightning__transfer_intro__title">Saldo de\n&lt;accent&gt;Gasto&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Rellene el saldo de gasto para disfrutar de transacciones baratas e instantáneas con amigos, familia y comerciantes.</string>
@@ -274,7 +272,6 @@
     <string name="lightning__order_state__closed">Conexión cerrada</string>
     <string name="lightning__order_state__open">Conexión abierta</string>
     <string name="lightning__wait_text_top">Por favor, espere a que Bitkit se conecte a la red de pagos (±10 segundos).</string>
-    <string name="lightning__wait_text_bottom">Conectando y Sincronizando...</string>
     <string name="lightning__conn_onboarding_button">Comenzar</string>
     <string name="lightning__conn_onboarding_text">Configura tu saldo de gastos para disfrutar de transacciones instantáneas y económicas con amigos, familiares y comerciantes.</string>
     <string name="lightning__conn_onboarding_title">Habilitar\nLightning\n&lt;accent&gt;pagos&lt;/accent&gt;</string>
@@ -295,8 +292,6 @@
     <string name="notification__payment_failed_title">Pago fallido</string>
     <string name="notification__please_try_again_body">Por favor, inténtalo de nuevo</string>
     <string name="notification__received__body_amount">Recibido %s</string>
-    <string name="notification__received__body_channel">A través de un nuevo canal</string>
-    <string name="notification__received__body_hidden">Abre Bitkit para ver los detalles</string>
     <string name="notification__received__title">Pago Recibido</string>
     <string name="notification__service__body">Bitkit se está ejecutando en segundo plano para que puedas recibir pagos Lightning</string>
     <string name="notification__service__stop">Detener App</string>
@@ -371,8 +366,6 @@
     <string name="other__pay_insufficient_spending_amount_description">₿ {amount} más necesarios para pagar esta factura Lightning.</string>
     <string name="other__swipe">Deslizar para confirmar</string>
     <string name="other__scan_err_decoding">Error de descodificación</string>
-    <string name="other__scan_err_interpret_title">Incapaz de Interpretar los Datos Proporcionados</string>
-    <string name="other__lnurl_channel_error_raw">Ocurrió un error mientras intentaba pagar: {raw}</string>
     <string name="other__lnurl_channel_header">Conexión Lightning</string>
     <string name="other__lnurl_channel_title">Nueva\nconexión\n&lt;accent&gt;lightning&lt;/accent&gt;</string>
     <string name="other__lnurl_channel_message">¿Quiere abrir una conexión Lightning con este Proveedor de Servicio Lightning (LSP)?</string>
@@ -386,7 +379,6 @@
     <string name="other__camera_permission_description">Permite el acceso a la cámara para escanear facturas bitcoin y pagar más rápido.</string>
     <string name="other__camera_permission_title">ESCANEAR\n&lt;accent&gt;CÓDIGO QR&lt;/accent&gt;</string>
     <string name="other__camera_scan_qr">Escanear QR</string>
-    <string name="other__coming_soon">Próximamente</string>
     <string name="other__gift__claiming__text">Reclamando tu código de regalo Bitkit...</string>
     <string name="other__gift__claiming__title">Reclamando Regalo</string>
     <string name="other__gift__error__text">Bitkit no pudo reclamar los fondos. Por favor, inténtalo más tarde o contáctanos.</string>
@@ -515,7 +507,6 @@
     <string name="security__bio">Biometría</string>
     <string name="security__bio_auth_with">Autenticar con {biometricsName}</string>
     <string name="security__bio_ask">Código PIN establecido. ¿Te gustaría usar {biometricsName} en lugar de tu código PIN?</string>
-    <string name="security__bio_no">Parece que su dispositivo no es compatible con la seguridad biométrica.</string>
     <string name="security__bio_not_available">Parece que aún no has configurado la seguridad biométrica (o no es compatible). Intenta activarla en los ajustes del teléfono.</string>
     <string name="security__bio_confirm">Confirma {biometricsName}</string>
     <string name="security__bio_use">Utilizar {biometricsName}</string>
@@ -559,13 +550,10 @@
     <string name="settings__general_title">General</string>
     <string name="settings__security_title">Seguridad y Privacidad</string>
     <string name="settings__advanced_title">Avanzado</string>
-    <string name="settings__about_title">Acerca de</string>
     <string name="settings__language_system_default">Ajustes del sistema</string>
     <string name="settings__language_title">Idioma</string>
     <string name="settings__support_title">Soporte</string>
     <string name="settings__about__legal">Legal</string>
-    <string name="settings__about__title">Sobre Bitkit</string>
-    <string name="settings__about__text">Gracias por ser un Bitcoiner responsable.\nCambia tu monedero, cambia el mundo.\n\nBitkit te facilita las llaves a tu propio dinero, perfil, contactos y cuentas web.\n\nBitkit fue elaborado por Synonym Software Ltd.</string>
     <string name="settings__about__share">Compartir</string>
     <string name="settings__about__version">Versión</string>
     <string name="settings__about__shareText">Cambia tu monedero, cambia el mundo. Descarga Bitkit para iPhone {appStoreUrl} o Android {playStoreUrl}</string>
@@ -615,7 +603,6 @@
     <string name="settings__security__pin_payments">Pedir PIN al realizar pagos</string>
     <string name="settings__security__pin_enabled">Activado</string>
     <string name="settings__security__pin_disabled">Desactivado</string>
-    <string name="settings__security__footer">Cuando está activado, puedes usar {biometryTypeName} en lugar de tu código PIN para desbloquear tu monedero o enviar pagos.</string>
     <string name="settings__security__use_bio">Usar {biometryTypeName} en su lugar</string>
     <string name="settings__security__section_backup">Respaldar o restablecer</string>
     <string name="settings__security__section_privacy">Privacidad</string>
@@ -640,13 +627,11 @@
     <string name="settings__bg__customize">Personalizar en los Ajustes de Bitkit Android</string>
     <string name="settings__bg__disabled">Los pagos en segundo plano están desactivados porque has denegado las notificaciones.</string>
     <string name="settings__bg__enabled">Los pagos en segundo plano están activados. Puedes recibir fondos incluso cuando la aplicación está cerrada (si tu dispositivo está conectado a internet).</string>
-    <string name="settings__bg__include_amount">Incluir cantidad en las notificaciones</string>
     <string name="settings__bg__intro_desc">Activa las notificaciones para recibir pagos, incluso cuando tu aplicación Bitkit está cerrada.</string>
     <string name="settings__bg__intro_title">RECIBE PAGOS\n&lt;accent&gt;PASIVAMENTE&lt;/accent&gt;</string>
     <string name="settings__bg__notifications_header">Notificaciones</string>
     <string name="settings__bg__off">Desactivado</string>
     <string name="settings__bg__on">Activado</string>
-    <string name="settings__bg__privacy_header">Privacidad</string>
     <string name="settings__bg__setup">Configurar en segundo plano</string>
     <string name="settings__bg__switch_title">Recibir pagos cuando Bitkit está cerrado</string>
     <string name="settings__bg__title">Pagos en Segundo Plano</string>
@@ -662,7 +647,6 @@
     <string name="settings__quickpay__settings__text">Si está activado, las facturas escaneadas por debajo de ${amount} se pagarán automáticamente sin pedirte confirmación ni PIN*.</string>
     <string name="settings__quickpay__settings__toggle">QuickPay activado</string>
     <string name="settings__quickpay__sheet__description">QuickPay hace que pagar sea más rápido pagando automáticamente códigos QR escaneados.</string>
-    <string name="settings__support__title">Soporte</string>
     <string name="settings__support__text">¿Necesita ayuda? Reporte su problema desde el propio Bitkit, visite el centro de ayuda, compruebe el estado o póngase en contacto con nosotros en nuestras redes sociales.</string>
     <string name="settings__support__report">Reportar Problema</string>
     <string name="settings__support__help">Centro de Ayuda</string>
@@ -704,7 +688,6 @@
     <string name="settings__status__backup__error">Falló al hacer una copia de seguridad completa</string>
     <string name="settings__adv__section_payments">Pagos</string>
     <string name="settings__adv__section_networks">Redes</string>
-    <string name="settings__adv__section_other">Otros</string>
     <string name="settings__adv__coin_selection">Selección de monedas</string>
     <string name="settings__adv__cs_method">Método de selección de monedas</string>
     <string name="settings__adv__cs_manual">Manual</string>
@@ -721,7 +704,6 @@
     <string name="settings__adv__cs_min">Minimizar</string>
     <string name="settings__adv__cs_min_description">Usa los UTXOs de menor valor primero</string>
     <string name="settings__adv__address_viewer">Visualizador de direcciones</string>
-    <string name="settings__adv__suggestions_reset">Restablecer sugerencias</string>
     <string name="settings__adv__reset_title">¿Restablecer sugerencias?</string>
     <string name="settings__adv__reset_desc">¿Estás seguro de que deseas restablecer las sugerencias? Volverán a aparecer en caso de que las hayas eliminado.</string>
     <string name="settings__adv__reset_confirm">Sí, restaurar</string>
@@ -743,7 +725,6 @@
     <string name="settings__fee__custom__label">Personalizar</string>
     <string name="settings__fee__custom__value">Personalizar</string>
     <string name="settings__fee__custom__description">Depende de la comisión</string>
-    <string name="settings__addr__no_addrs">No hay direcciones para mostrar</string>
     <string name="settings__addr__loading">Cargando direcciones...</string>
     <string name="settings__addr__index">Índice: {index}</string>
     <string name="settings__addr__path">Ruta: {path}</string>
@@ -774,38 +755,6 @@
     <string name="settings__rgs__button_connect">Conectar</string>
     <string name="settings__rgs__update_success_description">Bitkit se ha conectado correctamente al servidor Rapid-Gossip-Sync especificado.</string>
     <string name="settings__rgs__update_success_title">Servidor Rapid-Gossip-Sync Actualizado</string>
-    <string name="sweep__balance_format">%1$s sats</string>
-    <string name="sweep__checking_description">Por favor espera mientras Bitkit comprueba si hay fondos en esta dirección.</string>
-    <string name="sweep__checking_loading">Comprobando si hay fondos...</string>
-    <string name="sweep__confirm_broadcasting">Emitiendo transacción...</string>
-    <string name="sweep__confirm_nav_title">Confirmar Barrido</string>
-    <string name="sweep__confirm_preparing">Preparando transacción...</string>
-    <string name="sweep__confirm_retry">Reintentar</string>
-    <string name="sweep__confirm_swipe">Deslizar para barrer</string>
-    <string name="sweep__confirm_to_address">A la dirección</string>
-    <string name="sweep__custom_fee_nav_title">Comisión Personalizada</string>
-    <string name="sweep__custom_fee_total">para esta transacción</string>
-    <string name="sweep__error_title">Error de Barrido</string>
-    <string name="sweep__fee_nav_title">Comisión de Barrido</string>
-    <string name="sweep__found_description">Por favor, selecciona qué fondos quieres barrer a tu monedero Bitkit.</string>
-    <string name="sweep__found_label">Encontrado</string>
-    <string name="sweep__found_title">Fondos encontrados</string>
-    <string name="sweep__legacy_title">Legacy</string>
-    <string name="sweep__nav_title">Barrer Fondos</string>
-    <string name="sweep__no_funds_description">No se encontraron fondos en esta clave privada. Por favor, comprueba si la clave es correcta.</string>
-    <string name="sweep__no_funds_title">Sin fondos encontrados</string>
-    <string name="sweep__prompt_description">Bitkit escaneará esta clave y te ayudará a mover cualquier fondo a tu monedero.</string>
-    <string name="sweep__prompt_sweep">Barrer fondos</string>
-    <string name="sweep__prompt_title">Barrer\n&lt;accent&gt;clave privada&lt;/accent&gt;</string>
-    <string name="sweep__segwit_title">SegWit</string>
-    <string name="sweep__success_description">Tus fondos han sido barridos correctamente a tu monedero Bitkit.</string>
-    <string name="sweep__success_nav_title">Barrido Exitoso</string>
-    <string name="sweep__success_wallet_overview">Ver monedero</string>
-    <string name="sweep__taproot_title">Taproot</string>
-    <string name="sweep__to_wallet">A tu monedero</string>
-    <string name="sweep__total">Total</string>
-    <string name="sweep__utxo_format">%1$s, %2$d UTXO</string>
-    <string name="sweep__utxos_format">%1$s, %2$d UTXOs</string>
     <string name="usdt__address">Dirección de destino</string>
     <string name="usdt__amount">Cantidad</string>
     <string name="usdt__bridge_attention">El puente requiere atención</string>
@@ -940,9 +889,7 @@
     <string name="wallet__send_clipboard_empty_title">Portapapeles vacío</string>
     <string name="wallet__send_clipboard_empty_text">Por favor, copia una dirección o factura</string>
     <string name="wallet__send_amount">Cantidad de Bitcoin</string>
-    <string name="wallet__send_max">MAX</string>
     <string name="wallet__send_available_spending">Disponible (para gasto)</string>
-    <string name="wallet__send_available_savings">Disponible (ahorro)</string>
     <string name="wallet__send_review">Confirmar</string>
     <string name="wallet__send_confirming_in">Confirmando en</string>
     <string name="wallet__send_contact_title">Seleccionar contacto</string>
@@ -951,6 +898,7 @@
     <string name="wallet__send_yes">Sí, enviar</string>
     <string name="wallet__send_dialog1">Parece que está enviando más de 100 dólares. ¿Desea continuar?</string>
     <string name="wallet__send_dialog2">Parece que está enviando más del 50% de su saldo total. ¿Desea continuar?</string>
+    <string name="wallet__send_dialog2_usdt" formatted="false">Parece que está enviando más del 50% de su saldo de USDT. ¿Desea continuar?</string>
     <string name="wallet__send_dialog3">La comisión de transacción parece ser superior al 50% del importe que está enviando. ¿Desea continuar?</string>
     <string name="wallet__send_dialog4">La comisión de transacción parece ser superior a 10 dólares. ¿Desea continuar?</string>
     <string name="wallet__send_sent">Bitcoin Enviado</string>
@@ -1153,10 +1101,8 @@
     <string name="widgets__widgets">Widgets</string>
     <string name="widgets__onboarding__title">Hola,\n&lt;accent&gt;Widgets&lt;/accent&gt;</string>
     <string name="widgets__onboarding__description">Disfruta de fuentes descentralizadas de tus servicios web favoritos, añadiendo widgets divertidos y útiles a tu monedero Bitkit.</string>
-    <string name="widgets__widget__nav_title">Widget</string>
     <string name="widgets__widget__save">Guardar Widget</string>
     <string name="widgets__widget__edit_custom">Personalizar</string>
-    <string name="widgets__widget__edit_description">Por favor, seleccione cuales campos quiere mostrar en el widget {name}.</string>
     <string name="widgets__add">Añadir Widget</string>
     <string name="widgets__delete__title">¿Borrar Widget?</string>
     <string name="widgets__delete__description">¿Está seguro de querer borrar ‘{name}‘ de sus widgets?</string>
@@ -1186,7 +1132,6 @@
     <string name="widgets__weather__description">Descubre cuándo es un buen momento para transaccionar en la blockchain de Bitcoin.</string>
     <string name="widgets__weather__name">Tiempo Bitcoin</string>
     <string name="widgets__weather__next_block">Inclusión en el próximo bloque</string>
-    <string name="widgets__widget__edit">Feed del Widget</string>
     <string name="widgets__widget__edit_default">Por defecto</string>
     <string name="appwidget__loading">Cargando…</string>
     <string name="appwidget__price__currency">Moneda</string>
@@ -1638,7 +1583,6 @@
     <string name="wallet__payment_request_sending">En cola para su entrega</string>
     <string name="wallet__payment_request_sent_description">Ha enviado una solicitud de pago a</string>
     <string name="wallet__payment_request_sent_headline">Pago &lt;accent&gt;solicitado&lt;/accent&gt;</string>
-    <string name="wallet__payment_request_status_accepted">Aceptada</string>
     <string name="wallet__payment_request_status_action_required">Acción necesaria</string>
     <string name="wallet__payment_request_status_canceled">Cancelada</string>
     <string name="wallet__payment_request_status_expired">Caducada</string>

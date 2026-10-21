@@ -137,6 +137,22 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deposit liquidity rejection keeps the amount editable without showing a deposit address`() = test {
+        whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf(UsdtDepositNetwork.POLYGON)))
+        whenever(repo.prepareDeposit(UsdtDepositNetwork.POLYGON, "3.5"))
+            .thenReturn(Result.failure(UsdtException.BridgeLiquidityUnavailable()))
+        val model = UsdtDepositViewModel(repo)
+        model.selectNetwork(UsdtDepositNetwork.POLYGON)
+        model.prepare("3.5").join()
+        assertEquals(R.string.usdt__error_bridge_liquidity, model.state.value.error)
+        assertNull(model.state.value.amountLimits)
+        assertNull(model.state.value.address)
+        assertFalse(model.state.value.busy)
+        model.clearError()
+        assertNull(model.state.value.error)
+    }
+
+    @Test
     fun `editing a rejected amount clears its error and limits`() = test {
         whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf(UsdtDepositNetwork.POLYGON)))
         val error = UsdtException.DepositAmountOutOfRange("200", "1200000000")

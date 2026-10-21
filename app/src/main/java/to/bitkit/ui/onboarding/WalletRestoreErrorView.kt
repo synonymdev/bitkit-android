@@ -37,8 +37,8 @@ fun WalletRestoreErrorView(
     retryCount: Int,
     onRetry: () -> Unit,
     onProceedWithoutRestore: () -> Unit,
-    hazeState: HazeState = rememberHazeState(),
     modifier: Modifier = Modifier,
+    hazeState: HazeState = rememberHazeState(),
 ) {
     var showDialog by remember { mutableStateOf(false) }
 

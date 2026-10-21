@@ -2,9 +2,10 @@
   <description>
     Optional reminders must not replace an open scanner or another sheet, and a blocked reminder
     must remain eligible for a later Home visit. Use an onboarded test wallet with PIN disabled
-    and a reminder that has not appeared in this app session. The USDT intro requires a configured build and an
-    undecided USDT preference. Alternatively, use an unverified backup on a wallet with a positive
-    balance and no backup-reminder dismissal within 24 hours. Grant camera permission beforehand.
+    and a reminder that has not appeared in this app session. Use an unverified backup on a wallet
+    with a positive balance and no backup-reminder dismissal within 24 hours. Resolve the USDT
+    intro before this journey: its separate idle retry is covered by usdt-intro-scheduling.xml.
+    Grant camera permission beforehand.
     Do not resolve or dismiss the chosen reminder before testing: displaying it consumes its
     session queue entry, and dismissing the backup reminder starts a 24-hour cooldown. Relaunch
     between independent cases without changing the wallet's eligibility. No payment is submitted.

@@ -24,19 +24,17 @@ import kotlin.math.abs
  * @param currentTabIndex The currently selected tab index (0-based)
  * @param tabCount Total number of tabs available for navigation
  * @param onTabChange Callback invoked when user swipes to change tabs, receives the new tab index
- * @param velocityThreshold Velocity threshold in px/s (default: 600f)
- * @param distanceThreshold Distance threshold in dp (default: 50.dp)
+ * @param wrapAround Whether a swipe past the first or last tab selects the tab at the other end
  */
 fun Modifier.swipeToChangeTab(
     currentTabIndex: Int,
     tabCount: Int,
     onTabChange: (Int) -> Unit,
-    velocityThreshold: Float = DEFAULT_VELOCITY_THRESHOLD,
-    distanceThreshold: Float = DEFAULT_DISTANCE_THRESHOLD_DP,
+    wrapAround: Boolean = false,
 ): Modifier = composed {
     val velocityTracker = remember { VelocityTracker() }
     var totalDragDistance by remember { mutableFloatStateOf(0f) }
-    val distanceThresholdPx = with(LocalDensity.current) { distanceThreshold.dp.toPx() }
+    val distanceThresholdPx = with(LocalDensity.current) { DEFAULT_DISTANCE_THRESHOLD_DP.dp.toPx() }
 
     pointerInput(currentTabIndex) {
         detectHorizontalDragGestures(
@@ -49,19 +47,17 @@ fun Modifier.swipeToChangeTab(
                 val dragDistance = totalDragDistance
 
                 // Check if either velocity OR distance threshold is met
-                val shouldNavigate = abs(velocity) >= velocityThreshold ||
+                val shouldNavigate = abs(velocity) >= DEFAULT_VELOCITY_THRESHOLD ||
                     abs(dragDistance) >= distanceThresholdPx
 
                 if (shouldNavigate) {
-                    when {
+                    swipeTargetIndex(
                         // Swipe right (previous tab) - positive velocity/drag
-                        (velocity > 0 || dragDistance > 0) && currentTabIndex > 0 ->
-                            onTabChange(currentTabIndex - 1)
-
-                        // Swipe left (next tab) - negative velocity/drag
-                        (velocity < 0 || dragDistance < 0) && currentTabIndex < tabCount - 1 ->
-                            onTabChange(currentTabIndex + 1)
-                    }
+                        isPrevious = velocity > 0 || dragDistance > 0,
+                        currentTabIndex = currentTabIndex,
+                        tabCount = tabCount,
+                        wrapAround = wrapAround,
+                    )?.let(onTabChange)
                 }
 
                 velocityTracker.resetTracking()
@@ -74,6 +70,15 @@ fun Modifier.swipeToChangeTab(
         )
     }
 }
+
+private fun swipeTargetIndex(isPrevious: Boolean, currentTabIndex: Int, tabCount: Int, wrapAround: Boolean): Int? =
+    when {
+        isPrevious && currentTabIndex > 0 -> currentTabIndex - 1
+        isPrevious && wrapAround -> tabCount - 1
+        !isPrevious && currentTabIndex < tabCount - 1 -> currentTabIndex + 1
+        !isPrevious && wrapAround -> 0
+        else -> null
+    }
 
 // Reduced from 1500 to 600 for better iOS-like sensitivity
 private const val DEFAULT_VELOCITY_THRESHOLD = 600f

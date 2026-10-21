@@ -13,6 +13,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
@@ -227,6 +228,7 @@ import to.bitkit.services.PubkyService
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
+import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
@@ -400,6 +402,8 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
+    private val _transactionSheet = MutableStateFlow(NewTransactionSheetDetails.EMPTY)
+    val transactionSheet = _transactionSheet.asStateFlow()
     val pendingPaymentRequests = paykitPaymentRequestRepo.pendingRequests
     val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
@@ -413,6 +417,7 @@ class AppViewModel @Inject constructor(
     val subscriptions = paykitPaymentRequestRepo.subscriptions
     val pubkyContacts = pubkyRepo.contacts
     private var sheetTransitionJob: Job? = null
+    private var isUsdtIntroPresented = false
     private var transitionSheet: Sheet? = null
     private var paymentRequestSheetTransitionJob: Job? = null
     private var queuedPairingCodeRequestId: Long? = null
@@ -501,6 +506,7 @@ class AppViewModel @Inject constructor(
     private var paykitAmountConversion = PaykitAmountConversion()
     private val pendingContactPaymentContexts = mutableMapOf<String, ContactPaymentContext>()
     private val _requestedPaymentRequestId = MutableStateFlow<PaykitPaymentRequestId?>(null)
+    private val expiredFeedbackRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     val requestedPaymentRequestId = _requestedPaymentRequestId.asStateFlow()
     private val paymentRequestPreparation = MutableStateFlow<PaymentRequestPreparation?>(null)
     private val dismissedPreparingRequestIds = mutableSetOf<PaykitPaymentRequestId>()
@@ -684,6 +690,23 @@ class AppViewModel @Inject constructor(
                     }
                     if (shouldFlush) flushDeferredScan()
                 }
+            }
+        }
+        viewModelScope.launch {
+            isAuthenticated.collect { authenticated ->
+                if (authenticated) timedSheetManager.reevaluate()
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                currentSheet,
+                isAuthenticated,
+                showForgotPinSheet,
+                transactionSheet,
+            ) { sheet, authenticated, forgotPin, receipt ->
+                sheet == null && authenticated && !forgotPin && receipt == NewTransactionSheetDetails.EMPTY
+            }.collect {
+                if (it) retryUsdtIntro()
             }
         }
         viewModelScope.launch {
@@ -1355,6 +1378,9 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             paykitPaymentRequestRepo.pendingRequests.drop(1).collect(::onPendingPaykitRequestsChanged)
         }
+        viewModelScope.launch {
+            paykitPaymentRequestRepo.expiredProposals.collect(::toastExpiredPaymentRequests)
+        }
     }
 
     private suspend fun onPendingPaykitRequestsChanged(requests: List<PaykitPaymentRequest>) {
@@ -1404,6 +1430,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun onSheetVisible(sheet: Sheet?) {
+        if (sheet is Sheet.TimedSheet && sheet.type == TimedSheetType.USDT) {
+            if (sheet === currentSheet.value && _isAuthenticated.value) {
+                viewModelScope.launch { settingsStore.update { it.copy(hasSeenUsdtIntro = true) } }
+            }
+            return
+        }
         if (sheet is Sheet.Subscription && sheet.route is SubscriptionRoute.Review) {
             subscription(sheet.route.id)?.let { subscription ->
                 viewModelScope.launch {
@@ -1769,6 +1801,22 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun toastExpiredPaymentRequests(expired: List<PaykitPaymentRequest>) {
+        if (!isPaykitEnabled.value) return
+        // The opened request and the one being paid get their own feedback.
+        val handledIds = setOfNotNull(requestedPaymentRequestId.value, activeIncomingPaymentRequest()?.id)
+        val newlyExpired = expired.filter { it.id !in handledIds && it.id !in expiredFeedbackRequestIds }
+        if (newlyExpired.isEmpty()) return
+        // A refresh that started before the expiry can restore a request, so toast each one once.
+        expiredFeedbackRequestIds += newlyExpired.map { it.id }
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.wallet__payment_request_expired),
+            testTag = "PaymentRequestExpiredToast",
+        )
+    }
+
     private fun finishExpiredPaymentRequestPresentation(request: PaykitPaymentRequest) {
         paykitPaymentRequestDiagnostics.logPresentationRejection(
             request.counterparty,
@@ -1784,6 +1832,7 @@ class AppViewModel @Inject constructor(
         }
         clearPaymentRequestPresentationRetry(request.id)
         if (!showExpiredToast) return
+        expiredFeedbackRequestIds += request.id
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.wallet__payment_request),
@@ -3167,7 +3216,10 @@ class AppViewModel @Inject constructor(
         nextJob.invokeOnCompletion {
             if (scheduledScan === nextScheduledScan) scheduledScan = null
             if (nextJob.isCancelled) return@invokeOnCompletion clearCancelledContactContext(contactPaymentContext)
-            viewModelScope.launch { flushDeferredScan() }
+            viewModelScope.launch {
+                flushDeferredScan()
+                retryUsdtIntro()
+            }
         }
 
         Logger.debug("Starting scan from '${source.label}': '$scanId'", context = TAG)
@@ -3191,7 +3243,7 @@ class AppViewModel @Inject constructor(
         allowPubkyAuth: Boolean,
     ): Boolean {
         if (source != ScanSource.DEEPLINK) return true
-        val uri = Uri.parse(data)
+        val uri = data.toUri()
         val isContactLink = PubkyContactLink.matches(uri)
         if (isContactLink) {
             if (PubkyContactLink.publicKey(uri) == null) return true
@@ -4325,8 +4377,8 @@ class AppViewModel @Inject constructor(
     }
 
     private fun normalizedScanInput(result: String, routePubkyKeys: Boolean): String? {
-        return if (routePubkyKeys && PubkyContactLink.matches(Uri.parse(result))) {
-            PubkyContactLink.publicKey(Uri.parse(result)) ?: run {
+        return if (routePubkyKeys && PubkyContactLink.matches(result.toUri())) {
+            PubkyContactLink.publicKey(result.toUri()) ?: run {
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.other__scan_err_decoding),
@@ -6634,9 +6686,6 @@ class AppViewModel @Inject constructor(
     // region TxSheet
     private var _isTransactionSheetEnabled = true
 
-    private val _transactionSheet = MutableStateFlow(NewTransactionSheetDetails.EMPTY)
-    val transactionSheet = _transactionSheet.asStateFlow()
-
     private val _successSendUiState = MutableStateFlow(
         NewTransactionSheetDetails(
             type = NewTransactionSheetType.LIGHTNING,
@@ -6782,7 +6831,9 @@ class AppViewModel @Inject constructor(
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
             if (_currentSheet.value != null && !replacesSubscriptionReview(sheetType)) {
+                val replacesTimedSheet = _currentSheet.value is Sheet.TimedSheet
                 _currentSheet.update { null }
+                if (replacesTimedSheet) dismissTimedSheet()
                 delay(SCREEN_TRANSITION_DELAY)
             }
             receiveSheetContext = (sheetType as? Sheet.Receive)?.let { receiveSheet ->
@@ -7900,12 +7951,24 @@ class AppViewModel @Inject constructor(
         acc.replace(regex, "")
     }
 
+    private fun tryShowTimedSheet(type: TimedSheetType): Boolean {
+        if (!canShowTimedSheet()) return false
+        _currentSheet.update { Sheet.TimedSheet(type) }
+        if (type == TimedSheetType.USDT) isUsdtIntroPresented = true
+        return true
+    }
+
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered(
         canShowSheet = ::canShowTimedSheet,
-        showSheet = { showSheet(Sheet.TimedSheet(it)) },
+        showSheet = { tryShowTimedSheet(it) },
     )
 
-    private fun canShowTimedSheet() = _currentSheet.value == null &&
+    private suspend fun retryUsdtIntro() {
+        if (!isUsdtIntroPresented && usdtSheet.shouldShow()) timedSheetManager.reevaluate()
+    }
+
+    private fun canShowTimedSheet() = _isAuthenticated.value && !_showForgotPinSheet.value &&
+        _currentSheet.value == null &&
         sheetTransitionJob?.isActive != true &&
         paymentRequestSheetTransitionJob?.isActive != true &&
         _transactionSheet.value == NewTransactionSheetDetails.EMPTY &&
@@ -8105,6 +8168,7 @@ data class OnchainFeeUi(
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
     VALUE_OVER_100_USD(R.string.wallet__send_dialog1, "SendDialog1"),
     OVER_HALF_BALANCE(R.string.wallet__send_dialog2, "SendDialog2"),
+    OVER_HALF_USDT_BALANCE(R.string.wallet__send_dialog2_usdt, "SendDialog2"),
     FEE_OVER_HALF_VALUE(R.string.wallet__send_dialog3, "SendDialog3"),
     FEE_OVER_10_USD(R.string.wallet__send_dialog4, "SendDialog4"),
     // TODO SendDialog5 https://github.com/synonymdev/bitkit/blob/master/src/screens/Wallets/Send/ReviewAndSend.tsx#L457-L466

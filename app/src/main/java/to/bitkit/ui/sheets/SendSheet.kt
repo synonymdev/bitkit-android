@@ -1,5 +1,6 @@
 package to.bitkit.ui.sheets
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -596,12 +597,14 @@ fun SendSheet(
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.RecoveryPinCheck> {
+                    val cancel = {
+                        navController.previousBackStackEntry?.savedStateHandle
+                            ?.set(RECOVERY_PIN_CHECK_RESULT_KEY, false)
+                        navController.popBackStack()
+                    }
+                    BackHandler(onBack = { cancel() })
                     SendPinCheckScreen(
-                        onBack = {
-                            navController.previousBackStackEntry?.savedStateHandle
-                                ?.set(RECOVERY_PIN_CHECK_RESULT_KEY, false)
-                            navController.popBackStack()
-                        },
+                        onBack = { cancel() },
                         onSuccess = {
                             navController.previousBackStackEntry?.savedStateHandle
                                 ?.set(RECOVERY_PIN_CHECK_RESULT_KEY, true)
@@ -610,13 +613,15 @@ fun SendSheet(
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.PinCheck> {
+                    val cancel = {
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set(PIN_CHECK_RESULT_KEY, false)
+                        navController.popBackStack()
+                    }
+                    BackHandler(onBack = { cancel() })
                     SendPinCheckScreen(
-                        onBack = {
-                            navController.previousBackStackEntry
-                                ?.savedStateHandle
-                                ?.set(PIN_CHECK_RESULT_KEY, false)
-                            navController.popBackStack()
-                        },
+                        onBack = { cancel() },
                         onSuccess = {
                             navController.previousBackStackEntry
                                 ?.savedStateHandle
