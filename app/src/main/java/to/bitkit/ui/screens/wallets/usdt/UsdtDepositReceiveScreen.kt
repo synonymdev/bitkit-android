@@ -35,6 +35,8 @@ import com.synonym.bitkitcore.UsdtDepositDetail
 import com.synonym.bitkitcore.UsdtDepositNetwork
 import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.PaykitAmount
@@ -65,6 +67,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
     viewModel: UsdtViewModel,
     tabs: ImmutableList<ReceiveTab>,
     onSelectTab: (ReceiveTab) -> Unit,
+    tabLabels: ImmutableMap<ReceiveTab, String> = persistentMapOf(),
     onBack: () -> Unit,
     onBlockingChange: (Boolean) -> Unit,
     onContacts: (() -> Unit)? = null,
@@ -129,6 +132,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
         CustomTabRowWithSpacing(
             tabs = tabs,
             currentTabIndex = tabs.indexOf(ReceiveTab.USDT),
+            labelOverrides = tabLabels,
             onTabChange = onSelectTab
         )
         VerticalSpacer(16.dp)
