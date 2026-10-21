@@ -1865,6 +1865,31 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `request being paid gets no expired toast when it expires`() = test {
+        val (request, _) = reopenRetainedHardwareRequest(balanceSats = 1_000_000uL, amountSats = 30_000uL)
+        val sheet = sut.currentSheet.value
+        sut.onSheetVisible(sheet)
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToHardwareSign, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        clearInvocations(toastManager)
+
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = emptyList()
+        expiredPaykitProposals.emit(listOf(request))
+        runCurrent()
+
+        val toasts = argumentCaptor<Toast>()
+        verify(toastManager, atLeast(0)).enqueue(toasts.capture())
+        assertTrue(toasts.allValues.none { it.testTag == "PaymentRequestExpiredToast" })
+    }
+
+    @Test
     fun `reopened refused hardware request locks terms and reaches hardware sign on swipe`() = test {
         reopenRetainedHardwareRequest(balanceSats = 1_000_000uL, amountSats = 30_000uL)
         val sheet = sut.currentSheet.value

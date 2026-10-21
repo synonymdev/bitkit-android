@@ -1326,7 +1326,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         backgroundScope.launch { sut.expiredProposals.collect { reported += it } }
         runCurrent()
 
-        // The clock passes expiry after the snapshot is parsed and before the pending list is replaced.
+        // The clock passes expiry after the refresh reads its time and before the pending list is replaced.
         // Mockito answers with Result's unboxed value, as the compiled suspend call expects.
         whenever(usdtPayments.verifiedReceipts(any())).thenAnswer {
             clockJumpMillis = 10_000
