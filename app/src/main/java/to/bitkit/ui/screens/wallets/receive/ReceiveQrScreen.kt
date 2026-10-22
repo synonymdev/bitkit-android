@@ -618,6 +618,7 @@ fun ReceiveQrView(
     accentColor: Color,
     modifier: Modifier = Modifier,
     shareContent: String = copyText,
+    copyMessage: String = stringResource(R.string.wallet__receive_copied),
 ) {
     val context = LocalContext.current
     val qrButtonTooltipState = rememberTooltipState()
@@ -631,7 +632,7 @@ fun ReceiveQrView(
         QrCodeImage(
             content = uri,
             logoPainter = qrLogoPainter,
-            tipMessage = stringResource(R.string.wallet__receive_copied),
+            tipMessage = copyMessage,
             onBitmapGenerated = { bitmap -> qrBitmap = bitmap },
             testTag = "QRCode",
             copyContent = copyText,
@@ -664,7 +665,7 @@ fun ReceiveQrView(
             }
             Box(modifier = Modifier.weight(1f)) {
                 Tooltip(
-                    text = stringResource(R.string.wallet__receive_copied),
+                    text = copyMessage,
                     tooltipState = qrButtonTooltipState,
                 ) {
                     PrimaryButton(
@@ -934,6 +935,7 @@ fun CopyAddressCard(
     accentColor: Color? = null,
     shareContent: String = address,
     shareQrContent: String? = null,
+    copyMessage: String = stringResource(R.string.wallet__receive_copied),
 ) {
     val context = LocalContext.current
     val shareBitmap = shareQrContent?.let { rememberQrBitmap(it, 400.dp) }
@@ -982,7 +984,7 @@ fun CopyAddressCard(
             }
             Box(modifier = Modifier.weight(1f)) {
                 Tooltip(
-                    text = stringResource(R.string.wallet__receive_copied),
+                    text = copyMessage,
                     tooltipState = tooltipState
                 ) {
                     Box {

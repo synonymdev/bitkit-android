@@ -313,7 +313,7 @@ data class UsdtSendState(
 }
 
 private fun UsdtQuote.warnings(balance: ULong?, warnOver100: Boolean): List<SanityWarning> = buildList {
-    if (balance != null && amount > balance / 2u) add(SanityWarning.OVER_HALF_BALANCE)
+    if (balance != null && amount > balance / 2u) add(SanityWarning.OVER_HALF_USDT_BALANCE)
     if (warnOver100 && amount > 100_000_000u) add(SanityWarning.VALUE_OVER_100_USD)
     val totalCost = USat(maximumFee) + USat(USat(amount) - USat(receivedAmount))
     if (totalCost > 10_000_000u) add(SanityWarning.FEE_OVER_10_USD)
