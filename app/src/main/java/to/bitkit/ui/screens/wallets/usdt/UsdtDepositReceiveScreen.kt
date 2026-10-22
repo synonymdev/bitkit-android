@@ -122,6 +122,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
         modifier = Modifier.weight(1f)
     ) { shown ->
         val target = shown.page
+        val isCurrent = { target == page }
         Column(modifier = Modifier.fillMaxSize().background(Colors.Gray7).padding(horizontal = 16.dp)) {
             SheetTopBar(
                 titleText = stringResource(
@@ -132,7 +133,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                         ReceivePage.FEES -> R.string.usdt__receive_fees_title
                     }
                 ),
-                onBack = back.takeIf { target != ReceivePage.ADDRESS },
+                onBack = whenCurrent(isCurrent, back).takeIf { target != ReceivePage.ADDRESS },
                 action = if (target == ReceivePage.ADDRESS && onContacts != null) {
                     {
                         IconButton(onClick = onContacts) {
@@ -174,12 +175,12 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
             ) {
                 UsdtDepositReceiveContent(
                     page = target,
-                    onPage = { page = it },
+                    onPage = whenCurrentOf(isCurrent) { page = it },
                     wallet = wallet,
                     receiveError = walletUi.refreshError,
                     state = shown.state,
                     amount = shown.amount,
-                    onNetwork = {
+                    onNetwork = whenCurrentOf(isCurrent) {
                         if (state.network != it) {
                             amount = ""
                             draftAmount = ""
@@ -191,11 +192,11 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                             ReceivePage.AMOUNT
                         }
                     },
-                    onAmount = {
+                    onAmount = whenCurrentOf(isCurrent) {
                         if (draftAmount != it) deposits.clearError()
                         draftAmount = it
                     },
-                    onCreate = {
+                    onCreate = whenCurrent(isCurrent) {
                         if (state.network == null) {
                             amount = draftAmount
                             page = ReceivePage.ADDRESS
@@ -204,7 +205,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                         }
                     },
                     onHistory = { app?.navigateToUsdtDeposits() },
-                    onRefresh = {
+                    onRefresh = whenCurrent(isCurrent) {
                         draftAmount = if (state.network == null) amount else draftAmount
                         deposits.selectNetwork(state.network)
                         page = ReceivePage.AMOUNT
@@ -286,6 +287,12 @@ private fun ColumnScope.FeeEstimate(address: UsdtDepositAddress?, onContinue: ()
 }
 
 internal enum class ReceivePage { ADDRESS, NETWORKS, AMOUNT, FEES }
+
+private fun whenCurrent(isCurrent: () -> Boolean, block: () -> Unit): () -> Unit = { if (isCurrent()) block() }
+
+private fun <T> whenCurrentOf(isCurrent: () -> Boolean, block: (T) -> Unit): (T) -> Unit = {
+    if (isCurrent()) block(it)
+}
 
 private data class ShownPage(val page: ReceivePage, val state: DepositUiState, val amount: String)
 
