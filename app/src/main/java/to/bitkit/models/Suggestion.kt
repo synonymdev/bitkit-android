@@ -25,12 +25,6 @@ enum class Suggestion(
         color = Colors.Blue24,
         icon = R.drawable.trezor,
     ),
-    LIGHTNING(
-        title = R.string.cards__lightning__title,
-        description = R.string.cards__lightning__description,
-        color = Colors.Purple24,
-        icon = R.drawable.lightning,
-    ),
     BACK_UP(
         title = R.string.cards__backupSeedPhrase__title,
         description = R.string.cards__backupSeedPhrase__description,

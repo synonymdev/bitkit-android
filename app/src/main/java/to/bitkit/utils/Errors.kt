@@ -26,7 +26,6 @@ sealed class ServiceError(message: String) : AppError(message) {
     class ChannelSizeExceedsMaximum : ServiceError("Channel size exceeds maximum")
     class CjitQuoteInvalid : ServiceError("CJIT quote is invalid")
     class GeoBlocked : ServiceError("Geo blocked user")
-    class GiftClaimPaymentNotReceived : ServiceError("Gift claim payment not received")
     class NodeCapacityUnavailable : ServiceError("Additional spending capacity is unavailable")
 }
 

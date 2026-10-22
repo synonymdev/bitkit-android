@@ -25,12 +25,14 @@ import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BannerItem
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
+import to.bitkit.models.formatChannelsCloseDate
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SuggestionsRepo
 import to.bitkit.repositories.TransferRepo
@@ -50,6 +52,7 @@ class HomeViewModel @Inject constructor(
     private val currencyRepo: CurrencyRepo,
     private val settingsStore: SettingsStore,
     private val transferRepo: TransferRepo,
+    private val lightningRepo: LightningRepo,
     private val pubkyRepo: PubkyRepo,
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
@@ -306,7 +309,8 @@ class HomeViewModel @Inject constructor(
         combine(
             walletRepo.balanceState,
             transferRepo.forceCloseRemainingDuration,
-        ) { balanceState, remainingDuration ->
+            lightningRepo.hasTrustedChannels,
+        ) { balanceState, remainingDuration, hasTrustedChannels ->
             val defaultTitle = context.getString(R.string.lightning__transfer_in_progress)
             val savingsTitle = remainingDuration?.let {
                 context.getString(R.string.lightning__transfer_ready_in, it)
@@ -321,6 +325,17 @@ class HomeViewModel @Inject constructor(
                     type = ActivityBannerType.SAVINGS,
                     title = savingsTitle,
                 ).takeIf { balanceState.balanceInTransferToSavings > 0uL },
+                if (hasTrustedChannels) {
+                    BannerItem(
+                        type = ActivityBannerType.CHANNELS_CLOSING,
+                        title = context.getString(
+                            R.string.lightning__channels_closing_banner,
+                            formatChannelsCloseDate().uppercase(),
+                        ),
+                    )
+                } else {
+                    null
+                },
             )
         }.collect { banners ->
             _uiState.update { it.copy(banners = banners.toImmutableList()) }

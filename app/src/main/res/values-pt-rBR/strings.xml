@@ -7,8 +7,6 @@
     <string name="cards__buyBitcoin__title">Comprar</string>
     <string name="cards__invite__description">Compartilhe a Bitkit</string>
     <string name="cards__invite__title">Convide</string>
-    <string name="cards__lightning__description">Pagamentos instantâneos</string>
-    <string name="cards__lightning__title">Pagar</string>
     <string name="cards__notifications__description">Quando a Bitkit está fechada</string>
     <string name="cards__notifications__title">Receba pagamentos</string>
     <string name="cards__pin__description">Configure um PIN</string>
@@ -112,6 +110,8 @@
     <string name="lightning__channel_opened_msg">Agora é possível pagar qualquer pessoa, em qualquer lugar, instantaneamente.</string>
     <string name="lightning__channel_opened_title">Saldo de Gastos Pronto</string>
     <string name="lightning__channel_point">Ponto do canal</string>
+    <string name="lightning__channels_closing_banner">CANAIS FECHAM EM %1$s</string>
+    <string name="lightning__channels_closing_notice">Seus canais Lightning serão fechados em %1$s. Transfira seu saldo de gastos para a poupança antes dessa data.</string>
     <string name="lightning__close_button">Fechar</string>
     <string name="lightning__close_conn">Fechar Conexão</string>
     <string name="lightning__close_error">A Transferência Falhou</string>
@@ -357,14 +357,6 @@
     <string name="other__connection_back_title">Conexão com a Internet Restaurada.</string>
     <string name="other__connection_issue">Problemas de Conectividade com a Internet</string>
     <string name="other__connection_issue_explain">Parece que você está desconectado, tentando reconectar...</string>
-    <string name="other__gift__claiming__text">Reivindicando seu gitf code Bitkit...</string>
-    <string name="other__gift__claiming__title">Reivindicando presente</string>
-    <string name="other__gift__error__text">A Bitkit não pôde reivindicar os fundos. Tente novamente mais tarde ou entre em contato conosco.</string>
-    <string name="other__gift__error__title">Erro no código de presente</string>
-    <string name="other__gift__used__text">Este gift code da Bitkit já foi usado e os fundos já foram pagos.</string>
-    <string name="other__gift__used__title">Código usado</string>
-    <string name="other__gift__used_up__text">Desculpe, você chegou tarde! Todos os presentes deste código já foram reivindicados.</string>
-    <string name="other__gift__used_up__title">Presentes Esgotados</string>
     <string name="other__high_balance__cancel">Saiba Mais</string>
     <string name="other__high_balance__continue">Entendido</string>
     <string name="other__high_balance__nav_title">Saldo Alto</string>
@@ -1001,7 +993,6 @@
     <string name="wallet__payment_received">Bitcoin Recebido</string>
     <string name="wallet__peer_disconnected">Peer desconectado.</string>
     <string name="wallet__receive">Receber</string>
-    <string name="wallet__receive__cjit">Receber fundos Lightning</string>
     <string name="wallet__receive_bitcoin">Receber Bitcoin</string>
     <string name="wallet__receive_bitcoin_invoice">Invoice Bitcoin</string>
     <string name="wallet__receive_connect_additional">Para receber mais Bitcoin instantâneo, a Bitkit precisa aumentar sua liquidez. A taxa de rede de &lt;accent&gt;{networkFee}&lt;/accent&gt; e &lt;accent&gt;{serviceFee}&lt;/accent&gt; de taxa do provedor de serviços serão deduzidas do valor que você especificou.</string>
@@ -1017,8 +1008,6 @@
     <string name="wallet__receive_liquidity__text">Seu Saldo de Gastos usa a Lightning Network para tornar seus pagamentos mais baratos, mais rápidos e mais privados.\n\nIsso funciona como o acesso à Internet, mas você paga por liquidez e roteamento em vez de largura de banda.\n\nEssa configuração inclui alguns custos únicos.</string>
     <string name="wallet__receive_liquidity__text_additional">Seu Saldo de Gastos usa a Lightning Network para tornar seus pagamentos mais baratos, mais rápidos e mais privados.\n\nIsso funciona como o acesso à Internet, mas você paga por liquidez e roteamento em vez de largura de banda.\n\nA Bitkit precisa aumentar a capacidade de recebimento de seu saldo de gastos para processar esse pagamento.</string>
     <string name="wallet__receive_note_placeholder">Comentário opcional para o pagador</string>
-    <string name="wallet__receive_onboarding_description">Aproveite transações instantâneas\ne baratas com amigos, família\ne comerciantes.</string>
-    <string name="wallet__receive_onboarding_title">Receba no &lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Mostrar Detalhes</string>
     <string name="wallet__receive_show_qr">Mostrar código QR</string>
     <string name="wallet__receive_specify">Editar Invoice</string>
@@ -1115,7 +1104,6 @@
     <string name="wallet__toast_transaction_unconfirmed_description">Transação ficou não confirmada devido a reorganização da blockchain</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transação Não Confirmada</string>
     <string name="wallet__transfer_to_savings">Transferir Para Poupança</string>
-    <string name="wallet__transfer_to_spending">Transferir Para Gastos</string>
     <string name="wallet__withdraw_error">Seu saque não foi bem-sucedido. Por favor, escaneie o QR code novamente ou entre em contato com o suporte.</string>
     <string name="widgets__add">Adicionar Widget</string>
     <string name="widgets__blocks__description">Examinar várias estatísticas sobre blocos de Bitcoin recém-minerados.</string>

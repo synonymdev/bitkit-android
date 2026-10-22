@@ -7,8 +7,6 @@
     <string name="cards__buyBitcoin__title">Comprar</string>
     <string name="cards__invite__description">Comparteix Bitkit</string>
     <string name="cards__invite__title">Convidar</string>
-    <string name="cards__lightning__description">Pagaments instantanis</string>
-    <string name="cards__lightning__title">Gastar</string>
     <string name="cards__notifications__description">Quan Bitkit està tancat</string>
     <string name="cards__notifications__title">Rep pagaments</string>
     <string name="cards__pin__description">Configurar un codi PIN</string>
@@ -109,6 +107,8 @@
     <string name="lightning__channel_opened_msg">Ara pots pagar a qualsevol persona, en qualsevol lloc, instantàniament.</string>
     <string name="lightning__channel_opened_title">Saldo de despesa llest</string>
     <string name="lightning__channel_point">Punt del canal</string>
+    <string name="lightning__channels_closing_banner">ELS CANALS ES TANQUEN EL %1$s</string>
+    <string name="lightning__channels_closing_notice">Els teus canals Lightning es tancaran el %1$s. Transfereix el teu saldo de despesa a estalvis abans d\'aquesta data.</string>
     <string name="lightning__close_button">Tancar</string>
     <string name="lightning__close_conn">Tanca la connexió</string>
     <string name="lightning__close_error">Transferència fallida</string>
@@ -352,14 +352,6 @@
     <string name="other__connection_back_title">Connexió a Internet restaurada</string>
     <string name="other__connection_issue">Problemes de connexió a Internet</string>
     <string name="other__connection_issue_explain">Sembla que estàs desconnectat, intentant tornar a connectar-te...</string>
-    <string name="other__gift__claiming__text">Reclamant el teu codi de regal de Bitkit...</string>
-    <string name="other__gift__claiming__title">Reclamant regal</string>
-    <string name="other__gift__error__text">Bitkit no ha pogut reclamar els fons. Si us plau, torna-ho a provar més tard o contacta\'ns.</string>
-    <string name="other__gift__error__title">Error de codi de regal</string>
-    <string name="other__gift__used__text">Aquest codi de regal de Bitkit ja ha estat utilitzat i els fons han estat pagats.</string>
-    <string name="other__gift__used__title">Codi utilitzat</string>
-    <string name="other__gift__used_up__text">Ho sentim, arribes tard! Tots els regals per a aquest codi ja han estat reclamats.</string>
-    <string name="other__gift__used_up__title">Sense regals</string>
     <string name="other__high_balance__cancel">Aprèn més</string>
     <string name="other__high_balance__continue">Entès</string>
     <string name="other__high_balance__nav_title">Saldo alt</string>
@@ -994,7 +986,6 @@
     <string name="wallet__payment_received">Rebut Bitcoin</string>
     <string name="wallet__peer_disconnected">Parell desconnectat.</string>
     <string name="wallet__receive">Rebre</string>
-    <string name="wallet__receive__cjit">Rebre fons Lightning</string>
     <string name="wallet__receive_bitcoin">Rebre Bitcoin</string>
     <string name="wallet__receive_bitcoin_invoice">Factura de Bitcoin</string>
     <string name="wallet__receive_connect_additional">Per rebre més Bitcoin instantani, Bitkit ha d\'augmentar la teva liquiditat. Es descomptarà una tarifa de xarxa de &lt;accent&gt;{networkFee}&lt;/accent&gt; i una tarifa de proveïdor de servei de &lt;accent&gt;{serviceFee}&lt;/accent&gt; de l\'import especificat.</string>
@@ -1010,8 +1001,6 @@
     <string name="wallet__receive_liquidity__text">El teu saldo de despesa utilitza Lightning Network per fer els teus pagaments més barats, ràpids i privats.\n\nAixò funciona com l\'accés a Internet, però pagues per liquiditat i encaminament en lloc d\'amplada de banda.\n\nAquesta configuració inclou alguns costos únics.</string>
     <string name="wallet__receive_liquidity__text_additional">El teu saldo de despesa utilitza Lightning Network per fer els teus pagaments més barats, ràpids i privats.\n\nAixò funciona com l\'accés a Internet, però pagues per liquiditat i encaminament en lloc d\'amplada de banda.\n\nBitkit necessita augmentar la capacitat de recepció del teu saldo de despesa per processar aquest pagament.</string>
     <string name="wallet__receive_note_placeholder">Nota opcional per al pagador</string>
-    <string name="wallet__receive_onboarding_description">Gaudeix de transaccions instantànies i barates\namb amics, família\ni comerciants.</string>
-    <string name="wallet__receive_onboarding_title">Rebre al &lt;accent&gt;saldo de despesa&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Mostrar detalls</string>
     <string name="wallet__receive_show_qr">Mostra el codi QR</string>
     <string name="wallet__receive_specify">Editar factura</string>
@@ -1106,7 +1095,6 @@
     <string name="wallet__toast_transaction_unconfirmed_description">La transacció s\'ha tornat no confirmada a causa d\'una reorganització de blockchain</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transacció no confirmada</string>
     <string name="wallet__transfer_to_savings">Transferir a estalvis</string>
-    <string name="wallet__transfer_to_spending">Transferir a despesa</string>
     <string name="wallet__withdraw_error">La teva retirada no ha tingut èxit. Si us plau, escaneja el codi QR de nou o contacta amb el suport.</string>
     <string name="widgets__add">Afegir giny</string>
     <string name="widgets__blocks__description">Examina diverses estadístiques dels blocs de Bitcoin recentment minats.</string>

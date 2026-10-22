@@ -7,8 +7,6 @@
     <string name="cards__buyBitcoin__title">Купить</string>
     <string name="cards__invite__description">Поделитесь Bitkit</string>
     <string name="cards__invite__title">Пригласить</string>
-    <string name="cards__lightning__description">Мгновенные платежи</string>
-    <string name="cards__lightning__title">Тратить</string>
     <string name="cards__notifications__description">Когда Bitkit закрыт</string>
     <string name="cards__notifications__title">Получать платежи</string>
     <string name="cards__pin__description">Установите PIN-код</string>
@@ -120,6 +118,8 @@
     <string name="lightning__channel_opened_msg">Теперь вы можете платить кому угодно, где угодно, мгновенно.</string>
     <string name="lightning__channel_opened_title">Баланс Расходов Готов</string>
     <string name="lightning__channel_point">Точка Канала</string>
+    <string name="lightning__channels_closing_banner">КАНАЛЫ ЗАКРОЮТСЯ %1$s</string>
+    <string name="lightning__channels_closing_notice">Ваши каналы Lightning будут закрыты %1$s. До этой даты переведите баланс расходов в сбережения.</string>
     <string name="lightning__close_button">Закрыть</string>
     <string name="lightning__close_conn">Закрыть Соединение</string>
     <string name="lightning__close_error">Перевод Не Удался</string>
@@ -371,14 +371,6 @@
     <string name="other__connection_back_title">Интернет-Соединение Восстановлено</string>
     <string name="other__connection_issue">Проблемы с Подключением к Интернету</string>
     <string name="other__connection_issue_explain">Похоже, вы отключены, пытаемся переподключиться...</string>
-    <string name="other__gift__claiming__text">Получение вашего подарочного кода Bitkit...</string>
-    <string name="other__gift__claiming__title">Получение подарка</string>
-    <string name="other__gift__error__text">Bitkit не смог получить средства. Пожалуйста, попробуйте позже или свяжитесь с нами.</string>
-    <string name="other__gift__error__title">Ошибка подарочного кода</string>
-    <string name="other__gift__used__text">Этот подарочный код Bitkit уже был использован, и средства были выплачены.</string>
-    <string name="other__gift__used__title">Использованный код</string>
-    <string name="other__gift__used_up__text">К сожалению, вы опоздали! Все подарки по этому коду уже получены.</string>
-    <string name="other__gift__used_up__title">Подарки закончились</string>
     <string name="other__high_balance__cancel">Узнать Больше</string>
     <string name="other__high_balance__continue">Понятно</string>
     <string name="other__high_balance__nav_title">Высокий Баланс</string>
@@ -1019,7 +1011,6 @@
     <string name="wallet__payment_received">Получен Биткоин</string>
     <string name="wallet__peer_disconnected">Пир отключён.</string>
     <string name="wallet__receive">Получить</string>
-    <string name="wallet__receive__cjit">Получить Lightning средства</string>
     <string name="wallet__receive_bitcoin">Получить Биткоин</string>
     <string name="wallet__receive_bitcoin_invoice">Биткоин инвойс</string>
     <string name="wallet__receive_connect_additional">Чтобы получить больше мгновенных биткоинов, Bitkit должен увеличить вашу ликвидность. Сетевая комиссия &lt;accent&gt;{networkFee}&lt;/accent&gt; и комиссия провайдера услуг &lt;accent&gt;{serviceFee}&lt;/accent&gt; будут вычтены из указанной суммы.</string>
@@ -1043,10 +1034,6 @@
 
 Bitkit должен увеличить приёмную ёмкость вашего баланса расходов для обработки этого платежа.</string>
     <string name="wallet__receive_note_placeholder">Опциональная заметка для плательщика</string>
-    <string name="wallet__receive_onboarding_description">Наслаждайтесь мгновенными и недорогими
-транзакциями с друзьями, семьёй
-и продавцами.</string>
-    <string name="wallet__receive_onboarding_title">Получить на &lt;accent&gt;баланс расходов&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Показать детали</string>
     <string name="wallet__receive_show_qr">Показать QR-код</string>
     <string name="wallet__receive_specify">Редактировать Инвойс</string>
@@ -1144,7 +1131,6 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__toast_transaction_unconfirmed_description">Транзакция стала неподтверждённой из-за реорганизации блокчейна</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Транзакция не подтверждена</string>
     <string name="wallet__transfer_to_savings">Перевести в сбережения</string>
-    <string name="wallet__transfer_to_spending">Перевести на расходы</string>
     <string name="wallet__withdraw_error">Вывод не удался. Пожалуйста, отсканируйте QR-код снова или обратитесь в поддержку.</string>
     <string name="widgets__add">Добавить Виджет</string>
     <string name="widgets__blocks__description">Изучайте различную статистику по недавно добытым блокам Bitcoin.</string>

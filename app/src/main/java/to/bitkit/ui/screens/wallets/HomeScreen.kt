@@ -169,8 +169,6 @@ import to.bitkit.ui.navToActivityDetail
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToProfile
-import to.bitkit.ui.navigateToTransferFunding
-import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
@@ -242,7 +240,6 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
     val profileNavigationScope = rememberCoroutineScope()
@@ -316,14 +313,6 @@ fun HomeScreen(
 
                 Suggestion.HARDWARE -> {
                     appViewModel.showSheet(Sheet.Hardware())
-                }
-
-                Suggestion.LIGHTNING -> {
-                    if (!hasSeenTransferIntro) {
-                        rootNavController.navigateToTransferIntro()
-                    } else {
-                        rootNavController.navigateToTransferFunding()
-                    }
                 }
 
                 Suggestion.BACK_UP -> {
@@ -704,31 +693,34 @@ private fun WalletPage(
             VerticalSpacer(32.dp)
 
             if (!homeUiState.showEmptyState) {
-                if (hasActivity) {
-                    AnimatedVisibility(homeUiState.banners.isNotEmpty()) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp)
-                        ) {
-                            homeUiState.banners.forEach { banner ->
-                                ActivityBanner(
-                                    gradientColor = banner.type.color,
-                                    title = banner.title,
-                                    icon = banner.type.icon,
-                                    onClick = {
-                                        when (banner.type) {
-                                            ActivityBannerType.SPENDING -> onNavigateToSettingUp()
-                                            ActivityBannerType.SAVINGS -> Unit
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
+                AnimatedVisibility(homeUiState.banners.isNotEmpty()) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                    ) {
+                        homeUiState.banners.forEach { banner ->
+                            ActivityBanner(
+                                gradientColor = banner.type.color,
+                                title = banner.title,
+                                icon = banner.type.icon,
+                                onClick = {
+                                    when (banner.type) {
+                                        ActivityBannerType.SPENDING -> onNavigateToSettingUp()
+                                        ActivityBannerType.SAVINGS -> Unit
+                                        ActivityBannerType.CHANNELS_CLOSING -> onNavigateToSpending()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag(banner.type.testTag)
+                            )
                         }
                     }
+                }
 
+                if (hasActivity) {
                     ActivityListSimple(
                         items = latestActivities,
                         maxItems = (slotCapacity - countNonItemSlots(homeUiState)).coerceAtLeast(0),

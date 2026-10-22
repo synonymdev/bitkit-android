@@ -142,9 +142,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val hasSeenTransferIntro = settingsStore.data.map { it.hasSeenTransferIntro }
-        .asStateFlow(initialValue = false)
-
     fun setHasSeenTransferIntro(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(hasSeenTransferIntro = value) }

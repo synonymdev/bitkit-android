@@ -7,8 +7,6 @@
     <string name="cards__quickpay__description">Scannez et payez</string>
     <string name="cards__invite__title">Inviter</string>
     <string name="cards__invite__description">Partager Bitkit</string>
-    <string name="cards__lightning__title">Dépenser</string>
-    <string name="cards__lightning__description">Paiements instantanés</string>
     <string name="cards__pin__title">Sécurité</string>
     <string name="cards__pin__description">Définir un code PIN</string>
     <string name="cards__shop__title">Boutique</string>
@@ -100,6 +98,8 @@
     <string name="fee__custom__description">Dépend des frais</string>
     <string name="fee__custom__duration">Dépend des frais</string>
     <string name="fee__custom__shortDescription">Dépend des frais</string>
+    <string name="lightning__channels_closing_banner">LES CANAUX FERMENT LE %1$s</string>
+    <string name="lightning__channels_closing_notice">Vos canaux Lightning seront fermés le %1$s. Transférez votre solde de dépenses vers l\'Épargne avant cette date.</string>
     <string name="lightning__transfer_intro__title">Dépenses \n&lt;accent&gt;Solde&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Alimentez votre solde de dépenses pour profiter de transactions instantanées et bon marché avec vos amis, votre famille et les commerçants.</string>
     <string name="lightning__transfer_intro__button">Commencer</string>
@@ -437,14 +437,6 @@
     <string name="other__update_button">Mise à jour</string>
     <string name="other__scan__error__generic">Bitkit ne peut pas lire les données fournies.</string>
     <string name="other__scan__error__expired">Cette facture Lightning a expiré.</string>
-    <string name="other__gift__claiming__title">Réclamer un cadeau</string>
-    <string name="other__gift__claiming__text">Réclamer votre code cadeau Bitkit...</string>
-    <string name="other__gift__error__title">Erreur de code cadeau</string>
-    <string name="other__gift__error__text">Bitkit n\'a pas pu réclamer les fonds. Veuillez réessayer plus tard ou nous contacter.</string>
-    <string name="other__gift__used__title">Code utilisé</string>
-    <string name="other__gift__used__text">Ce code cadeau Bitkit a déjà été utilisé et les fonds ont été versés.</string>
-    <string name="other__gift__used_up__text">Désolé, vous arrivez trop tard ! Tous les cadeaux pour ce code ont déjà été réclamés.</string>
-    <string name="other__gift__used_up__title">Plus de cadeaux</string>
     <string name="other__shop__intro__title">Boutique</string>
     <string name="other__shop__intro__description">Passez à la norme Bitcoin. Dépensez vos bitcoins en cartes-cadeaux numériques, eSIM, recharges téléphoniques, et plus encore.</string>
     <string name="other__shop__discover__nav_title">Boutique</string>
@@ -973,7 +965,6 @@
     <string name="wallet__toast_transaction_unconfirmed_description">La transaction n\'est plus confirmée suite à une réorganisation de la blockchain</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transaction non confirmée</string>
     <string name="wallet__transfer_to_savings">Transférer vers l\'Épargne</string>
-    <string name="wallet__transfer_to_spending">Transférer vers les Dépenses</string>
     <string name="wallet__withdraw_error">Votre retrait a échoué. Veuillez scanner le QR code à nouveau ou contacter le support.</string>
     <string name="wallet__selection_title">Sélection des UTXOs</string>
     <string name="wallet__selection_total_required">Total requis</string>
@@ -1101,11 +1092,8 @@
     <string name="wallet__lnurl_pay__error_min__description">Le montant minimum pour cette facture est de ₿ {amount}.</string>
     <string name="wallet__peer_disconnected">Pair déconnecté.</string>
     <string name="wallet__ldk_start_error_title">Erreur de démarrage de Lightning</string>
-    <string name="wallet__receive__cjit">Recevoir des fonds Lightning</string>
     <string name="wallet__receive_liquidity__bg_setup_desc">Activez la configuration en arrière-plan pour quitter Bitkit en toute sécurité pendant la configuration de votre solde.</string>
     <string name="wallet__receive_liquidity__bg_setup_switch">Configurer en arrière-plan</string>
-    <string name="wallet__receive_onboarding_description">Profitez de transactions instantanées\net peu coûteuses avec vos amis, votre\nfamille et les commerçants.</string>
-    <string name="wallet__receive_onboarding_title">Recevoir sur le &lt;accent&gt;solde dépenses&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Afficher les détails</string>
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Épargne</string>

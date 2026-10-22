@@ -6,8 +6,6 @@
     <string name="cards__buyBitcoin__title">Comprar</string>
     <string name="cards__invite__description">Comparta Bitkit</string>
     <string name="cards__invite__title">Invitar</string>
-    <string name="cards__lightning__description">Pagos instantáneos</string>
-    <string name="cards__lightning__title">Gastar</string>
     <string name="cards__notifications__description">Cuando Bitkit está cerrado</string>
     <string name="cards__notifications__title">Recibir pagos</string>
     <string name="cards__pin__description">Establezca un código PIN</string>
@@ -108,6 +106,8 @@
     <string name="lightning__channel_node_id">ID del par</string>
     <string name="lightning__channel_opened_title">Saldo de Gastos Listo</string>
     <string name="lightning__channel_point">Punto de canal</string>
+    <string name="lightning__channels_closing_banner">LOS CANALES CIERRAN EL %1$s</string>
+    <string name="lightning__channels_closing_notice">Tus canales Lightning se cerrarán el %1$s. Transfiere tu saldo de gasto a ahorros antes de esa fecha.</string>
     <string name="lightning__close_error">Transferencia Fallida</string>
     <string name="lightning__close_error_msg">No se pueden transferir los fondos de vuelta a ahorros. Por favor, inténtalo de nuevo.</string>
     <string name="lightning__close_success_msg">Tus fondos se están transfiriendo de vuelta a tus ahorros.</string>
@@ -379,14 +379,6 @@
     <string name="other__camera_permission_description">Permite el acceso a la cámara para escanear facturas bitcoin y pagar más rápido.</string>
     <string name="other__camera_permission_title">ESCANEAR\n&lt;accent&gt;CÓDIGO QR&lt;/accent&gt;</string>
     <string name="other__camera_scan_qr">Escanear QR</string>
-    <string name="other__gift__claiming__text">Reclamando tu código de regalo Bitkit...</string>
-    <string name="other__gift__claiming__title">Reclamando Regalo</string>
-    <string name="other__gift__error__text">Bitkit no pudo reclamar los fondos. Por favor, inténtalo más tarde o contáctanos.</string>
-    <string name="other__gift__error__title">Error del Código de Regalo</string>
-    <string name="other__gift__used__text">Este código de regalo de Bitkit ya ha sido usado y los fondos han sido pagados.</string>
-    <string name="other__gift__used__title">Código Usado</string>
-    <string name="other__gift__used_up__text">¡Lo siento, llegas tarde! Todos los regalos de este código ya han sido reclamados.</string>
-    <string name="other__gift__used_up__title">Sin Regalos</string>
     <string name="other__high_balance__nav_title">Saldo Alto</string>
     <string name="other__high_balance__title">Saldo\n&lt;accent&gt;Alto&lt;/accent&gt;</string>
     <string name="other__lnurl_auth_error">Inicio de Sesión Fallido (LNURL)</string>
@@ -975,8 +967,6 @@
     <string name="wallet__receive_bitcoin_invoice">Factura bitcoin</string>
     <string name="wallet__receive_lightning_invoice">Factura Lightning</string>
     <string name="wallet__receive_note_placeholder">Nota opcional para el pagador</string>
-    <string name="wallet__receive_onboarding_description">Disfruta de transacciones\ninstantáneas y baratas con\namigos, familia y comerciantes.</string>
-    <string name="wallet__receive_onboarding_title">Recibir en &lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Mostrar Detalles</string>
     <string name="wallet__receive_show_qr">Mostrar código QR</string>
     <string name="wallet__receive_liquidity__bg_setup_desc">Activa la configuración en segundo plano para salir de Bitkit de forma segura mientras se configura tu saldo.</string>
@@ -992,7 +982,6 @@
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Ahorros</string>
     <string name="wallet__receive_tab_spending">Gastos</string>
-    <string name="wallet__receive__cjit">Recibir fondos de Lightning</string>
     <string name="wallet__receive_will">Recibirás</string>
     <string name="wallet__minimum">MÍNIMO</string>
     <string name="wallet__activity">Actividad</string>
@@ -1096,7 +1085,6 @@
     <string name="wallet__lnurl_w_text">Los fondos que retires se depositarán en tu saldo de gastos de Bitkit.</string>
     <string name="wallet__lnurl_w_title">Retirar Bitcoin</string>
     <string name="wallet__transfer_to_savings">Transferir a Ahorros</string>
-    <string name="wallet__transfer_to_spending">Transferir a Gastos</string>
     <string name="wallet__withdraw_error">Tu retiro no tuvo éxito. Por favor, escanea el código QR de nuevo o contacta con soporte.</string>
     <string name="wallet__error_invalid_bitcoin_address">Dirección de envío de bitcoin inválida</string>
     <string name="wallet__error_invoice_update">Error al actualizar factura</string>

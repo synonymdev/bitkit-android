@@ -9,7 +9,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -18,6 +20,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsData
 import to.bitkit.env.Env
+import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
 import to.bitkit.models.HwWallet
 import to.bitkit.models.Suggestion
@@ -26,6 +29,7 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SuggestionsRepo
 import to.bitkit.repositories.TransferRepo
@@ -47,6 +51,8 @@ class HomeViewModelTest : BaseUnitTest() {
     private val currencyRepo = mock<CurrencyRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val transferRepo = mock<TransferRepo>()
+    private val lightningRepo = mock<LightningRepo>()
+    private val hasTrustedChannels = MutableStateFlow(false)
     private val pubkyRepo = mock<PubkyRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
@@ -63,6 +69,7 @@ class HomeViewModelTest : BaseUnitTest() {
         suggestions = MutableStateFlow(emptyList())
 
         whenever(context.getString(R.string.lightning__transfer_in_progress)).thenReturn("Transfer in progress")
+        whenever(context.getString(eq(R.string.lightning__channels_closing_banner), any())).thenReturn("Channels close")
         whenever(walletRepo.balanceState).thenReturn(MutableStateFlow(BalanceState()))
         whenever(widgetsRepo.widgetsDataFlow).thenReturn(MutableStateFlow(WidgetsData()))
         whenever(widgetsRepo.articlesFlow).thenReturn(MutableStateFlow(emptyList()))
@@ -71,6 +78,7 @@ class HomeViewModelTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(MutableStateFlow(SettingsData()))
         whenever(transferRepo.activeTransfers).thenReturn(MutableStateFlow(emptyList()))
         whenever(transferRepo.forceCloseRemainingDuration).thenReturn(MutableStateFlow(null))
+        whenever(lightningRepo.hasTrustedChannels).thenReturn(hasTrustedChannels)
         whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.displayName).thenReturn(MutableStateFlow(null))
         whenever(pubkyRepo.displayImageUri).thenReturn(MutableStateFlow(null))
@@ -91,6 +99,25 @@ class HomeViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(Suggestion.HARDWARE in sut.uiState.value.suggestions)
+    }
+
+    @Test
+    fun `shows channels closing banner when wallet has blocktank channels`() = test {
+        hasTrustedChannels.value = true
+        val sut = createViewModel()
+
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.banners.any { it.type == ActivityBannerType.CHANNELS_CLOSING })
+    }
+
+    @Test
+    fun `hides channels closing banner without blocktank channels`() = test {
+        val sut = createViewModel()
+
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.banners.any { it.type == ActivityBannerType.CHANNELS_CLOSING })
     }
 
     @Test
@@ -160,6 +187,7 @@ class HomeViewModelTest : BaseUnitTest() {
         currencyRepo = currencyRepo,
         settingsStore = settingsStore,
         transferRepo = transferRepo,
+        lightningRepo = lightningRepo,
         pubkyRepo = pubkyRepo,
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,

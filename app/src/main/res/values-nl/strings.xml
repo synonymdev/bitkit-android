@@ -7,8 +7,6 @@
     <string name="cards__buyBitcoin__title">Koop</string>
     <string name="cards__invite__description">Deel Bitkit</string>
     <string name="cards__invite__title">Uitnodiging</string>
-    <string name="cards__lightning__description">Directe betalingen</string>
-    <string name="cards__lightning__title">Besteed</string>
     <string name="cards__notifications__description">Als Bitkit gesloten is</string>
     <string name="cards__notifications__title">Ontvang betaling</string>
     <string name="cards__pin__description">Pincode instellen</string>
@@ -110,6 +108,8 @@
     <string name="lightning__channel_opened_msg">Je kunt nu overal, direct, iedereen betalen.</string>
     <string name="lightning__channel_opened_title">Bestedingssaldo gereed</string>
     <string name="lightning__channel_point">Kanaalpunt</string>
+    <string name="lightning__channels_closing_banner">KANALEN SLUITEN OP %1$s</string>
+    <string name="lightning__channels_closing_notice">Je Lightning-kanalen worden op %1$s gesloten. Boek je bestedingssaldo vóór die datum over naar spaargeld.</string>
     <string name="lightning__close_button">Sluiten</string>
     <string name="lightning__close_conn">Verbinding sluiten</string>
     <string name="lightning__close_error">Overboeking mislukt</string>
@@ -353,14 +353,6 @@
     <string name="other__connection_back_title">Internetverbinding hersteld</string>
     <string name="other__connection_issue">Internetverbindingsproblemen</string>
     <string name="other__connection_issue_explain">Je lijkt niet verbonden te zijn, proberen opnieuw te verbinden...</string>
-    <string name="other__gift__claiming__text">Je Bitkit-cadeaucode wordt geclaimd...</string>
-    <string name="other__gift__claiming__title">Cadeau claimen</string>
-    <string name="other__gift__error__text">Bitkit kon het geld niet claimen. Probeer het later opnieuw of neem contact met ons op.</string>
-    <string name="other__gift__error__title">Cadeaucode-fout</string>
-    <string name="other__gift__used__text">Deze Bitkit-cadeaucode is al gebruikt en het geld is uitbetaald.</string>
-    <string name="other__gift__used__title">Gebruikte code</string>
-    <string name="other__gift__used_up__text">Sorry, je bent te laat! Alle cadeaus voor deze code zijn al geclaimd.</string>
-    <string name="other__gift__used_up__title">Cadeaus op</string>
     <string name="other__high_balance__cancel">Meer informatie</string>
     <string name="other__high_balance__continue">Begrepen</string>
     <string name="other__high_balance__nav_title">Hoog saldo</string>
@@ -992,7 +984,6 @@
     <string name="wallet__payment_received">Bitcoin ontvangen</string>
     <string name="wallet__peer_disconnected">Peer niet verbonden.</string>
     <string name="wallet__receive">Ontvangen</string>
-    <string name="wallet__receive__cjit">Lightning-geld ontvangen</string>
     <string name="wallet__receive_bitcoin">Bitcoin ontvangen</string>
     <string name="wallet__receive_bitcoin_invoice">Bitcoin-factuur</string>
     <string name="wallet__receive_connect_additional">Om meer directe Bitcoin te ontvangen, moet Bitkit je liquiditeit verhogen. Een netwerkvergoeding van &lt;accent&gt;{networkFee}&lt;/accent&gt; en serviceprovidervergoeding van &lt;accent&gt;{serviceFee}&lt;/accent&gt; worden afgetrokken van het door jou opgegeven bedrag.</string>
@@ -1008,8 +999,6 @@
     <string name="wallet__receive_liquidity__text">Je bestedingssaldo gebruikt het Lightning Network om je betalingen goedkoper, sneller en privater te maken.\n\nDit werkt als internettoegang, maar je betaalt voor liquiditeit &amp; routering in plaats van bandbreedte.\n\nDeze configuratie bevat eenmalige kosten.</string>
     <string name="wallet__receive_liquidity__text_additional">Je bestedingssaldo gebruikt het Lightning Network om je betalingen goedkoper, sneller en privater te maken.\n\nDit werkt als internettoegang, maar je betaalt voor liquiditeit &amp; routering in plaats van bandbreedte.\n\nBitkit moet de ontvangstcapaciteit van je bestedingssaldo verhogen om deze betaling te verwerken.</string>
     <string name="wallet__receive_note_placeholder">Optionele notitie voor betaler</string>
-    <string name="wallet__receive_onboarding_description">Geniet van directe en goedkope\ntransacties met vrienden, familie\nen winkeliers.</string>
-    <string name="wallet__receive_onboarding_title">Ontvangen op &lt;accent&gt;bestedingssaldo&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Details tonen</string>
     <string name="wallet__receive_show_qr">QR-code tonen</string>
     <string name="wallet__receive_specify">Factuur bewerken</string>
@@ -1105,7 +1094,6 @@
     <string name="wallet__toast_transaction_unconfirmed_description">Transactie is niet meer bevestigd vanwege blockchain-reorganisatie</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transactie niet bevestigd</string>
     <string name="wallet__transfer_to_savings">Overboeken naar spaargeld</string>
-    <string name="wallet__transfer_to_spending">Overboeken naar bestedingssaldo</string>
     <string name="wallet__withdraw_error">Je opname is niet gelukt. Scan de QR-code opnieuw of neem contact op met support.</string>
     <string name="widgets__add">Widget toevoegen</string>
     <string name="widgets__blocks__description">Bekijk verschillende statistieken over nieuw gedolven Bitcoin-blokken.</string>

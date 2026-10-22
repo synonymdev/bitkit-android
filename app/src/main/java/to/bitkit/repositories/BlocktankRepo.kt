@@ -15,17 +15,12 @@ import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.calculateChannelLiquidityOptions
 import com.synonym.bitkitcore.getDefaultLspBalance
-import com.synonym.bitkitcore.giftOrder
-import com.synonym.bitkitcore.giftPay
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -33,7 +28,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -47,23 +41,17 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
-import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.Event
-import to.bitkit.async.ServiceQueue
 import to.bitkit.async.appScope
 import to.bitkit.data.BlocktankRefundAddress
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.CjitQuoteValidator
 import to.bitkit.models.EUR
-import to.bitkit.models.msatCeilOf
 import to.bitkit.models.safe
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
@@ -75,8 +63,6 @@ import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 import kotlin.math.ceil
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
@@ -617,131 +603,11 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    suspend fun claimGiftCode(
-        code: String,
-        amount: ULong,
-        waitTimeout: Duration = TIMEOUT_GIFT_CODE,
-    ): Result<GiftClaimResult> = withContext(bgDispatcher) {
-        runCatching {
-            require(code.isNotBlank()) { "Gift code cannot be blank" }
-            require(amount > 0u) { "Gift amount must be positive" }
-
-            Logger.debug("Starting gift code claim: amount=$amount, timeout=$waitTimeout", context = TAG)
-
-            lightningRepo.executeWhenNodeRunning(
-                operationName = "claimGiftCode",
-                waitTimeout = waitTimeout,
-            ) {
-                delay(PEER_CONNECTION_DELAY_MS)
-
-                val channels = lightningRepo.getChannelsAsync().getOrThrow()
-                val maxInboundCapacity = channels.calculateRemoteBalance()
-
-                Logger.debug(
-                    "Liquidity check: maxInbound=$maxInboundCapacity, required=$amount",
-                    context = TAG
-                )
-
-                if (maxInboundCapacity >= amount) {
-                    Logger.debug("Sufficient liquidity available, claiming with existing channel", context = TAG)
-                    Result.success(claimGiftCodeWithLiquidity(code, amount))
-                } else {
-                    Logger.debug("Insufficient liquidity, opening new channel", context = TAG)
-                    Result.success(claimGiftCodeWithoutLiquidity(code, amount))
-                }
-            }.getOrThrow()
-        }.onFailure {
-            Logger.error("Failed to claim gift code", it, context = TAG)
-        }
-    }
-
-    private suspend fun claimGiftCodeWithLiquidity(code: String, amount: ULong): GiftClaimResult = coroutineScope {
-        val invoice = lightningRepo.createInvoice(
-            amountSats = null,
-            description = "blocktank-gift-code:$code",
-            expirySeconds = 1.hours.inWholeSeconds.toUInt(),
-        ).getOrThrow()
-
-        val expectedPaymentHash = Bolt11Invoice.fromStr(invoice).paymentHash()
-
-        Logger.debug("Created invoice for gift code, requesting payment from LSP", context = TAG)
-
-        val paymentReceivedDeferred = async(start = CoroutineStart.UNDISPATCHED) {
-            lightningRepo.nodeEvents
-                .filterIsInstance<Event.PaymentReceived>()
-                .first { it.paymentHash == expectedPaymentHash }
-        }
-
-        val giftResponse = ServiceQueue.CORE.background {
-            giftPay(invoice = invoice)
-        }
-
-        Logger.debug(
-            "Gift payment request completed: id='${giftResponse.id}', awaiting LDK PaymentReceived",
-            context = TAG,
-        )
-
-        val paymentReceived = withTimeoutOrNull(GIFT_PAYMENT_RECEIVE_TIMEOUT) {
-            paymentReceivedDeferred.await()
-        }
-
-        if (paymentReceived == null) {
-            paymentReceivedDeferred.cancel()
-            throw ServiceError.GiftClaimPaymentNotReceived()
-        }
-
-        Logger.debug(
-            "Gift payment confirmed by LDK: hash='${paymentReceived.paymentHash}', " +
-                "amountMsat='${paymentReceived.amountMsat}'",
-            context = TAG,
-        )
-
-        val receivedSats = msatCeilOf(paymentReceived.amountMsat).toLong()
-
-        GiftClaimResult.SuccessWithLiquidity(
-            paymentHashOrTxId = paymentReceived.paymentHash,
-            sats = receivedSats.takeIf { it > 0 } ?: amount.toLong(),
-            invoice = invoice,
-            code = code,
-        )
-    }
-
-    private suspend fun claimGiftCodeWithoutLiquidity(code: String, amount: ULong): GiftClaimResult {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
-
-        Logger.debug("Creating gift order for code (insufficient liquidity)", context = TAG)
-
-        val order = ServiceQueue.CORE.background {
-            giftOrder(clientNodeId = nodeId, code = "blocktank-gift-code:$code")
-        }
-
-        val orderId = checkNotNull(order.orderId) { "Order ID is null after gift order creation" }
-        Logger.debug("Gift order created: $orderId", context = TAG)
-
-        val openedOrder = openChannel(orderId).getOrThrow()
-        Logger.debug("Channel opened for gift order: ${openedOrder.id}", context = TAG)
-
-        val fundingTxId = openedOrder.channel?.fundingTx?.id
-        if (fundingTxId == null) {
-            Logger.warn("Channel opened but funding transaction ID is null", context = TAG)
-        }
-
-        return GiftClaimResult.SuccessWithoutLiquidity(
-            paymentHashOrTxId = fundingTxId ?: orderId,
-            sats = amount.toLong(),
-            invoice = openedOrder.payment?.bolt11Invoice?.request ?: "",
-            code = code,
-        )
-    }
-
     companion object {
         private const val TAG = "BlocktankRepo"
         private const val REFUND_ADDRESS_ALLOCATION_LIMIT = 20
         private const val DEFAULT_CHANNEL_EXPIRY_WEEKS = 6u
         private const val DEFAULT_SOURCE = "bitkit-android"
-        private const val PEER_CONNECTION_DELAY_MS = 2_000L
-        private val TIMEOUT_GIFT_CODE = 30.seconds
-        private val GIFT_PAYMENT_RECEIVE_TIMEOUT = 45.seconds
         private const val CJIT_REFRESH_ATTEMPTS = 3
         private val CJIT_REFRESH_TIMEOUT = 5.seconds
         private val CJIT_REFRESH_RETRY_DELAY = 1.seconds
@@ -785,24 +651,3 @@ data class BlocktankState(
     val info: IBtInfo? = null,
     val minCjitSats: Int? = null,
 )
-
-sealed class GiftClaimResult {
-    abstract val paymentHashOrTxId: String
-    abstract val sats: Long
-    abstract val invoice: String
-    abstract val code: String
-
-    data class SuccessWithLiquidity(
-        override val paymentHashOrTxId: String,
-        override val sats: Long,
-        override val invoice: String,
-        override val code: String,
-    ) : GiftClaimResult()
-
-    data class SuccessWithoutLiquidity(
-        override val paymentHashOrTxId: String,
-        override val sats: Long,
-        override val invoice: String,
-        override val code: String,
-    ) : GiftClaimResult()
-}

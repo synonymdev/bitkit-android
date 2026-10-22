@@ -7,8 +7,6 @@
     <string name="cards__buyBitcoin__title">Koupit</string>
     <string name="cards__invite__description">Sdílet Bitkit</string>
     <string name="cards__invite__title">Pozvat</string>
-    <string name="cards__lightning__description">Okamžité platby</string>
-    <string name="cards__lightning__title">Utratit</string>
     <string name="cards__notifications__description">Když je Bitkit zavřený</string>
     <string name="cards__notifications__title">Přijímat platby</string>
     <string name="cards__pin__description">Nastavte PIN kód</string>
@@ -111,6 +109,8 @@
     <string name="lightning__channel_opened_msg">Nyní můžete platit komukoli, kdekoli a okamžitě.</string>
     <string name="lightning__channel_opened_title">Disponibilní zůstatek připraven</string>
     <string name="lightning__channel_point">Bod kanálu</string>
+    <string name="lightning__channels_closing_banner">KANÁLY SE ZAVŘOU %1$s</string>
+    <string name="lightning__channels_closing_notice">Vaše Lightning kanály budou uzavřeny %1$s. Do té doby převeďte zůstatek útrat do úspor.</string>
     <string name="lightning__close_button">Zavřít</string>
     <string name="lightning__close_conn">Uzavřít spojení</string>
     <string name="lightning__close_error">Přenos se nezdařil</string>
@@ -355,14 +355,6 @@
     <string name="other__connection_back_title">Obnoveno internetové připojení</string>
     <string name="other__connection_issue">Problémy s připojením k internetu</string>
     <string name="other__connection_issue_explain">Zdá se, že jste odpojen, snažíte se znovu připojit...</string>
-    <string name="other__gift__claiming__text">Uplatnění dárkového kódu Bitkit...</string>
-    <string name="other__gift__claiming__title">Uplatnění daru</string>
-    <string name="other__gift__error__text">Bitkit nemohl nárokovat prostředky. Zkuste to prosím znovu později nebo nás kontaktujte.</string>
-    <string name="other__gift__error__title">Chyba dárkového kódu</string>
-    <string name="other__gift__used__text">Tento dárkový kód BitKitu již byl použit a prostředky byly vyplaceny.</string>
-    <string name="other__gift__used__title">Použitý kód</string>
-    <string name="other__gift__used_up__text">Omlouváme se, přicházíte pozdě! Všechny dary pro tento kód již byly vyzvednuty.</string>
-    <string name="other__gift__used_up__title">Dary vyčerpány</string>
     <string name="other__high_balance__cancel">Další informace</string>
     <string name="other__high_balance__continue">Rozumím</string>
     <string name="other__high_balance__nav_title">Vysoký zůstatek</string>
@@ -998,7 +990,6 @@
     <string name="wallet__payment_received">bitcoin přijatý</string>
     <string name="wallet__peer_disconnected">Peer odpojen.</string>
     <string name="wallet__receive">Přijmout</string>
-    <string name="wallet__receive__cjit">Přijímat Lightning prostředky</string>
     <string name="wallet__receive_bitcoin">Přijmout bitcoin</string>
     <string name="wallet__receive_bitcoin_invoice">bitcoinová faktura</string>
     <string name="wallet__receive_connect_additional">Chcete-li získat více okamžitých bitcoinů, musí Bitkit navýšit vaši likviditu. Od vámi zadané částky bude odečten síťový poplatek &lt;accent&gt;{networkFee}&lt;/accent&gt; a &lt;accent&gt;{serviceFee}&lt;/accent&gt; poplatek poskytovatele služeb  .</string>
@@ -1014,8 +1005,6 @@
     <string name="wallet__receive_liquidity__text">Váš zůstatek na účtu využívá síť lightning network, aby byly vaše platby levnější, rychlejší a soukromější.\n\nFunguje to jako přístup k internetu, ale místo za šířku pásma platíte za likviditu a směrování.\n\nToto nastavení zahrnuje některé jednorázové náklady.</string>
     <string name="wallet__receive_liquidity__text_additional">Váš zůstatek na účtu využívá síť lightning network, aby byly vaše platby levnější, rychlejší a soukromější.\n\nFunguje to jako přístup k internetu, ale místo za šířku pásma platíte za likviditu a směrování.\n\nBitkit potřebuje zvýšit přijímací kapacitu vašeho výdajového zůstatku, aby mohl tuto platbu zpracovat.</string>
     <string name="wallet__receive_note_placeholder">Nepovinná poznámka pro plátce</string>
-    <string name="wallet__receive_onboarding_description">Užívejte si okamžité a levné\ntransakce s přáteli, rodinou\na obchodníky.</string>
-    <string name="wallet__receive_onboarding_title">Přijímat na <accent>disponibilní zůstatek</accent></string>
     <string name="wallet__receive_show_details">Zobrazit podrobnosti</string>
     <string name="wallet__receive_show_qr">Zobrazit QR kód</string>
     <string name="wallet__receive_specify">Upravit fakturu</string>
@@ -1112,7 +1101,6 @@
     <string name="wallet__toast_transaction_unconfirmed_description">Transakce se stala nepotvrzenou kvůli reorganizaci blockchainu</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transakce nepotvrzena</string>
     <string name="wallet__transfer_to_savings">Převést do úspor</string>
-    <string name="wallet__transfer_to_spending">Převést do útrat</string>
     <string name="wallet__withdraw_error">Váš výběr byl neúspěšný. Naskenujte prosím QR kód znovu nebo kontaktujte podporu.</string>
     <string name="widgets__add">Přidat widget</string>
     <string name="widgets__blocks__description">Prozkoumejte různé statistiky nově vytěžených bloků bitcoinu.</string>

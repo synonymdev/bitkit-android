@@ -219,7 +219,6 @@ import to.bitkit.ui.sheets.ChangePinSheet
 import to.bitkit.ui.sheets.ConnectionClosedSheet
 import to.bitkit.ui.sheets.DisablePinSheet
 import to.bitkit.ui.sheets.ForceTransferSheet
-import to.bitkit.ui.sheets.GiftSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
@@ -658,7 +657,6 @@ fun ContentView(
                         )
 
                         is Sheet.BTCPayConnection -> BTCPayConnectionSheet(sheet, appViewModel)
-                        is Sheet.Gift -> GiftSheet(sheet, appViewModel)
                         is Sheet.QrScanner -> QrScanningSheet(sheet, appViewModel)
                         is Sheet.PubkyAuth -> PubkyAuthApprovalSheet(
                             authUrl = sheet.authUrl,
@@ -1292,28 +1290,22 @@ private fun NavGraphBuilder.home(
         )
     }
     deepLinkableComposable<Routes.Savings> {
-        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
-        val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
         val forceCloseRemainingDuration by appViewModel.forceCloseRemainingDuration.collectAsStateWithLifecycle()
 
         SavingsWalletScreen(
-            isGeoBlocked = isGeoBlocked,
             onchainActivities = onchainActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
-            onTransferToSpendingClick = {
-                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
-            },
             onBackClick = { navController.popBackStack() },
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
     }
     deepLinkableComposable<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
-        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
+        val hasTrustedChannels by walletViewModel.hasTrustedChannels.collectAsStateWithLifecycle(initialValue = false)
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
         SpendingWalletScreen(
@@ -1329,21 +1321,15 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSavingsAvailability()
                 }
             },
-            onTransferFromSavingsClick = {
-                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
-            },
             onBackClick = { navController.popBackStack() },
+            showChannelsClosingNotice = hasTrustedChannels,
         )
     }
     deepLinkableComposable<Routes.HardwareWallet> {
         val walletId = it.toRoute<Routes.HardwareWallet>().walletId
-        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         HardwareWalletScreen(
             walletId = walletId,
             onActivityItemClick = { navController.navToActivityDetail(it) },
-            onTransferToSpendingClick = { selectedDeviceId ->
-                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
-            },
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -2209,11 +2195,6 @@ fun NavController.navigateOnSavingsTransferExit() {
 fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) =
     navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro))
 
-fun NavController.navigateToTransferSpendingStart(
-    hasSeenSpendingIntro: Boolean,
-    walletId: String,
-) = navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, walletId))
-
 internal fun shouldDismissSheetForScreenLink(handled: Boolean, currentSheet: Sheet?): Boolean =
     handled && currentSheet != null
 
@@ -2238,16 +2219,6 @@ internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes =
     hasSeenSpendingIntro -> Routes.SpendingAmount
     else -> Routes.SpendingIntro
 }
-
-internal fun transferSpendingStartRoute(
-    hasSeenSpendingIntro: Boolean,
-    walletId: String,
-): Routes = when {
-    hasSeenSpendingIntro -> Routes.SpendingAmountHw(walletId)
-    else -> Routes.SpendingIntroHw(walletId)
-}
-
-fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
 
 fun NavController.navigateToTransferFunding() = navigateTo(Routes.Funding)
 

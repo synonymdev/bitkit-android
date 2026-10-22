@@ -7,8 +7,6 @@
     <string name="cards__quickpay__description">Scanne und zahle</string>
     <string name="cards__invite__title">Einladen</string>
     <string name="cards__invite__description">Teile Bitkit</string>
-    <string name="cards__lightning__title">Ausgeben</string>
-    <string name="cards__lightning__description">Sofortüberweisung</string>
     <string name="cards__pin__title">Sichern</string>
     <string name="cards__pin__description">Lege eine PIN fest</string>
     <string name="cards__shop__title">Shop</string>
@@ -101,6 +99,8 @@
     <string name="fee__custom__description">Abhängig von der Gebühr</string>
     <string name="fee__custom__duration">Abhängig von der Gebühr</string>
     <string name="fee__custom__shortDescription">Abhängig von der Gebühr</string>
+    <string name="lightning__channels_closing_banner">KANÄLE SCHLIESSEN AM %1$s</string>
+    <string name="lightning__channels_closing_notice">Deine Lightning-Kanäle werden am %1$s geschlossen. Übertrage dein Guthaben vorher auf das Sparkonto.</string>
     <string name="lightning__transfer_intro__title">Spending\n&lt;accent&gt;Balance&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Fülle dein Guthaben auf, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu genießen.</string>
     <string name="lightning__transfer_intro__button">Los geht\'s</string>
@@ -354,14 +354,6 @@
     <string name="other__connection_issue_explain">Sieht so aus, als wärst du nicht verbunden, wiederverbinden...</string>
     <string name="other__connection_back_title">Internetverbindung wiederhergestellt</string>
     <string name="other__connection_back_msg">Bitkit wurde erfolgreich mit dem Internet verbunden.</string>
-    <string name="other__gift__claiming__text">Dein Bitkit-Geschenkcode wird eingelöst...</string>
-    <string name="other__gift__claiming__title">Geschenk wird eingelöst</string>
-    <string name="other__gift__error__text">Bitkit konnte die Gelder nicht einlösen. Bitte versuche es später erneut oder kontaktiere uns.</string>
-    <string name="other__gift__error__title">Geschenkcode-Fehler</string>
-    <string name="other__gift__used__text">Dieser Bitkit-Geschenkcode wurde bereits verwendet und die Gelder wurden ausgezahlt.</string>
-    <string name="other__gift__used__title">Code verwendet</string>
-    <string name="other__gift__used_up__text">Entschuldigung, du bist zu spät! Alle Geschenke für diesen Code wurden bereits eingelöst.</string>
-    <string name="other__gift__used_up__title">Keine Geschenke mehr</string>
     <string name="other__high_balance__nav_title">Hoher Kontostand</string>
     <string name="other__high_balance__title">Hoher\n&lt;accent&gt;Kontostand&lt;/accent&gt;</string>
     <string name="other__high_balance__text">&lt;accent&gt;Dein Wallet-Kontostand übersteigt $500.&lt;/accent&gt;\nZu deiner Sicherheit solltest du einen Teil deiner Ersparnisse in ein Offline-Wallet verschieben.</string>
@@ -987,11 +979,8 @@
     <string name="wallet__receive_lightning_invoice">Lightning-Rechnung</string>
     <string name="wallet__receive_note_placeholder">Optionale Notiz an den Zahler</string>
     <string name="wallet__receive_show_qr">QR-Code anzeigen</string>
-    <string name="wallet__receive__cjit">Lightning-Gelder empfangen</string>
     <string name="wallet__receive_connect_initial">Um dein Ausgabenguthaben einzurichten, wird eine &lt;accent&gt;{networkFee}&lt;/accent&gt; Netzwerkgebühr und &lt;accent&gt;{serviceFee}&lt;/accent&gt; Service-Provider-Gebühr abgezogen.</string>
     <string name="wallet__receive_connect_additional">Um mehr sofortiges Bitcoin zu empfangen, muss Bitkit deine Liquidität erhöhen. Eine &lt;accent&gt;{networkFee}&lt;/accent&gt; Netzwerkgebühr und &lt;accent&gt;{serviceFee}&lt;/accent&gt; Service-Provider-Gebühr werden von dem von dir angegebenen Betrag abgezogen.</string>
-    <string name="wallet__receive_onboarding_title">Empfangen auf &lt;accent&gt;Ausgabenguthaben&lt;/accent&gt;</string>
-    <string name="wallet__receive_onboarding_description">Genieße sofortige und günstige\nTransaktionen mit Freunden, Familie\nund Händlern.</string>
     <string name="wallet__receive_show_details">Details anzeigen</string>
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Sparkonto</string>
@@ -1110,7 +1099,6 @@
     <string name="wallet__ldk_start_error_title">Lightning-Startfehler</string>
     <string name="wallet__peer_disconnected">Peer getrennt.</string>
     <string name="wallet__transfer_to_savings">Übertragen zum Sparkonto</string>
-    <string name="wallet__transfer_to_spending">Übertragen zum Ausgabenkonto</string>
     <string name="wallet__withdraw_error">Deine Abhebung war nicht erfolgreich. Bitte scanne den QR-Code erneut oder kontaktiere den Support.</string>
     <string name="widgets__widgets">Widgets</string>
     <string name="widgets__onboarding__title">Hallo,\n&lt;accent&gt;Widgets&lt;/accent&gt;</string>

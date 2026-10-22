@@ -7,8 +7,6 @@
     <string name="cards__quickpay__description">Skanuj i zapłać</string>
     <string name="cards__invite__title">Zaproś</string>
     <string name="cards__invite__description">Udostępnij Bitkit</string>
-    <string name="cards__lightning__title">Wydawaj</string>
-    <string name="cards__lightning__description">Płatności natychmiastowe</string>
     <string name="cards__pin__title">Zabezpiecz</string>
     <string name="cards__pin__description">Ustaw kod PIN</string>
     <string name="cards__shop__title">Sklep</string>
@@ -102,6 +100,8 @@
     <string name="fee__custom__description">Zależy od opłaty</string>
     <string name="fee__custom__duration">Zależy od opłaty</string>
     <string name="fee__custom__shortDescription">Zależy od opłaty</string>
+    <string name="lightning__channels_closing_banner">KANAŁY ZOSTANĄ ZAMKNIĘTE %1$s</string>
+    <string name="lightning__channels_closing_notice">Twoje kanały Lightning zostaną zamknięte %1$s. Przed tym terminem prześlij saldo wydatków na oszczędności.</string>
     <string name="lightning__transfer_intro__title">Saldo \n&lt;accent&gt;Wydatków&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Zasil swoje saldo wydatków, aby cieszyć się natychmiastowymi i tanimi transakcjami z przyjaciółmi, rodziną i sprzedawcami.</string>
     <string name="lightning__transfer_intro__button">Rozpocznij</string>
@@ -440,14 +440,6 @@
     <string name="other__scan__error__expired">Ta faktura Lightning wygasła.</string>
     <string name="other__share_qr">Udostępnij kod QR przez</string>
     <string name="other__shop__categories__travel">Podróże</string>
-    <string name="other__gift__claiming__title">Odbiór prezentu</string>
-    <string name="other__gift__claiming__text">Odbiór kodu podarunkowego Bitkit...</string>
-    <string name="other__gift__error__title">Błąd kodu podarunkowego</string>
-    <string name="other__gift__error__text">Bitkit nie mógł odebrać środków. Proszę spróbować ponownie później lub skontaktować się z nami.</string>
-    <string name="other__gift__used__title">Użyty kod</string>
-    <string name="other__gift__used__text">Ten kod podarunkowy Bitkit został już wykorzystany, a środki zostały wypłacone.</string>
-    <string name="other__gift__used_up__text">Przepraszamy, jesteś za późno! Wszystkie prezenty dla tego kodu zostały już odebrane.</string>
-    <string name="other__gift__used_up__title">Brak prezentów</string>
     <string name="other__shop__intro__title">Sklep</string>
     <string name="other__shop__intro__description">Przestaw się na standard Bitcoina. Wydawaj swoje Bitcoiny na karty podarunkowe, eSIM-y, doładowania telefonu i inne usługi.</string>
     <string name="other__shop__discover__nav_title">Sklep</string>
@@ -978,7 +970,6 @@
     <string name="wallet__toast_transaction_unconfirmed_description">Transakcja stała się niepotwierdzona z powodu reorganizacji łańcucha bloków</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transakcja niepotwierdzona</string>
     <string name="wallet__transfer_to_savings">Prześlij na oszczędności</string>
-    <string name="wallet__transfer_to_spending">Prześlij na saldo wydatków</string>
     <string name="wallet__withdraw_error">Twoja wypłata nie powiodła się. Proszę ponownie zeskanować kod QR lub skontaktować się z pomocą techniczną.</string>
     <string name="wallet__selection_title">Wybór monet /Coin Selection/</string>
     <string name="wallet__selection_total_required">Wymagana kwota</string>
@@ -1107,11 +1098,8 @@
     <string name="wallet__lnurl_pay__error_min__description">Minimalna kwota dla tej faktury wynosi ₿ {amount}.</string>
     <string name="wallet__peer_disconnected">Węzeł rozłączony.</string>
     <string name="wallet__ldk_start_error_title">Błąd uruchamiania Lightning</string>
-    <string name="wallet__receive__cjit">Odbierz środki Lightning</string>
     <string name="wallet__receive_liquidity__bg_setup_desc">Włącz konfigurację w tle, aby bezpiecznie opuścić Bitkit podczas konfigurowania salda.</string>
     <string name="wallet__receive_liquidity__bg_setup_switch">Konfiguracja w tle</string>
-    <string name="wallet__receive_onboarding_description">Ciesz się natychmiastowymi i tanimi\ntransakcjami z przyjaciółmi, rodziną\ni sprzedawcami.</string>
-    <string name="wallet__receive_onboarding_title">Odbierz na &lt;accent&gt;saldo wydatków&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Pokaż szczegóły</string>
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Oszczędności</string>

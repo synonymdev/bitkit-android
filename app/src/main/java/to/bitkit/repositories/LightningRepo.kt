@@ -138,6 +138,10 @@ class LightningRepo @Inject constructor(
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
 
+    val hasTrustedChannels = lightningState
+        .map { separateTrustedChannels(it.channels).first.isNotEmpty() }
+        .distinctUntilChanged()
+
     private val _nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>(extraBufferCapacity = 64)
     val nodeEventUpdates = _nodeEventUpdates.asSharedFlow()
     val nodeEvents = nodeEventUpdates.map { it.event }

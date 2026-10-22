@@ -498,7 +498,7 @@ private val PreviewArticle = ArticleModel(
 private val PREVIEW_SUGGESTIONS = persistentListOf(
     Suggestion.BACK_UP,
     Suggestion.SECURE,
-    Suggestion.LIGHTNING,
+    Suggestion.BUY,
     Suggestion.SUPPORT,
 )
 private const val DISABLED_CARD_ALPHA = 0.42f

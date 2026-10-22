@@ -181,14 +181,6 @@ class ContentViewTest {
     }
 
     @Test
-    fun `hardware spending start route keeps device id after intro`() {
-        val deviceId = "trezor-1"
-
-        assertEquals(Routes.SpendingIntroHw(deviceId), transferSpendingStartRoute(false, deviceId))
-        assertEquals(Routes.SpendingAmountHw(deviceId), transferSpendingStartRoute(true, deviceId))
-    }
-
-    @Test
     fun `transfer effect destinations cover funding paid and hw signed`() {
         assertEquals(Routes.SettingUp, transferEffectDestination(TransferEffect.OnSpendingFundingPaid))
         assertEquals(Routes.SpendingHwSigned, transferEffectDestination(TransferEffect.OnHwTxSigned))

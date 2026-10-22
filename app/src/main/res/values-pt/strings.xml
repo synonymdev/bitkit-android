@@ -7,8 +7,6 @@
     <string name="cards__quickpay__description">Escanear e pagar</string>
     <string name="cards__invite__title">Convide</string>
     <string name="cards__invite__description">Compartilhe a Bitkit</string>
-    <string name="cards__lightning__title">Pagar</string>
-    <string name="cards__lightning__description">Pagamentos instantâneos</string>
     <string name="cards__pin__title">Segurança</string>
     <string name="cards__pin__description">Configure um PIN</string>
     <string name="cards__shop__title">Comprar</string>
@@ -97,6 +95,8 @@
     <string name="fee__custom__description">Depende da taxa</string>
     <string name="fee__custom__duration">Depende da taxa</string>
     <string name="fee__custom__shortDescription">Depende da taxa</string>
+    <string name="lightning__channels_closing_banner">CANAIS FECHAM A %1$s</string>
+    <string name="lightning__channels_closing_notice">Os seus canais Lightning serão fechados a %1$s. Transfira o seu saldo de gastos para a poupança antes dessa data.</string>
     <string name="lightning__transfer_intro__title">Saldo de\n&lt;accent&gt;Gastos&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Use seu saldo de gastos para desfrutar de transações instantâneas e baratas com amigos, familiares e comerciantes.</string>
     <string name="lightning__transfer_intro__button">Começar</string>
@@ -406,14 +406,6 @@
     <string name="other__update_button">Atualizar</string>
     <string name="other__scan__error__generic">Bitkit não consegue ler os dados fornecidos.</string>
     <string name="other__scan__error__expired">Este invoice lightning expirou.</string>
-    <string name="other__gift__claiming__title">Reivindicando presente</string>
-    <string name="other__gift__claiming__text">Reivindicando seu gitf code Bitkit...</string>
-    <string name="other__gift__error__title">Erro no código de presente</string>
-    <string name="other__gift__error__text">A Bitkit não pôde reivindicar os fundos. Tente novamente mais tarde ou entre em contato conosco.</string>
-    <string name="other__gift__used__title">Código usado</string>
-    <string name="other__gift__used__text">Este gift code da Bitkit já foi usado e os fundos já foram pagos.</string>
-    <string name="other__gift__used_up__text">Desculpe, você chegou tarde demais! Todos os presentes para este código já foram resgatados.</string>
-    <string name="other__gift__used_up__title">Presentes Esgotados</string>
     <string name="other__lnurl_auth_login_button">Entrar</string>
     <string name="other__lnurl_auth_login_prompt">Entrar em {domain}?</string>
     <string name="other__lnurl_auth_login_title">Entrar</string>
@@ -932,7 +924,6 @@
     <string name="wallet__boost_decrease_fee">Reduzir taxa</string>
     <string name="wallet__send_fee_error_max">Não é possível aumentar a taxa mais. Caso contrário, excederá metade do saldo de entrada atual.</string>
     <string name="wallet__transfer_to_savings">Transferir Para Poupança</string>
-    <string name="wallet__transfer_to_spending">Transferir Para Gastos</string>
     <string name="wallet__payment_received">Bitcoin Recebido</string>
     <string name="wallet__instant_payment_received">Bitcoin Recebido Instantaneamente</string>
     <string name="wallet__filter_title">Selecionar intervalo</string>
@@ -952,13 +943,10 @@
     <string name="wallet__lnurl_pay__error_min__title">Valor muito baixo</string>
     <string name="wallet__lnurl_pay__error_min__description">O valor mínimo para este invoice é de ₿ {amount}.</string>
     <string name="wallet__ldk_start_error_title">Erro de inicialização da Lightning</string>
-    <string name="wallet__receive__cjit">Receber fundos Lightning</string>
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Poupança</string>
     <string name="wallet__receive_tab_spending">Gastos</string>
     <string name="wallet__receive_show_details">Mostrar Detalhes</string>
-    <string name="wallet__receive_onboarding_title">Receba no &lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>
-    <string name="wallet__receive_onboarding_description">Aproveite transações instantâneas e baratas\ncom amigos, familiares\ne comerciantes.</string>
     <string name="wallet__receive_liquidity__bg_setup_desc">Ative a configuração em segundo plano para sair da Bitkit com segurança enquanto seu saldo está sendo configurado.</string>
     <string name="wallet__receive_liquidity__bg_setup_switch">Configurar em segundo plano</string>
     <string name="wallet__toast_transaction_replaced_title">Transação Substituída</string>
