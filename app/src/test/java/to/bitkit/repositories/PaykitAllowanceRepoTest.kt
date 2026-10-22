@@ -315,8 +315,8 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `received proposal is presented once and accepting answers it`() = test {
-        val proposalRecord = receivedProposal()
+    fun `received ask is presented once and accepting answers it`() = test {
+        val proposalRecord = receivedAsk()
         records = listOf(proposalRecord)
         whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(proposalRecord)
         sut.activate(identity)
@@ -334,6 +334,208 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `offer from the allower is accepted without the review sheet and not announced twice`() = test {
+        // The proposer took the allower role, so this wallet is the allowee.
+        val offer = receivedProposal()
+        records = listOf(offer)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+            records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false))
+            records.single()
+        }
+        sut.activate(identity)
+        assertNull(sut.proposalForPresentation(), "An offer from the allower never opens the review sheet")
+
+        val accepted = sut.acceptOffersFromAllowers()
+
+        assertEquals(listOf(fixtures.counterpartyKey), accepted.map { it.counterparty })
+        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
+        val entry = sut.entries.value.single()
+        assertEquals(PaykitAllowance.Status.ACTIVE, entry.status(fixtures.now))
+        assertEquals(PaykitAllowance.Role.ALLOWEE, entry.role)
+        assertTrue(entry.canEnd, "The allowee can still end it")
+        assertNull(sut.proposalForPresentation())
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An accepted offer is not accepted or announced twice")
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `failed offer accept stays unanswered and is retried and announced once on the next refresh`() = test {
+        records = listOf(receivedProposal())
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenThrow(RuntimeException("offline"))
+        sut.activate(identity)
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "A failed accept is not announced")
+        assertEquals(PaykitAllowance.Status.AWAITING_MY_ANSWER, sut.entries.value.single().status(fixtures.now))
+        assertNull(sut.proposalForPresentation(), "A failed offer still never opens the review sheet")
+
+        acceptFlipsRecordToActive()
+        assertEquals(listOf(fixtures.counterpartyKey), sut.acceptOffersFromAllowers().map { it.counterparty })
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+        verify(sdk, times(2)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `offers are neither accepted nor announced while the session cannot announce or continue`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+
+        assertTrue(sut.acceptOffersFromAllowers(canAnnounce = { false }).isEmpty())
+        assertTrue(sut.acceptOffersFromAllowers(canContinue = { false }).isEmpty())
+
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `offer accepted as the app backgrounds is still announced and no further offer is accepted`() = test {
+        val secondOffer = fixtures.record(
+            allowanceId = "Y",
+            counterparty = fixtures.otherCounterpartyKey,
+            localRole = AllowanceLocalRole.ALLOWEE,
+            state = AllowanceLifecycleState.PROPOSED,
+            proposedByMe = false,
+        )
+        records = listOf(receivedProposal(), secondOffer)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer { records.first() }
+        sut.activate(identity)
+
+        var checks = 0
+        val announced = sut.acceptOffersFromAllowers(canContinue = { ++checks == 1 })
+
+        assertEquals(1, announced.size, "An offer already accepted is announced, since it is never announced later")
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `offer accepted while the profile is being deleted is not announced`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+
+        var checks = 0
+        val announced = sut.acceptOffersFromAllowers(canAnnounce = { ++checks == 1 })
+
+        assertTrue(announced.isEmpty(), "An accept that outlived its session is not announced")
+        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
+    }
+
+    @Test
+    fun `offer accept never answers an ask that joined the entry after the check`() = test {
+        val secondAllower = "pubky" + "a".repeat(52)
+        val asker = "pubky" + "m".repeat(52)
+        val offerX = fixtures.record(
+            allowanceId = "X",
+            localRole = AllowanceLocalRole.ALLOWEE,
+            state = AllowanceLifecycleState.PROPOSED,
+            proposedByMe = false,
+        )
+        records = listOf(
+            fixtures.record(
+                allowanceId = "Y",
+                counterparty = secondAllower,
+                localRole = AllowanceLocalRole.ALLOWEE,
+                state = AllowanceLifecycleState.PROPOSED,
+                proposedByMe = false,
+            ),
+            offerX,
+        )
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+            if (it.getArgument<String>(1) == "Y") {
+                records = listOf(
+                    fixtures.record(
+                        allowanceId = "Y",
+                        counterparty = secondAllower,
+                        localRole = AllowanceLocalRole.ALLOWEE,
+                        proposedByMe = false,
+                    ),
+                    offerX,
+                    fixtures.record(
+                        allowanceId = "X",
+                        counterparty = asker,
+                        localRole = AllowanceLocalRole.ALLOWER,
+                        state = AllowanceLifecycleState.PROPOSED,
+                        proposedByMe = false,
+                    ),
+                )
+            }
+            records.first()
+        }
+        sut.activate(identity)
+
+        sut.acceptOffersFromAllowers()
+
+        verify(sdk).acceptAllowance(eq(fixtures.counterpartyKey), eq("X"), any())
+        verify(sdk, never()).acceptAllowance(eq(asker), eq("X"), any())
+    }
+
+    @Test
+    fun `offer accepted after the identity changed is not announced`() = test {
+        records = listOf(receivedProposal())
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+            sut.deactivate()
+            records.single()
+        }
+        sut.activate(identity)
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
+    }
+
+    @Test
+    fun `ask from the allowee is left for the review sheet`() = test {
+        // The proposer took the allowee role, so this wallet is the allower and pays: the user decides.
+        records = listOf(receivedAsk())
+        sut.activate(identity)
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        assertEquals(entryKey, sut.proposalForPresentation()?.id)
+        assertEquals(PaykitAllowance.Status.AWAITING_MY_ANSWER, sut.entries.value.single().status(fixtures.now))
+    }
+
+    @Test
+    fun `proposal sent or already answered is never accepted`() = test {
+        records = listOf(
+            fixtures.record(allowanceId = "sent", state = AllowanceLifecycleState.PROPOSED, proposedByMe = true),
+            fixtures.record(
+                allowanceId = "declined",
+                localRole = AllowanceLocalRole.ALLOWEE,
+                state = AllowanceLifecycleState.REJECTED,
+                proposedByMe = false,
+            ),
+            fixtures.record(
+                allowanceId = "ended",
+                localRole = AllowanceLocalRole.ALLOWEE,
+                state = AllowanceLifecycleState.ENDED,
+                proposedByMe = false,
+            ),
+            fixtures.record(
+                allowanceId = "active",
+                localRole = AllowanceLocalRole.ALLOWEE,
+                state = AllowanceLifecycleState.ACCEPTED,
+                proposedByMe = false,
+            ),
+        )
+        sut.activate(identity)
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `offers are not accepted without an identity`() = test {
+        records = listOf(receivedProposal())
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
     fun `accepting a proposal never answers another contact's proposal with the same id`() = test {
         val offer = receivedProposal()
         val ask = fixtures.record(
@@ -344,16 +546,17 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             lastEventAt = "2026-09-01T10:00:00Z",
         )
         records = listOf(offer, ask)
-        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(offer)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenReturn(ask)
         sut.activate(identity)
 
+        // The offer is accepted automatically, so the sheet presents the other contact's ask.
         val presented = checkNotNull(sut.proposalForPresentation())
-        assertEquals(PaykitAllowance.Role.ALLOWEE, presented.role)
-        assertEquals(fixtures.counterpartyKey, presented.counterparty)
+        assertEquals(PaykitAllowance.Role.ALLOWER, presented.role)
+        assertEquals(fixtures.otherCounterpartyKey, presented.counterparty)
         assertTrue(sut.accept(presented.id).isSuccess)
 
-        verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
-        verify(sdk, never()).acceptAllowance(eq(fixtures.otherCounterpartyKey), any(), any())
+        verify(sdk).acceptAllowance(fixtures.otherCounterpartyKey, ALLOWANCE_ID, 1uL)
+        verify(sdk, never()).acceptAllowance(eq(fixtures.counterpartyKey), any(), any())
     }
 
     @Test
@@ -585,8 +788,21 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         createdAtMillis = fixtures.now.toEpochMilliseconds(),
     )
 
+    private fun acceptFlipsRecordToActive() {
+        whenever { sdk.acceptAllowance(any(), any(), any()) }.thenAnswer {
+            records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false))
+            records.single()
+        }
+    }
+
     private fun receivedProposal() = fixtures.record(
         localRole = AllowanceLocalRole.ALLOWEE,
+        state = AllowanceLifecycleState.PROPOSED,
+        proposedByMe = false,
+    )
+
+    private fun receivedAsk() = fixtures.record(
+        localRole = AllowanceLocalRole.ALLOWER,
         state = AllowanceLifecycleState.PROPOSED,
         proposedByMe = false,
     )

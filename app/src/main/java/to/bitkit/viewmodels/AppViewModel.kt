@@ -179,6 +179,7 @@ import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendPendingError
+import to.bitkit.repositories.PaykitAllowanceEntry
 import to.bitkit.repositories.PaykitAllowanceError
 import to.bitkit.repositories.PaykitAllowanceEvent
 import to.bitkit.repositories.PaykitAllowanceRepo
@@ -1189,6 +1190,11 @@ class AppViewModel @Inject constructor(
             releaseCoverage()
         }
         return result.onSuccess {
+            val acceptedOffers = paykitAllowanceRepo.acceptOffersFromAllowers(
+                canAnnounce = { !privatePaykitRepo.isProfileDeletionInProgress.value },
+                canContinue = { !(onlyWhileActive && isPaymentRequestPollingStopped.value) },
+            )
+            announceAcceptedAllowanceOffers(acceptedOffers)
             if (processAllowanceRequests()) paykitPaymentRequestRepo.refresh()
             presentNextIncomingPaykitPaymentRequest()
         }
@@ -1238,6 +1244,18 @@ class AppViewModel @Inject constructor(
             )
 
             PaykitAllowanceEvent.LedgerChanged -> Unit
+        }
+    }
+
+    private fun announceAcceptedAllowanceOffers(offers: List<PaykitAllowanceEntry>) {
+        offers.forEach { offer ->
+            notifyAllowanceEvent(
+                type = Toast.ToastType.SUCCESS,
+                title = context.getString(R.string.subscriptions__allowance_offer_accepted_title),
+                description = context.getString(R.string.subscriptions__allowance_offer_accepted_description)
+                    .replace("{name}", allowanceContactName(offer.counterparty)),
+                testTag = "AllowanceOfferAcceptedToast",
+            )
         }
     }
 
