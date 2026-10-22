@@ -2352,8 +2352,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val otherRequest = targetRequest.copy(paymentRequestId = "other-subscription")
         surfacedPaykitPaymentRequestIds += targetRequest.id
         surfacedPaykitPaymentRequestIds += otherRequest.id
-        whenever(paykitPaymentRequestRepo.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.FULL))
-            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+        whenever(
+            paykitPaymentRequestRepo.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.FULL, Priority.Background),
+        ).thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
         whenever(privatePaykitRepo.beginPaymentRequest(targetRequest)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
@@ -2366,7 +2367,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyPublicKey.value = testPublicKey
         runCurrent()
 
-        verify(paykitPaymentRequestRepo).refreshAfterStateChange(PaykitPaymentRequestRefreshMode.FULL)
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(
+            PaykitPaymentRequestRefreshMode.FULL,
+            Priority.Background,
+        )
         assertEquals(targetRequest.id, sut.requestedPaymentRequestId.value)
         assertNull(sut.currentSheet.value)
         verify(privatePaykitRepo, never()).beginPaymentRequest(any())
@@ -13748,9 +13752,50 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).pruneUnsavedContactState(eq(emptySet<String>()), any())
         inOrder(privatePaykitRepo, paykitPaymentRequestRepo).apply {
             verify(privatePaykitRepo).removeSavedContacts(eq(setOf(contact.publicKey)), any())
-            verify(paykitPaymentRequestRepo).refreshAfterStateChange()
+            verify(paykitPaymentRequestRepo).refreshAfterStateChange(
+                PaykitPaymentRequestRefreshMode.FULL,
+                Priority.Background,
+            )
         }
         verify(paykitPaymentRequestRepo, never()).refresh(any())
+    }
+
+    @Test
+    fun `automatic contact refresh defers without losing the next poll`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        runCurrent()
+        whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
+        whenever(
+            paykitPaymentRequestRepo.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.FULL, Priority.Background),
+        ).thenReturn(Result.failure(PaykitPaymentRequestError.OperationInProgress))
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            for (trigger in listOf("contacts", "foreground")) {
+                clearInvocations(paykitPaymentRequestRepo, activityRepo)
+                when (trigger) {
+                    "contacts" -> pubkyContactsLoadVersion.update { it + 1L }
+                    else -> sut.refreshPrivatePaykitEndpoints()
+                }
+                runCurrent()
+
+                verify(paykitPaymentRequestRepo).refreshAfterStateChange(
+                    PaykitPaymentRequestRefreshMode.FULL,
+                    Priority.Background,
+                )
+                verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+                verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
+                verify(activityRepo, never()).backfillPaykitContacts()
+                assertEquals(testPublicKey, pubkyPublicKey.value)
+
+                verifyPaymentRequestPollingInterval()
+                verify(paykitPaymentRequestRepo).refresh(PaykitPaymentRequestRefreshMode.INBOX, Priority.Background)
+                verify(activityRepo).backfillPaykitContacts()
+            }
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
     }
 
     @Test
@@ -13779,6 +13824,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         contactWork.complete(Unit)
         runCurrent()
         verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any(), any())
         verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
 
         sut.startPaykitPaymentRequestPolling()
@@ -13861,13 +13907,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo, never()).scheduleSavedContactPreparation(any<Collection<String>>(), any())
         verify(paykitPaymentRequestRepo, never()).refresh(any(), any())
         verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any())
+        verify(paykitPaymentRequestRepo, never()).refreshAfterStateChange(any(), any())
         verify(pubkyRepo, never()).refreshContacts()
         verify(pubkyRepo, never()).importShopContacts()
 
         isProfileDeletionInProgress.update { false }
         runCurrent()
         verify(privatePaykitRepo).scheduleSavedContactPreparation(eq(emptySet<String>()), any())
-        verify(paykitPaymentRequestRepo).refreshAfterStateChange()
+        verify(paykitPaymentRequestRepo).refreshAfterStateChange(
+            PaykitPaymentRequestRefreshMode.FULL,
+            Priority.Background,
+        )
         verify(pubkyRepo).refreshContacts()
         sut.stopPaykitPaymentRequestPolling()
     }
@@ -13941,7 +13991,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         inOrder(privatePaykitRepo, paykitPaymentRequestRepo).apply {
             verify(privatePaykitRepo).retryPendingEndpointRemoval(any())
-            verify(paykitPaymentRequestRepo).refreshAfterStateChange()
+            verify(paykitPaymentRequestRepo).refreshAfterStateChange(
+                PaykitPaymentRequestRefreshMode.FULL,
+                Priority.Background,
+            )
         }
         verify(paykitPaymentRequestRepo, never()).refresh(any())
     }

@@ -964,7 +964,11 @@ class AppViewModel @Inject constructor(
             refreshPrivateOnlyPaykitApp("contact sync", onlyIfNeeded = !identityChanged)
             if (!state.contactsLoaded || !synchronizeSavedPaykitContacts(state.contactKeys, isStillCurrent)) return
             if (isPaymentRequestPollingStopped.value) return
-            val result = refreshIncomingPaykitPaymentRequests(forceFresh = true, onlyWhileActive = true)
+            val result = refreshIncomingPaykitPaymentRequests(
+                forceFresh = true,
+                refreshPriority = Priority.Background,
+                onlyWhileActive = true,
+            )
             if (!isPaymentRequestPollingStopped.value) refreshPaymentRequestTargets(force = true)
             result
         } finally {
@@ -1045,7 +1049,11 @@ class AppViewModel @Inject constructor(
             isStillCurrent = isStillCurrent,
         )
         if (isPaymentRequestPollingStopped.value) return
-        refreshIncomingPaykitPaymentRequests(forceFresh = true, onlyWhileActive = true)
+        refreshIncomingPaykitPaymentRequests(
+            forceFresh = true,
+            refreshPriority = Priority.Background,
+            onlyWhileActive = true,
+        )
         if (!isPaymentRequestPollingStopped.value) refreshPaymentRequestTargets(force = true)
     }
 

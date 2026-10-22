@@ -316,6 +316,11 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers(any())).doSuspendableAnswer {
             paykitSdkService.receivePrivateMessagesFromLinkedPeers()
         }
+        whenever(paykitSdkService.receiveAndObserveState(any(), any())).doSuspendableAnswer {
+            val reports = paykitSdkService.receivePrivateMessagesFromLinkedPeers(Priority.Background)
+            it.getArgument<(List<PrivateStreamCounterpartyIntakeReport>) -> Unit>(1)(reports)
+            paykitSdkService.observeState(it.getArgument(0), Priority.Background)
+        }
         stubRequestReads()
         whenever(paykitSdkService.processOutboundPrivateMessages(any(), any())).doSuspendableAnswer {
             paykitSdkService.processOutboundPrivateMessages(it.getArgument(0))
@@ -497,6 +502,58 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService, never()).linkedPeers(any())
         verify(paykitSdkService).processPendingPrivateMessages(Priority.Background)
         verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers(Priority.Background)
+        verify(paykitSdkService, times(2)).receiveAndObserveState(eq(LOCAL_IDENTITY), any())
+    }
+
+    @Test
+    fun `forced and non-background refresh retain separate receive and observation`() = test {
+        for (mode in listOf(PaykitPaymentRequestRefreshMode.INBOX, PaykitPaymentRequestRefreshMode.FULL)) {
+            for (priority in listOf(Priority.Background, Priority.Ordered, Priority.Interactive)) {
+                clearInvocations(paykitSdkService)
+                if (priority == Priority.Background) {
+                    sut.refreshAfterStateChange(mode, priority).getOrThrow()
+                } else {
+                    sut.refresh(mode, priority).getOrThrow()
+                }
+
+                verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers(priority)
+                verify(paykitSdkService).observeState(LOCAL_IDENTITY, Priority.Background)
+                verify(paykitSdkService, never()).receiveAndObserveState(any(), any())
+            }
+        }
+    }
+
+    @Test
+    fun `automatic full refresh finishes pending drain before receive observation and stops on deferral`() = test {
+        for (deferred in listOf(false, true)) {
+            clearInvocations(paykitSdkService)
+            val release = CompletableDeferred<Unit>()
+            doSuspendableAnswer {
+                release.await()
+                if (deferred) throw PaykitPaymentRequestError.OperationInProgress
+                emptyList<OutboundPrivateCounterpartySendReport>()
+            }.whenever(paykitSdkService).processPendingPrivateMessages(Priority.Background)
+            val refresh = async { sut.refresh() }
+            runCurrent()
+            verify(paykitSdkService).processPendingPrivateMessages(Priority.Background)
+            verify(paykitSdkService, never()).receiveAndObserveState(any(), any())
+            verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers(any())
+            verify(paykitSdkService, never()).observeState(any(), any())
+            release.complete(Unit)
+            val result = refresh.await()
+
+            if (deferred) {
+                assertSame(PaykitPaymentRequestError.OperationInProgress, result.exceptionOrNull())
+                verify(paykitSdkService, never()).receiveAndObserveState(any(), any())
+                verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers(any())
+                verify(paykitSdkService, never()).observeState(any(), any())
+            } else {
+                result.getOrThrow()
+                verify(paykitSdkService).receiveAndObserveState(eq(LOCAL_IDENTITY), any())
+                verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers(Priority.Background)
+                verify(paykitSdkService).observeState(LOCAL_IDENTITY, Priority.Background)
+            }
+        }
     }
 
     @Test
@@ -1131,6 +1188,36 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             val result = paymentRequestRecord(paymentDeadline = deadline).parseIncomingPaykitPaymentRequest(START_TIME)
                 as PaykitPaymentRequestParseResult.Rejected
             assertEquals(PaykitPaymentRequest.ParseFailure.UnsupportedPaymentDeadline, result.reason)
+        }
+    }
+
+    @Test
+    fun `inbox reports intake failures once before observation fails and keeps warm requests`() = test {
+        for (failure in listOf(
+            PaykitPaymentRequestError.OperationInProgress,
+            PaykitException.SharedStateBusy("shared_state_busy", "Locked"),
+        )) {
+            stubRequestReads()
+            val record = paymentRequestRecord()
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+            sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+            val pending = sut.pendingRequests.value
+            val intakeError = mock<PrivateOperationError> {
+                on { redactedContext() } doReturn "transport failure"
+            }
+            whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(
+                listOf(PrivateStreamCounterpartyIntakeReport(COUNTERPARTY, null, intakeError)),
+            )
+            whenever(paykitSdkService.observeState(any(), any())).doSuspendableAnswer { throw failure }
+            clearInvocations(paykitSdkService)
+
+            val result = sut.refresh(PaykitPaymentRequestRefreshMode.INBOX)
+
+            assertSame(failure, result.exceptionOrNull())
+            assertEquals(pending, sut.pendingRequests.value)
+            verify(intakeError).redactedContext()
+            verify(paykitSdkService).receiveAndObserveState(eq(LOCAL_IDENTITY), any())
+            verify(paykitSdkService).receivePrivateMessagesFromLinkedPeers()
         }
     }
 
