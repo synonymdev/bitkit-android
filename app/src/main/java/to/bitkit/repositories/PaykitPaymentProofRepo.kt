@@ -101,6 +101,8 @@ data class PendingPaykitPaymentProof(
     val hardwareTotalSpent: ULong? = null,
     val privatePaymentListVersion: ULong? = null,
     val previousPrivatePaymentListVersion: ULong? = null,
+    /** Set only for an automatic Allowance payment, from its submitted attempt. Manual payments omit it. */
+    val allowanceId: String? = null,
 )
 
 data class PaykitOnchainPaymentProofResolution(
@@ -181,6 +183,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         paymentAppId: String,
         kind: PaykitPaymentProofKind,
         paymentTerms: PaykitRequestPayment? = null,
+        allowanceId: String? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             releaseInterruptedShopPreparation()
@@ -192,7 +195,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     paymentEndpointIdentifier,
                     paymentAppId,
                     kind
-                ).copy(conversionQuoteId = paymentTerms?.quoteId)
+                ).copy(conversionQuoteId = paymentTerms?.quoteId, allowanceId = allowanceId)
                 val currentProofs = loadProofs()
                 if (currentProofs.any {
                         it.isStartedFor(proof.identity, request.id) ||
@@ -577,6 +580,23 @@ class PaykitPaymentProofRepo @Inject constructor(
             } ?: return@withContext false
             val txid = attempt.txid ?: return@withContext false
             completeOnchainPayment(request, txid, proof.paymentEndpointIdentifier, proof.paymentAppId)
+        }
+
+    /** Whether a verified on-chain proof of [txid] is held for [requestId], here or already queued in the SDK. */
+    suspend fun hasVerifiedOnchainProof(requestId: PaykitPaymentRequestId, txid: String): Boolean =
+        withContext(ioDispatcher) {
+            val held = operationMutex.withLock {
+                loadProofs().any {
+                    it.requestId == requestId && it.kind == PaykitPaymentProofKind.Onchain &&
+                        it.onchainAcceptanceVerified == true && it.proofData.equals(txid, ignoreCase = true)
+                }
+            }
+            val expected = proofJson(PaykitPaymentProofKind.Onchain, txid.lowercase()).proofValues()
+            held || paykitSdkService.paymentRequests().any { record ->
+                record.paymentRequestId == requestId.paymentRequestId &&
+                    PubkyPublicKeyFormat.matches(record.counterparty, requestId.counterparty) &&
+                    record.paymentProofs.any { it.proof.exportText().proofValues() == expected }
+            }
         }
 
     @Suppress("CyclomaticComplexMethod")
@@ -1409,6 +1429,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                 proofJson = proofJson,
                 conversionQuoteId = proof.conversionQuoteId,
                 billingPeriod = proof.billingPeriod,
+                allowanceId = proof.allowanceId,
             )
             Logger.info("Queued a Paykit payment proof for private delivery", context = TAG)
             runSuspendCatching { paykitSdkService.processPendingPrivateMessages() }

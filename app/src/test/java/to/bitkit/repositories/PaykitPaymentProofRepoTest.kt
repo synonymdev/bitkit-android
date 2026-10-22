@@ -99,6 +99,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         private const val PAYMENT_REQUEST_ID = "550e8400-e29b-41d4-a716-446655440000"
         private const val PAYMENT_HASH = "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
         private const val ONCHAIN_ADDRESS = "bcrt1qpaymentproof"
+        private const val ALLOWANCE_ID = "4f1c2d3e-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
         private val PREIMAGE = "00".repeat(32)
     }
 
@@ -180,7 +181,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .doSuspendableAnswer {
                 assertEquals(txid, PaykitPaymentProofStore(diskKeychain).load().single().proofData)
                 delay(5.seconds)
@@ -216,7 +217,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.prepare(request, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
         repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS, request.amount.atomic).getOrThrow()
         whenever(store.save(any())).doSuspendableAnswer { throw AppError("disk unavailable") }
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .doSuspendableAnswer {
                 delay(5.seconds)
                 throw AppError("delivery unavailable")
@@ -266,14 +267,20 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             whenever(paykitSdkService.identityStatus()).thenReturn(status)
             paymentProofRepo().reconcile()
             assertEquals(txid, storedProofs.single().proofData)
-            verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            verify(
+                paykitSdkService,
+                never()
+            ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         }
         storedProofs = emptyList()
         whenever(paykitSdkService.identityStatus())
             .thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         repo.reconcile()
         assertTrue(storedProofs.isEmpty())
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
     }
 
     @Test
@@ -281,7 +288,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         storedProofs = listOf(readyLightningProof(PAYMENT_REQUEST_ID).copy(paymentAppId = ""))
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
         paymentProofRepo().reconcile()
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         assertEquals("", storedProofs.single().paymentAppId)
         assertTrue(storedProofs.single().paymentStarted)
     }
@@ -489,7 +499,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.Bolt11.rawValue)
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenThrow(IllegalStateException("temporary failure"))
             .thenReturn(record)
         val firstRepo = paymentProofRepo()
@@ -513,6 +523,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proofJson = proofCaptor.capture(),
             billingPeriod = isNull(),
             conversionQuoteId = isNull(),
+            allowanceId = isNull(),
         )
         assertEquals(MethodId.Bolt11.rawValue, endpointCaptor.lastValue)
         assertEquals(
@@ -533,7 +544,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             )
         }
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenReturn(record)
         val lightning = readyLightningProof(PAYMENT_REQUEST_ID)
         val onchain = lightning.copy(
@@ -564,6 +575,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 proofJson = any(),
                 billingPeriod = isNull(),
                 conversionQuoteId = isNull(),
+                allowanceId = isNull(),
             )
         }
     }
@@ -581,7 +593,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 paymentRequestRecord(paymentRequestId = secondPaymentRequestId),
             ),
         )
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenThrow(IllegalStateException("temporary failure"))
             .thenReturn(paymentRequestRecord(paymentRequestId = secondPaymentRequestId))
 
@@ -596,6 +608,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proofJson = any(),
             billingPeriod = isNull(),
             conversionQuoteId = isNull(),
+            allowanceId = isNull(),
         )
         assertEquals(listOf(PAYMENT_REQUEST_ID, secondPaymentRequestId), paymentRequestIdCaptor.allValues)
         assertEquals(listOf(PAYMENT_REQUEST_ID), storedProofs.map { it.requestId.paymentRequestId })
@@ -617,7 +630,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(lightningRepo.getPayments()).thenReturn(Result.success(listOf(payment)))
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         ).thenReturn(record)
         val firstRepo = paymentProofRepo()
 
@@ -637,10 +650,45 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proofJson = proofCaptor.capture(),
             billingPeriod = isNull(),
             conversionQuoteId = isNull(),
+            allowanceId = isNull(),
         )
         assertEquals(
             """{"data":"$PREIMAGE","type":"${PaykitPaymentProofKind.Lightning.type}"}""",
             proofCaptor.firstValue,
+        )
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `allowance proof is submitted with its allowance id`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), any()))
+            .thenReturn(record)
+        val sut = paymentProofRepo()
+
+        sut.prepare(
+            request,
+            MethodId.Bolt11.rawValue,
+            "bitkit",
+            PaykitPaymentProofKind.Lightning,
+            allowanceId = ALLOWANCE_ID,
+        ).getOrThrow()
+        sut.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
+        assertEquals(ALLOWANCE_ID, storedProofs.single().allowanceId)
+        sut.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
+        sut.reconcile()
+
+        verify(paykitSdkService).submitPaymentProof(
+            counterparty = any(),
+            paymentRequestId = any(),
+            paymentAppId = eq("bitkit"),
+            paymentEndpointIdentifier = eq(MethodId.Bolt11.rawValue),
+            proofJson = any(),
+            billingPeriod = isNull(),
+            conversionQuoteId = isNull(),
+            allowanceId = eq(ALLOWANCE_ID),
         )
         assertTrue(storedProofs.isEmpty())
     }
@@ -651,7 +699,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = paymentRequest(MethodId.Bolt11.rawValue)
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         ).thenReturn(record)
         val repo = paymentProofRepo()
 
@@ -659,7 +707,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
 
         repo.reconcile()
-        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         assertTrue(storedProofs.isEmpty())
     }
 
@@ -673,7 +721,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.completeLightningPayment(PAYMENT_HASH, "01".repeat(32))
 
         assertNull(storedProofs.single().proofData)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
     }
 
     @Test
@@ -697,7 +748,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(PaykitPaymentRequestError.OperationInProgress, result.exceptionOrNull())
         assertTrue(storedProofs.isEmpty())
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
     }
 
     @Test
@@ -727,7 +781,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.failLightningPayment(PAYMENT_HASH)
 
         assertTrue(storedProofs.isEmpty())
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
     }
 
     @Test
@@ -742,7 +799,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         ).thenReturn(record)
         for (error in errors) {
             val request = paymentRequest(MethodId.Bolt11.rawValue)
@@ -773,7 +830,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(
             paykitSdkService,
             times(errors.size)
-        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
     }
 
     @Test
@@ -807,7 +864,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         ).thenReturn(record)
         val repo = paymentProofRepo()
 
@@ -833,6 +890,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proofCaptor.capture(),
             isNull(),
             conversionQuoteId = isNull(),
+            allowanceId = isNull(),
         )
         assertEquals(MethodId.P2wpkh.rawValue, endpointCaptor.firstValue)
         assertEquals(
@@ -953,7 +1011,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertNull(storedProofs.single().paymentIdentifier)
         assertNull(storedProofs.single().proofData)
         assertTrue(storedProofs.single().paymentStarted)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
     }
 
     @Test
@@ -964,14 +1025,16 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         ).thenReturn(record)
         val repo = paymentProofRepo()
 
         repo.completeOnchainPayment(request, txid, endpoint, "bitkit", OnchainSendOutcome.Accepted(txid))
 
         repo.reconcile()
-        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), eq(endpoint), any(), isNull(), isNull())
+        verify(
+            paykitSdkService
+        ).submitPaymentProof(any(), any(), any(), eq(endpoint), any(), isNull(), isNull(), isNull())
         assertTrue(storedProofs.isEmpty())
     }
 
@@ -985,7 +1048,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
         ).thenReturn(record)
         val repo = paymentProofRepo()
 
@@ -1003,6 +1066,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proofJson = any(),
             billingPeriod = periodCaptor.capture(),
             conversionQuoteId = isNull(),
+            allowanceId = isNull(),
         )
         assertEquals(period, periodCaptor.firstValue)
     }
@@ -1029,7 +1093,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = paymentRequest(MethodId.Bolt11.rawValue, billingPeriod = currentPeriod)
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
         ).thenReturn(record)
         val repo = paymentProofRepo()
 
@@ -1038,7 +1102,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
 
         repo.reconcile()
-        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
     }
 
     @Test
@@ -1080,7 +1144,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         ).thenReturn(record)
         val repo = paymentProofRepo()
 
@@ -1095,7 +1159,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             OnchainSendOutcome.Accepted(txid)
         )
 
-        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         assertTrue(storedProofs.isEmpty())
     }
 
@@ -1105,7 +1169,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenThrow(IllegalStateException("transient submission failure"))
         val repo = paymentProofRepo()
 
@@ -1121,7 +1185,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
 
         assertEquals(txid, storedProofs.single().proofData)
-        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
     }
 
     @Test
@@ -1131,7 +1195,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         ).thenReturn(record)
         val repo = paymentProofRepo()
 
@@ -1147,7 +1211,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         repo.reconcile()
 
-        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         assertEquals(txid, storedProofs.single().proofData)
     }
 
@@ -1159,7 +1223,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         ).thenReturn(record)
         val repo = paymentProofRepo()
 
@@ -1179,6 +1243,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proofJson = proofCaptor.capture(),
             billingPeriod = isNull(),
             conversionQuoteId = isNull(),
+            allowanceId = isNull(),
         )
         assertEquals(endpoint, endpointCaptor.firstValue)
         assertEquals(
@@ -1195,7 +1260,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         ).thenReturn(record)
         val repo = paymentProofRepo()
 
@@ -1214,6 +1279,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proofJson = proofCaptor.capture(),
             billingPeriod = isNull(),
             conversionQuoteId = isNull(),
+            allowanceId = isNull(),
         )
         assertTrue(proofCaptor.firstValue.contains(txid))
     }
@@ -1236,7 +1302,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             )
         )
         assertEquals(listOf(original), storedProofs)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
     }
 
     @Test
@@ -1293,7 +1362,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             ),
         )
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenThrow(IllegalStateException("delivery temporarily unavailable"))
 
         assertTrue(
@@ -1345,7 +1414,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt.copy(payerIdentity = null))
         assertTrue(repo.authorizeOnchainRecovery(request, attempt.copy(payerIdentity = null)).isFailure)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
     }
 
     @Test
@@ -1426,7 +1498,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertNull(storedProofs.single().proofData)
         assertEquals("ef".repeat(32), storedProofs.single().paymentIdentifier)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
         verify(lightningRepo, never()).finishAcceptedShopActivity(any(), any())
     }
 
@@ -1441,7 +1516,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 paymentRequestRecord(paymentRequestId = secondPaymentRequestId),
             ),
         )
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenReturn(paymentRequestRecord())
         val repo = paymentProofRepo()
         repo.prepare(firstRequest, MethodId.P2wpkh.rawValue, "bitkit", PaykitPaymentProofKind.Onchain).getOrThrow()
@@ -1472,7 +1547,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(storedProofs.single().onchainMatchingTransactionIdsBeforeAttempt.isEmpty())
         assertNull(storedProofs.single().proofData)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
     }
 
     @Test
@@ -1524,7 +1602,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(storedProofs.single().paymentStarted)
         assertNull(storedProofs.single().proofData)
         verify(lightningRepo, never()).completeAcceptedShopFollowup(any(), any())
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
 
         whenever(
             paykitSdkService.identityStatus()
@@ -1533,7 +1614,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(storedProofs.single().paymentStarted)
         assertNull(storedProofs.single().proofData)
         verify(lightningRepo, never()).completeAcceptedShopFollowup(any(), any())
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
         whenever(
             paykitSdkService.identityStatus()
         ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
@@ -1551,6 +1635,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             any(),
             isNull(),
             isNull(),
+            isNull(),
         )
     }
 
@@ -1560,7 +1645,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         val record = paymentRequestRecord()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenThrow(IllegalStateException("delivery unavailable"))
             .thenReturn(record)
         val repo = paymentProofRepo()
@@ -1593,6 +1678,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             proofCaptor.capture(),
             isNull(),
             isNull(),
+            isNull(),
         )
         assertTrue(proofCaptor.allValues.all { it.contains(txid) })
         verify(lightningRepo, never()).completeAcceptedShopFollowup(newerRequest.id, "cd".repeat(32))
@@ -1616,7 +1702,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         paymentProofRepo().reconcile()
 
         assertEquals(1, storedProofs.size)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
         verify(lightningRepo, never()).completeAcceptedShopFollowup(any(), any())
     }
 
@@ -1630,7 +1719,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertFalse(repo.completeOnchainPayment(request, "ab".repeat(32), MethodId.P2wpkh.rawValue, "bitkit"))
         assertNull(storedProofs.single().proofData)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
     }
 
     @Test
@@ -1653,7 +1745,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             acceptedAttempt(request, txid).copy(evidence = OnchainSendEvidence.Observed),
         )
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenThrow(IllegalStateException("delivery unavailable"))
         paymentProofRepo().reconcile()
 
@@ -1679,7 +1771,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         assertFalse(storedProofs.single().onchainAcceptanceVerified)
         assertNull(storedProofs.single().proofData)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
     }
 
     @Test
@@ -1700,7 +1795,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         paymentProofRepo().reconcile()
 
         assertEquals(1, storedProofs.size)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), any(), isNull(), isNull())
         verify(lightningRepo, never()).completeAcceptedShopFollowup(any(), any())
     }
 
@@ -2232,7 +2330,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ).thenReturn(Result.success(true))
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
         whenever(
-            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+            paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         ).thenReturn(paymentRequestRecord())
         paymentProofRepo().reconcile()
         verify(paykitSdkService).submitPaymentProof(
@@ -2241,6 +2339,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             any(),
             eq(MethodId.P2wpkh.rawValue),
             eq("""{"data":"$txid","type":"bitcoin-onchain-txid"}"""),
+            isNull(),
             isNull(),
             isNull()
         )
@@ -2270,13 +2369,16 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         repo.failOnchainPayment(request)
         assertEquals(1, storedProofs.size)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
 
         whenever(
             hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amount.atomic)
         ).thenReturn(Result.success(true))
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenReturn(paymentRequestRecord())
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(acceptedAttempt(request, "cd".repeat(32)))
         paymentProofRepo().reconcile()
@@ -2287,6 +2389,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             any(),
             eq(MethodId.P2wpkh.rawValue),
             eq("""{"data":"$txid","type":"bitcoin-onchain-txid"}"""),
+            isNull(),
             isNull(),
             isNull()
         )
@@ -2312,10 +2415,13 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(Result.success(false))
         paymentProofRepo().reconcile()
         assertEquals(txid, storedProofs.single().proofData)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amount.atomic))
             .thenReturn(Result.success(true))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenReturn(paymentRequestRecord())
         paymentProofRepo().reconcile()
         assertTrue(storedProofs.isEmpty())
@@ -2343,7 +2449,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(hwWalletRepo.observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amount.atomic))
             .thenReturn(Result.success(false))
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
-        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull()))
             .thenReturn(paymentRequestRecord())
         repo.reconcile()
         assertTrue(storedProofs.isEmpty())
@@ -2354,6 +2460,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             any(),
             eq(MethodId.P2wpkh.rawValue),
             eq("""{"data":"$txid","type":"bitcoin-onchain-txid"}"""),
+            isNull(),
             isNull(),
             isNull(),
         )
@@ -2382,7 +2489,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(completed, storedProofs.single())
         verify(hwWalletRepo, times(2)).observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amount.atomic)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
     }
 
@@ -2406,7 +2516,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFalse(storedProofs.single().onchainAcceptanceVerified)
         verify(hwWalletRepo, times(2)).observeExactTransaction(walletId, txid, ONCHAIN_ADDRESS, request.amount.atomic)
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
     }
 
     @Test
@@ -2435,7 +2548,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(repo.completeHardwareOnchainPayment(request.id, walletId, txid, LOCAL_IDENTITY))
         assertTrue(storedProofs.first { it.identity == LOCAL_IDENTITY }.onchainAcceptanceVerified)
         assertEquals(other, storedProofs.first { it.identity == COUNTERPARTY })
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
     }
 
     @Test
@@ -2537,7 +2653,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 .exceptionOrNull()
         )
         verify(hwWalletRepo, times(1)).broadcastFunding(signed)
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
     }
 
     @Test
@@ -2910,7 +3029,10 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertNull(reopened.retainedHardwareOnchainRequest(request))
         assertEquals(listOf(proof), storedProofs)
         verify(hwWalletRepo, never()).broadcastFunding(any(), org.mockito.kotlin.anyOrNull())
-        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull())
+        verify(
+            paykitSdkService,
+            never()
+        ).submitPaymentProof(any(), any(), any(), any(), any(), isNull(), isNull(), isNull())
     }
 
     private fun paymentProofRepo(store: PaykitPaymentProofStore = this.store) = PaykitPaymentProofRepo(

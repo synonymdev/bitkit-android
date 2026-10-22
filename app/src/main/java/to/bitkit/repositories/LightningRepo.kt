@@ -1408,10 +1408,18 @@ class LightningRepo @Inject constructor(
         sats: ULong?,
         paymentDeadlineAt: Instant?,
         onBeforeSend: suspend () -> Boolean,
+    ): Result<PaymentId> = payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat = null, onBeforeSend)
+
+    suspend fun payInvoice(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        maxTotalRoutingFeeMsat: ULong?,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
         waitForUsableChannels()
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
-        runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt) }.also {
+        runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }.also {
             syncState()
         }
     }
