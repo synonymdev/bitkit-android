@@ -12,9 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -113,30 +111,18 @@ fun NewTransactionSheetView(
         TransactionConfetti(details)
 
         if (details.direction == NewTransactionSheetDirection.RECEIVED) {
-            if (details.usdtAmount != null) {
-                // The exported composition includes artwork outside its centered 256dp design slot.
-                Image(
-                    painter = painterResource(R.drawable.usdt_coins_received),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .offset(x = 13.5.dp)
-                        .padding(bottom = 12.dp)
-                        .size(width = 349.dp, height = 520.dp)
-                        .testTag("transaction_received_image")
-                )
-            } else {
-                Image(
-                    painter = painterResource(R.drawable.coin_stack_5),
-                    contentDescription = null,
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("transaction_received_image")
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = 32.dp)
-                )
-            }
+            Image(
+                painter = painterResource(
+                    if (details.usdtAmount != null) R.drawable.usdt_coins_received else R.drawable.coin_stack_5
+                ),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("transaction_received_image")
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 32.dp)
+            )
         } else {
             Image(
                 painter = painterResource(R.drawable.check),
