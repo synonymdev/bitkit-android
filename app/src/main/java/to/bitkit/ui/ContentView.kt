@@ -127,6 +127,7 @@ import to.bitkit.ui.screens.settings.VssDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen
+import to.bitkit.ui.screens.subscriptions.AllowanceSheet
 import to.bitkit.ui.screens.subscriptions.CreateSubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionDetailScreen
 import to.bitkit.ui.screens.subscriptions.SubscriptionSheet
@@ -567,7 +568,7 @@ fun ContentView(
                     usesFlatSheetStyle || currentSheet is Sheet.Widgets -> Colors.Gray7
                     // Meet the top of the subscription sheets' own gradient, so the grabber strip
                     // does not sit a shade darker than the content right below it.
-                    currentSheet is Sheet.Subscription -> Colors.Gray6
+                    currentSheet is Sheet.Subscription || currentSheet is Sheet.Allowance -> Colors.Gray6
                     else -> DefaultSheetContainerColor
                 },
                 sheets = {
@@ -624,6 +625,8 @@ fun ContentView(
                         Sheet.CreateSubscription -> CreateSubscriptionSheet(appViewModel)
 
                         is Sheet.Subscription -> SubscriptionSheet(appViewModel, sheet.route)
+
+                        is Sheet.Allowance -> AllowanceSheet(appViewModel, sheet.route)
 
                         is Sheet.ActivityDateRangeSelector -> DateRangeSelectorSheet()
                         is Sheet.ActivityTagSelector -> TagSelectorSheet()

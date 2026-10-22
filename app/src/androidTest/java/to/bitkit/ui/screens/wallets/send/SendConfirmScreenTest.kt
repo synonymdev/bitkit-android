@@ -369,4 +369,40 @@ class SendConfirmScreenTest {
         composeTestRule.onNodeWithText("±10-20 minutes").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Depends on the fee").assertDoesNotExist()
     }
+
+    @Test
+    fun merchantRequestLabelsThePayeeAsTo() {
+        val seller = PubkyProfile.placeholder("seller").copy(name = "Corner Shop")
+        val state = mutableStateOf(
+            SendUiState(
+                amount = 25_000u,
+                address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                isPaymentRequest = true,
+                isMerchantPaymentRequest = true,
+                contactPaymentProfile = seller,
+                paymentRequestNote = "Pubky Shop order 1a2b3c4d",
+            )
+        )
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SendConfirmContent(
+                    uiState = state.value,
+                    isNodeRunning = true,
+                    isLoading = false,
+                    showBiometrics = false,
+                    modifier = Modifier.sheetHeight(),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("SendConfirmToggleDetails").performClick()
+        composeTestRule.onNodeWithText("To", ignoreCase = true).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Contact", ignoreCase = true).assertDoesNotExist()
+
+        composeTestRule.runOnIdle { state.value = state.value.copy(isMerchantPaymentRequest = false) }
+        composeTestRule.onNodeWithText("Contact", ignoreCase = true).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("To", ignoreCase = true).assertDoesNotExist()
+    }
 }

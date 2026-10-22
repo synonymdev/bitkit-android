@@ -135,6 +135,7 @@ fun PaykitUsdtReview(
                         amountEditable = false,
                         isPaymentRequest = uiState.isPaymentRequest,
                         paymentRequestNote = uiState.paymentRequestNote,
+                        isMerchantRequest = uiState.isMerchantPaymentRequest,
                         contact = uiState.contactPaymentProfile,
                     )
                 }

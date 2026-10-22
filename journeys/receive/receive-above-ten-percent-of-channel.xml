@@ -1,0 +1,22 @@
+<journey name="a single lightning payment above 10% of a new channel is received">
+  <description>
+    Bitkit's node cannot announce channels, so it only accepts unannounced ones. Until LDK Node
+    0.7.0-rc.77 it let the channel partner put at most 10% of the channel value in flight, so a single
+    incoming payment above 10% of the channel failed with no route, even when the channel had the
+    receiving capacity. From rc.77 a channel opened by an updated app accepts up to its full value.
+    Channels opened before the update keep the 10% limit.
+
+    Precondition: an onboarded regtest wallet with no Lightning channel, connected to the LSP
+    (README.md, Backend preconditions). The LSP node pays the invoices with the lsp helper.
+  </description>
+  <actions>
+    <action>Open Receive, create a Lightning invoice for 50 000 sats (it opens a channel from the LSP on payment) and copy the invoice</action>
+    <action>Pay it from the LSP node: ./lsp POST /regtest/lightning/pay '{"invoice":"&lt;bolt11&gt;"}'</action>
+    <action>Verify the received sheet shows 50 000 sats</action>
+    <action>Open Settings, then the "Advanced" tab, then "Lightning Connections", open the new connection and note its total size and receiving capacity</action>
+    <action>Go back to Receive and create a Lightning invoice for an amount between 15% and 90% of the connection's total size that is also below its receiving capacity (for example 30% of the size)</action>
+    <action>Pay it from the LSP node with the same helper call</action>
+    <action>Verify the payment arrives: the received sheet shows the amount, and the spending balance grows by it</action>
+    <action>Regression check: with a build on LDK Node 0.7.0-rc.76 the same second payment fails with no route and Bitkit shows nothing</action>
+  </actions>
+</journey>
