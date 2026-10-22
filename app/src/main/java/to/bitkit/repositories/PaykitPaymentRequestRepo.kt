@@ -106,6 +106,8 @@ data class PaykitPaymentRequest(
     val paymentDeadlineAt: Instant? = null,
     val isPaymentInFlight: Boolean = false,
     val proposalStreamItemId: ULong? = null,
+    /** An incoming request a Paykit server created for a merchant, such as a Pubky Market order. */
+    val isMerchantRequest: Boolean = false,
 ) {
     val amountValue: String get() = amount.value
 
@@ -1071,40 +1073,67 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     if (it.proposalStreamItemId != proposalStreamItemId) {
                         throw PaykitPaymentRequestError.RequestUnavailable
                     }
-                    val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
-                    val generation = stateGeneration.get()
-                    ensurePaymentAllowed(it, forExecution = false).getOrThrow()
-                    val alreadySaved = it.id in presentationStore.loadAcceptedOneTimeIds(identity)
-                    val acceptedIds = presentationStore.addAcceptedOneTimeId(identity, it.id)
-                    if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
-                    acceptedOneTimeRequestIds = acceptedIds
-                    runSuspendCatching {
+                    withAcceptanceIntent(it) {
                         paykitSdkService.acceptPaymentRequest(
                             counterparty = it.counterparty,
                             paymentRequestId = it.paymentRequestId,
                             expectedProposalStreamItemId = proposalStreamItemId,
                         )
-                    }.onFailure { error ->
-                        // Acceptance may already be committed. Reconcile before discarding its owner.
-                        val uncertain = when (error) {
-                            is PaykitException.Transport,
-                            is PaykitException.Storage,
-                            is PaykitException.Identity,
-                            is PaykitException.ConcurrentUpdate,
-                            is PaykitException.SharedStateBusy -> true
-                            else -> false
-                        }
-                        if (!alreadySaved && !uncertain) {
-                            val remaining = presentationStore.removeAcceptedOneTimeIds(identity, setOf(it.id))
-                            if (isCurrentState(generation, identity)) acceptedOneTimeRequestIds = remaining
-                        }
-                    }.getOrThrow()
-                    if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
+                    }
                 }.getOrThrow()
             }
         }.onFailure {
             Logger.warn("Failed to accept incoming Paykit payment request", it, context = TAG)
         }
+    }
+
+    /**
+     * Accepts [request] through [accept] with this install as its owner, like [accept], for an acceptance that does not
+     * come from the request sheet: the Allowance accepts an automatically paid request. The request stays payable on
+     * this install if the payment that follows fails.
+     */
+    suspend fun <T> acceptOnThisInstall(
+        request: PaykitPaymentRequest,
+        accept: suspend () -> T,
+    ): Result<T> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            if (!request.requiresAcceptance) throw PaykitPaymentRequestError.RequestUnavailable
+            operationMutex.withLock { withAcceptanceIntent(request, accept) }
+        }.onFailure {
+            Logger.warn("Failed to accept an incoming Paykit payment request for this install", it, context = TAG)
+        }
+    }
+
+    /** Saves this install as the owner of [request] before [operation] runs, and drops it on a definite failure. */
+    private suspend fun <T> withAcceptanceIntent(request: PaykitPaymentRequest, operation: suspend () -> T): T {
+        val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
+        val generation = stateGeneration.get()
+        ensurePaymentAllowed(request, forExecution = false).getOrThrow()
+        val alreadySaved = request.id in presentationStore.loadAcceptedOneTimeIds(identity)
+        val acceptedIds = presentationStore.addAcceptedOneTimeId(identity, request.id)
+        requireCurrentState(generation, identity)
+        acceptedOneTimeRequestIds = acceptedIds
+        val result = runSuspendCatching { operation() }.onFailure { error ->
+            // Acceptance may already be committed. Reconcile before discarding its owner.
+            val uncertain = when (error) {
+                is PaykitException.Transport,
+                is PaykitException.Storage,
+                is PaykitException.Identity,
+                is PaykitException.ConcurrentUpdate,
+                is PaykitException.SharedStateBusy -> true
+                else -> false
+            }
+            if (!alreadySaved && !uncertain) {
+                val remaining = presentationStore.removeAcceptedOneTimeIds(identity, setOf(request.id))
+                if (isCurrentState(generation, identity)) acceptedOneTimeRequestIds = remaining
+            }
+        }.getOrThrow()
+        requireCurrentState(generation, identity)
+        return result
+    }
+
+    private fun requireCurrentState(generation: Long, identity: String) {
+        if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
     }
 
     suspend fun reject(request: PaykitPaymentRequest): Result<Unit> = updateRequest(
@@ -2036,7 +2065,11 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
     paymentProofKind = paymentProofs.lastOrNull()?.let {
         PaykitPaymentProofKind.fromPaymentEndpointIdentifier(it.paymentEndpointIdentifier)
     },
+    isMerchantRequest = expectedRole == PaymentRequestLocalRole.PAYER && proposalAppId == PAYKIT_SERVER_APP_ID,
 )
+
+/** The app id a Paykit server stamps on requests it creates for merchants. */
+private const val PAYKIT_SERVER_APP_ID = "paykit-server"
 
 internal fun PaymentRequestRecord.toPaykitPaymentRequestHistory(now: Instant): PaykitPaymentRequest? {
     val role = localRole ?: return null
