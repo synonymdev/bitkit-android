@@ -1,0 +1,26 @@
+<journey name="Set And Accept Allowance">
+  <description>
+    The payer sets an allowance for a contact from the Allowances tab, and the payee's wallet accepts
+    the offer by itself: no review sheet opens and the payee taps nothing. The payee gets a "&lt;payer&gt;
+    set up an allowance for you" notification, and both sides show the allowance as Active. Until the
+    payee's wallet has received the offer, the payer's row reads "Waiting for an answer". The other
+    allowance journeys start from the Active state this one ends in.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled on both instances, each with the other saved as a linked contact, the payer holding a spendable balance above 50,000 sats with a usable Lightning channel</action>
+    <action>On the payer instance, open the drawer menu and tap Subscriptions</action>
+    <action>Tap the Allowances tab (testTag "Tab-allowances")</action>
+    <action>Verify the empty state (testTag "AllowancesEmpty") reads "Set up allowances" over the group illustration, with the footer button "Add Allowance"</action>
+    <action>Tap Add Allowance (testTag "AllowanceAdd")</action>
+    <action>Verify the Choose Contact sheet lists the payee and tap it (testTag "AllowanceContact-&lt;displayName&gt;")</action>
+    <action>Verify the Set Allowance sheet (testTag "SetAllowance") shows the payee's card, a PAYMENT LIMIT slider (testTag "AllowancePerPayment") and a MONTHLY ALLOWANCE slider (testTag "AllowanceMonthly")</action>
+    <action>Tap the $5 stop of the payment limit slider (testTag "AllowancePerPaymentStop-1") and the $50 stop of the monthly slider (testTag "AllowanceMonthlyStop-1")</action>
+    <action>Verify the summary (testTag "AllowanceSummary") reads "Requests up to $5 will be paid automatically, up to $50 a month, without asking you each time."</action>
+    <action>Tap Save Allowance (testTag "AllowanceSave")</action>
+    <action>Verify the sheet dismisses and the list shows one row for the payee (testTag "AllowanceRow-&lt;entryId&gt;") whose status line (testTag "AllowanceRowStatus") reads "Waiting for an answer", with "$ 50.00" over "Monthly limit" on the right</action>
+    <action>Switch to the payee instance and bring Bitkit to the foreground</action>
+    <action>Verify no Allowance review sheet (testTag "AllowanceReview") opens on the payee and that a notification "Allowance Added" reading "&lt;payer&gt; set up an allowance for you" arrives (or, with notifications off, the toast with testTag "AllowanceOfferAcceptedToast")</action>
+    <action>On the payee, open the drawer menu, tap Subscriptions, tap the Allowances tab and verify the payer's row reads "Active" followed by the per-payment limit, with no Accept or Decline step</action>
+    <action>Switch back to the payer instance and verify its row now reads "Active · $5 a payment"</action>
+  </actions>
+</journey>
