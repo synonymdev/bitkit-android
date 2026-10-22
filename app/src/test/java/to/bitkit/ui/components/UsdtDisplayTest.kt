@@ -8,18 +8,19 @@ import kotlin.test.assertNull
 
 class UsdtDisplayTest {
     @Test
-    fun `amount input uses the local separator and preserves precision and trailing zeros`() {
-        assertEquals("150,50", usdtInputAmount("150.50", Locale.GERMANY))
-        assertEquals("0,000001", usdtInputAmount("0.000001", Locale.GERMANY))
-        assertEquals("150.50", usdtInputAmount("150.50", Locale.US))
-        assertEquals("1,", usdtInputAmount("1.", Locale.GERMANY))
-    }
-
-    @Test
-    fun `exact amounts preserve token precision and locale separators`() {
-        assertEquals("4.996", usdtExactAmount(4_996_000u, Locale.US))
-        assertEquals("1,234567", usdtExactAmount(1_234_567u, Locale.GERMANY))
-        assertEquals("3,50", usdtExactAmount(3_500_000u, Locale.GERMANY))
+    fun `exact amounts preserve token precision across regions`() {
+        listOf(Locale.US, Locale.GERMANY, Locale.forLanguageTag("nl-NL"), Locale.FRANCE).forEach { locale ->
+            listOf(
+                0uL to "0.00",
+                1uL to "0.000001",
+                4_996_000uL to "4.996",
+                1_234_567uL to "1.234567",
+                3_500_000uL to "3.50",
+                ULong.MAX_VALUE to "18,446,744,073,709.551615",
+            ).forEach { (amount, expected) ->
+                assertEquals(expected, usdtExactAmount(amount, locale), locale.toString())
+            }
+        }
     }
 
     @Test
@@ -30,6 +31,7 @@ class UsdtDisplayTest {
         assertEquals(0L, usdtDisplaySats("0.000001", rate, now))
         assertNull(usdtDisplaySats("3.5", null, now))
         assertNull(usdtDisplaySats("3.5", rate.copy(timestampMillis = now - 601_000), now))
+        assertNull(usdtDisplaySats("—", rate, now))
         assertNull(usdtDisplaySats("-1", rate, now))
         assertNull(usdtDisplaySats("999999999999999999999999", rate, now))
     }
@@ -46,9 +48,9 @@ class UsdtDisplayTest {
             1025000uL to "1.03",
             1234567890uL to "1,234.57",
         ).forEach { (amount, expected) ->
-            assertEquals(expected, usdtOverviewAmount(amount, Locale.US), "amount: $amount")
+            listOf(Locale.US, Locale.GERMANY, Locale.forLanguageTag("nl-NL"), Locale.FRANCE).forEach { locale ->
+                assertEquals(expected, usdtOverviewAmount(amount, locale), locale.toString())
+            }
         }
-        assertEquals("<0,01", usdtOverviewAmount(1uL, Locale.GERMANY))
-        assertEquals("1.234,57", usdtOverviewAmount(1234567890uL, Locale.GERMANY))
     }
 }

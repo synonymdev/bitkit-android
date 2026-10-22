@@ -834,7 +834,6 @@
     <string name="usdt__fee_note">Todas as taxas são pagas em USDT. A taxa final pode ser menor.</string>
     <string name="usdt__from_address">Endereço de origem</string>
     <string name="usdt__hide_details">Ocultar detalhes</string>
-    <string name="usdt__history_sync">A atividade mais antiga ainda está sincronizando. Seu saldo fica atualizado sempre que houver conexão.</string>
     <string name="usdt__intro_decline">Não, Obrigado</string>
     <string name="usdt__intro_description">Bitcoin no coração. Dólares quando você precisar. Ative o USDT (Tether) para enviar e receber dólares digitais com a Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DÓLARES?&lt;/accent&gt;\nVOCÊ DECIDE</string>

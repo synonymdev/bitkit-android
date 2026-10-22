@@ -45,7 +45,7 @@ class PaymentRequestAmountLocaleTest {
     }
 
     @Test
-    fun commaDecimalEntryPreservesExactCentsAndTrailingZeros() {
+    fun dotDecimalEntryPreservesExactCentsInCommaRegions() {
         var submitted: PaykitPaymentRequestDraft? = null
         val amountInput = AmountInputViewModel(AmountInputHandler.stub())
         composeTestRule.setContent {
@@ -67,15 +67,15 @@ class PaymentRequestAmountLocaleTest {
             }
         }
 
-        composeTestRule.onNodeWithText(",", useUnmergedTree = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText(".", useUnmergedTree = true).assertIsDisplayed()
         listOf("N1", "N5", "N0", "NDecimal").forEach {
             composeTestRule.onNodeWithTag(it).performClick()
         }
-        composeTestRule.onNodeWithText("150,", useUnmergedTree = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("150.", useUnmergedTree = true).assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestAmountContinue").assertIsEnabled()
         composeTestRule.onNodeWithTag("N5").performClick()
         composeTestRule.onNodeWithTag("N0").performClick()
-        composeTestRule.onNodeWithText("150,50", useUnmergedTree = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("150.50", useUnmergedTree = true).assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestAmountContinue").performClick()
 
         assertEquals(PaykitAmount(PaykitAsset.USD, 15_050uL), submitted?.amount)

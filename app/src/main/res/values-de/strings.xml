@@ -829,7 +829,6 @@
     <string name="usdt__fee_note">Alle Gebühren werden in USDT bezahlt. Die endgültige Gebühr kann niedriger sein.</string>
     <string name="usdt__from_address">Absenderadresse</string>
     <string name="usdt__hide_details">Details ausblenden</string>
-    <string name="usdt__history_sync">Ältere Aktivitäten werden noch synchronisiert. Dein Guthaben ist aktuell, sobald eine Verbindung besteht.</string>
     <string name="usdt__intro_decline">Nein danke</string>
     <string name="usdt__intro_description">Im Herzen Bitcoin. Dollar, wenn du sie brauchst. Aktiviere USDT (Tether), um mit Bitkit digitale Dollar zu senden und zu empfangen.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLAR?&lt;/accent&gt;\nDU ENTSCHEIDEST</string>
