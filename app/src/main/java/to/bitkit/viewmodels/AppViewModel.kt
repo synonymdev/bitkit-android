@@ -1154,7 +1154,7 @@ class AppViewModel @Inject constructor(
     private suspend fun refreshIncomingPaykitPaymentRequests(
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
         forceFresh: Boolean = false,
-        messagePriority: Priority = Priority.Ordered,
+        messagePriority: Priority = Priority.Background,
         onlyWhileActive: Boolean = false,
         reconcileProofs: Boolean = mode == PaykitPaymentRequestRefreshMode.FULL,
     ): Result<Unit> {
@@ -1165,6 +1165,17 @@ class AppViewModel @Inject constructor(
             onlyWhileActive && isPaymentRequestPollingStopped.value
         ) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+        }
+        if (onlyWhileActive && reconcileProofs) {
+            val signIn = pubkyRepo.currentSignIn()
+                ?: return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+            paykitPaymentRequestRepo.isPaymentSubmissionActive.first { !it }
+            currentCoroutineContext().ensureActive()
+            if (!pubkyRepo.isCurrent(signIn) || !isPaykitEnabled.value || !walletRepo.walletExists() ||
+                isPaymentRequestPollingStopped.value || privatePaykitRepo.isProfileDeletionInProgress.value
+            ) {
+                return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+            }
         }
         if (reconcileProofs) paykitPaymentProofRepo.reconcile()
         if (privatePaykitRepo.isProfileDeletionInProgress.value ||
@@ -5694,7 +5705,9 @@ class AppViewModel @Inject constructor(
         }
         val preparedPaymentProofRequest = proofPreparation.getOrNull()
 
-        contactPaymentContext?.incomingPaymentRequest?.let { request ->
+        contactPaymentContext?.incomingPaymentRequest?.takeIf {
+            !it.requiresAcceptance || requiresPrivatePaymentListConsumption(contactPaymentContext)
+        }?.let { request ->
             paykitPaymentRequestRepo.claimForPayment(request).onFailure {
                 cancelPaymentProofPreparation(preparedPaymentProofRequest)
                 handlePaymentPreparationFailure(it, contactPaymentContext)
@@ -6270,18 +6283,21 @@ class AppViewModel @Inject constructor(
 
     private suspend fun prepareContactPayment(
         contactPaymentContext: ContactPaymentContext?,
-        beforePrivateConsumption: suspend () -> Result<Unit> = { Result.success(Unit) },
+        beforePrivateConsumption: (suspend () -> Result<Unit>)? = null,
     ): Boolean {
         if (isPreparedContactPayment(contactPaymentContext)) return true
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return false
 
-        contactPaymentContext?.incomingPaymentRequest?.let { request ->
+        contactPaymentContext?.incomingPaymentRequest?.takeIf {
+            beforePrivateConsumption != null || !it.requiresAcceptance ||
+                requiresPrivatePaymentListConsumption(contactPaymentContext)
+        }?.let { request ->
             paykitPaymentRequestRepo.claimForPayment(request).onFailure {
                 handlePaymentPreparationFailure(it, contactPaymentContext)
                 return false
             }
         }
-        beforePrivateConsumption().onFailure {
+        beforePrivateConsumption?.invoke()?.onFailure {
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return false
@@ -6343,15 +6359,19 @@ class AppViewModel @Inject constructor(
         if (preparation == null) return
         val quoteId = paykitPaymentTerms?.quoteId
         viewModelScope.launch {
-            paykitPaymentProofRepo.completeOnchainPayment(
-                request = paymentRequest,
-                txid = txId,
-                paymentEndpointIdentifier = preparation.endpointIdentifier,
-                paymentAppId = preparation.appId,
-                acceptedOutcome = acceptedOutcome,
-                conversionQuoteId = quoteId,
-            )
-            if (paymentRequest.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
+            runSuspendCatching {
+                paykitPaymentProofRepo.completeOnchainPayment(
+                    request = paymentRequest,
+                    txid = txId,
+                    paymentEndpointIdentifier = preparation.endpointIdentifier,
+                    paymentAppId = preparation.appId,
+                    acceptedOutcome = acceptedOutcome,
+                    conversionQuoteId = quoteId,
+                )
+                if (paymentRequest.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
+            }.onFailure {
+                Logger.warn("Deferred on-chain Paykit proof completion for reconciliation", context = TAG)
+            }
         }
     }
 
@@ -7329,6 +7349,8 @@ class AppViewModel @Inject constructor(
 
     fun beginHardwarePaymentSubmission(): () -> Unit = beginPaymentSubmission()
 
+    fun beginPaymentReview(): () -> Unit = paykitPaymentRequestRepo.beginPaymentReview()
+
     private fun beginPaymentSubmission(): () -> Unit {
         val submission = Any()
         synchronized(activePaymentSubmissions) {
@@ -7606,6 +7628,9 @@ class AppViewModel @Inject constructor(
             )
         }
     }
+
+    private fun requiresPrivatePaymentListConsumption(context: ContactPaymentContext?): Boolean =
+        !_sendUiState.value.paykitUsesUsdt && context?.privatePaymentContext?.paymentListVersion != null
 
     private suspend fun consumePrivatePaymentListIfNeeded(context: ContactPaymentContext?): Result<Unit> {
         context ?: return Result.success(Unit)

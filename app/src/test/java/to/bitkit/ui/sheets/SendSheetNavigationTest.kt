@@ -12,12 +12,41 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.ui.navigateTo
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @Config(sdk = [34])
 @RunWith(RobolectricTestRunner::class)
 class SendSheetNavigationTest {
+    @Test
+    fun `recovery pin holds review only until returning to pending`() {
+        val pending = SendRoute.Pending(paymentHash = "payment", amount = 1000, walletId = "wallet0")
+        val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+            navigatorProvider.addNavigator(ComposeNavigator())
+            graph = createGraph(startDestination = pending) {
+                composable<SendRoute.Pending> {}
+                composable<SendRoute.Confirm> {}
+                composable<SendRoute.PinCheck> {}
+                composable<SendRoute.RecoveryPinCheck> {}
+                composable<SendRoute.HardwareSign> {}
+            }
+        }
+        val reviewRoutes = listOf(
+            SendRoute.RecoveryPinCheck,
+            SendRoute.Confirm,
+            SendRoute.PinCheck,
+            SendRoute.HardwareSign,
+        )
+        for (route in reviewRoutes) {
+            assertFalse(requireNotNull(navController.currentDestination).isPaymentReview())
+            navController.navigateTo(route)
+            assertTrue(requireNotNull(navController.currentDestination).isPaymentReview())
+            assertTrue(navController.popBackStack())
+            assertFalse(requireNotNull(navController.currentDestination).isPaymentReview())
+        }
+    }
+
     @Test
     fun `pending clears earlier send screens after prepared amount review`() {
         for (start in listOf(SendRoute.Confirm, SendRoute.ContactSelect, SendRoute.Amount)) {

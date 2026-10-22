@@ -8,9 +8,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
+import to.bitkit.models.formatCurrency
 import to.bitkit.ui.theme.Colors
 import java.math.BigDecimal
-import java.text.NumberFormat
 import java.util.Locale
 
 @Composable
@@ -69,10 +69,6 @@ fun PaykitAmountCell(
     }
 }
 
-internal fun usdDisplayAmount(cents: ULong, locale: Locale = Locale.getDefault()): String {
-    val format = NumberFormat.getNumberInstance(locale).apply {
-        minimumFractionDigits = PaykitAsset.USD.decimals
-        maximumFractionDigits = PaykitAsset.USD.decimals
-    }
-    return format.format(BigDecimal(cents.toString()).movePointLeft(PaykitAsset.USD.decimals))
-}
+internal fun usdDisplayAmount(cents: ULong, locale: Locale = Locale.getDefault()): String = checkNotNull(
+    BigDecimal(cents.toString()).movePointLeft(PaykitAsset.USD.decimals).formatCurrency(locale = locale)
+)

@@ -23,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtTransferStatus
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ui.scaffold.AppAlertDialog
@@ -48,6 +49,18 @@ fun PaykitUsdtReview(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val paymentActive = state.busy || state.authenticationRequired
+    val reviewing = state.quote != null && !state.submitted
+    LaunchedEffect(reviewing, lifecycle, app) {
+        if (!reviewing) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val finishReview = app.beginPaymentReview()
+            try {
+                awaitCancellation()
+            } finally {
+                finishReview()
+            }
+        }
+    }
     DisposableEffect(paymentActive) {
         app.updatePaykitUsdtBusy(paymentActive)
         onDispose { app.updatePaykitUsdtBusy(false) }
