@@ -1,6 +1,7 @@
 
 package to.bitkit.ui.components
 
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -103,6 +104,8 @@ fun Headline20(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    autoSize: TextAutoSize? = null,
 ) {
     Text(
         text = text,
@@ -112,6 +115,8 @@ fun Headline20(
             letterSpacing = (-.5).sp,
             color = color,
         ),
+        maxLines = maxLines,
+        autoSize = autoSize,
         modifier = modifier
     )
 }

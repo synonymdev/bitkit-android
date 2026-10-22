@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ShapeDefaults
 import androidx.compose.runtime.Composable
@@ -34,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -43,12 +45,16 @@ import to.bitkit.ui.theme.Colors
 
 private const val GLOW_ANIMATION_MILLIS = 1200
 
+/** Smallest size an auto-sized banner title shrinks to so it fits on one line. */
+private val TITLE_MIN_FONT_SIZE = 12.sp
+
 @Composable
 fun ActivityBanner(
     gradientColor: Color,
     title: String,
     @DrawableRes icon: Int,
     modifier: Modifier = Modifier,
+    autoSizeTitle: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "glow")
@@ -169,6 +175,12 @@ fun ActivityBanner(
             Headline20(
                 text = AnnotatedString(title),
                 color = Colors.White,
+                maxLines = if (autoSizeTitle) 1 else Int.MAX_VALUE,
+                autoSize = if (autoSizeTitle) {
+                    TextAutoSize.StepBased(minFontSize = TITLE_MIN_FONT_SIZE, maxFontSize = 20.sp)
+                } else {
+                    null
+                },
             )
         }
     }

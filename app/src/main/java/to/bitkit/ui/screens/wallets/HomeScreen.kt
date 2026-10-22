@@ -705,6 +705,7 @@ private fun WalletPage(
                                 gradientColor = banner.type.color,
                                 title = banner.title,
                                 icon = banner.type.icon,
+                                autoSizeTitle = banner.type == ActivityBannerType.CHANNELS_CLOSING,
                                 onClick = {
                                     when (banner.type) {
                                         ActivityBannerType.SPENDING -> onNavigateToSettingUp()
