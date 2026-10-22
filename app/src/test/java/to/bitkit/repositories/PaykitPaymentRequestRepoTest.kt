@@ -408,33 +408,42 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `warm request observations remain readable while refresh waits and clear on identity change`() = test {
-        val record = paymentRequestRecord()
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
-        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
-        val pending = sut.pendingRequests.value
-        val history = sut.paymentRequestHistory.value
-        assertTrue(pending.isNotEmpty())
-        val reading = CompletableDeferred<Unit>()
-        val resume = CompletableDeferred<Unit>()
-        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
-            reading.complete(Unit)
-            resume.await()
-            listOf(record)
+        for (forceFresh in listOf(false, true)) {
+            sut.activate(LOCAL_IDENTITY)
+            val record = paymentRequestRecord()
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+            sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+            val pending = sut.pendingRequests.value
+            val history = sut.paymentRequestHistory.value
+            assertTrue(pending.isNotEmpty())
+            val reading = CompletableDeferred<Unit>()
+            val resume = CompletableDeferred<Unit>()
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).doSuspendableAnswer {
+                reading.complete(Unit)
+                resume.await()
+                listOf(record)
+            }
+            val refresh = async {
+                if (forceFresh) {
+                    sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED, Priority.Background)
+                } else {
+                    sut.refresh(PaykitPaymentRequestRefreshMode.STORED)
+                }
+            }
+            reading.await()
+            val started = testScheduler.currentTime
+            assertEquals(pending, sut.pendingRequests.value)
+            assertEquals(history, sut.paymentRequestHistory.value)
+            assertEquals(0L, testScheduler.currentTime - started)
+            assertFalse(refresh.isCompleted)
+            sut.activate(SECOND_IDENTITY)
+            assertTrue(sut.pendingRequests.value.isEmpty())
+            assertTrue(sut.paymentRequestHistory.value.isEmpty())
+            resume.complete(Unit)
+            refresh.await().getOrThrow()
+            assertTrue(sut.pendingRequests.value.isEmpty())
+            assertTrue(sut.paymentRequestHistory.value.isEmpty())
         }
-        val refresh = async { sut.refresh(PaykitPaymentRequestRefreshMode.STORED) }
-        reading.await()
-        val started = testScheduler.currentTime
-        assertEquals(pending, sut.pendingRequests.value)
-        assertEquals(history, sut.paymentRequestHistory.value)
-        assertEquals(0L, testScheduler.currentTime - started)
-        assertFalse(refresh.isCompleted)
-        sut.activate(SECOND_IDENTITY)
-        assertTrue(sut.pendingRequests.value.isEmpty())
-        assertTrue(sut.paymentRequestHistory.value.isEmpty())
-        resume.complete(Unit)
-        refresh.await().getOrThrow()
-        assertTrue(sut.pendingRequests.value.isEmpty())
-        assertTrue(sut.paymentRequestHistory.value.isEmpty())
     }
 
     @Test
@@ -517,7 +526,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `checkpoint reload preserves refresh admission and filters local proofs on retry`() = test {
-        for (forceFresh in listOf(false, true)) {
+        for (priority in listOf(null, Priority.Ordered, Priority.Background)) {
             val record = paymentRequestRecord()
             val other = paymentRequestRecord(id = "another-request")
             val records = listOf(record, other)
@@ -545,8 +554,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             }.whenever(paykitSdkService).allPaymentRequests(anyOrNull(), any())
             clearInvocations(paykitSdkService)
             val refresh = async {
-                if (forceFresh) {
-                    sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED)
+                if (priority != null) {
+                    sut.refreshAfterStateChange(PaykitPaymentRequestRefreshMode.STORED, priority)
                 } else {
                     sut.refresh(PaykitPaymentRequestRefreshMode.STORED)
                 }
@@ -558,7 +567,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             resume.complete(Unit)
 
             val result = refresh.await()
-            if (forceFresh) {
+            if (priority == Priority.Ordered) {
                 result.getOrThrow()
                 assertEquals(listOf("another-request"), sut.pendingRequests.value.map { it.paymentRequestId })
             } else {
@@ -567,12 +576,19 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 assertEquals(warmHistory, sut.paymentRequestHistory.value)
                 verify(paykitSdkService, never()).linkedPeers(Priority.Background)
             }
-            val priority = if (forceFresh) Priority.Ordered else Priority.Background
-            verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, priority)
+            verify(paykitSdkService).allPaymentRequests(LOCAL_IDENTITY, priority ?: Priority.Background)
 
             paymentSubmissionActive.value = false
+            val latest = paymentRequestRecord(id = "new-request")
+            whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(records + latest)
+            proofStateVersion.value += 1
+            clearInvocations(paykitSdkService)
             sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
-            assertEquals(listOf("another-request"), sut.pendingRequests.value.map { it.paymentRequestId })
+            verify(paykitSdkService).observeState(LOCAL_IDENTITY, Priority.Background)
+            assertEquals(
+                listOf("another-request", "new-request"),
+                sut.pendingRequests.value.map { it.paymentRequestId },
+            )
             assertTrue(sut.paymentRequestHistory.value.any { it.id == requestId })
         }
     }
