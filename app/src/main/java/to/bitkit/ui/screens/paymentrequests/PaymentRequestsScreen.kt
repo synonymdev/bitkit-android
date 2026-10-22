@@ -201,6 +201,7 @@ fun PaymentRequestsScreen(
     onDetails: (PaykitPaymentRequestId) -> Unit,
     showsNavigationBar: Boolean = true,
     topPadding: Dp = 0.dp,
+    autoPaidRequestIds: ImmutableSet<PaykitPaymentRequestId> = persistentSetOf(),
 ) {
     val pending by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
     val receipts by appViewModel.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()
@@ -217,6 +218,7 @@ fun PaymentRequestsScreen(
         contacts = contacts.toImmutableList(),
         subscriptions = subscriptions.toImmutableList(),
         dismissingRequestIds = dismissingRequestIds.toImmutableSet(),
+        autoPaidRequestIds = autoPaidRequestIds,
         canRequestPayment = targets.isNotEmpty(),
         onBack = onBack,
         onRequestPayment = onRequestPayment,
@@ -245,6 +247,7 @@ internal fun PaymentRequestsContent(
     onDetails: (PaykitPaymentRequestId) -> Unit,
     showsNavigationBar: Boolean = true,
     topPadding: Dp = 0.dp,
+    autoPaidRequestIds: ImmutableSet<PaykitPaymentRequestId> = persistentSetOf(),
 ) {
     val sections = paymentRequestSections(requests, pending, Clock.System.now())
     val density = LocalDensity.current
@@ -338,9 +341,12 @@ internal fun PaymentRequestsContent(
                                 request = request,
                                 contact = contacts.contactFor(request),
                                 compactSubtitle = if (request.hasPaymentEvidence) {
-                                    subscriptions.nameFor(request)
-                                        ?: request.note?.takeIf(String::isNotBlank)
-                                        ?: paymentRequestDate(request)
+                                    paymentRequestHistorySubtitle(
+                                        subtitle = subscriptions.nameFor(request)
+                                            ?: request.note?.takeIf(String::isNotBlank)
+                                            ?: paymentRequestDate(request),
+                                        isAutoPaid = request.id in autoPaidRequestIds,
+                                    )
                                 } else {
                                     paymentRequestStatus(request)
                                 },
@@ -477,6 +483,12 @@ private fun PaykitPaymentRequest.historyPeriod(
         date.year == today.year -> PaymentRequestHistoryPeriod.ThisYear
         else -> PaymentRequestHistoryPeriod.Earlier
     }
+}
+
+@Composable
+private fun paymentRequestHistorySubtitle(subtitle: String, isAutoPaid: Boolean): String {
+    if (!isAutoPaid) return subtitle
+    return "$subtitle · ${stringResource(R.string.subscriptions__allowance_auto_paid)}"
 }
 
 @Composable

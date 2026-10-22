@@ -153,7 +153,7 @@ class UsdtPaymentContentTest {
         total.assertIsDisplayed()
         composeTestRule.onNodeWithText("4.47").assertIsDisplayed()
         composeTestRule.onNodeWithText("Polygon").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("All fees are paid in USDT. Final fee may be lower.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("All fees are paid in USDT. Final fee may be lower.").performScrollTo().assertIsDisplayed()
         swipe.assertIsDisplayed()
         SystemClock.sleep(600)
         composeTestRule.onNodeWithTag("UsdtReviewDetails").performScrollTo().performClick()
