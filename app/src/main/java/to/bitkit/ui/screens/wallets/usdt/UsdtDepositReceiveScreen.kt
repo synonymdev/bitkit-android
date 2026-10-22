@@ -1,6 +1,10 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.bitkitcore.UsdtDepositAddress
 import com.synonym.bitkitcore.UsdtDepositDetail
 import com.synonym.bitkitcore.UsdtDepositNetwork
 import com.synonym.bitkitcore.usdtFormatAmount
@@ -58,6 +63,7 @@ import to.bitkit.ui.screens.wallets.receive.ReceiveTab
 import to.bitkit.ui.shared.modifiers.swipeToChangeTab
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.Transitions
 import java.text.DecimalFormatSymbols
 import java.text.NumberFormat
 import java.util.Locale
@@ -102,93 +108,111 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
     LaunchedEffect(state.address) { if (state.address != null) page = ReceivePage.FEES }
     UsdtRefreshEffect(viewModel, receiving = true, onReceived = { !state.busy })
     BackHandler(onBack = back)
-    SheetTopBar(
-        titleText = stringResource(
-            when (page) {
-                ReceivePage.ADDRESS -> R.string.usdt__receive_title
-                ReceivePage.NETWORKS -> R.string.usdt__receive_network_title
-                ReceivePage.AMOUNT -> R.string.usdt__receive_amount_title
-                ReceivePage.FEES -> R.string.usdt__receive_fees_title
+    AnimatedContent(
+        targetState = ShownPage(page, state, if (page == ReceivePage.AMOUNT) draftAmount else amount),
+        contentKey = { it.page },
+        transitionSpec = {
+            if (targetState.page > initialState.page) {
+                Transitions.defaultEnter togetherWith Transitions.defaultExit
+            } else {
+                ContentTransform(Transitions.defaultPopEnter, Transitions.defaultPopExit, targetContentZIndex = -1f)
             }
-        ),
-        onBack = back.takeIf { page != ReceivePage.ADDRESS },
-        action = if (page == ReceivePage.ADDRESS && onContacts != null) {
-            {
-                IconButton(onClick = onContacts) {
-                    Icon(
-                        painterResource(R.drawable.ic_users),
-                        stringResource(R.string.wallet__payment_request_choose_recipient)
-                    )
-                }
-            }
-        } else {
-            null
         },
-    )
-    VerticalSpacer(
-        if (page == ReceivePage.NETWORKS || page == ReceivePage.AMOUNT) 8.dp else 16.dp
-    )
-    if (page == ReceivePage.ADDRESS) {
-        CustomTabRowWithSpacing(
-            tabs = tabs,
-            currentTabIndex = tabs.indexOf(ReceiveTab.USDT),
-            labelOverrides = tabLabels,
-            onTabChange = onSelectTab
-        )
-        VerticalSpacer(16.dp)
-    }
-    walletUi.error?.let { BodyS(stringResource(it), color = Colors.Brand) }
-    val tabIndex = tabs.indexOf(ReceiveTab.USDT)
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth()
-            .then(
-                if (page == ReceivePage.ADDRESS) {
-                    Modifier.swipeToChangeTab(tabIndex, tabs.size, { onSelectTab(tabs[it]) }, wrapAround = true)
+        label = "UsdtReceivePage",
+        modifier = Modifier.weight(1f)
+    ) { shown ->
+        val target = shown.page
+        val isCurrent = { target == page }
+        Column(modifier = Modifier.fillMaxSize().background(Colors.Gray7).padding(horizontal = 16.dp)) {
+            SheetTopBar(
+                titleText = stringResource(
+                    when (target) {
+                        ReceivePage.ADDRESS -> R.string.usdt__receive_title
+                        ReceivePage.NETWORKS -> R.string.usdt__receive_network_title
+                        ReceivePage.AMOUNT -> R.string.usdt__receive_amount_title
+                        ReceivePage.FEES -> R.string.usdt__receive_fees_title
+                    }
+                ),
+                onBack = whenCurrent(isCurrent, back).takeIf { target != ReceivePage.ADDRESS },
+                action = if (target == ReceivePage.ADDRESS && onContacts != null) {
+                    {
+                        IconButton(onClick = onContacts) {
+                            Icon(
+                                painterResource(R.drawable.ic_users),
+                                stringResource(R.string.wallet__payment_request_choose_recipient)
+                            )
+                        }
+                    }
                 } else {
-                    Modifier
-                }
+                    null
+                },
             )
-    ) {
-        UsdtDepositReceiveContent(
-            page = page,
-            onPage = { page = it },
-            wallet = wallet,
-            receiveError = walletUi.refreshError,
-            state = state,
-            amount = if (page == ReceivePage.AMOUNT) draftAmount else amount,
-            onNetwork = {
-                if (state.network != it) {
-                    amount = ""
-                    draftAmount = ""
-                    deposits.selectNetwork(it)
-                }
-                page = if (it == null || state.address != null && state.network == it) {
-                    ReceivePage.ADDRESS
-                } else {
-                    ReceivePage.AMOUNT
-                }
-            },
-            onAmount = {
-                if (draftAmount != it) deposits.clearError()
-                draftAmount = it
-            },
-            onCreate = {
-                if (state.network == null) {
-                    amount = draftAmount
-                    page = ReceivePage.ADDRESS
-                } else {
-                    deposits.prepare(draftAmount)
-                }
-            },
-            onHistory = { app?.navigateToUsdtDeposits() },
-            onRefresh = {
-                draftAmount = if (state.network == null) amount else draftAmount
-                deposits.selectNetwork(state.network)
-                page = ReceivePage.AMOUNT
-            },
-        )
+            VerticalSpacer(
+                if (target == ReceivePage.NETWORKS || target == ReceivePage.AMOUNT) 8.dp else 16.dp
+            )
+            if (target == ReceivePage.ADDRESS) {
+                CustomTabRowWithSpacing(
+                    tabs = tabs,
+                    currentTabIndex = tabs.indexOf(ReceiveTab.USDT),
+                    labelOverrides = tabLabels,
+                    onTabChange = onSelectTab
+                )
+                VerticalSpacer(16.dp)
+            }
+            walletUi.error?.let { BodyS(stringResource(it), color = Colors.Brand) }
+            val tabIndex = tabs.indexOf(ReceiveTab.USDT)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .then(
+                        if (target == ReceivePage.ADDRESS) {
+                            Modifier.swipeToChangeTab(tabIndex, tabs.size, { onSelectTab(tabs[it]) }, wrapAround = true)
+                        } else {
+                            Modifier
+                        }
+                    )
+            ) {
+                UsdtDepositReceiveContent(
+                    page = target,
+                    onPage = whenCurrentOf(isCurrent) { page = it },
+                    wallet = wallet,
+                    receiveError = walletUi.refreshError,
+                    state = shown.state,
+                    amount = shown.amount,
+                    onNetwork = whenCurrentOf(isCurrent) {
+                        if (state.network != it) {
+                            amount = ""
+                            draftAmount = ""
+                            deposits.selectNetwork(it)
+                        }
+                        page = if (it == null || state.address != null && state.network == it) {
+                            ReceivePage.ADDRESS
+                        } else {
+                            ReceivePage.AMOUNT
+                        }
+                    },
+                    onAmount = whenCurrentOf(isCurrent) {
+                        if (draftAmount != it) deposits.clearError()
+                        draftAmount = it
+                    },
+                    onCreate = whenCurrent(isCurrent) {
+                        if (state.network == null) {
+                            amount = draftAmount
+                            page = ReceivePage.ADDRESS
+                        } else {
+                            deposits.prepare(draftAmount)
+                        }
+                    },
+                    onHistory = { app?.navigateToUsdtDeposits() },
+                    onRefresh = whenCurrent(isCurrent) {
+                        draftAmount = if (state.network == null) amount else draftAmount
+                        deposits.selectNetwork(state.network)
+                        page = ReceivePage.AMOUNT
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -217,24 +241,8 @@ internal fun ColumnScope.UsdtDepositReceiveContent(
             onAmount,
             onCreate
         )
-        ReceivePage.FEES -> state.address?.let { address ->
-            UsdtAmountHeader(usdtFormatAmount(address.amount), displayAmount = usdtOverviewAmount(address.amount))
-            VerticalSpacer(24.dp)
-            BodyM(stringResource(R.string.usdt__deposit_fee_note), color = Colors.White64, letterSpacing = 0.sp)
-            VerticalSpacer(24.dp)
-            EstimateRow(
-                stringResource(R.string.usdt__receive_fee),
-                if (address.amount >= address.estimatedReceived) {
-                    usdtOverviewAmount(address.amount - address.estimatedReceived)
-                } else {
-                    "—"
-                }
-            )
-            EstimateRow(stringResource(R.string.usdt__receive_estimate), usdtOverviewAmount(address.estimatedReceived))
-            FillHeight()
-            PrimaryButton(stringResource(R.string.common__continue), onClick = {
-                onPage(ReceivePage.ADDRESS)
-            }, textStyle = UsdtDetailStyles.Body, modifier = Modifier.testTag("UsdtReceiveFeesContinue"))
+        ReceivePage.FEES -> {
+            FeeEstimate(state.address, onContinue = { onPage(ReceivePage.ADDRESS) })
         }
         ReceivePage.ADDRESS -> {
             val atomic = runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, amount).atomic }.getOrNull()
@@ -253,7 +261,40 @@ internal fun ColumnScope.UsdtDepositReceiveContent(
     }
 }
 
+@Composable
+private fun ColumnScope.FeeEstimate(address: UsdtDepositAddress?, onContinue: () -> Unit) {
+    if (address == null) return
+    UsdtAmountHeader(usdtFormatAmount(address.amount), displayAmount = usdtOverviewAmount(address.amount))
+    VerticalSpacer(24.dp)
+    BodyM(stringResource(R.string.usdt__deposit_fee_note), color = Colors.White64, letterSpacing = 0.sp)
+    VerticalSpacer(24.dp)
+    EstimateRow(
+        stringResource(R.string.usdt__receive_fee),
+        if (address.amount >= address.estimatedReceived) {
+            usdtOverviewAmount(address.amount - address.estimatedReceived)
+        } else {
+            "—"
+        }
+    )
+    EstimateRow(stringResource(R.string.usdt__receive_estimate), usdtOverviewAmount(address.estimatedReceived))
+    FillHeight()
+    PrimaryButton(
+        stringResource(R.string.common__continue),
+        onClick = onContinue,
+        textStyle = UsdtDetailStyles.Body,
+        modifier = Modifier.testTag("UsdtReceiveFeesContinue")
+    )
+}
+
 internal enum class ReceivePage { ADDRESS, NETWORKS, AMOUNT, FEES }
+
+private fun whenCurrent(isCurrent: () -> Boolean, block: () -> Unit): () -> Unit = { if (isCurrent()) block() }
+
+private fun <T> whenCurrentOf(isCurrent: () -> Boolean, block: (T) -> Unit): (T) -> Unit = {
+    if (isCurrent()) block(it)
+}
+
+private data class ShownPage(val page: ReceivePage, val state: DepositUiState, val amount: String)
 
 @Composable
 private fun ColumnScope.NetworkSelector(
