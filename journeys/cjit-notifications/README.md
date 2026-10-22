@@ -27,7 +27,7 @@ is no way to drive the push.
 
 1. **Onboarded dev (regtest) wallet** with the node connected to the staging/regtest LSP and a positive
    on-chain Savings balance.
-2. **Open a channel without CJIT.** This build has no Transfer To Spending, so open a manual channel to
+2. **Open a channel without CJIT.** Transfer To Spending on this build only opens a New Channels Unavailable sheet, so open a manual channel to
    the staging LSP node: Settings › Advanced › Lightning Connections › add connection › Manual Setup. See
    [Getting a Lightning channel](../README.md#getting-a-lightning-channel).
 

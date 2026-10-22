@@ -111,6 +111,8 @@
     <string name="lightning__channel_point">Bod kanálu</string>
     <string name="lightning__channels_closing_banner">KANÁLY SE ZAVŘOU %1$s</string>
     <string name="lightning__channels_closing_notice">Vaše Lightning kanály budou uzavřeny %1$s. Do té doby převeďte zůstatek útrat do úspor.</string>
+    <string name="lightning__channels_unavailable__text">Bitkit už nenabízí nové Lightning kanály, takže nemůžete převádět prostředky z úspor do útrat.</string>
+    <string name="lightning__channels_unavailable__title">Nové kanály nejsou dostupné</string>
     <string name="lightning__close_button">Zavřít</string>
     <string name="lightning__close_conn">Uzavřít spojení</string>
     <string name="lightning__close_error">Přenos se nezdařil</string>
@@ -1101,6 +1103,7 @@
     <string name="wallet__toast_transaction_unconfirmed_description">Transakce se stala nepotvrzenou kvůli reorganizaci blockchainu</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transakce nepotvrzena</string>
     <string name="wallet__transfer_to_savings">Převést do úspor</string>
+    <string name="wallet__transfer_to_spending">Převést do útrat</string>
     <string name="wallet__withdraw_error">Váš výběr byl neúspěšný. Naskenujte prosím QR kód znovu nebo kontaktujte podporu.</string>
     <string name="widgets__add">Přidat widget</string>
     <string name="widgets__blocks__description">Prozkoumejte různé statistiky nově vytěžených bloků bitcoinu.</string>

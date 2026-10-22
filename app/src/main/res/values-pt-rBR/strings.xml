@@ -112,6 +112,8 @@
     <string name="lightning__channel_point">Ponto do canal</string>
     <string name="lightning__channels_closing_banner">CANAIS FECHAM EM %1$s</string>
     <string name="lightning__channels_closing_notice">Seus canais Lightning serão fechados em %1$s. Transfira seu saldo de gastos para a poupança antes dessa data.</string>
+    <string name="lightning__channels_unavailable__text">O Bitkit não oferece mais novos canais Lightning, então você não pode transferir fundos da poupança para gastos.</string>
+    <string name="lightning__channels_unavailable__title">Novos canais indisponíveis</string>
     <string name="lightning__close_button">Fechar</string>
     <string name="lightning__close_conn">Fechar Conexão</string>
     <string name="lightning__close_error">A Transferência Falhou</string>
@@ -1104,6 +1106,7 @@
     <string name="wallet__toast_transaction_unconfirmed_description">Transação ficou não confirmada devido a reorganização da blockchain</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transação Não Confirmada</string>
     <string name="wallet__transfer_to_savings">Transferir Para Poupança</string>
+    <string name="wallet__transfer_to_spending">Transferir Para Gastos</string>
     <string name="wallet__withdraw_error">Seu saque não foi bem-sucedido. Por favor, escaneie o QR code novamente ou entre em contato com o suporte.</string>
     <string name="widgets__add">Adicionar Widget</string>
     <string name="widgets__blocks__description">Examinar várias estatísticas sobre blocos de Bitcoin recém-minerados.</string>

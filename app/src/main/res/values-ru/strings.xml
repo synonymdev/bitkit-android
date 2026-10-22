@@ -120,6 +120,8 @@
     <string name="lightning__channel_point">Точка Канала</string>
     <string name="lightning__channels_closing_banner">КАНАЛЫ ЗАКРОЮТСЯ %1$s</string>
     <string name="lightning__channels_closing_notice">Ваши каналы Lightning будут закрыты %1$s. До этой даты переведите баланс расходов в сбережения.</string>
+    <string name="lightning__channels_unavailable__text">Bitkit больше не открывает новые каналы Lightning, поэтому перевести средства из сбережений в расходы нельзя.</string>
+    <string name="lightning__channels_unavailable__title">Новые каналы недоступны</string>
     <string name="lightning__close_button">Закрыть</string>
     <string name="lightning__close_conn">Закрыть Соединение</string>
     <string name="lightning__close_error">Перевод Не Удался</string>
@@ -1131,6 +1133,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__toast_transaction_unconfirmed_description">Транзакция стала неподтверждённой из-за реорганизации блокчейна</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Транзакция не подтверждена</string>
     <string name="wallet__transfer_to_savings">Перевести в сбережения</string>
+    <string name="wallet__transfer_to_spending">Перевести на расходы</string>
     <string name="wallet__withdraw_error">Вывод не удался. Пожалуйста, отсканируйте QR-код снова или обратитесь в поддержку.</string>
     <string name="widgets__add">Добавить Виджет</string>
     <string name="widgets__blocks__description">Изучайте различную статистику по недавно добытым блокам Bitcoin.</string>

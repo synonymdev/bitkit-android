@@ -100,6 +100,8 @@
     <string name="fee__custom__shortDescription">Dépend des frais</string>
     <string name="lightning__channels_closing_banner">LES CANAUX FERMENT LE %1$s</string>
     <string name="lightning__channels_closing_notice">Vos canaux Lightning seront fermés le %1$s. Transférez votre solde de dépenses vers l\'Épargne avant cette date.</string>
+    <string name="lightning__channels_unavailable__text">Bitkit ne propose plus de nouveaux canaux Lightning, vous ne pouvez donc pas transférer de fonds de l\'Épargne vers les Dépenses.</string>
+    <string name="lightning__channels_unavailable__title">Nouveaux canaux indisponibles</string>
     <string name="lightning__transfer_intro__title">Dépenses \n&lt;accent&gt;Solde&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Alimentez votre solde de dépenses pour profiter de transactions instantanées et bon marché avec vos amis, votre famille et les commerçants.</string>
     <string name="lightning__transfer_intro__button">Commencer</string>
@@ -965,6 +967,7 @@
     <string name="wallet__toast_transaction_unconfirmed_description">La transaction n\'est plus confirmée suite à une réorganisation de la blockchain</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transaction non confirmée</string>
     <string name="wallet__transfer_to_savings">Transférer vers l\'Épargne</string>
+    <string name="wallet__transfer_to_spending">Transférer vers les Dépenses</string>
     <string name="wallet__withdraw_error">Votre retrait a échoué. Veuillez scanner le QR code à nouveau ou contacter le support.</string>
     <string name="wallet__selection_title">Sélection des UTXOs</string>
     <string name="wallet__selection_total_required">Total requis</string>

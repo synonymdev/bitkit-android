@@ -111,6 +111,8 @@
     <string name="lightning__channel_point">Punto del canal</string>
     <string name="lightning__channels_closing_banner">LOS CANALES CIERRAN EL %1$s</string>
     <string name="lightning__channels_closing_notice">Tus canales Lightning se cerrarán el %1$s. Transfiere tu saldo de gasto a ahorros antes de esa fecha.</string>
+    <string name="lightning__channels_unavailable__text">Bitkit ya no ofrece canales Lightning nuevos, así que no puedes transferir fondos de ahorro a gasto.</string>
+    <string name="lightning__channels_unavailable__title">Canales nuevos no disponibles</string>
     <string name="lightning__close_button">Cerrar</string>
     <string name="lightning__close_conn">Terminar conexión</string>
     <string name="lightning__close_error">Transferencia fallida</string>
@@ -1096,6 +1098,7 @@
     <string name="wallet__toast_transaction_unconfirmed_description">La transacción quedó sin confirmar debido a una reorganización de la blockchain</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transacción sin confirmar</string>
     <string name="wallet__transfer_to_savings">Transferir a ahorros</string>
+    <string name="wallet__transfer_to_spending">Transferir a gasto</string>
     <string name="wallet__withdraw_error">Tu retiro no tuvo éxito. Por favor, escanea el código QR de nuevo o contacta con soporte.</string>
     <string name="widgets__add">Añadir Widget</string>
     <string name="widgets__blocks__description">Examina varias estadísticas de los bloques de Bitcoin recién minados.</string>

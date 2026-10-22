@@ -109,6 +109,8 @@
     <string name="lightning__channel_point">Punt del canal</string>
     <string name="lightning__channels_closing_banner">ELS CANALS ES TANQUEN EL %1$s</string>
     <string name="lightning__channels_closing_notice">Els teus canals Lightning es tancaran el %1$s. Transfereix el teu saldo de despesa a estalvis abans d\'aquesta data.</string>
+    <string name="lightning__channels_unavailable__text">Bitkit ja no ofereix canals Lightning nous, així que no pots transferir fons d\'estalvis a despesa.</string>
+    <string name="lightning__channels_unavailable__title">Canals nous no disponibles</string>
     <string name="lightning__close_button">Tancar</string>
     <string name="lightning__close_conn">Tanca la connexió</string>
     <string name="lightning__close_error">Transferència fallida</string>
@@ -1095,6 +1097,7 @@
     <string name="wallet__toast_transaction_unconfirmed_description">La transacció s\'ha tornat no confirmada a causa d\'una reorganització de blockchain</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transacció no confirmada</string>
     <string name="wallet__transfer_to_savings">Transferir a estalvis</string>
+    <string name="wallet__transfer_to_spending">Transferir a despesa</string>
     <string name="wallet__withdraw_error">La teva retirada no ha tingut èxit. Si us plau, escaneja el codi QR de nou o contacta amb el suport.</string>
     <string name="widgets__add">Afegir giny</string>
     <string name="widgets__blocks__description">Examina diverses estadístiques dels blocs de Bitcoin recentment minats.</string>

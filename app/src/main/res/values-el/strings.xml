@@ -106,6 +106,8 @@
     <string name="lightning__channel_point">Σημείο καναλιού</string>
     <string name="lightning__channels_closing_banner">ΤΑ ΚΑΝΑΛΙΑ ΚΛΕΙΝΟΥΝ ΣΤΙΣ %1$s</string>
     <string name="lightning__channels_closing_notice">Τα κανάλια Lightning σας θα κλείσουν στις %1$s. Μεταφέρετε το υπόλοιπο δαπανών σε αποταμιεύσεις πριν από τότε.</string>
+    <string name="lightning__channels_unavailable__text">Το Bitkit δεν προσφέρει πλέον νέα κανάλια Lightning, οπότε δεν μπορείτε να μεταφέρετε κεφάλαια από τις αποταμιεύσεις στις δαπάνες.</string>
+    <string name="lightning__channels_unavailable__title">Νέα κανάλια μη διαθέσιμα</string>
     <string name="lightning__close_button">Κλείσιμο</string>
     <string name="lightning__close_conn">Κλείσιμο σύνδεσης</string>
     <string name="lightning__close_error">Αποτυχία μεταφοράς</string>
@@ -1074,6 +1076,7 @@
     <string name="wallet__toast_transaction_unconfirmed_description">Η συναλλαγή έγινε μη επιβεβαιωμένη λόγω αναδιοργάνωσης blockchain</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Μη επιβεβαιωμένη συναλλαγή</string>
     <string name="wallet__transfer_to_savings">Μεταφορά σε αποταμιεύσεις</string>
+    <string name="wallet__transfer_to_spending">Μεταφορά σε δαπάνες</string>
     <string name="wallet__withdraw_error">Η ανάληψή σου δεν ήταν επιτυχής. Σάρωσε ξανά τον κωδικό QR ή επικοινώνησε με την υποστήριξη.</string>
     <string name="widgets__add">Προσθήκη Widget</string>
     <string name="widgets__blocks__description">Εξέτασε διάφορα στατιστικά για τα νεοεξορυχθέντα Bitcoin Blocks.</string>

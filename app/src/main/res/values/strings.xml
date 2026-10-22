@@ -254,6 +254,8 @@
     <string name="lightning__channel_point">Channel point</string>
     <string name="lightning__channels_closing_banner">CHANNELS CLOSE ON %1$s</string>
     <string name="lightning__channels_closing_notice">Your Lightning channels will be closed on %1$s. Move your spending balance to savings before then.</string>
+    <string name="lightning__channels_unavailable__text">Bitkit no longer offers new Lightning channels, so you can\'t move funds from savings to spending.</string>
+    <string name="lightning__channels_unavailable__title">New Channels Unavailable</string>
     <string name="lightning__close_button">Close</string>
     <string name="lightning__close_conn">Close Connection</string>
     <string name="lightning__close_error">Transfer Failed</string>
@@ -1656,6 +1658,7 @@
     <string name="wallet__toast_transaction_unconfirmed_description">Transaction became unconfirmed due to blockchain reorganization</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transaction Unconfirmed</string>
     <string name="wallet__transfer_to_savings">Transfer To Savings</string>
+    <string name="wallet__transfer_to_spending">Transfer To Spending</string>
     <string name="wallet__withdraw_error">Your withdrawal was unsuccessful. Please scan the QR code again or contact support.</string>
     <string name="watch_only_accounts__active_section">Active accounts</string>
     <string name="watch_only_accounts__copy_xpub">Copy xpub</string>

@@ -101,6 +101,8 @@
     <string name="fee__custom__shortDescription">Abhängig von der Gebühr</string>
     <string name="lightning__channels_closing_banner">KANÄLE SCHLIESSEN AM %1$s</string>
     <string name="lightning__channels_closing_notice">Deine Lightning-Kanäle werden am %1$s geschlossen. Übertrage dein Guthaben vorher auf das Sparkonto.</string>
+    <string name="lightning__channels_unavailable__text">Bitkit bietet keine neuen Lightning-Kanäle mehr an, daher kannst du kein Guthaben vom Sparkonto auf das Ausgabenkonto übertragen.</string>
+    <string name="lightning__channels_unavailable__title">Neue Kanäle nicht verfügbar</string>
     <string name="lightning__transfer_intro__title">Spending\n&lt;accent&gt;Balance&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Fülle dein Guthaben auf, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu genießen.</string>
     <string name="lightning__transfer_intro__button">Los geht\'s</string>
@@ -1099,6 +1101,7 @@
     <string name="wallet__ldk_start_error_title">Lightning-Startfehler</string>
     <string name="wallet__peer_disconnected">Peer getrennt.</string>
     <string name="wallet__transfer_to_savings">Übertragen zum Sparkonto</string>
+    <string name="wallet__transfer_to_spending">Übertragen zum Ausgabenkonto</string>
     <string name="wallet__withdraw_error">Deine Abhebung war nicht erfolgreich. Bitte scanne den QR-Code erneut oder kontaktiere den Support.</string>
     <string name="widgets__widgets">Widgets</string>
     <string name="widgets__onboarding__title">Hallo,\n&lt;accent&gt;Widgets&lt;/accent&gt;</string>

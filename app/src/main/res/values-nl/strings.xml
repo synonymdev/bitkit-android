@@ -110,6 +110,8 @@
     <string name="lightning__channel_point">Kanaalpunt</string>
     <string name="lightning__channels_closing_banner">KANALEN SLUITEN OP %1$s</string>
     <string name="lightning__channels_closing_notice">Je Lightning-kanalen worden op %1$s gesloten. Boek je bestedingssaldo vóór die datum over naar spaargeld.</string>
+    <string name="lightning__channels_unavailable__text">Bitkit biedt geen nieuwe Lightning-kanalen meer aan, dus je kunt geen geld van spaargeld naar je bestedingssaldo overboeken.</string>
+    <string name="lightning__channels_unavailable__title">Nieuwe kanalen niet beschikbaar</string>
     <string name="lightning__close_button">Sluiten</string>
     <string name="lightning__close_conn">Verbinding sluiten</string>
     <string name="lightning__close_error">Overboeking mislukt</string>
@@ -1094,6 +1096,7 @@
     <string name="wallet__toast_transaction_unconfirmed_description">Transactie is niet meer bevestigd vanwege blockchain-reorganisatie</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transactie niet bevestigd</string>
     <string name="wallet__transfer_to_savings">Overboeken naar spaargeld</string>
+    <string name="wallet__transfer_to_spending">Overboeken naar bestedingssaldo</string>
     <string name="wallet__withdraw_error">Je opname is niet gelukt. Scan de QR-code opnieuw of neem contact op met support.</string>
     <string name="widgets__add">Widget toevoegen</string>
     <string name="widgets__blocks__description">Bekijk verschillende statistieken over nieuw gedolven Bitcoin-blokken.</string>

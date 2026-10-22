@@ -97,6 +97,8 @@
     <string name="fee__custom__shortDescription">Depende da taxa</string>
     <string name="lightning__channels_closing_banner">CANAIS FECHAM A %1$s</string>
     <string name="lightning__channels_closing_notice">Os seus canais Lightning serão fechados a %1$s. Transfira o seu saldo de gastos para a poupança antes dessa data.</string>
+    <string name="lightning__channels_unavailable__text">O Bitkit já não oferece novos canais Lightning, por isso não pode transferir fundos da poupança para gastos.</string>
+    <string name="lightning__channels_unavailable__title">Novos canais indisponíveis</string>
     <string name="lightning__transfer_intro__title">Saldo de\n&lt;accent&gt;Gastos&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Use seu saldo de gastos para desfrutar de transações instantâneas e baratas com amigos, familiares e comerciantes.</string>
     <string name="lightning__transfer_intro__button">Começar</string>
@@ -938,6 +940,7 @@
     <string name="wallet__error_invoice_update">Erro ao atualizar invoice</string>
     <string name="wallet__error_lnurl_invoice_fetch">Erro ao buscar invoice lnurl</string>
     <string name="wallet__peer_disconnected">Par desconectado.</string>
+    <string name="wallet__transfer_to_spending">Transferir Para Gastos</string>
     <string name="wallet__withdraw_error">Seu saque não foi bem-sucedido. Por favor, escaneie o código QR novamente ou entre em contato com o suporte.</string>
     <string name="wallet__lnurl_p_title">Pagar com Bitcoin</string>
     <string name="wallet__lnurl_pay__error_min__title">Valor muito baixo</string>

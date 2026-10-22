@@ -216,6 +216,7 @@ import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
 import to.bitkit.ui.sheets.ChangePinSheet
+import to.bitkit.ui.sheets.ChannelsUnavailableSheet
 import to.bitkit.ui.sheets.ConnectionClosedSheet
 import to.bitkit.ui.sheets.DisablePinSheet
 import to.bitkit.ui.sheets.ForceTransferSheet
@@ -655,6 +656,14 @@ fun ContentView(
                         Sheet.ConnectionClosed -> ConnectionClosedSheet(
                             onDismiss = { appViewModel.hideSheet() },
                         )
+                        Sheet.ChannelsUnavailable -> {
+                            val hasTrustedChannels by walletViewModel.hasTrustedChannels
+                                .collectAsStateWithLifecycle(initialValue = false)
+                            ChannelsUnavailableSheet(
+                                showCloseDate = hasTrustedChannels,
+                                onDismiss = { appViewModel.hideSheet() },
+                            )
+                        }
 
                         is Sheet.BTCPayConnection -> BTCPayConnectionSheet(sheet, appViewModel)
                         is Sheet.QrScanner -> QrScanningSheet(sheet, appViewModel)
@@ -1290,14 +1299,17 @@ private fun NavGraphBuilder.home(
         )
     }
     deepLinkableComposable<Routes.Savings> {
+        val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
         val forceCloseRemainingDuration by appViewModel.forceCloseRemainingDuration.collectAsStateWithLifecycle()
 
         SavingsWalletScreen(
+            isGeoBlocked = isGeoBlocked,
             onchainActivities = onchainActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
+            onTransferToSpendingClick = { appViewModel.showSheet(Sheet.ChannelsUnavailable) },
             onBackClick = { navController.popBackStack() },
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
@@ -1321,6 +1333,7 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSavingsAvailability()
                 }
             },
+            onTransferFromSavingsClick = { appViewModel.showSheet(Sheet.ChannelsUnavailable) },
             onBackClick = { navController.popBackStack() },
             showChannelsClosingNotice = hasTrustedChannels,
         )
@@ -1330,6 +1343,7 @@ private fun NavGraphBuilder.home(
         HardwareWalletScreen(
             walletId = walletId,
             onActivityItemClick = { navController.navToActivityDetail(it) },
+            onTransferToSpendingClick = { appViewModel.showSheet(Sheet.ChannelsUnavailable) },
             onBackClick = { navController.popBackStack() },
         )
     }

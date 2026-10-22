@@ -102,6 +102,8 @@
     <string name="fee__custom__shortDescription">Zależy od opłaty</string>
     <string name="lightning__channels_closing_banner">KANAŁY ZOSTANĄ ZAMKNIĘTE %1$s</string>
     <string name="lightning__channels_closing_notice">Twoje kanały Lightning zostaną zamknięte %1$s. Przed tym terminem prześlij saldo wydatków na oszczędności.</string>
+    <string name="lightning__channels_unavailable__text">Bitkit nie oferuje już nowych kanałów Lightning, więc nie możesz przesyłać środków z oszczędności na wydatki.</string>
+    <string name="lightning__channels_unavailable__title">Nowe kanały niedostępne</string>
     <string name="lightning__transfer_intro__title">Saldo \n&lt;accent&gt;Wydatków&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Zasil swoje saldo wydatków, aby cieszyć się natychmiastowymi i tanimi transakcjami z przyjaciółmi, rodziną i sprzedawcami.</string>
     <string name="lightning__transfer_intro__button">Rozpocznij</string>
@@ -970,6 +972,7 @@
     <string name="wallet__toast_transaction_unconfirmed_description">Transakcja stała się niepotwierdzona z powodu reorganizacji łańcucha bloków</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transakcja niepotwierdzona</string>
     <string name="wallet__transfer_to_savings">Prześlij na oszczędności</string>
+    <string name="wallet__transfer_to_spending">Prześlij na saldo wydatków</string>
     <string name="wallet__withdraw_error">Twoja wypłata nie powiodła się. Proszę ponownie zeskanować kod QR lub skontaktować się z pomocą techniczną.</string>
     <string name="wallet__selection_title">Wybór monet /Coin Selection/</string>
     <string name="wallet__selection_total_required">Wymagana kwota</string>

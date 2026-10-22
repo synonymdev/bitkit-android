@@ -4,6 +4,8 @@
     offers the Savings tab and nothing that buys Lightning liquidity, and Home shows neither the Spend
     suggestion card nor the channels-closing banner. Blocktank channel purchases were removed in
     synonymdev/bitkit-android#1669: there is no "Receive Lightning funds" (CJIT) button or onboarding,
+    and the Transfer To Spending and Transfer from Savings buttons open the "New Channels Unavailable"
+    sheet,
     and the Spending and Auto tabs appear only when the wallet can create a Lightning invoice over a
     ready channel with inbound liquidity.
 
@@ -22,6 +24,9 @@
     <action>Verify there is no "Receive Lightning funds" button anywhere on the sheet</action>
     <action>Tap "Edit" (testTag "SpecifyInvoiceButton"), tap the amount field (testTag "ReceiveNumberPadTextField"), enter a small amount (for example "N1" then "N0" twice), tap Continue (testTag "ReceiveNumberPadSubmit") and then "QR Code" (testTag "ShowQrReceive")</action>
     <action>Verify the sheet returns to the QR screen with no liquidity or channel confirm screen in between, the Savings tab is still selected and there is still no Spending tab (testTag "Tab-spending")</action>
-    <action>Close the sheet, open the Savings wallet (testTag "ActivitySavings") and verify no "Transfer To Spending" button (testTag "TransferToSpending") is shown, then open the Spending wallet (testTag "ActivitySpending") and verify no "Transfer from Savings" button (testTag "TransferFromSavings") and no notice (testTag "ChannelsClosingNotice") is shown</action>
+    <action>Close the sheet, open the Savings wallet (testTag "ActivitySavings") and tap the "Transfer To Spending" button (testTag "TransferToSpending")</action>
+    <action>Verify the sheet (testTag "ChannelsUnavailableSheet") shows the title "New Channels Unavailable" and the text "Bitkit no longer offers new Lightning channels, so you can't move funds from savings to spending.", and no close date line (testTag "ChannelsUnavailableCloseDate"); tap "OK" (testTag "ChannelsUnavailableButton") and verify the Savings wallet screen is still shown</action>
+    <action>Go back, open the Spending wallet (testTag "ActivitySpending"), verify no notice (testTag "ChannelsClosingNotice") is shown and tap the "Transfer from Savings" button (testTag "TransferFromSavings")</action>
+    <action>Verify the same sheet (testTag "ChannelsUnavailableSheet") opens with no close date line (testTag "ChannelsUnavailableCloseDate"), tap "OK" (testTag "ChannelsUnavailableButton") and verify the Spending wallet screen is still shown</action>
   </actions>
 </journey>
