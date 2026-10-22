@@ -748,6 +748,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     ): Result<PaykitPaymentRequestCreation> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (!creationMutex.tryLock()) throw PaykitPaymentRequestError.OperationInProgress
+            var endReview: (() -> Unit)? = null
             _isCreatingRequest.update { true }
             try {
                 operationMutex.withLock {
@@ -757,6 +758,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     if (draft.amount.atomic == 0uL || !isAvailable()) throw PaykitPaymentRequestError.RequestUnavailable
                     if (draft.expiresAt <= proposalDate) throw PaykitPaymentRequestError.RequestExpired
 
+                    endReview = paykitSdkService.beginPaymentReview()
                     val selectedSavedKey = savedPublicKeys.firstOrNull {
                         PubkyPublicKeyFormat.matches(it, target.publicKey)
                     }
@@ -795,6 +797,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     publishCreatedRequest(request, generation, expectedIdentity)
                 }
             } finally {
+                endReview?.invoke()
                 _isCreatingRequest.update { false }
                 creationMutex.unlock()
             }
