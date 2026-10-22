@@ -175,7 +175,6 @@
     <string name="lightning__funding__button2">Usar Otra Billetera</string>
     <string name="lightning__funding__nav_title">Saldo de gastos</string>
     <string name="lightning__funding__text">La forma más fácil es usar tus ahorros de Bitkit o enviar bitcoin desde una billetera diferente.</string>
-    <string name="lightning__funding__text_blocked">Bitkit no tiene soporte Lightning en tu región, pero puedes usar nodos externos manualmente.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit no tiene soporte Lightning en tu región, pero puedes usar nodos externos manualmente.</string>
     <string name="lightning__funding__title">Fondee su &lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">QR de canal LNURL</string>
@@ -293,7 +292,6 @@
     <string name="notification__channel_node__body">Canal de notificación para el servicio en segundo plano del nodo Lightning</string>
     <string name="notification__channel_node__name">Notificación del nodo Lightning</string>
     <string name="notification__channel_open_bg_failed_title">El canal no se pudo abrir en segundo plano</string>
-    <string name="notification__channel_open_failed_title">Apertura del canal fallida</string>
     <string name="notification__channel_opened_title">Canal abierto</string>
     <string name="notification__channel_pending_body">Pendiente</string>
     <string name="notification__channel_ready_body">Listo para enviar</string>
@@ -337,7 +335,6 @@
     <string name="onboarding__slide0_header">Libertad en\n&lt;accent&gt;tu bolsillo&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit te da las llaves para manejar tu dinero. Gasta ahora o ahorra para después. Tú decides.</string>
     <string name="onboarding__slide1_header">Pagos\n&lt;accent&gt;al instante&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">Bitkit no tiene soporte Lightning en tu región, pero puedes usar nodos externos manualmente.</string>
     <string name="onboarding__slide1_text">Gasta bitcoin más rápido que nunca. Disfruta pagos instantáneos y baratos con amigos, familia y comercios.</string>
     <string name="onboarding__slide3_header">La privacidad\n&lt;accent&gt;no es un delito&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Tu dinero, tu privacidad. Desliza para ocultar tu saldo y gasta de forma más privada, sin rastreo de datos y sin KYC.</string>

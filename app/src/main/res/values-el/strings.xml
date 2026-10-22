@@ -168,7 +168,6 @@
     <string name="lightning__funding__button2">Χρήση άλλου πορτοφολιού</string>
     <string name="lightning__funding__nav_title">Υπόλοιπο δαπανών</string>
     <string name="lightning__funding__text">Ο ευκολότερος τρόπος είναι να χρησιμοποιήσεις τις αποταμιεύσεις Bitkit ή να στείλεις bitcoin από διαφορετικό πορτοφόλι.</string>
-    <string name="lightning__funding__text_blocked">Το Bitkit δεν παρέχει προς το παρόν υπηρεσίες Lightning στη χώρα σου, αλλά μπορείς να συνδεθείς απευθείας σε άλλους κόμβους.</string>
     <string name="lightning__funding__text_blocked_cjit">Το Bitkit δεν παρέχει προς το παρόν υπηρεσίες Lightning στη χώρα σου, αλλά μπορείς να συνδεθείς απευθείας σε άλλους κόμβους.</string>
     <string name="lightning__funding__title">Χρηματοδότησε το &lt;accent&gt;υπόλοιπο δαπανών&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">LNURL Channel QR</string>
@@ -286,7 +285,6 @@
     <string name="notification__channel_node__body">Κανάλι ειδοποιήσεων για υπηρεσία προσκηνίου κόμβου Lightning</string>
     <string name="notification__channel_node__name">Ειδοποίηση κόμβου Lightning</string>
     <string name="notification__channel_open_bg_failed_title">Το κανάλι απέτυχε να ανοίξει στο παρασκήνιο</string>
-    <string name="notification__channel_open_failed_title">Αποτυχία ανοίγματος καναλιού</string>
     <string name="notification__channel_opened_title">Το κανάλι άνοιξε</string>
     <string name="notification__channel_pending_body">Εκκρεμεί</string>
     <string name="notification__channel_ready_body">Έτοιμο για αποστολή</string>
@@ -330,7 +328,6 @@
     <string name="onboarding__slide0_header">Ελευθερία στην\n&lt;accent&gt;τσέπη σου&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Το Bitkit σου δίνει τα κλειδιά για να διαχειριστείς τα χρήματά σου. Ξόδεψε τώρα ή αποταμίευσε για αργότερα. Η επιλογή είναι δική σου.</string>
     <string name="onboarding__slide1_header">Άμεσες\n&lt;accent&gt;πληρωμές&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Το Bitkit δεν παρέχει προς το παρόν υπηρεσίες Lightning στη χώρα σου, αλλά μπορείς να συνδεθείς σε άλλους κόμβους.</string>
     <string name="onboarding__slide1_text">Ξόδεψε bitcoin πιο γρήγορα από ποτέ. Απόλαυσε άμεσες και φθηνές πληρωμές με φίλους, οικογένεια και εμπόρους.</string>
     <string name="onboarding__slide3_header">Το απόρρητο δεν\n&lt;accent&gt;είναι έγκλημα&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Τα χρήματά σας, η ιδιωτικότητά σας. Σύρετε για να κρύψετε το υπόλοιπό σας και ξοδέψτε πιο ιδιωτικά, χωρίς παρακολούθηση δεδομένων και μηδενικό KYC.</string>

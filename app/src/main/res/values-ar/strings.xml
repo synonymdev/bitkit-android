@@ -168,7 +168,6 @@
     <string name="lightning__funding__button2">استخدم محفظة أخرى</string>
     <string name="lightning__funding__nav_title">رصيد الإنفاق</string>
     <string name="lightning__funding__text">أسهل خيار هو استخدام مدخرات Bitkit الخاصة بك أو إرسال بيتكوين من محفظة مختلفة.</string>
-    <string name="lightning__funding__text_blocked">لا يوفر Bitkit حاليًا خدمات Lightning في بلدك، لكن يمكنك الاتصال بعقد أخرى مباشرة.</string>
     <string name="lightning__funding__text_blocked_cjit">لا يوفر Bitkit حاليًا خدمات Lightning في بلدك، لكن يمكنك الاتصال بعقد أخرى مباشرة.</string>
     <string name="lightning__funding__title">موّل &lt;accent&gt;رصيد الإنفاق&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">رمز QR لقناة LNURL</string>
@@ -285,7 +284,6 @@
     <string name="notification__channel_node__body">قناة الإشعارات لخدمة عقدة Lightning في المقدمة</string>
     <string name="notification__channel_node__name">إشعار عقدة Lightning</string>
     <string name="notification__channel_open_bg_failed_title">فشل فتح القناة في الخلفية</string>
-    <string name="notification__channel_open_failed_title">فشل فتح القناة</string>
     <string name="notification__channel_opened_title">تم فتح القناة</string>
     <string name="notification__channel_pending_body">معلق</string>
     <string name="notification__channel_ready_body">جاهز للإرسال</string>
@@ -329,7 +327,6 @@
     <string name="onboarding__slide0_header">الحرية في\n&lt;accent&gt;جيبك&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">يمنحك Bitkit مفاتيح إدارة أموالك. أنفق الآن أو ادخر للمستقبل. الخيار لك.</string>
     <string name="onboarding__slide1_header">مدفوعات\n&lt;accent&gt;فورية&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*لا يوفر Bitkit حاليًا خدمات Lightning في بلدك، لكن يمكنك الاتصال بعقد أخرى.</string>
     <string name="onboarding__slide1_text">أنفق Bitcoin أسرع من أي وقت مضى. استمتع بمدفوعات فورية ورخيصة مع الأصدقاء والعائلة والتجار.</string>
     <string name="onboarding__slide3_header">الخصوصية\n&lt;accent&gt;ليست جريمة&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">اسحب لإخفاء رصيدك، واستمتع بمدفوعات أكثر خصوصية، واحمِ محفظتك بتفعيل ميزات الأمان.</string>

@@ -37,7 +37,6 @@ internal object Env {
 
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
-    const val isGeoblockingEnabled = BuildConfig.GEO
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val isLocalE2eBackend = isE2eTest && e2eBackend == "local"
     const val e2eLocalHost = BuildConfig.E2E_LOCAL_HOST
@@ -69,7 +68,6 @@ internal object Env {
 
     const val fxRateRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
     const val fxRateStaleThreshold = 10 * 60 * 1000L // 10 minutes in millis
-    const val lspOrdersRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
 
     val pushNotificationFeatures = BlocktankNotificationType.entries
     const val derivationName = "bitkit-notifications"
@@ -152,7 +150,6 @@ internal object Env {
             else -> "https://bitkit.stag0.blocktank.to/fx/rates/btc"
         }
 
-    const val geoCheckUrl = "https://api1.blocktank.to/api/geocheck"
     const val chatwootUrl = "https://synonym.to/api/chatwoot"
     const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
     const val mempoolBaseUrl = "https://mempool.space/api"

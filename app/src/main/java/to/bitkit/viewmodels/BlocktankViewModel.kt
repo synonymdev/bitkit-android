@@ -44,7 +44,7 @@ class BlocktankViewModel @Inject constructor(
 
     fun refreshOrders() {
         viewModelScope.launch {
-            blocktankRepo.refreshOrders()
+            blocktankRepo.loadCachedOrders()
         }
     }
 

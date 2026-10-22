@@ -315,7 +315,6 @@ fun ContentView(
                     appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.APP_FOREGROUND)
                     appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.APP_FOREGROUND)
                     currencyViewModel.triggerRefresh()
-                    blocktankViewModel.refreshOrders()
                     appViewModel.checkAdoptedPubkySource()
                     appViewModel.refreshPrivatePaykitEndpoints()
                     appViewModel.startPaykitPaymentRequestPolling()
@@ -1144,7 +1143,6 @@ private fun RootNavHost(
             }
             deepLinkableComposable<Routes.Funding> {
                 val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
-                val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
 
                 FundingScreen(
                     onTransfer = {
@@ -1159,7 +1157,6 @@ private fun RootNavHost(
                     },
                     onManual = { navController.navigateTo(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
-                    isGeoBlocked = isGeoBlocked,
                 )
             }
             deepLinkableComposable<Routes.ChooseLsp> {
@@ -1306,12 +1303,10 @@ private fun NavGraphBuilder.home(
         )
     }
     deepLinkableComposable<Routes.Savings> {
-        val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
         val forceCloseRemainingDuration by appViewModel.forceCloseRemainingDuration.collectAsStateWithLifecycle()
 
         SavingsWalletScreen(
-            isGeoBlocked = isGeoBlocked,
             onchainActivities = onchainActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },

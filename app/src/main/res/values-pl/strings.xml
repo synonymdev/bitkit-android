@@ -114,7 +114,6 @@
     <string name="lightning__funding__nav_title">Saldo wydatków</string>
     <string name="lightning__funding__title">Zasil swoje &lt;accent&gt;saldo wydatków&lt;/accent&gt;</string>
     <string name="lightning__funding__text">Najłatwiejszą opcją jest użycie oszczędności Bitkit lub wysłanie bitcoinów z innego portfela.</string>
-    <string name="lightning__funding__text_blocked">Bitkit nie świadczy obecnie usług Lightning w Twoim kraju, ale nadal możesz łączyć się z innymi węzłami.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit nie świadczy obecnie usług Lightning w Twoim kraju, ale nadal możesz łączyć się bezpośrednio z innymi węzłami.</string>
     <string name="lightning__funding__button1">Prześlij z Oszczędności</string>
     <string name="lightning__funding__button2">Użyj innego portfela</string>
@@ -294,7 +293,6 @@
     <string name="notification__channel_node__body">Kanał powiadomień dla usługi Lightning w tle</string>
     <string name="notification__channel_node__name">Powiadomienie węzła Lightning</string>
     <string name="notification__channel_open_bg_failed_title">Nie udało się otworzyć kanału w tle</string>
-    <string name="notification__channel_open_failed_title">Otwarcie kanału nie powiodło się</string>
     <string name="notification__channel_opened_title">Kanał otwarty</string>
     <string name="notification__channel_pending_body">Oczekujące</string>
     <string name="notification__channel_ready_body">Gotowy do wysłania</string>
@@ -319,7 +317,6 @@
     <string name="onboarding__slide0_text">Bitkit przekazuje Ci klucze do kontrolowania Twoich pieniędzy, profilu i kontaktów. Przejmij kontrolę i stań się wolnym.</string>
     <string name="onboarding__slide1_header">Płatności\n&lt;accent&gt;natychmiastowe&lt;/accent&gt;</string>
     <string name="onboarding__slide1_text">Wydawaj bitcoiny szybciej niż kiedykolwiek. Ciesz się natychmiastowymi i tanimi płatnościami z przyjaciółmi, rodziną i sprzedawcami.</string>
-    <string name="onboarding__slide1_note">Bitkit nie świadczy obecnie usług Lightning w Twoim kraju, ale nadal możesz łączyć się z innymi węzłami.</string>
     <string name="onboarding__slide3_header">Prywatność nie jest\n&lt;accent&gt;przestępstwem&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Twoje pieniądze, Twoja prywatność. Przesuń, aby ukryć saldo i wydawaj bardziej prywatnie, bez śledzenia danych i bez KYC.</string>
     <string name="onboarding__slide4_header">Twoje klucze,\n&lt;accent&gt;twoje monety&lt;/accent&gt;</string>

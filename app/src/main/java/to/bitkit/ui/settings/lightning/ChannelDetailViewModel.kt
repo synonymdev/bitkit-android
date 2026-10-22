@@ -87,7 +87,6 @@ class ChannelDetailViewModel @Inject constructor(
     fun onPullToRefresh() = viewModelScope.launch {
         _uiState.update { it.copy(isRefreshing = true) }
         lightningRepo.sync()
-        blocktankRepo.refreshOrders()
         delay(500.milliseconds)
         _uiState.update { it.copy(isRefreshing = false) }
     }

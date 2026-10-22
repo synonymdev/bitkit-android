@@ -173,7 +173,6 @@
     <string name="lightning__funding__button2">Usa un altro portafoglio</string>
     <string name="lightning__funding__nav_title">Conto di Spesa</string>
     <string name="lightning__funding__text">Il modo più semplice è usare i tuoi risparmi Bitkit o inviare bitcoin da un portafoglio diverso.</string>
-    <string name="lightning__funding__text_blocked">Bitkit attualmente non fornisce servizi Lightning nel tuo paese, ma puoi comunque connetterti direttamente ad altri nodi.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit attualmente non fornisce servizi Lightning nel tuo paese, ma puoi comunque connetterti direttamente ad altri nodi.</string>
     <string name="lightning__funding__title">Manda fondi al tuo &lt;accent&gt;conto di spesa&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">QR Canale LNURL</string>
@@ -291,7 +290,6 @@
     <string name="notification__channel_node__body">Canale di notifica per il servizio in primo piano del nodo Lightning</string>
     <string name="notification__channel_node__name">Notifica nodo Lightning</string>
     <string name="notification__channel_open_bg_failed_title">Apertura canale in background non riuscita</string>
-    <string name="notification__channel_open_failed_title">Apertura canale non riuscita</string>
     <string name="notification__channel_opened_title">Canale aperto</string>
     <string name="notification__channel_pending_body">In attesa</string>
     <string name="notification__channel_ready_body">Pronto per inviare</string>
@@ -335,7 +333,6 @@
     <string name="onboarding__slide0_header">La libertà\n&lt;accent&gt;nella tua tasca&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit ti dà le chiavi per controllare i tuoi soldi, il tuo profilo e i tuoi contatti. Prendi il controllo e diventa senza confini.</string>
     <string name="onboarding__slide1_header">Pagamenti\n&lt;accent&gt;istantanei&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Bitkit attualmente non fornisce servizi Lightning nel tuo paese, ma puoi comunque connetterti ad altri nodi.</string>
     <string name="onboarding__slide1_text">Spendi bitcoin più velocemente che mai. Goditi pagamenti immediati ed economici con amici, familiari e commercianti.</string>
     <string name="onboarding__slide3_header">La privacy\n&lt;accent&gt;non è un crimine&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">I tuoi soldi, la tua privacy. Scorri per nascondere il saldo e spendi in modo più privato, senza tracciamento dei dati e zero KYC.</string>

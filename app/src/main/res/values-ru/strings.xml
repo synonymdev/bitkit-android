@@ -184,7 +184,6 @@
     <string name="lightning__funding__button2">Использовать Другой Кошелёк</string>
     <string name="lightning__funding__nav_title">Баланс Расходов</string>
     <string name="lightning__funding__text">Самый простой вариант — использовать ваши сбережения Bitkit или отправить биткоин с другого кошелька.</string>
-    <string name="lightning__funding__text_blocked">Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам напрямую.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам напрямую.</string>
     <string name="lightning__funding__title">Пополните свой &lt;accent&gt;Баланс Расходов&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">QR LNURL Канала</string>
@@ -307,7 +306,6 @@
     <string name="notification__channel_node__body">Канал уведомлений для фоновой службы Lightning ноды</string>
     <string name="notification__channel_node__name">Уведомление Lightning ноды</string>
     <string name="notification__channel_open_bg_failed_title">Не удалось открыть канал в фоновом режиме</string>
-    <string name="notification__channel_open_failed_title">Не удалось открыть канал</string>
     <string name="notification__channel_opened_title">Канал открыт</string>
     <string name="notification__channel_pending_body">В ожидании</string>
     <string name="notification__channel_ready_body">Готов к отправке</string>
@@ -351,7 +349,6 @@
     <string name="onboarding__slide0_header">Свобода в\n&lt;accent&gt;вашем кармане&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit даёт вам ключи для управления вашими деньгами, профилем и контактами. Возьмите контроль и станьте безграничными.</string>
     <string name="onboarding__slide1_header">Мгновенные\n&lt;accent&gt;платежи&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам.</string>
     <string name="onboarding__slide1_text">Тратьте биткойны быстрее, чем когда-либо. Наслаждайтесь мгновенными и недорогими платежами с друзьями, семьёй и продавцами.</string>
     <string name="onboarding__slide3_header">Конфиденциальность — это\n&lt;accent&gt;не преступление&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Ваши деньги, ваша конфиденциальность. Проведите пальцем, чтобы скрыть баланс и тратить более конфиденциально, без отслеживания данных и KYC.</string>

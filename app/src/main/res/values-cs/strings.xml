@@ -175,7 +175,6 @@
     <string name="lightning__funding__button2">Použijte jinou peněženku</string>
     <string name="lightning__funding__nav_title">Dostupný zůstatek</string>
     <string name="lightning__funding__text">Nejjednodušší možností je použít úspory z Bitkitu nebo poslat bitcoin z jiné peněženky.</string>
-    <string name="lightning__funding__text_blocked">Bitkit v současné době neposkytuje služby lightning ve vaší zemi, ale stále se můžete připojit k jiným uzlům přímo.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit v současné době neposkytuje služby lightning ve vaší zemi, ale stále se můžete připojit k jiným uzlům přímo.</string>
     <string name="lightning__funding__title">Navyšte svůj &lt;accent&gt;disponibilní zůstatek&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">LNURL kanál QR</string>
@@ -292,7 +291,6 @@
     <string name="notification__channel_node__body">Notifikační kanál pro službu Lightning uzlu na pozadí</string>
     <string name="notification__channel_node__name">Notifikace Lightning uzlu</string>
     <string name="notification__channel_open_bg_failed_title">Kanál se nepodařilo otevřít na pozadí</string>
-    <string name="notification__channel_open_failed_title">Otevření kanálu selhalo</string>
     <string name="notification__channel_opened_title">Kanál otevřen</string>
     <string name="notification__channel_pending_body">Čekající</string>
     <string name="notification__channel_ready_body">Připraveno k odeslání</string>
@@ -336,7 +334,6 @@
     <string name="onboarding__slide0_header">Svoboda ve\n&lt;accent&gt;vaší kapse&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit vám předá klíče ke správě vašich peněz. Utrácejte teď nebo si spořte na později. Volba je na vás.</string>
     <string name="onboarding__slide1_header">Okamžité\n&lt;accent&gt;platby&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Bitkit v současné době neposkytuje služby lightning ve vaší zemi, ale stále se můžete připojit k jiným uzlům.</string>
     <string name="onboarding__slide1_text">Utrácejte bitcoiny rychleji než kdykoli předtím. Užívejte si okamžité a levné platby s přáteli, rodinou a obchodníky.</string>
     <string name="onboarding__slide3_header">Soukromí\n&lt;accent&gt;není zločin&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Přejetím prstem můžete skrýt zůstatek, využívat soukromější platby a chránit peněženku zapnutím bezpečnostních funkcí.</string>

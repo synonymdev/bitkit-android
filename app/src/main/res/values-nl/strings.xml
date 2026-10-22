@@ -172,7 +172,6 @@
     <string name="lightning__funding__button2">Andere wallet gebruiken</string>
     <string name="lightning__funding__nav_title">Bestedingssaldo</string>
     <string name="lightning__funding__text">De makkelijkste optie is om je Bitkit-spaargeld te gebruiken of bitcoin te versturen vanuit een andere wallet.</string>
-    <string name="lightning__funding__text_blocked">Bitkit biedt momenteel geen Lightning-services in jouw land, maar je kunt nog steeds rechtstreeks verbinding maken met andere nodes.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit biedt momenteel geen Lightning-services in jouw land, maar je kunt nog steeds rechtstreeks verbinding maken met andere nodes.</string>
     <string name="lightning__funding__title">Vul je &lt;accent&gt;bestedingssaldo&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">LNURL Kanaal QR</string>
@@ -290,7 +289,6 @@
     <string name="notification__channel_node__body">Notificatiekanaal voor Lightning node voorgrondservice</string>
     <string name="notification__channel_node__name">Lightning node notificatie</string>
     <string name="notification__channel_open_bg_failed_title">Kanaal kon niet op de achtergrond worden geopend</string>
-    <string name="notification__channel_open_failed_title">Kanaal openen mislukt</string>
     <string name="notification__channel_opened_title">Kanaal geopend</string>
     <string name="notification__channel_pending_body">In behandeling</string>
     <string name="notification__channel_ready_body">Klaar om te versturen</string>
@@ -334,7 +332,6 @@
     <string name="onboarding__slide0_header">Vrijheid in\n&lt;accent&gt;je zak&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit geeft u de sleutels om uw geld, profiel en contacten te beheren. Neem de controle en word grenzeloos.</string>
     <string name="onboarding__slide1_header">Directe\n&lt;accent&gt;betalingen&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Bitkit biedt momenteel geen Lightning-services in jouw land, maar je kunt nog steeds verbinding maken met andere nodes.</string>
     <string name="onboarding__slide1_text">Besteed bitcoin sneller dan ooit. Geniet van directe en goedkope betalingen met vrienden, familie en winkeliers.</string>
     <string name="onboarding__slide3_header">Privacy is\n&lt;accent&gt;geen misdaad&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Uw geld, uw privacy. Veeg om uw saldo te verbergen en besteed meer privé, zonder datatracking en zonder KYC.</string>

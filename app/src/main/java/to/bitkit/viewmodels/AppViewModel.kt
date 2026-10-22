@@ -331,9 +331,6 @@ class AppViewModel @Inject constructor(
     var splashVisible by mutableStateOf(true)
         private set
 
-    val isGeoBlocked = lightningRepo.lightningState.map { it.isGeoBlocked }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
     val forceCloseRemainingDuration = transferRepo.forceCloseRemainingDuration
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -643,9 +640,6 @@ class AppViewModel @Inject constructor(
             resetIsAuthenticatedState()
             delay(AUTH_CHECK_SPLASH_DELAY_MS)
             splashVisible = false
-        }
-        viewModelScope.launch {
-            lightningRepo.updateGeoBlockState()
         }
         viewModelScope.launch {
             quickPayRepo.unhandledFailures.collect {

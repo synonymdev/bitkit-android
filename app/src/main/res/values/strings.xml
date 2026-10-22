@@ -321,7 +321,6 @@
     <string name="lightning__funding__button2">Use Other Wallet</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
     <string name="lightning__funding__text">The easiest option is to use your Bitkit savings or send bitcoin from a different wallet.</string>
-    <string name="lightning__funding__text_blocked">Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes directly.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes directly.</string>
     <string name="lightning__funding__title">Fund your &lt;accent&gt;spending balance&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">LNURL Channel QR</string>
@@ -461,7 +460,6 @@
     <string name="notification__channel_node__body">Notification channel for Lightning node foreground service</string>
     <string name="notification__channel_node__name">Lightning node notification</string>
     <string name="notification__channel_open_bg_failed_title">Channel failed to open in the background</string>
-    <string name="notification__channel_open_failed_title">Channel open failed</string>
     <string name="notification__channel_opened_title">Channel opened</string>
     <string name="notification__channel_pending_body">Pending</string>
     <string name="notification__channel_ready_body">Ready to send</string>
@@ -506,7 +504,6 @@
     <string name="onboarding__slide0_header">Freedom in\n&lt;accent&gt;your pocket&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit hands you the keys to control your money, profile, and contacts. Take charge and become borderless.</string>
     <string name="onboarding__slide1_header">Instant\n&lt;accent&gt;payments&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes.</string>
     <string name="onboarding__slide1_text">Enjoy instant and cheap payments with friends, family, and merchants on the Lightning Network.</string>
     <string name="onboarding__slide3_header">Privacy is\n&lt;accent&gt;not a crime&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Your money, your privacy. Swipe to hide your balance and spend more privately, with no data tracking and zero KYC.</string>

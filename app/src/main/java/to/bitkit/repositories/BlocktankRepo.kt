@@ -1,9 +1,6 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
-import com.synonym.bitkitcore.AddressType
-import com.synonym.bitkitcore.BtOrderState2
-import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.ChannelLiquidityParams
 import com.synonym.bitkitcore.CreateCjitOptions
@@ -18,35 +15,22 @@ import com.synonym.bitkitcore.getDefaultLspBalance
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.async.appScope
-import to.bitkit.data.BlocktankRefundAddress
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BlocktankBackupV1
@@ -55,15 +39,12 @@ import to.bitkit.models.EUR
 import to.bitkit.models.safe
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
-import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.math.BigDecimal
 import javax.inject.Inject
-import javax.inject.Named
 import javax.inject.Singleton
 import kotlin.math.ceil
-import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class BlocktankRepo @Inject constructor(
@@ -72,11 +53,9 @@ class BlocktankRepo @Inject constructor(
     private val lightningService: LightningService,
     private val currencyRepo: CurrencyRepo,
     private val cacheStore: CacheStore,
-    @Named("enablePolling") private val enablePolling: Boolean,
     private val lightningRepo: LightningRepo,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
-    private val refundAddressMutex = Mutex()
 
     private val _blocktankState = MutableStateFlow(BlocktankState())
     val blocktankState: StateFlow<BlocktankState> = _blocktankState.asStateFlow()
@@ -85,25 +64,12 @@ class BlocktankRepo @Inject constructor(
     private var isRefreshing = false
 
     init {
-        startPolling()
         observePaidOrders()
 
         repoScope.launch {
             refreshInfo()
-            refreshOrders()
+            loadCachedOrders()
         }
-    }
-
-    private fun startPolling() {
-        if (!enablePolling) return
-        flow {
-            while (currentCoroutineContext().isActive) {
-                emit(Unit)
-                delay(Env.lspOrdersRefreshInterval)
-            }
-        }.flowOn(bgDispatcher)
-            .onEach { refreshOrders() }
-            .launchIn(repoScope)
     }
 
     private fun observePaidOrders() {
@@ -130,41 +96,7 @@ class BlocktankRepo @Inject constructor(
             fundingTx.id == fundingTxo.txid && fundingTx.vout == fundingTxo.vout.toULong()
         }
 
-        val cached = _blocktankState.value.cjitEntries
-        cached.matching()?.let { return@withContext it }
-
-        // A ChannelReady can only be a CJIT if a live cached entry is still awaiting its channel; otherwise skip
-        // the server round-trip so a non-CJIT transfer confirmation isn't delayed by a slow Blocktank API.
-        val hasPendingCjit = cached.any {
-            it.channel == null && it.state != CJitStateEnum.EXPIRED && it.state != CJitStateEnum.FAILED
-        }
-        if (cached.isNotEmpty() && !hasPendingCjit) return@withContext null
-
-        // Match against the freshly fetched list so a concurrent refreshOrders() can't clobber state before we read.
-        return@withContext refreshCjitEntries().matching()
-    }
-
-    private suspend fun refreshCjitEntries(): List<IcJitEntry> {
-        repeat(CJIT_REFRESH_ATTEMPTS) { attempt ->
-            val entries = runCatching {
-                withTimeout(CJIT_REFRESH_TIMEOUT) {
-                    coreService.blocktank.cjitEntries(refresh = true)
-                }
-            }.mapCatching { entries ->
-                _blocktankState.update { it.copy(cjitEntries = entries.toImmutableList()) }
-                entries
-            }.getOrElse {
-                if (it is CancellationException && it !is TimeoutCancellationException) throw it
-                if (attempt == CJIT_REFRESH_ATTEMPTS - 1) {
-                    Logger.warn("Failed to refresh CJIT entries; using cached state", it, context = TAG)
-                }
-                null
-            }
-
-            entries?.let { return it }
-            delay(CJIT_REFRESH_RETRY_DELAY)
-        }
-        return _blocktankState.value.cjitEntries
+        _blocktankState.value.cjitEntries.matching()
     }
 
     suspend fun refreshInfo() = withContext(bgDispatcher) {
@@ -183,16 +115,13 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    suspend fun refreshOrders(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun loadCachedOrders(): Result<Unit> = withContext(bgDispatcher) {
         if (isRefreshing) return@withContext Result.success(Unit)
         isRefreshing = true
 
         runCatching {
-            Logger.verbose("Refreshing blocktank orders…", context = TAG)
-
             val paidOrderIds = cacheStore.data.first().paidOrders.keys
 
-            // Sync instantly from cache
             val cachedOrders = coreService.blocktank.orders(refresh = false)
             val cachedCjitEntries = coreService.blocktank.cjitEntries(refresh = false)
             _blocktankState.update { state ->
@@ -203,24 +132,10 @@ class BlocktankRepo @Inject constructor(
                 )
             }
 
-            // Then refresh from server
-            val orders = coreService.blocktank.orders(refresh = true)
-            val cjitEntries = coreService.blocktank.cjitEntries(refresh = true)
-            _blocktankState.update { state ->
-                state.copy(
-                    orders = orders.toImmutableList(),
-                    cjitEntries = cjitEntries.toImmutableList(),
-                    paidOrders = orders.filter { order -> order.id in paidOrderIds }.toImmutableList(),
-                )
-            }
-
             Logger.debug(
-                "Orders refreshed: ${orders.size} orders, " +
-                    "${cjitEntries.size} cjit entries, " +
-                    "${_blocktankState.value.paidOrders.size} paid orders",
-                context = TAG
+                "Loaded cached orders: ${cachedOrders.size} orders, ${cachedCjitEntries.size} cjit entries",
+                context = TAG,
             )
-            openChannelWithPaidOrders()
         }.also {
             isRefreshing = false
         }
@@ -245,7 +160,6 @@ class BlocktankRepo @Inject constructor(
         description: String = "",
     ): Result<IcJitEntry> = withContext(bgDispatcher) {
         runSuspendCatching {
-            if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
             val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
             val maxChannelSizeSat = freshMaxChannelSizeSat()
             if (maxChannelSizeSat != null && amountSats > maxChannelSizeSat) {
@@ -271,7 +185,7 @@ class BlocktankRepo @Inject constructor(
                 channelSizeSat = cjitEntry.channelSizeSat,
             ).getOrThrow()
 
-            repoScope.launch { refreshOrders() }
+            repoScope.launch { loadCachedOrders() }
 
             return@runSuspendCatching cjitEntry
         }.fold(
@@ -311,14 +225,10 @@ class BlocktankRepo @Inject constructor(
         channelExpiryWeeks: UInt = DEFAULT_CHANNEL_EXPIRY_WEEKS,
     ): Result<IBtOrder> = withContext(bgDispatcher) {
         runSuspendCatching {
-            if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
             if (lightningService.nodeId == null) throw ServiceError.NodeNotStarted()
 
             currentCoroutineContext().ensureActive()
-            val refundAddress = getBlocktankRefundAddress()
-            currentCoroutineContext().ensureActive()
-            val baseOptions = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
-            val options = baseOptions.copy(refundOnchainAddress = refundAddress)
+            val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
             currentCoroutineContext().ensureActive()
 
             Logger.info(
@@ -338,63 +248,12 @@ class BlocktankRepo @Inject constructor(
                 options = options,
             )
 
-            repoScope.launch { refreshOrders() }
+            repoScope.launch { loadCachedOrders() }
 
             return@runSuspendCatching order
         }.onFailure {
             Logger.error("Failed to create order", it, context = TAG)
         }
-    }
-
-    private suspend fun getBlocktankRefundAddress(): String = refundAddressMutex.withLock {
-        val cached = cacheStore.data.first().blocktankRefundAddress
-        if (cached == null) return@withLock allocateBlocktankRefundAddress()
-
-        if (cached.index !in 0..Int.MAX_VALUE.toLong()) {
-            throw AppError("Invalid cached Blocktank refund address index")
-        }
-        if (cached.address.isBlank()) {
-            throw AppError("Invalid cached Blocktank refund address")
-        }
-
-        val index = cached.index.toInt()
-        val derived = lightningRepo.addressInfoForType(AddressType.P2WPKH, index).getOrThrow()
-        if (derived.index != index || derived.address != cached.address) {
-            throw AppError("Cached Blocktank refund address does not belong to the active wallet")
-        }
-
-        lightningRepo.revealReceiveAddresses(index, AddressType.P2WPKH).getOrThrow()
-        if (!coreService.isAddressUsed(cached.address)) return@withLock cached.address
-
-        allocateBlocktankRefundAddress(afterIndex = index)
-    }
-
-    private suspend fun allocateBlocktankRefundAddress(afterIndex: Int? = null): String {
-        var previousIndex = afterIndex
-        repeat(REFUND_ADDRESS_ALLOCATION_LIMIT) {
-            val derived = lightningRepo.newAddressInfoForType(AddressType.P2WPKH).getOrThrow()
-            val lastIndex = previousIndex
-            val hasInvalidIndex = derived.index !in 0..Int.MAX_VALUE
-            val didNotAdvance = lastIndex != null && derived.index <= lastIndex
-            if (hasInvalidIndex || derived.address.isBlank() || didNotAdvance) {
-                throw AppError("Failed to allocate a valid advancing Blocktank refund address")
-            }
-            previousIndex = derived.index
-
-            if (coreService.isAddressUsed(derived.address)) return@repeat
-
-            cacheStore.update {
-                it.copy(
-                    blocktankRefundAddress = BlocktankRefundAddress(
-                        address = derived.address,
-                        index = derived.index.toLong(),
-                    ),
-                )
-            }
-            return derived.address
-        }
-
-        throw AppError("Failed to allocate an unused Blocktank refund address")
     }
 
     suspend fun estimateOrderFee(
@@ -447,7 +306,7 @@ class BlocktankRepo @Inject constructor(
     ): Result<IBtOrder?> = withContext(bgDispatcher) {
         runSuspendCatching {
             if (refresh) {
-                refreshOrders().getOrThrow()
+                loadCachedOrders().getOrThrow()
             }
             val order = _blocktankState.value.orders.find { it.id == orderId }
             return@runSuspendCatching order
@@ -456,10 +315,10 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    /** Fetches [orderIds] from the LSP, including orders the local cache has never seen, and caches them. */
+    /** Reads [orderIds] from the local order cache, without calling the LSP, and merges them into state. */
     suspend fun fetchOrders(orderIds: List<String>): Result<List<IBtOrder>> = withContext(bgDispatcher) {
         runSuspendCatching {
-            val fetched = coreService.blocktank.orders(orderIds = orderIds, refresh = true)
+            val fetched = coreService.blocktank.orders(orderIds = orderIds, refresh = false)
             val fetchedById = fetched.associateBy { it.id }
             _blocktankState.update { state ->
                 val cachedIds = state.orders.map { it.id }.toSet()
@@ -470,12 +329,6 @@ class BlocktankRepo @Inject constructor(
             fetched
         }.onFailure {
             Logger.warn("Failed to fetch orders '$orderIds'", it, context = TAG)
-        }
-    }
-
-    private suspend fun openChannelWithPaidOrders() = withContext(bgDispatcher) {
-        _blocktankState.value.paidOrders.filter { it.state2 == BtOrderState2.PAID }.forEach { order ->
-            openChannel(order.id)
         }
     }
 
@@ -605,12 +458,8 @@ class BlocktankRepo @Inject constructor(
 
     companion object {
         private const val TAG = "BlocktankRepo"
-        private const val REFUND_ADDRESS_ALLOCATION_LIMIT = 20
         private const val DEFAULT_CHANNEL_EXPIRY_WEEKS = 6u
         private const val DEFAULT_SOURCE = "bitkit-android"
-        private const val CJIT_REFRESH_ATTEMPTS = 3
-        private val CJIT_REFRESH_TIMEOUT = 5.seconds
-        private val CJIT_REFRESH_RETRY_DELAY = 1.seconds
     }
 }
 

@@ -34,7 +34,6 @@ import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun FundingScreen(
-    isGeoBlocked: Boolean,
     onTransfer: () -> Unit = {},
     onFund: () -> Unit = {},
     onManual: () -> Unit = {},
@@ -61,12 +60,7 @@ fun FundingScreen(
             Display(text = stringResource(R.string.lightning__funding__title).withAccent(accentColor = Colors.Purple))
             Spacer(modifier = Modifier.height(8.dp))
 
-            val text = if (isGeoBlocked) {
-                stringResource(R.string.lightning__funding__text_blocked)
-            } else {
-                stringResource(R.string.lightning__funding__text)
-            }
-            BodyM(text = text, color = Colors.White64)
+            BodyM(text = stringResource(R.string.lightning__funding__text), color = Colors.White64)
 
             Spacer(modifier = Modifier.height(32.dp))
 
@@ -78,7 +72,7 @@ fun FundingScreen(
                         label = stringResource(R.string.lightning__funding__button1),
                         icon = R.drawable.ic_transfer,
                         iconTint = Colors.Purple,
-                        enabled = canTransfer && !isGeoBlocked,
+                        enabled = canTransfer,
                         onClick = onTransfer,
                         modifier = Modifier.testTag("FundTransfer")
                     )
@@ -98,7 +92,6 @@ fun FundingScreen(
                     icon = R.drawable.ic_qr_purple,
                     iconTint = Colors.Purple,
                     iconSize = 13.75.dp,
-                    enabled = !isGeoBlocked,
                     onClick = onFund,
                     modifier = Modifier.testTag("FundReceive")
                 )
@@ -132,6 +125,6 @@ fun FundingScreen(
 @Composable
 private fun FundingScreenPreview() {
     AppThemeSurface {
-        FundingScreen(isGeoBlocked = false)
+        FundingScreen()
     }
 }

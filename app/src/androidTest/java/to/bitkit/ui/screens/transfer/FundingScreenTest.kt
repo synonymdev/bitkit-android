@@ -52,14 +52,13 @@ class FundingScreenTest {
         manualClicks = 0
     }
 
-    private fun setContent(fundableBalance: ULong = 100_000uL, isGeoBlocked: Boolean = false) {
+    private fun setContent(fundableBalance: ULong = 100_000uL) {
         composeTestRule.setContent {
             CompositionLocalProvider(
                 LocalBalances provides BalanceState(channelFundableBalance = fundableBalance)
             ) {
                 AppThemeSurface {
                     FundingScreen(
-                        isGeoBlocked = isGeoBlocked,
                         onTransfer = { transferClicks++ },
                         onFund = { fundClicks++ },
                         onManual = { manualClicks++ },

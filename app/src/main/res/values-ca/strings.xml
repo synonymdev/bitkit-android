@@ -172,7 +172,6 @@
     <string name="lightning__funding__button2">Utilitza un altre moneder</string>
     <string name="lightning__funding__nav_title">Balanç de despesa</string>
     <string name="lightning__funding__text">La forma més fàcil és utilitzar els teus estalvis de Bitkit o enviar bitcoin des d\'una altra cartera.</string>
-    <string name="lightning__funding__text_blocked">Bitkit no ofereix serveis Lightning al teu país, però encara pots connectar-te a altres nodes directament.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit no ofereix serveis Lightning al teu país, però encara pots connectar-te a altres nodes directament.</string>
     <string name="lightning__funding__title">Finança el teu &lt;accent&gt;saldo de despesa&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">QR de canal LNURL</string>
@@ -289,7 +288,6 @@
     <string name="notification__channel_node__body">Canal de notificació per al servei en primer pla del node Lightning</string>
     <string name="notification__channel_node__name">Notificació del node Lightning</string>
     <string name="notification__channel_open_bg_failed_title">El canal no s\'ha pogut obrir en segon pla</string>
-    <string name="notification__channel_open_failed_title">Obertura de canal fallida</string>
     <string name="notification__channel_opened_title">Canal obert</string>
     <string name="notification__channel_pending_body">Pendent</string>
     <string name="notification__channel_ready_body">Llest per enviar</string>
@@ -333,7 +331,6 @@
     <string name="onboarding__slide0_header">Llibertat a\n&lt;accent&gt;la teva butxaca&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit et dona les claus per gestionar els teus diners. Gasta ara o estalvia per després. La decisió és teva.</string>
     <string name="onboarding__slide1_header">Pagaments\n&lt;accent&gt;instantanis&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Bitkit no ofereix serveis Lightning al teu país, però encara pots connectar-te a altres nodes.</string>
     <string name="onboarding__slide1_text">Gasta bitcoin més ràpid que mai. Gaudeix de pagaments instantanis i barats amb amics, família i comerciants.</string>
     <string name="onboarding__slide3_header">La privacitat\n&lt;accent&gt;no és un crim&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Llisca per amagar el teu saldo, gaudeix de pagaments més privats i protegeix la teva cartera habilitant funcions de seguretat.</string>
