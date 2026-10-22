@@ -27,6 +27,8 @@ import to.bitkit.ui.shared.util.primaryButtonStyle
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun NumberPadActionButton(
@@ -41,6 +43,7 @@ fun NumberPadActionButton(
     @DrawableRes icon: Int? = null,
     @DrawableRes trailingIcon: Int? = null,
     textStyle: TextStyle = AppTextStyles.CaptionM,
+    debounce: Duration = 500.milliseconds,
 ) {
     val contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
     val height = 28.dp
@@ -60,7 +63,7 @@ fun NumberPadActionButton(
                     }
                 )
                 .animateContentSize(animationSpec = tween(durationMillis = 200))
-                .clickableAlpha(enabled = enabled && clickable && !isLoading, onClick = onClick)
+                .clickableAlpha(enabled = enabled && clickable && !isLoading, debounce = debounce, onClick = onClick)
                 .padding(contentPadding)
         ) {
             if (isLoading) {
@@ -74,7 +77,7 @@ fun NumberPadActionButton(
             } else if (icon != null) {
                 Icon(
                     painter = painterResource(icon),
-                    contentDescription = text,
+                    contentDescription = null,
                     tint = color,
                     modifier = Modifier.size(16.dp)
                 )
@@ -109,7 +112,7 @@ fun NumberPadActionButton(
             if (icon != null) {
                 Icon(
                     painter = painterResource(icon),
-                    contentDescription = text,
+                    contentDescription = null,
                     tint = color,
                     modifier = Modifier.size(16.dp)
                 )
