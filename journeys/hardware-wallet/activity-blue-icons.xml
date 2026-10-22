@@ -2,7 +2,10 @@
   <description>
     Verifies hardware wallet on-chain activity in the unified home and All Activity lists,
     with wallet-scoped blue icons and tab filters. Requires a paired Bridge emulator with at
-    least two confirmed receives with distinct amounts and one Transfer To Spending activity.
+    least two confirmed receives with distinct amounts and one Transfer To Spending activity. This build
+    cannot create that activity (the button was removed in synonymdev/bitkit-android#1669), so the
+    fixture comes from a build from before that change (master before it) that signed a hardware
+    Transfer To Spending; the activity stays in the wallet after installing this build over it.
   </description>
   <actions>
     <action>

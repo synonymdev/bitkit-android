@@ -6,15 +6,16 @@
     the Receive sheet, also when it is released above the sheet, and a tap on a QR still copies it.
 
     Precondition: onboarded dev wallet with USDT enabled (introductory sheet or Settings, General,
-    Payments), no open Spending channel, no CJIT invoice pending and no hardware wallet paired, so the
-    tabs are Savings, Spending and USDT; a usable channel adds the Auto tab. Start on the wallet home
+    Payments), no Lightning channel and no hardware wallet paired, so the tabs are Savings and USDT.
+    Without a channel with inbound liquidity the Receive sheet has no Spending or Auto tab, since
+    Blocktank channel purchases were removed (synonymdev/bitkit-android#1669). Start on the wallet home
     screen. The USDT address loads without funding; wait for the QR before swiping.
 
     Swipe with `adb shell input swipe` across the middle of the QR, about 60% of its width, in
     300 ms (`adb shell input swipe 220 1176 860 1176 300` to the right on a 1080 px wide screen). A
     swipe that starts at the screen edge is the system back gesture, which closes the sheet on every
-    tab; start the swipes at least 100 px from the edge. The pager behind Savings, Auto and Spending
-    snaps back from a short synthetic swipe on the emulator, so swipe across it in 1200 ms
+    tab; start the swipes at least 100 px from the edge. The pager behind Savings snaps back from a
+    short synthetic swipe on the emulator, so swipe across it in 1200 ms
     (`adb shell input swipe 150 1176 900 1176 1200`); the USDT QR takes the 300 ms swipe.
   </description>
   <actions>
@@ -23,16 +24,11 @@
     <action>Swipe left across the USDT QR; verify the Savings tab is selected</action>
     <action>Start a screen recording, tap the USDT tab (testTag "Tab-usdt") and wait until the USDT QR is visible, then swipe left across the USDT QR; verify the Savings tab is selected and the recording goes straight from the USDT QR to the Savings QR, with no Auto or Spending QR and no second USDT screen in between</action>
     <action>Start a screen recording, tap the USDT tab and wait until the USDT QR is visible, then tap the Savings tab; verify the Savings tab is selected and the recording shows the same direct change from USDT to Savings</action>
-    <action>Swipe left across the Savings QR in 1200 ms (`adb shell input swipe 900 1176 150 1176 1200`); verify the Spending tab (testTag "Tab-spending") is selected</action>
-    <action>Swipe left across the Spending content in 1200 ms; verify the USDT tab is selected and wait until its QR is visible</action>
+    <action>Verify there is no Spending tab (testTag "Tab-spending") and no Auto tab (testTag "Tab-auto") in the tab row</action>
+    <action>Swipe left across the Savings QR in 1200 ms (`adb shell input swipe 900 1176 150 1176 1200`); verify the USDT tab is selected and wait until its QR is visible</action>
     <action>Swipe left from the top right of the USDT QR to above the sheet (`adb shell input swipe 950 720 100 200 300`); verify the Receive sheet is still open and the Savings tab is selected</action>
     <action>Swipe right from the top left of the Savings QR to above the sheet (`adb shell input swipe 100 720 950 200 1200`); verify the Receive sheet is still open and the USDT tab is selected</action>
     <action>Swipe left across the USDT QR, then tap the Savings QR once; verify the "copied" tooltip appears</action>
-    <action>Close Receive, turn USDT off (Settings, General, Payments), return to the wallet home screen and tap Receive; verify the Savings tab is selected and only Savings and Spending show</action>
-    <action>Swipe right across the Savings QR; verify the Spending tab is selected</action>
-    <action>Swipe right across the Spending content; verify the Savings tab is selected</action>
-    <action>Swipe left across the Savings QR; verify the Spending tab is selected</action>
-    <action>Swipe left across the Spending content; verify the Savings tab is selected</action>
-    <action>Swipe left across the Savings QR; verify the Spending tab is selected</action>
+    <action>Close Receive, turn USDT off (Settings, General, Payments), return to the wallet home screen and tap Receive; verify the Savings tab is selected and there is no Spending tab (testTag "Tab-spending"), no Auto tab and no USDT tab (testTag "Tab-usdt")</action>
   </actions>
 </journey>

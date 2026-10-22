@@ -6,8 +6,11 @@
     (synonymdev/bitkit-android#809). iOS resets navigation to home on the same OK.
 
     Precondition: onboarded dev wallet with an open, usable channel to the LSP and a POSITIVE
-    Spending balance. The transfer closes that channel, so reopen one (Blocktank order through the
-    lsp helper, then mine blocks) afterwards if later work needs a Spending balance. Start on the
+    Spending balance. This build cannot buy a channel from Blocktank (synonymdev/bitkit-android#1669), so
+    get one by installing a build from before that change, opening a channel with Transfer To Spending
+    and installing this build over it, or by opening a manual channel to the staging LSP node (see
+    ../README.md, Getting a Lightning channel). The transfer closes that channel, and a replacement
+    needs the same steps again if later work needs a Spending balance. Start on the
     wallet home screen.
   </description>
   <actions>

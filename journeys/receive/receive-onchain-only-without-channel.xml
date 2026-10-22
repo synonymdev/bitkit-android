@@ -1,0 +1,27 @@
+<journey name="receive onchain only without channel">
+  <description>
+    Verifies that a funded wallet with no Lightning channel can only receive on-chain: the Receive sheet
+    offers the Savings tab and nothing that buys Lightning liquidity, and Home shows neither the Spend
+    suggestion card nor the channels-closing banner. Blocktank channel purchases were removed in
+    synonymdev/bitkit-android#1669: there is no "Receive Lightning funds" (CJIT) button or onboarding,
+    and the Spending and Auto tabs appear only when the wallet can create a Lightning invoice over a
+    ready channel with inbound liquidity.
+
+    Precondition: a freshly onboarded dev wallet on the staging regtest backend with NO Lightning
+    channel (open, pending or closed), USDT disabled and no hardware wallet paired, funded with an
+    on-chain deposit: ./lsp POST /regtest/chain/deposit with the Savings address from Receive, Show
+    Details, then ./lsp POST /regtest/chain/mine '{"count":3}', and wait about 20 seconds for the
+    balance and the activity row to appear. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Verify the Savings balance card (testTag "ActivitySavings") shows the deposit and the Spending balance card (testTag "ActivitySpending") shows 0</action>
+    <action>Verify the home screen has no Spend suggestion card (testTag "Suggestion-lightning") and no channels-closing banner (testTag "ChannelsClosingBanner"), scrolling the suggestions row if needed</action>
+    <action>Tap the Receive button (testTag "Receive")</action>
+    <action>Verify the Savings tab (testTag "Tab-savings") is selected and the QR code (testTag "QRCode") is visible</action>
+    <action>Verify there is no Spending tab (testTag "Tab-spending") and no Auto tab (testTag "Tab-auto")</action>
+    <action>Verify there is no "Receive Lightning funds" button anywhere on the sheet</action>
+    <action>Tap "Edit" (testTag "SpecifyInvoiceButton"), tap the amount field (testTag "ReceiveNumberPadTextField"), enter a small amount (for example "N1" then "N0" twice), tap Continue (testTag "ReceiveNumberPadSubmit") and then "QR Code" (testTag "ShowQrReceive")</action>
+    <action>Verify the sheet returns to the QR screen with no liquidity or channel confirm screen in between, the Savings tab is still selected and there is still no Spending tab (testTag "Tab-spending")</action>
+    <action>Close the sheet, open the Savings wallet (testTag "ActivitySavings") and verify no "Transfer To Spending" button (testTag "TransferToSpending") is shown, then open the Spending wallet (testTag "ActivitySpending") and verify no "Transfer from Savings" button (testTag "TransferFromSavings") and no notice (testTag "ChannelsClosingNotice") is shown</action>
+  </actions>
+</journey>

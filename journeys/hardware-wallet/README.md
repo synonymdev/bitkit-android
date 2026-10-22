@@ -64,7 +64,7 @@ each end by re-pairing after a forget, and `detail-overview.xml` runs last becau
 Remove step forgets the device. Run the send and receive journeys while the paired native-segwit
 account is funded. The `passphrase-*` journeys run as a block after
 `connect-home-tile.xml`, in the order listed: `passphrase-pairing.xml` pairs the hidden wallet
-the other three rely on, and `passphrase-settings-remove.xml` removes it again.
+the other two rely on, and `passphrase-settings-remove.xml` removes it again.
 
 | Journey | Covers |
 | - | - |
@@ -75,16 +75,12 @@ the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 | `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, full connect flow (Intro → Searching → Found → Paired → Finish) re-pairs |
 | `connect-flow.xml` | Settings Add button → connect flow with an edited Label Funds → paired device count + name |
 | `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, rename sheet, Add button sheet/back dismiss, per-row delete confirm + re-pair |
-| `detail-overview.xml` | Detail screen overview, Transfer placeholder when funded, activity, Remove confirm + forget |
-| `transfer-to-spending.xml` | Happy-path transfer plus one scoped hardware Transfer activity |
-| `transfer-to-spending-max-lsp-cap.xml` | MAX when Trezor balance is higher than remaining LSP headroom; verifies MAX uses AVAILABLE and reaches sign without insufficient funds |
-| `transfer-to-spending-node-warmup.xml` | Transfer started during app/node warm-up; verifies loading recovers into the sign screen |
+| `detail-overview.xml` | Detail screen overview, no Transfer To Spending button, activity, Remove confirm + forget |
 | `send-onchain.xml` | Normal Send flow funded by Trezor: source selection, guarded preparation, device signing, broadcast, success, and activity |
 | `receive-onchain.xml` | Trezor Receive tab: current address and QR display plus exact on-device address verification |
 | `passphrase-pairing.xml` | Passphrase button on Paired → Enter Passphrase → Passphrase Funds Found; second home tile, own label, no passphrase in logs |
 | `passphrase-duplicate.xml` | Re-entering a watched passphrase reports "already added" and adds no tile |
 | `passphrase-settings-remove.xml` | Per-identity settings row, rename and delete; removing the hidden wallet keeps the device paired |
-| `passphrase-transfer-to-spending.xml` | Signs with the live session, re-prompts after the session is dropped, refuses a wrong passphrase |
 
 Connect-flow testTags: `HardwareWalletSheet`, `HardwareWalletIntroScreen`,
 `HardwareWalletIntroCancel`, `HardwareWalletIntroContinue`,
@@ -100,9 +96,7 @@ and `RenameHardwareWalletSave`.
 
 Passphrase testTags: `HardwareWalletPairedPassphrase`, `HardwareWalletPassphraseScreen`,
 `HardwareWalletPassphraseInput`, `HardwareWalletPassphraseBack`,
-`HardwareWalletPassphraseContinue`, `HardwareWalletPassphrasePairedScreen`, and on the transfer
-sign screen `HwTransferPassphraseSheet`, `HwTransferPassphraseInput`,
-`HwTransferPassphraseCancel`, `HwTransferPassphraseContinue`.
+`HardwareWalletPassphraseContinue`, `HardwareWalletPassphrasePairedScreen`.
 
 Send and receive testTags: `Send`, `RecipientManual`, `RecipientInput`, `AddressContinue`,
 `send_amount_screen`, `AssetButton-switch`, `ContinueAmount`, `SendConfirmAssetButton`,
@@ -120,9 +114,8 @@ path is better validated on a physical device because the Bridge path can still 
 without BLE.
 
 A physical device holds one hidden wallet open at a time, and Bitkit never stores the
-passphrase, so the `passphrase-*` journeys assert both halves of that: the tile, label,
-settings row, activity scope and removal are per identity, while signing reuses the live
-session and asks again once it is gone. They also grep the app log and datastore to prove the
+passphrase, so the `passphrase-*` journeys assert that: the tile, label, settings row,
+activity scope and removal are per identity. They also grep the app log and datastore to prove the
 passphrase is never written anywhere — note `BlockScreenshots` is a no-op in debug builds, so
 the passphrase steps remain screenshottable while journeys run.
 
@@ -134,12 +127,17 @@ with `./bitcoin-cli`.
 The activity journeys use a mixed fixture with two confirmed hardware receives carrying
 distinct amounts and one hardware Transfer To Spending transaction. This proves
 ordering, tab filtering, tags, inputs/outputs, transfer metadata, and row uniqueness together.
+The Transfer row cannot be created on this build; take it from a build from before
+synonymdev/bitkit-android#1669.
 
-For transfer-to-spending QA, explicitly cover the LSP cap boundary: the hardware wallet
-balance can be much larger than the displayed AVAILABLE amount because MAX is capped by
-Blocktank channel headroom. After signing, decode the funding transaction and compare the
-activity DB row: the on-chain activity fee should be the composed mining fee, while the
-funding output should equal the final Blocktank `order.feeSat`.
+## Retired journeys
+
+`transfer-to-spending.xml`, `transfer-to-spending-max-lsp-cap.xml`,
+`transfer-to-spending-node-warmup.xml` and `passphrase-transfer-to-spending.xml` were retired because
+Blocktank channel purchases were removed (synonymdev/bitkit-android#1669): the hardware wallet detail
+screen no longer has a Transfer To Spending button (`HardwareTransferToSpending`). The
+`HardwareTransfer*` and `HwTransferPassphrase*` screens and tags are still in the nav graph but nothing
+in the UI reaches them.
 
 ## Blockstream Jade
 

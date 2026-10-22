@@ -26,7 +26,7 @@ escalating.
   <description>What this proves, and the preconditions needed to prove it.</description>
   <actions>
     <action>Tap the Spending balance card on the home screen</action>
-    <action>Verify the spending amount screen (tag "SpendingAmount") is visible</action>
+    <action>Verify the spending wallet screen (tag "TotalBalance") is visible</action>
   </actions>
 </journey>
 ```
@@ -107,6 +107,22 @@ through the `lsp` helper at the repo root, which talks to the same staging LSP:
 `deposit` prints the funding txid; **`mine` prints nothing on success** and signals only through its
 exit status, so an empty response there is not a failure. Give the wallet ~20s to sync.
 
+### Getting a Lightning channel
+
+Blocktank is winding down, and this build no longer buys channels from it (synonymdev/bitkit-android#1669):
+Transfer To Spending, the Receive sheet's CJIT button and gift codes are gone. A journey that needs a
+Lightning channel as its precondition says "a wallet with an open Lightning channel"; get one in either way:
+
+- Install a build from before that change (master before synonymdev/bitkit-android#1669), open a channel with
+  Transfer To Spending, then install this build over it. The wallet, its channel and its balances carry over.
+- Or open a manual channel to the staging LSP node on this build: Settings › Advanced › Lightning
+  Connections › add connection (opens Funding Advanced) › Manual Setup (testTag `FundManual`), then enter the
+  node id, host and port from `./lsp GET /info` (id
+  `028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc`, host `34.65.86.104`, port `9400`),
+  pick an amount, confirm, and mine blocks with `./lsp POST /regtest/chain/mine '{"count":3}'`. The Spending
+  balance is available once the channel is ready. A channel this wallet opens holds outbound liquidity
+  only, so a journey that receives over Lightning needs the first route, which buys inbound capacity.
+
 Fund a wallet before any amount journey — with a zero balance the caps fall back to the global
 maximum and the journeys pass for the wrong reason. Per-suite preconditions (Trezor emulator, Pubky
 fixtures, push notifications) live in each suite's README.
@@ -127,15 +143,30 @@ journey PR, which is what made this file conflict on every merge.
 | Controlled USDT quotes, provider history, funded submission and recovery | an explicitly configured local USDT gateway/RPC/bundler fixture with owned test accounts and funds; absent from the standard journey environment. Report these steps as blocked unless that setup and transfer authorization are supplied — [USDT QA](../docs/usdt-qa.md) |
 | On-chain funds and blocks on regtest | `./lsp` deposit and mine against the staging LSP — [Backend preconditions](#backend-preconditions) |
 | Several separate on-chain UTXOs to choose between | three or more `./lsp` deposits, each mined, so manual coin selection has inputs to list — [Backend preconditions](#backend-preconditions) |
-| Lightning channels, CJIT orders and quoted maxima | the same staging LSP the dev flavor targets, plus its node as an external LN peer — [Backend preconditions](#backend-preconditions), [amount-limits](amount-limits/README.md) |
+| Lightning channels and quoted maxima | the same staging LSP the dev flavor targets, plus its node as an external LN peer; this build opens channels only through Lightning Connections › add connection — [Getting a Lightning channel](#getting-a-lightning-channel), [amount-limits](amount-limits/README.md) |
 | A hardware wallet to pair, watch and sign with | the deterministic Trezor emulator from `bitkit-docker` over the Bridge transport, with the USB attach intent injected by `adb`; USB enumeration, permission grants, the OS picker and BLE are not simulated — [hardware-wallet](hardware-wallet/README.md) |
-| Push notifications to a backgrounded or killed app | an FCM push from a CJIT order paid through `./lsp`, read back with `adb shell dumpsys notification` — [cjit-notifications](cjit-notifications/README.md) |
-| The OS notification-permission dialog | an API 33+ target, reset with `adb shell pm revoke to.bitkit.dev android.permission.POST_NOTIFICATIONS` — [notification-permission](notification-permission/README.md) |
+| Notifications read back from the shade | `adb shell dumpsys notification` — [cjit-notifications](cjit-notifications/README.md). Push to a killed app via a CJIT order is retired with CJIT |
+| The OS notification-permission dialog | an API 33+ target, reset with `adb shell pm revoke to.bitkit.dev android.permission.POST_NOTIFICATIONS`; no journey uses it since the suite was retired — [notification-permission](notification-permission/README.md) |
 | An incoming Payment Request from a linked issuer | the fixture issuer, saved as a contact and linked as identities — [payment-requests](payment-requests/README.md) |
 | Two linked Bitkit wallets for a subscription lifecycle | a second Bitkit instance linked to the first, so a proposal can be reviewed and accepted — [subscriptions](subscriptions) |
 | A Pubky identity and a two-wallet marketplace purchase | the integration fixture runtime: Pubky testnet, Paykit Server, regtest bitcoind and Fulcrum — [pubky-marketplace](pubky-marketplace/README.md) |
 | LNURL pay, withdraw, channel and auth, and Lightning Addresses | the `bitkit-docker` `lnurl-server` on local regtest, with the app started by `just run docker`, which builds with `E2E=true` and forwards its ports over `adb reverse`; it issues memo invoices, so a check that needs a description-hash invoice needs another endpoint — [lnurl](lnurl) |
 | Deep links, addresses and invoices handed to the app | `adb shell am start -a android.intent.action.VIEW -d "<uri>"`; `bitkit://` screen and sheet routes sit behind the dev-mode gate — [Running a journey](#running-a-journey), [deeplinks](deeplinks) |
+
+## Retired journeys
+
+Blocktank channel purchases were removed in synonymdev/bitkit-android#1669, so every journey whose route
+buys a channel went with them. They are listed here rather than left as stale files; the iOS twin
+(synonymdev/bitkit-ios#1097) retires the same names.
+
+| Retired journey | Route it covered |
+| --- | --- |
+| `amount-limits/transfer-spending-over-max.xml`, `transfer-spending-advanced-over-max.xml`, `transfer-spending-preset-delete.xml` | Transfer To Spending amount and Receiving Capacity number pads |
+| `cjit-notifications/cjit-foreground-service-notification.xml`, `cjit-push-single-notification.xml` | CJIT channel-ready notifications from the foreground service and from an FCM push |
+| `hardware-wallet/transfer-to-spending.xml`, `transfer-to-spending-max-lsp-cap.xml`, `transfer-to-spending-node-warmup.xml`, `passphrase-transfer-to-spending.xml` | Hardware wallet Transfer To Spending (the `HardwareTransferToSpending` button is gone) |
+| `notification-permission/receive-cjit-confirm-notification-toggle.xml`, `receive-cjit-liquidity-notification-toggle.xml`, `transfer-spending-confirm-notification-toggle.xml`, `toggle-off-opens-system-settings.xml` | The "Set up in background" toggle on the CJIT and Spending Confirm screens, which nothing navigates to now |
+| `transfer/spending-confirm-amount-change.xml` | Spending Confirm amount rebuilt at swipe |
+| `transfers/closed-channel-transfer-settles.xml` | Pending Transfer To Spending banner after the LSP closes the channel |
 
 ## Cross-platform
 
@@ -150,8 +181,6 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 
 | Here | On iOS |
 | --- | --- |
-| `cjit-notifications/cjit-foreground-service-notification.xml` | `cjit-background-notification.xml`, with the thousands-separator assertions dropped — the notification extension never formats an amount |
-| `notification-permission/toggle-off-opens-system-settings.xml` | `toggle-off-and-system-settings-route.xml` — iOS does not deep link into system settings, so it asserts the real route in through Settings ▸ Notifications |
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
@@ -170,7 +199,6 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `send/retry-original-dialog-style.xml` | not ported — iOS shows the two Retry original payment steps as native alerts |
 | `send/prepared-fee-recovery.md` | Same four manual fault cases and file on both platforms; the recipe records original-send versus replacement fee retention and iOS Max/identity-flow adaptations. These faults are not journey capabilities. |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
-| `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `onchain-receive/*` | port pending in synonymdev/bitkit-ios#588, which wires `onchainTransactionConfirmed` into the same received-sheet flow but carries no `journeys/` files. Two adaptations when it lands: iOS suppresses replayed historical receives with a `pendingRestoreActivitySeen` flag cleared by the first post-restore on-chain sync, not the one-hour block-timestamp guard used here, so a stale-confirmation step has to drive a restore instead of a clock; and iOS has no foreground-service path, so `confirmed-only-background-notification.xml` has no counterpart |
 | `backup/show-mnemonic-long-words.xml` | not ported — the long-word fit is an Android-only change (synonymdev/bitkit-android#633); whether iOS wraps long words at larger text sizes is unchecked |
 | `security/forgot-pin-nav-bar-inset.xml` | not ported — Android-only fix (synonymdev/bitkit-android#1572): the Android sheet host adds no navigation-bar inset, so each sheet screen pads itself. iOS sheets keep their content inside the bottom safe area |
@@ -185,7 +213,6 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `deeplinks/screen-deeplink.xml`, `deeplinks/sheet-deeplink.xml` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `shop/gift-card-category-titles.xml` | not ported — iOS still hardcodes the category names, and its route in has no screen deeplink |
-| `amount-limits/transfer-spending-preset-delete.xml` | not ported yet — the same fix shipped in synonymdev/bitkit-ios#289, so this one should port |
 | `app-update/critical-update-onboarding.xml` | not ported yet — iOS already blocks at the top level in `AppScene`, so the journey applies there once written |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `home/timed-reminders-do-not-interrupt.xml` | paired draft in synonymdev/bitkit-ios#1013; the journey name and actions match, but iOS device verification is incomplete. Android resumes Home after permission prompts and background/foreground; iOS uses primary-screen lifecycle callbacks and explicit rechecks. |
@@ -193,13 +220,13 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `receive/receive-auto-tab-selection.xml` | not ported — the Auto tab override fix is Android-only so far; iOS parity not checked |
 | `security/pin-lock-on-resume.xml` | not ported yet — iOS already clears the PIN verification on entering the background, so the journey applies; it lands with the iOS side of synonymdev/bitkit-android#1298 |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
+| `channels-closing/channels-closing-notice.xml` | port pending in synonymdev/bitkit-ios#1097 — same file, journey name and steps; the iOS views take the `ChannelsClosingBanner` and `ChannelsClosingNotice` identifiers, and the date is a placeholder constant until the shutdown date is final |
+| `receive/receive-onchain-only-without-channel.xml` | port pending in synonymdev/bitkit-ios#1097 — same file, journey name and steps; Android asserts the absence of `Tab-spending` and of the Spend suggestion card (`Suggestion-lightning`) by identifier, iOS cards expose no identifier, so read them from a screenshot |
 | `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | `transfer/transfer-to-savings-returns-home.xml` | not ported — iOS already resets navigation to home on the same OK, so the journey has no iOS counterpart yet |
 | `lnurl/lnurl-pay-comment-note.xml` | not ported — bitkit-ios has not been checked for keeping the LNURL-pay comment on the activity |
 | `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
-| `transfer/spending-confirm-amount-change.xml` | same file — both platforms show the same "Fees changed" info toast; iOS has no app-log step, and closing the received sheet re-sizes its Spending Confirm, so the lower amounts can show before the swipe |
-| — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
 
@@ -258,6 +285,8 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Confirm mnemonic selected slot | `SelectedWord-<n>` | — *(no identifier on `ConfirmWordView` rows)* |
 | Widgets intro screen container | — | `WidgetsOnboarding` |
 | Home suggestion cards | `Suggestion-<id>` | — *(cards expose no identifier)* |
+| Channels closing banner on Home | `ChannelsClosingBanner` | `ChannelsClosingBanner` *(to match when synonymdev/bitkit-ios#1097 lands)* |
+| Channels closing notice on the Spending wallet | `ChannelsClosingNotice` | `ChannelsClosingNotice` *(to match when synonymdev/bitkit-ios#1097 lands)* |
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
 | Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<period>` *(`-one-time` for a one-off)* |
 | Payment Request detail screen | `PaymentRequestDetailsScreen` | `PaymentRequestDetailScreen` |

@@ -26,8 +26,10 @@ recovery phrase, and what the app is allowed to upload while that restore is sti
 3. **Fund through the staging LSP**, as the top-level README describes:
    `./lsp POST /regtest/chain/deposit '{"address":"<savings addr>","amountSat":500000}'` then
    `./lsp POST /regtest/chain/mine '{"count":3}'`. Give the wallet ~20s to sync.
-4. **The channel needs the node connected to the LSP.** On the spending amount screen the max starts
-   at `0` behind a spinner — wait for it to populate before entering an amount.
+4. **The channel is opened by hand.** This build cannot buy a channel from Blocktank
+   (synonymdev/bitkit-android#1669), so the journey opens a manual channel to the staging LSP node from
+   Lightning Connections. On the external amount screen the max starts at `0` behind a spinner — wait for
+   it to populate before entering an amount.
 
 ## Gotchas
 
@@ -52,7 +54,6 @@ recovery phrase, and what the app is allowed to upload while that restore is sti
 - Restore: `RestoreWallet`, `Word-<index>`, `RestoreButton`, `GetStartedButton`.
 - Receive: `Receive`, `ShowDetails`, `ReceiveCopyQR`.
 - Activity: `ActivityShort-<index>`, `ActivityTag`, `ActivityTags`, `AddTagInput`, `AddTagSave`.
-- Transfer: `ActivitySavings`, `TransferToSpending`, `TransferIntro-button`, `FundTransfer`,
-  `SpendingIntro-button`, `SpendingAmount`, `SpendingAmountContinue`, `GRAB`,
-  `TransferSuccess-button`.
+- Manual channel: `add_connection_button`, `FundManual`, `NodeIdInput`, `HostInput`, `PortInput`,
+  `ExternalContinue`, `ExternalAmount`, `ExternalAmountContinue`, `GRAB`, `ExternalSuccess`.
 - Lightning connections: `Channel`, `CloseConnection`, `CloseConnectionButton`, `ChannelsClosed`.

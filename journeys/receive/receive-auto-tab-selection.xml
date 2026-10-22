@@ -2,8 +2,10 @@
   <description>
     Verifies that the Receive sheet opens on the Auto tab without sliding to it, that a tab the user
     picks is not overridden by the Auto tab, and that a leftover invoice amount from an earlier Edit
-    Invoice session does not open the sheet on Savings. Requires a wallet with a usable spending
-    channel so the Auto tab is available once the Lightning node is running. The selected tab is
+    Invoice session does not open the sheet on Savings. Requires a wallet with an open, usable
+    Lightning channel with inbound capacity so the Auto tab is available once the Lightning node is
+    running; this build cannot buy one from Blocktank (synonymdev/bitkit-android#1669), see ../README.md,
+    Getting a Lightning channel. Without a channel the sheet shows Savings only. The selected tab is
     shown only by its underline, which `android layout` does not expose, so tab assertions need a
     screenshot; the Auto tab's presence can be read from the testTag "Tab-auto". The underline itself
     crossfades over 200 ms even when the switch is instant, so the two steps that check for an

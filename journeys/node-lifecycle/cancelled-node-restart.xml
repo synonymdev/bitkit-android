@@ -15,7 +15,10 @@
     rebuild the node with `restartWithRgsServer`, which takes the identical cancel-and-recover path.
     A cancelled change is never persisted, so the run leaves the emulator on the default URL.
     Precondition: onboarded dev debug build (`to.bitkit.dev`) with dev mode on, a usable Lightning
-    channel with inbound capacity, the configured Electrum server reachable, the default RGS
+    channel with inbound capacity (this build cannot buy one from Blocktank, so install a build from
+    before synonymdev/bitkit-android#1669, open a channel with Transfer To Spending, then install this
+    build over it; a manual channel has no inbound capacity, see ../README.md, Getting a Lightning
+    channel), the configured Electrum server reachable, the default RGS
     snapshot server reachable, and the regtest LSP reachable. Building the node takes several
     seconds on the emulator, which is the window the back press must land in. The lifecycle lines
     are only in the app log, not in `android layout`; read `files/logs/` through `run-as`, and list
