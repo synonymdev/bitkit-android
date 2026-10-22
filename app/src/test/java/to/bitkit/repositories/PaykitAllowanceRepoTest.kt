@@ -377,18 +377,47 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `offers are accepted and announced only while the session is current`() = test {
+    fun `offers are neither accepted nor announced while the session cannot announce or continue`() = test {
         records = listOf(receivedProposal())
         acceptFlipsRecordToActive()
         sut.activate(identity)
 
-        assertTrue(sut.acceptOffersFromAllowers { false }.isEmpty())
+        assertTrue(sut.acceptOffersFromAllowers(canAnnounce = { false }).isEmpty())
+        assertTrue(sut.acceptOffersFromAllowers(canContinue = { false }).isEmpty())
+
         verify(sdk, never()).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `offer accepted as the app backgrounds is still announced and no further offer is accepted`() = test {
+        val secondOffer = fixtures.record(
+            allowanceId = "Y",
+            counterparty = fixtures.otherCounterpartyKey,
+            localRole = AllowanceLocalRole.ALLOWEE,
+            state = AllowanceLifecycleState.PROPOSED,
+            proposedByMe = false,
+        )
+        records = listOf(receivedProposal(), secondOffer)
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer { records.first() }
+        sut.activate(identity)
 
         var checks = 0
-        val endedDuringAccept = sut.acceptOffersFromAllowers { ++checks == 1 }
+        val announced = sut.acceptOffersFromAllowers(canContinue = { ++checks == 1 })
 
-        assertTrue(endedDuringAccept.isEmpty(), "An accept that outlived its session is not announced")
+        assertEquals(1, announced.size, "An offer already accepted is announced, since it is never announced later")
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `offer accepted while the profile is being deleted is not announced`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+
+        var checks = 0
+        val announced = sut.acceptOffersFromAllowers(canAnnounce = { ++checks == 1 })
+
+        assertTrue(announced.isEmpty(), "An accept that outlived its session is not announced")
         verify(sdk).acceptAllowance(fixtures.counterpartyKey, ALLOWANCE_ID, 1uL)
     }
 

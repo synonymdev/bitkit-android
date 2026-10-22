@@ -282,14 +282,16 @@ class PaykitAllowanceRepo @Inject constructor(
 
     /**
      * Accepts the offers that make this wallet the allowee and returns the ones now active so the caller can tell the
-     * user. A failed accept stays unanswered and is tried again on the next refresh. Stops, and returns nothing to
-     * announce, once the identity it started with is gone or [canContinue] turns false.
+     * user. A failed accept stays unanswered and is tried again on the next refresh. Stops accepting once
+     * [canContinue] turns false and still returns what it accepted, since an active allowance is never announced
+     * later; returns nothing to announce once the identity it started with is gone or [canAnnounce] turns false.
      */
     suspend fun acceptOffersFromAllowers(
+        canAnnounce: () -> Boolean = { true },
         canContinue: () -> Boolean = { true },
     ): List<PaykitAllowanceEntry> = withContext(ioDispatcher) {
         val identity = activeIdentity ?: return@withContext emptyList()
-        val isCurrent = { activeIdentity == identity && canContinue() }
+        val isCurrent = { activeIdentity == identity && canAnnounce() }
         val offers = _entries.value.filter { entry ->
             val answerable = entry.allowances.filter { it.isAnswerable }
             answerable.isNotEmpty() && answerable.all { it.isOfferFromAllower }
@@ -299,7 +301,7 @@ class PaykitAllowanceRepo @Inject constructor(
         try {
             val accepted = mutableListOf<PaykitAllowanceEntry>()
             for (offer in offers) {
-                if (!isCurrent()) return@withContext emptyList()
+                if (!isCurrent() || !canContinue()) break
                 // Answers the entry that was checked, so an ask that joined it since is never accepted here.
                 respond(offer) { acceptProposal(it) }
                     .onSuccess { accepted += offer }

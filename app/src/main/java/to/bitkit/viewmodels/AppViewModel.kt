@@ -1189,10 +1189,10 @@ class AppViewModel @Inject constructor(
             releaseCoverage()
         }
         return result.onSuccess {
-            val acceptedOffers = paykitAllowanceRepo.acceptOffersFromAllowers {
-                !privatePaykitRepo.isProfileDeletionInProgress.value &&
-                    !(onlyWhileActive && isPaymentRequestPollingStopped.value)
-            }
+            val acceptedOffers = paykitAllowanceRepo.acceptOffersFromAllowers(
+                canAnnounce = { !privatePaykitRepo.isProfileDeletionInProgress.value },
+                canContinue = { !(onlyWhileActive && isPaymentRequestPollingStopped.value) },
+            )
             announceAcceptedAllowanceOffers(acceptedOffers)
             if (processAllowanceRequests()) paykitPaymentRequestRepo.refresh()
             presentNextIncomingPaykitPaymentRequest()
