@@ -1299,6 +1299,7 @@
     <string name="usdt__payment_sent">USDT Sent</string>
     <string name="usdt__pending">Pending</string>
     <string name="usdt__receive_amount_title">Amount</string>
+    <string name="usdt__receive_copied">Address copied to clipboard.\nMake sure USDT is only sent on the selected network.</string>
     <string name="usdt__receive_estimate">Receive (est)</string>
     <string name="usdt__receive_fee">Fees</string>
     <string name="usdt__receive_fees_title">Estimated Fees</string>

@@ -830,6 +830,7 @@
     <string name="usdt__payment_sent">تم إرسال USDT</string>
     <string name="usdt__pending">معلق</string>
     <string name="usdt__receive_amount_title">المبلغ</string>
+    <string name="usdt__receive_copied">تم نسخ العنوان إلى الحافظة.\nتأكد من إرسال USDT على الشبكة المحددة فقط.</string>
     <string name="usdt__receive_estimate">الاستلام (تقديري)</string>
     <string name="usdt__receive_fee">الرسوم</string>
     <string name="usdt__receive_fees_title">الرسوم المقدّرة</string>

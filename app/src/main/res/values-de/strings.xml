@@ -842,6 +842,7 @@
     <string name="usdt__payment_sent">USDT gesendet</string>
     <string name="usdt__pending">Ausstehend</string>
     <string name="usdt__receive_amount_title">Betrag</string>
+    <string name="usdt__receive_copied">Adresse in die Zwischenablage kopiert.\nStelle sicher, dass USDT nur über das ausgewählte Netzwerk gesendet wird.</string>
     <string name="usdt__receive_estimate">Empfang (ca.)</string>
     <string name="usdt__receive_fee">Gebühren</string>
     <string name="usdt__receive_fees_title">Geschätzte Gebühren</string>

@@ -832,6 +832,7 @@
     <string name="usdt__payment_sent">Στάλθηκαν USDT</string>
     <string name="usdt__pending">Εκκρεμεί</string>
     <string name="usdt__receive_amount_title">Ποσό</string>
+    <string name="usdt__receive_copied">Η διεύθυνση αντιγράφηκε στο πρόχειρο.\nΒεβαιώσου ότι το USDT αποστέλλεται μόνο μέσω του επιλεγμένου δικτύου.</string>
     <string name="usdt__receive_estimate">Λήψη (εκτίμ.)</string>
     <string name="usdt__receive_fee">Τέλη</string>
     <string name="usdt__receive_fees_title">Εκτιμώμενα τέλη</string>

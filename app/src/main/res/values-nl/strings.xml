@@ -839,6 +839,7 @@
     <string name="usdt__payment_sent">USDT verzonden</string>
     <string name="usdt__pending">In behandeling</string>
     <string name="usdt__receive_amount_title">Bedrag</string>
+    <string name="usdt__receive_copied">Adres gekopieerd naar klembord.\nZorg ervoor dat USDT alleen via het geselecteerde netwerk wordt verstuurd.</string>
     <string name="usdt__receive_estimate">Ontvangst (ca.)</string>
     <string name="usdt__receive_fee">Vergoedingen</string>
     <string name="usdt__receive_fees_title">Geschatte vergoedingen</string>

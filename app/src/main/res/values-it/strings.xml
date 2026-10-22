@@ -843,6 +843,7 @@
     <string name="usdt__payment_sent">USDT Inviati</string>
     <string name="usdt__pending">In attesa</string>
     <string name="usdt__receive_amount_title">Importo</string>
+    <string name="usdt__receive_copied">Indirizzo copiato negli appunti.\nAssicurati che USDT venga inviato solo sulla rete selezionata.</string>
     <string name="usdt__receive_estimate">Ricevi (stima)</string>
     <string name="usdt__receive_fee">Commissioni</string>
     <string name="usdt__receive_fees_title">Commissioni Stimate</string>

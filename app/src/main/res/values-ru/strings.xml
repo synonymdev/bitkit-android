@@ -865,6 +865,7 @@
     <string name="usdt__payment_sent">Отправлено USDT</string>
     <string name="usdt__pending">В ожидании</string>
     <string name="usdt__receive_amount_title">Сумма</string>
+    <string name="usdt__receive_copied">Адрес скопирован в буфер обмена.\nОтправляйте USDT только через выбранную сеть.</string>
     <string name="usdt__receive_estimate">К получению (≈)</string>
     <string name="usdt__receive_fee">Комиссии</string>
     <string name="usdt__receive_fees_title">Примерные Комиссии</string>
