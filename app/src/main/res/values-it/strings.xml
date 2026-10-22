@@ -110,8 +110,12 @@
     <string name="lightning__channel_point">Punto del canale</string>
     <string name="lightning__channels_closing_banner">I CANALI CHIUDONO IL %1$s</string>
     <string name="lightning__channels_closing_notice">I tuoi canali Lightning verranno chiusi il %1$s. Trasferisci il saldo di spesa ai risparmi prima di allora.</string>
-    <string name="lightning__channels_unavailable__text">Bitkit non offre più nuovi canali Lightning, quindi non puoi trasferire fondi dai risparmi alla spesa.</string>
-    <string name="lightning__channels_unavailable__title">Nuovi canali non disponibili</string>
+    <string name="lightning__channels_unavailable__button">Apri canale</string>
+    <string name="lightning__channels_unavailable__text">Purtroppo il servizio per trasferire automaticamente fondi al saldo di spesa non è più disponibile. Puoi ancora aprire manualmente un canale Lightning per ricaricare il saldo di spesa.</string>
+    <string name="lightning__channels_unavailable__title">Nessun trasferimento automatico</string>
+    <string name="lightning__choose_lsp__explanation">Quando ti danno un QR per collegare o riscattare il canale Lightning, tocca qui sotto per scansionare o incollare il QR.</string>
+    <string name="lightning__choose_lsp__text">Ordina un canale da un fornitore di servizi Lightning (LSP). Qui sotto trovi alcune opzioni. Bitkit non le gestisce, non le approva e non le supporta.</string>
+    <string name="lightning__choose_lsp__title">Scegli un\n&lt;accent&gt;fornitore Lightning&lt;/accent&gt;</string>
     <string name="lightning__close_button">Chiudi</string>
     <string name="lightning__close_conn">Chiusura Connessione</string>
     <string name="lightning__close_error">Trasferimento non riuscito</string>

@@ -1,8 +1,10 @@
 package to.bitkit.ui.sheets
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -23,6 +25,7 @@ import to.bitkit.models.formatChannelsCloseDate
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -34,10 +37,12 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun ChannelsUnavailableSheet(
     showCloseDate: Boolean,
+    onOpenChannel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     Content(
         showCloseDate = showCloseDate,
+        onOpenChannel = onOpenChannel,
         onDismiss = onDismiss,
     )
 }
@@ -46,6 +51,7 @@ fun ChannelsUnavailableSheet(
 private fun Content(
     showCloseDate: Boolean,
     modifier: Modifier = Modifier,
+    onOpenChannel: () -> Unit = {},
     onDismiss: () -> Unit = {},
 ) {
     val locale = LocalConfiguration.current.locales[0]
@@ -94,13 +100,25 @@ private fun Content(
             )
         }
 
-        PrimaryButton(
-            text = stringResource(R.string.common__ok),
-            onClick = onDismiss,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("ChannelsUnavailableButton")
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            SecondaryButton(
+                text = stringResource(R.string.common__cancel),
+                onClick = onDismiss,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("ChannelsUnavailableButton")
+            )
+            PrimaryButton(
+                text = stringResource(R.string.lightning__channels_unavailable__button),
+                onClick = onOpenChannel,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("ChannelsUnavailableOpenChannel")
+            )
+        }
 
         VerticalSpacer(16.dp)
     }

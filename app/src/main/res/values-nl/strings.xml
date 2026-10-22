@@ -110,8 +110,12 @@
     <string name="lightning__channel_point">Kanaalpunt</string>
     <string name="lightning__channels_closing_banner">KANALEN SLUITEN OP %1$s</string>
     <string name="lightning__channels_closing_notice">Je Lightning-kanalen worden op %1$s gesloten. Boek je bestedingssaldo vóór die datum over naar spaargeld.</string>
-    <string name="lightning__channels_unavailable__text">Bitkit biedt geen nieuwe Lightning-kanalen meer aan, dus je kunt geen geld van spaargeld naar je bestedingssaldo overboeken.</string>
-    <string name="lightning__channels_unavailable__title">Nieuwe kanalen niet beschikbaar</string>
+    <string name="lightning__channels_unavailable__button">Kanaal openen</string>
+    <string name="lightning__channels_unavailable__text">Helaas is de dienst om automatisch geld naar je bestedingssaldo over te boeken niet meer beschikbaar. Je kunt nog steeds handmatig een Lightning-kanaal openen om je bestedingssaldo aan te vullen.</string>
+    <string name="lightning__channels_unavailable__title">Geen automatische overboeking</string>
+    <string name="lightning__choose_lsp__explanation">Als je een QR krijgt om het Lightning-kanaal te verbinden of te claimen, tik dan hieronder om de QR te scannen of te plakken.</string>
+    <string name="lightning__choose_lsp__text">Bestel een kanaal bij een Lightning Service Provider (LSP). Hieronder staan enkele opties. Bitkit beheert, onderschrijft of ondersteunt deze niet.</string>
+    <string name="lightning__choose_lsp__title">Kies een\n&lt;accent&gt;Lightning-aanbieder&lt;/accent&gt;</string>
     <string name="lightning__close_button">Sluiten</string>
     <string name="lightning__close_conn">Verbinding sluiten</string>
     <string name="lightning__close_error">Overboeking mislukt</string>

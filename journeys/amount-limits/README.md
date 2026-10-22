@@ -54,5 +54,5 @@ no button navigates to them.
 `transfer-spending-over-max.xml`, `transfer-spending-advanced-over-max.xml` and
 `transfer-spending-preset-delete.xml` were retired because Blocktank channel purchases were removed
 (synonymdev/bitkit-android#1669). Their route started at the Savings wallet's "Transfer To Spending"
-button, which now opens the New Channels Unavailable sheet instead of the transfer flow. Their tags (`TransferToSpending`, `SpendingAmount*`, `SpendingAdvanced*`) are no
+button, which now opens the No automatic transfer sheet instead of the transfer flow. Their tags (`TransferToSpending`, `SpendingAmount*`, `SpendingAdvanced*`) are no
 longer reachable from the UI.

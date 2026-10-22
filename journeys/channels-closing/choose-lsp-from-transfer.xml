@@ -1,0 +1,25 @@
+<journey name="choose lsp from transfer to spending">
+  <description>
+    Verifies the way to a channel that is left after Blocktank channel purchases were removed
+    (synonymdev/bitkit-android#1669). Transfer To Spending opens the "No automatic transfer" sheet, whose
+    "Open Channel" button (testTag "ChannelsUnavailableOpenChannel") opens the "Choose a Lightning provider"
+    screen. That screen lists third-party providers (testTag "ChooseLspProvider"), and each row opens the
+    provider's own channel order page in the browser. Its footer has "Manual Setup" (testTag
+    "ChooseLspManual"), which opens the manual channel setup with an empty node, and "QR Code" (testTag
+    "ChooseLspScan"), which opens the scanner for the provider's LNURL channel or node QR. No step creates a
+    Blocktank order. The design (Figma, Bitkit - Final Review v63 › Third-party LSP › Choose LSP) shows the
+    provider page embedded in the app; this build opens it in the browser instead.
+
+    Precondition: onboarded dev wallet with a positive on-chain Savings balance, so the Savings wallet shows
+    "Transfer To Spending". A channel is not needed. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the Savings balance card (testTag "ActivitySavings"), then "Transfer To Spending" (testTag "TransferToSpending")</action>
+    <action>Verify the sheet (testTag "ChannelsUnavailableSheet") shows the title "No automatic transfer", then tap "Open Channel" (testTag "ChannelsUnavailableOpenChannel")</action>
+    <action>Verify the screen titled "Spending Balance" shows "CHOOSE A LIGHTNING PROVIDER", the text "Order a channel from a Lightning Service Provider (LSP). Below are some options. Bitkit does not run, endorse, or support these." and four provider rows (testTag "ChooseLspProvider"): "LNBIG", "ZEUS Olympus", "Megalithic" and "Amboss Magma"</action>
+    <action>Verify the explanation "When they give you a QR to connect or claim the Lightning channel, tap below to scan or paste the QR." and the buttons "Manual Setup" (testTag "ChooseLspManual") and "QR Code" (testTag "ChooseLspScan") are visible</action>
+    <action>Tap "Megalithic" and verify the browser opens https://megalithic.me/get_a_channel, then return to Bitkit and verify the provider screen is still shown</action>
+    <action>Tap "QR Code" (testTag "ChooseLspScan") and verify the scanner sheet opens, then close it</action>
+    <action>Tap "Manual Setup" (testTag "ChooseLspManual") and verify the manual connection screen shows empty node id (testTag "NodeIdInput"), host (testTag "HostInput") and port (testTag "PortInput") fields</action>
+  </actions>
+</journey>

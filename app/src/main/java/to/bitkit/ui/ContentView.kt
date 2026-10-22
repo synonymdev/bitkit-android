@@ -132,6 +132,7 @@ import to.bitkit.ui.screens.subscriptions.CreateSubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionDetailScreen
 import to.bitkit.ui.screens.subscriptions.SubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionsScreen
+import to.bitkit.ui.screens.transfer.ChooseLspScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen
@@ -661,6 +662,10 @@ fun ContentView(
                                 .collectAsStateWithLifecycle(initialValue = false)
                             ChannelsUnavailableSheet(
                                 showCloseDate = hasTrustedChannels,
+                                onOpenChannel = {
+                                    appViewModel.hideSheet()
+                                    navController.navigateTo(Routes.ChooseLsp)
+                                },
                                 onDismiss = { appViewModel.hideSheet() },
                             )
                         }
@@ -1160,6 +1165,13 @@ private fun RootNavHost(
                     onManual = { navController.navigateTo(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                     isGeoBlocked = isGeoBlocked,
+                )
+            }
+            deepLinkableComposable<Routes.ChooseLsp> {
+                ChooseLspScreen(
+                    onManualClick = { navController.navigateTo(Routes.ExternalNav) },
+                    onScanClick = { appViewModel.showScannerSheet() },
+                    onBackClick = { navController.popBackStack() },
                 )
             }
             deepLinkableComposable<Routes.FundingAdvanced> {
@@ -2477,6 +2489,9 @@ sealed interface Routes {
 
     @Serializable
     data object FundingAdvanced : Routes.DeepLinkable
+
+    @Serializable
+    data object ChooseLsp : Routes.DeepLinkable
 
     @Serializable
     data object ExternalNav : Routes.DeepLinkable

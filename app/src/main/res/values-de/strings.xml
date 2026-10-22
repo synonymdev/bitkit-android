@@ -101,8 +101,12 @@
     <string name="fee__custom__shortDescription">Abhängig von der Gebühr</string>
     <string name="lightning__channels_closing_banner">KANÄLE SCHLIESSEN AM %1$s</string>
     <string name="lightning__channels_closing_notice">Deine Lightning-Kanäle werden am %1$s geschlossen. Übertrage dein Guthaben vorher auf das Sparkonto.</string>
-    <string name="lightning__channels_unavailable__text">Bitkit bietet keine neuen Lightning-Kanäle mehr an, daher kannst du kein Guthaben vom Sparkonto auf das Ausgabenkonto übertragen.</string>
-    <string name="lightning__channels_unavailable__title">Neue Kanäle nicht verfügbar</string>
+    <string name="lightning__channels_unavailable__button">Kanal öffnen</string>
+    <string name="lightning__channels_unavailable__text">Leider ist der Dienst, der Guthaben automatisch auf dein Ausgabenkonto überträgt, nicht mehr verfügbar. Du kannst weiterhin manuell einen Lightning-Kanal öffnen, um dein Ausgabenkonto aufzuladen.</string>
+    <string name="lightning__channels_unavailable__title">Keine automatische Übertragung</string>
+    <string name="lightning__choose_lsp__explanation">Wenn du einen QR-Code zum Verbinden oder Einlösen des Lightning-Kanals erhältst, tippe unten, um ihn zu scannen oder einzufügen.</string>
+    <string name="lightning__choose_lsp__text">Bestelle einen Kanal bei einem Lightning Service Provider (LSP). Unten findest du einige Optionen. Bitkit betreibt, empfiehlt oder unterstützt diese nicht.</string>
+    <string name="lightning__choose_lsp__title">Wähle einen\n&lt;accent&gt;Lightning-Anbieter&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__title">Spending\n&lt;accent&gt;Balance&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Fülle dein Guthaben auf, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu genießen.</string>
     <string name="lightning__transfer_intro__button">Los geht\'s</string>

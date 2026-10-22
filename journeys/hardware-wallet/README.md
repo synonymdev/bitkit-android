@@ -75,7 +75,7 @@ the other two rely on, and `passphrase-settings-remove.xml` removes it again.
 | `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, full connect flow (Intro → Searching → Found → Paired → Finish) re-pairs |
 | `connect-flow.xml` | Settings Add button → connect flow with an edited Label Funds → paired device count + name |
 | `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, rename sheet, Add button sheet/back dismiss, per-row delete confirm + re-pair |
-| `detail-overview.xml` | Detail screen overview, Transfer To Spending opens the New Channels Unavailable sheet, activity, Remove confirm + forget |
+| `detail-overview.xml` | Detail screen overview, Transfer To Spending opens the No automatic transfer sheet, activity, Remove confirm + forget |
 | `send-onchain.xml` | Normal Send flow funded by Trezor: source selection, guarded preparation, device signing, broadcast, success, and activity |
 | `receive-onchain.xml` | Trezor Receive tab: current address and QR display plus exact on-device address verification |
 | `passphrase-pairing.xml` | Passphrase button on Paired → Enter Passphrase → Passphrase Funds Found; second home tile, own label, no passphrase in logs |
@@ -135,7 +135,7 @@ synonymdev/bitkit-android#1669.
 `transfer-to-spending.xml`, `transfer-to-spending-max-lsp-cap.xml`,
 `transfer-to-spending-node-warmup.xml` and `passphrase-transfer-to-spending.xml` were retired because
 Blocktank channel purchases were removed (synonymdev/bitkit-android#1669): the hardware wallet detail
-screen's Transfer To Spending button (`HardwareTransferToSpending`) now opens the New Channels Unavailable
+screen's Transfer To Spending button (`HardwareTransferToSpending`) now opens the No automatic transfer
 sheet instead of the transfer flow. The
 `HardwareTransfer*` and `HwTransferPassphrase*` screens and tags are still in the nav graph but nothing
 in the UI reaches them.

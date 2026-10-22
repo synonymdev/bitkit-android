@@ -254,8 +254,12 @@
     <string name="lightning__channel_point">Channel point</string>
     <string name="lightning__channels_closing_banner">CHANNELS CLOSE ON %1$s</string>
     <string name="lightning__channels_closing_notice">Your Lightning channels will be closed on %1$s. Move your spending balance to savings before then.</string>
-    <string name="lightning__channels_unavailable__text">Bitkit no longer offers new Lightning channels, so you can\'t move funds from savings to spending.</string>
-    <string name="lightning__channels_unavailable__title">New Channels Unavailable</string>
+    <string name="lightning__channels_unavailable__button">Open Channel</string>
+    <string name="lightning__channels_unavailable__text">Unfortunately, the service to automatically transfer funds to your spending balance is no longer available. You can still manually open a Lightning channel to top up your spending balance.</string>
+    <string name="lightning__channels_unavailable__title">No automatic transfer</string>
+    <string name="lightning__choose_lsp__explanation">When they give you a QR to connect or claim the Lightning channel, tap below to scan or paste the QR.</string>
+    <string name="lightning__choose_lsp__text">Order a channel from a Lightning Service Provider (LSP). Below are some options. Bitkit does not run, endorse, or support these.</string>
+    <string name="lightning__choose_lsp__title">Choose a\n&lt;accent&gt;Lightning provider&lt;/accent&gt;</string>
     <string name="lightning__close_button">Close</string>
     <string name="lightning__close_conn">Close Connection</string>
     <string name="lightning__close_error">Transfer Failed</string>

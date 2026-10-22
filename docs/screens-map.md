@@ -129,6 +129,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
+| ChooseLspScreen.kt | `todo` |
 | FundingAdvancedScreen.kt | Manual Setup › Lightning Manual Setup |
 | FundingScreen.kt | Lightning Onboarding From Suggestion Card › Lightning onboarding Fund |
 | LiquidityScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Receiving Capacity |

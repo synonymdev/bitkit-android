@@ -102,8 +102,12 @@
     <string name="fee__custom__shortDescription">Zależy od opłaty</string>
     <string name="lightning__channels_closing_banner">KANAŁY ZOSTANĄ ZAMKNIĘTE %1$s</string>
     <string name="lightning__channels_closing_notice">Twoje kanały Lightning zostaną zamknięte %1$s. Przed tym terminem prześlij saldo wydatków na oszczędności.</string>
-    <string name="lightning__channels_unavailable__text">Bitkit nie oferuje już nowych kanałów Lightning, więc nie możesz przesyłać środków z oszczędności na wydatki.</string>
-    <string name="lightning__channels_unavailable__title">Nowe kanały niedostępne</string>
+    <string name="lightning__channels_unavailable__button">Otwórz kanał</string>
+    <string name="lightning__channels_unavailable__text">Niestety usługa automatycznego przesyłania środków na saldo wydatków nie jest już dostępna. Nadal możesz ręcznie otworzyć kanał Lightning, aby doładować saldo wydatków.</string>
+    <string name="lightning__channels_unavailable__title">Brak automatycznego przesłania</string>
+    <string name="lightning__choose_lsp__explanation">Gdy otrzymasz kod QR do połączenia lub odebrania kanału Lightning, dotknij poniżej, aby zeskanować lub wkleić kod QR.</string>
+    <string name="lightning__choose_lsp__text">Zamów kanał u dostawcy usług Lightning (LSP). Poniżej kilka opcji. Bitkit ich nie prowadzi, nie poleca ani nie wspiera.</string>
+    <string name="lightning__choose_lsp__title">Wybierz\n&lt;accent&gt;dostawcę Lightning&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__title">Saldo \n&lt;accent&gt;Wydatków&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Zasil swoje saldo wydatków, aby cieszyć się natychmiastowymi i tanimi transakcjami z przyjaciółmi, rodziną i sprzedawcami.</string>
     <string name="lightning__transfer_intro__button">Rozpocznij</string>

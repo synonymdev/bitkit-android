@@ -110,7 +110,7 @@ exit status, so an empty response there is not a failure. Give the wallet ~20s t
 ### Getting a Lightning channel
 
 Blocktank is winding down, and this build no longer buys channels from it (synonymdev/bitkit-android#1669):
-the Transfer To Spending buttons now open a "New Channels Unavailable" sheet instead of the transfer flow, and the Receive sheet's CJIT button and gift codes are gone. A journey that needs a
+the Transfer To Spending buttons now open a "No automatic transfer" sheet instead of the transfer flow, and the Receive sheet's CJIT button and gift codes are gone. A journey that needs a
 Lightning channel as its precondition says "a wallet with an open Lightning channel"; get one in either way:
 
 - Install a build from before that change (master before synonymdev/bitkit-android#1669), open a channel with
@@ -163,7 +163,7 @@ buys a channel went with them. They are listed here rather than left as stale fi
 | --- | --- |
 | `amount-limits/transfer-spending-over-max.xml`, `transfer-spending-advanced-over-max.xml`, `transfer-spending-preset-delete.xml` | Transfer To Spending amount and Receiving Capacity number pads |
 | `cjit-notifications/cjit-foreground-service-notification.xml`, `cjit-push-single-notification.xml` | CJIT channel-ready notifications from the foreground service and from an FCM push |
-| `hardware-wallet/transfer-to-spending.xml`, `transfer-to-spending-max-lsp-cap.xml`, `transfer-to-spending-node-warmup.xml`, `passphrase-transfer-to-spending.xml` | Hardware wallet Transfer To Spending (the `HardwareTransferToSpending` button now opens the New Channels Unavailable sheet instead) |
+| `hardware-wallet/transfer-to-spending.xml`, `transfer-to-spending-max-lsp-cap.xml`, `transfer-to-spending-node-warmup.xml`, `passphrase-transfer-to-spending.xml` | Hardware wallet Transfer To Spending (the `HardwareTransferToSpending` button now opens the No automatic transfer sheet instead) |
 | `notification-permission/receive-cjit-confirm-notification-toggle.xml`, `receive-cjit-liquidity-notification-toggle.xml`, `transfer-spending-confirm-notification-toggle.xml`, `toggle-off-opens-system-settings.xml` | The "Set up in background" toggle on the CJIT and Spending Confirm screens, which nothing navigates to now |
 | `transfer/spending-confirm-amount-change.xml` | Spending Confirm amount rebuilt at swipe |
 | `transfers/closed-channel-transfer-settles.xml` | Pending Transfer To Spending banner after the LSP closes the channel |
@@ -221,6 +221,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `security/pin-lock-on-resume.xml` | not ported yet — iOS already clears the PIN verification on entering the background, so the journey applies; it lands with the iOS side of synonymdev/bitkit-android#1298 |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
 | `channels-closing/channels-closing-notice.xml` | port pending in synonymdev/bitkit-ios#1097 — same file, journey name and steps; the iOS views take the `ChannelsClosingBanner` and `ChannelsClosingNotice` identifiers, and the date is a placeholder constant until the shutdown date is final |
+| `channels-closing/choose-lsp-from-transfer.xml` | port pending in synonymdev/bitkit-ios#1097 — same file, journey name and steps; the provider list and its URLs must match the Android `THIRD_PARTY_LSPS` |
 | `receive/receive-onchain-only-without-channel.xml` | port pending in synonymdev/bitkit-ios#1097 — same file, journey name and steps; Android asserts the absence of `Tab-spending` and of the Spend suggestion card (`Suggestion-lightning`) by identifier, iOS cards expose no identifier, so read them from a screenshot |
 | `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | `transfer/transfer-to-savings-returns-home.xml` | not ported — iOS already resets navigation to home on the same OK, so the journey has no iOS counterpart yet |
@@ -287,9 +288,13 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Home suggestion cards | `Suggestion-<id>` | — *(cards expose no identifier)* |
 | Channels closing banner on Home | `ChannelsClosingBanner` | `ChannelsClosingBanner` *(to match when synonymdev/bitkit-ios#1097 lands)* |
 | Channels closing notice on the Spending wallet | `ChannelsClosingNotice` | `ChannelsClosingNotice` *(to match when synonymdev/bitkit-ios#1097 lands)* |
-| New Channels Unavailable sheet | `ChannelsUnavailableSheet` | `ChannelsUnavailableSheet` *(to match when synonymdev/bitkit-ios#1097 lands)* |
+| No automatic transfer sheet | `ChannelsUnavailableSheet` | `ChannelsUnavailableSheet` *(to match when synonymdev/bitkit-ios#1097 lands)* |
 | Channel close date line in that sheet | `ChannelsUnavailableCloseDate` | `ChannelsUnavailableCloseDate` *(to match when synonymdev/bitkit-ios#1097 lands)* |
-| OK button in that sheet | `ChannelsUnavailableButton` | `ChannelsUnavailableButton` *(to match when synonymdev/bitkit-ios#1097 lands)* |
+| Cancel button in that sheet | `ChannelsUnavailableButton` | `ChannelsUnavailableButton` *(to match when synonymdev/bitkit-ios#1097 lands)* |
+| Open Channel button in that sheet | `ChannelsUnavailableOpenChannel` | `ChannelsUnavailableOpenChannel` *(to match when synonymdev/bitkit-ios#1097 lands)* |
+| Provider row on Choose a Lightning provider | `ChooseLspProvider` | `ChooseLspProvider` *(to match when synonymdev/bitkit-ios#1097 lands)* |
+| Manual Setup on Choose a Lightning provider | `ChooseLspManual` | `ChooseLspManual` *(to match when synonymdev/bitkit-ios#1097 lands)* |
+| QR Code on Choose a Lightning provider | `ChooseLspScan` | `ChooseLspScan` *(to match when synonymdev/bitkit-ios#1097 lands)* |
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
 | Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<period>` *(`-one-time` for a one-off)* |
 | Payment Request detail screen | `PaymentRequestDetailsScreen` | `PaymentRequestDetailScreen` |

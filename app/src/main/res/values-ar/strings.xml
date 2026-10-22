@@ -106,8 +106,12 @@
     <string name="lightning__channel_point">نقطة القناة</string>
     <string name="lightning__channels_closing_banner">تُغلق القنوات في %1$s</string>
     <string name="lightning__channels_closing_notice">ستُغلق قنوات Lightning الخاصة بك في %1$s. انقل رصيد الإنفاق إلى المدخرات قبل ذلك.</string>
-    <string name="lightning__channels_unavailable__text">لم يعد Bitkit يوفّر قنوات Lightning جديدة، لذا لا يمكنك نقل الأموال من المدخرات إلى الإنفاق.</string>
-    <string name="lightning__channels_unavailable__title">القنوات الجديدة غير متاحة</string>
+    <string name="lightning__channels_unavailable__button">فتح قناة</string>
+    <string name="lightning__channels_unavailable__text">للأسف، لم تعد خدمة التحويل التلقائي للأموال إلى رصيد الإنفاق متاحة. لا يزال بإمكانك فتح قناة Lightning يدويًا لتعبئة رصيد الإنفاق.</string>
+    <string name="lightning__channels_unavailable__title">لا يوجد تحويل تلقائي</string>
+    <string name="lightning__choose_lsp__explanation">عندما يقدّمون لك رمز QR للاتصال بقناة Lightning أو المطالبة بها، اضغط أدناه لمسح رمز QR أو لصقه.</string>
+    <string name="lightning__choose_lsp__text">اطلب قناة من مزوّد خدمة Lightning ‏(LSP). فيما يلي بعض الخيارات. لا يدير Bitkit هذه الخدمات ولا يؤيدها ولا يدعمها.</string>
+    <string name="lightning__choose_lsp__title">اختر\n&lt;accent&gt;مزوّد Lightning&lt;/accent&gt;</string>
     <string name="lightning__close_button">إغلاق</string>
     <string name="lightning__close_conn">إغلاق الاتصال</string>
     <string name="lightning__close_error">فشل التحويل</string>
