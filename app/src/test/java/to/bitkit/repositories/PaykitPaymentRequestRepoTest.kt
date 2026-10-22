@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -243,9 +244,12 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val usdtPayments = mock<PaykitUsdtPaymentRepo>()
     private val subscriptionNotificationScheduler = mock<PaykitSubscriptionNotificationScheduler>()
     private var schedulerOriginMillis = 0L
+
+    /** Wall-clock jump on top of scheduler time, as after a suspend, which no scheduled job sees. */
+    private var clockJumpMillis = 0L
     private val clock = object : Clock {
         override fun now(): Instant = START_TIME.plus(
-            (testDispatcher.scheduler.currentTime - schedulerOriginMillis).milliseconds,
+            (testDispatcher.scheduler.currentTime - schedulerOriginMillis + clockJumpMillis).milliseconds,
         )
     }
     private lateinit var sut: PaykitPaymentRequestRepo
@@ -1011,6 +1015,18 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `requests created by a paykit server are merchant requests`() {
+        fun parse(record: PaymentRequestRecord) =
+            (record.parseIncomingPaykitPaymentRequest(START_TIME) as PaykitPaymentRequestParseResult.Parsed).request
+
+        assertFalse(parse(paymentRequestRecord()).isMerchantRequest)
+        assertTrue(parse(paymentRequestRecord().copy(proposalAppId = "paykit-server")).isMerchantRequest)
+        assertFalse(parse(paymentRequestRecord().copy(proposalAppId = "marketplace")).isMerchantRequest)
+        val outgoing = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalAppId = "paykit-server")
+        assertFalse(requireNotNull(outgoing.toPaykitPaymentRequestHistory(START_TIME)).isMerchantRequest)
+    }
+
+    @Test
     fun `absolute payment deadlines preserve fractional seconds and include the deadline instant`() {
         val deadline = START_TIME + 123.milliseconds
         val record = paymentRequestRecord(paymentDeadline = PaymentDeadline.At(deadline.toString()))
@@ -1321,6 +1337,64 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `refresh after a clock jump past expiry reports the expired proposal`() = test {
+        val record = paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val reported = mutableListOf<List<PaykitPaymentRequest>>()
+        backgroundScope.launch { sut.expiredProposals.collect { reported += it } }
+        runCurrent()
+
+        clockJumpMillis = 10_000
+        sut.refresh().getOrThrow()
+        runCurrent()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(listOf(listOf(request.id)), reported.map { list -> list.map { it.id } })
+    }
+
+    @Test
+    fun `refresh crossing expiry leaves the report to the expiry timer`() = test {
+        val record = paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val reported = mutableListOf<List<PaykitPaymentRequest>>()
+        backgroundScope.launch { sut.expiredProposals.collect { reported += it } }
+        runCurrent()
+
+        // The clock passes expiry after the refresh reads its time and before the pending list is replaced.
+        // Mockito answers with Result's unboxed value, as the compiled suspend call expects.
+        whenever(usdtPayments.verifiedReceipts(any())).thenAnswer {
+            clockJumpMillis = 10_000
+            emptyList<Any>()
+        }
+        sut.refresh().getOrThrow()
+        runCurrent()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(listOf(listOf(request.id)), reported.map { list -> list.map { it.id } })
+    }
+
+    @Test
+    fun `expiry timer reports the incoming proposal that expired`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
+            listOf(paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())),
+        )
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val reported = mutableListOf<List<PaykitPaymentRequest>>()
+        backgroundScope.launch { sut.expiredProposals.collect { reported += it } }
+        runCurrent()
+
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        assertEquals(listOf(listOf(request.id)), reported.map { list -> list.map { it.id } })
+    }
+
+    @Test
     fun `outgoing request moves to expired history exactly when it expires`() = test {
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(
             listOf(
@@ -1492,6 +1566,41 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFalse(backgroundWork.isCompleted)
         sut.setPaymentSubmissionActive(false)
         backgroundWork.await()
+    }
+
+    @Test
+    fun `automatic acceptance saves this install as owner before it runs and keeps the request payable here`() = test {
+        val proposed = paymentRequestRecord()
+        val accepted = proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val requestId = PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY)
+
+        val result = sut.acceptOnThisInstall(request) {
+            verify(presentationStore).addAcceptedOneTimeId(LOCAL_IDENTITY, requestId)
+            "accepted"
+        }
+
+        assertEquals("accepted", result.getOrThrow())
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(accepted))
+        sut.refresh().getOrThrow()
+        sut.ensurePaymentAllowed(request).getOrThrow()
+    }
+
+    @Test
+    fun `failed automatic acceptance drops this install as owner`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(paymentRequestRecord()))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+
+        val result = sut.acceptOnThisInstall<Unit>(request) { error("claimed by another app") }
+
+        assertTrue(result.isFailure)
+        verify(presentationStore).removeAcceptedOneTimeIds(
+            LOCAL_IDENTITY,
+            setOf(PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY)),
+        )
     }
 
     @Test

@@ -1,6 +1,7 @@
 package to.bitkit.data
 
 import android.content.Context
+import androidx.datastore.core.DataMigration
 import androidx.datastore.core.DataStore
 import androidx.datastore.dataStore
 import androidx.datastore.preferences.core.Preferences
@@ -10,6 +11,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -32,7 +34,10 @@ private val Context.settingsDataStore: DataStore<SettingsData> by dataStore(
     serializer = SettingsSerializer,
 )
 
-private val Context.localSettingsDataStore: DataStore<Preferences> by preferencesDataStore("local_settings")
+private val Context.localSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "local_settings",
+    produceMigrations = { listOf(PaykitUiResetMigration) },
+)
 
 @Singleton
 class SettingsStore @Inject constructor(
@@ -109,6 +114,8 @@ class SettingsStore @Inject constructor(
         localStore.edit { it[PAYKIT_ENABLED_KEY] = value }
     }
 
+    internal suspend fun isPaykitUiResetDone() = localStore.data.first()[PaykitUiResetMigration.MIGRATED_KEY] == true
+
     suspend fun setPubkyProfileSetupPending(value: Boolean) {
         localStore.edit { it[PUBKY_PROFILE_SETUP_PENDING_KEY] = value }
     }
@@ -140,7 +147,10 @@ class SettingsStore @Inject constructor(
 
     suspend fun reset() {
         store.updateData { SettingsData() }
-        localStore.edit { it.clear() }
+        localStore.edit {
+            it.clear()
+            it[PaykitUiResetMigration.MIGRATED_KEY] = true
+        }
         restoredMonitoredTypesFromBackup = false
         Logger.info("Deleted all user settings data.")
     }
@@ -148,10 +158,28 @@ class SettingsStore @Inject constructor(
     companion object {
         private const val TAG = "SettingsStore"
         private const val MAX_LAST_USED_TAGS = 10
-        private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
+        internal val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
         private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
         private val SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY = intPreferencesKey("subscription_clock_offset_days")
     }
+}
+
+/**
+ * Shows Paykit to every wallet once, now that it is public. A stored off came from the Dev Settings switch
+ * on 2.x or 3.0.x and hid the profile and contacts. Like the Dev Settings "Enable", this only clears the flag;
+ * later Dev Settings changes stay.
+ */
+internal object PaykitUiResetMigration : DataMigration<Preferences> {
+    val MIGRATED_KEY = booleanPreferencesKey("paykit_ui_reset_v1")
+
+    override suspend fun shouldMigrate(currentData: Preferences) = currentData[MIGRATED_KEY] != true
+
+    override suspend fun migrate(currentData: Preferences): Preferences = currentData.toMutablePreferences().apply {
+        remove(SettingsStore.PAYKIT_ENABLED_KEY)
+        this[MIGRATED_KEY] = true
+    }.toPreferences()
+
+    override suspend fun cleanUp() = Unit
 }
 
 @Serializable

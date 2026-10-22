@@ -36,6 +36,23 @@ class PaykitPaymentStateBackupTest {
     }
 
     @Test
+    fun `allowance proof keeps its allowance id through backup`() {
+        WalletScope.pushTestOverride("wallet0").use {
+            val backup = Json.decodeFromString<PaykitPaymentStateBackup.Proof>(
+                """
+                    {"identity":"alice","requestId":{"paymentRequestId":"request","counterparty":"bob"},
+                    "paymentEndpointIdentifier":"bitcoin-bolt11","kind":"bitcoin-bolt11-preimage","paymentStarted":true,
+                    "onchainMatchingTransactionIdsBeforeAttempt":[],"allowanceId":"allowance-1"}
+                """.trimIndent(),
+            )
+            val restored = backup.restored()
+            assertEquals("allowance-1", restored.allowanceId)
+            val json = Json.encodeToString(PaykitPaymentStateBackup.Proof(restored))
+            assertContains(json, "\"allowanceId\":\"allowance-1\"")
+        }
+    }
+
+    @Test
     fun `shared active operation survives payment backup reader writer roundtrip`() {
         val wire = """
             {"subscriptions":{},"pendingProofs":[],"activeOnchainAttempt":{"version":1,"wallet":{"kind":"software","network":"regtest","binding":"${"ab".repeat(
