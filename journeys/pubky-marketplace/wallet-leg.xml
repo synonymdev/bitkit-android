@@ -45,8 +45,9 @@
     <action>Verify Bitcoin Sent (testTag "SendSuccess") appears after the backend accepts the transaction</action>
     <action>Wait 30 seconds on Bitcoin Sent, then tap Details (testTag "Details")</action>
     <action>Verify the activity details open and the payment review (testTag "ReviewAmount") does not reappear for the paid request within 10 seconds</action>
-    <action>Return to Home; if the requests bell (testTag "PaymentRequestsBell") is visible and still lists the paid request, tap its Pay button (testTag "PaymentRequestPay-&lt;payment-request-id&gt;") and verify the request is refused (testTag "PaymentRequestUnavailableToast") with no payment review (testTag "ReviewAmount")</action>
-    <action>Verify the fixture mempool contains the transaction with an amount-matched output</action>
+    <action>Return to Home; if the requests bell (testTag "PaymentRequestsBell") is visible, tap it and check whether the requests sheet (testTag "PaymentRequestsSheet") still lists the paid request</action>
+    <action>If it does, tap its Pay button (testTag "PaymentRequestPay-&lt;payment-request-id&gt;") and verify the payment is refused: a preparing confirmation may appear with its swipe disabled (testTag "PaymentRequestPreparing"), then it closes without ever enabling the swipe</action>
+    <action>Verify the fixture mempool contains exactly one transaction for this request, with an amount-matched output</action>
     <action>Mine one block with the fixture and wait for both Bitkit and the marketplace status to refresh</action>
     <action>Open the latest sent on-chain activity and verify its amount (testTag "ActivityAmount") and transaction details (testTag "ActivityTxDetails")</action>
     <action>Verify the fixture reports the transaction confirmed and the marketplace purchase completed</action>
