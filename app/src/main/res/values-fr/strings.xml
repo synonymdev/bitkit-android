@@ -1412,7 +1412,6 @@
     <string name="profile__pubky_copied">pubky copié dans le presse-papiers</string>
     <string name="profile__public_key">Clé publique</string>
     <string name="profile__public_payments_toggle">Paiements publics</string>
-    <string name="profile__public_payments_warning">Vos informations de paiement seront publiques et liées à votre profil. Tout le monde pourra les voir.</string>
     <string name="profile__restore_nav_title">Restaurer le profil</string>
     <string name="profile__session_expired">La session de votre profil a expiré. Veuillez vous reconnecter pour restaurer votre profil.</string>
     <string name="profile__sign_out">Déconnecter</string>

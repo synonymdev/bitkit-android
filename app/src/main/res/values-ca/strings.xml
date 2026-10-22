@@ -1414,7 +1414,6 @@
     <string name="profile__pubky_copied">pubky copiat al porta-retalls</string>
     <string name="profile__public_key">Clau pública</string>
     <string name="profile__public_payments_toggle">Pagaments públics</string>
-    <string name="profile__public_payments_warning">Les teves dades de pagament seran públiques i estaran vinculades al teu perfil. Tothom les podrà veure.</string>
     <string name="profile__restore_nav_title">Restaurar perfil</string>
     <string name="profile__session_expired">La sessió del teu perfil ha caducat. Torna a connectar-te per restaurar el teu perfil.</string>
     <string name="profile__sign_out">Desconnectar</string>

@@ -724,7 +724,6 @@
     <string name="profile__pubky_copied">pubky copied to clipboard</string>
     <string name="profile__public_key">Public Key</string>
     <string name="profile__public_payments_toggle">Public payments</string>
-    <string name="profile__public_payments_warning">Your payment details will be public and linked to your profile. Anyone can see them.</string>
     <string name="profile__restore_nav_title">Restore Profile</string>
     <string name="profile__retry_load">Try Again</string>
     <string name="profile__session_expired">Your profile session has expired. Please reconnect to restore your profile.</string>

@@ -12,7 +12,7 @@
     <action>Open Settings and select General</action>
     <action>Scroll to the payment sharing settings</action>
     <action>Verify Private contact payments (identifier "PrivateContactPaymentsToggle") is on and Public payments (identifier "PublicPaymentsToggle") is off</action>
-    <action>Verify the public sharing warning says payment details will be public and linked to the profile</action>
+    <action>Verify Public payments uses a label and switch without a permanent description, matching the neighboring settings rows.</action>
     <action>Turn Public payments on and wait for the operation to finish</action>
     <action>Verify both sharing switches are on</action>
     <action>Turn Private contact payments off and wait for the operation to finish</action>

@@ -1415,7 +1415,6 @@
     <string name="profile__pubky_copied">pubky skopiowany do schowka</string>
     <string name="profile__public_key">Klucz publiczny</string>
     <string name="profile__public_payments_toggle">Płatności publiczne</string>
-    <string name="profile__public_payments_warning">Twoje dane płatności będą publiczne i powiązane z Twoim profilem. Każdy będzie mógł je zobaczyć.</string>
     <string name="profile__restore_nav_title">Przywróć profil</string>
     <string name="profile__session_expired">Sesja Twojego profilu wygasła. Połącz się ponownie, aby przywrócić profil.</string>
     <string name="profile__sign_out">Odłącz</string>

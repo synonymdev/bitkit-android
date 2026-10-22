@@ -1417,7 +1417,6 @@
     <string name="profile__pubky_copied">pubky copiada para a área de transferência</string>
     <string name="profile__public_key">Chave Pública</string>
     <string name="profile__public_payments_toggle">Pagamentos públicos</string>
-    <string name="profile__public_payments_warning">Seus dados de pagamento serão públicos e vinculados ao seu perfil. Qualquer pessoa poderá vê-los.</string>
     <string name="profile__restore_nav_title">Restaurar Perfil</string>
     <string name="profile__session_expired">A sessão do seu perfil expirou. Reconecte para restaurar seu perfil.</string>
     <string name="profile__sign_out">Desconectar</string>

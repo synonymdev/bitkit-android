@@ -405,7 +405,6 @@ private fun GeneralTabContent(
             )
             SettingsSwitchRow(
                 title = stringResource(R.string.profile__public_payments_toggle),
-                subtitle = stringResource(R.string.profile__public_payments_warning),
                 isChecked = state.publicPaymentsEnabled,
                 icon = { SettingsIcon(R.drawable.ic_coins) },
                 onClick = { onEvent(SettingsEvent.PublicPaymentsClick) },

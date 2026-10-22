@@ -1416,7 +1416,6 @@
     <string name="profile__pubky_copied">pubky zkopírován do schránky</string>
     <string name="profile__public_key">Veřejný klíč</string>
     <string name="profile__public_payments_toggle">Veřejné platby</string>
-    <string name="profile__public_payments_warning">Vaše platební údaje budou veřejné a propojené s vaším profilem. Uvidí je kdokoli.</string>
     <string name="profile__restore_nav_title">Obnovit profil</string>
     <string name="profile__session_expired">Platnost relace vašeho profilu vypršela. Pro obnovení profilu se prosím znovu připojte.</string>
     <string name="profile__sign_out">Odpojit</string>

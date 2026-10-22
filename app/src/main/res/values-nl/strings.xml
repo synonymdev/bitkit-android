@@ -1414,7 +1414,6 @@
     <string name="profile__pubky_copied">pubky gekopieerd naar klembord</string>
     <string name="profile__public_key">Publieke sleutel</string>
     <string name="profile__public_payments_toggle">Openbare betalingen</string>
-    <string name="profile__public_payments_warning">Je betaalgegevens worden openbaar en aan je profiel gekoppeld. Iedereen kan ze zien.</string>
     <string name="profile__restore_nav_title">Profiel herstellen</string>
     <string name="profile__session_expired">Uw profielsessie is verlopen. Verbind opnieuw om uw profiel te herstellen.</string>
     <string name="profile__sign_out">Ontkoppelen</string>
