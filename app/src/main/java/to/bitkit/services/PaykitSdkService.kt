@@ -2,6 +2,15 @@ package to.bitkit.services
 
 import android.content.Context
 import androidx.annotation.VisibleForTesting
+import com.synonym.paykit.AllowanceAccountingReconciliation
+import com.synonym.paykit.AllowanceAccountingState
+import com.synonym.paykit.AllowanceAssociationRecord
+import com.synonym.paykit.AllowanceCandidate
+import com.synonym.paykit.AllowanceFilter
+import com.synonym.paykit.AllowanceLocalRole
+import com.synonym.paykit.AllowanceRecord
+import com.synonym.paykit.AllowanceSelectionInput
+import com.synonym.paykit.AllowanceTerms
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.EndpointSyncReport
@@ -20,8 +29,14 @@ import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitSdkDefaults
 import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentAmountContext
+import com.synonym.paykit.PaymentAttemptDecision
+import com.synonym.paykit.PaymentAttemptRecord
 import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentDeadline
+import com.synonym.paykit.PaymentExecutionChecks
+import com.synonym.paykit.PaymentOccurrence
+import com.synonym.paykit.PaymentOccurrenceRecord
+import com.synonym.paykit.PaymentOutcomeReport
 import com.synonym.paykit.PaymentPayload
 import com.synonym.paykit.PaymentProofSubmission
 import com.synonym.paykit.PaymentReference
@@ -32,6 +47,7 @@ import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRead
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
+import com.synonym.paykit.PaymentRequestScope
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PaymentTarget
 import com.synonym.paykit.PrivateContactPaymentResolution
@@ -1201,6 +1217,7 @@ class PaykitSdkService @Inject constructor(
         proofJson: String,
         billingPeriod: PaykitBillingPeriod? = null,
         conversionQuoteId: String? = null,
+        allowanceId: String? = null,
         priority: Priority = Priority.Ordered,
     ): PaymentRequestRecord {
         isSetup.await()
@@ -1214,12 +1231,165 @@ class PaykitSdkService @Inject constructor(
                             billingPeriod = billingPeriod?.sdkValue,
                             paymentAppId = paymentAppId,
                             paymentEndpointIdentifier = paymentEndpointIdentifier,
-                            allowanceId = null,
+                            allowanceId = allowanceId,
                             conversionQuoteId = conversionQuoteId,
                             proof = PrivateJsonObject(proofJson),
                         ),
                     )
                 }
+            }
+        }
+    }
+
+    suspend fun listAllowances(filter: AllowanceFilter): List<AllowanceRecord> {
+        isSetup.await()
+        return operationLock.withLock {
+            withPaykitKey { completeSdkCall { it.listAllowances(filter) } }
+        }
+    }
+
+    suspend fun proposeAllowance(
+        counterparty: String,
+        localRole: AllowanceLocalRole,
+        terms: AllowanceTerms,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.proposeAllowance(counterparty, localRole, terms) }
+            }
+        }
+    }
+
+    suspend fun acceptAllowance(
+        counterparty: String,
+        allowanceId: String,
+        expectedProposalStreamItemId: ULong,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationLock.withLock(Priority.Interactive) {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.acceptAllowance(counterparty, allowanceId, expectedProposalStreamItemId) }
+            }
+        }
+    }
+
+    suspend fun rejectAllowance(
+        counterparty: String,
+        allowanceId: String,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.rejectAllowance(counterparty, allowanceId) }
+            }
+        }
+    }
+
+    suspend fun endAllowance(
+        counterparty: String,
+        allowanceId: String,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.endAllowance(counterparty, allowanceId) }
+            }
+        }
+    }
+
+    suspend fun allowanceAccountingState(): AllowanceAccountingState? {
+        isSetup.await()
+        return operationLock.withLock {
+            withPaykitKey { completeSdkCall { it.allowanceAccountingState() } }
+        }
+    }
+
+    suspend fun reconcileAllowanceAccounting(
+        reconciliation: AllowanceAccountingReconciliation,
+    ): AllowanceAccountingState {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.reconcileAllowanceAccounting(reconciliation) }
+            }
+        }
+    }
+
+    suspend fun evaluateAllowanceCandidates(
+        scope: PaymentRequestScope,
+        trustedTime: String,
+    ): List<AllowanceCandidate> {
+        isSetup.await()
+        return operationLock.withLock {
+            withPaykitKey { completeSdkCall { it.evaluateAllowanceCandidates(scope, trustedTime) } }
+        }
+    }
+
+    suspend fun acceptPaymentRequestAutomatically(
+        scope: PaymentRequestScope,
+        selection: AllowanceSelectionInput,
+        checks: PaymentExecutionChecks,
+    ): AllowanceAssociationRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.acceptPaymentRequestAutomatically(scope, selection, checks) }
+            }
+        }
+    }
+
+    suspend fun reserveAutomaticPayment(
+        occurrence: PaymentOccurrence,
+        expectedAssociationRevision: ULong,
+        checks: PaymentExecutionChecks,
+    ): PaymentAttemptDecision {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.reserveAutomaticPayment(occurrence, expectedAssociationRevision, checks) }
+            }
+        }
+    }
+
+    suspend fun reserveManualPayment(
+        occurrence: PaymentOccurrence,
+        checks: PaymentExecutionChecks,
+    ): PaymentAttemptDecision {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.reserveManualPayment(occurrence, checks) }
+            }
+        }
+    }
+
+    suspend fun beginPaymentExecution(
+        attemptId: String,
+        checks: PaymentExecutionChecks,
+    ): PaymentAttemptDecision {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.beginPaymentExecution(attemptId, checks) }
+            }
+        }
+    }
+
+    suspend fun recordPaymentOutcome(report: PaymentOutcomeReport): PaymentAttemptRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.recordPaymentOutcome(report) }
+            }
+        }
+    }
+
+    suspend fun markPaymentManualOnly(occurrence: PaymentOccurrence): PaymentOccurrenceRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.markPaymentManualOnly(occurrence) }
             }
         }
     }
