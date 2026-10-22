@@ -400,6 +400,15 @@ class UsdtViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `sending over half the balance shows the usdt balance warning`() = test {
+        val model = createViewModel(walletState = UsdtWalletState(balance = 1_500_000u))
+        model.quote(quote.recipient, "1", quote.destination).join()
+        model.confirm().join()
+        assertEquals(SanityWarning.OVER_HALF_USDT_BALANCE, model.state.value.warning)
+        verify(repo, never()).send(any(), anyOrNull(), any())
+    }
+
+    @Test
     fun `recorded payment that exceeds its deadline retains recovery with an expiry error`() = test {
         val retained: UsdtTransfer = mock { on { id }.thenReturn(quote.id) }
         val model = createViewModel(walletState = UsdtWalletState(transfers = persistentListOf(retained)))
