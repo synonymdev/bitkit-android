@@ -100,9 +100,9 @@
     <string name="fee__custom__shortDescription">Dépend des frais</string>
     <string name="lightning__channels_closing_banner">LES CANAUX FERMENT LE %1$s</string>
     <string name="lightning__channels_closing_notice">Vos canaux Lightning seront fermés le %1$s. Transférez votre solde de dépenses vers l\'Épargne avant cette date.</string>
-    <string name="lightning__channels_unavailable__button">Ouvrir un canal</string>
-    <string name="lightning__channels_unavailable__text">Malheureusement, le service de transfert automatique de fonds vers votre solde de dépenses n\'est plus disponible. Vous pouvez toujours ouvrir manuellement un canal Lightning pour recharger votre solde de dépenses.</string>
-    <string name="lightning__channels_unavailable__title">Pas de transfert automatique</string>
+    <string name="lightning__channels_unavailable__nav_title">Transfert indisponible</string>
+    <string name="lightning__channels_unavailable__text">Les transferts automatiques vers votre solde de dépenses ne sont plus disponibles. Utilisez votre propre nœud ou configurez une connexion avec un autre fournisseur.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;Configuration manuelle&lt;/accent&gt;\nrequise</string>
     <string name="lightning__choose_lsp__explanation">Quand ils vous donnent un QR pour connecter ou réclamer le canal Lightning, touchez ci-dessous pour scanner ou coller le QR.</string>
     <string name="lightning__choose_lsp__text">Commandez un canal auprès d\'un fournisseur de services Lightning (LSP). Voici quelques options. Bitkit ne les exploite pas, ne les cautionne pas et ne les prend pas en charge.</string>
     <string name="lightning__choose_lsp__title">Choisissez un\n&lt;accent&gt;fournisseur Lightning&lt;/accent&gt;</string>

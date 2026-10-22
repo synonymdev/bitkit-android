@@ -120,9 +120,9 @@
     <string name="lightning__channel_point">Точка Канала</string>
     <string name="lightning__channels_closing_banner">КАНАЛЫ ЗАКРОЮТСЯ %1$s</string>
     <string name="lightning__channels_closing_notice">Ваши каналы Lightning будут закрыты %1$s. До этой даты переведите баланс расходов в сбережения.</string>
-    <string name="lightning__channels_unavailable__button">Открыть канал</string>
-    <string name="lightning__channels_unavailable__text">К сожалению, сервис автоматического перевода средств на баланс расходов больше недоступен. Вы по-прежнему можете вручную открыть канал Lightning, чтобы пополнить баланс расходов.</string>
-    <string name="lightning__channels_unavailable__title">Нет автоматического перевода</string>
+    <string name="lightning__channels_unavailable__nav_title">Перевод недоступен</string>
+    <string name="lightning__channels_unavailable__text">Автоматические переводы на баланс расходов больше недоступны. Используйте собственный узел или настройте подключение к другому провайдеру.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;Требуется ручная&lt;/accent&gt;\nнастройка</string>
     <string name="lightning__choose_lsp__explanation">Когда вам дадут QR-код для подключения или получения канала Lightning, нажмите ниже, чтобы отсканировать или вставить QR-код.</string>
     <string name="lightning__choose_lsp__text">Закажите канал у провайдера услуг Lightning (LSP). Ниже несколько вариантов. Bitkit не управляет ими, не рекомендует и не поддерживает их.</string>
     <string name="lightning__choose_lsp__title">Выберите\n&lt;accent&gt;провайдера Lightning&lt;/accent&gt;</string>

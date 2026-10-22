@@ -6,10 +6,10 @@
     wallet, which shows "Your Lightning channels will be closed on Dec 15, 2026. Move your spending
     balance to savings before then." (testTag "ChannelsClosingNotice") under the balance header, and
     Transfer To Savings (testTag "TransferToSavings") is still offered. The Savings wallet's
-    Transfer To Spending button (testTag "TransferToSpending") opens the "No automatic transfer"
+    Transfer To Spending button (testTag "TransferToSpending") opens the "Manual setup required"
     sheet (testTag "ChannelsUnavailableSheet") instead of the transfer flow, since new channels can no
-    longer be bought; the sheet shows the same close date as the banner. The date is a placeholder constant until the shutdown date is final; assert whatever
-    date the build shows, and keep the banner and the notice in agreement.
+    longer be bought; the sheet has no close date line. The date is a placeholder constant until the
+    shutdown date is final; assert whatever date the build shows, and keep the banner and the notice in agreement.
 
     Precondition: onboarded dev wallet with a Lightning channel to the staging LSP (Blocktank) node, open
     or pending, and a POSITIVE Spending balance; channels to other nodes do not show the notice. This build cannot buy a channel from Blocktank, so get
@@ -27,8 +27,8 @@
     <action>Verify the "Transfer To Savings" button (testTag "TransferToSavings") is visible</action>
     <action>Press the system back button, then tap the Savings balance card (testTag "ActivitySavings")</action>
     <action>Verify the Savings wallet screen is open and tap the "Transfer To Spending" button (testTag "TransferToSpending")</action>
-    <action>Verify the sheet (testTag "ChannelsUnavailableSheet") opens with the title "No automatic transfer" and the text "Unfortunately, the service to automatically transfer funds to your spending balance is no longer available. You can still manually open a Lightning channel to top up your spending balance.", and that the line (testTag "ChannelsUnavailableCloseDate") reads "Your Lightning channels will be closed on Dec 15, 2026. Move your spending balance to savings before then." with the same date the banner showed</action>
-    <action>Tap "Cancel" (testTag "ChannelsUnavailableButton") and verify the sheet closes and the Savings wallet screen is still shown</action>
+    <action>Verify the sheet (testTag "ChannelsUnavailableSheet") opens with the nav title "Transfer Unavailable", the lightning-bolt image (testTag "ChannelsUnavailableSheetImage"), the title "MANUAL SETUP REQUIRED" with "MANUAL SETUP" in purple (testTag "ChannelsUnavailableSheetTitle") and the text "Automatic transfers to your spending balance are no longer available. Use your own node, or set up a connection with another provider." (testTag "ChannelsUnavailableSheetDescription"), with "Cancel" (testTag "ChannelsUnavailableSheetCancel") and "Continue" (testTag "ChannelsUnavailableSheetContinue") buttons, and no close date line</action>
+    <action>Tap "Cancel" (testTag "ChannelsUnavailableSheetCancel") and verify the sheet closes and the Savings wallet screen is still shown</action>
     <action>Press the system back button, tap the Spending balance card (testTag "ActivitySpending") and verify the notice (testTag "ChannelsClosingNotice") is still shown</action>
   </actions>
 </journey>

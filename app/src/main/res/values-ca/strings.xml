@@ -109,9 +109,9 @@
     <string name="lightning__channel_point">Punt del canal</string>
     <string name="lightning__channels_closing_banner">ELS CANALS ES TANQUEN EL %1$s</string>
     <string name="lightning__channels_closing_notice">Els teus canals Lightning es tancaran el %1$s. Transfereix el teu saldo de despesa a estalvis abans d\'aquesta data.</string>
-    <string name="lightning__channels_unavailable__button">Obrir canal</string>
-    <string name="lightning__channels_unavailable__text">Malauradament, el servei per transferir fons automàticament al teu saldo de despesa ja no està disponible. Encara pots obrir manualment un canal Lightning per recarregar el teu saldo de despesa.</string>
-    <string name="lightning__channels_unavailable__title">Sense transferència automàtica</string>
+    <string name="lightning__channels_unavailable__nav_title">Transferència no disponible</string>
+    <string name="lightning__channels_unavailable__text">Les transferències automàtiques al teu saldo de despesa ja no estan disponibles. Fes servir el teu propi node o configura una connexió amb un altre proveïdor.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;Configuració manual&lt;/accent&gt;\nnecessària</string>
     <string name="lightning__choose_lsp__explanation">Quan et donin un QR per connectar o reclamar el canal Lightning, toca a sota per escanejar o enganxar el QR.</string>
     <string name="lightning__choose_lsp__text">Demana un canal a un proveïdor de serveis Lightning (LSP). A sota hi ha algunes opcions. Bitkit no les gestiona, avala ni hi dona suport.</string>
     <string name="lightning__choose_lsp__title">Tria un\n&lt;accent&gt;proveïdor Lightning&lt;/accent&gt;</string>

@@ -106,9 +106,9 @@
     <string name="lightning__channel_point">Σημείο καναλιού</string>
     <string name="lightning__channels_closing_banner">ΤΑ ΚΑΝΑΛΙΑ ΚΛΕΙΝΟΥΝ ΣΤΙΣ %1$s</string>
     <string name="lightning__channels_closing_notice">Τα κανάλια Lightning σας θα κλείσουν στις %1$s. Μεταφέρετε το υπόλοιπο δαπανών σε αποταμιεύσεις πριν από τότε.</string>
-    <string name="lightning__channels_unavailable__button">Άνοιγμα καναλιού</string>
-    <string name="lightning__channels_unavailable__text">Δυστυχώς, η υπηρεσία αυτόματης μεταφοράς κεφαλαίων στο υπόλοιπο δαπανών δεν είναι πλέον διαθέσιμη. Μπορείτε ακόμα να ανοίξετε χειροκίνητα ένα κανάλι Lightning για να αναπληρώσετε το υπόλοιπο δαπανών.</string>
-    <string name="lightning__channels_unavailable__title">Χωρίς αυτόματη μεταφορά</string>
+    <string name="lightning__channels_unavailable__nav_title">Μεταφορά μη διαθέσιμη</string>
+    <string name="lightning__channels_unavailable__text">Οι αυτόματες μεταφορές στο υπόλοιπο δαπανών δεν είναι πλέον διαθέσιμες. Χρησιμοποιήστε τον δικό σας κόμβο ή ρυθμίστε σύνδεση με άλλον πάροχο.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;Απαιτείται χειροκίνητη&lt;/accent&gt;\nρύθμιση</string>
     <string name="lightning__choose_lsp__explanation">Όταν σας δώσουν ένα QR για σύνδεση ή διεκδίκηση του καναλιού Lightning, πατήστε παρακάτω για σάρωση ή επικόλληση του QR.</string>
     <string name="lightning__choose_lsp__text">Παραγγείλετε ένα κανάλι από έναν πάροχο υπηρεσιών Lightning (LSP). Παρακάτω υπάρχουν μερικές επιλογές. Το Bitkit δεν τις λειτουργεί, δεν τις προτείνει και δεν τις υποστηρίζει.</string>
     <string name="lightning__choose_lsp__title">Επιλέξτε\n&lt;accent&gt;πάροχο Lightning&lt;/accent&gt;</string>

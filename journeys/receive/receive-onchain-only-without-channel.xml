@@ -4,9 +4,8 @@
     offers the Savings tab and nothing that buys Lightning liquidity, and Home shows neither the Spend
     suggestion card nor the channels-closing banner. Blocktank channel purchases were removed in
     synonymdev/bitkit-android#1669: there is no "Receive Lightning funds" (CJIT) button or onboarding,
-    and the Transfer To Spending and Transfer from Savings buttons open the "No automatic transfer"
-    sheet,
-    and the Spending and Auto tabs appear only when the wallet can create a Lightning invoice over a
+    and the Transfer To Spending and Transfer from Savings buttons open the "Manual setup required"
+    sheet, and the Spending and Auto tabs appear only when the wallet can create a Lightning invoice over a
     ready channel with inbound liquidity.
 
     Precondition: a freshly onboarded dev wallet on the staging regtest backend with NO Lightning
@@ -25,8 +24,8 @@
     <action>Tap "Edit" (testTag "SpecifyInvoiceButton"), tap the amount field (testTag "ReceiveNumberPadTextField"), enter a small amount (for example "N1" then "N0" twice), tap Continue (testTag "ReceiveNumberPadSubmit") and then "QR Code" (testTag "ShowQrReceive")</action>
     <action>Verify the sheet returns to the QR screen with no liquidity or channel confirm screen in between, the Savings tab is still selected and there is still no Spending tab (testTag "Tab-spending")</action>
     <action>Close the sheet, open the Savings wallet (testTag "ActivitySavings") and tap the "Transfer To Spending" button (testTag "TransferToSpending")</action>
-    <action>Verify the sheet (testTag "ChannelsUnavailableSheet") shows the title "No automatic transfer" and the text "Unfortunately, the service to automatically transfer funds to your spending balance is no longer available. You can still manually open a Lightning channel to top up your spending balance.", and no close date line (testTag "ChannelsUnavailableCloseDate"); tap "Cancel" (testTag "ChannelsUnavailableButton") and verify the Savings wallet screen is still shown</action>
+    <action>Verify the sheet (testTag "ChannelsUnavailableSheet") opens with the nav title "Transfer Unavailable", the lightning-bolt image (testTag "ChannelsUnavailableSheetImage"), the title "MANUAL SETUP REQUIRED" with "MANUAL SETUP" in purple (testTag "ChannelsUnavailableSheetTitle") and the text "Automatic transfers to your spending balance are no longer available. Use your own node, or set up a connection with another provider." (testTag "ChannelsUnavailableSheetDescription"), with "Cancel" (testTag "ChannelsUnavailableSheetCancel") and "Continue" (testTag "ChannelsUnavailableSheetContinue") buttons; tap "Cancel" (testTag "ChannelsUnavailableSheetCancel") and verify the Savings wallet screen is still shown</action>
     <action>Go back, open the Spending wallet (testTag "ActivitySpending"), verify no notice (testTag "ChannelsClosingNotice") is shown and tap the "Transfer from Savings" button (testTag "TransferFromSavings")</action>
-    <action>Verify the same sheet (testTag "ChannelsUnavailableSheet") opens with no close date line (testTag "ChannelsUnavailableCloseDate"), tap "Cancel" (testTag "ChannelsUnavailableButton") and verify the Spending wallet screen is still shown</action>
+    <action>Verify the same sheet (testTag "ChannelsUnavailableSheet") opens, tap "Cancel" (testTag "ChannelsUnavailableSheetCancel") and verify the Spending wallet screen is still shown</action>
   </actions>
 </journey>

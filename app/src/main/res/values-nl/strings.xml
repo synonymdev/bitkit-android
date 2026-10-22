@@ -110,9 +110,9 @@
     <string name="lightning__channel_point">Kanaalpunt</string>
     <string name="lightning__channels_closing_banner">KANALEN SLUITEN OP %1$s</string>
     <string name="lightning__channels_closing_notice">Je Lightning-kanalen worden op %1$s gesloten. Boek je bestedingssaldo vóór die datum over naar spaargeld.</string>
-    <string name="lightning__channels_unavailable__button">Kanaal openen</string>
-    <string name="lightning__channels_unavailable__text">Helaas is de dienst om automatisch geld naar je bestedingssaldo over te boeken niet meer beschikbaar. Je kunt nog steeds handmatig een Lightning-kanaal openen om je bestedingssaldo aan te vullen.</string>
-    <string name="lightning__channels_unavailable__title">Geen automatische overboeking</string>
+    <string name="lightning__channels_unavailable__nav_title">Overboeking niet beschikbaar</string>
+    <string name="lightning__channels_unavailable__text">Automatische overboekingen naar je bestedingssaldo zijn niet meer beschikbaar. Gebruik je eigen node of stel een verbinding in met een andere aanbieder.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;Handmatige instelling&lt;/accent&gt;\nvereist</string>
     <string name="lightning__choose_lsp__explanation">Als je een QR krijgt om het Lightning-kanaal te verbinden of te claimen, tik dan hieronder om de QR te scannen of te plakken.</string>
     <string name="lightning__choose_lsp__text">Bestel een kanaal bij een Lightning Service Provider (LSP). Hieronder staan enkele opties. Bitkit beheert, onderschrijft of ondersteunt deze niet.</string>
     <string name="lightning__choose_lsp__title">Kies een\n&lt;accent&gt;Lightning-aanbieder&lt;/accent&gt;</string>

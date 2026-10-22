@@ -111,9 +111,9 @@
     <string name="lightning__channel_point">Bod kanálu</string>
     <string name="lightning__channels_closing_banner">KANÁLY SE ZAVŘOU %1$s</string>
     <string name="lightning__channels_closing_notice">Vaše Lightning kanály budou uzavřeny %1$s. Do té doby převeďte zůstatek útrat do úspor.</string>
-    <string name="lightning__channels_unavailable__button">Otevřít kanál</string>
-    <string name="lightning__channels_unavailable__text">Služba pro automatický převod prostředků na zůstatek útrat bohužel již není k dispozici. Stále můžete ručně otevřít Lightning kanál a doplnit si zůstatek útrat.</string>
-    <string name="lightning__channels_unavailable__title">Žádný automatický převod</string>
+    <string name="lightning__channels_unavailable__nav_title">Převod není dostupný</string>
+    <string name="lightning__channels_unavailable__text">Automatické převody na zůstatek útrat již nejsou k dispozici. Použijte vlastní uzel nebo si nastavte připojení u jiného poskytovatele.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;Vyžadováno ruční&lt;/accent&gt;\nnastavení</string>
     <string name="lightning__choose_lsp__explanation">Až vám dají QR kód pro připojení nebo převzetí Lightning kanálu, klepněte níže a QR kód naskenujte nebo vložte.</string>
     <string name="lightning__choose_lsp__text">Objednejte si kanál u poskytovatele služeb Lightning (LSP). Níže je několik možností. Bitkit je neprovozuje, nedoporučuje ani nepodporuje.</string>
     <string name="lightning__choose_lsp__title">Vyberte\n&lt;accent&gt;poskytovatele Lightning&lt;/accent&gt;</string>

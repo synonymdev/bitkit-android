@@ -17,9 +17,10 @@ The iOS twin is synonymdev/bitkit-ios#1097.
   banner and the notice agree and read the date from the screen instead of hardcoding it.
 - **Unavailable sheet:** Savings "Transfer To Spending" (`TransferToSpending`), Spending "Transfer from
   Savings" (`TransferFromSavings`) and hardware wallet "Transfer To Spending" (`HardwareTransferToSpending`)
-  stay, but open the "No automatic transfer" sheet (`ChannelsUnavailableSheet`) instead of the transfer
-  flow. For a wallet with a Blocktank channel it also shows the close date (`ChannelsUnavailableCloseDate`);
-  Cancel (`ChannelsUnavailableButton`) closes it, and Open Channel (`ChannelsUnavailableOpenChannel`) opens the Choose a Lightning provider screen and leaves the user on the same screen.
+  stay, but open the "Transfer Unavailable" sheet (`ChannelsUnavailableSheet`: image, title "MANUAL SETUP REQUIRED",
+  description) instead of the transfer flow. It has no close date line; the date stays on the Home banner and
+  the Spending notice. Cancel (`ChannelsUnavailableSheetCancel`) closes it and leaves the user where they
+  were, and Continue (`ChannelsUnavailableSheetContinue`) closes it and opens the Choose a Lightning provider screen.
 - **Removed:** the Home "Spend" suggestion card (`Suggestion-lightning`), the Receive sheet's CJIT button
   and gift codes.
   Transfer To Savings, send, receive over an existing channel, LNURL channel and manual external node
@@ -36,13 +37,14 @@ The iOS twin is synonymdev/bitkit-ios#1097.
 
 | Journey | Covers |
 | --- | --- |
-| `channels-closing-notice.xml` | Banner on Home → tap → Spending wallet notice and Transfer To Savings; Savings Transfer To Spending opens the No automatic transfer sheet with the close date |
-| `choose-lsp-from-transfer.xml` | Transfer To Spending → sheet → Open Channel → Choose a Lightning provider: four provider rows open their sites in the browser; Manual Setup and QR Code open the existing manual setup and scanner |
+| `channels-closing-notice.xml` | Banner on Home → tap → Spending wallet notice and Transfer To Savings; Savings Transfer To Spending opens the Manual setup required sheet (no close date) and Cancel returns to Savings |
+| `choose-lsp-from-transfer.xml` | Transfer To Spending → sheet → Continue → Choose a Lightning provider: four provider rows open their sites in the browser; Manual Setup and QR Code open the existing manual setup and scanner |
 | [`../receive/receive-onchain-only-without-channel.xml`](../receive/receive-onchain-only-without-channel.xml) | The opposite precondition: a funded wallet with no channels shows no banner, no Spend card and a Savings-only Receive sheet |
 
 ## Test tags
 
 `ChannelsClosingBanner`, `ChannelsClosingNotice`, `ActivitySavings`, `ActivitySpending`, `TotalBalance`,
-`TransferToSavings`, `TransferToSpending`, `ChannelsUnavailableSheet`, `ChannelsUnavailableCloseDate`,
-`ChannelsUnavailableButton`, `ChannelsUnavailableOpenChannel`, `ChooseLspProvider`, `ChooseLspManual`,
+`TransferToSavings`, `TransferToSpending`, `ChannelsUnavailableSheet`, `ChannelsUnavailableSheetImage`,
+`ChannelsUnavailableSheetTitle`, `ChannelsUnavailableSheetDescription`, `ChannelsUnavailableSheetCancel`,
+`ChannelsUnavailableSheetContinue`, `ChooseLspProvider`, `ChooseLspManual`,
 `ChooseLspScan`.

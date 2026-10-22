@@ -657,18 +657,13 @@ fun ContentView(
                         Sheet.ConnectionClosed -> ConnectionClosedSheet(
                             onDismiss = { appViewModel.hideSheet() },
                         )
-                        Sheet.ChannelsUnavailable -> {
-                            val hasTrustedChannels by walletViewModel.hasTrustedChannels
-                                .collectAsStateWithLifecycle(initialValue = false)
-                            ChannelsUnavailableSheet(
-                                showCloseDate = hasTrustedChannels,
-                                onOpenChannel = {
-                                    appViewModel.hideSheet()
-                                    navController.navigateTo(Routes.ChooseLsp)
-                                },
-                                onDismiss = { appViewModel.hideSheet() },
-                            )
-                        }
+                        Sheet.ChannelsUnavailable -> ChannelsUnavailableSheet(
+                            onContinue = {
+                                appViewModel.hideSheet()
+                                navController.navigateTo(Routes.ChooseLsp)
+                            },
+                            onCancel = { appViewModel.hideSheet() },
+                        )
 
                         is Sheet.BTCPayConnection -> BTCPayConnectionSheet(sheet, appViewModel)
                         is Sheet.QrScanner -> QrScanningSheet(sheet, appViewModel)
