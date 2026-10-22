@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -32,6 +33,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import to.bitkit.async.appScope
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.runSuspendCatching
@@ -41,6 +43,7 @@ import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitRequestPayment
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
+import to.bitkit.services.PaykitSdkOperationLock
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -129,6 +132,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private val operationMutex = Mutex()
+    private val persistenceMutex = Mutex()
+    private val deliveryScope = appScope(ioDispatcher, TAG)
 
     // Process-local activity handoffs only; restored proofs must reconstruct their activity.
     private val observedHardwareProofs = mutableSetOf<PendingPaykitPaymentProof>()
@@ -160,7 +165,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     )
 
     suspend fun backupSnapshot(): List<PaykitPaymentStateBackup.Proof> = withContext(ioDispatcher) {
-        operationMutex.withLock {
+        persistenceMutex.withLock {
             val proofs = store.load()
             check(proofs.none { it.hardwareDispatchDenied }) { "Hardware dispatch denial cleanup is pending" }
             proofs.map { PaykitPaymentStateBackup.Proof(it) }
@@ -190,12 +195,29 @@ class PaykitPaymentProofRepo @Inject constructor(
             val onchainAttempt = lightningRepo.currentOnchainSendAttempt()
             if (onchainAttempt?.requestId == request.id) throw PaykitPaymentRequestError.OperationInProgress
             operationMutex.withLock {
-                val proof = pendingProof(
-                    request,
-                    paymentEndpointIdentifier,
-                    paymentAppId,
-                    kind
-                ).copy(conversionQuoteId = paymentTerms?.quoteId, allowanceId = allowanceId)
+                if (
+                    paymentAppId.isBlank() ||
+                    paymentEndpointIdentifier !in request.acceptedPaymentEndpointIdentifiers ||
+                    !endpointSupports(paymentEndpointIdentifier, kind)
+                ) {
+                    throw PaykitPaymentRequestError.RequestUnavailable
+                }
+                val read = paykitSdkService.readPaymentRequests(request.counterparty)
+                val identityStatus = read.identityStatus
+                val identity = identityStatus?.publicKey?.let(PubkyPublicKeyFormat::normalized)
+                if (identityStatus?.capability != PubkyIdentityCapability.PRIVATE_LINK_CAPABLE || identity == null) {
+                    throw PaykitPaymentRequestError.RequestUnavailable
+                }
+                val proof = PendingPaykitPaymentProof(
+                    identity = identity,
+                    requestId = request.id,
+                    paymentEndpointIdentifier = paymentEndpointIdentifier,
+                    paymentAppId = paymentAppId,
+                    kind = kind,
+                    billingPeriod = request.billingPeriod,
+                    conversionQuoteId = paymentTerms?.quoteId,
+                    allowanceId = allowanceId,
+                )
                 val currentProofs = loadProofs()
                 if (currentProofs.any {
                         it.isStartedFor(proof.identity, request.id) ||
@@ -208,7 +230,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                 ) {
                     throw PaykitPaymentRequestError.OperationInProgress
                 }
-                val alreadyPaid = paykitSdkService.paymentRequests().any { record ->
+                val alreadyPaid = read.paymentRequests.any { record ->
                     record.paymentRequestId == request.paymentRequestId &&
                         PubkyPublicKeyFormat.matches(record.counterparty, request.counterparty) &&
                         record.paymentProofs.any { it.billingPeriod.matches(request.billingPeriod) }
@@ -871,6 +893,9 @@ class PaykitPaymentProofRepo @Inject constructor(
     suspend fun retainedHardwareOnchainRequest(request: PaykitPaymentRequest): PendingPaykitPaymentProof? =
         withContext(ioDispatcher) {
             operationMutex.withLock {
+                if (loadProofs().none { it.requestId == request.id && it.hardwareSignedTransaction != null }) {
+                    return@withLock null
+                }
                 val identity = currentIdentity() ?: return@withLock null
                 loadProofs().singleOrNull {
                     it.isReopenableHardwareReceipt(identity) && it.matchesHardwareRetryRequest(request)
@@ -1401,12 +1426,16 @@ class PaykitPaymentProofRepo @Inject constructor(
         operationMutex.withLock { runSuspendCatching { submitReady(proof) } }
     }
 
-    private suspend fun submitReady(proof: PendingPaykitPaymentProof): Boolean {
+    private suspend fun submitReady(
+        proof: PendingPaykitPaymentProof,
+        priority: PaykitSdkOperationLock.Priority = PaykitSdkOperationLock.Priority.Ordered,
+    ): Boolean {
         // Missing legacy app provenance must remain readable, never guessed for delivery.
         if (proof.paymentAppId.isBlank()) return false
         if (proof.kind == PaykitPaymentProofKind.Onchain && proof.onchainAcceptanceVerified != true) return false
         val proofData = proof.proofData ?: return false
-        val identityStatus = paykitSdkService.identityStatus()
+        val read = paykitSdkService.readPaymentRequests(proof.requestId.counterparty, expectedIdentity = proof.identity)
+        val identityStatus = read.identityStatus
         if (
             identityStatus?.capability != PubkyIdentityCapability.PRIVATE_LINK_CAPABLE ||
             !PubkyPublicKeyFormat.matches(identityStatus.publicKey, proof.identity)
@@ -1414,7 +1443,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             return false
         }
 
-        val record = paykitSdkService.paymentRequests().firstOrNull {
+        val record = read.paymentRequests.firstOrNull {
             it.paymentRequestId == proof.requestId.paymentRequestId &&
                 PubkyPublicKeyFormat.matches(it.counterparty, proof.requestId.counterparty)
         } ?: return false
@@ -1430,16 +1459,21 @@ class PaykitPaymentProofRepo @Inject constructor(
                 conversionQuoteId = proof.conversionQuoteId,
                 billingPeriod = proof.billingPeriod,
                 allowanceId = proof.allowanceId,
+                priority = priority,
             )
             Logger.info("Queued a Paykit payment proof for private delivery", context = TAG)
-            runSuspendCatching { paykitSdkService.processPendingPrivateMessages() }
-                .onFailure {
-                    Logger.warn(
-                        "Paykit payment proof remains queued for private delivery",
-                        it,
-                        context = TAG,
-                    )
-                }
+        }
+        // Submission has durably queued the proof; transport does not need the local proof-state lock.
+        deliveryScope.launch {
+            runSuspendCatching {
+                paykitSdkService.processOutboundPrivateMessages(
+                    proof.requestId.counterparty,
+                    PaykitSdkOperationLock.Priority.Background,
+                    expectedIdentity = proof.identity,
+                )
+            }.onFailure {
+                Logger.warn("Retained Paykit payment proof for private delivery", it, context = TAG)
+            }
         }
         if (proof.kind != PaykitPaymentProofKind.Usdt) {
             runSuspendCatching {
@@ -1506,7 +1540,31 @@ class PaykitPaymentProofRepo @Inject constructor(
                     context = TAG,
                 )
             }.isSuccess
-        if (didPersist && !awaitDelivery) return true
+        if (didPersist && !awaitDelivery) {
+            deliveryScope.launch {
+                operationMutex.withLock {
+                    runSuspendCatching {
+                        for (proof in completedProofs) {
+                            if (proof in loadProofs()) {
+                                val priority = if (
+                                    proof.kind == PaykitPaymentProofKind.Lightning ||
+                                    (
+                                        proof.kind == PaykitPaymentProofKind.Onchain &&
+                                            proof.onchainWalletId == WalletScope.default
+                                        )
+                                ) {
+                                    PaykitSdkOperationLock.Priority.Interactive
+                                } else {
+                                    PaykitSdkOperationLock.Priority.Ordered
+                                }
+                                submitReady(proof, priority)
+                            }
+                        }
+                    }.onFailure { Logger.warn("Failed to queue a Paykit payment proof", it, context = TAG) }
+                }
+            }
+            return true
+        }
         var hasUndeliveredProof = false
         completedProofs.forEach { proof ->
             val wasDelivered = runSuspendCatching { submitReady(proof) }
@@ -1571,7 +1629,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private suspend fun persist(proofs: List<PendingPaykitPaymentProof>) {
-        store.save(proofs)
+        // Snapshots wait for durable local writes, not the operation's remote SDK calls.
+        persistenceMutex.withLock { store.save(proofs) }
         observedHardwareProofs.retainAll(proofs.toSet())
     }
 }

@@ -377,6 +377,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     fun setPaymentSubmissionActive(active: Boolean) = paykitSdkService.setPaymentSubmissionActive(active)
 
+    fun beginPaymentReview(): () -> Unit = paykitSdkService.beginPaymentReview()
+
     @Volatile
     private var activeIdentity: String? = null
 
@@ -575,7 +577,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun refresh(
         mode: PaykitPaymentRequestRefreshMode,
         forceFresh: Boolean,
-        messagePriority: Priority = Priority.Ordered,
+        messagePriority: Priority = Priority.Background,
     ): Result<Unit> {
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity
@@ -599,7 +601,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     } ?: return@refresh
                     val snapshot = runSuspendCatching {
                         val priority = if (forceFresh) Priority.Ordered else Priority.Background
-                        fetchRequestSnapshot(expectedIdentity, mode, priority, messagePriority, observationOnly = true)
+                        fetchRequestSnapshot(
+                            expectedIdentity,
+                            mode,
+                            priority,
+                            if (forceFresh) Priority.Ordered else messagePriority,
+                            observationOnly = true,
+                        )
                     }
                     operationMutex.withLock {
                         if (!isCurrentState(generation, expectedIdentity)) return@withLock
@@ -622,7 +630,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                 }
             }.onFailure {
-                Logger.warn("Failed to refresh incoming Paykit payment requests", it, context = TAG)
+                if (it != PaykitPaymentRequestError.OperationInProgress) {
+                    Logger.warn("Failed to refresh incoming Paykit payment requests", it, context = TAG)
+                }
             }
         }
     }
@@ -1073,6 +1083,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     if (it.proposalStreamItemId != proposalStreamItemId) {
                         throw PaykitPaymentRequestError.RequestUnavailable
                     }
+                    if (it.isExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
+                    if (!isLocallyPayable(it)) throw PaykitPaymentRequestError.RequestUnavailable
+                    // The SDK checks the current peer while atomically claiming and queueing acceptance.
                     withAcceptanceIntent(it) {
                         paykitSdkService.acceptPaymentRequest(
                             counterparty = it.counterparty,
@@ -1098,7 +1111,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
     ): Result<T> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (!request.requiresAcceptance) throw PaykitPaymentRequestError.RequestUnavailable
-            operationMutex.withLock { withAcceptanceIntent(request, accept) }
+            operationMutex.withLock {
+                ensurePaymentAllowed(request, forExecution = false).getOrThrow()
+                withAcceptanceIntent(request, accept)
+            }
         }.onFailure {
             Logger.warn("Failed to accept an incoming Paykit payment request for this install", it, context = TAG)
         }
@@ -1108,7 +1124,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun <T> withAcceptanceIntent(request: PaykitPaymentRequest, operation: suspend () -> T): T {
         val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
         val generation = stateGeneration.get()
-        ensurePaymentAllowed(request, forExecution = false).getOrThrow()
         val alreadySaved = request.id in presentationStore.loadAcceptedOneTimeIds(identity)
         val acceptedIds = presentationStore.addAcceptedOneTimeId(identity, request.id)
         requireCurrentState(generation, identity)
@@ -1738,7 +1753,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
             }
         }
             .onSuccess(::logOutboundFailures)
-            .onFailure { Logger.warn("Failed to deliver pending Paykit private messages", it, context = TAG) }
+            .onFailure {
+                if (it == PaykitPaymentRequestError.OperationInProgress) throw it
+                Logger.warn("Failed to deliver pending Paykit private messages", it, context = TAG)
+            }
             .getOrDefault(emptyList())
 
     private fun logOutboundFailures(reports: List<OutboundPrivateCounterpartySendReport>) {

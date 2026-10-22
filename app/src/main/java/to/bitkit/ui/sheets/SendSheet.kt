@@ -30,7 +30,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.coroutines.delay
@@ -41,6 +44,7 @@ import to.bitkit.R
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.supportPaymentRequest
 import to.bitkit.ext.toSendFailureDetails
+import to.bitkit.ext.withPaymentReview
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -103,6 +107,10 @@ private const val HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE = 3uL
 
 /** A peer reconnecting makes a channel usable again without any node event, so the overlay polls. */
 private val CHANNELS_REFRESH_INTERVAL = 1.seconds
+
+internal fun NavDestination.isPaymentReview(): Boolean =
+    hasRoute<SendRoute.Confirm>() || hasRoute<SendRoute.PinCheck>() ||
+        hasRoute<SendRoute.RecoveryPinCheck>() || hasRoute<SendRoute.HardwareSign>()
 
 internal fun NavController.navigateToCoinSelection() {
     currentBackStackEntry?.savedStateHandle?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
@@ -180,6 +188,12 @@ fun SendSheet(
                 .testTag("SendSheet"),
         ) {
             val navController = rememberNavController()
+            val entry by navController.currentBackStackEntryAsState()
+            val reviewing = entry?.destination?.isPaymentReview() == true
+            LaunchedEffect(reviewing, lifecycle, appViewModel) {
+                if (!reviewing) return@LaunchedEffect
+                lifecycle.withPaymentReview(appViewModel::beginPaymentReview)
+            }
             fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String, isShopPayment: Boolean) {
                 appViewModel.onSendSuccess(
                     details = NewTransactionSheetDetails(
@@ -672,6 +686,7 @@ fun SendSheet(
                     SendPendingScreen(
                         savedStateHandle = it.savedStateHandle,
                         onNavigateToPin = { navController.navigateTo(SendRoute.RecoveryPinCheck) },
+                        beginPaymentReview = appViewModel::beginPaymentReview,
                         paymentHash = route.paymentHash,
                         amount = route.amount,
                         observeResolution = route.observeResolution,
