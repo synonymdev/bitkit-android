@@ -12471,7 +12471,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `blocked admission releases consumed private context before dispatch only`() = test {
+        val request = paymentRequest()
+        val previous = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "original", requestId = request.id, orderId = null,
+            address = "original", amountSats = request.amount.atomic, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown, txid = "ab".repeat(32),
+        )
         val cases = listOf(
+            false to OnchainSendBlockedError(previous),
+            true to OnchainSendBlockedError(previous.copy(requestId = null)),
             false to OnchainSendBlockedError(),
             true to OnchainSendBlockedError(),
             false to OnchainSendAttemptUnreadableError(IllegalStateException("guard unreadable")),
@@ -12479,9 +12488,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         for ((index, case) in cases.withIndex()) {
             val (sendAttempted, error) = case
-            val request = paymentRequest()
             val privateContext =
                 PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to "bitkit"), 7uL + index.toULong())
+            val attemptId = "manual-$index"
+            whenever(paykitAllowanceRepo.beginManualPayment(eq(request), any())).thenReturn(Result.success(attemptId))
             balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
             whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
             whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
@@ -12513,6 +12523,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
             }
             verify(paykitPaymentProofRepo, never()).failOnchainPayment(any())
+            verify(paykitAllowanceRepo).finishManualPayment(attemptId, null, null)
         }
     }
 
@@ -12596,6 +12607,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
         whenever(paykitPaymentRequestRepo.accept(incoming)).thenReturn(Result.success(Unit))
+        whenever(paykitAllowanceRepo.beginManualPayment(eq(incoming), any())).thenReturn(Result.success("attempt-b"))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         setActiveContactPaymentContext(testPublicKey, privateContext, incoming, isInitialSubscriptionPayment = true)
@@ -12609,7 +12621,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 incomingPaymentRequestId = incoming.id
             )
         )
-        stubOnchainSend("bcrt1qnewshop", incoming.amount.atomic, Result.failure(OnchainSendBlockedError(previous)))
+        stubOnchainSend(
+            "bcrt1qnewshop",
+            incoming.amount.atomic,
+            Result.failure(OnchainSendBlockedError(previous)),
+            invokeBeforeSendAttempt = false,
+        )
         val resolution = PaykitOnchainPaymentProofResolution(
             testPublicKey,
             original.id,
@@ -12632,6 +12649,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             runCurrent()
             expectNoEvents()
         }
+        verify(paykitAllowanceRepo).finishManualPayment("attempt-b", false, null)
+        verify(paykitPaymentProofRepo).cancelPreparation(incoming)
+        verify(paykitPaymentProofRepo, never()).failOnchainPayment(original)
     }
 
     @Test

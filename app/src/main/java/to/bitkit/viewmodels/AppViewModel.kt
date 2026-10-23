@@ -5909,6 +5909,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun isUnsentBlockedRequest(
+        sendAttempted: Boolean,
+        previous: OnchainSendAttempt?,
+        request: PaykitPaymentRequest?,
+    ): Boolean = !sendAttempted && previous != null && request != null && previous.requestId != request.id
+
     private suspend fun handleOnchainPaymentFailure(
         error: Throwable,
         sendAttempted: Boolean,
@@ -5924,10 +5930,11 @@ class AppViewModel @Inject constructor(
             (sendAttempted && error !is OnchainSendNotDispatchedError)
         if (unresolved) {
             Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
-            finishManualAllowancePayment(allowanceAttemptId, succeeded = null)
+            val previous = (error as? OnchainSendBlockedError)?.attempt
+            val unsentRequest = isUnsentBlockedRequest(sendAttempted, previous, incomingPaymentRequest)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = if (unsentRequest) false else null)
             if (!sendAttempted) releasePrivatePaymentListIfNeeded(contactPaymentContext)
             if (!paymentProofStarted) cancelPaymentProofPreparation(preparedPaymentProofRequest)
-            val previous = (error as? OnchainSendBlockedError)?.attempt
             if (previous != null &&
                 (incomingPaymentRequest == null || previous.requestId != incomingPaymentRequest.id)
             ) {
