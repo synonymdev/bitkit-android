@@ -56,11 +56,13 @@ class EditProfileViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             val profile = pubkyRepo.profile.value
             val publicKey = pubkyRepo.publicKey.value.orEmpty()
+            val removal = if (pubkyRepo.isRingAdoptedIdentity()) ProfileRemoval.UNLINK else ProfileRemoval.DELETE
             if (profile != null) {
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         publicKey = publicKey,
+                        removal = removal,
                         name = profile.name,
                         bio = profile.bio,
                         links = profile.links.map { link ->
@@ -71,10 +73,8 @@ class EditProfileViewModel @Inject constructor(
                     )
                 }
             } else {
-                _uiState.update { it.copy(isLoading = false, publicKey = publicKey) }
+                _uiState.update { it.copy(isLoading = false, publicKey = publicKey, removal = removal) }
             }
-            val removal = if (pubkyRepo.isRingAdoptedIdentity()) ProfileRemoval.UNLINK else ProfileRemoval.DELETE
-            _uiState.update { it.copy(removal = removal) }
         }
     }
 
