@@ -32,6 +32,6 @@
     <action>Tap "Yes, Unlink"</action>
     <action>Wait for unlinking to finish and verify profile onboarding is shown: the Pubky choice screen, or the Profile intro (testTag "ProfileIntro") if it has not been seen; tap Continue (testTag "ProfileIntro-button") in that case</action>
     <action>Verify the Pubky choice screen still offers the same Ring identity (testTag "PubkyChoiceIdentity", told apart by the key caption of &lt;ring-pubky&gt;)</action>
-    <action>Run `adb shell monkey -p to.pubky.ring -c android.intent.category.LAUNCHER 1` and verify Pubky Ring still lists the identity</action>
+    <action>Run `adb shell am start -n to.pubky.ring/to.pubkyring.MainActivity` and verify Pubky Ring still lists the identity</action>
   </actions>
 </journey>
