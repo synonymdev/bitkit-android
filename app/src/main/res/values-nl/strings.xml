@@ -826,7 +826,6 @@
     <string name="usdt__fee_note">Alle vergoedingen worden in USDT betaald. De uiteindelijke vergoeding kan lager zijn.</string>
     <string name="usdt__from_address">Van adres</string>
     <string name="usdt__hide_details">Details verbergen</string>
-    <string name="usdt__history_sync">Oudere activiteit wordt nog gesynchroniseerd. Uw saldo is actueel zodra er verbinding is.</string>
     <string name="usdt__intro_decline">Nee, bedankt</string>
     <string name="usdt__intro_description">Bitcoin in hart en nieren. Dollars wanneer u ze nodig heeft. Schakel USDT (Tether) in om digitale dollars te verzenden en ontvangen met Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nU BESLIST</string>
@@ -839,6 +838,7 @@
     <string name="usdt__payment_sent">USDT verzonden</string>
     <string name="usdt__pending">In behandeling</string>
     <string name="usdt__receive_amount_title">Bedrag</string>
+    <string name="usdt__receive_copied">Adres gekopieerd naar klembord.\nZorg ervoor dat USDT alleen via het geselecteerde netwerk wordt verstuurd.</string>
     <string name="usdt__receive_estimate">Ontvangst (ca.)</string>
     <string name="usdt__receive_fee">Vergoedingen</string>
     <string name="usdt__receive_fees_title">Geschatte vergoedingen</string>

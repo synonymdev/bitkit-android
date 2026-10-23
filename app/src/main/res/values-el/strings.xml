@@ -819,7 +819,6 @@
     <string name="usdt__fee_note">Όλα τα τέλη πληρώνονται σε USDT. Το τελικό τέλος μπορεί να είναι χαμηλότερο.</string>
     <string name="usdt__from_address">Από διεύθυνση</string>
     <string name="usdt__hide_details">Απόκρυψη λεπτομερειών</string>
-    <string name="usdt__history_sync">Η παλαιότερη δραστηριότητα συγχρονίζεται ακόμα. Το υπόλοιπό σου είναι ενημερωμένο όταν υπάρχει σύνδεση.</string>
     <string name="usdt__intro_decline">Όχι, ευχαριστώ</string>
     <string name="usdt__intro_description">Bitcoin στην καρδιά. Δολάρια όταν τα χρειάζεσαι. Ενεργοποίησε το USDT (Tether) για να στέλνεις και να λαμβάνεις ψηφιακά δολάρια με το Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;ΔΟΛΑΡΙΑ;&lt;/accent&gt;\nΔΙΚΗ ΣΟΥ ΕΠΙΛΟΓΗ</string>
@@ -832,6 +831,7 @@
     <string name="usdt__payment_sent">Στάλθηκαν USDT</string>
     <string name="usdt__pending">Εκκρεμεί</string>
     <string name="usdt__receive_amount_title">Ποσό</string>
+    <string name="usdt__receive_copied">Η διεύθυνση αντιγράφηκε στο πρόχειρο.\nΒεβαιώσου ότι το USDT αποστέλλεται μόνο μέσω του επιλεγμένου δικτύου.</string>
     <string name="usdt__receive_estimate">Λήψη (εκτίμ.)</string>
     <string name="usdt__receive_fee">Τέλη</string>
     <string name="usdt__receive_fees_title">Εκτιμώμενα τέλη</string>

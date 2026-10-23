@@ -1,0 +1,24 @@
+<journey name="Payment Review Refresh Deferral">
+  <description>
+    Verifies that a Bitcoin Payment Request remains usable while reviewing and authorizing it, and that closing or backgrounding review does not prevent later requests from arriving. Requires two linked disposable regtest wallets, an existing PIN with payment-PIN enabled and biometric authorization disabled, and at least 10,000 sats in Savings. Use only authorized regtest payments. Queue-admission and expiry fault checks are covered separately by repository tests; this journey verifies the visible flow without changing payment terms.
+  </description>
+  <actions>
+    <action>On the requester, send the payer an on-chain-only Bitcoin Payment Request for 1,000 sats</action>
+    <action>On the payer, verify the Payment Request confirmation screen (id "PaymentRequestConfirm") shows 1,000 sats and Savings is selected</action>
+    <action>Leave the confirmation open for 30 seconds</action>
+    <action>Verify the amount remains 1,000 sats and payment authorization has not started</action>
+    <action>Swipe to pay using the control with id "GRAB", complete any sending-warning confirmation, and wait on PIN entry for 30 seconds without authorizing</action>
+    <action>Cancel PIN entry, then close the send sheet without paying</action>
+    <action>Verify Activity contains no outgoing payment for this request</action>
+    <action>On the requester, send the payer a second on-chain-only Bitcoin Payment Request for 2,000 sats</action>
+    <action>On the payer, verify the second request becomes visible without restarting the app</action>
+    <action>Close the second request without paying, then reopen the first request from the pending-request list</action>
+    <action>Verify the confirmation still shows the original 1,000 sats</action>
+    <action>Background the app, reopen it, and verify the original request remains available for review</action>
+    <action>Open the original request if necessary, verify 1,000 sats and the fee, then swipe to pay and complete PIN authorization</action>
+    <action>Verify the success screen (id "SendSuccess") is visible</action>
+    <action>Close success and verify Activity contains exactly one outgoing payment for the original request</action>
+    <action>On the requester, verify the original request records the completed Bitcoin payment without another payment from the payer</action>
+    <action>Verify the second request remains unpaid</action>
+  </actions>
+</journey>

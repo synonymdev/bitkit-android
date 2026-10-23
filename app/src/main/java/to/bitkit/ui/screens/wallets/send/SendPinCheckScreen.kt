@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -47,6 +48,8 @@ fun SendPinCheckScreen(
     val app = appViewModel ?: return
     val attemptsRemaining by app.pinAttemptsRemaining.collectAsStateWithLifecycle()
     var pin by remember { mutableStateOf("") }
+
+    BackHandler(onBack = onBack)
 
     LaunchedEffect(pin) {
         if (pin.length == Env.PIN_LENGTH) {

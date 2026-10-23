@@ -9,6 +9,7 @@ import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PaykitSdk
+import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.ProfileSource
 import com.synonym.paykit.PubkyAuthCompanionClaim
@@ -3476,6 +3477,97 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals("Alice", contacts.first().name)
         assertEquals(contactKey, contacts.first().publicKey)
         assertFalse(sut.isLoadingContacts.value)
+    }
+
+    @Test
+    fun `contact refresh retries wrapped SDK review deferral without completing or holding the SDK lock`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val saved = createContactRecord(VALID_CONTACT_KEY_A, profile = createPaykitProfile("Saved"))
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).thenReturn(listOf(saved))
+        sut.loadContacts()
+        val version = sut.contactsLoadVersion.value
+        val completionVersion = sut.contactsLoadCompletionVersion.value
+        val sdk = mock<PaykitSdk>()
+        val observation = PaykitStateObservation(
+            publicKey = VALID_SELF_KEY,
+            keyGeneration = 0uL,
+            observedAt = "2026-10-20T00:00:00Z",
+            contacts = listOf(saved),
+            linkedPeers = emptyList(),
+            paymentRequests = emptyList(),
+            receipts = emptyList(),
+        )
+        whenever(sdk.observeState()).thenReturn(observation)
+        whenever(sdk.contactRecords()).thenReturn(listOf(saved))
+        val paykit = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val service = PubkyService(paykit)
+        val deferred = CompletableDeferred<Throwable>()
+        whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).doSuspendableAnswer {
+            runSuspendCatching { service.observedContactRecords(VALID_SELF_KEY) }
+                .onFailure { deferred.complete(it) }
+                .getOrThrow()
+        }
+        val endReview = paykit.beginPaymentReview()
+        val refresh = async { sut.refreshContacts() }
+        try {
+            assertSame(PaykitPaymentRequestError.OperationInProgress, deferred.await().cause)
+            runCurrent()
+
+            assertFalse(refresh.isCompleted)
+            assertEquals(version, sut.contactsLoadVersion.value)
+            assertEquals(completionVersion, sut.contactsLoadCompletionVersion.value)
+            assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+            verify(sdk, never()).observeState()
+            assertEquals(listOf(saved), service.contactRecords())
+
+            endReview()
+            advanceTimeBy(500.milliseconds)
+            runCurrent()
+
+            assertTrue(refresh.await())
+            assertEquals(version + 1, sut.contactsLoadVersion.value)
+            assertEquals(completionVersion + 1, sut.contactsLoadCompletionVersion.value)
+            assertFalse(sut.isLoadingContacts.value)
+            verify(sdk).observeState()
+        } finally {
+            endReview()
+            refresh.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun `deferred contact load stops after cancellation or sign out`() = test {
+        listOf("cancel", "sign out").forEachCase({ it }) { action ->
+            resetForCase()
+            authenticateForTesting(publicKey = VALID_SELF_KEY)
+            val version = sut.contactsLoadVersion.value
+            val completionVersion = sut.contactsLoadCompletionVersion.value
+            whenever(pubkyService.observedContactRecords(VALID_SELF_KEY)).doSuspendableAnswer {
+                throw PaykitPaymentRequestError.OperationInProgress
+            }
+            clearInvocations(pubkyService)
+            val load = launch { sut.loadContacts() }
+            try {
+                runCurrent()
+                assertFalse(load.isCompleted)
+                assertEquals(version, sut.contactsLoadVersion.value)
+                assertEquals(completionVersion, sut.contactsLoadCompletionVersion.value)
+
+                when (action) {
+                    "cancel" -> load.cancel()
+                    "sign out" -> sut.signOut().getOrThrow()
+                }
+                advanceUntilIdle()
+                load.join()
+
+                verify(pubkyService).observedContactRecords(VALID_SELF_KEY)
+                assertFalse(sut.isLoadingContacts.value)
+                assertEquals(if (action == "cancel") version else 0L, sut.contactsLoadVersion.value)
+                assertEquals(if (action == "cancel") completionVersion else 0L, sut.contactsLoadCompletionVersion.value)
+            } finally {
+                load.cancelAndJoin()
+            }
+        }
     }
 
     @Test

@@ -827,7 +827,6 @@
     <string name="usdt__fee_note">Totes les tarifes es paguen en USDT. La tarifa final pot ser inferior.</string>
     <string name="usdt__from_address">Adreça d\'origen</string>
     <string name="usdt__hide_details">Amagar detalls</string>
-    <string name="usdt__history_sync">L\'activitat anterior encara s\'està sincronitzant. El teu saldo està al dia quan hi ha connexió.</string>
     <string name="usdt__intro_decline">No, gràcies</string>
     <string name="usdt__intro_description">Bitcoin de cor. Dòlars quan els necessitis. Activa USDT (Tether) per enviar i rebre dòlars digitals amb Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DÒLARS?&lt;/accent&gt;\nTU DECIDEIXES</string>
@@ -840,6 +839,7 @@
     <string name="usdt__payment_sent">USDT enviats</string>
     <string name="usdt__pending">Pendent</string>
     <string name="usdt__receive_amount_title">Import</string>
+    <string name="usdt__receive_copied">Adreça copiada al porta-retalls.\nAssegura’t que l’USDT només s’enviï a través de la xarxa seleccionada.</string>
     <string name="usdt__receive_estimate">Rebràs (est.)</string>
     <string name="usdt__receive_fee">Tarifes</string>
     <string name="usdt__receive_fees_title">Tarifes estimades</string>

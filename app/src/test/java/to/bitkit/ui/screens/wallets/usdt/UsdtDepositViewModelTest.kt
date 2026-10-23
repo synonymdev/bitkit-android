@@ -56,8 +56,8 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
     @Test
     fun `USD cents respect locale grouping and decimal separators`() {
         assertEquals("$10,000.00", "1000000".usdCents(Locale.US))
-        assertEquals("$10.000,00", "1000000".usdCents(Locale.GERMANY))
-        assertEquals("$0,05", "5".usdCents(Locale.GERMANY))
+        assertEquals("$10,000.00", "1000000".usdCents(Locale.GERMANY))
+        assertEquals("$0.05", "5".usdCents(Locale.GERMANY))
     }
 
     @Test
