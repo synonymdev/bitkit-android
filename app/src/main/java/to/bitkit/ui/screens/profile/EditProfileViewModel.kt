@@ -54,11 +54,13 @@ class EditProfileViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             val profile = pubkyRepo.profile.value
             val publicKey = pubkyRepo.publicKey.value.orEmpty()
+            val isRingIdentity = pubkyRepo.isRingAdoptedIdentity()
             if (profile != null) {
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         publicKey = publicKey,
+                        isRingIdentity = isRingIdentity,
                         name = profile.name,
                         bio = profile.bio,
                         links = profile.links.map { link ->
@@ -69,7 +71,7 @@ class EditProfileViewModel @Inject constructor(
                     )
                 }
             } else {
-                _uiState.update { it.copy(isLoading = false, publicKey = publicKey) }
+                _uiState.update { it.copy(isLoading = false, publicKey = publicKey, isRingIdentity = isRingIdentity) }
             }
         }
     }
@@ -272,9 +274,14 @@ class EditProfileViewModel @Inject constructor(
             val result = pubkyRepo.deleteProfileWithSessionRetry()
             if (result.isSuccess) {
                 privatePaykitRepo.closeAndClear()
+                val successRes = if (_uiState.value.isRingIdentity) {
+                    R.string.profile__unlink_success
+                } else {
+                    R.string.profile__delete_success
+                }
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.profile__delete_success),
+                    title = context.getString(successRes),
                 )
                 _effects.emit(EditProfileEffect.DeleteSuccess)
             } else {
@@ -292,6 +299,7 @@ class EditProfileViewModel @Inject constructor(
 @Stable
 data class EditProfileUiState(
     val publicKey: String = "",
+    val isRingIdentity: Boolean = false,
     val name: String = "",
     val bio: String = "",
     val links: ImmutableList<ProfileEditLink> = persistentListOf(),

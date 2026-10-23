@@ -1384,6 +1384,7 @@
     <string name="profile__edit_save_error">Falha ao guardar o perfil</string>
     <string name="profile__edit_save_success">Perfil guardado</string>
     <string name="profile__edit_tags">ETIQUETAS</string>
+    <string name="profile__edit_unlink_section">DESASSOCIAR</string>
     <string name="profile__empty_state">Não foi possível carregar o seu perfil.</string>
     <string name="profile__intro_description">Com o seu perfil portátil, os seus contactos podem encontrá-lo e pagar-lhe em qualquer lugar.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTÁTIL&lt;/accent&gt;</string>
@@ -1404,6 +1405,13 @@
     <string name="profile__sign_out_title">Desligar perfil</string>
     <string name="profile__source_lost">Este pubky já não está disponível no Pubky Ring. O seu perfil foi desligado.</string>
     <string name="profile__suggestions_to_add">Sugestões a adicionar</string>
+    <string name="profile__unlink_confirm">Sim, desassociar</string>
+    <string name="profile__unlink_confirm_description">Isto vai eliminar os seus dados Paykit e desassociar este pubky da Bitkit. Continuará disponível no Pubky Ring.</string>
+    <string name="profile__unlink_confirm_title">Desassociar pubky?</string>
+    <string name="profile__unlink_error_description">Não foi possível eliminar os seus dados Paykit. Tente novamente ou desligue este pubky da Bitkit.</string>
+    <string name="profile__unlink_error_title">Não foi possível desassociar o pubky</string>
+    <string name="profile__unlink_pubky">Desassociar pubky</string>
+    <string name="profile__unlink_success">Pubky desassociado</string>
     <string name="profile__your_name">O seu nome</string>
     <string name="profile__your_pubky">O seu pubky</string>
     <string name="pubky_auth__already_signed_in">Sessão já iniciada</string>

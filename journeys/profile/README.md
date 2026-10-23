@@ -2,6 +2,8 @@
 
 `delete-profile.xml` verifies visible progress and completion when deleting a disposable profile. Use a test identity that may be deleted.
 
+`unlink-ring-pubky.xml` verifies that a pubky adopted from Pubky Ring shows "Unlink pubky" instead of "Delete Profile" in Edit Profile, returns to profile onboarding after unlinking, and stays available in Pubky Ring. It needs Pubky Ring (`to.pubky.ring`) on the same emulator or device, signed with the same key as the Bitkit build (`app/debug.keystore` for a dev build), which is not a listed capability. Use a disposable Ring identity; a profile created in Bitkit keeps "Delete Profile", covered by `delete-profile.xml`. Android Ring choice rows share the testTag `PubkyChoiceIdentity`, so the journey tells the adopted identity's row apart by its key caption.
+
 During profile deletion, automatic contact refresh, request intake and endpoint publication must not start new work. Already admitted operations and explicit deletion cleanup still finish. After a failed deletion, normal automatic work must resume for the retained identity. Verifying SDK admission and a controlled cleanup failure requires operation gates beyond the journey runner capabilities; this remains a manual check rather than a timed deletion guarantee.
 
 Contact-link retention after deletion is platform-specific. Android cancels a scan awaiting a signed-in contacts refresh when deletion signs out; it does not retry that scan as the iOS retained-link flow does. This change does not alter that cancellation behavior.

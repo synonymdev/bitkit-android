@@ -1786,6 +1786,29 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `isRingAdoptedIdentity needs a Ring reference to the signed-in pubky`() = test {
+        stubAdoptedRingSource()
+        assertFalse(sut.isRingAdoptedIdentity(), "Signed out")
+
+        adoptedSource = null
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        assertFalse(sut.isRingAdoptedIdentity(), "Bitkit-created identity")
+
+        stubAdoptedRingSource()
+        assertTrue(sut.isRingAdoptedIdentity(), "Ring reference matches the signed-in pubky")
+
+        adoptedSource = SharedPubkyContract.RING_SOURCE_PREFIX + VALID_CONTACT_KEY_B.removePrefix("pubky")
+        assertFalse(sut.isRingAdoptedIdentity(), "Ring reference to another pubky")
+
+        adoptedSource = "to.bitkit.other:" + VALID_SELF_KEY.removePrefix("pubky")
+        assertFalse(sut.isRingAdoptedIdentity(), "Reference from another app")
+
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name))
+            .thenAnswer { throw TestAppError("Keychain unavailable") }
+        assertFalse(sut.isRingAdoptedIdentity(), "Keychain failure")
+    }
+
+    @Test
     fun `localIdentityPublicKey needs a saved session and a stored key without a Ring source`() = test {
         whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(true)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")

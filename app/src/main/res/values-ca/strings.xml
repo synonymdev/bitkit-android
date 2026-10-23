@@ -446,6 +446,13 @@
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Torna a intentar</string>
     <string name="profile__suggestions">Suggeriments</string>
+    <string name="profile__unlink_confirm">Sí, desvincula</string>
+    <string name="profile__unlink_confirm_description">Això eliminarà les teves dades de Paykit i desvincularà aquest pubky de Bitkit. Continuarà disponible a Pubky Ring.</string>
+    <string name="profile__unlink_confirm_title">Desvincular el pubky?</string>
+    <string name="profile__unlink_error_description">No hem pogut eliminar les teves dades de Paykit. Torna-ho a provar o desconnecta aquest pubky de Bitkit.</string>
+    <string name="profile__unlink_error_title">No s\'ha pogut desvincular el pubky</string>
+    <string name="profile__unlink_pubky">Desvincular el pubky</string>
+    <string name="profile__unlink_success">Pubky desvinculat</string>
     <string name="profile__your_name">El teu Nom</string>
     <string name="security__backup_button">Còpia de seguretat</string>
     <string name="security__backup_funds">Ara que tens alguns fons a la teva cartera, és hora de fer una còpia de seguretat dels teus diners!</string>
@@ -1399,6 +1406,7 @@
     <string name="profile__edit_save_error">No s\'ha pogut desar el perfil</string>
     <string name="profile__edit_save_success">Perfil desat</string>
     <string name="profile__edit_tags">ETIQUETES</string>
+    <string name="profile__edit_unlink_section">DESVINCULAR</string>
     <string name="profile__empty_state">No s\'ha pogut carregar el teu perfil.</string>
     <string name="profile__intro_description">Amb el teu perfil portable, els teus contactes et poden trobar i pagar a qualsevol lloc.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTABLE&lt;/accent&gt;</string>

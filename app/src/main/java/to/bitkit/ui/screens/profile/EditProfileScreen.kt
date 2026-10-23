@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -113,6 +115,8 @@ private fun Content(
 ) {
     BackHandler(enabled = uiState.isBusy) {}
 
+    val removal = if (uiState.isRingIdentity) ProfileRemoval.UNLINK else ProfileRemoval.DELETE
+
     val pickMedia = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { onAvatarSelected(it) } }
@@ -177,16 +181,18 @@ private fun Content(
                     )
                 },
                 onDelete = onDelete,
-                deleteLabel = stringResource(R.string.profile__delete_profile),
+                deleteLabel = stringResource(removal.label),
+                deleteSectionLabel = stringResource(removal.sectionLabel),
+                deleteIcon = removal.icon,
             )
         }
     }
 
     if (uiState.showDeleteDialog) {
         AppAlertDialog(
-            title = stringResource(R.string.profile__delete_confirm_title),
-            text = stringResource(R.string.profile__delete_confirm_description),
-            confirmText = stringResource(R.string.common__delete_yes),
+            title = stringResource(removal.confirmTitle),
+            text = stringResource(removal.confirmDescription),
+            confirmText = stringResource(removal.confirmText),
             onConfirm = onConfirmDelete,
             onDismiss = onDismissDeleteDialog,
         )
@@ -194,8 +200,8 @@ private fun Content(
 
     if (uiState.showDeleteFailureDialog) {
         AppAlertDialog(
-            title = stringResource(R.string.profile__delete_error_title),
-            text = stringResource(R.string.profile__delete_error_description),
+            title = stringResource(removal.errorTitle),
+            text = stringResource(removal.errorDescription),
             confirmText = stringResource(R.string.common__retry),
             dismissText = stringResource(R.string.profile__sign_out),
             onConfirm = onRetryDelete,
@@ -221,6 +227,38 @@ private fun Content(
             onSave = onSaveTag,
         )
     }
+}
+
+private enum class ProfileRemoval(
+    @StringRes val sectionLabel: Int,
+    @StringRes val label: Int,
+    @DrawableRes val icon: Int,
+    @StringRes val confirmTitle: Int,
+    @StringRes val confirmDescription: Int,
+    @StringRes val confirmText: Int,
+    @StringRes val errorTitle: Int,
+    @StringRes val errorDescription: Int,
+) {
+    DELETE(
+        sectionLabel = R.string.profile__edit_delete_section,
+        label = R.string.profile__delete_profile,
+        icon = R.drawable.ic_trash,
+        confirmTitle = R.string.profile__delete_confirm_title,
+        confirmDescription = R.string.profile__delete_confirm_description,
+        confirmText = R.string.common__delete_yes,
+        errorTitle = R.string.profile__delete_error_title,
+        errorDescription = R.string.profile__delete_error_description,
+    ),
+    UNLINK(
+        sectionLabel = R.string.profile__edit_unlink_section,
+        label = R.string.profile__unlink_pubky,
+        icon = R.drawable.ic_link,
+        confirmTitle = R.string.profile__unlink_confirm_title,
+        confirmDescription = R.string.profile__unlink_confirm_description,
+        confirmText = R.string.profile__unlink_confirm,
+        errorTitle = R.string.profile__unlink_error_title,
+        errorDescription = R.string.profile__unlink_error_description,
+    ),
 }
 
 @Composable

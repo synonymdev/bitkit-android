@@ -20,6 +20,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -202,6 +203,43 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `profile created in Bitkit keeps delete copy`() = test {
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isRingIdentity)
+
+        sut.deleteProfile()
+        advanceUntilIdle()
+        verify(context).getString(R.string.profile__delete_success)
+        verify(context, never()).getString(R.string.profile__unlink_success)
+    }
+
+    @Test
+    fun `ring identity is unlinked with the same cleanup`() = test {
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+        val sut = createSut(isRingIdentity = true)
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.isRingIdentity)
+
+        sut.effects.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+
+            assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
+        }
+        verify(context).getString(R.string.profile__unlink_success)
+        verify(context, never()).getString(R.string.profile__delete_success)
+        inOrder(privatePaykitRepo, pubkyRepo).apply {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
+            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(privatePaykitRepo).closeAndClear()
+        }
+    }
+
+    @Test
     fun `retryDeleteProfile should emit success when repository delete succeeds`() = test {
         whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
 
@@ -335,8 +373,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
     }
 
-    private fun createSut(): EditProfileViewModel {
+    private fun createSut(isRingIdentity: Boolean = false): EditProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
+        whenever { pubkyRepo.isRingAdoptedIdentity() }.thenReturn(isRingIdentity)
         whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))

@@ -1385,6 +1385,7 @@
     <string name="profile__edit_save_error">فشل حفظ الملف الشخصي</string>
     <string name="profile__edit_save_success">تم حفظ الملف الشخصي</string>
     <string name="profile__edit_tags">العلامات</string>
+    <string name="profile__edit_unlink_section">إلغاء الربط</string>
     <string name="profile__empty_state">تعذر تحميل ملفك الشخصي.</string>
     <string name="profile__intro_description">مع ملفك الشخصي المحمول، يمكن لجهات اتصالك الوصول إليك والدفع لك في أي مكان.</string>
     <string name="profile__intro_title">ملف شخصي\n&lt;accent&gt;محمول&lt;/accent&gt;</string>
@@ -1405,6 +1406,13 @@
     <string name="profile__sign_out_title">فصل الملف الشخصي</string>
     <string name="profile__source_lost">لم يعد هذا الـ pubky متاحًا في Pubky Ring. تم فصل ملفك الشخصي.</string>
     <string name="profile__suggestions_to_add">اقتراحات للإضافة</string>
+    <string name="profile__unlink_confirm">نعم، ألغِ الربط</string>
+    <string name="profile__unlink_confirm_description">سيؤدي هذا إلى حذف بيانات Paykit الخاصة بك وإلغاء ربط هذا الـ pubky من Bitkit. سيظل متاحًا في Pubky Ring.</string>
+    <string name="profile__unlink_confirm_title">إلغاء ربط الـ pubky؟</string>
+    <string name="profile__unlink_error_description">تعذر علينا حذف بيانات Paykit الخاصة بك. أعد المحاولة، أو افصل هذا الـ pubky عن Bitkit.</string>
+    <string name="profile__unlink_error_title">تعذر إلغاء ربط الـ pubky</string>
+    <string name="profile__unlink_pubky">إلغاء ربط الـ pubky</string>
+    <string name="profile__unlink_success">تم إلغاء ربط الـ pubky</string>
     <string name="profile__your_name">اسمك</string>
     <string name="profile__your_pubky">Pubky الخاص بك</string>
     <string name="pubky_auth__already_signed_in">تم تسجيل الدخول بالفعل</string>

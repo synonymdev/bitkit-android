@@ -447,6 +447,13 @@
     <string name="profile__retry_load">Inténtelo de nuevo</string>
     <string name="profile__suggestions">Sugerencias</string>
     <string name="profile__suggestions_to_add">Sugerencias para añadir</string>
+    <string name="profile__unlink_confirm">Sí, desvincular</string>
+    <string name="profile__unlink_confirm_description">Esto eliminará sus datos de Paykit y desvinculará este pubky de Bitkit. Seguirá disponible en Pubky Ring.</string>
+    <string name="profile__unlink_confirm_title">¿Desvincular el pubky?</string>
+    <string name="profile__unlink_error_description">No pudimos eliminar sus datos de Paykit. Vuelva a intentarlo o desconecte este pubky de Bitkit.</string>
+    <string name="profile__unlink_error_title">No se pudo desvincular el pubky</string>
+    <string name="profile__unlink_pubky">Desvincular pubky</string>
+    <string name="profile__unlink_success">Pubky desvinculado</string>
     <string name="profile__your_name">Su Nombre</string>
     <string name="other__update_text">Por favor, ¡actualice Bitkit a la última versión para nuevas funciones y corregir errores!</string>
     <string name="security__backup_wallet">Copia de seguridad de la cartera</string>
@@ -1396,6 +1403,7 @@
     <string name="profile__edit_save_error">No se pudo guardar el perfil</string>
     <string name="profile__edit_save_success">Perfil guardado</string>
     <string name="profile__edit_tags">ETIQUETAS</string>
+    <string name="profile__edit_unlink_section">DESVINCULAR</string>
     <string name="profile__empty_state">No se pudo cargar su perfil.</string>
     <string name="profile__intro_description">Con su perfil portátil, sus contactos pueden localizarle y pagarle en cualquier lugar.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTÁTIL&lt;/accent&gt;</string>

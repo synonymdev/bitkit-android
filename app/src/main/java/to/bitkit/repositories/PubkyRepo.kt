@@ -1549,6 +1549,16 @@ class PubkyRepo @Inject constructor(
         keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name) && !keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)
     }
 
+    /** Whether the signed-in pubky was adopted from Pubky Ring, so removing it from Bitkit only unlinks it. */
+    suspend fun isRingAdoptedIdentity(): Boolean = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val publicKey = _publicKey.value ?: return@withContext false
+            val reference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ?: return@withContext false
+            if (!reference.startsWith(SharedPubkyContract.RING_SOURCE_PREFIX)) return@withContext false
+            PubkyPublicKeyFormat.matches(reference.removePrefix(SharedPubkyContract.RING_SOURCE_PREFIX), publicKey)
+        }
+    }.getOrDefault(false)
+
     /**
      * The identity of the key Bitkit stores for the saved session, read without restoring the session.
      * Null for a Ring-sourced identity, or without both a saved session and a stored key.
