@@ -1553,9 +1553,8 @@ class PubkyRepo @Inject constructor(
     suspend fun isRingAdoptedIdentity(): Boolean = runSuspendCatching {
         withContext(ioDispatcher) {
             val publicKey = _publicKey.value ?: return@withContext false
-            val reference = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ?: return@withContext false
-            if (!reference.startsWith(SharedPubkyContract.RING_SOURCE_PREFIX)) return@withContext false
-            PubkyPublicKeyFormat.matches(reference.removePrefix(SharedPubkyContract.RING_SOURCE_PREFIX), publicKey)
+            val adoptedPubky = adoptedRingPubky() ?: return@withContext false
+            PubkyPublicKeyFormat.matches(adoptedPubky, publicKey)
         }
     }.getOrDefault(false)
 
@@ -2107,11 +2106,13 @@ class PubkyRepo @Inject constructor(
         null
     }
 
-    private suspend fun adoptedSecretKeyHex(): String? {
-        val pubky = runCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.getOrNull()
+    private suspend fun adoptedRingPubky(): String? =
+        runCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.getOrNull()
             ?.substringAfter(SharedPubkyContract.RING_SOURCE_PREFIX, "")
             ?.takeIf { it.isNotBlank() }
-            ?: return null
+
+    private suspend fun adoptedSecretKeyHex(): String? {
+        val pubky = adoptedRingPubky() ?: return null
         return sharedPubkyClient.ringCredential(pubky)
             .onFailure { Logger.warn("Failed to read adopted ring credential", it, context = TAG) }
             .getOrNull()

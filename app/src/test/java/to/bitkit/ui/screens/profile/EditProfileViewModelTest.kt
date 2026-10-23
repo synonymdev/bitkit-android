@@ -208,7 +208,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        assertFalse(sut.uiState.value.isRingIdentity)
+        assertEquals(ProfileRemoval.DELETE, sut.uiState.value.removal)
 
         sut.deleteProfile()
         advanceUntilIdle()
@@ -222,7 +222,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         val sut = createSut(isRingIdentity = true)
         advanceUntilIdle()
 
-        assertTrue(sut.uiState.value.isRingIdentity)
+        assertEquals(ProfileRemoval.UNLINK, sut.uiState.value.removal)
 
         sut.effects.test {
             sut.deleteProfile()

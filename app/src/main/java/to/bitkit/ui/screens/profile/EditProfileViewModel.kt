@@ -2,6 +2,8 @@ package to.bitkit.ui.screens.profile
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -54,13 +56,11 @@ class EditProfileViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             val profile = pubkyRepo.profile.value
             val publicKey = pubkyRepo.publicKey.value.orEmpty()
-            val isRingIdentity = pubkyRepo.isRingAdoptedIdentity()
             if (profile != null) {
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         publicKey = publicKey,
-                        isRingIdentity = isRingIdentity,
                         name = profile.name,
                         bio = profile.bio,
                         links = profile.links.map { link ->
@@ -71,8 +71,10 @@ class EditProfileViewModel @Inject constructor(
                     )
                 }
             } else {
-                _uiState.update { it.copy(isLoading = false, publicKey = publicKey, isRingIdentity = isRingIdentity) }
+                _uiState.update { it.copy(isLoading = false, publicKey = publicKey) }
             }
+            val removal = if (pubkyRepo.isRingAdoptedIdentity()) ProfileRemoval.UNLINK else ProfileRemoval.DELETE
+            _uiState.update { it.copy(removal = removal) }
         }
     }
 
@@ -274,14 +276,9 @@ class EditProfileViewModel @Inject constructor(
             val result = pubkyRepo.deleteProfileWithSessionRetry()
             if (result.isSuccess) {
                 privatePaykitRepo.closeAndClear()
-                val successRes = if (_uiState.value.isRingIdentity) {
-                    R.string.profile__unlink_success
-                } else {
-                    R.string.profile__delete_success
-                }
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
-                    title = context.getString(successRes),
+                    title = context.getString(_uiState.value.removal.successToast),
                 )
                 _effects.emit(EditProfileEffect.DeleteSuccess)
             } else {
@@ -299,7 +296,7 @@ class EditProfileViewModel @Inject constructor(
 @Stable
 data class EditProfileUiState(
     val publicKey: String = "",
-    val isRingIdentity: Boolean = false,
+    val removal: ProfileRemoval = ProfileRemoval.DELETE,
     val name: String = "",
     val bio: String = "",
     val links: ImmutableList<ProfileEditLink> = persistentListOf(),
@@ -316,6 +313,41 @@ data class EditProfileUiState(
     val showAddTagSheet: Boolean = false,
 ) {
     val isBusy: Boolean get() = isSaving || isDeleting
+}
+
+enum class ProfileRemoval(
+    @StringRes val sectionLabel: Int,
+    @StringRes val label: Int,
+    @DrawableRes val icon: Int,
+    @StringRes val confirmTitle: Int,
+    @StringRes val confirmDescription: Int,
+    @StringRes val confirmText: Int,
+    @StringRes val errorTitle: Int,
+    @StringRes val errorDescription: Int,
+    @StringRes val successToast: Int,
+) {
+    DELETE(
+        sectionLabel = R.string.profile__edit_delete_section,
+        label = R.string.profile__delete_profile,
+        icon = R.drawable.ic_trash,
+        confirmTitle = R.string.profile__delete_confirm_title,
+        confirmDescription = R.string.profile__delete_confirm_description,
+        confirmText = R.string.common__delete_yes,
+        errorTitle = R.string.profile__delete_error_title,
+        errorDescription = R.string.profile__delete_error_description,
+        successToast = R.string.profile__delete_success,
+    ),
+    UNLINK(
+        sectionLabel = R.string.profile__edit_unlink_section,
+        label = R.string.profile__unlink_pubky,
+        icon = R.drawable.ic_link,
+        confirmTitle = R.string.profile__unlink_confirm_title,
+        confirmDescription = R.string.profile__unlink_confirm_description,
+        confirmText = R.string.profile__unlink_confirm,
+        errorTitle = R.string.profile__unlink_error_title,
+        errorDescription = R.string.profile__unlink_error_description,
+        successToast = R.string.profile__unlink_success,
+    ),
 }
 
 sealed interface EditProfileEffect {
