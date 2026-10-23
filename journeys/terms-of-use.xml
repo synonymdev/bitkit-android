@@ -7,10 +7,24 @@
   <actions>
     <action>Launch Bitkit</action>
     <action>Verify the terms screen shows "Effective date: October 20, 2026"</action>
+    <action>Scroll the terms until the "Blocktank Connection" definition in section 2.1.7 is visible</action>
+    <action>Verify the whole defined-term name is bold, not only its opening quotation mark</action>
     <action>Scroll the terms until the "USDT" definition in section 2.1.49 is visible</action>
-    <action>Verify the definition includes "USDT0 on Arbitrum One"</action>
+    <action>Verify the definition includes "USDT0 on Arbitrum One" and the defined-term name "USDT" is bold</action>
+    <action>Scroll until section 4.2.4 is visible</action>
+    <action>Verify the defined-term name "Wallet Inbound Transfers" is bold</action>
+    <action>Scroll within section 4.2.4 until the warning beginning "Synonym incurs no obligation whatsoever" is visible</action>
+    <action>Verify the visible warning text is bold</action>
+    <action>Scroll until the warning ending "All such erroneously transmitted Digital Assets will be lost." is visible</action>
+    <action>Verify the warning is bold through its final period</action>
+    <action>Scroll until section 7.2 is visible</action>
+    <action>Verify the "Synonym Content" caption is bold</action>
+    <action>Scroll until the final paragraph of section 10 is visible</action>
+    <action>Verify the sentence beginning "In addition, should your actions" is bold through its final period</action>
+    <action>Scroll until section 20.6 is visible</action>
+    <action>Verify the jury-trial waiver caption and its full paragraph are bold</action>
     <action>Scroll the terms to the end of section 21</action>
-    <action>Verify the final "Electronic Communications and Acceptance" clause is readable through its last sentence</action>
+    <action>Verify the final "Electronic Communications and Acceptance" caption is bold and the clause is readable through its last sentence</action>
     <action>Verify Continue is enabled without selecting a checkbox</action>
     <action>Tap Continue</action>
     <action>Verify the welcome screen shows Get started and Skip intro (identifiers "GetStarted" and "SkipIntro")</action>
