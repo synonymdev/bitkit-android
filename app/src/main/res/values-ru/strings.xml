@@ -469,6 +469,13 @@
     <string name="profile__retry_load">Попробовать снова</string>
     <string name="profile__suggestions">Рекомендации</string>
     <string name="profile__suggestions_to_add">Рекомендации для добавления</string>
+    <string name="profile__unlink_confirm">Да, Отвязать</string>
+    <string name="profile__unlink_confirm_description">Ваши данные Paykit будут удалены, а этот pubky будет отвязан от Bitkit. Он останется доступен в Pubky Ring.</string>
+    <string name="profile__unlink_confirm_title">Отвязать pubky?</string>
+    <string name="profile__unlink_error_description">Не удалось удалить ваши данные Paykit. Повторите попытку или отключите этот pubky от Bitkit.</string>
+    <string name="profile__unlink_error_title">Не Удалось Отвязать pubky</string>
+    <string name="profile__unlink_pubky">Отвязать pubky</string>
+    <string name="profile__unlink_success">pubky отвязан</string>
     <string name="profile__your_name">Ваше Имя</string>
     <string name="security__backup_button">Создать</string>
     <string name="security__backup_funds">Теперь, когда у вас есть средства в кошельке, пришло время создать их резервную копию!</string>
@@ -1430,6 +1437,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="profile__edit_save_error">Не удалось сохранить профиль</string>
     <string name="profile__edit_save_success">Профиль сохранён</string>
     <string name="profile__edit_tags">ТЕГИ</string>
+    <string name="profile__edit_unlink_section">ОТВЯЗКА</string>
     <string name="profile__empty_state">Не удалось загрузить ваш профиль.</string>
     <string name="profile__intro_description">С переносимым профилем ваши контакты смогут связаться с вами и заплатить вам где угодно.</string>
     <string name="profile__intro_title">ПЕРЕНОСИМЫЙ\n&lt;accent&gt;ПРОФИЛЬ&lt;/accent&gt;</string>

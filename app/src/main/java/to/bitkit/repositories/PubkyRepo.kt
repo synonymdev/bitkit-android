@@ -1549,6 +1549,15 @@ class PubkyRepo @Inject constructor(
         keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name) && !keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)
     }
 
+    /** Whether the signed-in pubky was adopted from Pubky Ring, so removing it from Bitkit only unlinks it. */
+    suspend fun isRingAdoptedIdentity(): Boolean = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val publicKey = _publicKey.value ?: return@withContext false
+            val adoptedPubky = adoptedRingPubky() ?: return@withContext false
+            PubkyPublicKeyFormat.matches(adoptedPubky, publicKey)
+        }
+    }.getOrDefault(false)
+
     /**
      * The identity of the key Bitkit stores for the saved session, read without restoring the session.
      * Null for a Ring-sourced identity, or without both a saved session and a stored key.
@@ -2097,11 +2106,13 @@ class PubkyRepo @Inject constructor(
         null
     }
 
-    private suspend fun adoptedSecretKeyHex(): String? {
-        val pubky = runCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.getOrNull()
+    private suspend fun adoptedRingPubky(): String? =
+        runCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.getOrNull()
             ?.substringAfter(SharedPubkyContract.RING_SOURCE_PREFIX, "")
             ?.takeIf { it.isNotBlank() }
-            ?: return null
+
+    private suspend fun adoptedSecretKeyHex(): String? {
+        val pubky = adoptedRingPubky() ?: return null
         return sharedPubkyClient.ringCredential(pubky)
             .onFailure { Logger.warn("Failed to read adopted ring credential", it, context = TAG) }
             .getOrNull()
