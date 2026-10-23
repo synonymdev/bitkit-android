@@ -30,6 +30,7 @@ import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendUiState
 import kotlin.time.Duration.Companion.seconds
 
@@ -39,6 +40,7 @@ fun PaykitUsdtReview(
     app: AppViewModel,
     onBack: () -> Unit,
     onDone: () -> Unit,
+    onEditAmount: () -> Unit = onBack,
     viewModel: UsdtViewModel = hiltViewModel()
 ) {
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
@@ -80,6 +82,11 @@ fun PaykitUsdtReview(
             viewModel.quote(requireNotNull(uiState.usdtRecipient), uiState.paykitAmount, UsdtDestination.ARBITRUM)
         }
     }
+    LaunchedEffect(state.quote, state.error) {
+        if (state.quote == null && state.error == R.string.usdt__error_expired && uiState.isPaymentRequest) {
+            viewModel.requote(requireNotNull(uiState.usdtRecipient), uiState.paykitAmount, UsdtDestination.ARBITRUM)
+        }
+    }
     LaunchedEffect(state.submitted, lifecycle) {
         if (state.submitted) {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -95,7 +102,7 @@ fun PaykitUsdtReview(
             confirmText = stringResource(R.string.wallet__send_yes),
             dismissText = stringResource(R.string.common__cancel),
             onConfirm = viewModel::acceptWarning,
-            onDismiss = viewModel::edit
+            onDismiss = viewModel::dismissWarning
         )
     }
     val transfer = wallet.transfers.firstOrNull { it.id == state.quote?.id }
@@ -122,7 +129,9 @@ fun PaykitUsdtReview(
                     onRecipientChange = {},
                     onAmountChange = {},
                     onRecipientContinue = {},
-                    onPageChange = { back() },
+                    onPageChange = {
+                        if (!state.busy && !state.authenticationRequired && !state.submitted) onEditAmount()
+                    },
                     onBack = back,
                     onReview = {
                         viewModel.quote(
@@ -142,6 +151,8 @@ fun PaykitUsdtReview(
                     paymentRequestNote = uiState.paymentRequestNote,
                     isMerchantRequest = uiState.isMerchantPaymentRequest,
                     contact = uiState.contactPaymentProfile,
+                    onSwitchAsset = { app.setSendEvent(SendEvent.PaymentMethodSwitch) }
+                        .takeIf { uiState.canSwitchConfirmFundingSource },
                 )
             }
         }

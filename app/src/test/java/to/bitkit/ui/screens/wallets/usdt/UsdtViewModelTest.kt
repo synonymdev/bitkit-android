@@ -37,6 +37,7 @@ import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -364,6 +365,77 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertEquals(R.string.wallet__payment_request_expired, viewModel.state.value.error)
         viewModel.confirm().join()
         verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
+    }
+
+    @Test
+    fun `expired quote is replaced on review with a notice to swipe again`() = test {
+        val viewModel = createViewModel()
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.QuoteExpired()))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        assertNull(viewModel.state.value.quote)
+        assertEquals(R.string.usdt__error_expired, viewModel.state.value.error)
+
+        viewModel.requote(quote.recipient, "1", quote.destination).join()
+
+        assertEquals(quote, viewModel.state.value.quote)
+        assertEquals(R.string.usdt__error_quote_refreshed, viewModel.state.value.error)
+        verify(repo, times(2)).quote(any(), any(), any(), any())
+        verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
+    }
+
+    @Test
+    fun `expired replacement quote is not requoted again until the next swipe`() = test {
+        val viewModel = createViewModel()
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.QuoteExpired()))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.failure(UsdtException.QuoteExpired()))
+
+        viewModel.requote(quote.recipient, "1", quote.destination).join()
+        viewModel.requote(quote.recipient, "1", quote.destination).join()
+
+        assertNull(viewModel.state.value.quote)
+        assertEquals(R.string.usdt__error_expired, viewModel.state.value.error)
+        verify(repo, times(2)).quote(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `declining a warning keeps the reviewed quote and warns again on the next swipe`() = test {
+        val viewModel = createViewModel(walletState = UsdtWalletState(balance = 1u))
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        val warning = assertNotNull(viewModel.state.value.warning)
+
+        viewModel.dismissWarning()
+
+        assertEquals(quote, viewModel.state.value.quote)
+        assertNull(viewModel.state.value.warning)
+        viewModel.confirm().join()
+        assertEquals(warning, viewModel.state.value.warning)
+        verify(repo, times(1)).quote(any(), any(), any(), any())
+        verify(repo, never()).send(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `requote leaves other errors for the user to review`() = test {
+        val viewModel = createViewModel()
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.SubmissionDeadlineExpired()))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+
+        viewModel.requote(quote.recipient, "1", quote.destination).join()
+
+        assertNull(viewModel.state.value.quote)
+        assertEquals(R.string.wallet__payment_request_expired, viewModel.state.value.error)
+        verify(repo, times(1)).quote(any(), any(), any(), any())
     }
 
     @Test

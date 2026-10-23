@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -126,6 +127,7 @@ internal fun UsdtPaymentContent(
     contact: PubkyProfile? = null,
     onDestinationChange: ((UsdtDestination) -> Unit)? = null,
     destinations: ImmutableList<UsdtDestination> = Env.usdtDestinations.toImmutableList(),
+    onSwitchAsset: (() -> Unit)? = null,
 ) {
     if (page == UsdtPage.WALLET) return
 
@@ -160,6 +162,9 @@ internal fun UsdtPaymentContent(
         }
     }
     val showSubmitted = pending || (completed && hasShownSubmitted)
+    // A payment request's amount is fixed, so its review waits for the quote on a confirm screen, not on Amount.
+    val preparingConfirmation = quote == null && page == UsdtPage.AMOUNT && isPaymentRequest && !amountEditable &&
+        state.error == null
     if (showSuccess && completed && quote != null) {
         NewTransactionSheetView(
             details = NewTransactionSheetDetails(
@@ -184,7 +189,7 @@ internal fun UsdtPaymentContent(
         showSubmitted && failed -> R.string.wallet__send_error_tx_failed
         showSubmitted && state.error != null -> R.string.wallet__payment_request_expired
         showSubmitted -> R.string.usdt__submitted
-        quote != null && isPaymentRequest -> R.string.wallet__payment_request
+        (quote != null || preparingConfirmation) && isPaymentRequest -> R.string.wallet__payment_request
         quote != null -> R.string.wallet__send_review
         page == UsdtPage.AMOUNT -> R.string.usdt__amount
         else -> R.string.usdt__send_title
@@ -214,7 +219,9 @@ internal fun UsdtPaymentContent(
                 onConfirm,
                 completed,
                 onEditAmount = { onPageChange(UsdtPage.AMOUNT) },
+                onSwitchAsset = onSwitchAsset,
             )
+            preparingConfirmation -> UsdtConfirmationLoading(amount, contact, paymentRequestNote)
             page == UsdtPage.AMOUNT -> UsdtAmountContent(
                 amount,
                 destination,
@@ -541,6 +548,7 @@ private fun UsdtConfirmation(
     onConfirm: () -> Unit,
     completed: Boolean,
     onEditAmount: () -> Unit,
+    onSwitchAsset: (() -> Unit)?,
 ) {
     var showDetails by rememberSaveable(quote.id) { mutableStateOf(false) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
@@ -560,6 +568,7 @@ private fun UsdtConfirmation(
                     isPaymentRequest,
                     isMerchantRequest,
                     showDetails,
+                    onSwitchAsset = onSwitchAsset?.takeUnless { state.busy || completed },
                 ) {
                     if (!state.busy && !completed) onEditAmount()
                 }
@@ -596,6 +605,31 @@ private fun UsdtConfirmation(
             progress = swipeProgress,
             textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
             modifier = Modifier.fillMaxWidth().testTag("UsdtConfirm")
+        )
+    }
+}
+
+@Composable
+private fun UsdtConfirmationLoading(amount: String, contact: PubkyProfile?, note: String?) {
+    Column(modifier = Modifier.fillMaxSize().testTag("UsdtConfirmLoading")) {
+        UsdtAmountHeader(amount.ifEmpty { "0" })
+        VerticalSpacer(24.dp)
+        PaymentRequestSummary(
+            profile = contact,
+            note = note?.trim()?.takeIf { it.isNotEmpty() },
+            accentColor = Colors.Usdt,
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        SwipeToConfirm(
+            text = stringResource(R.string.wallet__send_swipe),
+            color = Colors.Usdt,
+            onConfirm = {},
+            enabled = false,
+            loading = true,
+            confirmed = false,
+            progress = remember { mutableFloatStateOf(0f) },
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -648,6 +682,7 @@ private fun UsdtReviewHeader(
     isMerchantRequest: Boolean,
     showDetails: Boolean,
     modifier: Modifier = Modifier,
+    onSwitchAsset: (() -> Unit)? = null,
     onEditAmount: () -> Unit,
 ) {
     Column(modifier = modifier) {
@@ -658,7 +693,7 @@ private fun UsdtReviewHeader(
         )
         VerticalSpacer(24.dp)
         if (showDetails) {
-            UsdtQuoteDetails(quote, contact, isMerchantRequest)
+            UsdtQuoteDetails(quote, contact, isMerchantRequest, onSwitchAsset)
             note?.let {
                 VerticalSpacer(16.dp)
                 PaymentRequestInvoiceNote(it)
@@ -671,16 +706,23 @@ private fun UsdtReviewHeader(
 }
 
 @Composable
-private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?, isMerchantRequest: Boolean) {
+private fun UsdtQuoteDetails(
+    quote: UsdtQuote,
+    contact: PubkyProfile?,
+    isMerchantRequest: Boolean,
+    onSwitchAsset: (() -> Unit)?,
+) {
     var showFullAddress by rememberSaveable(quote.recipient) { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         UsdtDetailField(caption = stringResource(R.string.usdt__pay_from), modifier = Modifier.weight(1f)) {
             NumberPadActionButton(
                 text = "USDT",
                 color = Colors.Usdt,
-                enabled = false,
+                enabled = onSwitchAsset != null,
+                icon = R.drawable.ic_transfer.takeIf { onSwitchAsset != null },
                 textStyle = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
-                onClick = {},
+                onClick = { onSwitchAsset?.invoke() },
+                modifier = Modifier.testTag("UsdtPayFrom"),
             )
         }
         UsdtDetailCell(
