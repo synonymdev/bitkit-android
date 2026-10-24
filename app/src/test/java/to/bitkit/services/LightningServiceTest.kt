@@ -1,14 +1,19 @@
 package to.bitkit.services
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
@@ -51,6 +56,7 @@ import to.bitkit.data.WatchOnlyAccountReconciliationState
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.WalletBackupRestorePendingError
 import to.bitkit.env.Env
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.ActiveOnchainAttemptBackup
@@ -103,7 +109,11 @@ class LightningServiceTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        sut = LightningService(
+        sut = createService()
+    }
+
+    private fun createService(ldkDispatcher: CoroutineDispatcher = testDispatcher): LightningService =
+        LightningService(
             bgDispatcher = testDispatcher,
             ioDispatcher = testDispatcher,
             keychain = keychain,
@@ -112,10 +122,39 @@ class LightningServiceTest : BaseUnitTest() {
             watchOnlyAccountStore = watchOnlyAccountStore,
             loggerLdk = loggerLdk,
             watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
-            ldkQueue = testDispatcher,
+            ldkQueue = ldkDispatcher,
             onchainFeeRateFactory = { sendFeeRate },
-        )
-        sut.node = node
+        ).also { it.node = node }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `queued address allocation rechecks recovery before native mutation`() = test {
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.newAddress()).thenReturn("bcrt1qnew")
+        val queued = createService(StandardTestDispatcher(testScheduler))
+        val result = async { runCatching { queued.newAddress() } }
+        assertFalse(result.isCompleted)
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        runCurrent()
+        assertTrue(result.await().exceptionOrNull()?.cause is WalletBackupRestorePendingError)
+        verify(onchainPayment, never()).newAddress()
+    }
+
+    @Test
+    fun `prepared native broadcast rechecks recovery after caller suspension`() = test {
+        val txid = "ab".repeat(32)
+        val native = preparedNative(txid)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.prepareSendToAddress("address", 1_000uL, sendFeeRate, null)).thenReturn(native)
+        whenever(native.broadcast()).thenReturn(OnchainSendResult.Accepted(txid))
+        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1uL)
+        val result = runCatching {
+            prepared.broadcast {
+                whenever(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+            }
+        }
+        assertTrue(result.exceptionOrNull() is WalletBackupRestorePendingError)
+        verify(native, never()).broadcast()
     }
 
     @Test

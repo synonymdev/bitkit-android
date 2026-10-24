@@ -67,6 +67,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.WalletBackupRestorePendingError
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
 import to.bitkit.models.ActiveOnchainAttemptBackup
@@ -1080,6 +1081,109 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verify(lightningService).resetNetworkGraph(0)
+    }
+
+    @Test
+    fun `pending wallet recovery blocks new receiving data while node remains available`() = test {
+        startNodeForTesting()
+        whenever(lightningService.newAddress()).thenReturn("address")
+        for (marker in listOf(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE, Keychain.Key.USDT_PENDING_BACKUP_RESTORE)) {
+            whenever(keychain.exists(marker.name)).thenReturn(true)
+            assertIs<WalletBackupRestorePendingError>(sut.newAddress().exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.newAddressForType(AddressType.P2WPKH).exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.newAddressInfoForType(AddressType.P2WPKH).exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.createInvoice(description = "test").exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.createInvoiceMsats(1000uL, "test").exceptionOrNull())
+            assertTrue(sut.revealReceiveAddresses(505, AddressType.P2WPKH).isSuccess)
+            assertTrue(sut.sync().isSuccess)
+            whenever(keychain.exists(marker.name)).thenReturn(false)
+        }
+        verify(lightningService, never()).newAddress()
+        verify(lightningService, never()).newAddressForType(any())
+        verify(lightningService, never()).newAddressInfoForType(any())
+        verify(lightningService, never()).receive(anyOrNull(), any(), any())
+        verify(lightningService, never()).receiveMsats(any(), any(), any())
+        assertEquals("address", sut.newAddress().getOrThrow())
+    }
+
+    @Test
+    fun `pending wallet recovery prevents ordinary payment admission`() = test {
+        startNodeForTesting()
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        var beforeSend = false
+        sut.payInvoice("invoice", null, onBeforeSend = {
+            beforeSend = true
+            true
+        })
+        assertFalse(beforeSend)
+        assertIs<WalletBackupRestorePendingError>(sut.sendOnChain("address", 1000uL).exceptionOrNull())
+        verify(onchainSendAttemptStore, never()).current()
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `restore beginning during payment authorization prevents dispatch`() = test {
+        startNodeForTesting()
+        val result = sut.payInvoice("invoice", null, onBeforeSend = {
+            whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+            true
+        })
+        assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `unreadable restore admission fails closed`() = test {
+        startNodeForTesting()
+        val failure = IllegalStateException("Keychain unavailable")
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenThrow(failure)
+        assertEquals(failure, sut.newAddress().exceptionOrNull())
+        verify(lightningService, never()).newAddress()
+    }
+
+    @Test
+    fun `recreated repository retains durable recovery admission`() = test {
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        repeat(2) {
+            setUp()
+            startNodeForTesting()
+            assertIs<WalletBackupRestorePendingError>(sut.newAddress().exceptionOrNull())
+        }
+        verify(lightningService, never()).newAddress()
+    }
+
+    @Test
+    fun `pending restore blocks explicit recovery channel close and fee mutations`() = test {
+        startNodeForTesting()
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        val results = listOf(
+            sut.retryOriginalOnchainSend("attempt", "wallet", 1uL, authorizeOriginal = { error("Must not authorize") }),
+            sut.closeChannel(createChannelDetails()),
+            sut.openChannel(mock(), 1000uL),
+            sut.bumpFeeByRbf("txid", 1uL),
+            sut.accelerateByCpfp("txid", 1uL, "address"),
+        )
+        results.forEach { assertIs<WalletBackupRestorePendingError>(it.exceptionOrNull()) }
+        assertFailsWith<WalletBackupRestorePendingError> { sut.prepareRelease(pendingSendAttempt()) }
+        verify(lightningService, never()).prepareRelease(any())
+    }
+
+    @Test
+    fun `restore beginning after release preparation prevents broadcast`() = test {
+        val attempt = pendingSendAttempt()
+        var broadcasts = 0
+        val native = PreparedOnchainSend(preparedOutcome(OnchainSendOutcome.Accepted("release")).receipt) {
+            broadcasts++
+            OnchainSendOutcome.Accepted("release")
+        }
+        whenever(lightningService.prepareRelease(attempt)).thenReturn(native)
+        val prepared = sut.prepareRelease(attempt)
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        repeat(2) {
+            assertFailsWith<WalletBackupRestorePendingError> { prepared.broadcast() }
+        }
+        assertEquals(0, broadcasts)
     }
 
     @Test

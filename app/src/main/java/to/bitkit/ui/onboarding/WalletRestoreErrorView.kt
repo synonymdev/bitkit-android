@@ -38,6 +38,7 @@ fun WalletRestoreErrorView(
     onRetry: () -> Unit,
     onProceedWithoutRestore: () -> Unit,
     modifier: Modifier = Modifier,
+    allowProceedWithoutRestore: Boolean = true,
     hazeState: HazeState = rememberHazeState(),
 ) {
     var showDialog by remember { mutableStateOf(false) }
@@ -75,7 +76,7 @@ fun WalletRestoreErrorView(
             modifier = Modifier.testTag("TryAgainButton")
         )
 
-        if (retryCount > 1) {
+        if (allowProceedWithoutRestore && retryCount > 1) {
             VerticalSpacer(12.dp)
             SecondaryButton(
                 text = stringResource(R.string.onboarding__restore_no_backup_button),
@@ -86,7 +87,7 @@ fun WalletRestoreErrorView(
 
         VerticalSpacer(16.dp)
 
-        if (showDialog) {
+        if (showDialog && allowProceedWithoutRestore) {
             AppAlertDialog(
                 title = stringResource(R.string.common__are_you_sure),
                 text = stringResource(R.string.onboarding__restore_no_backup_warn),

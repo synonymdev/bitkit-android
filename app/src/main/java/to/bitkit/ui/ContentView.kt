@@ -419,10 +419,13 @@ fun ContentView(
     val backupRestoreFailed =
         restoreState is RestoreState.BackupFailed && nodeLifecycleState == NodeLifecycleState.Running
 
+    val canProceedWithoutRestore = (restoreState as? RestoreState.BackupFailed)?.hasPendingWalletRestore != true
+
     if (walletIsInitializing || backupRestoreFailed) {
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting || backupRestoreFailed) {
             WalletRestoreErrorView(
                 retryCount = restoreState.retryCount(),
+                allowProceedWithoutRestore = canProceedWithoutRestore,
                 hazeState = hazeState,
                 onRetry = {
                     if (backupRestoreFailed) {

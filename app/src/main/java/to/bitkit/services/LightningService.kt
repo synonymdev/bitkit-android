@@ -58,6 +58,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.requireWalletRestoreComplete
 import to.bitkit.data.withRequiredNativeSegwitMonitoring
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.IoDispatcher
@@ -676,6 +677,7 @@ class LightningService internal constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            keychain.requireWalletRestoreComplete()
             node.onchainPayment().newAddress()
         }
     }
@@ -689,6 +691,7 @@ class LightningService internal constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            keychain.requireWalletRestoreComplete()
             val addressInfo = node.onchainPayment().newAddressInfoForType(addressType.toLdkAddressType())
             AddressDerivationInfo(address = addressInfo.address, index = addressInfo.index.toInt())
         }
@@ -838,6 +841,7 @@ class LightningService internal constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            keychain.requireWalletRestoreComplete()
             try {
                 val pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u }
                 Logger.debug("Initiating channel open (sats: '$channelAmountSats') with: '${peer.uri}'", context = TAG)
@@ -886,6 +890,7 @@ class LightningService internal constructor(
 
         try {
             ServiceQueue.LDK.background(ldkQueue) {
+                keychain.requireWalletRestoreComplete()
                 Logger.debug("Initiating channel close (force=$force): '$channelId'", context = TAG)
                 if (force) {
                     node.forceCloseChannel(userChannelId, counterpartyNodeId, forceCloseReason.orEmpty())
@@ -954,6 +959,7 @@ class LightningService internal constructor(
         val message = description
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            keychain.requireWalletRestoreComplete()
             val bolt11Invoice: Bolt11Invoice = if (amountMsat != null) {
                 node.bolt11Payment()
                     .receive(
@@ -983,6 +989,7 @@ class LightningService internal constructor(
         walletIndex: Int = currentWalletIndex,
         paymentDeadlineAt: Instant? = null,
     ): PreparedOnchainSend = callOnchainSend {
+        keychain.requireWalletRestoreComplete()
         ensurePaymentDeadline(paymentDeadlineAt)
         require(satsPerVByte > 0uL && satsPerVByte <= UInt.MAX_VALUE.toULong())
         if (currentWalletIndex != walletIndex) throw ServiceError.NodeNotSetup()
@@ -1012,8 +1019,10 @@ class LightningService internal constructor(
             callOnchainSend {
                 // Dispatch only through the handle that signed the original receipt.
                 if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+                keychain.requireWalletRestoreComplete()
                 ensurePaymentDeadline(paymentDeadlineAt)
                 beforeDispatch()
+                keychain.requireWalletRestoreComplete()
                 when (val result = prepared.broadcast()) {
                     is OnchainSendResult.Accepted -> OnchainSendOutcome.Accepted(result.txid)
                     is OnchainSendResult.Rejected -> OnchainSendOutcome.Rejected(result.txid, result.reason)
@@ -1131,6 +1140,7 @@ class LightningService internal constructor(
             .getOrElse { throw LdkError(it as NodeException) }
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            keychain.requireWalletRestoreComplete()
             ensurePaymentDeadline(paymentDeadlineAt)
             runCatching {
                 val routeParameters = maxTotalRoutingFeeMsat?.let(::routeParametersWithFeeCap)
@@ -1311,6 +1321,7 @@ class LightningService internal constructor(
         Logger.info("RBF for txid='$txid' using satsPerVByte='$satsPerVByte'", context = TAG)
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            keychain.requireWalletRestoreComplete()
             return@background try {
                 node.onchainPayment().bumpFeeByRbf(
                     txid = txid,
@@ -1332,6 +1343,7 @@ class LightningService internal constructor(
         Logger.info("CPFP for txid='$txid' using satsPerVByte='$satsPerVByte', to address='$toAddress'", context = TAG)
 
         return ServiceQueue.LDK.background(ldkQueue) {
+            keychain.requireWalletRestoreComplete()
             return@background try {
                 node.onchainPayment().accelerateByCpfp(
                     txid = txid,

@@ -111,6 +111,7 @@ class WalletViewModel @Inject constructor(
     val isRefreshing = _isRefreshing.asStateFlow()
 
     private val retryLightningPaymentMutex = Mutex()
+    private val backupRestoreMutex = Mutex()
     private val _isRetryingLightningPayment = MutableStateFlow(false)
     val isRetryingLightningPayment = _isRetryingLightningPayment.asStateFlow()
 
@@ -226,6 +227,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private suspend fun restoreFromBackup(resumePendingWalletBackup: Boolean = false) {
+        if (!backupRestoreMutex.tryLock()) return
         val retryCount = _restoreState.value.backupRetryCount()
         _restoreState.update { RestoreState.InProgress.Metadata }
         try {
@@ -242,10 +244,12 @@ class WalletViewModel @Inject constructor(
             }.onFailure {
                 Logger.error("Restore from backup failed", it, context = TAG)
                 ToastEventBus.send(it)
-                _restoreState.update { RestoreState.BackupFailed(retryCount + 1) }
+                val pendingRestore = runSuspendCatching { backupRepo.hasPendingWalletRestore() }.getOrDefault(true)
+                _restoreState.update { RestoreState.BackupFailed(retryCount + 1, pendingRestore) }
             }
         } finally {
             backupRepo.setRestorePending(false)
+            backupRestoreMutex.unlock()
         }
     }
 
@@ -323,11 +327,13 @@ class WalletViewModel @Inject constructor(
 
     @Suppress("ForbiddenComment")
     fun onProceedWithoutRestore(onDone: () -> Unit) = viewModelScope.launch {
+        if (runSuspendCatching { backupRepo.hasPendingWalletRestore() }.getOrDefault(true)) return@launch
         // TODO start LDK without trying to restore backup state from VSS if possible
         if (lightningState.value.nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
             lightningRepo.stop()
             delay(LOADING_MS.milliseconds)
         }
+        if (runSuspendCatching { backupRepo.hasPendingWalletRestore() }.getOrDefault(true)) return@launch
         _restoreState.update { RestoreState.Settled }
         onDone()
     }
@@ -720,7 +726,7 @@ sealed interface RestoreState {
     }
 
     data class Retry(val count: Int) : RestoreState
-    data class BackupFailed(val count: Int) : RestoreState
+    data class BackupFailed(val count: Int, val hasPendingWalletRestore: Boolean = true) : RestoreState
     data object Completed : RestoreState
     data object Settled : RestoreState
 
@@ -733,7 +739,7 @@ sealed interface RestoreState {
     fun backupRetryCount() = (this as? BackupFailed)?.count ?: 0
     fun countRetry(): RestoreState = when (this) {
         is Retry -> Retry(count + 1)
-        is BackupFailed -> BackupFailed(count + 1)
+        is BackupFailed -> copy(count = count + 1)
         else -> Retry(1)
     }
     fun isOngoing() = this is InProgress

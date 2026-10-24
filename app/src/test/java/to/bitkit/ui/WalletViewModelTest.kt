@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDataMigration
@@ -334,7 +335,7 @@ class WalletViewModelTest : BaseUnitTest() {
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
-        assertEquals(RestoreState.BackupFailed(1), sut.restoreState.value)
+        assertEquals(RestoreState.BackupFailed(1, hasPendingWalletRestore = false), sut.restoreState.value)
 
         sut.onBackupRestoreRetry()
         advanceUntilIdle()
@@ -381,13 +382,91 @@ class WalletViewModelTest : BaseUnitTest() {
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
-        assertEquals(RestoreState.BackupFailed(1), sut.restoreState.value)
+        assertEquals(RestoreState.BackupFailed(1, hasPendingWalletRestore = false), sut.restoreState.value)
 
         sut.onProceedWithoutRestore(onDone = {})
         advanceUntilIdle()
 
         assertEquals(RestoreState.Settled, sut.restoreState.value)
         verify(lightningRepo, never()).stop()
+    }
+
+    @Test
+    fun `proceed cannot dismiss pending wallet recovery`() = test {
+        whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
+        walletState.value = walletState.value.copy(walletExists = true)
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+        advanceUntilIdle()
+        val pendingState = sut.restoreState.value
+        var dismissed = false
+
+        repeat(3) {
+            sut.onProceedWithoutRestore { dismissed = true }
+            advanceUntilIdle()
+        }
+
+        assertEquals(pendingState, sut.restoreState.value)
+        assertFalse(dismissed)
+        verify(lightningRepo, never()).stop()
+    }
+
+    @Test
+    fun `post restore profile failure allows proceeding only while safety markers stay clear`() = test {
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any())).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile cache unavailable") }
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        assertEquals(RestoreState.BackupFailed(1, hasPendingWalletRestore = false), sut.restoreState.value)
+
+        whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
+        var dismissed = false
+        sut.onProceedWithoutRestore { dismissed = true }
+        advanceUntilIdle()
+        assertFalse(dismissed)
+        assertTrue(sut.restoreState.value is RestoreState.BackupFailed)
+
+        whenever(backupRepo.hasPendingWalletRestore()).thenReturn(false)
+        sut.onProceedWithoutRestore { dismissed = true }
+        advanceUntilIdle()
+        assertTrue(dismissed)
+        assertEquals(RestoreState.Settled, sut.restoreState.value)
+        verify(backupRepo, times(1)).performFullRestoreFromLatestBackup(any())
+    }
+
+    @Test
+    fun `failed safety marker inspection keeps restore failure closed`() = test {
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any())).thenReturn(Result.failure(AppError("offline")))
+        whenever(backupRepo.hasPendingWalletRestore()).doSuspendableAnswer { throw AppError("keychain unavailable") }
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        assertEquals(RestoreState.BackupFailed(1), sut.restoreState.value)
+        var dismissed = false
+        sut.onProceedWithoutRestore { dismissed = true }
+        advanceUntilIdle()
+        assertFalse(dismissed)
+        assertEquals(RestoreState.BackupFailed(1), sut.restoreState.value)
+    }
+
+    @Test
+    fun `overlapping backup retries perform one restore`() = test {
+        val finishRestore = CompletableDeferred<Unit>()
+        var calls = 0
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any())).doSuspendableAnswer {
+            calls++
+            finishRestore.await()
+            Result.success(Unit)
+        }
+        sut.onBackupRestoreRetry()
+        sut.onBackupRestoreRetry()
+        runCurrent()
+        try {
+            assertEquals(1, calls)
+            assertEquals(RestoreState.InProgress.Metadata, sut.restoreState.value)
+        } finally {
+            finishRestore.complete(Unit)
+        }
+        advanceUntilIdle()
+        assertEquals(RestoreState.Completed, sut.restoreState.value)
     }
 
     @Test
@@ -412,7 +491,7 @@ class WalletViewModelTest : BaseUnitTest() {
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
-        assertEquals(RestoreState.BackupFailed(1), sut.restoreState.value)
+        assertEquals(RestoreState.BackupFailed(1, hasPendingWalletRestore = false), sut.restoreState.value)
         verify(migrationService).restoreFromRNRemoteBackup()
         verify(backupRepo).restoreUsdtRecoveryAfterLegacyMigration()
         verify(backupRepo, never()).performFullRestoreFromLatestBackup(any())

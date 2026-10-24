@@ -48,6 +48,7 @@ import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.hwWalletNames
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.hasPendingWalletRestore
 import to.bitkit.data.resetPin
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
@@ -186,7 +187,7 @@ class BackupRepo @Inject constructor(
     }
 
     suspend fun hasPendingWalletRestore(): Boolean = withContext(ioDispatcher) {
-        keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name) || isUsdtRestorePending()
+        keychain.hasPendingWalletRestore()
     }
 
     private fun currentTimeMillis(): Long = nowMillis(clock)

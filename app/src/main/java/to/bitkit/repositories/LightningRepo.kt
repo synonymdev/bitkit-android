@@ -66,6 +66,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.requireWalletRestoreComplete
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
@@ -282,6 +283,10 @@ class LightningRepo @Inject constructor(
         if (!nodeRunning) return@withContext Result.failure(NodeRunTimeoutError(operationName))
 
         return@withContext executeOperation(operationName, operation)
+    }
+
+    private fun requireWalletRestoreComplete() {
+        keychain.requireWalletRestoreComplete()
     }
 
     private suspend fun <T> executeOperation(
@@ -1274,16 +1279,19 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun newAddress(): Result<String> = executeWhenNodeRunning("newAddress") {
+        requireWalletRestoreComplete()
         runCatching { lightningService.newAddress() }
     }
 
     suspend fun newAddressForType(addressType: AddressType): Result<String> =
         executeWhenNodeRunning("newAddressForType") {
+            requireWalletRestoreComplete()
             runCatching { lightningService.newAddressForType(addressType) }
         }
 
     suspend fun newAddressInfoForType(addressType: AddressType): Result<AddressDerivationInfo> =
         executeWhenNodeRunning("newAddressInfoForType") {
+            requireWalletRestoreComplete()
             runSuspendCatching { lightningService.newAddressInfoForType(addressType) }
         }
 
@@ -1312,7 +1320,9 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
+        requireWalletRestoreComplete()
         updateGeoBlockState()
+        requireWalletRestoreComplete()
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
@@ -1321,7 +1331,9 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
+        requireWalletRestoreComplete()
         updateGeoBlockState()
+        requireWalletRestoreComplete()
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
     }
 
@@ -1350,6 +1362,7 @@ class LightningRepo @Inject constructor(
         callback: String,
         paymentRequest: String,
     ): Result<LnurlWithdrawResponse> = executeWhenNodeRunning("requestLnurlWithdraw") {
+        requireWalletRestoreComplete()
         val callbackUrl = createWithdrawCallbackUrl(k1, callback, paymentRequest)
         Logger.debug("handleLnurlWithdraw callbackUrl generated: '$callbackUrl'", context = TAG)
         lnurlService.requestLnurlWithdraw(callbackUrl)
@@ -1360,6 +1373,7 @@ class LightningRepo @Inject constructor(
         callback: String,
         nodeId: String,
     ): Result<LnurlChannelResponse> = executeWhenNodeRunning("requestLnurlChannel") {
+        requireWalletRestoreComplete()
         val url = createChannelRequestUrl(
             k1 = k1,
             callback = callback,
@@ -1417,8 +1431,11 @@ class LightningRepo @Inject constructor(
         maxTotalRoutingFeeMsat: ULong?,
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
+        requireWalletRestoreComplete()
         waitForUsableChannels()
+        requireWalletRestoreComplete()
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
+        requireWalletRestoreComplete()
         runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }.also {
             syncState()
         }
@@ -1519,6 +1536,7 @@ class LightningRepo @Inject constructor(
         paymentDeadlineAt: Instant? = null,
         contactPublicKey: String? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
+        requireWalletRestoreComplete()
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
         // Recovery must remain reachable when observing the original transaction makes sync fail.
@@ -1551,6 +1569,7 @@ class LightningRepo @Inject constructor(
         Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
 
         val attempt = runSuspendCatching {
+            requireWalletRestoreComplete()
             onchainSendAttemptStore.admit(
                 walletId = WalletScope.default,
                 requestId = requestId,
@@ -1577,6 +1596,7 @@ class LightningRepo @Inject constructor(
         }
         val preparedResult = try {
             runSuspendCatching {
+                requireWalletRestoreComplete()
                 lightningService.prepareOnchainSend(
                     address,
                     sats,
@@ -1625,7 +1645,9 @@ class LightningRepo @Inject constructor(
                 prepared.receipt.txid,
                 broadcast = { beforeDispatch ->
                     prepared.broadcast {
+                        requireWalletRestoreComplete()
                         beforeDispatch()
+                        requireWalletRestoreComplete()
                         dispatchStarted = true
                     }
                 },
@@ -1717,14 +1739,17 @@ class LightningRepo @Inject constructor(
                     val selected = inputs.map { input ->
                         SpendableUtxo(OutPoint(input.txid, input.vout), 0uL)
                     }
-                    return lightningService.prepareOnchainSend(
-                        attempt.address,
-                        attempt.amountSats,
-                        feeRateSatsPerVByte,
-                        selected,
-                        false,
-                        attempt.walletIndex,
-                        paymentDeadlineAt,
+                    requireWalletRestoreComplete()
+                    return guardPreparedBroadcast(
+                        lightningService.prepareOnchainSend(
+                            attempt.address,
+                            attempt.amountSats,
+                            feeRateSatsPerVByte,
+                            selected,
+                            false,
+                            attempt.walletIndex,
+                            paymentDeadlineAt,
+                        )
                     )
                 }
             },
@@ -1740,6 +1765,7 @@ class LightningRepo @Inject constructor(
         approvePrepared: suspend (OnchainPreparedReceipt) -> Unit = {},
         authorizeOriginal: suspend (OnchainSendAttempt) -> Unit,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("retryOriginalOnchainSend") {
+        requireWalletRestoreComplete()
         val result = recoveryCoordinator.retryOriginal(
             attemptId,
             walletId,
@@ -1913,8 +1939,20 @@ class LightningRepo @Inject constructor(
     override suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean =
         lightningService.originalCoinSpentElsewhere(attempt)
 
-    override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend =
-        lightningService.prepareRelease(attempt)
+    override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
+        requireWalletRestoreComplete()
+        return guardPreparedBroadcast(lightningService.prepareRelease(attempt))
+    }
+
+    private fun guardPreparedBroadcast(prepared: PreparedOnchainSend): PreparedOnchainSend =
+        PreparedOnchainSend(prepared.receipt) { beforeDispatch ->
+            requireWalletRestoreComplete()
+            prepared.broadcast {
+                requireWalletRestoreComplete()
+                beforeDispatch()
+                requireWalletRestoreComplete()
+            }
+        }
 
     suspend fun recordOnchainRelease(expected: OnchainSendAttempt, txid: String): OnchainSendAttempt? =
         onchainSendAttemptStore.recordRelease(expected, txid)
@@ -2086,6 +2124,7 @@ class LightningRepo @Inject constructor(
         pushToCounterpartySats: ULong? = null,
         channelConfig: ChannelConfig? = null,
     ): Result<OpenChannelResult> = executeWhenNodeRunning("openChannel") {
+        requireWalletRestoreComplete()
         lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats, channelConfig).also {
             syncState()
         }
@@ -2096,6 +2135,7 @@ class LightningRepo @Inject constructor(
         force: Boolean = false,
         forceCloseReason: String? = null,
     ): Result<Unit> = executeWhenNodeRunning("closeChannel") {
+        requireWalletRestoreComplete()
         runCatching { lightningService.closeChannel(channel, force, forceCloseReason) }.also {
             syncState()
         }
@@ -2279,6 +2319,7 @@ class LightningRepo @Inject constructor(
         originalTxId: Txid,
         satsPerVByte: ULong,
     ): Result<Txid> = executeWhenNodeRunning("bumpFeeByRbf") {
+        requireWalletRestoreComplete()
         runCatching {
             require(!originalTxId.isBlank()) { "originalTxId is null or empty: $originalTxId" }
             require(satsPerVByte > 0u) { "satsPerVByte invalid: $satsPerVByte" }
@@ -2309,6 +2350,7 @@ class LightningRepo @Inject constructor(
         satsPerVByte: ULong,
         destinationAddress: Address,
     ): Result<Txid> = executeWhenNodeRunning("accelerateByCpfp") {
+        requireWalletRestoreComplete()
         runCatching {
             require(!originalTxId.isBlank()) { "originalTxId is null or empty: $originalTxId" }
             require(!destinationAddress.isBlank()) { "destinationAddress is null or empty: $destinationAddress" }
