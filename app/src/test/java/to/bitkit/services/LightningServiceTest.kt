@@ -2,13 +2,16 @@ package to.bitkit.services
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
@@ -132,6 +135,33 @@ class LightningServiceTest : BaseUnitTest() {
             details
         }
         assertNull(sut.getTransactionDetails(txid, 0))
+    }
+
+    @Test
+    fun `queued transaction lookup does not query a replaced node`() = test {
+        val queued = LightningService(
+            bgDispatcher = testDispatcher,
+            ioDispatcher = testDispatcher,
+            keychain = keychain,
+            vssStoreIdProvider = vssStoreIdProvider,
+            settingsStore = settingsStore,
+            watchOnlyAccountStore = watchOnlyAccountStore,
+            loggerLdk = loggerLdk,
+            watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
+            ldkQueue = StandardTestDispatcher(testScheduler),
+        )
+        val txid = "ab".repeat(32)
+        val replacement = mock<Node>()
+        queued.node = node
+        val lookup = async(start = CoroutineStart.UNDISPATCHED) {
+            queued.getTransactionDetails(txid, 0)
+        }
+        assertFalse(lookup.isCompleted)
+        verify(node, never()).getTransactionDetails(txid)
+        queued.node = replacement
+        assertNull(lookup.await())
+        verify(node, never()).getTransactionDetails(txid)
+        verify(replacement, never()).getTransactionDetails(txid)
     }
 
     @Test
