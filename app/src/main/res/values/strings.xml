@@ -721,8 +721,10 @@
     <string name="profile__pay_contacts_error_wallet">Wallet is still starting. Try again in a moment.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pay Contacts</string>
+    <string name="profile__private_payments_toggle">Private contact payments</string>
     <string name="profile__pubky_copied">pubky copied to clipboard</string>
     <string name="profile__public_key">Public Key</string>
+    <string name="profile__public_payments_toggle">Public payments</string>
     <string name="profile__restore_nav_title">Restore Profile</string>
     <string name="profile__retry_load">Try Again</string>
     <string name="profile__session_expired">Your profile session has expired. Please reconnect to restore your profile.</string>
@@ -986,7 +988,6 @@
     <string name="settings__general__denomination_classic">Classic (₿ 0.00010000)</string>
     <string name="settings__general__denomination_label">Bitcoin denomination</string>
     <string name="settings__general__denomination_modern">Modern (₿ 10 000)</string>
-    <string name="settings__general__enable_contact_payments">Enable payments with contacts</string>
     <string name="settings__general__section_interface">Interface</string>
     <string name="settings__general__section_payments">Payments</string>
     <string name="settings__general__speed">Transaction Speed</string>

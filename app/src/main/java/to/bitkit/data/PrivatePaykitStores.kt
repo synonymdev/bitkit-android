@@ -93,6 +93,8 @@ data class PrivatePaykitReservationData(
     val reservedReceiveIndexesByAddressType: Map<String, Set<Int>> = emptyMap(),
     val contactAssignments: Map<String, PrivatePaykitStoredAssignmentData> = emptyMap(),
     val contactAssignmentHistory: Map<String, List<PrivatePaykitStoredAssignmentData>> = emptyMap(),
+    val publicAssignments: Map<String, PrivatePaykitStoredAssignmentData> = emptyMap(),
+    val quarantinedPublicAddresses: Set<String> = emptySet(),
     val restoredReservedReceiveIndexCeilingsByAddressType: Map<String, Int> = emptyMap(),
 )
 

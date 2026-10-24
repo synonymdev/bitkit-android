@@ -17,6 +17,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -27,6 +28,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.UsdtPreference
 import to.bitkit.services.CoreService
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
@@ -40,7 +42,6 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalTime::class)
 class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
     private val pubkyRepo = mock<PubkyRepo>()
-    private val walletRepo = mock<WalletRepo>()
     private val paykitSdkService = mock<PaykitSdkService>()
     private val settingsStore = mock<SettingsStore>()
     private val lightningRepo = mock<LightningRepo>()
@@ -51,13 +52,14 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
         on { state }.thenReturn(MutableStateFlow(UsdtWalletState()))
     }
     private lateinit var sut: PublicPaykitRepo
+    private val addressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
 
     @Before
     fun setUp() = test {
         sut = PublicPaykitRepo(
             ioDispatcher = testDispatcher,
             pubkyRepo = pubkyRepo,
-            walletRepo = walletRepo,
+            addressReservationRepo = addressReservationRepo,
             lightningRepo = lightningRepo,
             coreService = coreService,
             paykitSdkService = paykitSdkService,
@@ -66,9 +68,14 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             usdtRepo = usdtRepo,
         )
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
+        whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("pubkyself", 0L))
+        whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringSession)
-        whenever(walletRepo.walletState).thenReturn(MutableStateFlow(WalletState(onchainAddress = "bc1ptest")))
         whenever(settingsStore.data).thenReturn(settingsFlow)
+        whenever(addressReservationRepo.currentOrRotatedPublicAddress(any())).thenReturn(Result.success("bc1ptest"))
+        doSuspendableAnswer {
+            it.getArgument<suspend (Boolean) -> Unit>(2)(true)
+        }.whenever(addressReservationRepo).withPublicAddressMatch(any(), any(), any())
         whenever(settingsStore.update(any())).thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -81,8 +88,158 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
     }
 
     @Test
+    fun `public disable without a current sign in persists off and defers remote cleanup`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(emptyList()))
+        val privateRepo = mock<PrivatePaykitRepo>()
+        whenever(privateRepo.isProfileDeletionInProgress).thenReturn(MutableStateFlow(false))
+        whenever(privateRepo.disableSharingAndPruneUnsavedContactState(any(), any()))
+            .thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.currentSignIn()).thenReturn(null)
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitBolt11 = "pending withdrawal",
+        )
+        val controls = ContactPaymentSettingsRepo(settingsStore, sut, privateRepo, pubkyRepo, testDispatcher)
+
+        controls.setEnabled(false).getOrThrow()
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        verifyNoInteractions(paykitSdkService)
+        settingsFlow.value = settingsFlow.value.copy(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitCleanupPending = false,
+        )
+        controls.setPublicEnabled(false).getOrThrow()
+
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        assertEquals("pending withdrawal", settingsFlow.value.publicPaykitBolt11)
+        verifyNoInteractions(paykitSdkService)
+    }
+
+    @Test
+    fun `public disable and failed enable withdrawal retain original ownership at endpoint admission`() = test {
+        for (failedEnable in listOf(false, true)) {
+            for (outcome in listOf("current", "replacement", "deletion", "public enabled")) {
+                val original = PubkySignIn("pubkyself", 1L)
+                var signIn = original
+                val deleting = MutableStateFlow(false)
+                val privateRepo = mock<PrivatePaykitRepo>()
+                whenever(privateRepo.isProfileDeletionInProgress).thenReturn(deleting)
+                whenever(pubkyRepo.currentSignIn()).thenAnswer { signIn }
+                whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0) == signIn }
+                settingsFlow.value = SettingsData(
+                    sharesPublicPaykitEndpoints = !failedEnable,
+                    sharesPrivatePaykitEndpoints = true,
+                    publicPaykitBolt11 = "original invoice",
+                )
+                val publicationError = AppError("publication unavailable")
+                whenever(lightningRepo.executeWhenNodeRunning<Unit>(any(), any(), any()))
+                    .thenReturn(Result.failure(publicationError))
+                val entered = CompletableDeferred<Unit>()
+                val release = CompletableDeferred<Unit>()
+                var endpointWrites = 0
+                var registryWrites = 0
+                whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+                    assertTrue(it.getArgument<List<Endpoint>>(0).isEmpty())
+                    entered.complete(Unit)
+                    release.await()
+                    val admission = it.getArgument<suspend () -> Boolean>(1)
+                    if (!admission()) return@doSuspendableAnswer null
+                    endpointWrites++
+                    EndpointSyncReport(emptyList(), emptyList(), emptyList())
+                }
+                whenever(paykitSdkService.syncPaykitApp(eq(true), eq(Priority.Interactive), any()))
+                    .doSuspendableAnswer {
+                        val admission = it.getArgument<suspend () -> Boolean>(2)
+                        if (!admission()) return@doSuspendableAnswer false
+                        registryWrites++
+                        true
+                    }
+                val controls = ContactPaymentSettingsRepo(settingsStore, sut, privateRepo, pubkyRepo, testDispatcher)
+                val operation = async { controls.setPublicEnabled(failedEnable) }
+                entered.await()
+                assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+                assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+                when (outcome) {
+                    "replacement" -> signIn = PubkySignIn("replacement", 2L)
+                    "deletion" -> deleting.value = true
+                    "public enabled" -> settingsFlow.value = settingsFlow.value.copy(sharesPublicPaykitEndpoints = true)
+                }
+                if (outcome != "current") {
+                    settingsFlow.value = settingsFlow.value.copy(publicPaykitBolt11 = "newer invoice")
+                }
+                val retainedSettings = settingsFlow.value
+                release.complete(Unit)
+                val result = operation.await()
+
+                assertEquals(failedEnable, result.isFailure, outcome)
+                if (failedEnable) assertEquals(publicationError, result.exceptionOrNull())
+                assertEquals(if (outcome == "current") 1 else 0, endpointWrites, outcome)
+                assertEquals(if (outcome == "current") 1 else 0, registryWrites, outcome)
+                if (outcome == "current") {
+                    assertEquals("", settingsFlow.value.publicPaykitBolt11)
+                    assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+                    assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+                } else {
+                    assertEquals(retainedSettings, settingsFlow.value, outcome)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `withdrawal rechecks ownership before metadata registry and acknowledgement`() = test {
+        for (boundary in listOf("metadata", "registry", "acknowledgement")) {
+            var current = true
+            settingsFlow.value = SettingsData(
+                sharesPrivatePaykitEndpoints = true,
+                publicPaykitCleanupPending = true,
+                publicPaykitBolt11 = "original invoice",
+            )
+            val replacement = settingsFlow.value.copy(publicPaykitBolt11 = "replacement invoice")
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var registryWrites = 0
+            whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+                assertTrue(it.getArgument<suspend () -> Boolean>(1)())
+                if (boundary == "metadata") {
+                    entered.complete(Unit)
+                    release.await()
+                }
+                EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            }
+            whenever(paykitSdkService.syncPaykitApp(eq(true), eq(Priority.Interactive), any())).doSuspendableAnswer {
+                if (boundary == "registry") {
+                    entered.complete(Unit)
+                    release.await()
+                }
+                if (!it.getArgument<suspend () -> Boolean>(2)()) return@doSuspendableAnswer false
+                registryWrites++
+                if (boundary == "acknowledgement") {
+                    entered.complete(Unit)
+                    release.await()
+                }
+                true
+            }
+            val operation = async { sut.syncPublishedEndpoints(false, Priority.Interactive) { current } }
+            entered.await()
+            current = false
+            settingsFlow.value = replacement
+            release.complete(Unit)
+
+            operation.await().getOrThrow()
+            assertEquals(replacement, settingsFlow.value, boundary)
+            assertEquals(if (boundary == "acknowledgement") 1 else 0, registryWrites, boundary)
+        }
+    }
+
+    @Test
     fun `USDT preparation failure allows Bitcoin publication and retries until recovery or disable`() = test {
-        whenever(walletRepo.refreshReusableReceiveAddress()).thenReturn(Result.success(Unit))
         whenever(paykitSdkService.syncPublicEndpoints(any(), any()))
             .thenReturn(EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList()))
         settingsFlow.value = SettingsData(
@@ -333,6 +490,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
     fun `deferred public lightning refresh does not transfer to a replacement session`() = test {
         val original = PubkySignIn("pubkyself", 0L)
         var generation = 0L
+        whenever(pubkyRepo.currentSignIn()).thenAnswer { PubkySignIn("pubkyself", generation) }
         whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0).generation == generation }
         whenever(lightningRepo.canReceive()).thenReturn(true)
         PublicPaykitRepo.lightningRouteHintsValidator = { true }
@@ -382,7 +540,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
         publication.await().getOrThrow()
 
         verifyNoInteractions(paykitSdkService)
-        verifyBlocking(walletRepo, never()) { refreshReusableReceiveAddress() }
+        verifyBlocking(addressReservationRepo, never()) { currentOrRotatedPublicAddress(any()) }
         assertEquals("lnbc1previous", settingsFlow.value.publicPaykitBolt11)
         assertTrue(settingsFlow.value.publicPaykitCleanupPending)
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
@@ -401,12 +559,12 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             val reached = CompletableDeferred<Unit>()
             val resume = CompletableDeferred<Unit>()
             var published = false
-            whenever(walletRepo.refreshReusableReceiveAddress()).doSuspendableAnswer {
+            whenever(addressReservationRepo.currentOrRotatedPublicAddress(any())).doSuspendableAnswer {
                 if (stage == "preparation") {
                     reached.complete(Unit)
                     resume.await()
                 }
-                Result.success(Unit)
+                Result.success("bc1ptest")
             }
             whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
                 if (stage == "queued") {

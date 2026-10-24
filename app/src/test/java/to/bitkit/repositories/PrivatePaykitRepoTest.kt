@@ -12,7 +12,9 @@ import com.synonym.paykit.LinkedPeerHandshakeReport
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateSendReport
+import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PrivateMessageSchedulingSnapshot
 import com.synonym.paykit.PrivatePaymentListDeliveryFailure
@@ -185,7 +187,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever { publicPaykitRepo.beginPayment(any()) }
             .thenReturn(Result.success(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic")))
         whenever { publicPaykitRepo.payableEndpoints(any()) }.thenAnswer { it.getArgument<List<Endpoint>>(0) }
-        whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { publicPaykitRepo.syncPaykitApp(anyOrNull(), canSync = anyOrNull()) }.thenReturn(Result.success(Unit))
         whenever { paymentRequestRepo.refreshEligibleTarget(any()) }
             .thenReturn(Result.success(PaykitPaymentRequestTargetCheck(null, isComplete = true)))
         whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
@@ -2214,11 +2216,137 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `sharing callers retain ownership through real registry admission and cleanup acknowledgements`() = test {
+        val callers = listOf(
+            "public enable", "public refresh", "private enable", "private disable", "private rollback",
+            "selective cleanup", "cleanup retry", "enable failure", "disable failure", "rollback failure",
+        )
+        for (caller in callers) {
+            val rollback = caller.endsWith("rollback") || caller == "rollback failure"
+            val admittedFailure = caller.endsWith("failure")
+            val original = PubkySignIn(OWN_KEY, 1L)
+            var signIn = original
+            val deleting = MutableStateFlow(false)
+            val ownsOperation = { signIn === original && !deleting.value }
+            val pubkyRepo = mock<PubkyRepo>()
+            whenever(pubkyRepo.currentSignIn()).thenAnswer { signIn }
+            whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0) === signIn }
+            whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(OWN_KEY))
+            whenever(pubkyRepo.isRestoringSession).thenReturn(MutableStateFlow(false))
+            whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(emptyList()))
+            settingsData.value = SettingsData(
+                sharesPublicPaykitEndpoints = caller == "public refresh",
+                sharesPrivatePaykitEndpoints = caller == "private disable" || caller == "disable failure",
+                publicPaykitLightningEnabled = false,
+                publicPaykitUsdtEnabled = false,
+                publicPaykitCleanupPending = true,
+            )
+            cacheData.value = PrivatePaykitCacheData(cleanupPending = caller == "cleanup retry")
+            whenever(addressReservationRepo.currentOrRotatedPublicAddress(OWN_KEY))
+                .thenReturn(Result.success(PRIVATE_ADDRESS))
+            whenever(lightningRepo.executeWhenNodeRunning<Unit>(any(), any(), any()))
+                .thenReturn(Result.success(Unit))
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val sdk = mock<PaykitSdk>()
+            var lookups = 0
+            var writes = 0
+            whenever(sdk.identityStatus()).doSuspendableAnswer {
+                lookups++
+                if (!admittedFailure && (!rollback || lookups > 1)) {
+                    entered.complete(Unit)
+                    release.await()
+                }
+                IdentityStatus(OWN_KEY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+            }
+            whenever(sdk.publishPaykitApp(any(), any())).doSuspendableAnswer {
+                writes++
+                if (rollback && writes == 1) throw AppError("initial registration failed")
+                if (admittedFailure) {
+                    entered.complete(Unit)
+                    release.await()
+                    throw AppError("admitted registration failed")
+                }
+                mock<PaykitAppRegistry>()
+            }
+            val registryService = PaykitSdkService(mock(), mock(), mock(), settingsStore = settingsStore) { sdk }
+            val publicRepo = PublicPaykitRepo(
+                ioDispatcher = testDispatcher,
+                pubkyRepo = pubkyRepo,
+                lightningRepo = lightningRepo,
+                coreService = coreService,
+                paykitSdkService = registryService,
+                settingsStore = settingsStore,
+                clock = clock,
+                usdtRepo = usdtRepo,
+                addressReservationRepo = addressReservationRepo,
+            )
+            sut = createSut(publicRepo)
+            val privateControls = mock<PrivatePaykitRepo>()
+            whenever(privateControls.isProfileDeletionInProgress).thenReturn(deleting)
+            whenever(privateControls.hasPrivatePaymentAccess()).thenReturn(true)
+            whenever(privateControls.enableSharingAndPrepareSavedContacts(any(), any()))
+                .thenReturn(Result.success(Unit))
+            whenever(privateControls.disableSharingAndPruneUnsavedContactState(any(), any()))
+                .doSuspendableAnswer {
+                    sut.disableSharingAndPruneUnsavedContactState(it.getArgument(0), it.getArgument(1))
+                }
+            val controls = ContactPaymentSettingsRepo(
+                settingsStore,
+                publicRepo,
+                privateControls,
+                pubkyRepo,
+                testDispatcher,
+            )
+            val operation = async {
+                when (caller) {
+                    "public enable" -> controls.setPublicEnabled(true)
+                    "public refresh" -> publicRepo.syncCurrentPublishedEndpoints(canPublish = ownsOperation)
+                    "private enable", "private rollback", "enable failure", "rollback failure" ->
+                        controls.setEnabled(true)
+                    "private disable", "disable failure" -> controls.setEnabled(false)
+                    "selective cleanup" -> sut.removeSavedContacts(listOf(CONTACT_KEY), ownsOperation)
+                    else -> sut.retryPendingEndpointRemoval(emptyList(), ownsOperation)
+                }
+            }
+            entered.await()
+            assertFalse(operation.isCompleted, caller)
+            if (rollback) assertFalse(settingsData.value.sharesPrivatePaykitEndpoints, caller)
+            val writesAtBoundary = writes
+            val replacement = SettingsData(
+                sharesPrivatePaykitEndpoints = true,
+                sharesPublicPaykitEndpoints = caller != "public enable",
+                publicPaykitCleanupPending = !admittedFailure,
+                publicPaykitBolt11 = "replacement invoice",
+            )
+            val replacementCache = PrivatePaykitCacheData(
+                cleanupPending = true,
+                deletedContactCleanupPendingPublicKeys = setOf(CONTACT_KEY),
+            )
+            when (caller) {
+                "public enable" -> Unit // The same sign-in withdrew public consent while registry admission waited.
+                "private enable", "selective cleanup" -> deleting.value = true
+                else -> signIn = PubkySignIn(OWN_KEY, 2L)
+            }
+            settingsData.value = replacement
+            cacheData.value = replacementCache
+            release.complete(Unit)
+
+            assertEquals(rollback || admittedFailure, operation.await().isFailure, caller)
+            assertEquals(writesAtBoundary, writes, caller)
+            assertEquals(replacement, settingsData.value, caller)
+            assertEquals(replacementCache, cacheData.value, caller)
+            verify(privateControls, never()).enableSharingAndPrepareSavedContacts(any(), any())
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
     fun `disabled cleanup uses existing capability and retries withdrawal and registry failures`() = test {
         val publicRepo = PublicPaykitRepo(
             ioDispatcher = testDispatcher,
             pubkyRepo = mock(),
-            walletRepo = walletRepo,
+            addressReservationRepo = addressReservationRepo,
             lightningRepo = lightningRepo,
             coreService = coreService,
             paykitSdkService = paykitSdkService,
@@ -2281,7 +2409,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val result = sut.removeSavedContact(CONTACT_KEY)
 
         assertEquals(failure, result.exceptionOrNull())
-        verifyBlocking(publicPaykitRepo, never()) { syncPaykitApp(anyOrNull()) }
+        verifyBlocking(publicPaykitRepo, never()) { syncPaykitApp(anyOrNull(), canSync = anyOrNull()) }
         assertTrue(settingsData.value.publicPaykitCleanupPending)
         assertTrue(CONTACT_KEY in cacheData.value.deletedContactCleanupPendingPublicKeys)
     }

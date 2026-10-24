@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.validateBitcoinAddress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
@@ -111,13 +112,13 @@ data class PrivatePaykitAllowancePayment(
 class PublicPaykitRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val pubkyRepo: PubkyRepo,
-    private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
     private val coreService: CoreService,
     private val paykitSdkService: PaykitSdkService,
     private val settingsStore: SettingsStore,
     private val clock: Clock,
     private val usdtRepo: UsdtRepo,
+    private val addressReservationRepo: PrivatePaykitAddressReservationRepo,
 ) {
     companion object {
         private val methodIdPattern = Regex("^[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$")
@@ -263,24 +264,27 @@ class PublicPaykitRepo @Inject constructor(
     internal suspend fun syncPublishedEndpoints(
         publish: Boolean,
         appSyncPriority: Priority,
+        isStillCurrent: (() -> Boolean)? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (!publish) {
-                val endpointError = runSuspendCatching { removePublishedEndpoints() }.exceptionOrNull()
-                val appError = syncPaykitApp(priority = appSyncPriority).exceptionOrNull()
-                if (endpointError != null) {
-                    appError?.let(endpointError::addSuppressed)
-                    throw endpointError
-                }
-                appError?.let { throw it }
-                settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                withdrawPublishedEndpoints(appSyncPriority, isStillCurrent)
                 return@runSuspendCatching
             }
 
-            val desired = buildWalletEndpoints(refresh = true)
-            syncPaykitApp().getOrThrow()
-            applyPublishedEndpoints(desired)
-            acknowledgePublishedEndpoints(desired)
+            val signIn = pubkyRepo.currentSignIn() ?: return@runSuspendCatching
+            val canPublish = { pubkyRepo.isCurrent(signIn) && isStillCurrent?.invoke() != false }
+            if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
+            val desired = buildWalletEndpoints(signIn.publicKey, canPublish, refresh = true)
+            if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
+            syncPaykitApp(canSync = { isAutomaticPublicationAllowed(canPublish) }).getOrThrow()
+            applyPublishedEndpoints(
+                desired,
+                beforePublish = { markPublicationPending(canPublish) },
+                acknowledge = { acknowledgePublishedEndpoints(desired, signIn.publicKey, canPublish) },
+                canPublish = { isAutomaticPublicationAllowed(canPublish) },
+            )
+            Unit
         }
     }
 
@@ -291,19 +295,30 @@ class PublicPaykitRepo @Inject constructor(
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             pubkyRepo.isRestoringSession.first { !it }
-            if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
+            val signIn = pubkyRepo.currentSignIn() ?: return@runSuspendCatching
+            val ownsPublication = { pubkyRepo.isCurrent(signIn) && canPublish() }
+            if (!isAutomaticPublicationAllowed(ownsPublication)) return@runSuspendCatching
             val requestedRefresh = currentLightningRefresh()
             val desired = buildWalletEndpoints(
+                publicKey = signIn.publicKey,
+                canPublish = ownsPublication,
                 refresh = false,
                 forceRefreshLightning = forceRefreshLightning && requestedRefresh == null,
                 requireEndpoint = requireEndpoint,
                 lightningRefresh = requestedRefresh,
             )
-            if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
-            syncPaykitApp().getOrThrow()
-            if (applyPublishedEndpoints(desired) { isAutomaticPublicationAllowed(canPublish) }) {
-                acknowledgePublishedEndpoints(desired, canPublish)
-                if (requestedRefresh != null && currentLightningRefresh() === requestedRefresh) {
+            if (!isAutomaticPublicationAllowed(ownsPublication)) return@runSuspendCatching
+            syncPaykitApp(canSync = { isAutomaticPublicationAllowed(ownsPublication) }).getOrThrow()
+            val published = applyPublishedEndpoints(
+                desired,
+                beforePublish = { markPublicationPending(ownsPublication) },
+                acknowledge = { acknowledgePublishedEndpoints(desired, signIn.publicKey, ownsPublication) },
+                canPublish = { isAutomaticPublicationAllowed(ownsPublication) },
+            )
+            if (published) {
+                if (isAutomaticPublicationAllowed(ownsPublication) &&
+                    requestedRefresh != null && currentLightningRefresh() === requestedRefresh
+                ) {
                     pendingLightningRefresh.compareAndSet(requestedRefresh, null)
                 }
             }
@@ -315,16 +330,22 @@ class PublicPaykitRepo @Inject constructor(
         canPublish: () -> Boolean = { true },
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
+            val signIn = pubkyRepo.currentSignIn() ?: return@runSuspendCatching
+            val ownsPublication = { pubkyRepo.isCurrent(signIn) && canPublish() }
             val settings = settingsStore.data.first()
             if (!settings.sharesPublicPaykitEndpoints) return@runSuspendCatching
             if (settings.publicPaykitBolt11PaymentHash != paymentHash) return@runSuspendCatching
 
-            clearPublicBolt11Metadata(publicationPending = true)
-            if (!isAutomaticPublicationAllowed(canPublish)) return@runSuspendCatching
-            val desired = buildWalletEndpoints(refresh = true)
-            if (applyPublishedEndpoints(desired) { isAutomaticPublicationAllowed(canPublish) }) {
-                acknowledgePublishedEndpoints(desired, canPublish)
-            }
+            clearPublicBolt11Metadata(publicationPending = true, canClear = { pubkyRepo.isCurrent(signIn) })
+            if (!isAutomaticPublicationAllowed(ownsPublication)) return@runSuspendCatching
+            val desired = buildWalletEndpoints(signIn.publicKey, ownsPublication, refresh = true)
+            applyPublishedEndpoints(
+                desired,
+                beforePublish = { markPublicationPending(ownsPublication) },
+                acknowledge = { acknowledgePublishedEndpoints(desired, signIn.publicKey, ownsPublication) },
+                canPublish = { isAutomaticPublicationAllowed(ownsPublication) },
+            )
+            Unit
         }
     }
 
@@ -341,22 +362,56 @@ class PublicPaykitRepo @Inject constructor(
 
     suspend fun syncPaykitApp(
         privateSharingEnabled: Boolean? = null,
-    ): Result<Unit> = syncPaykitApp(privateSharingEnabled, Priority.Ordered)
+        canSync: (suspend () -> Boolean)? = null,
+    ): Result<Unit> = syncPaykitApp(privateSharingEnabled, Priority.Ordered, canSync)
 
     internal suspend fun syncPaykitApp(
         privateSharingEnabled: Boolean? = null,
         priority: Priority,
+        canSync: (suspend () -> Boolean)? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val settings = settingsStore.data.first()
             val privateSharing = privateSharingEnabled ?: settings.sharesPrivatePaykitEndpoints
-            paykitSdkService.syncPaykitApp(privatePaymentsEnabled = privateSharing, priority = priority)
+            if (canSync?.invoke() == false) return@runSuspendCatching
+            if (canSync == null) {
+                paykitSdkService.syncPaykitApp(privatePaymentsEnabled = privateSharing, priority = priority)
+            } else {
+                paykitSdkService.syncPaykitApp(privateSharing, priority, canSync)
+            }
+            Unit
         }
     }
 
-    private suspend fun removePublishedEndpoints() {
-        applyPublishedEndpoints(emptyList())
-        clearPublicBolt11Metadata()
+    private suspend fun withdrawPublishedEndpoints(priority: Priority, isStillCurrent: (() -> Boolean)?) {
+        val ownsSettings: (SettingsData) -> Boolean = {
+            isStillCurrent == null || (!it.sharesPublicPaykitEndpoints && isStillCurrent())
+        }
+        val canWithdraw: suspend () -> Boolean = { ownsSettings(settingsStore.data.first()) }
+        var removed = false
+        val endpointError = runSuspendCatching {
+            removed = applyPublishedEndpoints(emptyList(), canPublish = canWithdraw)
+            if (removed) clearPublicBolt11Metadata(canClear = ownsSettings)
+        }.exceptionOrNull()
+        val appResult = runSuspendCatching {
+            if (!canWithdraw()) return@runSuspendCatching false
+            if (isStillCurrent == null) {
+                syncPaykitApp(priority = priority).getOrThrow()
+                true
+            } else {
+                paykitSdkService.syncPaykitApp(
+                    privatePaymentsEnabled = settingsStore.data.first().sharesPrivatePaykitEndpoints,
+                    priority = priority,
+                    canSync = canWithdraw,
+                )
+            }
+        }
+        if (endpointError != null) {
+            appResult.exceptionOrNull()?.let(endpointError::addSuppressed)
+            throw endpointError
+        }
+        if (!appResult.getOrThrow() || !removed) return
+        settingsStore.update { if (ownsSettings(it)) it.copy(publicPaykitCleanupPending = false) else it }
     }
 
     private suspend fun isAutomaticPublicationAllowed(canPublish: () -> Boolean): Boolean =
@@ -364,11 +419,14 @@ class PublicPaykitRepo @Inject constructor(
 
     private suspend fun applyPublishedEndpoints(
         desiredEndpoints: List<Endpoint>,
+        beforePublish: suspend () -> Unit = {},
+        acknowledge: suspend () -> Unit = {},
         canPublish: suspend () -> Boolean = { true },
     ): Boolean =
         publishMutex.withLock {
             if (!canPublish()) return@withLock false
             requireCurrentPublicKey()
+            beforePublish()
             if (!canPublish()) return@withLock false
             val report = paykitSdkService.syncPublicEndpoints(desiredEndpoints, canPublish) ?: return@withLock false
             report.failed.forEach { failure ->
@@ -378,6 +436,7 @@ class PublicPaykitRepo @Inject constructor(
                 )
             }
             if (report.failed.isNotEmpty()) throw PublicPaykitError.PublicationFailed
+            acknowledge()
             true
         }
 
@@ -389,23 +448,50 @@ class PublicPaykitRepo @Inject constructor(
         return currentPublicKey
     }
 
-    private suspend fun acknowledgePublishedEndpoints(
-        endpoints: List<Endpoint>,
-        canPublish: () -> Boolean = { true },
-    ) {
-        val publishedInvoice = endpoints.firstOrNull { it.methodId == MethodId.Bolt11 }?.value.orEmpty()
+    private suspend fun markPublicationPending(canPublish: () -> Boolean) {
         settingsStore.update {
             if (it.sharesPublicPaykitEndpoints && canPublish()) {
-                val usdtPending = isUsdtPaymentOptionEnabled(it, usdtRepo.state.value) &&
-                    endpoints.none { endpoint -> endpoint.methodId == MethodId.UsdtArbitrum }
-                it.copy(publicPaykitCleanupPending = it.publicPaykitBolt11 != publishedInvoice || usdtPending)
+                it.copy(publicPaykitCleanupPending = true)
             } else {
                 it
             }
         }
     }
 
+    private suspend fun acknowledgePublishedEndpoints(
+        endpoints: List<Endpoint>,
+        publicKey: String,
+        canPublish: () -> Boolean,
+    ) {
+        if (!canPublish()) return
+        val publishedInvoice = endpoints.firstOrNull { it.methodId == MethodId.Bolt11 }?.value.orEmpty()
+        val publishedOnchain = endpoints.firstOrNull { it.methodId.isOnchain }
+        val acknowledge: suspend (Boolean) -> Unit = { addressMatches ->
+            settingsStore.update {
+                if (it.sharesPublicPaykitEndpoints && canPublish()) {
+                    val usdtPending = isUsdtPaymentOptionEnabled(it, usdtRepo.state.value) &&
+                        endpoints.none { endpoint -> endpoint.methodId == MethodId.UsdtArbitrum }
+                    val onchainPending =
+                        if (isOnchainPaymentOptionEnabled(it)) !addressMatches else publishedOnchain != null
+                    it.copy(
+                        publicPaykitCleanupPending = it.publicPaykitBolt11 != publishedInvoice ||
+                            usdtPending || onchainPending,
+                    )
+                } else {
+                    it
+                }
+            }
+        }
+        if (publishedOnchain == null) {
+            acknowledge(false)
+        } else {
+            addressReservationRepo.withPublicAddressMatch(publicKey, publishedOnchain.value, acknowledge)
+        }
+    }
+
     private suspend fun buildWalletEndpoints(
+        publicKey: String,
+        canPublish: () -> Boolean,
         refresh: Boolean,
         forceRefreshLightning: Boolean = false,
         requireEndpoint: Boolean = true,
@@ -422,11 +508,6 @@ class PublicPaykitRepo @Inject constructor(
                 Result.success(Unit)
             }.getOrThrow()
         }
-        if (includeOnchain) {
-            walletRepo.refreshReusableReceiveAddress().getOrThrow()
-        }
-
-        val state = walletRepo.walletState.value
         val endpoints = mutableListOf<Endpoint>()
         if (includeLightning) {
             buildPublicBolt11Endpoint(forceRefreshLightning, lightningRefresh)?.let { endpoints += it }
@@ -434,8 +515,16 @@ class PublicPaykitRepo @Inject constructor(
             clearPublicBolt11Metadata()
         }
 
-        val onchainAddress = state.onchainAddress
-        if (includeOnchain && onchainAddress.isNotBlank()) {
+        if (includeOnchain) {
+            if (!isAutomaticPublicationAllowed(canPublish)) return emptyList()
+            val onchainAddress = addressReservationRepo.currentOrRotatedPublicAddress(publicKey)
+                .getOrThrow()
+            // A prior acknowledgement may have cleared repair while this reservation was being delivered.
+            withContext(NonCancellable) {
+                markPublicationPending(canPublish)
+            }
+            currentCoroutineContext().ensureActive()
+            if (!isAutomaticPublicationAllowed(canPublish)) return emptyList()
             val methodId = onchainMethodId(onchainAddress)
             endpoints += Endpoint(
                 methodId = methodId,
@@ -520,8 +609,12 @@ class PublicPaykitRepo @Inject constructor(
         )
     }
 
-    private suspend fun clearPublicBolt11Metadata(publicationPending: Boolean = false) {
+    private suspend fun clearPublicBolt11Metadata(
+        publicationPending: Boolean = false,
+        canClear: (SettingsData) -> Boolean = { true },
+    ) {
         settingsStore.update {
+            if (!canClear(it)) return@update it
             it.copy(
                 publicPaykitBolt11 = "",
                 publicPaykitBolt11PaymentHash = "",

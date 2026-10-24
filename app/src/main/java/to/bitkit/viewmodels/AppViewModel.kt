@@ -875,7 +875,11 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { pubkyRepo.checkAdoptedSource() }
     }
 
-    private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
+    private suspend fun refreshPublicPaykitEndpointsIfEnabled(
+        forceRefreshLightning: Boolean = false,
+        canPublish: (() -> Boolean)? = null,
+    ) {
+        if (canPublish != null && !canPublish()) return
         val signIn = pubkyRepo.currentSignIn()
         val restorationGuard = if (forceRefreshLightning && signIn == null) pubkyRepo.savedIdentityGuard() else null
         val settings = settingsStore.data.first()
@@ -887,7 +891,7 @@ class AppViewModel @Inject constructor(
 
         pubkyRepo.isRestoringSession.first { !it }
         val restoredSignIn = signIn ?: pubkyRepo.currentSignIn()
-        val admission = publicPaykitPublicationAdmission(restoredSignIn)
+        val admission = canPublish ?: publicPaykitPublicationAdmission(restoredSignIn)
         val onchainAddress = walletRepo.walletState.value.onchainAddress
         if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
 
@@ -2200,16 +2204,22 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPrivateOnlyPaykitApp(reason: String, onlyIfNeeded: Boolean = false) {
+        val signIn = pubkyRepo.currentSignIn() ?: return
+        val isStillCurrent = publicPaykitPublicationAdmission(signIn)
         val settings = settingsStore.data.first()
-        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
+        if (!isStillCurrent()) return
         if (!settings.sharesPrivatePaykitEndpoints || settings.sharesPublicPaykitEndpoints) return
-        val identity = pubkyRepo.publicKey.value ?: return
+        val identity = signIn.publicKey
         if (onlyIfNeeded && PubkyPublicKeyFormat.matches(privatePaykitAppRegistrationIdentity, identity)) return
         privatePaykitAppRegistrationIdentity = null
 
-        publicPaykitRepo.syncPaykitApp()
+        val canSync: suspend () -> Boolean = {
+            val current = settingsStore.data.first()
+            isStillCurrent() && current.sharesPrivatePaykitEndpoints && !current.sharesPublicPaykitEndpoints
+        }
+        publicPaykitRepo.syncPaykitApp(canSync = canSync)
             .onSuccess {
-                if (PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, identity)) {
+                if (canSync()) {
                     privatePaykitAppRegistrationIdentity = identity
                 }
             }
@@ -2219,29 +2229,30 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun retryPendingPaykitEndpointRemoval(contactKeys: Collection<String>, reason: String) {
-        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
+        val signIn = pubkyRepo.currentSignIn()
+        val isStillCurrent = publicPaykitPublicationAdmission(signIn)
+        if (!isStillCurrent()) return
         contactPaymentSettingsRepo.reconcilePendingEndpoints {
-            privatePaykitRepo.retryPendingEndpointRemoval(contactKeys)
+            privatePaykitRepo.retryPendingEndpointRemoval(contactKeys, isStillCurrent)
                 .onFailure {
                     Logger.warn("Failed to retry private Paykit endpoint removal for '$reason'", it, context = TAG)
                 }
 
             val settings = settingsStore.data.first()
-            if (privatePaykitRepo.isProfileDeletionInProgress.value) return@reconcilePendingEndpoints
+            if (!isStillCurrent()) return@reconcilePendingEndpoints
             if (settings.publicPaykitCleanupPending ||
                 settings.sharesPublicPaykitEndpoints && publicPaykitRepo.hasPendingLightningRefresh
             ) {
                 val reconciliationResult = if (settings.sharesPublicPaykitEndpoints) {
-                    publicPaykitRepo.syncCurrentPublishedEndpoints(canPublish = publicPaykitPublicationAdmission())
+                    publicPaykitRepo.syncCurrentPublishedEndpoints(canPublish = isStillCurrent)
                 } else {
-                    publicPaykitRepo.syncPublishedEndpoints(publish = false)
+                    publicPaykitRepo.syncPublishedEndpoints(
+                        publish = false,
+                        appSyncPriority = Priority.Ordered,
+                        isStillCurrent = isStillCurrent,
+                    )
                 }
                 reconciliationResult
-                    .onSuccess {
-                        if (!settings.sharesPublicPaykitEndpoints) {
-                            settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
-                        }
-                    }
                     .onFailure {
                         Logger.warn("Failed to reconcile public Paykit state for '$reason'", it, context = TAG)
                     }
@@ -2252,6 +2263,7 @@ class AppViewModel @Inject constructor(
     private fun handleLdkEvent(update: NodeEventUpdate) {
         val event = update.event
         if (!walletRepo.walletExists()) return
+        val publicPaykitAdmission = publicPaykitPublicationAdmission()
         Logger.debug("LDK-node event received in $TAG: ${jsonLogOf(event)}", context = TAG)
 
         val receiveSheetToClose = receiveSheetContext?.takeIf { context ->
@@ -2271,9 +2283,16 @@ class AppViewModel @Inject constructor(
                     is Event.ChannelClosed -> handleChannelClosed(event)
                     is Event.ChannelPending -> handleChannelPending()
                     is Event.ChannelReady -> handleChannelReady(event)
-                    is Event.OnchainTransactionConfirmed -> handleOnchainTransactionConfirmed(event)
+                    is Event.OnchainTransactionConfirmed -> handleOnchainTransactionConfirmed(
+                        event,
+                        publicPaykitAdmission,
+                    )
                     is Event.OnchainTransactionEvicted -> handleOnchainTransactionEvicted(event)
-                    is Event.OnchainTransactionReceived -> handleOnchainTransactionReceived(event, receiveSheetToClose)
+                    is Event.OnchainTransactionReceived -> handleOnchainTransactionReceived(
+                        event,
+                        receiveSheetToClose,
+                        publicPaykitAdmission,
+                    )
                     is Event.OnchainTransactionReorged -> handleOnchainTransactionReorged(event)
                     is Event.OnchainTransactionReplaced -> handleOnchainTransactionReplaced(event)
                     is Event.PaymentClaimable -> Unit
@@ -2285,7 +2304,7 @@ class AppViewModel @Inject constructor(
                     is Event.ProbeSuccessful -> Unit
                     is Event.SpliceFailed -> Unit
                     is Event.SplicePending -> Unit
-                    is Event.SyncCompleted -> handleSyncCompleted(event)
+                    is Event.SyncCompleted -> handleSyncCompleted(event, publicPaykitAdmission)
                     is Event.SyncProgress -> Unit
                 }
             }.onFailure { e ->
@@ -2373,7 +2392,10 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun handleSyncCompleted(event: Event.SyncCompleted) {
+    private suspend fun handleSyncCompleted(event: Event.SyncCompleted, canPublish: () -> Boolean) {
+        val onActivitiesSynced: suspend () -> Unit = {
+            viewModelScope.launch { refreshPublicPaykitEndpointsIfEnabled(canPublish = canPublish) }
+        }
         if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen(event.syncedBlockHeight)
 
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
@@ -2388,12 +2410,12 @@ class AppViewModel @Inject constructor(
                 settingsStore.update { it.copy(pendingRestoreAddressTypePrune = false) }
                 delay(POST_RESTORE_PRUNE_DELAY_MS)
                 lightningRepo.pruneEmptyAddressTypesAfterRestore()
-                walletRepo.debounceSyncByEvent()
+                walletRepo.debounceSyncByEvent(onActivitiesSynced)
             }
 
             !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> {
                 retryPendingMigrationData()
-                walletRepo.debounceSyncByEvent()
+                walletRepo.debounceSyncByEvent(onActivitiesSynced)
             }
             else -> Unit
         }
@@ -2590,9 +2612,13 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private suspend fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
+    private suspend fun handleOnchainTransactionConfirmed(
+        event: Event.OnchainTransactionConfirmed,
+        canPublish: () -> Boolean,
+    ) {
         activityRepo.handleOnchainTransactionConfirmed(event.txid, event.details)
         notifyPaymentReceived(event)
+        schedulePublicPaykitRefreshAfterActivitySync(canPublish)
     }
 
     private suspend fun handleOnchainTransactionEvicted(event: Event.OnchainTransactionEvicted) {
@@ -2603,6 +2629,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handleOnchainTransactionReceived(
         event: Event.OnchainTransactionReceived,
         receiveSheetToClose: ReceiveSheetContext?,
+        canPublish: () -> Boolean,
     ) {
         closeSettledReceiveSheet(receiveSheetToClose)
         val addresses = event.details.outputs.mapNotNull { it.scriptpubkeyAddress }
@@ -2611,6 +2638,14 @@ class AppViewModel @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to rotate private Paykit address for '${event.txid}'", it, context = TAG)
             }
+        schedulePublicPaykitRefreshAfterActivitySync(canPublish)
+    }
+
+    private suspend fun schedulePublicPaykitRefreshAfterActivitySync(canPublish: () -> Boolean) {
+        if (!canPublish() || !isPaykitEnabled.value || !settingsStore.data.first().sharesPublicPaykitEndpoints) return
+        walletRepo.debounceSyncByEvent {
+            viewModelScope.launch { refreshPublicPaykitEndpointsIfEnabled(canPublish = canPublish) }
+        }
     }
 
     private suspend fun handleOnchainTransactionReorged(event: Event.OnchainTransactionReorged) {
