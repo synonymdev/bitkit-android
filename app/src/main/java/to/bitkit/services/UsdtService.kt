@@ -18,6 +18,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.text.DecimalFormatSymbols
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -32,6 +33,21 @@ class UsdtService @Inject constructor(
     private var credentialFingerprint: ByteArray? = null
     private var addressFingerprint: ByteArray? = null
     private var cachedPaymentAddress: String? = null
+    private val backupAcknowledgements = AtomicLong()
+    val recoveryGeneration: Long get() = backupAcknowledgements.get()
+
+    internal val recoveryBackup = object : UsdtBackup {
+        override suspend fun persist(snapshot: String) {
+            backupRepo.get().persistUsdtRecoveryBackup(snapshot).getOrElse {
+                Logger.error(
+                    "Failed to persist USDT recovery backup with '${it.javaClass.simpleName}'",
+                    context = TAG,
+                )
+                throw UsdtException.BackupUnavailable()
+            }
+            backupAcknowledgements.incrementAndGet()
+        }
+    }
 
     val isRecoveryRestorePending: Boolean
         get() = keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)
@@ -74,17 +90,7 @@ class UsdtService @Inject constructor(
             rpcUrl = Env.usdtRpcUrl ?: "http://127.0.0.1:1",
             bundlerUrl = Env.usdtBundlerUrl.ifEmpty { "http://127.0.0.1:1" },
             bridgeUrl = Env.usdtBridgesUrl,
-            backup = object : UsdtBackup {
-                override suspend fun persist(snapshot: String) {
-                    backupRepo.get().persistUsdtRecoveryBackup(snapshot).getOrElse {
-                        Logger.error(
-                            "Failed to persist USDT recovery backup with '${it.javaClass.simpleName}'",
-                            context = TAG,
-                        )
-                        throw UsdtException.BackupUnavailable()
-                    }
-                }
-            },
+            backup = recoveryBackup,
         ).also {
             wallet = it
             credentialFingerprint = fingerprint

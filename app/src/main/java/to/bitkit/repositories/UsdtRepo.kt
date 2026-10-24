@@ -55,6 +55,7 @@ class UsdtRepo @Inject constructor(
     private var rateLimitedUntil = 0L
     private val _state = MutableStateFlow(UsdtWalletState())
     val state = _state.asStateFlow()
+    val recoveryGeneration: Long get() = service.recoveryGeneration
     fun consumeReceipt(id: String): Boolean = _state.getAndUpdate {
         it.copy(pendingReceipts = it.pendingReceipts.filterNot { receipt -> receipt.id == id }.toImmutableList())
     }.pendingReceipts.any { it.id == id }
@@ -76,7 +77,7 @@ class UsdtRepo @Inject constructor(
                     val balance = wallet.balance()
                     _state.update { it.copy(balance = balance) }
                     val transfers = wallet.refreshTransfers().toImmutableList()
-                    _state.update { it.copy(transfers = transfers, recoveryGeneration = it.recoveryGeneration + 1) }
+                    _state.update { it.copy(transfers = transfers) }
                 }
                 if (settlement.exceptionOrNull() is UsdtException.RateLimited) settlement.getOrThrow()
                 if (history && !isSendPresented) {
@@ -159,7 +160,7 @@ class UsdtRepo @Inject constructor(
         val transfer = wallet.history().firstOrNull { it.id == id } ?: throw UsdtException.InvalidBackup()
         if (transfer.status == UsdtTransferStatus.PENDING) {
             val transfers = wallet.refreshTransfers().toImmutableList()
-            _state.update { it.copy(transfers = transfers, recoveryGeneration = it.recoveryGeneration + 1) }
+            _state.update { it.copy(transfers = transfers) }
         }
     }
 
@@ -279,7 +280,6 @@ data class UsdtWalletState(
     val balance: ULong? = null,
     val transfers: ImmutableList<UsdtTransfer> = persistentListOf(),
     val historyComplete: Boolean = false,
-    val recoveryGeneration: Long = 0,
     val pendingReceipts: ImmutableList<UsdtTransfer> = persistentListOf(),
     val pendingDepositIds: ImmutableSet<String> = persistentSetOf(),
 )

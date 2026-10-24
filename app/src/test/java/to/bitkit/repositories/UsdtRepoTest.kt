@@ -56,12 +56,20 @@ class UsdtRepoTest : BaseUnitTest() {
         now += 1.seconds
         repo.retryTransfer("original").getOrThrow()
         assertEquals(listOf(transfer), repo.state.value.transfers)
-        assertEquals(1L, repo.state.value.recoveryGeneration)
+        assertEquals(0L, repo.recoveryGeneration)
         assertTrue(repo.retryTransfer("unknown").exceptionOrNull() is UsdtException.InvalidBackup)
         whenever(transfer.status).thenReturn(UsdtTransferStatus.CONFIRMED)
         repo.retryTransfer("original").getOrThrow()
-        assertEquals(1L, repo.state.value.recoveryGeneration)
+        assertEquals(0L, repo.recoveryGeneration)
         verify(wallet, times(2)).refreshTransfers()
+    }
+
+    @Test
+    fun `acknowledgement generation reads the current service value before any refresh`() {
+        val repo = UsdtRepo(service, testDispatcher)
+        whenever(service.recoveryGeneration).thenReturn(4L, 5L)
+        assertEquals(4L, repo.recoveryGeneration)
+        assertEquals(5L, repo.recoveryGeneration)
     }
 
     @Test

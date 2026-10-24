@@ -95,7 +95,7 @@ class UsdtViewModel @Inject constructor(
             .onSuccess {
                 _state.update { current ->
                     val recovered = current.submitted && current.canRetryRecovery &&
-                        repo.state.value.recoveryGeneration != submissionFailureGeneration
+                        repo.recoveryGeneration != submissionFailureGeneration
                     current.copy(
                         refreshError = null,
                         error = current.error.takeUnless { recovered },
@@ -265,9 +265,13 @@ class UsdtViewModel @Inject constructor(
         _state.update { it.copy(retryingRecovery = true) }
         try {
             repo.retryTransfer(quote.id)
-                .onSuccess { _state.update { it.copy(error = null, canRetryRecovery = false) } }
+                .onSuccess {
+                    if (repo.recoveryGeneration != submissionFailureGeneration) {
+                        _state.update { it.copy(error = null, canRetryRecovery = false) }
+                    }
+                }
                 .onFailure { error ->
-                    submissionFailureGeneration = repo.state.value.recoveryGeneration
+                    submissionFailureGeneration = repo.recoveryGeneration
                     _state.update { it.copy(error = error.messageResource()) }
                 }
         } finally {
@@ -295,7 +299,7 @@ class UsdtViewModel @Inject constructor(
                 Logger.warn("Failed to send USDT with '${error.javaClass.simpleName}'", context = TAG)
                 val transfer = wallet.value.transfers.firstOrNull { it.id == quote.id }
                 val recorded = transfer != null
-                submissionFailureGeneration = repo.state.value.recoveryGeneration
+                submissionFailureGeneration = repo.recoveryGeneration
                 _state.update {
                     it.copy(
                         submitted = recorded,

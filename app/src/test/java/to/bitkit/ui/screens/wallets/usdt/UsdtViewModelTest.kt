@@ -151,6 +151,7 @@ class UsdtViewModelTest : BaseUnitTest() {
     private val repo: UsdtRepo = mock()
     private val settingsStore: SettingsStore = mock()
     private val walletState = MutableStateFlow(UsdtWalletState())
+    private var recoveryGeneration = 0L
     private val settings = MutableStateFlow(SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true))
     private val quote = UsdtQuote(
         id = "payment",
@@ -369,6 +370,8 @@ class UsdtViewModelTest : BaseUnitTest() {
 
     @Test
     fun `durably recorded send failure retains the payment and prevents resubmission`() = test {
+        // A previously acknowledged payment must not clear this payment's failed backup.
+        recoveryGeneration = 4L
         val retained: UsdtTransfer = mock()
         whenever(retained.id).thenReturn(quote.id)
         whenever(retained.status).thenReturn(UsdtTransferStatus.PENDING)
@@ -398,12 +401,18 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertTrue(viewModel.state.value.canRetryRecovery)
         whenever(repo.retryTransfer(quote.id)).thenReturn(Result.success(Unit))
         viewModel.retryRecovery().join()
+        assertEquals(R.string.usdt__error_rate_limit, viewModel.state.value.error)
+        assertTrue(viewModel.state.value.canRetryRecovery)
+        viewModel.refresh()
+        assertTrue(viewModel.state.value.canRetryRecovery)
+        recoveryGeneration++
+        viewModel.retryRecovery().join()
         assertNull(viewModel.state.value.error)
         assertFalse(viewModel.state.value.canRetryRecovery)
         assertEquals(quote, viewModel.state.value.quote)
         viewModel.confirm().join()
         verify(repo, times(1)).quote(any(), any(), any(), any())
-        verify(repo, times(3)).retryTransfer(quote.id)
+        verify(repo, times(4)).retryTransfer(quote.id)
         verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
     }
 
@@ -424,7 +433,7 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertEquals(R.string.usdt__error_rate_limit, viewModel.state.value.error)
         assertTrue(viewModel.state.value.canRetryRecovery)
 
-        walletState.value = walletState.value.copy(recoveryGeneration = walletState.value.recoveryGeneration + 1)
+        recoveryGeneration++
         viewModel.refresh()
 
         assertNull(viewModel.state.value.error)
@@ -584,6 +593,7 @@ class UsdtViewModelTest : BaseUnitTest() {
     ): UsdtViewModel {
         this.walletState.value = walletState
         whenever(repo.state).thenReturn(this.walletState)
+        whenever(repo.recoveryGeneration).thenAnswer { recoveryGeneration }
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.success(quote))
         whenever(repo.send(eq(quote), anyOrNull(), any())).thenReturn(Result.success(mock<UsdtTransfer>()))
