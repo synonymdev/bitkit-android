@@ -281,3 +281,5 @@ tab's display name and becomes `Tab-todas` in Spanish. Journeys naming a `Tab-*`
 English device for iOS's sake.
 
 Device-clock fault injection requires a separate manual run: [Paykit clock changes](paykit-clock-changes.md).
+
+`usdt-independent-recovery.xml` is shared by iOS and Android with the same journey name and actions. It covers independent acknowledged recovery, Pubky lock contention, backup failure, same-operation retry, restart, migration and concurrent writers. It requires disposable local USDT and fault-injection endpoints; the standard staging environment does not supply those fixtures. A missing fixture is a verification gap, not a passed journey.

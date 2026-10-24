@@ -818,7 +818,7 @@
     <string name="usdt__enable_title">Włączyć USDT?</string>
     <string name="usdt__error_address">Wprowadź prawidłowy adres dla wybranej sieci.</string>
     <string name="usdt__error_amount">Wprowadź prawidłową kwotę z maksymalnie 6 miejscami po przecinku.</string>
-    <string name="usdt__error_backup">Nie można utworzyć kopii zapasowej tej płatności. Ponowna próba nastąpi, gdy kopia zapasowa będzie dostępna.</string>
+    <string name="usdt__error_backup">Nie można utworzyć kopii zapasowej tej płatności. Ta sama podpisana płatność zostanie automatycznie ponowiona, gdy kopia zapasowa będzie dostępna. Zamknięcie tego ekranu jej nie anuluje.</string>
     <string name="usdt__error_balance">Za mało USDT na pokrycie kwoty i opłat.</string>
     <string name="usdt__error_bridge_amount">Kwota jest za mała, aby pokryć koszty mostu. Spróbuj większej kwoty.</string>
     <string name="usdt__error_clock">Ustaw automatyczną datę i godzinę na urządzeniu, a następnie spróbuj ponownie.</string>

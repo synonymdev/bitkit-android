@@ -12,6 +12,7 @@ import com.synonym.bitkitcore.usdtParseAmount
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.repositories.BackupRepo
+import to.bitkit.utils.Logger
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -32,6 +33,9 @@ class UsdtService @Inject constructor(
     private var addressFingerprint: ByteArray? = null
     private var cachedPaymentAddress: String? = null
 
+    val isRecoveryRestorePending: Boolean
+        get() = keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)
+
     @get:Synchronized
     val paymentAddress: String
         get() {
@@ -51,6 +55,7 @@ class UsdtService @Inject constructor(
 
     @Synchronized
     fun wallet(requiresNetwork: Boolean = true): UsdtWallet {
+        if (requiresNetwork && isRecoveryRestorePending) throw UsdtException.BackupUnavailable()
         if (requiresNetwork && !Env.isUsdtEnabled) throw UsdtException.NotConfigured()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw UsdtException.InvalidCredentials()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
@@ -71,7 +76,13 @@ class UsdtService @Inject constructor(
             bridgeUrl = Env.usdtBridgesUrl,
             backup = object : UsdtBackup {
                 override suspend fun persist(snapshot: String) {
-                    backupRepo.get().persistWalletBackup(snapshot).getOrElse { throw UsdtException.BackupUnavailable() }
+                    backupRepo.get().persistUsdtRecoveryBackup(snapshot).getOrElse {
+                        Logger.error(
+                            "Failed to persist USDT recovery backup with '${it.javaClass.simpleName}'",
+                            context = TAG,
+                        )
+                        throw UsdtException.BackupUnavailable()
+                    }
                 }
             },
         ).also {
@@ -150,4 +161,8 @@ class UsdtService @Inject constructor(
         keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name),
         submissionDeadline?.toString(),
     )
+
+    companion object {
+        private const val TAG = "UsdtService"
+    }
 }

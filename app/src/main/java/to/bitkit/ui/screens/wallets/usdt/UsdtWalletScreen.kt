@@ -285,7 +285,8 @@ fun UsdtWalletScreen(
                                 maximumAmount = it
                             }
                         },
-                        onConfirm = { viewModel.confirm() }, onDone = dismiss,
+                        onConfirm = { viewModel.confirm() }, onRetryRecovery = { viewModel.retryRecovery() },
+                        onDone = dismiss,
                         hideBalance = settings.hideBalance,
                         onDetails = {
                             selectedTransferId = state.quote?.id
