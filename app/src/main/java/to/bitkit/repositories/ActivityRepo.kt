@@ -140,7 +140,7 @@ class ActivityRepo @Inject constructor(
                 Unit
             }.onFailure { Logger.error("Failed to sync activities", it, context = TAG) }
         } catch (e: CancellationException) {
-            sync.completeExceptionally(e)
+            sync.complete(Result.failure(AppError("Activity sync was interrupted", e)))
             throw e
         } finally {
             withContext(NonCancellable) {
