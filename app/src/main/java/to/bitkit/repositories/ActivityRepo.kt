@@ -116,7 +116,7 @@ class ActivityRepo @Inject constructor(
         }.onFailure { Logger.warn("Failed to backfill Paykit activity contacts", it, context = TAG) }
     }
 
-    suspend fun syncActivities(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun syncActivities(requireFresh: Boolean = false): Result<Unit> = withContext(bgDispatcher) {
         var ownsSync = false
         val sync = syncMutex.withLock {
             activeSync ?: CompletableDeferred<Result<Unit>>().also {
@@ -126,11 +126,12 @@ class ActivityRepo @Inject constructor(
             }
         }
         if (!ownsSync) {
-            return@withContext withTimeoutOrNull(MS_SYNC_TIMEOUT) { sync.await() }
-                ?: Result.failure(TimeoutException("Waiting for activity sync timed out"))
+            val result = withTimeoutOrNull(MS_SYNC_TIMEOUT) { sync.await() }
+                ?: return@withContext Result.failure(TimeoutException("Waiting for activity sync timed out"))
+            return@withContext if (requireFresh && result.isSuccess) syncActivities() else result
         }
-        try {
-            val result = runSuspendCatching {
+        val result = try {
+            runSuspendCatching {
                 val payments = lightningRepo.getPayments().getOrThrow()
                 syncLdkNodePayments(payments).getOrThrow()
                 boostPendingActivities()
@@ -138,8 +139,6 @@ class ActivityRepo @Inject constructor(
                 getAllAvailableTags().getOrNull()
                 Unit
             }.onFailure { Logger.error("Failed to sync activities", it, context = TAG) }
-            sync.complete(result)
-            result
         } catch (e: CancellationException) {
             sync.completeExceptionally(e)
             throw e
@@ -152,6 +151,8 @@ class ActivityRepo @Inject constructor(
                 notifyActivitiesChanged()
             }
         }
+        sync.complete(result)
+        result
     }
 
     /**
@@ -432,7 +433,7 @@ class ActivityRepo @Inject constructor(
 
                 if (walletId == WalletScope.default) {
                     lightningRepo.sync().onSuccess { Logger.debug("Syncing LN node SUCCESS", context = TAG) }
-                    syncActivities().onSuccess {
+                    syncActivities(requireFresh = true).onSuccess {
                         Logger.debug(
                             "Sync success, searching again the activity with paymentHashOrTxId:'$paymentHashOrTxId'",
                             context = TAG,
@@ -621,7 +622,7 @@ class ActivityRepo @Inject constructor(
         if (activity != null) return activity
         if (!syncLdkPayments) return null
 
-        syncActivities().getOrThrow()
+        syncActivities(requireFresh = true).getOrThrow()
         return getActivityByPaymentId(forPaymentId, walletId)
     }
 

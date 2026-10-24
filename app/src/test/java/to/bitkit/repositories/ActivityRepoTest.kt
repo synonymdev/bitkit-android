@@ -293,6 +293,52 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `successful overlap stays reserved through transfer updates`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val transfers = CompletableDeferred<Result<Unit>>()
+        whenever(transferRepo.syncTransferStates()).doSuspendableAnswer { transfers.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val waiting = List(16) { async { sut.syncActivities() } }
+        runCurrent()
+        assertFalse(owner.isCompleted)
+        assertTrue(waiting.none { it.isCompleted })
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        verify(lightningRepo, times(1)).getPayments()
+        transfers.complete(Result.success(Unit))
+        assertTrue(owner.await().isSuccess)
+        assertTrue(waiting.awaitAll().all { it.isSuccess })
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        assertTrue(sut.syncActivities().isSuccess)
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `fresh callers import payments added after the active snapshot`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val transfers = CompletableDeferred<Result<Unit>>()
+        whenever(transferRepo.syncTransferStates()).doSuspendableAnswer { transfers.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val newPayments = listOf(testPaymentDetails)
+        val paymentResponse = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { paymentResponse.await() }
+        val fresh = List(16) { async { sut.syncActivities(requireFresh = true) } }
+        runCurrent()
+        assertTrue(fresh.none { it.isCompleted })
+        verify(lightningRepo, times(1)).getPayments()
+        transfers.complete(Result.success(Unit))
+        assertTrue(owner.await().isSuccess)
+        runCurrent()
+        assertTrue(fresh.none { it.isCompleted })
+        paymentResponse.complete(Result.success(newPayments))
+        assertTrue(fresh.awaitAll().all { it.isSuccess })
+        verify(coreService.activity).syncLdkNodePaymentsToActivities(eq(newPayments), eq(false), any())
+        verify(lightningRepo, times(2)).getPayments()
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+    }
+
+    @Test
     fun `syncActivities success flow`() = test {
         val payments = listOf(testPaymentDetails)
         whenever { lightningRepo.getPayments() }.thenReturn(Result.success(payments))

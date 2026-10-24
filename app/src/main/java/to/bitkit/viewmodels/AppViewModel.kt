@@ -1134,7 +1134,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             if (resolution.walletId == WalletScope.default) {
                 lightningRepo.sync()
-                activityRepo.syncActivities()
+                activityRepo.syncActivities(requireFresh = true)
             }
             activityRepo.setContact(
                 contactPublicKey = resolution.requestId.counterparty,
