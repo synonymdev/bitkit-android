@@ -150,6 +150,19 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         }
     }
 
+    /** Keeps the read-only match stable through acknowledgement; the callback must not re-enter reservations. */
+    internal suspend fun withPublicAddressMatch(
+        publicKey: String,
+        address: String,
+        acknowledge: suspend (Boolean) -> Unit,
+    ) = withContext(ioDispatcher) {
+        locked {
+            val matches = address.isNotBlank() &&
+                it.publicAssignments[normalizedPublicKey(publicKey)]?.address == address
+            acknowledge(matches)
+        }
+    }
+
     suspend fun nextReusableReceiveAddress(): Result<String> =
         nextReusableReceiveAddress(selectedAddressType())
 

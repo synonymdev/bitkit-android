@@ -68,9 +68,14 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             usdtRepo = usdtRepo,
         )
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
+        whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("pubkyself", 0L))
+        whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringSession)
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(addressReservationRepo.currentOrRotatedPublicAddress(any())).thenReturn(Result.success("bc1ptest"))
+        doSuspendableAnswer {
+            it.getArgument<suspend (Boolean) -> Unit>(2)(true)
+        }.whenever(addressReservationRepo).withPublicAddressMatch(any(), any(), any())
         whenever(settingsStore.update(any())).thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -485,6 +490,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
     fun `deferred public lightning refresh does not transfer to a replacement session`() = test {
         val original = PubkySignIn("pubkyself", 0L)
         var generation = 0L
+        whenever(pubkyRepo.currentSignIn()).thenAnswer { PubkySignIn("pubkyself", generation) }
         whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0).generation == generation }
         whenever(lightningRepo.canReceive()).thenReturn(true)
         PublicPaykitRepo.lightningRouteHintsValidator = { true }

@@ -122,6 +122,58 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `public address acknowledgement holds its match through rotation and clear`() = test {
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(
+            Result.success(AddressDerivationInfo("bcrt1qpublic", 1)),
+            Result.success(AddressDerivationInfo("bcrt1qrotated", 2)),
+        )
+        whenever(lightningRepo.revealReceiveAddresses(any(), any())).thenReturn(Result.success(Unit))
+        whenever(lightningRepo.getAddressBalance(any())).thenReturn(Result.success(0u))
+        whenever(reservationStore.reset()).thenAnswer { reservationData.value = PrivatePaykitReservationData() }
+        assertEquals("bcrt1qpublic", sut.currentOrRotatedPublicAddress(CONTACT_KEY).getOrThrow())
+
+        for (clear in listOf(false, true)) {
+            val address = if (clear) "bcrt1qrotated" else "bcrt1qpublic"
+            val before = reservationData.value
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            doSuspendableAnswer {
+                entered.complete(Unit)
+                release.await()
+                settingsData.update(it.getArgument<(SettingsData) -> SettingsData>(0))
+            }.whenever(settingsStore).update(any())
+            val acknowledgement = async {
+                sut.withPublicAddressMatch(CONTACT_KEY.removePrefix("pubky"), address) { matches ->
+                    assertTrue(matches)
+                    settingsStore.update { it.copy(publicPaykitCleanupPending = !matches) }
+                }
+            }
+            entered.await()
+            whenever(coreService.isAddressUsed(address)).thenReturn(true)
+            val mutation = async {
+                if (clear) {
+                    sut.clear()
+                } else {
+                    assertEquals("bcrt1qrotated", sut.currentOrRotatedPublicAddress(CONTACT_KEY).getOrThrow())
+                }
+            }
+            assertFalse(mutation.isCompleted)
+            assertEquals(before, reservationData.value)
+            release.complete(Unit)
+            acknowledgement.await()
+            mutation.await()
+
+            assertFalse(settingsData.value.publicPaykitCleanupPending)
+            sut.withPublicAddressMatch(CONTACT_KEY, address) { assertFalse(it) }
+            assertEquals(
+                if (clear) null else "bcrt1qrotated",
+                reservationData.value.publicAssignments[CONTACT_KEY]?.address,
+            )
+        }
+        verify(lightningRepo, never()).addressInfoForType(any(), any())
+    }
+
+    @Test
     fun `public assignments are scoped to profile identity`() = test {
         val otherIdentity = "pubky4rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(

@@ -6,10 +6,16 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.PublicationStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -35,6 +41,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -75,11 +82,16 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         isRestoringSession.value = false
 
         whenever(pubkyRepo.publicKey).thenReturn(publicKey)
+        whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("pubkyself", 0L))
+        whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringSession)
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(NOW_MILLIS))
         whenever(paykitSdkService.syncPublicEndpoints(any(), any())).thenReturn(syncReport())
         whenever { addressReservationRepo.currentOrRotatedPublicAddress(any()) }.thenReturn(Result.success("bc1ptest"))
+        doSuspendableAnswer {
+            it.getArgument<suspend (Boolean) -> Unit>(2)(true)
+        }.whenever(addressReservationRepo).withPublicAddressMatch(any(), any(), any())
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -381,6 +393,183 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         sut.syncCurrentPublishedEndpoints().getOrThrow()
         verifyBlocking(paykitSdkService, times(3)) { syncPublicEndpoints(endpoints.capture(), any()) }
         assertEquals("lnbc1replacement", endpoints.lastValue.single().value)
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
+    fun `older onchain publication after an acknowledged rotation keeps the replacement pending`() = test {
+        for (cancelAfterAdmission in listOf(false, true)) {
+            clearInvocations(paykitSdkService)
+            settingsFlow.value = SettingsData(
+                sharesPublicPaykitEndpoints = true,
+                publicPaykitLightningEnabled = false,
+                publicPaykitOnchainEnabled = true,
+                publicPaykitUsdtEnabled = false,
+                publicPaykitCleanupPending = true,
+            )
+            var reservedAddress = "bc1qpublic"
+            doSuspendableAnswer {
+                Result.success(reservedAddress)
+            }.whenever(addressReservationRepo).currentOrRotatedPublicAddress(eq("pubkyself"))
+            doSuspendableAnswer {
+                it.getArgument<suspend (Boolean) -> Unit>(2)(it.getArgument<String>(1) == reservedAddress)
+            }.whenever(addressReservationRepo).withPublicAddressMatch(eq("pubkyself"), any(), any())
+            val appSyncStarted = CompletableDeferred<Unit>()
+            val resumeAppSync = CompletableDeferred<Unit>()
+            val writeStarted = CompletableDeferred<Unit>()
+            val resumeWrite = CompletableDeferred<Unit>()
+            var remoteAddress: String? = null
+            doSuspendableAnswer {
+                val address = it.getArgument<List<Endpoint>>(0).single().value
+                if (cancelAfterAdmission && address == "bc1qpublic") {
+                    withContext(NonCancellable) {
+                        writeStarted.complete(Unit)
+                        resumeWrite.await()
+                        remoteAddress = address
+                    }
+                    currentCoroutineContext().ensureActive()
+                } else {
+                    remoteAddress = address
+                }
+                syncReport()
+            }.whenever(paykitSdkService).syncPublicEndpoints(any(), any())
+            whenever(paykitSdkService.syncPaykitApp(any(), any(), any())).doSuspendableAnswer {
+                if (!appSyncStarted.isCompleted) {
+                    appSyncStarted.complete(Unit)
+                    resumeAppSync.await()
+                }
+                true
+            }
+            val older = async { sut.syncCurrentPublishedEndpoints().getOrThrow() }
+            appSyncStarted.await()
+            reservedAddress = "bc1qrotated"
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+            assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+            resumeAppSync.complete(Unit)
+            if (cancelAfterAdmission) {
+                writeStarted.await()
+                older.cancel()
+                resumeWrite.complete(Unit)
+                assertFailsWith<CancellationException> { older.await() }
+            } else {
+                older.await()
+            }
+
+            val endpoints = argumentCaptor<List<Endpoint>>()
+            verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(endpoints.capture(), any()) }
+            assertEquals(listOf("bc1qrotated", "bc1qpublic"), endpoints.allValues.map { it.single().value })
+            assertTrue(endpoints.allValues.all { it.single().methodId == MethodId.P2wpkh })
+            assertEquals("bc1qpublic", remoteAddress)
+            assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+            sut.syncCurrentPublishedEndpoints().getOrThrow()
+            verifyBlocking(paykitSdkService, times(3)) { syncPublicEndpoints(endpoints.capture(), any()) }
+            assertEquals("bc1qrotated", endpoints.lastValue.single().value)
+            assertEquals("bc1qrotated", remoteAddress)
+            assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+            verifyNoInteractions(lightningRepo, coreService)
+        }
+    }
+
+    @Test
+    fun `public address preparation and acknowledgement retain their original sign in`() = test {
+        for (boundary in listOf("reservation", "acknowledgement")) {
+            clearInvocations(paykitSdkService)
+            val original = PubkySignIn("pubkyself", 0L)
+            var signIn = original
+            whenever(pubkyRepo.currentSignIn()).thenAnswer { signIn }
+            whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0) === signIn }
+            settingsFlow.value = SettingsData(
+                sharesPublicPaykitEndpoints = true,
+                publicPaykitLightningEnabled = false,
+                publicPaykitUsdtEnabled = false,
+            )
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var acknowledging = false
+            doSuspendableAnswer {
+                assertEquals(original.publicKey, it.getArgument<String>(0))
+                if (boundary == "reservation") {
+                    entered.complete(Unit)
+                    release.await()
+                }
+                Result.success("bc1qpublic")
+            }.whenever(addressReservationRepo).currentOrRotatedPublicAddress(any())
+            doSuspendableAnswer {
+                assertEquals(original.publicKey, it.getArgument<String>(0))
+                acknowledging = true
+                it.getArgument<suspend (Boolean) -> Unit>(2)(true)
+            }.whenever(addressReservationRepo).withPublicAddressMatch(any(), any(), any())
+            doSuspendableAnswer {
+                if (acknowledging) {
+                    entered.complete(Unit)
+                    release.await()
+                }
+                settingsFlow.value = it.getArgument<(SettingsData) -> SettingsData>(0)(settingsFlow.value)
+            }.whenever(settingsStore).update(any())
+            val publication = async { sut.syncCurrentPublishedEndpoints() }
+            entered.await()
+            signIn = PubkySignIn(if (boundary == "reservation") "replacement" else original.publicKey, 1L)
+            val replacement = settingsFlow.value.copy(
+                publicPaykitBolt11 = "replacement invoice",
+                publicPaykitCleanupPending = boundary == "acknowledgement",
+            )
+            settingsFlow.value = replacement
+            release.complete(Unit)
+            publication.await().getOrThrow()
+
+            assertEquals(replacement, settingsFlow.value, boundary)
+            verifyBlocking(paykitSdkService, times(if (boundary == "reservation") 0 else 1)) {
+                syncPublicEndpoints(any(), any())
+            }
+        }
+    }
+
+    @Test
+    fun `cancelled public address preparation restores repair after reservation delivery`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+            publicPaykitCleanupPending = true,
+        )
+        whenever(addressReservationRepo.currentOrRotatedPublicAddress(any())).doSuspendableAnswer {
+            settingsFlow.value = settingsFlow.value.copy(publicPaykitCleanupPending = false)
+            currentCoroutineContext().cancel()
+            Result.success("bc1qrotated")
+        }
+        val publication = async { sut.syncCurrentPublishedEndpoints() }
+
+        assertFailsWith<CancellationException> { publication.await() }
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        verifyNoInteractions(paykitSdkService)
+    }
+
+    @Test
+    fun `public endpoint writes wait for the preceding acknowledgement`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitUsdtEnabled = false,
+        )
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            if (!entered.isCompleted) {
+                entered.complete(Unit)
+                release.await()
+            }
+            it.getArgument<suspend (Boolean) -> Unit>(2)(true)
+        }.whenever(addressReservationRepo).withPublicAddressMatch(any(), any(), any())
+        val first = async { sut.syncCurrentPublishedEndpoints() }
+        entered.await()
+        val later = async { sut.syncCurrentPublishedEndpoints() }
+
+        assertFalse(later.isCompleted)
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(any(), any()) }
+        release.complete(Unit)
+        first.await().getOrThrow()
+        later.await().getOrThrow()
+        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(any(), any()) }
         assertFalse(settingsFlow.value.publicPaykitCleanupPending)
     }
 
