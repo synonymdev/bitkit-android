@@ -189,7 +189,59 @@ class BackupRepoTest : BaseUnitTest() {
         }.thenReturn(Result.success(Unit))
 
         whenever { vssBackupClient.listKeys() }.thenReturn(Result.success(emptyList()))
+        whenever(pubkyRepo.hasIdentityForBackup()).thenReturn(false)
         sut = createSut()
+    }
+
+    @Test
+    fun `metadata backup preserves complete data when identity records cannot be read`() = test {
+        stubMetadataBackupReads()
+        val error = AppError("keychain unavailable")
+        whenever(pubkyRepo.snapshotSessionBackupState()).thenReturn(Result.failure(error))
+        assertEquals(error, sut.triggerBackup(BackupCategory.METADATA).exceptionOrNull())
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+
+        stubMetadataBackupReads()
+        sut.triggerBackup(BackupCategory.METADATA).getOrThrow()
+        verify(vssBackupClient).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    @Test
+    fun `metadata backup preserves complete data when contact overrides cannot be read`() = test {
+        stubMetadataBackupReads()
+        val error = AppError("store unavailable")
+        whenever(pubkyRepo.snapshotContactProfileOverrides()).thenReturn(Result.failure(error))
+        assertEquals(error, sut.triggerBackup(BackupCategory.METADATA).exceptionOrNull())
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+
+        stubMetadataBackupReads()
+        sut.triggerBackup(BackupCategory.METADATA).getOrThrow()
+        verify(vssBackupClient).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    @Test
+    fun `wallet backup preserves complete data while stored identity is unresolved`() = test {
+        whenever(pubkyRepo.hasIdentityForBackup()).thenReturn(true)
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+
+        whenever(privatePaykitRepo.backupSnapshot()).thenReturn(
+            Result.success(PrivatePaykitBackupSnapshot("fresh-sdk-state", 0)),
+        )
+        sut.triggerBackup(BackupCategory.WALLET).getOrThrow()
+        val payload = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), payload.capture())
+        val backup = json.decodeFromString<WalletBackupV1>(payload.firstValue.decodeToString())
+        assertEquals("fresh-sdk-state", backup.paykitSdkBackupState)
+    }
+
+    @Test
+    fun `wallet backup cannot treat unreadable identity as absent`() = test {
+        whenever(pubkyRepo.hasIdentityForBackup()).doSuspendableAnswer {
+            throw IllegalStateException("keychain unavailable")
+        }
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
     }
 
     @Test

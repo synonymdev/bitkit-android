@@ -23,7 +23,6 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
-import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -411,12 +410,33 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `post restore profile failure allows proceeding only while safety markers stay clear`() = test {
+    fun `completed wallet restore does not wait for optional identity activation`() = test {
+        val release = CompletableDeferred<Unit>()
         whenever(backupRepo.performFullRestoreFromLatestBackup(any())).thenReturn(Result.success(Unit))
-        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile cache unavailable") }
+        whenever(pubkyRepo.initialize()).doSuspendableAnswer {
+            release.await()
+            Result.success(Unit)
+        }
+        try {
+            sut.onBackupRestoreRetry()
+            runCurrent()
+            assertEquals(RestoreState.Completed, sut.restoreState.value)
+            verify(pubkyRepo).scheduleInitializationAfterRestore()
+            verify(pubkyRepo, never()).initialize()
+            verify(backupRepo).setRestorePending(false)
+        } finally {
+            release.complete(Unit)
+        }
+    }
+
+    @Test
+    fun `proceed rechecks safety markers after an optional restore failure`() = test {
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any()))
+            .thenReturn(Result.failure(AppError("metadata cache unavailable")))
         sut.onBackupRestoreRetry()
         advanceUntilIdle()
         assertEquals(RestoreState.BackupFailed(1, hasPendingWalletRestore = false), sut.restoreState.value)
+        verify(pubkyRepo, never()).scheduleInitializationAfterRestore()
 
         whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
         var dismissed = false
@@ -589,7 +609,7 @@ class WalletViewModelTest : BaseUnitTest() {
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
 
-        verifyBlocking(pubkyRepo) { initialize() }
+        verify(pubkyRepo).scheduleInitializationAfterRestore()
     }
 
     @Test

@@ -235,7 +235,7 @@ class WalletViewModel @Inject constructor(
                 if (resumePendingWalletBackup) {
                     backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
                         .getOrThrow()
-                    pubkyRepo.initialize()
+                    pubkyRepo.scheduleInitializationAfterRestore()
                 } else {
                     restoreFromMostRecentBackup()
                 }
@@ -273,7 +273,7 @@ class WalletViewModel @Inject constructor(
                 .getOrThrow()
         }
 
-        pubkyRepo.initialize()
+        pubkyRepo.scheduleInitializationAfterRestore()
     }
 
     private suspend fun restoreFromRNRemoteBackup() {

@@ -1,0 +1,18 @@
+<journey name="wallet restore during optional identity outage">
+  <description>
+    Use a disposable test-network wallet with a complete VSS backup and a saved Pubky identity.
+    Required wallet, private reservation and USDT recovery imports must succeed before the injected
+    delay starts. Delay only final identity activation or subsequent profile/contact reads.
+    Keep metadata credential replacement and required restore imports available. These complete-app
+    fault controls are not currently provisioned; component test results are separate evidence.
+    Never use live funds or reset an existing wallet.
+  </description>
+  <actions>
+    <action>Restore the complete backup and hold final identity activation; verify ordinary wallet access resumes after required recovery completes, without reporting Paykit authenticated or payment-ready</action>
+    <action>Trigger a full backup while the saved identity cannot be exported; verify failure retains the previous complete WALLET record and required pending backup work</action>
+    <action>Close the restore screen, release the identity fault and verify retained work completes and a fresh complete backup succeeds once</action>
+    <action>Repeat with delayed profile/contact enrichment, then replace or remove the identity; verify late results cannot republish the old identity or overwrite current profile data</action>
+    <action>Restart during the outage; verify saved credentials resume recovery without duplicating a payment or contact mutation</action>
+    <action>Fail a required wallet or USDT restore instead; verify spending and address allocation remain gated and retry resumes the same required recovery</action>
+  </actions>
+</journey>

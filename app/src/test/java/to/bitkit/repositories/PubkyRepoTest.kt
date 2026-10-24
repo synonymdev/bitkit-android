@@ -2413,6 +2413,87 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scheduled restore activation returns while authentication is held and coalesces duplicates`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        val release = CompletableDeferred<String>()
+        whenever(pubkyService.importSession("restored_session")).doSuspendableAnswer { release.await() }
+        clearInvocations(pubkyService)
+        try {
+            repeat(3) { sut.scheduleInitializationAfterRestore() }
+            runCurrent()
+            assertNull(sut.publicKey.value)
+            assertFalse(sut.isAuthenticated.value)
+            verify(pubkyService).importSession("restored_session")
+        } finally {
+            release.complete(VALID_SELF_KEY)
+        }
+        advanceUntilIdle()
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verify(pubkyService).importSession("restored_session")
+    }
+
+    @Test
+    fun `new restored identity proceeds while old scheduled profile loading is held`() = test {
+        sut.awaitInitialization()
+        var session: String? = "first_session"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
+        whenever(keychain.delete(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session = null }
+        whenever(pubkyService.importSession("first_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.importSession("second_session")).thenReturn(VALID_CONTACT_KEY_B)
+        val releaseFirst = CompletableDeferred<Unit>()
+        val releaseSecond = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            releaseFirst.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Obsolete"))
+        }
+        whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_B, true)).doSuspendableAnswer {
+            releaseSecond.await()
+            createResolution(VALID_CONTACT_KEY_B, pubkyProfile = createPubkyProfile(name = "Current"))
+        }
+        try {
+            sut.scheduleInitializationAfterRestore()
+            runCurrent()
+            assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+            sut.restoreSessionBackupState(null).getOrThrow()
+            assertNull(sut.publicKey.value)
+            session = "second_session"
+            sut.scheduleInitializationAfterRestore()
+            runCurrent()
+            assertEquals(VALID_CONTACT_KEY_B, sut.publicKey.value)
+            releaseFirst.complete(Unit)
+            runCurrent()
+            sut.scheduleInitializationAfterRestore()
+            runCurrent()
+            verify(pubkyService).importSession("second_session")
+        } finally {
+            releaseFirst.complete(Unit)
+            releaseSecond.complete(Unit)
+        }
+        advanceUntilIdle()
+        assertEquals(VALID_CONTACT_KEY_B, sut.publicKey.value)
+        assertEquals("Current", sut.profile.value?.name)
+    }
+
+    @Test
+    fun `backup identity includes persisted and adopted credentials and fails on unreadable storage`() = test {
+        sut.awaitInitialization()
+        assertFalse(sut.hasIdentityForBackup())
+        val identityKeys = listOf(
+            Keychain.Key.PAYKIT_SESSION,
+            Keychain.Key.PUBKY_SECRET_KEY,
+            Keychain.Key.SHARED_PUBKY_SOURCE,
+        )
+        for (key in identityKeys) {
+            whenever(keychain.loadString(key.name)).thenReturn("stored")
+            assertTrue(sut.hasIdentityForBackup())
+            whenever(keychain.loadString(key.name)).thenReturn(null)
+        }
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { throw TestAppError("unreadable") }
+        assertTrue(runSuspendCatching { sut.hasIdentityForBackup() }.isFailure)
+    }
+
+    @Test
     fun `awaitInitialization shares startup and preserves it when a waiter is cancelled`() = test {
         val imported = CompletableDeferred<String>()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
