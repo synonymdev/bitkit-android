@@ -26,6 +26,10 @@ enum class BackupCategory(
         icon = R.drawable.ic_timer_alt,
         title = R.string.settings__backup__category_wallet,
     ),
+    USDT_RECOVERY(
+        icon = R.drawable.ic_timer_alt,
+        title = R.string.usdt__settings_title,
+    ),
     SETTINGS(
         icon = R.drawable.ic_settings,
         title = R.string.settings__backup__category_settings,

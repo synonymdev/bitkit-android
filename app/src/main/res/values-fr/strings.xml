@@ -816,7 +816,7 @@
     <string name="usdt__enable_title">Activer USDT ?</string>
     <string name="usdt__error_address">Saisissez une adresse valide pour le réseau sélectionné.</string>
     <string name="usdt__error_amount">Saisissez un montant valide avec 6 décimales au maximum.</string>
-    <string name="usdt__error_backup">Impossible de sauvegarder ce paiement. Une nouvelle tentative aura lieu dès que la sauvegarde sera disponible.</string>
+    <string name="usdt__error_backup">Impossible de sauvegarder ce paiement. Le même paiement signé sera réessayé automatiquement dès que la sauvegarde sera disponible. Fermer cet écran ne l’annule pas.</string>
     <string name="usdt__error_balance">USDT insuffisants pour couvrir le montant et les frais.</string>
     <string name="usdt__error_bridge_amount">Montant trop faible pour couvrir les coûts du pont. Essayez un montant plus élevé.</string>
     <string name="usdt__error_clock">Réglez la date et l\'heure de votre appareil en automatique, puis réessayez.</string>

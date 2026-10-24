@@ -55,6 +55,7 @@ class UsdtRepo @Inject constructor(
     private var rateLimitedUntil = 0L
     private val _state = MutableStateFlow(UsdtWalletState())
     val state = _state.asStateFlow()
+    val recoveryGeneration: Long get() = service.recoveryGeneration
     fun consumeReceipt(id: String): Boolean = _state.getAndUpdate {
         it.copy(pendingReceipts = it.pendingReceipts.filterNot { receipt -> receipt.id == id }.toImmutableList())
     }.pendingReceipts.any { it.id == id }
@@ -149,6 +150,19 @@ class UsdtRepo @Inject constructor(
         (state.value.balance == null && hasStoredWallet())
 
     fun backupSnapshot(): String? = service.backupSnapshot()
+
+    val isRecoveryRestorePending: Boolean get() = service.isRecoveryRestorePending
+
+    suspend fun waitForRecoveryIdle() = mutex.withLock { }
+
+    suspend fun retryTransfer(id: String): Result<Unit> = paymentOperation {
+        val wallet = wallet()
+        val transfer = wallet.history().firstOrNull { it.id == id } ?: throw UsdtException.InvalidBackup()
+        if (transfer.status == UsdtTransferStatus.PENDING) {
+            val transfers = wallet.refreshTransfers().toImmutableList()
+            _state.update { it.copy(transfers = transfers) }
+        }
+    }
 
     suspend fun restoreBackup(snapshot: String) = withContext(ioDispatcher) {
         mutex.withLock {
