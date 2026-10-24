@@ -128,8 +128,9 @@ class ActivityRepo @Inject constructor(
         if (!ownsSync) {
             val result = withTimeoutOrNull(MS_SYNC_TIMEOUT) { sync.await() }
                 ?: return@withContext Result.failure(TimeoutException("Waiting for activity sync timed out"))
-            return@withContext if (requireFresh && result.isSuccess) syncActivities() else result
+            return@withContext if (requireFresh) syncActivities() else result
         }
+        var cancellation: CancellationException? = null
         val result = try {
             runSuspendCatching {
                 val payments = lightningRepo.getPayments().getOrThrow()
@@ -140,8 +141,8 @@ class ActivityRepo @Inject constructor(
                 Unit
             }.onFailure { Logger.error("Failed to sync activities", it, context = TAG) }
         } catch (e: CancellationException) {
-            sync.complete(Result.failure(AppError("Activity sync was interrupted", e)))
-            throw e
+            cancellation = e
+            Result.failure(AppError("Activity sync was interrupted", e))
         } finally {
             withContext(NonCancellable) {
                 syncMutex.withLock {
@@ -152,6 +153,7 @@ class ActivityRepo @Inject constructor(
             }
         }
         sync.complete(result)
+        cancellation?.let { throw it }
         result
     }
 

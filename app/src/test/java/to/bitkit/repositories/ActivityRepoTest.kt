@@ -343,6 +343,39 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `fresh callers retry after cancelled or failed refreshes`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val responses = ArrayDeque<CompletableDeferred<Result<List<PaymentDetails>>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { responses.removeFirst().await() }
+        listOf(true, false).forEachIndexed { index, cancelOwner ->
+            val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+            val nextResponse = CompletableDeferred<Result<List<PaymentDetails>>>()
+            responses.addLast(response)
+            responses.addLast(nextResponse)
+            val owner = async { sut.syncActivities() }
+            runCurrent()
+            val fresh = async { sut.syncActivities(requireFresh = true) }
+            runCurrent()
+            assertFalse(fresh.isCompleted)
+
+            if (cancelOwner) owner.cancel() else response.complete(Result.failure(AppError("Unavailable")))
+            runCurrent()
+            assertFalse(fresh.isCompleted)
+            val payments = listOf(testPaymentDetails)
+            nextResponse.complete(Result.success(payments))
+            assertTrue(fresh.await().isSuccess)
+            if (cancelOwner) assertTrue(owner.isCancelled) else assertTrue(owner.await().isFailure)
+            verify(lightningRepo, times(2 * (index + 1))).getPayments()
+            verify(coreService.activity, times(index + 1)).syncLdkNodePaymentsToActivities(
+                eq(payments),
+                eq(false),
+                any(),
+            )
+            assertFalse(sut.isSyncingLdkNodePayments.value)
+        }
+    }
+
+    @Test
     fun `syncActivities success flow`() = test {
         val payments = listOf(testPaymentDetails)
         whenever { lightningRepo.getPayments() }.thenReturn(Result.success(payments))
