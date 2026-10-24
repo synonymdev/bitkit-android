@@ -11,8 +11,14 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -47,7 +53,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class ActivityRepoTest : BaseUnitTest() {
 
     private val coreService = mock<CoreService>()
@@ -242,6 +248,48 @@ class ActivityRepoTest : BaseUnitTest() {
     fun `Paykit backfill preserves cancellation`() = test {
         whenever(coreService.activity.backfillPaykitContacts()).thenThrow(CancellationException("canceled"))
         assertFailsWith<CancellationException> { sut.backfillPaykitContacts() }
+    }
+
+    @Test
+    fun `simultaneous activity syncs share one operation and its failure`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        val failure = IllegalStateException("Node unavailable")
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val calls = List(256) { async { sut.syncActivities() } }
+        runCurrent()
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        verify(lightningRepo, times(1)).getPayments()
+        response.complete(Result.failure(failure))
+        assertTrue(calls.awaitAll().all { it.exceptionOrNull() === failure })
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        sut.syncActivities()
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `cancelled and timed out waiters cannot reset the active sync`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val cancelled = async { sut.syncActivities() }
+        val waiting = async { sut.syncActivities() }
+        runCurrent()
+        cancelled.cancel()
+        advanceTimeBy(40_001)
+        runCurrent()
+        assertTrue(waiting.await().isFailure)
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        val later = async { sut.syncActivities() }
+        runCurrent()
+        verify(lightningRepo, times(1)).getPayments()
+        owner.cancel()
+        runCurrent()
+        assertTrue(later.isCancelled)
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        response.complete(Result.failure(IllegalStateException("Unavailable")))
+        sut.syncActivities()
+        verify(lightningRepo, times(2)).getPayments()
     }
 
     @Test

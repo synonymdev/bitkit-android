@@ -16,16 +16,20 @@ import com.synonym.bitkitcore.SortDirection
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -51,6 +55,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import java.util.concurrent.TimeoutException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -72,6 +77,8 @@ class ActivityRepo @Inject constructor(
     private val clock: Clock,
 ) {
     val isSyncingLdkNodePayments = MutableStateFlow(false)
+    private val syncMutex = Mutex()
+    private var activeSync: CompletableDeferred<Result<Unit>>? = null
 
     private val _state = MutableStateFlow(ActivityState())
     val state: StateFlow<ActivityState> = _state
@@ -99,7 +106,6 @@ class ActivityRepo @Inject constructor(
 
     suspend fun resetState() = withContext(bgDispatcher) {
         _state.update { ActivityState() }
-        isSyncingLdkNodePayments.update { false }
         notifyActivitiesChanged()
         Logger.debug("Activity state reset", context = TAG)
     }
@@ -111,36 +117,41 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun syncActivities(): Result<Unit> = withContext(bgDispatcher) {
-        Logger.debug("syncActivities called", context = TAG)
-
-        val result = runCatching {
-            withTimeout(MS_SYNC_TIMEOUT) {
-                Logger.debug("isSyncingLdkNodePayments = ${isSyncingLdkNodePayments.value}", context = TAG)
-                isSyncingLdkNodePayments.first { !it }
+        var ownsSync = false
+        val sync = syncMutex.withLock {
+            activeSync ?: CompletableDeferred<Result<Unit>>().also {
+                activeSync = it
+                ownsSync = true
+                isSyncingLdkNodePayments.update { true }
             }
-
-            isSyncingLdkNodePayments.update { true }
-
-            lightningRepo.getPayments().mapCatching { payments ->
-                Logger.debug("Got payments with success, syncing activities", context = TAG)
+        }
+        if (!ownsSync) {
+            return@withContext withTimeoutOrNull(MS_SYNC_TIMEOUT) { sync.await() }
+                ?: Result.failure(TimeoutException("Waiting for activity sync timed out"))
+        }
+        try {
+            val result = runSuspendCatching {
+                val payments = lightningRepo.getPayments().getOrThrow()
                 syncLdkNodePayments(payments).getOrThrow()
                 boostPendingActivities()
                 transferRepo.syncTransferStates().getOrThrow()
-            }.onSuccess {
                 getAllAvailableTags().getOrNull()
-            }.getOrThrow()
-        }.onFailure { e ->
-            if (e is TimeoutCancellationException) {
-                Logger.warn("syncActivities timeout, forcing reset", context = TAG)
-            } else {
-                Logger.error("Failed to sync activities", e, context = TAG)
+                Unit
+            }.onFailure { Logger.error("Failed to sync activities", it, context = TAG) }
+            sync.complete(result)
+            result
+        } catch (e: CancellationException) {
+            sync.completeExceptionally(e)
+            throw e
+        } finally {
+            withContext(NonCancellable) {
+                syncMutex.withLock {
+                    activeSync = null
+                    isSyncingLdkNodePayments.update { false }
+                }
+                notifyActivitiesChanged()
             }
         }
-
-        isSyncingLdkNodePayments.update { false }
-        notifyActivitiesChanged()
-
-        return@withContext result
     }
 
     /**
