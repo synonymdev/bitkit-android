@@ -6228,7 +6228,7 @@ class AppViewModel @Inject constructor(
                 Logger.info("Lightning payment pending", context = TAG)
                 pendingPaymentRepo.track(pendingHash)
                 preserveContactPaymentContext(pendingHash)
-                refreshIncomingPaykitPaymentRequests()
+                if (incomingPaymentRequest != null) refreshIncomingPaykitPaymentRequests()
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
                 lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 return@onFailure
@@ -6261,11 +6261,8 @@ class AppViewModel @Inject constructor(
         isPaymentRequest: Boolean,
     ): Boolean = when (error) {
         is PaymentPendingException -> false
+        else if !isPaymentRequest -> true
         is LightningPaymentFailedError -> {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
-            true
-        }
-        else if !isPaymentRequest -> {
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
             true
         }

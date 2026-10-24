@@ -12899,6 +12899,76 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ordinary lightning failure is shown while unrelated proof cleanup is unavailable`() = test {
+        val bolt11 = "lnbcrt1ordinaryfailure"
+        val cleanup = CompletableDeferred<Unit>()
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
+            .thenReturn(Result.failure(NodeException.PaymentSendingFailed("no route")))
+        whenever(paykitPaymentProofRepo.failLightningPayment(any())).doSuspendableAnswer {
+            cleanup.await()
+            Result.success(Unit)
+        }
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+        try {
+            sut.sendEffect.test {
+                sut.setSendEvent(SendEvent.PayConfirmed)
+                advanceUntilIdle()
+                assertTrue(awaitItem() is SendEffect.NavigateToError)
+                verify(paykitPaymentProofRepo, never()).failLightningPayment(any())
+                verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
+            }
+        } finally {
+            cleanup.complete(Unit)
+        }
+    }
+
+    @Test
+    fun `ordinary lightning pending state is shown while unrelated proof reconciliation is unavailable`() = test {
+        val bolt11 = "lnbcrt1ordinarypending"
+        val paymentHash = "pending_hash"
+        val reconciliation = CompletableDeferred<Unit>()
+        var submitted = false
+        isPaykitEnabled.value = true
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).doSuspendableAnswer {
+            submitted = true
+            Result.failure(PaymentPendingException(paymentHash))
+        }
+        whenever(paykitPaymentProofRepo.reconcile()).doSuspendableAnswer {
+            if (submitted) reconciliation.await()
+        }
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+        try {
+            sut.sendEffect.test {
+                sut.setSendEvent(SendEvent.PayConfirmed)
+                advanceUntilIdle()
+                assertEquals(SendEffect.NavigateToPending(paymentHash, 1000), awaitItem())
+                verify(pendingPaymentRepo).track(paymentHash)
+                verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
+            }
+        } finally {
+            reconciliation.complete(Unit)
+        }
+    }
+
+    @Test
     fun `private lightning contact payment consumes private list before send`() = test {
         val bolt11 = "lnbcrt1privatecontact"
         val paymentHash = "payment_hash"
