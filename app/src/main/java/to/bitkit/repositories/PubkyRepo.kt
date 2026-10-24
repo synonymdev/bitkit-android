@@ -1086,16 +1086,6 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    suspend fun deleteProfileWithSessionRetry(): Result<Unit> = withContext(ioDispatcher) {
-        val initialResult = deleteProfile()
-        if (initialResult.isSuccess) return@withContext initialResult
-
-        val refreshedSession = refreshSessionIfPossible().getOrDefault(false)
-        if (!refreshedSession) return@withContext initialResult
-
-        deleteProfile()
-    }
-
     suspend fun deleteProfile(): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
             requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
@@ -1809,20 +1799,6 @@ class PubkyRepo @Inject constructor(
                 )
             }
             notifyBackupStateChanged()
-        }
-    }
-
-    suspend fun refreshSessionIfPossible(): Result<Boolean> = runSuspendCatching {
-        withContext(ioDispatcher) {
-            val storedSecretKeyHex = activeSecretKeyHex() ?: return@withContext false
-
-            pubkyService.signIn(storedSecretKeyHex)
-            val publicKey = pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
-
-            notifyBackupStateChanged()
-            continueSignIn(publicKey)
-
-            true
         }
     }
 
