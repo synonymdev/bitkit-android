@@ -150,7 +150,6 @@ class LightningConnectionsViewModel @Inject constructor(
 
     suspend fun refreshObservedState() {
         lightningRepo.sync()
-        blocktankRepo.refreshOrders()
         loadClosedChannels()
     }
 

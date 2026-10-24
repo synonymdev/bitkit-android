@@ -89,6 +89,7 @@ class WalletViewModel @Inject constructor(
     }
 
     val lightningState = lightningRepo.lightningState
+    val hasTrustedChannels = lightningRepo.hasTrustedChannels
     val walletState = walletRepo.walletState
     val balanceState = walletRepo.balanceState
 

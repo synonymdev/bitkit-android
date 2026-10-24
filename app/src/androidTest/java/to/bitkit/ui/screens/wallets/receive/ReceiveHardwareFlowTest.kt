@@ -56,7 +56,6 @@ class ReceiveHardwareFlowTest {
                         walletState = WALLET_STATE,
                         lightningState = LightningState(),
                         onClickEditInvoice = {},
-                        onClickReceiveCjit = {},
                         onClickHardwareEditInvoice = {
                             editState.beginHardwareEdit()
                             isEditing = true

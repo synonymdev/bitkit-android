@@ -7,8 +7,6 @@
     <string name="cards__buyBitcoin__title">Koop</string>
     <string name="cards__invite__description">Deel Bitkit</string>
     <string name="cards__invite__title">Uitnodiging</string>
-    <string name="cards__lightning__description">Directe betalingen</string>
-    <string name="cards__lightning__title">Besteed</string>
     <string name="cards__notifications__description">Als Bitkit gesloten is</string>
     <string name="cards__notifications__title">Ontvang betaling</string>
     <string name="cards__pin__description">Pincode instellen</string>
@@ -110,6 +108,14 @@
     <string name="lightning__channel_opened_msg">Je kunt nu overal, direct, iedereen betalen.</string>
     <string name="lightning__channel_opened_title">Bestedingssaldo gereed</string>
     <string name="lightning__channel_point">Kanaalpunt</string>
+    <string name="lightning__channels_closing_banner">KANALEN SLUITEN OP %1$s</string>
+    <string name="lightning__channels_closing_notice">Je Lightning-kanalen worden op %1$s gesloten. Boek je bestedingssaldo vóór die datum over naar spaargeld.</string>
+    <string name="lightning__channels_unavailable__nav_title">Overboeking niet beschikbaar</string>
+    <string name="lightning__channels_unavailable__text">Automatische overboekingen naar je bestedingssaldo zijn niet meer beschikbaar. Gebruik je eigen node of stel een verbinding in met een andere aanbieder.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;Handmatige instelling&lt;/accent&gt;\nvereist</string>
+    <string name="lightning__choose_lsp__explanation">Als je een QR krijgt om het Lightning-kanaal te verbinden of te claimen, tik dan hieronder om de QR te scannen of te plakken.</string>
+    <string name="lightning__choose_lsp__text">Bestel een kanaal bij een Lightning Service Provider (LSP). Hieronder staan enkele opties. Bitkit beheert, onderschrijft of ondersteunt deze niet.</string>
+    <string name="lightning__choose_lsp__title">Kies een\n&lt;accent&gt;Lightning-aanbieder&lt;/accent&gt;</string>
     <string name="lightning__close_button">Sluiten</string>
     <string name="lightning__close_conn">Verbinding sluiten</string>
     <string name="lightning__close_error">Overboeking mislukt</string>
@@ -166,7 +172,6 @@
     <string name="lightning__funding__button2">Andere wallet gebruiken</string>
     <string name="lightning__funding__nav_title">Bestedingssaldo</string>
     <string name="lightning__funding__text">De makkelijkste optie is om je Bitkit-spaargeld te gebruiken of bitcoin te versturen vanuit een andere wallet.</string>
-    <string name="lightning__funding__text_blocked">Bitkit biedt momenteel geen Lightning-services in jouw land, maar je kunt nog steeds rechtstreeks verbinding maken met andere nodes.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit biedt momenteel geen Lightning-services in jouw land, maar je kunt nog steeds rechtstreeks verbinding maken met andere nodes.</string>
     <string name="lightning__funding__title">Vul je &lt;accent&gt;bestedingssaldo&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">LNURL Kanaal QR</string>
@@ -284,7 +289,6 @@
     <string name="notification__channel_node__body">Notificatiekanaal voor Lightning node voorgrondservice</string>
     <string name="notification__channel_node__name">Lightning node notificatie</string>
     <string name="notification__channel_open_bg_failed_title">Kanaal kon niet op de achtergrond worden geopend</string>
-    <string name="notification__channel_open_failed_title">Kanaal openen mislukt</string>
     <string name="notification__channel_opened_title">Kanaal geopend</string>
     <string name="notification__channel_pending_body">In behandeling</string>
     <string name="notification__channel_ready_body">Klaar om te versturen</string>
@@ -328,7 +332,6 @@
     <string name="onboarding__slide0_header">Vrijheid in\n&lt;accent&gt;je zak&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit geeft u de sleutels om uw geld, profiel en contacten te beheren. Neem de controle en word grenzeloos.</string>
     <string name="onboarding__slide1_header">Directe\n&lt;accent&gt;betalingen&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Bitkit biedt momenteel geen Lightning-services in jouw land, maar je kunt nog steeds verbinding maken met andere nodes.</string>
     <string name="onboarding__slide1_text">Besteed bitcoin sneller dan ooit. Geniet van directe en goedkope betalingen met vrienden, familie en winkeliers.</string>
     <string name="onboarding__slide3_header">Privacy is\n&lt;accent&gt;geen misdaad&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Uw geld, uw privacy. Veeg om uw saldo te verbergen en besteed meer privé, zonder datatracking en zonder KYC.</string>
@@ -353,14 +356,6 @@
     <string name="other__connection_back_title">Internetverbinding hersteld</string>
     <string name="other__connection_issue">Internetverbindingsproblemen</string>
     <string name="other__connection_issue_explain">Je lijkt niet verbonden te zijn, proberen opnieuw te verbinden...</string>
-    <string name="other__gift__claiming__text">Je Bitkit-cadeaucode wordt geclaimd...</string>
-    <string name="other__gift__claiming__title">Cadeau claimen</string>
-    <string name="other__gift__error__text">Bitkit kon het geld niet claimen. Probeer het later opnieuw of neem contact met ons op.</string>
-    <string name="other__gift__error__title">Cadeaucode-fout</string>
-    <string name="other__gift__used__text">Deze Bitkit-cadeaucode is al gebruikt en het geld is uitbetaald.</string>
-    <string name="other__gift__used__title">Gebruikte code</string>
-    <string name="other__gift__used_up__text">Sorry, je bent te laat! Alle cadeaus voor deze code zijn al geclaimd.</string>
-    <string name="other__gift__used_up__title">Cadeaus op</string>
     <string name="other__high_balance__cancel">Meer informatie</string>
     <string name="other__high_balance__continue">Begrepen</string>
     <string name="other__high_balance__nav_title">Hoog saldo</string>
@@ -992,7 +987,6 @@
     <string name="wallet__payment_received">Bitcoin ontvangen</string>
     <string name="wallet__peer_disconnected">Peer niet verbonden.</string>
     <string name="wallet__receive">Ontvangen</string>
-    <string name="wallet__receive__cjit">Lightning-geld ontvangen</string>
     <string name="wallet__receive_bitcoin">Bitcoin ontvangen</string>
     <string name="wallet__receive_bitcoin_invoice">Bitcoin-factuur</string>
     <string name="wallet__receive_connect_additional">Om meer directe Bitcoin te ontvangen, moet Bitkit je liquiditeit verhogen. Een netwerkvergoeding van &lt;accent&gt;{networkFee}&lt;/accent&gt; en serviceprovidervergoeding van &lt;accent&gt;{serviceFee}&lt;/accent&gt; worden afgetrokken van het door jou opgegeven bedrag.</string>
@@ -1008,8 +1002,6 @@
     <string name="wallet__receive_liquidity__text">Je bestedingssaldo gebruikt het Lightning Network om je betalingen goedkoper, sneller en privater te maken.\n\nDit werkt als internettoegang, maar je betaalt voor liquiditeit &amp; routering in plaats van bandbreedte.\n\nDeze configuratie bevat eenmalige kosten.</string>
     <string name="wallet__receive_liquidity__text_additional">Je bestedingssaldo gebruikt het Lightning Network om je betalingen goedkoper, sneller en privater te maken.\n\nDit werkt als internettoegang, maar je betaalt voor liquiditeit &amp; routering in plaats van bandbreedte.\n\nBitkit moet de ontvangstcapaciteit van je bestedingssaldo verhogen om deze betaling te verwerken.</string>
     <string name="wallet__receive_note_placeholder">Optionele notitie voor betaler</string>
-    <string name="wallet__receive_onboarding_description">Geniet van directe en goedkope\ntransacties met vrienden, familie\nen winkeliers.</string>
-    <string name="wallet__receive_onboarding_title">Ontvangen op &lt;accent&gt;bestedingssaldo&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Details tonen</string>
     <string name="wallet__receive_show_qr">QR-code tonen</string>
     <string name="wallet__receive_specify">Factuur bewerken</string>

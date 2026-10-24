@@ -2,8 +2,10 @@
 
 These journeys exercise the "block numberpad input exceeding the max/available amount"
 behaviour added on `fix/block-input-over-max`. The same `AmountInputViewModel.setMaxAmount` +
-`MaxExceeded` effect path backs all four amount-entry screens (Send, Transfer→Spending,
-Receiving capacity, External node).
+`MaxExceeded` effect path backs the amount-entry screens. Two journeys remain: Send and External
+node. The Transfer→Spending and Receiving-capacity journeys are retired because Blocktank channel
+purchases were removed (synonymdev/bitkit-android#1669); their screens still back the same view model but
+no button navigates to them.
 
 ## What the feature does
 - Typing a digit that would push the amount **over the cap is rejected** — the display stays at
@@ -20,9 +22,8 @@ Receiving capacity, External node).
    - Fund + mine via the `lsp` skill:
      `./lsp POST /regtest/chain/deposit '{"address":"<addr>","amountSat":100000}'`
      then `./lsp POST /regtest/chain/mine '{"count":3}'` and wait for the balance to sync.
-2. **Transfer/Spending/Receiving-capacity flows need the node connected to the LSP** so a real
-   max can be quoted. On the Spending amount screen the max starts at `0` behind a spinner —
-   **wait for it to populate** before typing.
+2. **The External-node flow needs the node running** so the on-chain maximum can be computed;
+   wait for the available amount to populate before typing.
 3. **External-node flow needs a reachable LN peer.** The staging LSP node works as the peer:
    id `028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc`,
    host `34.65.86.104`, port `9400` (from `./lsp GET /info`).
@@ -44,12 +45,14 @@ Receiving capacity, External node).
 - Send: screen `send_amount_screen`, field `SendNumberField`, available `available_balance`,
   max `SendAmountMax`, continue `ContinueAmount`; recipient `RecipientManual` / `RecipientInput`
   / `AddressContinue`; home Send button `Send`.
-- Transfer→Spending: screen `SpendingAmount`, field `SpendingAmountNumberField`,
-  available `SpendingAmountAvailable`, 25% `SpendingAmountQuarter`, max `SpendingAmountMax`,
-  continue `SpendingAmountContinue`.
-- Receiving capacity: screen `SpendingAdvanced`, field `SpendingAdvancedNumberField`,
-  min/default/max `SpendingAdvancedMin`/`SpendingAdvancedDefault`/`SpendingAdvancedMax`,
-  continue `SpendingAdvancedContinue`.
-- External: funding `FundManual`; connection `NodeIdInput`/`HostInput`/`PortInput`/`ExternalContinue`;
+- External: Lightning Connections add button `add_connection_button` (opens Funding Advanced), `FundManual`; connection `NodeIdInput`/`HostInput`/`PortInput`/`ExternalContinue`;
   amount screen `ExternalAmount`, field `ExternalAmountNumberField`, 25% `ExternalAmountQuarter`,
   max `ExternalAmountMax`, continue `ExternalAmountContinue`.
+
+## Retired journeys
+
+`transfer-spending-over-max.xml`, `transfer-spending-advanced-over-max.xml` and
+`transfer-spending-preset-delete.xml` were retired because Blocktank channel purchases were removed
+(synonymdev/bitkit-android#1669). Their route started at the Savings wallet's "Transfer To Spending"
+button, which now opens the Manual setup required sheet instead of the transfer flow. Their tags (`TransferToSpending`, `SpendingAmount*`, `SpendingAdvanced*`) are no
+longer reachable from the UI.

@@ -7,8 +7,6 @@
     <string name="cards__buyBitcoin__title">شراء</string>
     <string name="cards__invite__description">شارك Bitkit</string>
     <string name="cards__invite__title">دعوة</string>
-    <string name="cards__lightning__description">مدفوعات فورية</string>
-    <string name="cards__lightning__title">إنفاق</string>
     <string name="cards__notifications__description">عندما يكون Bitkit مغلقًا</string>
     <string name="cards__notifications__title">استلم أموالك</string>
     <string name="cards__pin__description">إعداد رمز PIN</string>
@@ -106,6 +104,14 @@
     <string name="lightning__channel_opened_msg">يمكنك الآن الدفع لأي شخص، في أي مكان، فورًا.</string>
     <string name="lightning__channel_opened_title">رصيد الإنفاق جاهز</string>
     <string name="lightning__channel_point">نقطة القناة</string>
+    <string name="lightning__channels_closing_banner">تُغلق القنوات في %1$s</string>
+    <string name="lightning__channels_closing_notice">ستُغلق قنوات Lightning الخاصة بك في %1$s. انقل رصيد الإنفاق إلى المدخرات قبل ذلك.</string>
+    <string name="lightning__channels_unavailable__nav_title">التحويل غير متاح</string>
+    <string name="lightning__channels_unavailable__text">لم تعد التحويلات التلقائية إلى رصيد الإنفاق متاحة. استخدم عقدتك الخاصة، أو أنشئ اتصالًا مع مزوّد آخر.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;الإعداد اليدوي&lt;/accent&gt;\nمطلوب</string>
+    <string name="lightning__choose_lsp__explanation">عندما يقدّمون لك رمز QR للاتصال بقناة Lightning أو المطالبة بها، اضغط أدناه لمسح رمز QR أو لصقه.</string>
+    <string name="lightning__choose_lsp__text">اطلب قناة من مزوّد خدمة Lightning ‏(LSP). فيما يلي بعض الخيارات. لا يدير Bitkit هذه الخدمات ولا يؤيدها ولا يدعمها.</string>
+    <string name="lightning__choose_lsp__title">اختر\n&lt;accent&gt;مزوّد Lightning&lt;/accent&gt;</string>
     <string name="lightning__close_button">إغلاق</string>
     <string name="lightning__close_conn">إغلاق الاتصال</string>
     <string name="lightning__close_error">فشل التحويل</string>
@@ -162,7 +168,6 @@
     <string name="lightning__funding__button2">استخدم محفظة أخرى</string>
     <string name="lightning__funding__nav_title">رصيد الإنفاق</string>
     <string name="lightning__funding__text">أسهل خيار هو استخدام مدخرات Bitkit الخاصة بك أو إرسال بيتكوين من محفظة مختلفة.</string>
-    <string name="lightning__funding__text_blocked">لا يوفر Bitkit حاليًا خدمات Lightning في بلدك، لكن يمكنك الاتصال بعقد أخرى مباشرة.</string>
     <string name="lightning__funding__text_blocked_cjit">لا يوفر Bitkit حاليًا خدمات Lightning في بلدك، لكن يمكنك الاتصال بعقد أخرى مباشرة.</string>
     <string name="lightning__funding__title">موّل &lt;accent&gt;رصيد الإنفاق&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">رمز QR لقناة LNURL</string>
@@ -279,7 +284,6 @@
     <string name="notification__channel_node__body">قناة الإشعارات لخدمة عقدة Lightning في المقدمة</string>
     <string name="notification__channel_node__name">إشعار عقدة Lightning</string>
     <string name="notification__channel_open_bg_failed_title">فشل فتح القناة في الخلفية</string>
-    <string name="notification__channel_open_failed_title">فشل فتح القناة</string>
     <string name="notification__channel_opened_title">تم فتح القناة</string>
     <string name="notification__channel_pending_body">معلق</string>
     <string name="notification__channel_ready_body">جاهز للإرسال</string>
@@ -323,7 +327,6 @@
     <string name="onboarding__slide0_header">الحرية في\n&lt;accent&gt;جيبك&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">يمنحك Bitkit مفاتيح إدارة أموالك. أنفق الآن أو ادخر للمستقبل. الخيار لك.</string>
     <string name="onboarding__slide1_header">مدفوعات\n&lt;accent&gt;فورية&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*لا يوفر Bitkit حاليًا خدمات Lightning في بلدك، لكن يمكنك الاتصال بعقد أخرى.</string>
     <string name="onboarding__slide1_text">أنفق Bitcoin أسرع من أي وقت مضى. استمتع بمدفوعات فورية ورخيصة مع الأصدقاء والعائلة والتجار.</string>
     <string name="onboarding__slide3_header">الخصوصية\n&lt;accent&gt;ليست جريمة&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">اسحب لإخفاء رصيدك، واستمتع بمدفوعات أكثر خصوصية، واحمِ محفظتك بتفعيل ميزات الأمان.</string>
@@ -348,14 +351,6 @@
     <string name="other__connection_back_title">تمت استعادة اتصال الإنترنت</string>
     <string name="other__connection_issue">مشاكل في الاتصال بالإنترنت</string>
     <string name="other__connection_issue_explain">يبدو أنك غير متصل، جارٍ محاولة إعادة الاتصال...</string>
-    <string name="other__gift__claiming__text">جارٍ المطالبة برمز هدية Bitkit...</string>
-    <string name="other__gift__claiming__title">جارٍ المطالبة بالهدية</string>
-    <string name="other__gift__error__text">تعذر على Bitkit المطالبة بالأموال. يرجى المحاولة لاحقًا أو التواصل معنا.</string>
-    <string name="other__gift__error__title">خطأ في رمز الهدية</string>
-    <string name="other__gift__used__text">تم استخدام رمز هدية Bitkit هذا بالفعل، وتم صرف الأموال.</string>
-    <string name="other__gift__used__title">رمز مستخدم</string>
-    <string name="other__gift__used_up__text">عذرًا، لقد تأخرت! تمت المطالبة بجميع الهدايا لهذا الرمز.</string>
-    <string name="other__gift__used_up__title">نفدت الهدايا</string>
     <string name="other__high_balance__cancel">اعرف المزيد</string>
     <string name="other__high_balance__continue">مفهوم</string>
     <string name="other__high_balance__nav_title">رصيد مرتفع</string>
@@ -970,7 +965,6 @@
     <string name="wallet__payment_received">تم استلام Bitcoin</string>
     <string name="wallet__peer_disconnected">انقطع اتصال النظير.</string>
     <string name="wallet__receive">استلام</string>
-    <string name="wallet__receive__cjit">استلام أموال Lightning</string>
     <string name="wallet__receive_bitcoin">استلام Bitcoin</string>
     <string name="wallet__receive_bitcoin_invoice">فاتورة Bitcoin</string>
     <string name="wallet__receive_connect_additional">لاستلام المزيد من Bitcoin الفوري، يحتاج Bitkit لزيادة السيولة. سيتم خصم رسوم شبكة &lt;accent&gt;{networkFee}&lt;/accent&gt; ورسوم مزود الخدمة &lt;accent&gt;{serviceFee}&lt;/accent&gt; من المبلغ المحدد.</string>
@@ -986,8 +980,6 @@
     <string name="wallet__receive_liquidity__text">يستخدم رصيد الإنفاق شبكة Lightning لجعل مدفوعاتك أرخص وأسرع وأكثر خصوصية.\n\nهذا يعمل مثل الوصول إلى الإنترنت، لكنك تدفع مقابل السيولة والتوجيه بدلاً من عرض النطاق الترددي.\n\nيتضمن هذا الإعداد بعض التكاليف لمرة واحدة.</string>
     <string name="wallet__receive_liquidity__text_additional">يستخدم رصيد الإنفاق شبكة Lightning لجعل مدفوعاتك أرخص وأسرع وأكثر خصوصية.\n\nهذا يعمل مثل الوصول إلى الإنترنت، لكنك تدفع مقابل السيولة والتوجيه بدلاً من عرض النطاق الترددي.\n\nيحتاج Bitkit لزيادة سعة الاستقبال لرصيد الإنفاق لمعالجة هذا الدفع.</string>
     <string name="wallet__receive_note_placeholder">ملاحظة اختيارية للدافع</string>
-    <string name="wallet__receive_onboarding_description">استمتع بمعاملات فورية ورخيصة\nمع الأصدقاء والعائلة\nوالتجار.</string>
-    <string name="wallet__receive_onboarding_title">استلم على &lt;accent&gt;رصيد الإنفاق&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">عرض التفاصيل</string>
     <string name="wallet__receive_show_qr">عرض رمز QR</string>
     <string name="wallet__receive_specify">تعديل الفاتورة</string>

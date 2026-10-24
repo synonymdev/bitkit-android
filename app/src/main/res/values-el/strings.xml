@@ -7,8 +7,6 @@
     <string name="cards__buyBitcoin__title">Αγορά</string>
     <string name="cards__invite__description">Μοιράσου το Bitkit</string>
     <string name="cards__invite__title">Πρόσκληση</string>
-    <string name="cards__lightning__description">Άμεσες πληρωμές</string>
-    <string name="cards__lightning__title">Δαπάνη</string>
     <string name="cards__notifications__description">Όταν το Bitkit είναι κλειστό</string>
     <string name="cards__notifications__title">Λήψη πληρωμών</string>
     <string name="cards__pin__description">Καταχωρήστε κωδικό PIN</string>
@@ -106,6 +104,14 @@
     <string name="lightning__channel_opened_msg">Μπορείς τώρα να πληρώσεις οποιονδήποτε, οπουδήποτε, άμεσα.</string>
     <string name="lightning__channel_opened_title">Υπόλοιπο δαπανών έτοιμο</string>
     <string name="lightning__channel_point">Σημείο καναλιού</string>
+    <string name="lightning__channels_closing_banner">ΤΑ ΚΑΝΑΛΙΑ ΚΛΕΙΝΟΥΝ ΣΤΙΣ %1$s</string>
+    <string name="lightning__channels_closing_notice">Τα κανάλια Lightning σας θα κλείσουν στις %1$s. Μεταφέρετε το υπόλοιπο δαπανών σε αποταμιεύσεις πριν από τότε.</string>
+    <string name="lightning__channels_unavailable__nav_title">Μεταφορά μη διαθέσιμη</string>
+    <string name="lightning__channels_unavailable__text">Οι αυτόματες μεταφορές στο υπόλοιπο δαπανών δεν είναι πλέον διαθέσιμες. Χρησιμοποιήστε τον δικό σας κόμβο ή ρυθμίστε σύνδεση με άλλον πάροχο.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;Απαιτείται χειροκίνητη&lt;/accent&gt;\nρύθμιση</string>
+    <string name="lightning__choose_lsp__explanation">Όταν σας δώσουν ένα QR για σύνδεση ή διεκδίκηση του καναλιού Lightning, πατήστε παρακάτω για σάρωση ή επικόλληση του QR.</string>
+    <string name="lightning__choose_lsp__text">Παραγγείλετε ένα κανάλι από έναν πάροχο υπηρεσιών Lightning (LSP). Παρακάτω υπάρχουν μερικές επιλογές. Το Bitkit δεν τις λειτουργεί, δεν τις προτείνει και δεν τις υποστηρίζει.</string>
+    <string name="lightning__choose_lsp__title">Επιλέξτε\n&lt;accent&gt;πάροχο Lightning&lt;/accent&gt;</string>
     <string name="lightning__close_button">Κλείσιμο</string>
     <string name="lightning__close_conn">Κλείσιμο σύνδεσης</string>
     <string name="lightning__close_error">Αποτυχία μεταφοράς</string>
@@ -162,7 +168,6 @@
     <string name="lightning__funding__button2">Χρήση άλλου πορτοφολιού</string>
     <string name="lightning__funding__nav_title">Υπόλοιπο δαπανών</string>
     <string name="lightning__funding__text">Ο ευκολότερος τρόπος είναι να χρησιμοποιήσεις τις αποταμιεύσεις Bitkit ή να στείλεις bitcoin από διαφορετικό πορτοφόλι.</string>
-    <string name="lightning__funding__text_blocked">Το Bitkit δεν παρέχει προς το παρόν υπηρεσίες Lightning στη χώρα σου, αλλά μπορείς να συνδεθείς απευθείας σε άλλους κόμβους.</string>
     <string name="lightning__funding__text_blocked_cjit">Το Bitkit δεν παρέχει προς το παρόν υπηρεσίες Lightning στη χώρα σου, αλλά μπορείς να συνδεθείς απευθείας σε άλλους κόμβους.</string>
     <string name="lightning__funding__title">Χρηματοδότησε το &lt;accent&gt;υπόλοιπο δαπανών&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">LNURL Channel QR</string>
@@ -280,7 +285,6 @@
     <string name="notification__channel_node__body">Κανάλι ειδοποιήσεων για υπηρεσία προσκηνίου κόμβου Lightning</string>
     <string name="notification__channel_node__name">Ειδοποίηση κόμβου Lightning</string>
     <string name="notification__channel_open_bg_failed_title">Το κανάλι απέτυχε να ανοίξει στο παρασκήνιο</string>
-    <string name="notification__channel_open_failed_title">Αποτυχία ανοίγματος καναλιού</string>
     <string name="notification__channel_opened_title">Το κανάλι άνοιξε</string>
     <string name="notification__channel_pending_body">Εκκρεμεί</string>
     <string name="notification__channel_ready_body">Έτοιμο για αποστολή</string>
@@ -324,7 +328,6 @@
     <string name="onboarding__slide0_header">Ελευθερία στην\n&lt;accent&gt;τσέπη σου&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Το Bitkit σου δίνει τα κλειδιά για να διαχειριστείς τα χρήματά σου. Ξόδεψε τώρα ή αποταμίευσε για αργότερα. Η επιλογή είναι δική σου.</string>
     <string name="onboarding__slide1_header">Άμεσες\n&lt;accent&gt;πληρωμές&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Το Bitkit δεν παρέχει προς το παρόν υπηρεσίες Lightning στη χώρα σου, αλλά μπορείς να συνδεθείς σε άλλους κόμβους.</string>
     <string name="onboarding__slide1_text">Ξόδεψε bitcoin πιο γρήγορα από ποτέ. Απόλαυσε άμεσες και φθηνές πληρωμές με φίλους, οικογένεια και εμπόρους.</string>
     <string name="onboarding__slide3_header">Το απόρρητο δεν\n&lt;accent&gt;είναι έγκλημα&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Τα χρήματά σας, η ιδιωτικότητά σας. Σύρετε για να κρύψετε το υπόλοιπό σας και ξοδέψτε πιο ιδιωτικά, χωρίς παρακολούθηση δεδομένων και μηδενικό KYC.</string>
@@ -349,14 +352,6 @@
     <string name="other__connection_back_title">Η σύνδεση στο διαδίκτυο αποκαταστάθηκε</string>
     <string name="other__connection_issue">Προβλήματα σύνδεσης στο διαδίκτυο</string>
     <string name="other__connection_issue_explain">Φαίνεται ότι είσαι αποσυνδεδεμένος, προσπάθεια επανασύνδεσης...</string>
-    <string name="other__gift__claiming__text">Εξαργύρωση του κωδικού δώρου Bitkit...</string>
-    <string name="other__gift__claiming__title">Εξαργύρωση δώρου</string>
-    <string name="other__gift__error__text">Το Bitkit δεν μπόρεσε να εξαργυρώσει τα κεφάλαια. Δοκίμασε ξανά αργότερα ή επικοινώνησε μαζί μας.</string>
-    <string name="other__gift__error__title">Σφάλμα κωδικού δώρου</string>
-    <string name="other__gift__used__text">Αυτός ο κωδικός δώρου Bitkit έχει ήδη χρησιμοποιηθεί και τα κεφάλαια έχουν εκταμιευθεί.</string>
-    <string name="other__gift__used__title">Χρησιμοποιημένος κωδικός</string>
-    <string name="other__gift__used_up__text">Λυπούμαστε, άργησες! Όλα τα δώρα για αυτόν τον κωδικό έχουν ήδη εξαργυρωθεί.</string>
-    <string name="other__gift__used_up__title">Εξαντλήθηκαν τα δώρα</string>
     <string name="other__high_balance__cancel">Μάθε περισσότερα</string>
     <string name="other__high_balance__continue">Κατανοητό</string>
     <string name="other__high_balance__nav_title">Υψηλό υπόλοιπο</string>
@@ -976,7 +971,6 @@
     <string name="wallet__payment_received">Ελήφθησαν Bitcoin</string>
     <string name="wallet__peer_disconnected">Ο ομότιμος αποσυνδέθηκε.</string>
     <string name="wallet__receive">Λήψη</string>
-    <string name="wallet__receive__cjit">Λήψη κεφαλαίων Lightning</string>
     <string name="wallet__receive_bitcoin">Λήψη Bitcoin</string>
     <string name="wallet__receive_bitcoin_invoice">Τιμολόγιο Bitcoin</string>
     <string name="wallet__receive_connect_additional">Για να λάβεις περισσότερα άμεσα Bitcoin, το Bitkit πρέπει να αυξήσει τη ρευστότητά σου. Τέλος δικτύου &lt;accent&gt;{networkFee}&lt;/accent&gt; και τέλος παρόχου υπηρεσιών &lt;accent&gt;{serviceFee}&lt;/accent&gt; θα αφαιρεθούν από το ποσό που καθόρισες.</string>
@@ -992,8 +986,6 @@
     <string name="wallet__receive_liquidity__text">Το υπόλοιπο δαπανών χρησιμοποιεί το Lightning Network για να κάνει τις πληρωμές σου φθηνότερες, ταχύτερες και πιο ιδιωτικές.\n\nΛειτουργεί όπως η πρόσβαση στο διαδίκτυο, αλλά πληρώνεις για ρευστότητα &amp; δρομολόγηση αντί για εύρος ζώνης.\n\nΑυτή η ρύθμιση περιλαμβάνει κάποια εφάπαξ κόστη.</string>
     <string name="wallet__receive_liquidity__text_additional">Το υπόλοιπο δαπανών χρησιμοποιεί το Lightning Network για να κάνει τις πληρωμές σου φθηνότερες, ταχύτερες και πιο ιδιωτικές.\n\nΛειτουργεί όπως η πρόσβαση στο διαδίκτυο, αλλά πληρώνεις για ρευστότητα &amp; δρομολόγηση αντί για εύρος ζώνης.\n\nΤο Bitkit πρέπει να αυξήσει τη χωρητικότητα λήψης του υπολοίπου δαπανών σου για να επεξεργαστεί αυτή την πληρωμή.</string>
     <string name="wallet__receive_note_placeholder">Προαιρετική σημείωση προς τον πληρωτή</string>
-    <string name="wallet__receive_onboarding_description">Απόλαυσε άμεσες και φθηνές\nσυναλλαγές με φίλους, οικογένεια\nκαι εμπόρους.</string>
-    <string name="wallet__receive_onboarding_title">Λήψη σε &lt;accent&gt;υπόλοιπο δαπανών&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Εμφάνιση λεπτομερειών</string>
     <string name="wallet__receive_show_qr">Εμφάνιση κωδικού QR</string>
     <string name="wallet__receive_specify">Επεξεργασία τιμολογίου</string>

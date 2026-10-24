@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -39,8 +40,10 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.BalanceState
+import to.bitkit.models.formatChannelsCloseDate
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.IncomingTransfer
 import to.bitkit.ui.components.SecondaryButton
@@ -68,6 +71,7 @@ fun SpendingWalletScreen(
     onTransferToSavingsClick: () -> Unit,
     onTransferFromSavingsClick: () -> Unit,
     onBackClick: () -> Unit,
+    showChannelsClosingNotice: Boolean = false,
     balances: BalanceState = LocalBalances.current,
 ) {
     val showEmptyState by remember(balances.totalLightningSats, lightningActivities.size) {
@@ -83,6 +87,8 @@ fun SpendingWalletScreen(
     val canTransferFromSavings by remember(showEmptyState, balances.totalOnchainSats) {
         mutableStateOf(showEmptyState && balances.totalOnchainSats > 0uL)
     }
+    val locale = LocalConfiguration.current.locales[0]
+    val channelsCloseDate = remember(locale) { formatChannelsCloseDate(locale) }
     val hazeState = rememberHazeState()
 
     Box(
@@ -148,6 +154,18 @@ fun SpendingWalletScreen(
                     IncomingTransfer(
                         amount = balances.balanceInTransferToSpending,
                         modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+            }
+
+            if (showChannelsClosingNotice) {
+                item {
+                    BodyM(
+                        text = stringResource(R.string.lightning__channels_closing_notice, channelsCloseDate),
+                        color = Colors.White64,
+                        modifier = Modifier
+                            .padding(top = 16.dp)
+                            .testTag("ChannelsClosingNotice")
                     )
                 }
             }
@@ -229,6 +247,7 @@ private fun Preview() {
                 onTransferToSavingsClick = {},
                 onTransferFromSavingsClick = {},
                 onBackClick = {},
+                showChannelsClosingNotice = true,
                 balances = BalanceState(totalLightningSats = 50_000u),
             )
             TabBar()

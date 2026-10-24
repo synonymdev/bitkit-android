@@ -5,13 +5,16 @@
     When the app is in the foreground the only feedback is the in-app "Spending balance ready" toast.
 
     Precondition: onboarded regtest wallet connected to the LSP, with a positive on-chain balance to
-    fund the transfer. No CJIT entry is involved here — this is a manual/Transfer channel opening
-    (orderPaymentConfirmed), not a CJIT receive.
+    fund the channel. No CJIT entry is involved here — this is a manual channel opening, not a CJIT
+    receive. This build cannot buy a channel from Blocktank (synonymdev/bitkit-android#1669), so the
+    channel is opened to the staging LSP node by hand (see ../README.md, Getting a Lightning channel).
   </description>
   <actions>
-    <action>Keep the app in the foreground on the wallet home screen</action>
-    <action>Open a regular spending channel via Transfer → Spending (fund some sats and confirm), OR open one through the lsp skill order flow</action>
-    <action>Mine confirmations if required: ./lsp POST /regtest/mine '{"count":3}'</action>
+    <action>Start on the wallet home screen</action>
+    <action>Open Settings, then the "Advanced" tab (testTag "Tab-advanced"), then "Lightning Connections" (testTag "Channels"), tap "Get Started" or "Add Connection" (testTag "add_connection_button") and tap "Manual Setup" (testTag "FundManual")</action>
+    <action>Enter the staging LSP node id (testTag "NodeIdInput"), host (testTag "HostInput") and port (testTag "PortInput") from ./lsp GET /info, tap Continue (testTag "ExternalContinue"), enter an amount within the available maximum, then continue and confirm to open the channel</action>
+    <action>Mine confirmations: ./lsp POST /regtest/chain/mine '{"count":3}'</action>
+    <action>Return to the wallet home screen and keep the app in the foreground</action>
     <action>Wait for the ChannelReady event (~5-10s)</action>
     <action>Verify an in-app "Spending balance ready" toast appears (testTag "SpendingBalanceReadyToast")</action>
     <action>Dump notifications: adb shell dumpsys notification --noredact | grep -A3 -i "to.bitkit"</action>

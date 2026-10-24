@@ -36,8 +36,6 @@
     <string name="cards__hardware__title">Hardware</string>
     <string name="cards__invite__description">Share Bitkit</string>
     <string name="cards__invite__title">Invite</string>
-    <string name="cards__lightning__description">Instant payments</string>
-    <string name="cards__lightning__title">Spend</string>
     <string name="cards__notifications__description">When Bitkit is closed</string>
     <string name="cards__notifications__title">Get paid</string>
     <string name="cards__pin__description">Set up a PIN code</string>
@@ -254,6 +252,14 @@
     <string name="lightning__channel_opened_msg">You can now pay anyone, anywhere, instantly.</string>
     <string name="lightning__channel_opened_title">Spending Balance Ready</string>
     <string name="lightning__channel_point">Channel point</string>
+    <string name="lightning__channels_closing_banner">CHANNELS CLOSE ON %1$s</string>
+    <string name="lightning__channels_closing_notice">Your Lightning channels will be closed on %1$s. Move your spending balance to savings before then.</string>
+    <string name="lightning__channels_unavailable__nav_title">Transfer Unavailable</string>
+    <string name="lightning__channels_unavailable__text">Automatic transfers to your spending balance are no longer available. Use your own node, or set up a connection with another provider.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;Manual setup&lt;/accent&gt;\nrequired</string>
+    <string name="lightning__choose_lsp__explanation">When they give you a QR to connect or claim the Lightning channel, tap below to scan or paste the QR.</string>
+    <string name="lightning__choose_lsp__text">Order a channel from a Lightning Service Provider (LSP). Below are some options. Bitkit does not run, endorse, or support these.</string>
+    <string name="lightning__choose_lsp__title">Choose a\n&lt;accent&gt;Lightning provider&lt;/accent&gt;</string>
     <string name="lightning__close_button">Close</string>
     <string name="lightning__close_conn">Close Connection</string>
     <string name="lightning__close_error">Transfer Failed</string>
@@ -315,7 +321,6 @@
     <string name="lightning__funding__button2">Use Other Wallet</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
     <string name="lightning__funding__text">The easiest option is to use your Bitkit savings or send bitcoin from a different wallet.</string>
-    <string name="lightning__funding__text_blocked">Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes directly.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes directly.</string>
     <string name="lightning__funding__title">Fund your &lt;accent&gt;spending balance&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">LNURL Channel QR</string>
@@ -455,7 +460,6 @@
     <string name="notification__channel_node__body">Notification channel for Lightning node foreground service</string>
     <string name="notification__channel_node__name">Lightning node notification</string>
     <string name="notification__channel_open_bg_failed_title">Channel failed to open in the background</string>
-    <string name="notification__channel_open_failed_title">Channel open failed</string>
     <string name="notification__channel_opened_title">Channel opened</string>
     <string name="notification__channel_pending_body">Pending</string>
     <string name="notification__channel_ready_body">Ready to send</string>
@@ -500,7 +504,6 @@
     <string name="onboarding__slide0_header">Freedom in\n&lt;accent&gt;your pocket&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit hands you the keys to control your money, profile, and contacts. Take charge and become borderless.</string>
     <string name="onboarding__slide1_header">Instant\n&lt;accent&gt;payments&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes.</string>
     <string name="onboarding__slide1_text">Enjoy instant and cheap payments with friends, family, and merchants on the Lightning Network.</string>
     <string name="onboarding__slide3_header">Privacy is\n&lt;accent&gt;not a crime&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Your money, your privacy. Swipe to hide your balance and spend more privately, with no data tracking and zero KYC.</string>
@@ -527,14 +530,6 @@
     <string name="other__connection_issue_explain">It appears you’re disconnected, trying to reconnect...</string>
     <string name="other__connection_issues_explain">It appears you\’re disconnected. Please check your connection. Bitkit will try to reconnect every few seconds.</string>
     <string name="other__connection_issues_title"><![CDATA[<accent>Connection</accent>\nIssues]]></string>
-    <string name="other__gift__claiming__text">Claiming your Bitkit gift code...</string>
-    <string name="other__gift__claiming__title">Claiming Gift</string>
-    <string name="other__gift__error__text">Bitkit couldn\'t claim the funds. Please try again later or contact us.</string>
-    <string name="other__gift__error__title">Gift Code Error</string>
-    <string name="other__gift__used__text">This Bitkit gift code has already been used, and the funds have been paid out.</string>
-    <string name="other__gift__used__title">Used Code</string>
-    <string name="other__gift__used_up__text">Sorry, you\'re too late! All gifts for this code have already been claimed.</string>
-    <string name="other__gift__used_up__title">Out of Gifts</string>
     <string name="other__high_balance__cancel">Learn More</string>
     <string name="other__high_balance__continue">Understood</string>
     <string name="other__high_balance__nav_title">High Balance</string>
@@ -1538,7 +1533,6 @@
     <string name="wallet__payment_unknown_required_features">This Lightning invoice uses features Bitkit does not support yet.</string>
     <string name="wallet__peer_disconnected">Peer disconnected.</string>
     <string name="wallet__receive">Receive</string>
-    <string name="wallet__receive__cjit">Receive Lightning funds</string>
     <string name="wallet__receive_bitcoin">Receive Bitcoin</string>
     <string name="wallet__receive_bitcoin_invoice">Bitcoin invoice</string>
     <string name="wallet__receive_cjit_error_invalid__description">The liquidity quote is no longer valid. Try again to get a fresh quote.</string>
@@ -1560,8 +1554,6 @@
     <string name="wallet__receive_liquidity__text">Your Spending Balance uses the Lightning Network to make your payments cheaper, faster, and more private.\n\nThis works like internet access, but you pay for liquidity &amp; routing instead of bandwidth.\n\nThis setup includes some one-time costs.</string>
     <string name="wallet__receive_liquidity__text_additional">Your Spending Balance uses the Lightning Network to make your payments cheaper, faster, and more private.\n\nThis works like internet access, but you pay for liquidity &amp; routing instead of bandwidth.\n\nBitkit needs to increase the receiving capacity of your spending balance to process this payment.</string>
     <string name="wallet__receive_note_placeholder">Optional note to payer</string>
-    <string name="wallet__receive_onboarding_description">Enjoy instant and cheap bitcoin payments on the Lightning Network.</string>
-    <string name="wallet__receive_onboarding_title">Receive on &lt;accent&gt;spending balance&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Show Details</string>
     <string name="wallet__receive_show_qr">QR Code</string>
     <string name="wallet__receive_specify">Edit Invoice</string>

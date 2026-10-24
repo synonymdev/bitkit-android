@@ -54,7 +54,6 @@ private const val PAGE_COUNT = LAST_PAGE_INDEX + 1
 
 @Composable
 fun OnboardingSlidesScreen(
-    isGeoBlocked: Boolean,
     onAdvancedSetupClick: () -> Unit,
     onCreateClick: () -> Unit,
     onRestoreClick: () -> Unit,
@@ -87,7 +86,7 @@ fun OnboardingSlidesScreen(
                     title = stringResource(R.string.onboarding__slide1_header),
                     titleAccentColor = Colors.Purple,
                     text = stringResource(R.string.onboarding__slide1_text),
-                    disclaimerText = stringResource(R.string.onboarding__slide1_note).takeIf { isGeoBlocked },
+                    disclaimerText = null,
                     modifier = Modifier.testTag("Slide1")
                 )
 
@@ -229,7 +228,6 @@ private fun OnboardingViewPreview() {
             onAdvancedSetupClick = {},
             onCreateClick = {},
             onRestoreClick = {},
-            isGeoBlocked = true
         )
     }
 }
@@ -243,7 +241,6 @@ private fun OnboardingViewPreview2() {
             onAdvancedSetupClick = {},
             onCreateClick = {},
             onRestoreClick = {},
-            isGeoBlocked = true
         )
     }
 }
@@ -257,7 +254,6 @@ private fun OnboardingViewPreview3() {
             onAdvancedSetupClick = {},
             onCreateClick = {},
             onRestoreClick = {},
-            isGeoBlocked = false
         )
     }
 }
@@ -271,7 +267,6 @@ private fun OnboardingViewPreview4() {
             onAdvancedSetupClick = {},
             onCreateClick = {},
             onRestoreClick = {},
-            isGeoBlocked = false
         )
     }
 }

@@ -28,7 +28,6 @@ class SuggestionsRepoTest : BaseUnitTest() {
 
     private val walletRepo = mock<WalletRepo>()
     private val settingsStore = mock<SettingsStore>()
-    private val transferRepo = mock<TransferRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
 
@@ -42,7 +41,6 @@ class SuggestionsRepoTest : BaseUnitTest() {
 
         whenever(walletRepo.balanceState).thenReturn(MutableStateFlow(BalanceState()))
         whenever(settingsStore.data).thenReturn(flowOf(settings))
-        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
         whenever(hwWalletRepo.wallets).thenReturn(hardwareWallets)
 
@@ -50,7 +48,6 @@ class SuggestionsRepoTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             walletRepo = walletRepo,
             settingsStore = settingsStore,
-            transferRepo = transferRepo,
             pubkyRepo = pubkyRepo,
             hwWalletRepo = hwWalletRepo,
         )

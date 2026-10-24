@@ -47,7 +47,7 @@ import to.bitkit.ui.theme.Insets
 private val previewSuggestions = persistentListOf(
     Suggestion.BACK_UP,
     Suggestion.SECURE,
-    Suggestion.LIGHTNING,
+    Suggestion.BUY,
     Suggestion.SUPPORT,
 )
 

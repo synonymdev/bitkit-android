@@ -37,7 +37,6 @@ internal object Env {
 
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
-    const val isGeoblockingEnabled = BuildConfig.GEO
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val isLocalE2eBackend = isE2eTest && e2eBackend == "local"
     const val e2eLocalHost = BuildConfig.E2E_LOCAL_HOST
@@ -69,7 +68,6 @@ internal object Env {
 
     const val fxRateRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
     const val fxRateStaleThreshold = 10 * 60 * 1000L // 10 minutes in millis
-    const val lspOrdersRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
 
     val pushNotificationFeatures = BlocktankNotificationType.entries
     const val derivationName = "bitkit-notifications"
@@ -152,7 +150,6 @@ internal object Env {
             else -> "https://bitkit.stag0.blocktank.to/fx/rates/btc"
         }
 
-    const val geoCheckUrl = "https://api1.blocktank.to/api/geocheck"
     const val chatwootUrl = "https://synonym.to/api/chatwoot"
     const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
     const val mempoolBaseUrl = "https://mempool.space/api"
@@ -287,7 +284,7 @@ object Peers {
     val stag = PeerDetails.of("028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@34.65.86.104:9400")
     val lnd1 = PeerDetails.of("039b8b4dd1d88c2c5db374290cda397a8f5d79f312d6ea5d5bfdfc7c6ff363eae3@34.65.111.104:9735")
     val lnd3 = PeerDetails.of("03816141f1dce7782ec32b66a300783b1d436b19777e7c686ed00115bd4b88ff4b@34.65.191.64:9735")
-    val lnd4 = PeerDetails.of("02a371038863605300d0b3fc9de0cf5ccb57728b7f8906535709a831b16e311187@34.65.153.174:9735")
+    val lnd4 = PeerDetails.of("02a371038863605300d0b3fc9de0cf5ccb57728b7f8906535709a831b16e311187@34.65.147.55:9735")
 
     object Known {
         val stag = NodePeer(Peers.stag, name = "Synonym-Own-Regtest-0")

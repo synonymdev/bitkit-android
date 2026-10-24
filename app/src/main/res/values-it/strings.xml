@@ -7,8 +7,6 @@
     <string name="cards__buyBitcoin__title">Compra</string>
     <string name="cards__invite__description">Condividi Bitkit</string>
     <string name="cards__invite__title">Invita</string>
-    <string name="cards__lightning__description">Pagamenti istantanei</string>
-    <string name="cards__lightning__title">Spendi</string>
     <string name="cards__notifications__description">Quando Bitkit e\' chiuso</string>
     <string name="cards__notifications__title">Ricevi pagamenti</string>
     <string name="cards__pin__description">Imposta un codice PIN</string>
@@ -110,6 +108,14 @@
     <string name="lightning__channel_opened_msg">Ora puoi pagare chiunque, ovunque, istantaneamente.</string>
     <string name="lightning__channel_opened_title">Conto di spesa Pronto</string>
     <string name="lightning__channel_point">Punto del canale</string>
+    <string name="lightning__channels_closing_banner">I CANALI CHIUDONO IL %1$s</string>
+    <string name="lightning__channels_closing_notice">I tuoi canali Lightning verranno chiusi il %1$s. Trasferisci il saldo di spesa ai risparmi prima di allora.</string>
+    <string name="lightning__channels_unavailable__nav_title">Trasferimento non disponibile</string>
+    <string name="lightning__channels_unavailable__text">I trasferimenti automatici al saldo di spesa non sono più disponibili. Usa il tuo nodo o configura una connessione con un altro fornitore.</string>
+    <string name="lightning__channels_unavailable__title">&lt;accent&gt;Configurazione manuale&lt;/accent&gt;\nrichiesta</string>
+    <string name="lightning__choose_lsp__explanation">Quando ti danno un QR per collegare o riscattare il canale Lightning, tocca qui sotto per scansionare o incollare il QR.</string>
+    <string name="lightning__choose_lsp__text">Ordina un canale da un fornitore di servizi Lightning (LSP). Qui sotto trovi alcune opzioni. Bitkit non le gestisce, non le approva e non le supporta.</string>
+    <string name="lightning__choose_lsp__title">Scegli un\n&lt;accent&gt;fornitore Lightning&lt;/accent&gt;</string>
     <string name="lightning__close_button">Chiudi</string>
     <string name="lightning__close_conn">Chiusura Connessione</string>
     <string name="lightning__close_error">Trasferimento non riuscito</string>
@@ -167,7 +173,6 @@
     <string name="lightning__funding__button2">Usa un altro portafoglio</string>
     <string name="lightning__funding__nav_title">Conto di Spesa</string>
     <string name="lightning__funding__text">Il modo più semplice è usare i tuoi risparmi Bitkit o inviare bitcoin da un portafoglio diverso.</string>
-    <string name="lightning__funding__text_blocked">Bitkit attualmente non fornisce servizi Lightning nel tuo paese, ma puoi comunque connetterti direttamente ad altri nodi.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit attualmente non fornisce servizi Lightning nel tuo paese, ma puoi comunque connetterti direttamente ad altri nodi.</string>
     <string name="lightning__funding__title">Manda fondi al tuo &lt;accent&gt;conto di spesa&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">QR Canale LNURL</string>
@@ -285,7 +290,6 @@
     <string name="notification__channel_node__body">Canale di notifica per il servizio in primo piano del nodo Lightning</string>
     <string name="notification__channel_node__name">Notifica nodo Lightning</string>
     <string name="notification__channel_open_bg_failed_title">Apertura canale in background non riuscita</string>
-    <string name="notification__channel_open_failed_title">Apertura canale non riuscita</string>
     <string name="notification__channel_opened_title">Canale aperto</string>
     <string name="notification__channel_pending_body">In attesa</string>
     <string name="notification__channel_ready_body">Pronto per inviare</string>
@@ -329,7 +333,6 @@
     <string name="onboarding__slide0_header">La libertà\n&lt;accent&gt;nella tua tasca&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit ti dà le chiavi per controllare i tuoi soldi, il tuo profilo e i tuoi contatti. Prendi il controllo e diventa senza confini.</string>
     <string name="onboarding__slide1_header">Pagamenti\n&lt;accent&gt;istantanei&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Bitkit attualmente non fornisce servizi Lightning nel tuo paese, ma puoi comunque connetterti ad altri nodi.</string>
     <string name="onboarding__slide1_text">Spendi bitcoin più velocemente che mai. Goditi pagamenti immediati ed economici con amici, familiari e commercianti.</string>
     <string name="onboarding__slide3_header">La privacy\n&lt;accent&gt;non è un crimine&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">I tuoi soldi, la tua privacy. Scorri per nascondere il saldo e spendi in modo più privato, senza tracciamento dei dati e zero KYC.</string>
@@ -354,14 +357,6 @@
     <string name="other__connection_back_title">Connessione Internet ripristinata</string>
     <string name="other__connection_issue">Problemi di connettività Internet</string>
     <string name="other__connection_issue_explain">Sembra che tu sia disconnesso, tentativo di riconnessione...</string>
-    <string name="other__gift__claiming__text">Riscatto del tuo codice regalo Bitkit...</string>
-    <string name="other__gift__claiming__title">Riscatto Regalo</string>
-    <string name="other__gift__error__text">Bitkit non e\' riuscito a riscuotere i fondi. Riprova piu\' tardi o contattaci.</string>
-    <string name="other__gift__error__title">Errore Codice Regalo</string>
-    <string name="other__gift__used__text">Questo codice regalo Bitkit e\' gia\' stato usato e i fondi sono stati pagati.</string>
-    <string name="other__gift__used__title">Codice Usato</string>
-    <string name="other__gift__used_up__text">Spiacenti, sei in ritardo! Tutti i regali per questo codice sono gia\' stati riscossi.</string>
-    <string name="other__gift__used_up__title">Regali Esauriti</string>
     <string name="other__high_balance__cancel">Scopri di Più</string>
     <string name="other__high_balance__continue">Ho Capito</string>
     <string name="other__high_balance__nav_title">Saldo Elevato</string>
@@ -997,7 +992,6 @@
     <string name="wallet__payment_received">Bitcoin ricevuti</string>
     <string name="wallet__peer_disconnected">Peer disconnesso.</string>
     <string name="wallet__receive">Ricevi</string>
-    <string name="wallet__receive__cjit">Ricevi fondi Lightning</string>
     <string name="wallet__receive_bitcoin">Ricevi Bitcoin</string>
     <string name="wallet__receive_bitcoin_invoice">Bitcoin invoice</string>
     <string name="wallet__receive_connect_additional">Per ricevere piu\' Bitcoin istantanei, Bitkit deve aumentare la tua liquidita\'. Una commissione di rete di &lt;accent&gt;{networkFee}&lt;/accent&gt; e una commissione del fornitore di servizio di &lt;accent&gt;{serviceFee}&lt;/accent&gt; verranno detratte dall\'importo specificato.</string>
@@ -1013,8 +1007,6 @@
     <string name="wallet__receive_liquidity__text">Il tuo Conto di Spesa utilizza Lightning Network per rendere i tuoi pagamenti piu\' economici, veloci e privati.\n\nFunziona come l\'accesso a Internet, ma paghi per liquidita\' e routing invece che per la banda.\n\nQuesta configurazione include alcuni costi una tantum.</string>
     <string name="wallet__receive_liquidity__text_additional">Il tuo Conto di Spesa utilizza Lightning Network per rendere i tuoi pagamenti piu\' economici, veloci e privati.\n\nFunziona come l\'accesso a Internet, ma paghi per liquidita\' e routing invece che per la banda.\n\nBitkit deve aumentare la capacita\' di ricezione del tuo conto di spesa per elaborare questo pagamento.</string>
     <string name="wallet__receive_note_placeholder">Nota opzionale per chi paga</string>
-    <string name="wallet__receive_onboarding_description">Goditi transazioni istantanee\ned economiche con amici, familiari\ne commercianti.</string>
-    <string name="wallet__receive_onboarding_title">Ricevi sul &lt;accent&gt;conto di spesa&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Mostra Dettagli</string>
     <string name="wallet__receive_show_qr">Visualizza QR Code</string>
     <string name="wallet__receive_specify">Modifica Fattura</string>

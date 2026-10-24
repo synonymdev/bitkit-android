@@ -13,7 +13,7 @@
   </description>
   <actions>
     <action>Open Settings, then the "Advanced" tab, then "Lightning Connections"</action>
-    <action>Tap "Get Started" to open the funding options screen</action>
+    <action>Tap "Get Started" (testTag "add_connection_button"; "Add Connection" when a connection already exists) to open the Funding Advanced screen, which offers LNURL Channel QR and Manual Setup</action>
     <action>Tap "Manual Setup" (testTag "FundManual")</action>
     <action>Type the node id into the node id field (testTag "NodeIdInput")</action>
     <action>Type the host into the host field (testTag "HostInput")</action>

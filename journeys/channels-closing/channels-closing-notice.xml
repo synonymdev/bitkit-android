@@ -1,0 +1,34 @@
+<journey name="channels closing notice">
+  <description>
+    Verifies the notice that Synonym is winding down Blocktank (its Lightning service provider) for a
+    user with a Lightning channel (synonymdev/bitkit-android#1669). Home shows a banner,
+    "CHANNELS CLOSE ON DEC 15, 2026" (testTag "ChannelsClosingBanner"), tapping it opens the Spending
+    wallet, which shows "Your Lightning channels will be closed on Dec 15, 2026. Move your spending
+    balance to savings before then." (testTag "ChannelsClosingNotice") under the balance header, and
+    Transfer To Savings (testTag "TransferToSavings") is still offered. The Savings wallet's
+    Transfer To Spending button (testTag "TransferToSpending") opens the "Manual setup required"
+    sheet (testTag "ChannelsUnavailableSheet") instead of the transfer flow, since new channels can no
+    longer be bought; the sheet has no close date line. The date is a placeholder constant until the
+    shutdown date is final; assert whatever date the build shows, and keep the banner and the notice in agreement.
+
+    Precondition: onboarded dev wallet with a Lightning channel to the staging LSP (Blocktank) node, open
+    or pending, and a POSITIVE Spending balance; channels to other nodes do not show the notice. This build cannot buy a channel from Blocktank, so get
+    one by installing a build from before the change (master before synonymdev/bitkit-android#1669),
+    opening a channel with Transfer To Spending and installing this build over it, or by opening a
+    manual channel to the staging LSP node (see ../README.md, Getting a Lightning channel). Start on
+    the wallet home screen.
+  </description>
+  <actions>
+    <action>Verify the Spending balance card (testTag "ActivitySpending") shows a positive amount</action>
+    <action>Verify the banner (testTag "ChannelsClosingBanner") is visible on the home screen with the text "CHANNELS CLOSE ON DEC 15, 2026" and the same style as the "TRANSFER IN PROGRESS" banner; note the date it shows</action>
+    <action>Tap the banner (testTag "ChannelsClosingBanner")</action>
+    <action>Verify the Spending wallet screen is open, showing the balance (testTag "TotalBalance")</action>
+    <action>Verify the notice (testTag "ChannelsClosingNotice") reads "Your Lightning channels will be closed on Dec 15, 2026. Move your spending balance to savings before then." with the same date the banner showed</action>
+    <action>Verify the "Transfer To Savings" button (testTag "TransferToSavings") is visible</action>
+    <action>Press the system back button, then tap the Savings balance card (testTag "ActivitySavings")</action>
+    <action>Verify the Savings wallet screen is open and tap the "Transfer To Spending" button (testTag "TransferToSpending")</action>
+    <action>Verify the sheet (testTag "ChannelsUnavailableSheet") opens with the nav title "Transfer Unavailable", the lightning-bolt image (testTag "ChannelsUnavailableSheetImage"), the title "MANUAL SETUP REQUIRED" with "MANUAL SETUP" in purple (testTag "ChannelsUnavailableSheetTitle") and the text "Automatic transfers to your spending balance are no longer available. Use your own node, or set up a connection with another provider." (testTag "ChannelsUnavailableSheetDescription"), with "Cancel" (testTag "ChannelsUnavailableSheetCancel") and "Continue" (testTag "ChannelsUnavailableSheetContinue") buttons, and no close date line</action>
+    <action>Tap "Cancel" (testTag "ChannelsUnavailableSheetCancel") and verify the sheet closes and the Savings wallet screen is still shown</action>
+    <action>Press the system back button, tap the Spending balance card (testTag "ActivitySpending") and verify the notice (testTag "ChannelsClosingNotice") is still shown</action>
+  </actions>
+</journey>

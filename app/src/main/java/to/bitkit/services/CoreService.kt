@@ -65,9 +65,6 @@ import com.synonym.bitkitcore.upsertInfo
 import com.synonym.bitkitcore.upsertOrders
 import com.synonym.bitkitcore.upsertTransactionDetails
 import com.synonym.bitkitcore.wipeAllDatabases
-import io.ktor.client.HttpClient
-import io.ktor.client.request.get
-import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
@@ -121,7 +118,6 @@ import com.synonym.bitkitcore.markActivityAsSeen as coreMarkActivityAsSeen
 @Singleton
 class CoreService @Inject constructor(
     private val lightningService: LightningService,
-    private val httpClient: HttpClient,
     private val cacheStore: CacheStore,
     private val settingsStore: SettingsStore,
     private val privatePaykitContactResolver: Provider<PrivatePaykitContactResolver>,
@@ -168,44 +164,6 @@ class CoreService @Inject constructor(
             }.onFailure {
                 Logger.error("Failed to update Blocktank URL", it, context = TAG)
             }
-        }
-    }
-
-    @Suppress("KotlinConstantConditions")
-    suspend fun isGeoBlocked(): Boolean {
-        val tag = "GeoCheck"
-        if (!Env.isGeoblockingEnabled) {
-            Logger.verbose("Geoblocking disabled via build config", context = tag)
-            return false
-        }
-
-        return ServiceQueue.CORE.background {
-            runCatching {
-                Logger.verbose("Checking geo status…", context = tag)
-                val response = httpClient.get(Env.geoCheckUrl)
-
-                when (response.status.value) {
-                    HttpStatusCode.OK.value -> {
-                        Logger.verbose("Region allowed", context = tag)
-                        false
-                    }
-
-                    HttpStatusCode.Forbidden.value -> {
-                        Logger.warn("Region blocked", context = tag)
-                        true
-                    }
-
-                    else -> {
-                        Logger.warn(
-                            "Unexpected status code: ${response.status.value}, defaulting to false",
-                            context = tag
-                        )
-                        false
-                    }
-                }
-            }.onFailure {
-                Logger.warn("Error. defaulting isGeoBlocked to false", context = tag)
-            }.getOrDefault(false)
         }
     }
 

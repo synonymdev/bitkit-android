@@ -12,8 +12,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
@@ -86,25 +84,6 @@ class WakeNodeWorker @AssistedInject constructor(
                     timeout = timeout,
                     eventHandler = { event -> handleLdkEvent(event) }
                 )
-
-                // Once node is started, handle the manual channel opening if needed
-                if (notificationType == orderPaymentConfirmed) {
-                    val orderId = (notificationPayload?.get("orderId") as? JsonPrimitive)?.contentOrNull
-
-                    if (orderId == null) {
-                        Logger.error("Missing orderId", context = TAG)
-                    } else {
-                        Logger.info("Open channel request for order $orderId", context = TAG)
-                        blocktankRepo.openChannel(orderId).onFailure {
-                            Logger.error("Failed to open channel", it, context = TAG)
-                            bestAttemptContent = NotificationDetails(
-                                title = appContext.getString(R.string.notification__channel_open_failed_title),
-                                body = it.message ?: appContext.getString(R.string.common__error_body),
-                            )
-                            deliver()
-                        }
-                    }
-                }
             }
             // Stops node on timeout & avoids notification replay by OS
             withTimeout(timeout) { deliverSignal.await() }

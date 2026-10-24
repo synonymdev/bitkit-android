@@ -331,9 +331,6 @@ class AppViewModel @Inject constructor(
     var splashVisible by mutableStateOf(true)
         private set
 
-    val isGeoBlocked = lightningRepo.lightningState.map { it.isGeoBlocked }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
     val forceCloseRemainingDuration = transferRepo.forceCloseRemainingDuration
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -643,9 +640,6 @@ class AppViewModel @Inject constructor(
             resetIsAuthenticatedState()
             delay(AUTH_CHECK_SPLASH_DELAY_MS)
             splashVisible = false
-        }
-        viewModelScope.launch {
-            lightningRepo.updateGeoBlockState()
         }
         viewModelScope.launch {
             quickPayRepo.unhandledFailures.collect {
@@ -4594,7 +4588,6 @@ class AppViewModel @Inject constructor(
             is Scanner.LnurlAuth -> handleNonPaymentScan { onScanLnurlAuth(scan.data, fromMainScanner) }
             is Scanner.LnurlChannel -> handleNonPaymentScan { onScanLnurlChannel(scan.data) }
             is Scanner.NodeId -> handleNonPaymentScan { onScanNodeId(scan) }
-            is Scanner.Gift -> handleNonPaymentScan { onScanGift(scan.code, scan.amount) }
             else -> {
                 val hasIncomingPaymentRequest = clearIncomingPaymentRequestTarget()
                 val logMessage = if (hasIncomingPaymentRequest) {
@@ -5443,11 +5436,6 @@ class AppViewModel @Inject constructor(
         hideSheet() // hide scan sheet if opened
         val nextRoute = Routes.ExternalConnection(data.url)
         mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
-    }
-
-    private fun onScanGift(code: String, amount: ULong) {
-        hideSheet() // hide scan sheet if opened
-        showSheet(Sheet.Gift(code = code, amount = amount))
     }
 
     private suspend fun handleQuickPayIfApplicable(
@@ -8023,8 +8011,7 @@ class AppViewModel @Inject constructor(
         showPairingCodeSheet(requestId)
     }
 
-    private fun isHighPrioritySheet(sheet: Sheet?) = sheet is Sheet.Gift ||
-        sheet is Sheet.Send ||
+    private fun isHighPrioritySheet(sheet: Sheet?) = sheet is Sheet.Send ||
         sheet is Sheet.BTCPayConnection ||
         sheet is Sheet.LnurlAuth ||
         sheet is Sheet.Pin ||

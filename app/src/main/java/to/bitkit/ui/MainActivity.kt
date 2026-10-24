@@ -456,10 +456,8 @@ private fun OnboardingNav(
         }
         composableWithDefaultTransitions<StartupRoutes.Slides> { navBackEntry ->
             val route = navBackEntry.toRoute<StartupRoutes.Slides>()
-            val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
             OnboardingSlidesScreen(
                 currentTab = route.tab,
-                isGeoBlocked = isGeoBlocked,
                 onAdvancedSetupClick = { startupNavController.navigateTo(StartupRoutes.Advanced) },
                 onCreateClick = {
                     scope.launch {

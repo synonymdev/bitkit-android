@@ -1079,7 +1079,6 @@ class MigrationService internal constructor(
         val mapping = mapOf(
             "backupSeedPhrase" to Suggestion.BACK_UP,
             "buyBitcoin" to Suggestion.BUY,
-            "lightning" to Suggestion.LIGHTNING,
             "quickpay" to Suggestion.QUICK_PAY,
             "shop" to Suggestion.SHOP,
             "slashtagsProfile" to Suggestion.PROFILE,

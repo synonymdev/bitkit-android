@@ -248,13 +248,12 @@ class LightningService internal constructor(
         walletIndex: Int,
         customServerUrl: String? = null,
         customRgsServerUrl: String? = null,
-        trustedPeers: List<PeerDetails>? = null,
         channelMigration: ChannelDataMigration? = null,
     ) {
         awaitNodeRelease()
         Logger.debug("Building node…", context = TAG)
 
-        val config = config(walletIndex, trustedPeers)
+        val config = config(walletIndex)
         val builtNode = build(
             walletIndex,
             customServerUrl,
@@ -270,13 +269,10 @@ class LightningService internal constructor(
 
     private suspend fun config(
         walletIndex: Int,
-        trustedPeers: List<PeerDetails>?,
     ): Config {
         val dirPath = Env.ldkStoragePath(walletIndex)
 
-        this.trustedPeers = trustedPeers?.takeIf { it.isNotEmpty() } ?: Env.trustedLnPeers.also {
-            Logger.warn("Missing trusted peers from LSP, falling back to preconfigured env peers", context = TAG)
-        }
+        this.trustedPeers = Env.trustedLnPeers
 
         val trustedPeerNodeIds = this.trustedPeers.map { it.nodeId }
 

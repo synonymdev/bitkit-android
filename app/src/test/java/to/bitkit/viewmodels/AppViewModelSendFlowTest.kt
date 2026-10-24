@@ -716,7 +716,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { migrationService.needsPostMigrationSync() }.thenReturn(false)
         whenever { migrationService.isMigrationChecked() }.thenReturn(true)
         whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
-        whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)

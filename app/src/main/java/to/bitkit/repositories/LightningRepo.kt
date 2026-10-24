@@ -72,7 +72,6 @@ import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
-import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
@@ -137,6 +136,10 @@ class LightningRepo @Inject constructor(
 ) : OnchainReleasing {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
+
+    val hasTrustedChannels = lightningState
+        .map { separateTrustedChannels(it.channels).first.isNotEmpty() }
+        .distinctUntilChanged()
 
     private val _nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>(extraBufferCapacity = 64)
     val nodeEventUpdates = _nodeEventUpdates.asSharedFlow()
@@ -306,28 +309,16 @@ class LightningRepo @Inject constructor(
         channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
         runSuspendCatching {
-            val trustedPeers = fetchTrustedPeers()
             lightningService.setup(
                 walletIndex,
                 customServerUrl,
                 customRgsServerUrl,
-                trustedPeers,
                 channelMigration,
             )
         }.onFailure {
             Logger.error("Node setup error", it, context = TAG)
         }
     }
-
-    private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runSuspendCatching {
-        val info = coreService.blocktank.info(refresh = false)
-            ?: coreService.blocktank.info(refresh = true)
-        info?.nodes?.toPeerDetailsList()?.also {
-            Logger.info("Fetched ${it.size} trusted peers from remote", context = TAG)
-        }
-    }.onFailure {
-        Logger.warn("fetchTrustedPeers error", it, context = TAG)
-    }.getOrNull()
 
     suspend fun start(
         walletIndex: Int = 0,
@@ -421,7 +412,6 @@ class LightningRepo @Inject constructor(
                 // Initial state sync
                 syncState()
                 logNodeSupportSummary("node started")
-                updateGeoBlockState()
                 refreshChannelCache()
 
                 if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
@@ -671,12 +661,6 @@ class LightningRepo @Inject constructor(
     fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
 
     fun setWiping(enabled: Boolean) = run { isWiping = enabled }
-
-    suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
-        _lightningState.update {
-            it.copy(isGeoBlocked = coreService.isGeoBlocked())
-        }
-    }
 
     fun setInitNodeLifecycleState() {
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
@@ -1312,7 +1296,6 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
-        updateGeoBlockState()
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
@@ -1321,7 +1304,6 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
-        updateGeoBlockState()
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
     }
 
@@ -2775,7 +2757,6 @@ data class LightningState(
     val channels: ImmutableList<ChannelDetails> = persistentListOf(),
     val balances: BalanceDetails? = null,
     val isSyncingWallet: Boolean = false,
-    val isGeoBlocked: Boolean = false,
     val lastSyncError: Throwable? = null,
     val lastSuccessfulSyncAt: Long? = null,
 ) {

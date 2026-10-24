@@ -28,7 +28,6 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.Env
 import to.bitkit.ext.channelId
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.ext.runSuspendCatching
@@ -39,7 +38,6 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.BlockTimeHelpers
 import to.bitkit.utils.Logger
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -57,7 +55,6 @@ class TransferRepo @Inject constructor(
     private val cacheStore: CacheStore,
     private val connectivityRepo: ConnectivityRepo,
 ) {
-    private val lastOrdersFetchMs = AtomicLong(0L)
 
     private val fundingMutex = Mutex()
     private val repoScope = appScope(bgDispatcher, TAG)
@@ -296,7 +293,6 @@ class TransferRepo @Inject constructor(
             transfer.channelId != null && channels.none { it.channelId == transfer.channelId }
         }
         val closedChannelIds = if (hasMissingChannel) loadClosedChannelIds() else emptySet()
-        fetchOrdersAwaitingEvidence(toSpending, channels, closedChannelIds)
 
         for (transfer in toSpending) {
             val channelId = resolveChannelIdForTransfer(transfer, channels)
@@ -313,36 +309,6 @@ class TransferRepo @Inject constructor(
 
                 transfer.lspOrderId != null -> settleIfOrderEnded(transfer, transfer.lspOrderId)
             }
-        }
-    }
-
-    private suspend fun fetchOrdersAwaitingEvidence(
-        toSpending: List<TransferEntity>,
-        channels: List<ChannelDetails>,
-        closedChannelIds: Set<String>,
-    ) {
-        val orderIds = toSpending.mapNotNull { transfer ->
-            val orderId = transfer.lspOrderId ?: return@mapNotNull null
-            val channelId = resolveChannelIdForTransfer(transfer, channels)
-            if (channelId != null) {
-                val isChannelReady = channels.any { it.channelId == channelId && it.isChannelReady }
-                if (channelId in closedChannelIds || isChannelReady) return@mapNotNull null
-            }
-            val cached = blocktankRepo.getOrder(orderId, refresh = false).getOrNull()
-            if (cached != null && (cached.state2 == BtOrderState2.EXPIRED || cached.hasClosedChannel())) {
-                return@mapNotNull null
-            }
-            orderId
-        }.distinct()
-        if (orderIds.isEmpty()) return
-
-        val nowMs = clock.now().toEpochMilliseconds()
-        val lastFetchMs = lastOrdersFetchMs.get()
-        if (nowMs - lastFetchMs in 0L until Env.lspOrdersRefreshInterval) return
-        if (!lastOrdersFetchMs.compareAndSet(lastFetchMs, nowMs)) return
-
-        blocktankRepo.fetchOrders(orderIds).onSuccess { fetched ->
-            Logger.debug("Fetched '${fetched.size}' of '${orderIds.size}' orders for active transfers", context = TAG)
         }
     }
 
