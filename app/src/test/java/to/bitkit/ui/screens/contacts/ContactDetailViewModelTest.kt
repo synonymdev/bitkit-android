@@ -6,9 +6,16 @@ import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.job
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -582,30 +589,46 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pay tap cancels a stalled eligibility check before paying`() = test {
-        var isCheckCancelled = false
-        var wasCheckCancelledBeforePayment = false
+    fun `pay tap times out eligibility without waiting for a native call`() = test {
+        val checkStarted = CompletableDeferred<Job>()
+        val finishNativeCall = CompletableDeferred<Unit>()
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
         whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY)).doSuspendableAnswer {
-            try {
-                awaitCancellation()
-            } finally {
-                isCheckCancelled = true
-            }
+            checkStarted.complete(currentCoroutineContext().job)
+            withContext(NonCancellable) { finishNativeCall.await() }
+            currentCoroutineContext().ensureActive()
+            Result.success(targetCheck(target))
         }
-        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer {
-            wasCheckCancelledBeforePayment = isCheckCancelled
-            Result.success(openedPayment)
-        }
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
         val sut = createSut()
+        val check = checkStarted.await()
 
-        sut.effects.test {
-            sut.onClickPay()
-            advanceUntilIdle()
+        try {
+            sut.effects.test {
+                sut.onClickPay()
+                advanceTimeBy(2.seconds)
 
-            assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
-            assertTrue(wasCheckCancelledBeforePayment)
-            assertFalse(sut.uiState.value.showRequestOrPaySheet)
+                verify(privatePaykitRepo, never()).beginSavedContactPayment(any())
+                assertTrue(sut.uiState.value.isPayLoading)
+                runCurrent()
+
+                assertTrue(check.isCancelled)
+                assertFalse(check.isCompleted)
+                verify(privatePaykitRepo).beginSavedContactPayment(TEST_PUBLIC_KEY)
+                assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+                assertFalse(sut.uiState.value.showRequestOrPaySheet)
+
+                finishNativeCall.complete(Unit)
+                runCurrent()
+
+                assertTrue(check.isCompleted)
+                assertFalse(sut.uiState.value.showRequestOrPaySheet)
+                expectNoEvents()
+            }
+        } finally {
+            finishNativeCall.complete(Unit)
+            runCurrent()
         }
     }
 

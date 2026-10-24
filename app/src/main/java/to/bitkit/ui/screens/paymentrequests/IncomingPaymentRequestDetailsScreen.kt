@@ -187,7 +187,16 @@ internal fun IncomingPaymentRequestDetailsContent(
                 )
             }
             VerticalSpacer(20.dp)
-            Caption13Up(text = stringResource(R.string.wallet__payment_request_contact), color = Colors.White64)
+            Caption13Up(
+                text = stringResource(
+                    if (request.isMerchantRequest) {
+                        R.string.wallet__send_to
+                    } else {
+                        R.string.wallet__payment_request_contact
+                    }
+                ),
+                color = Colors.White64,
+            )
             VerticalSpacer(8.dp)
             Row(
                 verticalAlignment = Alignment.CenterVertically,

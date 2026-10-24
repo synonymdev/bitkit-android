@@ -10,6 +10,7 @@ import com.synonym.paykit.ConversionRate
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.OutboundPrivateCounterpartySendReport
 import com.synonym.paykit.OutboundPrivateMessageStatus
 import com.synonym.paykit.OutboundPrivateSendFailure
 import com.synonym.paykit.OutboundPrivateSendReport
@@ -485,8 +486,33 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService, times(3)).observeState(LOCAL_IDENTITY, Priority.Background)
         verify(paykitSdkService, never()).allPaymentRequests(anyOrNull(), any())
         verify(paykitSdkService, never()).linkedPeers(any())
-        verify(paykitSdkService).processPendingPrivateMessages(Priority.Ordered)
-        verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers(Priority.Ordered)
+        verify(paykitSdkService).processPendingPrivateMessages(Priority.Background)
+        verify(paykitSdkService, times(2)).receivePrivateMessagesFromLinkedPeers(Priority.Background)
+    }
+
+    @Test
+    fun `deferred refresh preserves requests releases its lock and retries without skipping recovery`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh(PaykitPaymentRequestRefreshMode.STORED).getOrThrow()
+        val pending = sut.pendingRequests.value
+        var paymentActive = true
+        doSuspendableAnswer {
+            if (paymentActive) throw PaykitPaymentRequestError.OperationInProgress
+            emptyList<OutboundPrivateCounterpartySendReport>()
+        }.whenever(paykitSdkService).processPendingPrivateMessages(Priority.Background)
+        clearInvocations(paykitSdkService)
+
+        assertSame(PaykitPaymentRequestError.OperationInProgress, sut.refresh().exceptionOrNull())
+        assertEquals(pending, sut.pendingRequests.value)
+        verify(paykitSdkService, never()).receivePrivateMessagesFromLinkedPeers(any())
+        sut.refreshAfterStateChange().getOrThrow()
+        verify(paykitSdkService).observeState(LOCAL_IDENTITY, Priority.Ordered)
+
+        paymentActive = false
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(emptyList())
+        sut.refresh().getOrThrow()
+        assertTrue(sut.pendingRequests.value.isEmpty())
     }
 
     @Test
@@ -617,7 +643,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         sut.refresh().getOrThrow()
         verify(paykitSdkService, times(2)).allPaymentRequests(anyOrNull())
-        verify(paykitSdkService).processPendingPrivateMessages(Priority.Ordered)
+        verify(paykitSdkService, times(2)).processPendingPrivateMessages(Priority.Background)
     }
 
     @Test
@@ -986,6 +1012,18 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = sut.pendingRequests.value.single()
         assertEquals(100_000uL, request.amount.atomic)
         assertEquals(listOf(MethodId.Bolt11.rawValue), request.acceptedPaymentEndpointIdentifiers)
+    }
+
+    @Test
+    fun `requests created by a paykit server are merchant requests`() {
+        fun parse(record: PaymentRequestRecord) =
+            (record.parseIncomingPaykitPaymentRequest(START_TIME) as PaykitPaymentRequestParseResult.Parsed).request
+
+        assertFalse(parse(paymentRequestRecord()).isMerchantRequest)
+        assertTrue(parse(paymentRequestRecord().copy(proposalAppId = "paykit-server")).isMerchantRequest)
+        assertFalse(parse(paymentRequestRecord().copy(proposalAppId = "marketplace")).isMerchantRequest)
+        val outgoing = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalAppId = "paykit-server")
+        assertFalse(requireNotNull(outgoing.toPaykitPaymentRequestHistory(START_TIME)).isMerchantRequest)
     }
 
     @Test
@@ -1398,6 +1436,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.accept(sut.pendingRequests.value.single()).getOrThrow()
         runCurrent()
 
+        verify(paykitSdkService, never()).linkedPeers()
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertEquals(PaymentRequestLifecycleState.ACCEPTED, sut.paymentRequestHistory.value.single().lifecycleState)
         verify(paykitSdkService, never()).processPendingPrivateMessages(any())
@@ -1416,6 +1455,53 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refresh(PaykitPaymentRequestRefreshMode.FULL, Priority.Background).getOrThrow()
         verify(paykitSdkService).processPendingPrivateMessages(Priority.Background)
         verify(paykitSdkService, times(1)).acceptPaymentRequest(COUNTERPARTY, PAYMENT_REQUEST_ID, 41uL)
+    }
+
+    @Test
+    fun `proposed acceptance rejects current sdk peer policy without a separate preflight`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        clearInvocations(paykitSdkService)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED)),
+        )
+        val refusal = PaykitException.Policy("policy", "counterparty is blocked")
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any(), any())).doSuspendableAnswer { throw refusal }
+
+        assertSame(refusal, sut.accept(request).exceptionOrNull())
+
+        verify(paykitSdkService, never()).linkedPeers()
+        verify(paykitSdkService).acceptPaymentRequest(
+            COUNTERPARTY,
+            PAYMENT_REQUEST_ID,
+            requireNotNull(request.proposalStreamItemId),
+        )
+        verify(presentationStore).removeAcceptedOneTimeIds(LOCAL_IDENTITY, setOf(request.id))
+        assertEquals(PaymentRequestLifecycleState.PROPOSED, sut.paymentRequestHistory.value.single().lifecycleState)
+        assertTrue(sut.ensurePaymentAllowed(request).isFailure)
+    }
+
+    @Test
+    fun `final authorization rejects a peer blocked after atomic acceptance`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        whenever(paykitSdkService.acceptPaymentRequest(any(), any(), any()))
+            .thenReturn(record.copy(state = PaymentRequestLifecycleState.ACCEPTED))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        sut.setPaymentSubmissionActive(true)
+        sut.accept(request).getOrThrow()
+        clearInvocations(paykitSdkService)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED)),
+        )
+
+        assertEquals(PaykitPaymentRequestError.RequestUnavailable, sut.ensurePaymentAllowed(request).exceptionOrNull())
+
+        verify(paykitSdkService).linkedPeers()
+        verify(paykitSdkService, never()).acceptPaymentRequest(any(), any(), any())
     }
 
     @Test
@@ -1480,6 +1566,41 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFalse(backgroundWork.isCompleted)
         sut.setPaymentSubmissionActive(false)
         backgroundWork.await()
+    }
+
+    @Test
+    fun `automatic acceptance saves this install as owner before it runs and keeps the request payable here`() = test {
+        val proposed = paymentRequestRecord()
+        val accepted = proposed.copy(state = PaymentRequestLifecycleState.ACCEPTED)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(proposed))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        val requestId = PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY)
+
+        val result = sut.acceptOnThisInstall(request) {
+            verify(presentationStore).addAcceptedOneTimeId(LOCAL_IDENTITY, requestId)
+            "accepted"
+        }
+
+        assertEquals("accepted", result.getOrThrow())
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(accepted))
+        sut.refresh().getOrThrow()
+        sut.ensurePaymentAllowed(request).getOrThrow()
+    }
+
+    @Test
+    fun `failed automatic acceptance drops this install as owner`() = test {
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(paymentRequestRecord()))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+
+        val result = sut.acceptOnThisInstall<Unit>(request) { error("claimed by another app") }
+
+        assertTrue(result.isFailure)
+        verify(presentationStore).removeAcceptedOneTimeIds(
+            LOCAL_IDENTITY,
+            setOf(PaykitPaymentRequestId(PAYMENT_REQUEST_ID, COUNTERPARTY)),
+        )
     }
 
     @Test

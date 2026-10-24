@@ -3,6 +3,7 @@ package to.bitkit.services
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitSdk
+import com.synonym.paykit.PaymentRequestRead
 import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.PubkySessionAccess
 import com.synonym.paykit.PubkySessionBootstrap
@@ -47,35 +48,50 @@ class PaykitSdkServiceWipeTest {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun `wipe drains a cancelled active identity read and rejects queued work`() = runTest {
-        val sdk = mock<PaykitSdk>()
-        val releaseRead = CompletableDeferred<Unit>()
-        val events = mutableListOf<String>()
-        whenever { sdk.identityStatus() }.doSuspendableAnswer {
-            releaseRead.await()
-            events += "read finished"
-            IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
-        }
-        whenever { sdk.contactRecords() }.thenReturn(emptyList())
-        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-        val read = async { service.identityStatus() }
-        runCurrent()
-        val queued = async { assertFailsWith<PaykitException.Storage> { service.contactRecords() } }
-        runCurrent()
-        read.cancel()
-        val wipe = async { service.withWalletWipe { events += "wipe" } }
-        runCurrent()
-        assertFalse(read.isCompleted)
-        assertFalse(wipe.isCompleted)
-        assertEquals(emptyList(), events)
-        releaseRead.complete(Unit)
+    fun `wipe drains a cancelled active read and rejects queued work`() = runTest {
+        for (requests in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            val releaseRead = CompletableDeferred<Unit>()
+            val events = mutableListOf<String>()
+            whenever { sdk.identityStatus() }.doSuspendableAnswer {
+                releaseRead.await()
+                events += "read finished"
+                IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+            }
+            whenever { sdk.readPaymentRequests(RING_PUBKY, null) }.doSuspendableAnswer {
+                releaseRead.await()
+                events += "read finished"
+                PaymentRequestRead(
+                    IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE),
+                    emptyList(),
+                )
+            }
+            whenever { sdk.contactRecords() }.thenReturn(emptyList())
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val read = async { if (requests) service.readPaymentRequests(RING_PUBKY) else service.identityStatus() }
+            runCurrent()
+            val queued = async {
+                assertFailsWith<PaykitException.Storage> {
+                    if (requests) service.readPaymentRequests(RING_PUBKY) else service.contactRecords()
+                }
+            }
+            runCurrent()
+            read.cancel()
+            val wipe = async { service.withWalletWipe { events += "wipe" } }
+            runCurrent()
+            assertFalse(read.isCompleted)
+            assertFalse(wipe.isCompleted)
+            assertEquals(emptyList(), events)
+            releaseRead.complete(Unit)
 
-        assertFailsWith<CancellationException> { read.await() }
-        assertEquals("wallet_wipe_in_progress", queued.await().code)
-        wipe.await()
-        assertEquals(listOf("read finished", "wipe"), events)
-        verify(sdk, never()).contactRecords()
-        assertEquals(emptyList(), service.contactRecords())
+            assertFailsWith<CancellationException> { read.await() }
+            assertEquals("wallet_wipe_in_progress", queued.await().code)
+            wipe.await()
+            assertEquals(listOf("read finished", "wipe"), events)
+            verify(sdk, never()).contactRecords()
+            verify(sdk, times(if (requests) 1 else 0)).readPaymentRequests(RING_PUBKY, null)
+            assertEquals(emptyList(), service.contactRecords())
+        }
     }
 
     @Test

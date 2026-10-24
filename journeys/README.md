@@ -123,7 +123,7 @@ journey PR, which is what made this file conflict on every merge.
 
 | Capability | Provided by |
 | --- | --- |
-| USDT wallet navigation without funding | an onboarded build with USDT configured; provider errors may remain visible while offline — [USDT QA](../docs/usdt-qa.md) |
+| USDT wallet navigation without funding | an onboarded build with USDT configured; wallet syncing remains silent while offline; payment-action errors remain available — [USDT QA](../docs/usdt-qa.md) |
 | Controlled USDT quotes, provider history, funded submission and recovery | an explicitly configured local USDT gateway/RPC/bundler fixture with owned test accounts and funds; absent from the standard journey environment. Report these steps as blocked unless that setup and transfer authorization are supplied — [USDT QA](../docs/usdt-qa.md) |
 | On-chain funds and blocks on regtest | `./lsp` deposit and mine against the staging LSP — [Backend preconditions](#backend-preconditions) |
 | Several separate on-chain UTXOs to choose between | three or more `./lsp` deposits, each mined, so manual coin selection has inputs to list — [Backend preconditions](#backend-preconditions) |
@@ -223,11 +223,15 @@ subscription payment-method switches: preserve the originally entered denominati
 
 ### Paykit payment-method review
 
-In `paykit-quoted-usdt.xml`, Android returns to Amount whenever a quoted request changes payment
-method. iOS keeps confirmation open when the exact amount, quote and validity window are unchanged
-and still valid; changed or expired terms return to Amount. Verify the selected method and exact
-payable amount on both platforms, and close without signing. The optional Savings/Spending
-confirmation check requires existing Bitcoin regtest funds and a usable Lightning channel.
+In `paykit-quoted-usdt.xml`, Android keeps confirmation open when a Savings/Spending switch can
+bind valid quoted Bitcoin terms, showing the selected method's exact amount and refreshed fees.
+Unavailable or expired terms, or a Lightning amount below its minimum, return to Amount for review.
+Opening Amount manually after a valid switch and then tapping Back closes the sheet. These checks
+complement `payment-requests/fixed-quoted-confirmation.xml`. iOS keeps confirmation open when the
+exact amount, quote and validity window are unchanged and still valid; changed or expired terms
+return to Amount. Verify the selected method and exact payable amount on both platforms, and close
+without signing. The optional Savings/Spending confirmation check requires existing Bitcoin
+regtest funds and a usable Lightning channel.
 
 ### USDT full-balance errors
 

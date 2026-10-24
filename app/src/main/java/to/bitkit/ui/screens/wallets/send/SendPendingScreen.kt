@@ -37,9 +37,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
+import to.bitkit.ext.withPaymentReview
 import to.bitkit.models.Toast
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.OnchainPreparedReceipt
@@ -93,6 +95,7 @@ fun SendPendingScreen(
     onRecovered: (String, Long) -> Unit,
     savedStateHandle: SavedStateHandle,
     onNavigateToPin: () -> Unit,
+    beginPaymentReview: () -> (() -> Unit),
     onRecoveredTransfer: (OnchainSendAttempt) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -143,6 +146,8 @@ fun SendPendingScreen(
         savedStateHandle,
         onNavigateToPin,
         viewModel,
+        beginPaymentReview,
+        showAbandonConfirmation,
         { rate, approve -> viewModel.retryOriginal(rate) { attempt, fee -> retryOriginal(attempt, fee, approve) } },
     ) { onRetry ->
         SendPendingContent(
@@ -229,6 +234,8 @@ private fun RecoveryAuthorization(
     savedStateHandle: SavedStateHandle,
     onNavigateToPin: () -> Unit,
     viewModel: SendPendingViewModel,
+    beginPaymentReview: () -> (() -> Unit),
+    showAbandonConfirmation: Boolean,
     retryOriginal: (ULong, suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit) -> Unit,
     content: @Composable (() -> Unit) -> Unit,
 ) {
@@ -239,6 +246,13 @@ private fun RecoveryAuthorization(
     val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val reviewing = (showFeeApproval && uiState.recoveryAttempt != null) ||
+        showAbandonConfirmation || uiState.recoveryApproval != null
+    LaunchedEffect(reviewing, lifecycle, beginPaymentReview) {
+        if (!reviewing) return@LaunchedEffect
+        lifecycle.withPaymentReview(beginPaymentReview)
+    }
     LaunchedEffect(savedStateHandle) {
         savedStateHandle.getStateFlow<Boolean?>(RECOVERY_PIN_CHECK_RESULT_KEY, null)
             .filterNotNull().collect { successful ->

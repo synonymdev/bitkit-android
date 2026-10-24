@@ -97,7 +97,6 @@ import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
-import java.text.DecimalFormatSymbols
 import kotlin.time.Duration.Companion.seconds
 
 @Composable
@@ -123,6 +122,7 @@ internal fun UsdtPaymentContent(
     amountEditable: Boolean = true,
     isPaymentRequest: Boolean = false,
     paymentRequestNote: String? = null,
+    isMerchantRequest: Boolean = false,
     contact: PubkyProfile? = null,
     onDestinationChange: ((UsdtDestination) -> Unit)? = null,
     destinations: ImmutableList<UsdtDestination> = Env.usdtDestinations.toImmutableList(),
@@ -209,6 +209,7 @@ internal fun UsdtPaymentContent(
                 state,
                 isPaymentRequest,
                 paymentRequestNote,
+                isMerchantRequest,
                 contact,
                 onConfirm,
                 completed,
@@ -510,7 +511,6 @@ private fun UsdtAmountContent(
             HorizontalDivider(color = Colors.White10)
             NumberPad(
                 type = NumberPadType.DECIMAL,
-                decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
                 availableHeight = maxHeight,
                 enabled = !state.busy && amountEditable,
                 onDeleteLongPress = { onAmountChange("") },
@@ -536,6 +536,7 @@ private fun UsdtConfirmation(
     state: UsdtSendState,
     isPaymentRequest: Boolean,
     paymentRequestNote: String?,
+    isMerchantRequest: Boolean,
     contact: PubkyProfile?,
     onConfirm: () -> Unit,
     completed: Boolean,
@@ -557,6 +558,7 @@ private fun UsdtConfirmation(
                     contact,
                     note,
                     isPaymentRequest,
+                    isMerchantRequest,
                     showDetails,
                 ) {
                     if (!state.busy && !completed) onEditAmount()
@@ -643,6 +645,7 @@ private fun UsdtReviewHeader(
     contact: PubkyProfile?,
     note: String?,
     isPaymentRequest: Boolean,
+    isMerchantRequest: Boolean,
     showDetails: Boolean,
     modifier: Modifier = Modifier,
     onEditAmount: () -> Unit,
@@ -655,7 +658,7 @@ private fun UsdtReviewHeader(
         )
         VerticalSpacer(24.dp)
         if (showDetails) {
-            UsdtQuoteDetails(quote, contact)
+            UsdtQuoteDetails(quote, contact, isMerchantRequest)
             note?.let {
                 VerticalSpacer(16.dp)
                 PaymentRequestInvoiceNote(it)
@@ -668,7 +671,7 @@ private fun UsdtReviewHeader(
 }
 
 @Composable
-private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
+private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?, isMerchantRequest: Boolean) {
     var showFullAddress by rememberSaveable(quote.recipient) { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         UsdtDetailField(caption = stringResource(R.string.usdt__pay_from), modifier = Modifier.weight(1f)) {
@@ -723,7 +726,15 @@ private fun UsdtQuoteDetails(quote: UsdtQuote, contact: PubkyProfile?) {
         VerticalSpacer(16.dp)
     }
     if (contact != null) {
-        SendCell(caption = stringResource(R.string.wallet__payment_request_contact)) {
+        SendCell(
+            caption = stringResource(
+                if (isMerchantRequest) {
+                    R.string.wallet__send_to
+                } else {
+                    R.string.wallet__payment_request_contact
+                }
+            )
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PubkyContactAvatar(profile = contact, size = 20.dp)
                 HorizontalSpacer(4.dp)

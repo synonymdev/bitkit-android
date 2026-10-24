@@ -10,6 +10,8 @@
     <action>Tap Close and observe the screen for five seconds</action>
     <action>Verify the send sheet is closed and no send error toast appears</action>
     <action>Verify the payer's Activity contains exactly one outgoing payment for this request</action>
+    <action>On the requester, verify the original request records the completed Lightning payment without another payment from the payer</action>
+    <action>On the payer, reopen the app and verify the completed request does not send another payment</action>
     <action>On the requester, send the payer a new Lightning Payment Request for 5,000 sats</action>
     <action>On the payer, verify the Payment Request confirmation screen (id "PaymentRequestConfirm") shows the new amount and Spending is selected</action>
     <action>Close the confirmation without paying and observe the screen for five seconds</action>

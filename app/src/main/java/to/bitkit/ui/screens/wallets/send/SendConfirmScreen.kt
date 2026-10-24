@@ -602,7 +602,7 @@ private fun OnChainDetails(
             }
             SendCell(
                 caption = stringResource(
-                    if (uiState.isOneOffPaymentRequest) {
+                    if (uiState.isOneOffPaymentRequest && !uiState.isMerchantPaymentRequest) {
                         R.string.wallet__payment_request_contact
                     } else {
                         R.string.wallet__send_to
@@ -753,7 +753,7 @@ private fun LightningDetails(
             }
             SendCell(
                 caption = stringResource(
-                    if (uiState.isOneOffPaymentRequest) {
+                    if (uiState.isOneOffPaymentRequest && !uiState.isMerchantPaymentRequest) {
                         R.string.wallet__payment_request_contact
                     } else {
                         R.string.wallet__send_to

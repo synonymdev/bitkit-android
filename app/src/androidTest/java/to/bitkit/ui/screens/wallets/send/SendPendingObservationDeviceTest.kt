@@ -151,6 +151,7 @@ class SendPendingObservationDeviceTest {
                                 onRecovered = { txid, amount -> recovered = txid to amount },
                                 savedStateHandle = SavedStateHandle(),
                                 onNavigateToPin = { error("Observation must not request spend authentication") },
+                                beginPaymentReview = { error("Observation must not hold payment review") },
                             )
                         } else {
                             Text("Original payment recovered")

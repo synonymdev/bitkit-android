@@ -2,6 +2,15 @@ package to.bitkit.services
 
 import android.content.Context
 import androidx.annotation.VisibleForTesting
+import com.synonym.paykit.AllowanceAccountingReconciliation
+import com.synonym.paykit.AllowanceAccountingState
+import com.synonym.paykit.AllowanceAssociationRecord
+import com.synonym.paykit.AllowanceCandidate
+import com.synonym.paykit.AllowanceFilter
+import com.synonym.paykit.AllowanceLocalRole
+import com.synonym.paykit.AllowanceRecord
+import com.synonym.paykit.AllowanceSelectionInput
+import com.synonym.paykit.AllowanceTerms
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.EndpointSyncReport
@@ -20,8 +29,14 @@ import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitSdkDefaults
 import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentAmountContext
+import com.synonym.paykit.PaymentAttemptDecision
+import com.synonym.paykit.PaymentAttemptRecord
 import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentDeadline
+import com.synonym.paykit.PaymentExecutionChecks
+import com.synonym.paykit.PaymentOccurrence
+import com.synonym.paykit.PaymentOccurrenceRecord
+import com.synonym.paykit.PaymentOutcomeReport
 import com.synonym.paykit.PaymentPayload
 import com.synonym.paykit.PaymentProofSubmission
 import com.synonym.paykit.PaymentReference
@@ -29,12 +44,15 @@ import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestFilter
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
+import com.synonym.paykit.PaymentRequestRead
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
+import com.synonym.paykit.PaymentRequestScope
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PaymentTarget
 import com.synonym.paykit.PrivateContactPaymentResolution
 import com.synonym.paykit.PrivateJsonObject
+import com.synonym.paykit.PrivateMessageSchedulingSnapshot
 import com.synonym.paykit.PrivatePaymentEndpointCandidate
 import com.synonym.paykit.PrivatePaymentEndpointReservationCancellation
 import com.synonym.paykit.PrivatePaymentEndpointSelectionRequest
@@ -74,6 +92,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -89,6 +108,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.BuildConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
@@ -108,18 +128,22 @@ import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PaykitBillingPeriod
+import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import kotlin.time.TimeSource
 
 data class PaykitPreparedPrivateContactPayment(
     val resolution: PaykitPrivateContactPaymentResolution,
@@ -272,6 +296,7 @@ class PaykitSdkService @Inject constructor(
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
     private val _isPaymentSubmissionActive = MutableStateFlow(false)
+    private val paymentReviews = mutableSetOf<Any>()
     val isPaymentSubmissionActive: StateFlow<Boolean> = _isPaymentSubmissionActive.asStateFlow()
 
     private var sdkFactory: () -> PaykitSdk = {
@@ -309,6 +334,12 @@ class PaykitSdkService @Inject constructor(
 
     fun setPaymentSubmissionActive(active: Boolean) {
         _isPaymentSubmissionActive.update { active }
+    }
+
+    fun beginPaymentReview(): () -> Unit {
+        val review = Any()
+        synchronized(paymentReviews) { paymentReviews.add(review) }
+        return { synchronized(paymentReviews) { paymentReviews.remove(review) } }
     }
 
     suspend fun initializeAndImportSession(secret: String): Result<PubkySessionBootstrapResult> {
@@ -940,7 +971,8 @@ class PaykitSdkService @Inject constructor(
     ): List<PrivateStreamCounterpartyIntakeReport> {
         isSetup.await()
         return operationLock.withLock(priority) {
-            withStateRevisionTracking { handle ->
+            checkRefreshAdmission(priority)
+            withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(priority) }) { handle ->
                 completeSdkCall { handle.receivePrivateMessagesFromLinkedPeers() }
             }
         }
@@ -974,10 +1006,10 @@ class PaykitSdkService @Inject constructor(
         var report: OutboundPrivateSendReport?
         do {
             if (deferDuringPayment) isPaymentSubmissionActive.first { !it }
-            report = operationLock.withLock(priority) {
+            report = measuredOperation("processOutboundPrivateMessages", priority) {
                 if (deferDuringPayment) {
                     check(runtimeGeneration == generation) { "Paykit runtime changed before peer delivery" }
-                    if (isPaymentSubmissionActive.value) return@withLock null
+                    if (isPaymentSubmissionActive.value) return@measuredOperation null
                 }
                 withStateRevisionTracking { handle ->
                     if (expectedIdentity != null) {
@@ -1002,13 +1034,24 @@ class PaykitSdkService @Inject constructor(
     ): List<OutboundPrivateCounterpartySendReport> {
         isSetup.await()
         return operationLock.withLock(priority) {
-            withStateRevisionTracking { handle ->
+            checkRefreshAdmission(priority)
+            withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(priority) }) { handle ->
                 completeSdkCall { handle.processPendingPrivateMessages() }
             }
         }
     }
 
     suspend fun paymentRequests(): List<PaymentRequestRecord> = allPaymentRequests().filter(::isBitkitPaymentRequest)
+
+    suspend fun readPaymentRequests(counterparty: String, expectedIdentity: String? = null): PaymentRequestRead {
+        isSetup.await()
+        return measuredOperation("readPaymentRequests") {
+            withPaykitKey { handle ->
+                val read = retryContendedRead { handle.readPaymentRequests(counterparty, expectedIdentity) }
+                read.copy(paymentRequests = read.paymentRequests.filter(::isBitkitPaymentRequest))
+            }
+        }
+    }
 
     /** Refreshes display projections only; payment authority remains with the action APIs. */
     internal suspend fun observeState(
@@ -1019,7 +1062,9 @@ class PaykitSdkService @Inject constructor(
         val generation = runtimeGeneration
         return operationLock.withLock(priority) {
             check(runtimeGeneration == generation) { "Paykit runtime changed before observation" }
+            checkRefreshAdmission(priority)
             withPaykitKey { handle ->
+                checkRefreshAdmission(priority)
                 val observation = completeSdkCall { handle.observeState() }
                 check(PubkyPublicKeyFormat.matches(observation.publicKey, expectedIdentity)) {
                     "Paykit observation identity changed"
@@ -1043,7 +1088,7 @@ class PaykitSdkService @Inject constructor(
         priority: Priority,
     ): List<PaymentRequestRecord> {
         isSetup.await()
-        return operationLock.withLock(priority) {
+        return measuredOperation("allPaymentRequests", priority) {
             withPaykitKey { handle ->
                 if (expectedIdentity != null) {
                     val identity = completeSdkCall { handle.identityStatus() }?.publicKey
@@ -1070,8 +1115,8 @@ class PaykitSdkService @Inject constructor(
 
     internal suspend fun identityStatus(priority: Priority): IdentityStatus? {
         isSetup.await()
-        return operationLock.withLock(priority) {
-            withPaykitKey { completeSdkCall { it.identityStatus() } }
+        return measuredOperation("identityStatus", priority) {
+            withPaykitKey { handle -> retryContendedRead { handle.identityStatus() } }
         }
     }
 
@@ -1132,7 +1177,7 @@ class PaykitSdkService @Inject constructor(
         expectedProposalStreamItemId: ULong,
     ): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock(Priority.Interactive) {
+        return measuredOperation("acceptPaymentRequest", Priority.Interactive) {
             withStateRevisionTracking { handle ->
                 completeSdkCall {
                     handle.claimAndAcceptPaymentRequest(counterparty, paymentRequestId, expectedProposalStreamItemId)
@@ -1143,14 +1188,14 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun claimPaymentRequestForExecution(counterparty: String, paymentRequestId: String): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock(Priority.Interactive) {
+        return measuredOperation("claimPaymentRequestForExecution", Priority.Interactive) {
             withStateRevisionTracking {
                 completeSdkCall { it.claimPaymentRequestForExecution(counterparty, paymentRequestId) }
             }
         }
     }
 
-    suspend fun submitPaymentProof(
+    internal suspend fun submitPaymentProof(
         counterparty: String,
         paymentRequestId: String,
         paymentAppId: String,
@@ -1158,9 +1203,11 @@ class PaykitSdkService @Inject constructor(
         proofJson: String,
         billingPeriod: PaykitBillingPeriod? = null,
         conversionQuoteId: String? = null,
+        allowanceId: String? = null,
+        priority: Priority = Priority.Ordered,
     ): PaymentRequestRecord {
         isSetup.await()
-        return operationLock.withLock {
+        return measuredOperation("submitPaymentProof", priority) {
             withStateRevisionTracking { handle ->
                 completeSdkCall {
                     handle.submitPaymentProof(
@@ -1170,12 +1217,165 @@ class PaykitSdkService @Inject constructor(
                             billingPeriod = billingPeriod?.sdkValue,
                             paymentAppId = paymentAppId,
                             paymentEndpointIdentifier = paymentEndpointIdentifier,
-                            allowanceId = null,
+                            allowanceId = allowanceId,
                             conversionQuoteId = conversionQuoteId,
                             proof = PrivateJsonObject(proofJson),
                         ),
                     )
                 }
+            }
+        }
+    }
+
+    suspend fun listAllowances(filter: AllowanceFilter): List<AllowanceRecord> {
+        isSetup.await()
+        return operationLock.withLock {
+            withPaykitKey { completeSdkCall { it.listAllowances(filter) } }
+        }
+    }
+
+    suspend fun proposeAllowance(
+        counterparty: String,
+        localRole: AllowanceLocalRole,
+        terms: AllowanceTerms,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.proposeAllowance(counterparty, localRole, terms) }
+            }
+        }
+    }
+
+    suspend fun acceptAllowance(
+        counterparty: String,
+        allowanceId: String,
+        expectedProposalStreamItemId: ULong,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationLock.withLock(Priority.Interactive) {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.acceptAllowance(counterparty, allowanceId, expectedProposalStreamItemId) }
+            }
+        }
+    }
+
+    suspend fun rejectAllowance(
+        counterparty: String,
+        allowanceId: String,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.rejectAllowance(counterparty, allowanceId) }
+            }
+        }
+    }
+
+    suspend fun endAllowance(
+        counterparty: String,
+        allowanceId: String,
+    ): AllowanceRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.endAllowance(counterparty, allowanceId) }
+            }
+        }
+    }
+
+    suspend fun allowanceAccountingState(): AllowanceAccountingState? {
+        isSetup.await()
+        return operationLock.withLock {
+            withPaykitKey { completeSdkCall { it.allowanceAccountingState() } }
+        }
+    }
+
+    suspend fun reconcileAllowanceAccounting(
+        reconciliation: AllowanceAccountingReconciliation,
+    ): AllowanceAccountingState {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.reconcileAllowanceAccounting(reconciliation) }
+            }
+        }
+    }
+
+    suspend fun evaluateAllowanceCandidates(
+        scope: PaymentRequestScope,
+        trustedTime: String,
+    ): List<AllowanceCandidate> {
+        isSetup.await()
+        return operationLock.withLock {
+            withPaykitKey { completeSdkCall { it.evaluateAllowanceCandidates(scope, trustedTime) } }
+        }
+    }
+
+    suspend fun acceptPaymentRequestAutomatically(
+        scope: PaymentRequestScope,
+        selection: AllowanceSelectionInput,
+        checks: PaymentExecutionChecks,
+    ): AllowanceAssociationRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.acceptPaymentRequestAutomatically(scope, selection, checks) }
+            }
+        }
+    }
+
+    suspend fun reserveAutomaticPayment(
+        occurrence: PaymentOccurrence,
+        expectedAssociationRevision: ULong,
+        checks: PaymentExecutionChecks,
+    ): PaymentAttemptDecision {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.reserveAutomaticPayment(occurrence, expectedAssociationRevision, checks) }
+            }
+        }
+    }
+
+    suspend fun reserveManualPayment(
+        occurrence: PaymentOccurrence,
+        checks: PaymentExecutionChecks,
+    ): PaymentAttemptDecision {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.reserveManualPayment(occurrence, checks) }
+            }
+        }
+    }
+
+    suspend fun beginPaymentExecution(
+        attemptId: String,
+        checks: PaymentExecutionChecks,
+    ): PaymentAttemptDecision {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.beginPaymentExecution(attemptId, checks) }
+            }
+        }
+    }
+
+    suspend fun recordPaymentOutcome(report: PaymentOutcomeReport): PaymentAttemptRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.recordPaymentOutcome(report) }
+            }
+        }
+    }
+
+    suspend fun markPaymentManualOnly(occurrence: PaymentOccurrence): PaymentOccurrenceRecord {
+        isSetup.await()
+        return operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                completeSdkCall { handle.markPaymentManualOnly(occurrence) }
             }
         }
     }
@@ -1211,7 +1411,16 @@ class PaykitSdkService @Inject constructor(
     internal suspend fun linkedPeers(priority: Priority): List<LinkedPeerRecord> {
         isSetup.await()
         return operationLock.withLock(priority) {
-            withPaykitKey { completeSdkCall { it.linkedPeers() } }
+            withPaykitKey { handle -> retryContendedRead { handle.linkedPeers() } }
+        }
+    }
+
+    internal suspend fun privateMessageSchedulingSnapshot(
+        priority: Priority = Priority.Ordered,
+    ): PrivateMessageSchedulingSnapshot {
+        isSetup.await()
+        return operationLock.withLock(priority) {
+            withPaykitKey { handle -> retryContendedRead { handle.privateMessageSchedulingSnapshot() } }
         }
     }
 
@@ -1486,8 +1695,34 @@ class PaykitSdkService @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
+    private suspend fun <T> measuredOperation(
+        name: String,
+        priority: Priority = Priority.Ordered,
+        operation: suspend () -> T,
+    ): T {
+        val trace = UUID.randomUUID()
+        val started = TimeSource.Monotonic.markNow()
+        return operationLock.withLock(priority) {
+            val queue = started.elapsedNow()
+            val admitted = TimeSource.Monotonic.markNow()
+            try {
+                operation()
+            } finally {
+                if (BuildConfig.DEBUG) {
+                    Logger.debug(
+                        "Finished Paykit operation '$name' trace='$trace' " +
+                            "queue='$queue' work='${admitted.elapsedNow()}'",
+                        context = TAG,
+                    )
+                }
+            }
+        }
+    }
+
     private suspend fun <T> withPaykitKey(block: suspend (PaykitSdk) -> T): T {
+        val started = TimeSource.Monotonic.markNow()
         refreshPaykitKey()
+        if (BuildConfig.DEBUG) Logger.debug("Prepared Paykit key duration='${started.elapsedNow()}'", context = TAG)
         return runSuspendCatching { block(handle()) }
             .onFailure(::invalidatePaykitKeyIfNeeded)
             .getOrThrow()
@@ -1499,12 +1734,29 @@ class PaykitSdkService @Inject constructor(
         cachedBackupState = null
     }
 
-    private suspend fun <T> withStateRevisionTracking(block: suspend (PaykitSdk) -> T): T = withPaykitKey { handle ->
+    private fun checkRefreshAdmission(priority: Priority) {
+        val reviewing = synchronized(paymentReviews) { paymentReviews.isNotEmpty() }
+        if (priority == Priority.Background && (isPaymentSubmissionActive.value || reviewing)) {
+            throw PaykitPaymentRequestError.OperationInProgress
+        }
+    }
+
+    private suspend fun <T> withStateRevisionTracking(
+        beforeOperation: suspend () -> Unit = {},
+        block: suspend (PaykitSdk) -> T,
+    ): T = withPaykitKey { handle ->
         withPaykitBackupStateTracking(
             readRevision = {
-                runSuspendCatching { completeSdkCall { handle.backupStateRevision() } }
-                    .onFailure(::invalidatePaykitKeyIfNeeded)
-                    .getOrThrow()
+                val started = TimeSource.Monotonic.markNow()
+                try {
+                    runSuspendCatching { completeSdkCall { handle.backupStateRevision() } }
+                        .onFailure(::invalidatePaykitKeyIfNeeded)
+                        .getOrThrow()
+                } finally {
+                    if (BuildConfig.DEBUG) {
+                        Logger.debug("Read Paykit backup revision duration='${started.elapsedNow()}'", context = TAG)
+                    }
+                }
             },
             readStateRevision = { handle.stateRevision() },
             readObservedSnapshot = {
@@ -1515,6 +1767,7 @@ class PaykitSdkService @Inject constructor(
             cachedSnapshot = cachedBackupState,
             onSnapshot = { cachedBackupState = it },
             onChange = ::notifyBackupStateChanged,
+            beforeOperation = beforeOperation,
         ) {
             block(handle)
         }
@@ -1532,6 +1785,13 @@ class PaykitSdkService @Inject constructor(
         currentCoroutineContext().ensureActive()
         return result.getOrThrow()
     }
+
+    private suspend fun <T> retryContendedRead(operation: suspend () -> T): T =
+        runSuspendCatching { completeSdkCall(operation) }.getOrElse {
+            if (it !is PaykitException.SharedStateBusy) throw it
+            delay(SHARED_STATE_READ_RETRY_DELAY)
+            completeSdkCall(operation)
+        }
 
     /**
      * Runs [block] on the SDK instance without [operationLock]. [block] may only call unauthenticated public
@@ -1607,6 +1867,9 @@ class PaykitSdkService @Inject constructor(
         /** Maximum time identity maintenance may delay its caller. */
         private val IDENTITY_REPUBLISH_WAIT_TIMEOUT = 5.seconds
 
+        /** Delay before the single retry of a contended shared state read. */
+        private val SHARED_STATE_READ_RETRY_DELAY = 250.milliseconds
+
         /** Maximum duration of a public payment-request capability lookup. */
         private val PAYMENT_REQUEST_DISCOVERY_TIMEOUT = 5.seconds
 
@@ -1656,10 +1919,12 @@ internal suspend fun <T> withPaykitBackupStateTracking(
     cachedSnapshot: PaykitBackupStateSnapshot? = null,
     onSnapshot: (PaykitBackupStateSnapshot?) -> Unit = {},
     onChange: () -> Unit,
+    beforeOperation: suspend () -> Unit = {},
     operation: suspend () -> T,
 ): T {
     val previousRevision = cachedSnapshot?.backupRevision
         ?: runSuspendCatching { readRevision() }.getOrNull()
+    beforeOperation()
     var succeeded = false
     return try {
         operation().also { succeeded = true }

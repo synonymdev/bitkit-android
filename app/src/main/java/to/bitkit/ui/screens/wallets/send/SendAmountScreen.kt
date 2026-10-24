@@ -106,7 +106,6 @@ import to.bitkit.viewmodels.SendFundingSource
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.previewAmountInputViewModel
-import java.text.DecimalFormatSymbols
 
 /** Opacity of unavailable payment sources in the balance selector. */
 private const val DISABLED_FUNDING_SOURCE_ALPHA = 0.30f
@@ -426,7 +425,6 @@ private fun SendAmountNodeRunning(
             if (uiState.paykitUsesUsdt) {
                 NumberPad(
                     type = NumberPadType.DECIMAL,
-                    decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
                     availableHeight = maxHeight,
                     enabled = uiState.isAmountEditable,
                     onPress = {
