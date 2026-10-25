@@ -5,13 +5,18 @@ import com.synonym.bitkitcore.UsdtException
 import com.synonym.vssclient.VssException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +28,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -82,6 +88,7 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -142,18 +149,29 @@ class BackupRepo @Inject constructor(
     private val usdtRecoveryBackup = UsdtRecoveryBackupStore(vssBackupClient)
     private val scope = appScope(ioDispatcher, TAG)
 
+    private val lifecycleLock = Any()
+    private val resetMutex = Mutex()
+    private var generation = 0L
+    private var resetting = false
+
+    // Reset owns all pending work; stopping observation only cancels its child scope.
+    // Retiring observation parents remain attached until their cancellation cleanup finishes.
+    private var pendingScope = newBackupScope(scope)
+    private var observation: Observation? = null
+    private val retiringObservations = mutableSetOf<Job>()
     private val backupJobs = mutableMapOf<BackupCategory, Job>()
-    private val statusObserverJobs = mutableListOf<Job>()
-    private val dataListenerJobs = mutableListOf<Job>()
-    private var periodicCheckJob: Job? = null
+    private val categoryMutexes = BackupCategory.entries.associateWith { Mutex() }
 
     private val runningBackups = ConcurrentHashMap.newKeySet<BackupCategory>() // Tracks active jobs since app start
     private val failedBackupRequired = ConcurrentHashMap<BackupCategory, Long>()
     private val temporaryFailureRetries = ConcurrentHashMap<BackupCategory, Int>()
     private val temporaryFailureSince = ConcurrentHashMap<BackupCategory, Long>()
-
-    private var isObserving = false
     private var lastNotificationTime = 0L
+
+    private class Observation(val scope: CoroutineScope, val generation: Long)
+
+    private fun newBackupScope(parent: CoroutineScope) =
+        CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext[Job]))
 
     private val _isRestoring = MutableStateFlow(false)
     val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
@@ -163,10 +181,34 @@ class BackupRepo @Inject constructor(
 
     private val restorePendingUntil = MutableStateFlow(0L)
 
-    fun reset() {
-        stopObservingBackups()
-        vssBackupClient.reset()
-        vssBackupClientLdk.reset()
+    suspend fun reset() = withContext(ioDispatcher) {
+        resetMutex.withLock {
+            val pending = synchronized(lifecycleLock) {
+                resetting = true
+                observation = null
+                pendingScope.coroutineContext[Job]
+            }
+            withContext(NonCancellable) {
+                try {
+                    pending?.cancel()
+                    pending?.join()
+                    synchronized(lifecycleLock) { generation += 1 }
+                    vssBackupClient.reset()
+                    vssBackupClientLdk.reset()
+                    synchronized(lifecycleLock) {
+                        backupJobs.clear()
+                        failedBackupRequired.clear()
+                        temporaryFailureRetries.clear()
+                        temporaryFailureSince.clear()
+                    }
+                } finally {
+                    synchronized(lifecycleLock) {
+                        pendingScope = newBackupScope(scope)
+                        resetting = false
+                    }
+                }
+            }
+        }
     }
 
     fun setWiping(isWiping: Boolean) = _isWiping.update { isWiping }
@@ -208,16 +250,26 @@ class BackupRepo @Inject constructor(
             failedBackupRequired[category] != this.required
 
     fun startObservingBackups() {
-        if (isObserving) return
-        if (_isWiping.value) {
-            Logger.debug("Skipped observing backups while wiping", context = TAG)
-            return
+        val startup = synchronized(lifecycleLock) {
+            if (observation != null || resetting || _isWiping.value) return
+            val previous = retiringObservations.toList()
+            val owner = Observation(newBackupScope(pendingScope), generation)
+            observation = owner
+            val parent = checkNotNull(owner.scope.coroutineContext[Job])
+            retiringObservations.add(parent)
+            parent.invokeOnCompletion { synchronized(lifecycleLock) { retiringObservations.remove(parent) } }
+            owner.scope.launch(start = CoroutineStart.LAZY) {
+                previous.joinAll()
+                currentCoroutineContext().ensureActive()
+                startObservation(owner)
+            }
         }
+        startup.start()
+    }
 
-        isObserving = true
+    private fun startObservation(owner: Observation) {
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
-
-        scope.launch {
+        owner.scope.launch {
             vssBackupClient.setupWithRetry {
                 onSuccess = { attempt ->
                     Logger.debug("VSS client setup succeeded on attempt $attempt", context = TAG)
@@ -232,15 +284,16 @@ class BackupRepo @Inject constructor(
                     Logger.warn("VSS client setup failed after $maxAttempts attempts", context = TAG)
                 }
             }.onSuccess {
-                scope.launch { vssBackupClientLdk.setup() }
+                currentCoroutineContext().ensureActive()
+                vssBackupClientLdk.setup()
             }
         }
 
-        scope.launch {
+        owner.scope.launch {
             BackupCategory.entries.forEach { category ->
                 if (category !in runningBackups) {
-                    cacheStore.updateBackupStatus(category) { status ->
-                        if (status.running) {
+                    updateBackupStatus(category, owner.generation) { status ->
+                        if (status.running && category !in runningBackups) {
                             Logger.debug("Clearing stale running flag for: '$category'", context = TAG)
                             status.copy(running = false)
                         } else {
@@ -251,39 +304,23 @@ class BackupRepo @Inject constructor(
             }
         }
 
-        startBackupStatusObservers()
-        startDataStoreListeners()
-        startPeriodicBackupFailureCheck()
+        startBackupStatusObservers(owner)
+        startDataStoreListeners(owner)
+        startPeriodicBackupFailureCheck(owner)
     }
 
     fun stopObservingBackups() {
-        if (!isObserving) return
-
-        isObserving = false
-
-        // Cancel all backup jobs
-        backupJobs.values.forEach { it.cancel() }
-        backupJobs.clear()
-
-        // Cancel backup status observer jobs
-        statusObserverJobs.forEach { it.cancel() }
-        statusObserverJobs.clear()
-
-        // Cancel data store listener jobs
-        dataListenerJobs.forEach { it.cancel() }
-        dataListenerJobs.clear()
-
-        // Cancel periodic check job
-        periodicCheckJob?.cancel()
-        periodicCheckJob = null
-
+        val parent = synchronized(lifecycleLock) {
+            observation?.scope?.coroutineContext?.get(Job).also { observation = null }
+        }
+        parent?.cancel()
         Logger.debug("Stopped observing backup statuses and data store changes", context = TAG)
     }
 
-    private fun startBackupStatusObservers() {
+    private fun startBackupStatusObservers(owner: Observation) {
         // Observe backup status changes for each category
         BackupCategory.entries.forEach { category ->
-            val job = scope.launch {
+            owner.scope.launch {
                 cacheStore.backupStatuses
                     .map { statuses -> statuses[category] ?: BackupItemStatus() }
                     .distinctUntilChanged { old, new ->
@@ -293,143 +330,126 @@ class BackupRepo @Inject constructor(
                     }
                     .collect { status ->
                         if (status.shouldBackup(category)) {
-                            scheduleBackup(category)
+                            scheduleBackup(category, owner)
                         }
                     }
             }
-            statusObserverJobs.add(job)
         }
-
-        Logger.debug("Started ${statusObserverJobs.size} backup status observers", context = TAG)
     }
 
-    private fun startDataStoreListeners() {
-        val settingsJob = scope.launch {
+    private fun startDataStoreListeners(owner: Observation) {
+        owner.scope.launch {
             settingsStore.data
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
                     if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.SETTINGS)
+                    markBackupRequired(owner, BackupCategory.SETTINGS)
                 }
         }
-        dataListenerJobs.add(settingsJob)
 
-        val widgetsJob = scope.launch {
+        owner.scope.launch {
             widgetsStore.data
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
                     if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.WIDGETS)
+                    markBackupRequired(owner, BackupCategory.WIDGETS)
                 }
         }
-        dataListenerJobs.add(widgetsJob)
 
         // WALLET - Observe transfers
-        val transfersJob = scope.launch {
+        owner.scope.launch {
             db.transferDao().observeAll()
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
                     if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.WALLET)
+                    markBackupRequired(owner, BackupCategory.WALLET)
                 }
         }
-        dataListenerJobs.add(transfersJob)
 
-        val watchOnlyAccountsJob = scope.launch {
+        owner.scope.launch {
             watchOnlyAccountStore.data
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
                     if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.WALLET)
+                    markBackupRequired(owner, BackupCategory.WALLET)
                 }
         }
-        dataListenerJobs.add(watchOnlyAccountsJob)
 
         // METADATA - Observe entire CacheStore excluding backup statuses
-        val cacheMetadataJob = scope.launch {
+        owner.scope.launch {
             cacheStore.data
                 .map { it.copy(backupStatuses = mapOf()) }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
                     if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.METADATA)
+                    markBackupRequired(owner, BackupCategory.METADATA)
                 }
         }
-        dataListenerJobs.add(cacheMetadataJob)
 
         // METADATA - Observe pre-activity metadata changes
-        val preActivityMetadataJob = scope.launch {
+        owner.scope.launch {
             preActivityMetadataRepo.preActivityMetadataChanged
                 .drop(1)
                 .collect {
                     if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.METADATA)
+                    markBackupRequired(owner, BackupCategory.METADATA)
                 }
         }
-        dataListenerJobs.add(preActivityMetadataJob)
 
         // METADATA - Observe hardware wallet names only: the store is also rewritten by every connect,
         // and reconnect traffic must not re-upload the whole metadata envelope.
-        val hwWalletNamesJob = scope.launch {
+        owner.scope.launch {
             hwWalletStore.data
                 .map { it.hwWalletNames() }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
                     if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.METADATA)
+                    markBackupRequired(owner, BackupCategory.METADATA)
                 }
         }
-        dataListenerJobs.add(hwWalletNamesJob)
 
-        dataListenerJobs.add(observeBackupChanges(pubkyRepo.backupStateVersion, BackupCategory.METADATA))
-        dataListenerJobs.add(observeBackupChanges(privatePaykitRepo.get().backupStateVersion, BackupCategory.WALLET))
-        dataListenerJobs.add(observeBackupChanges(paykitSdkService.backupStateVersion, BackupCategory.WALLET))
-        dataListenerJobs.add(observeBackupChanges(paykitPaymentProofStore.backupStateVersion, BackupCategory.WALLET))
-        dataListenerJobs.add(observeBackupChanges(onchainSendAttemptStore.backupStateVersion, BackupCategory.WALLET))
-        dataListenerJobs.add(
-            observeBackupChanges(paykitUsdtPaymentRepo.get().backupStateVersion, BackupCategory.WALLET)
+        observeBackupChanges(owner, pubkyRepo.backupStateVersion, BackupCategory.METADATA)
+        observeBackupChanges(owner, privatePaykitRepo.get().backupStateVersion, BackupCategory.WALLET)
+        observeBackupChanges(owner, paykitSdkService.backupStateVersion, BackupCategory.WALLET)
+        observeBackupChanges(owner, paykitPaymentProofStore.backupStateVersion, BackupCategory.WALLET)
+        observeBackupChanges(owner, onchainSendAttemptStore.backupStateVersion, BackupCategory.WALLET)
+        observeBackupChanges(owner, paykitUsdtPaymentRepo.get().backupStateVersion, BackupCategory.WALLET)
+        observeBackupChanges(owner, paykitUsdtPaymentRepo.get().backupStateVersion, BackupCategory.USDT_RECOVERY)
+        observeBackupChanges(
+            owner,
+            usdtRepo.get().state.map { it.transfers }.distinctUntilChanged(),
+            BackupCategory.USDT_RECOVERY,
         )
-        dataListenerJobs.add(
-            observeBackupChanges(paykitUsdtPaymentRepo.get().backupStateVersion, BackupCategory.USDT_RECOVERY)
+        observeBackupChanges(
+            owner,
+            usdtRepo.get().state.map { it.transfers }.distinctUntilChanged(),
+            BackupCategory.WALLET,
         )
-        dataListenerJobs.add(
-            observeBackupChanges(
-                usdtRepo.get().state.map { it.transfers }.distinctUntilChanged(),
-                BackupCategory.USDT_RECOVERY,
-            )
-        )
-        dataListenerJobs.add(
-            observeBackupChanges(
-                usdtRepo.get().state.map { it.transfers }.distinctUntilChanged(),
-                BackupCategory.WALLET,
-            )
-        )
-        dataListenerJobs.add(observeBackupChanges(paykitPresentationStore.backupStateVersion, BackupCategory.WALLET))
-        dataListenerJobs.add(
-            observeBackupChanges(
-                privatePaykitAddressReservationRepo.get().backupStateVersion,
-                BackupCategory.WALLET,
-            )
+        observeBackupChanges(owner, paykitPresentationStore.backupStateVersion, BackupCategory.WALLET)
+        observeBackupChanges(
+            owner,
+            privatePaykitAddressReservationRepo.get().backupStateVersion,
+            BackupCategory.WALLET,
         )
 
         // BLOCKTANK - Observe blocktank state changes (orders, cjitEntries, info)
-        dataListenerJobs.add(observeBackupChanges(blocktankRepo.blocktankState, BackupCategory.BLOCKTANK))
+        observeBackupChanges(owner, blocktankRepo.blocktankState, BackupCategory.BLOCKTANK)
 
         // ACTIVITY - Observe activity changes
-        dataListenerJobs.add(observeBackupChanges(activityRepo.activitiesChanged, BackupCategory.ACTIVITY))
+        observeBackupChanges(owner, activityRepo.activitiesChanged, BackupCategory.ACTIVITY)
         // Hardware tags are carried by the metadata backup. Observe the narrower tag signal so ordinary
         // payment and sync traffic does not re-upload the whole metadata envelope.
-        dataListenerJobs.add(observeBackupChanges(activityRepo.activityTagsChanged, BackupCategory.METADATA))
+        observeBackupChanges(owner, activityRepo.activityTagsChanged, BackupCategory.METADATA)
 
         // LIGHTNING_CONNECTIONS - Only display sync timestamp, ldk-node manages its own backups
         @OptIn(FlowPreview::class)
-        val lightningConnectionsJob = scope.launch {
+        owner.scope.launch {
             lightningService.syncStatusChanged
                 .debounce(SYNC_STATUS_DEBOUNCE)
                 .collect {
@@ -437,87 +457,119 @@ class BackupRepo @Inject constructor(
                         ?.let { it * 1000 } // Convert seconds to millis
                         ?: return@collect
                     if (shouldSkipBackup()) return@collect
-                    cacheStore.updateBackupStatus(BackupCategory.LIGHTNING_CONNECTIONS) {
+                    updateBackupStatus(BackupCategory.LIGHTNING_CONNECTIONS, owner.generation) {
                         it.copy(required = lastSync, synced = lastSync, running = false)
                     }
                 }
         }
-        dataListenerJobs.add(lightningConnectionsJob)
-
-        Logger.debug("Started ${dataListenerJobs.size} data store listeners", context = TAG)
     }
 
-    private fun observeBackupChanges(flow: Flow<*>, category: BackupCategory): Job =
-        scope.launch {
+    private fun observeBackupChanges(owner: Observation, flow: Flow<*>, category: BackupCategory): Job =
+        owner.scope.launch {
             flow.drop(1).collect {
                 if (shouldSkipBackup(category)) return@collect
-                markBackupRequired(category)
+                markBackupRequired(owner, category)
             }
         }
 
-    private fun startPeriodicBackupFailureCheck() {
-        periodicCheckJob = scope.launch {
+    private fun startPeriodicBackupFailureCheck(owner: Observation) {
+        owner.scope.launch {
             while (currentCoroutineContext().isActive) {
                 delay(BACKUP_CHECK_INTERVAL)
-                checkForFailedBackups()
+                checkForFailedBackups(owner)
             }
         }
     }
 
-    private fun markBackupRequired(category: BackupCategory) {
-        scope.launch {
-            failedBackupRequired -= category
-            cacheStore.updateBackupStatus(category) {
+    private suspend fun markBackupRequired(owner: Observation, category: BackupCategory) =
+        markBackupRequired(category, owner.generation)
+
+    private suspend fun markBackupRequired(category: BackupCategory, expectedGeneration: Long) =
+        withContext(NonCancellable) {
+            // A consumed change must remain pending even if observation stops before the cache write.
+            updateBackupStatus(category, expectedGeneration) {
+                failedBackupRequired -= category
                 it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
             }
-            Logger.verbose("Marked backup required for: '$category'", context = TAG)
+        }
+
+    private suspend fun updateBackupStatus(
+        category: BackupCategory,
+        expectedGeneration: Long,
+        transform: (BackupItemStatus) -> BackupItemStatus,
+    ) {
+        cacheStore.update { data ->
+            synchronized(lifecycleLock) {
+                // Reset drains admitted writers before advancing the generation or clearing clients.
+                if (generation != expectedGeneration) return@update data
+                val status = data.backupStatuses[category] ?: BackupItemStatus()
+                data.copy(backupStatuses = data.backupStatuses + (category to transform(status)))
+            }
         }
     }
 
-    private fun scheduleBackup(category: BackupCategory) {
-        backupJobs[category]?.cancel()
-
-        Logger.verbose("Scheduling backup for: '$category'", context = TAG)
-
-        backupJobs[category] = scope.launch {
-            runningBackups += category
-            cacheStore.updateBackupStatus(category) {
-                it.copy(running = true)
+    private fun scheduleBackup(
+        category: BackupCategory,
+        owner: Observation? = null,
+        requestedGeneration: Long? = null,
+    ) {
+        val job = synchronized(lifecycleLock) {
+            if (resetting || _isWiping.value || (owner != null && observation !== owner) ||
+                (requestedGeneration != null && requestedGeneration != generation)
+            ) {
+                return
             }
-
-            delay(BACKUP_DEBOUNCE)
-            if (category == BackupCategory.WALLET) paykitSdkService.isPaymentSubmissionActive.first { !it }
-
-            val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
-            if (status.isRequired && !shouldSkipBackup(category)) {
-                triggerBackup(category)
-            } else {
-                Logger.debug("Backup no longer needed for: '$category'", context = TAG)
-                runningBackups -= category
-                cacheStore.updateBackupStatus(category) {
-                    it.copy(running = false)
-                }
-            }
-        }.also { job ->
-            job.invokeOnCompletion { exception ->
-                if (exception != null) {
-                    Logger.debug("Backup job cancelled for: '$category'", context = TAG)
-                    scope.launch {
-                        runningBackups -= category
-                        cacheStore.updateBackupStatus(category) {
-                            it.copy(running = false)
+            val existing = backupJobs[category]
+            if (existing != null && !existing.isCompleted && !existing.isCancelled) return
+            val expectedGeneration = generation
+            val jobScope = owner?.scope ?: pendingScope
+            jobScope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    categoryMutexes.getValue(category).withLock {
+                        runningBackups += category
+                        try {
+                            updateBackupStatus(category, expectedGeneration) { it.copy(running = true) }
+                            delay(BACKUP_DEBOUNCE)
+                            if (category == BackupCategory.WALLET) {
+                                paykitSdkService.isPaymentSubmissionActive.first { !it }
+                            }
+                            val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
+                            if (status.isRequired && !shouldSkipBackup(category)) {
+                                performBackup(category, expectedGeneration)
+                            }
+                        } finally {
+                            finishBackup(category, expectedGeneration)
                         }
                     }
+                } finally {
+                    val currentJob = currentCoroutineContext()[Job]
+                    synchronized(lifecycleLock) { backupJobs.remove(category, currentJob) }
+                    val nextOwner = synchronized(lifecycleLock) {
+                        observation?.takeIf { generation == expectedGeneration && (owner == null || owner === it) }
+                    }
+                    if (nextOwner != null && nextOwner.scope.isActive) {
+                        val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
+                        if (status.shouldBackup(category)) scheduleBackup(category, nextOwner)
+                    }
                 }
-            }
+            }.also { backupJobs[category] = it }
+        }
+        job.start()
+    }
+
+    private suspend fun finishBackup(category: BackupCategory, expectedGeneration: Long) = withContext(NonCancellable) {
+        try {
+            updateBackupStatus(category, expectedGeneration) { it.copy(running = false) }
+        } finally {
+            runningBackups -= category
         }
     }
 
-    private fun checkForFailedBackups() {
+    private fun checkForFailedBackups(owner: Observation) {
         val currentTime = currentTimeMillis()
 
         // find if there are any backup categories that have been failing for more than 30 minutes
-        scope.launch {
+        owner.scope.launch {
             val backupStatuses = cacheStore.backupStatuses.first()
             val hasFailedBackups = BackupCategory.entries.any { category ->
                 val status = backupStatuses[category] ?: BackupItemStatus()
@@ -529,18 +581,18 @@ class BackupRepo @Inject constructor(
             }
 
             if (hasFailedBackups) {
-                showBackupFailureNotification(currentTime)
+                showBackupFailureNotification(owner, currentTime)
             }
         }
     }
 
-    private fun showBackupFailureNotification(currentTime: Long) {
+    private fun showBackupFailureNotification(owner: Observation, currentTime: Long) {
         // Throttle notifications to avoid spam
         if (currentTime - lastNotificationTime < FAILED_BACKUP_NOTIFICATION_INTERVAL) return
 
         lastNotificationTime = currentTime
 
-        scope.launch {
+        owner.scope.launch {
             ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.settings__backup__failed_title),
@@ -551,58 +603,85 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withContext(ioDispatcher) {
-        Logger.debug("Backup starting for: '$category'", context = TAG)
-
-        var backupRequired = currentTimeMillis()
-        runningBackups += category
-        failedBackupRequired -= category
-        try {
-            cacheStore.updateBackupStatus(category) {
-                backupRequired = maxOf(backupRequired, it.required, it.synced + 1)
-                it.copy(running = true, required = backupRequired)
+    suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withBackupOperation { expectedGeneration ->
+        categoryMutexes.getValue(category).withLock {
+            if (synchronized(lifecycleLock) { resetting || generation != expectedGeneration }) {
+                return@withLock Result.failure(UsdtException.BackupUnavailable())
             }
-
-            val upload = when (category) {
-                BackupCategory.WALLET -> uploadWalletBackup()
-                BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup()
-                else -> runSuspendCatching {
-                    vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
-                }
-            }
-            upload
-                .onSuccess {
-                    withContext(NonCancellable) {
-                        cacheStore.updateBackupStatus(category) {
-                            it.copy(running = false, synced = backupRequired)
-                        }
-                        runningBackups -= category
-                        failedBackupRequired -= category
-                        temporaryFailureRetries -= category
-                        temporaryFailureSince -= category
-                    }
-                    Logger.info("Backup succeeded for: '$category'", context = TAG)
-                }
-                .onFailure { markBackupFailed(category, backupRequired, it) }
-                .map {}
-        } finally {
-            if (runningBackups.remove(category)) {
-                withContext(NonCancellable) {
-                    cacheStore.updateBackupStatus(category) { it.copy(running = false) }
-                }
+            runningBackups += category
+            try {
+                performBackup(category, expectedGeneration)
+            } finally {
+                finishBackup(category, expectedGeneration)
             }
         }
     }
 
-    suspend fun persistWalletBackup(): Result<Unit> =
-        uploadWalletBackup().onFailure { markBackupRequired(BackupCategory.WALLET) }
-
-    suspend fun persistUsdtRecoveryBackup(snapshot: String): Result<Unit> = runSuspendCatching {
-        cacheStore.updateBackupStatus(BackupCategory.USDT_RECOVERY) {
-            it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
+    private suspend fun performBackup(category: BackupCategory, expectedGeneration: Long): Result<Unit> {
+        Logger.debug("Backup starting for: '$category'", context = TAG)
+        var backupRequired = currentTimeMillis()
+        updateBackupStatus(category, expectedGeneration) {
+            failedBackupRequired -= category
+            backupRequired = maxOf(backupRequired, it.required, it.synced + 1)
+            it.copy(running = true, required = backupRequired)
         }
-        uploadUsdtRecoveryBackup(snapshot).getOrThrow()
-    }.onFailure { markBackupRequired(BackupCategory.USDT_RECOVERY) }
+        if (synchronized(lifecycleLock) { resetting || generation != expectedGeneration }) {
+            return Result.failure(UsdtException.BackupUnavailable())
+        }
+        val upload = when (category) {
+            BackupCategory.WALLET -> uploadWalletBackup()
+            BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup()
+            else -> runSuspendCatching {
+                vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
+            }
+        }
+        return upload
+            .onSuccess {
+                withContext(NonCancellable) {
+                    updateBackupStatus(category, expectedGeneration) {
+                        failedBackupRequired -= category
+                        temporaryFailureRetries -= category
+                        temporaryFailureSince -= category
+                        it.copy(running = false, synced = backupRequired)
+                    }
+                }
+                Logger.info("Backup succeeded for: '$category'", context = TAG)
+            }
+            .onFailure { markBackupFailed(category, backupRequired, expectedGeneration, it) }
+            .map { }
+    }
+
+    suspend fun persistWalletBackup(): Result<Unit> = withBackupOperation { expectedGeneration ->
+        uploadWalletBackup().onFailure { markBackupRequired(BackupCategory.WALLET, expectedGeneration) }
+    }
+
+    suspend fun persistUsdtRecoveryBackup(snapshot: String): Result<Unit> = withBackupOperation { expectedGeneration ->
+        runSuspendCatching {
+            updateBackupStatus(BackupCategory.USDT_RECOVERY, expectedGeneration) {
+                it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
+            }
+            uploadUsdtRecoveryBackup(snapshot).getOrThrow()
+        }.onFailure { markBackupRequired(BackupCategory.USDT_RECOVERY, expectedGeneration) }
+    }
+
+    private suspend fun withBackupOperation(
+        operation: suspend (Long) -> Result<Unit>,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        val callerContext = currentCoroutineContext().minusKey(Job)
+        val task = synchronized(lifecycleLock) {
+            if (resetting || _isWiping.value) return@withContext Result.failure(UsdtException.BackupUnavailable())
+            val expectedGeneration = generation
+            pendingScope.async(context = callerContext, start = CoroutineStart.LAZY) { operation(expectedGeneration) }
+        }
+        try {
+            task.await()
+        } catch (e: CancellationException) {
+            currentCoroutineContext().ensureActive()
+            Result.failure(UsdtException.BackupUnavailable().apply { initCause(e) })
+        } finally {
+            withContext(NonCancellable) { task.cancelAndJoin() }
+        }
+    }
 
     private suspend fun uploadUsdtRecoveryBackup(snapshot: String? = null): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
@@ -640,9 +719,14 @@ class BackupRepo @Inject constructor(
         }.map { }
     }
 
-    private suspend fun markBackupFailed(category: BackupCategory, backupRequired: Long, e: Throwable) {
+    private suspend fun markBackupFailed(
+        category: BackupCategory,
+        backupRequired: Long,
+        expectedGeneration: Long,
+        e: Throwable,
+    ) {
         withContext(NonCancellable) {
-            cacheStore.updateBackupStatus(category) {
+            updateBackupStatus(category, expectedGeneration) {
                 if (it.required == backupRequired && e !is WalletBackupSnapshotChanged) {
                     failedBackupRequired[category] = backupRequired
                 } else {
@@ -650,28 +734,41 @@ class BackupRepo @Inject constructor(
                 }
                 it.copy(running = false)
             }
-            runningBackups -= category
         }
         when {
             e is WalletBackupSnapshotChanged ->
                 Logger.debug("Deferred changing backup snapshot for: '$category'", context = TAG)
-            e.isTemporaryBackupFailure() -> retryAfterTemporaryFailure(category, backupRequired, e)
+            e.isTemporaryBackupFailure() -> retryAfterTemporaryFailure(category, backupRequired, expectedGeneration, e)
             else -> Logger.error("Backup failed for: '$category'", e, context = TAG)
         }
     }
 
-    private fun retryAfterTemporaryFailure(category: BackupCategory, backupRequired: Long, e: Throwable) {
-        val attempt = temporaryFailureRetries.merge(category, 1, Int::plus) ?: 1
-        temporaryFailureSince.putIfAbsent(category, backupRequired)
-        val retryDelay = (TEMPORARY_FAILURE_RETRY_DELAY * (1 shl (attempt - 1).coerceAtMost(MAX_RETRY_SHIFT)))
-            .coerceAtMost(TEMPORARY_FAILURE_RETRY_MAX_DELAY)
-        Logger.warn("Retrying backup for: '$category' in '$retryDelay'", e, context = TAG)
-        scope.launch {
-            delay(retryDelay)
-            if (!failedBackupRequired.remove(category, backupRequired) || !isObserving) return@launch
-            val status = cacheStore.backupStatuses.first()[category] ?: return@launch
-            if (status.shouldBackup(category)) scheduleBackup(category)
+    private fun retryAfterTemporaryFailure(
+        category: BackupCategory,
+        backupRequired: Long,
+        expectedGeneration: Long,
+        e: Throwable,
+    ) {
+        val job = synchronized(lifecycleLock) {
+            if (resetting || generation != expectedGeneration) return
+            val attempt = temporaryFailureRetries.merge(category, 1, Int::plus) ?: 1
+            temporaryFailureSince.putIfAbsent(category, backupRequired)
+            val retryDelay = (TEMPORARY_FAILURE_RETRY_DELAY * (1 shl (attempt - 1).coerceAtMost(MAX_RETRY_SHIFT)))
+                .coerceAtMost(TEMPORARY_FAILURE_RETRY_MAX_DELAY)
+            Logger.warn("Retrying backup for: '$category' in '$retryDelay'", e, context = TAG)
+            pendingScope.launch(start = CoroutineStart.LAZY) {
+                delay(retryDelay)
+                val owner = synchronized(lifecycleLock) {
+                    if (generation != expectedGeneration || !failedBackupRequired.remove(category, backupRequired)) {
+                        return@launch
+                    }
+                    observation
+                } ?: return@launch
+                val status = cacheStore.backupStatuses.first()[category] ?: return@launch
+                if (status.shouldBackup(category)) scheduleBackup(category, owner)
+            }
         }
+        job.start()
     }
 
     private suspend fun getBackupDataBytes(category: BackupCategory): ByteArray = when (category) {
@@ -1131,10 +1228,11 @@ class BackupRepo @Inject constructor(
 
     fun scheduleFullBackup() {
         Logger.debug("Scheduling backups for all categories", context = TAG)
+        val requestedGeneration = synchronized(lifecycleLock) { generation }
         BackupCategory.entries
             .filter { it != BackupCategory.LIGHTNING_CONNECTIONS }
             .forEach {
-                scheduleBackup(it)
+                scheduleBackup(it, requestedGeneration = requestedGeneration)
             }
     }
 
