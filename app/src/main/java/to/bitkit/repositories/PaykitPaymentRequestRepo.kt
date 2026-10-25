@@ -355,6 +355,15 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val isReloadingPaymentProofs = AtomicBoolean(false)
     private val lastFailedPaymentProofVersion = AtomicLong(-1L)
 
+    private data class UsdtAttemptSnapshot(
+        val version: Long,
+        val identity: String,
+        val requestIds: Set<PaykitPaymentRequestId>?,
+    )
+
+    private val usdtAttemptSnapshot = MutableStateFlow<UsdtAttemptSnapshot?>(null)
+    private val isReloadingUsdtAttempts = AtomicBoolean(false)
+
     private var expirationJob: Job? = null
     private var cachedTargetContext: PaykitPaymentRequestTargetContext? = null
     private val targetRefreshTicket = AtomicLong()
@@ -423,6 +432,51 @@ class PaykitPaymentRequestRepo @Inject constructor(
         repoScope.launch {
             paymentProofStore.backupStateVersion.collect { loadPaymentProofSnapshot(it) }
         }
+        repoScope.launch {
+            usdtPayments.paymentRequestStateVersion.collect { loadUsdtAttemptSnapshot(it) }
+        }
+    }
+
+    private suspend fun loadUsdtAttemptSnapshot(version: Long) {
+        val identity = activeIdentity ?: return
+        val requestIds = usdtPayments.protectedPaymentAttempts(identity)
+            .onFailure { Logger.warn("Failed to read Paykit USDT payment attempts", it, context = TAG) }
+            .getOrNull()
+            ?.mapNotNullTo(mutableSetOf()) { it.requestId }
+        usdtAttemptSnapshot.update { current ->
+            val isNewer = current == null || !PubkyPublicKeyFormat.matches(current.identity, identity) ||
+                current.version < version || current.version == version && current.requestIds == null
+            if (isNewer) UsdtAttemptSnapshot(version, identity, requestIds) else current
+        }
+    }
+
+    private fun rememberUsdtAttempts(version: Long, identity: String, attempts: List<PaykitUsdtAttempt>) {
+        usdtAttemptSnapshot.update { current ->
+            val keepsCurrent = current != null && PubkyPublicKeyFormat.matches(current.identity, identity) &&
+                current.version > version
+            if (keepsCurrent) {
+                current
+            } else {
+                UsdtAttemptSnapshot(version, identity, attempts.mapNotNullTo(mutableSetOf()) { it.requestId })
+            }
+        }
+    }
+
+    private fun currentUsdtAttemptSnapshot(identity: String): UsdtAttemptSnapshot? =
+        usdtAttemptSnapshot.value?.takeIf {
+            it.version == usdtPayments.paymentRequestStateVersion.value &&
+                PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestIds != null
+        }
+
+    private fun reloadUsdtAttempts() {
+        if (!isReloadingUsdtAttempts.compareAndSet(false, true)) return
+        repoScope.launch {
+            try {
+                loadUsdtAttemptSnapshot(usdtPayments.paymentRequestStateVersion.value)
+            } finally {
+                isReloadingUsdtAttempts.set(false)
+            }
+        }
     }
 
     private suspend fun loadPaymentProofSnapshot(version: Long) {
@@ -441,12 +495,18 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     /**
-     * Reads the proof store when the snapshot lags it, so a payment check right after a proof write sees that write.
+     * Reads payment proofs and USDT payment attempts when their snapshots lag the stores, so a payment check right
+     * after a write sees that write.
      */
     suspend fun syncPaymentProofs() {
         val version = paymentProofStore.backupStateVersion.value
-        if (paymentProofSnapshot.value?.let { it.version == version && it.proofs != null } == true) return
-        withContext(ioDispatcher) { loadPaymentProofSnapshot(version) }
+        if (paymentProofSnapshot.value?.let { it.version == version && it.proofs != null } != true) {
+            withContext(ioDispatcher) { loadPaymentProofSnapshot(version) }
+        }
+        val identity = activeIdentity ?: return
+        if (currentUsdtAttemptSnapshot(identity) == null) {
+            loadUsdtAttemptSnapshot(usdtPayments.paymentRequestStateVersion.value)
+        }
     }
 
     private fun reloadUnreadablePaymentProofs(version: Long) {
@@ -492,6 +552,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             activeIdentity = normalizedIdentity
             activatedGeneration = generation
         }
+        if (activatedGeneration == generation) loadUsdtAttemptSnapshot(usdtPayments.paymentRequestStateVersion.value)
     }
 
     // A request this install accepted is only reopened by the user,
@@ -1245,7 +1306,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
             ?.takeIf { it.version == paymentProofStore.backupStateVersion.value }
             ?: return null
         val proofs = snapshot.proofs ?: return null.also { reloadUnreadablePaymentProofs(snapshot.version) }
-        return proofs.filter { proof ->
+        val usdtRequestIds = currentUsdtAttemptSnapshot(identity)?.requestIds
+            ?: return null.also { reloadUsdtAttempts() }
+        return usdtRequestIds + proofs.filter { proof ->
             PubkyPublicKeyFormat.matches(proof.identity, identity) && (
                 proof.paymentStarted && !proof.isReopenableHardwareReceipt(identity) ||
                     proof.proofData != null &&
@@ -1457,6 +1520,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         if (proofVersion != paymentProofVersion()) {
             throw PaykitPaymentRequestError.RequestUnavailable
         }
+        rememberUsdtAttempts(proofVersion.second, expectedIdentity, usdtAttempts)
         receivedContacts = ReceivedContactsSnapshot(generation, expectedIdentity, contacts)
         _pendingRequests.update { incoming }
         _paymentRequestHistory.update { history }

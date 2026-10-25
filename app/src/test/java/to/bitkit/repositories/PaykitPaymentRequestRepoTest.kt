@@ -333,6 +333,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paymentProofStore.backupStateVersion).thenReturn(proofStateVersion)
         whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
+        whenever(usdtPayments.protectedPaymentAttempts(any())).thenReturn(Result.success(emptyList()))
+        whenever(usdtPayments.paymentRequestStateVersion).thenReturn(usdtStateVersion)
         sut = PaykitPaymentRequestRepo(
             testDispatcher,
             paykitSdkService,
@@ -1507,6 +1509,57 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paymentProofStore.load()).thenReturn(listOf(onchainProof(requestId)))
         proofStateVersion.value += 1
 
+        sut.syncPaymentProofs()
+        assertTrue(sut.isPending(request))
+    }
+
+    @Test
+    fun `paid usdt request is not payable before the next refresh`() = test {
+        val record = paymentRequestRecord()
+        val requestId = PaykitPaymentRequestId(record.paymentRequestId, record.counterparty)
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        runCurrent()
+        val request = sut.pendingRequests.value.single()
+        assertTrue(sut.isPending(request))
+        assertEquals(requestId, sut.automaticPendingRequests().single().id)
+
+        // The USDT transfer executed; its proof is still being delivered and the pending list predates it.
+        val executed = PaykitUsdtAttempt(
+            "quote",
+            "wallet",
+            LOCAL_IDENTITY,
+            COUNTERPARTY,
+            requestId = requestId,
+            paymentStarted = true,
+        )
+        whenever(usdtPayments.protectedPaymentAttempts(LOCAL_IDENTITY)).thenReturn(Result.success(listOf(executed)))
+        usdtStateVersion.value++
+        runCurrent()
+
+        assertEquals(requestId, sut.pendingRequests.value.single().id)
+        assertFalse(sut.isPending(request))
+        assertTrue(sut.automaticPendingRequests().isEmpty())
+    }
+
+    @Test
+    fun `unread or unreadable usdt attempts keep requests from being payable`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        runCurrent()
+        val request = sut.pendingRequests.value.single()
+        assertTrue(sut.isPending(request))
+
+        whenever(usdtPayments.protectedPaymentAttempts(LOCAL_IDENTITY))
+            .thenReturn(Result.failure(IllegalStateException("unreadable")))
+        usdtStateVersion.value++
+        assertFalse(sut.isPending(request))
+        runCurrent()
+        assertFalse(sut.isPending(request))
+        assertTrue(sut.automaticPendingRequests().isEmpty())
+
+        whenever(usdtPayments.protectedPaymentAttempts(LOCAL_IDENTITY)).thenReturn(Result.success(emptyList()))
         sut.syncPaymentProofs()
         assertTrue(sut.isPending(request))
     }
