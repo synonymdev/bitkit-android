@@ -1093,14 +1093,7 @@ class PubkyRepo @Inject constructor(
             }
             clearSessionContactProfiles()
             deleteAllContacts()
-            runSuspendCatching {
-                pubkyService.deletePaykitProfile()
-            }.getOrElse {
-                if (!it.isMissingPubkyData()) {
-                    throw it
-                }
-                Logger.info("Continuing sign out, bitkit profile storage already missing", context = TAG)
-            }
+            pubkyService.deletePaykitProfile()
             profileWriteGeneration.incrementAndGet()
         }
         settingsStore.update { it.paykitDisabled(markPublicCleanupPending = it.hasPaykitState()) }
@@ -2253,22 +2246,6 @@ class PubkyRepo @Inject constructor(
         if (startsWith(PUBKY_PREFIX)) this else "$PUBKY_PREFIX$this"
 
     private fun redacted(publicKey: String): String = PubkyPublicKeyFormat.redacted(publicKey)
-
-    private fun Throwable.isMissingPubkyData(): Boolean {
-        val fullMessage = buildErrorMessage()
-        return fullMessage.contains("404") ||
-            fullMessage.contains("not found", ignoreCase = true) ||
-            fullMessage.contains("missing", ignoreCase = true)
-    }
-
-    private fun Throwable.buildErrorMessage(): String =
-        buildString {
-            append(message.orEmpty())
-            cause?.message?.takeIf { it.isNotBlank() }?.let {
-                append(" ")
-                append(it)
-            }
-        }
 
     // endregion
 }

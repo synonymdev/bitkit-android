@@ -1422,6 +1422,25 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `profile deletion errors mentioning missing data do not authorize sign out`() = test {
+        authenticateForTesting()
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+        )
+        val error = TestAppError("Delete failed: HTTP 404 Not Found at session endpoint")
+        whenever(pubkyService.deletePaykitProfile()).thenAnswer { throw error }
+
+        val result = sut.deleteProfile()
+
+        assertSame(error, result.exceptionOrNull())
+        assertTrue(sut.isAuthenticated.value)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        verify(pubkyService, never()).signOut()
+    }
+
+    @Test
     fun `deleteProfile should fail when signOut fails`() = test {
         authenticateForTesting()
         settingsFlow.value = SettingsData(
