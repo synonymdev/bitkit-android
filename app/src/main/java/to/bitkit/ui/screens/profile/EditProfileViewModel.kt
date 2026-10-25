@@ -243,7 +243,7 @@ class EditProfileViewModel @Inject constructor(
                             privatePaykitRepo.removePublishedEndpointsForCleanup(TAG).getOrThrow()
                             pubkyRepo.signOut().getOrThrow()
                         }
-                        privatePaykitRepo.closeAndClear()
+                        privatePaykitRepo.closeAndClear().getOrThrow()
                     }
                 }
                 if (result.isSuccess) {
@@ -272,10 +272,20 @@ class EditProfileViewModel @Inject constructor(
         }
         try {
             privatePaykitRepo.beginProfileDeletion()
-            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG, deferAppSync = true)
-            val result = pubkyRepo.deleteProfile()
+            val result = runSuspendCatching {
+                privatePaykitRepo.removePublishedEndpointsForCleanup(TAG, deferAppSync = true).getOrThrow()
+                pubkyRepo.deleteProfile().getOrThrow()
+            }
             if (result.isSuccess) {
-                privatePaykitRepo.closeAndClear()
+                privatePaykitRepo.closeAndClear().onFailure {
+                    Logger.error("Failed to clear local state after profile deletion", it, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = it.message,
+                    )
+                    return
+                }
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(_uiState.value.removal.successToast),

@@ -1108,27 +1108,19 @@ class PubkyRepo @Inject constructor(
     }
 
     private suspend fun deleteAllContacts() {
-        val records = runSuspendCatching {
-            pubkyService.contactRecords()
-        }.getOrElse {
-            if (!it.isMissingPubkyData()) throw it
-            emptyList()
-        }
-        runSuspendCatching {
-            val removed = pubkyService.removeContacts(records.map { it.publicKey })
-            if (removed.size != records.size) {
-                Logger.warn("Retained contacts that could not be removed during profile deletion", context = TAG)
-            }
-        }.onFailure {
-            Logger.warn("Failed to delete contacts", it, context = TAG)
-        }
-        pubkyStore.update { it.copy(contactProfileOverrides = emptyMap()) }
+        val records = pubkyService.contactRecords()
+        if (records.isEmpty()) return
+        val keys = records.map { it.publicKey.ensurePubkyPrefix() }.toSet()
+        val removedKeys = pubkyService.removeContacts(records.map { it.publicKey })
+            .map { it.publicKey.ensurePubkyPrefix() }.toSet().intersect(keys)
+        pubkyStore.update { it.copy(contactProfileOverrides = it.contactProfileOverrides - removedKeys) }
         notifyBackupStateChanged()
         synchronized(contactsLock) {
             cancelContactScreenLookups()
-            updateContacts { emptyList() }
+            updateContacts { current -> current.filterNot { it.publicKey in removedKeys } }
         }
         markContactsLoaded()
+        if (removedKeys != keys) throw PrivatePaykitError.PrivateUnavailable
         Logger.info("Deleted all contacts", context = TAG)
     }
 

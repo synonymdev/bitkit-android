@@ -1357,6 +1357,71 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `partial contact cleanup preserves retained contacts and stops profile deletion`() = test {
+        authenticateForTesting()
+        val records = listOf(
+            createContactRecord(VALID_CONTACT_KEY_A, label = "Removed"),
+            createContactRecord(VALID_CONTACT_KEY_B, label = "Retained"),
+        )
+        val overrides = records.associate {
+            it.publicKey to PubkyProfile.placeholder(it.publicKey).toProfileData()
+        }
+        var stored = PubkyStoreData(contactProfileOverrides = overrides)
+        whenever(pubkyStore.data).thenReturn(flowOf(stored))
+        whenever(pubkyStore.update(any())).thenAnswer {
+            stored = it.getArgument<(PubkyStoreData) -> PubkyStoreData>(0)(stored)
+            Unit
+        }
+        whenever(pubkyService.contactRecords()).thenReturn(records)
+        whenever(pubkyService.removeContacts(records.map { it.publicKey })).thenReturn(listOf(records.first()))
+        sut.loadContacts()
+
+        val result = sut.deleteProfile()
+
+        assertTrue(result.isFailure)
+        assertEquals(listOf(VALID_CONTACT_KEY_B), sut.contacts.value.map { it.publicKey })
+        assertEquals(setOf(VALID_CONTACT_KEY_B), stored.contactProfileOverrides.keys)
+        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).signOut()
+    }
+
+    @Test
+    fun `unavailable contact read does not authorize profile deletion`() = test {
+        authenticateForTesting()
+        val error = TestAppError("Fetch failed: 404 missing session")
+        whenever(pubkyService.contactRecords()).thenAnswer { throw error }
+        clearInvocations(pubkyStore)
+
+        val result = sut.deleteProfile()
+
+        assertSame(error, result.exceptionOrNull())
+        verify(pubkyStore, never()).update(any())
+        verify(pubkyService, never()).removeContacts(any())
+        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).signOut()
+    }
+
+    @Test
+    fun `uncertain contact cleanup preserves local evidence and stops profile deletion`() = test {
+        authenticateForTesting()
+        val record = createContactRecord(VALID_CONTACT_KEY_A, label = "Retained")
+        val records = listOf(record)
+        val error = TestAppError("Contact removal acknowledgement lost")
+        whenever(pubkyService.contactRecords()).thenReturn(records)
+        whenever(pubkyService.removeContacts(listOf(record.publicKey))).thenAnswer { throw error }
+        sut.loadContacts()
+        clearInvocations(pubkyStore)
+
+        val result = sut.deleteProfile()
+
+        assertSame(error, result.exceptionOrNull())
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+        verify(pubkyStore, never()).update(any())
+        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).signOut()
+    }
+
+    @Test
     fun `deleteProfile should fail when signOut fails`() = test {
         authenticateForTesting()
         settingsFlow.value = SettingsData(

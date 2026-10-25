@@ -1,0 +1,18 @@
+<journey name="profile cleanup failure">
+  <description>
+    Requires a disposable test identity with saved contacts and a controlled homeserver proxy.
+    Never use a personal profile. Inject a private-endpoint withdrawal failure, then in a fresh
+    fixture inject an unknown contact-removal response or a partial removal retaining an active peer.
+    These controls are not available in standard staging. This journey covers stopping on incomplete
+    cleanup, not cross-device conditional deletion or safe manual replay of an uncertain operation.
+  </description>
+  <actions>
+    <action>Open Edit Profile and confirm deletion with the cleanup fault enabled</action>
+    <action>Verify failure options appear without a success notification or onboarding navigation</action>
+    <action>Verify a failed private withdrawal is followed by no contact or profile deletion</action>
+    <action>Verify unknown contact removal keeps local contact data and prevents profile deletion</action>
+    <action>Verify partial contact removal preserves contacts and overrides not acknowledged as removed</action>
+    <action>Cancel the failure dialog and verify the app starts no second deletion</action>
+    <action>Restart the app and verify no profile deletion is automatically replayed</action>
+  </actions>
+</journey>

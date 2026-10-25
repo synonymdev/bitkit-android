@@ -182,6 +182,49 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed private cleanup stops deletion and preserves pending state`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        whenever(privatePaykitRepo.removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true)))
+            .thenReturn(Result.failure(TestAppError("Withdrawal pending")))
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
+
+        sut.effects.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isDeleting)
+        verify(pubkyRepo, never()).deleteProfile()
+        verify(privatePaykitRepo, never()).closeAndClear()
+        verify(privatePaykitRepo).endProfileDeletion()
+    }
+
+    @Test
+    fun `failed local finalization does not report deletion success`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
+        whenever(
+            privatePaykitRepo.closeAndClear()
+        ).thenReturn(Result.failure(TestAppError("Local storage unavailable")))
+
+        sut.effects.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isDeleting)
+        verify(pubkyRepo).deleteProfile()
+        verify(privatePaykitRepo).closeAndClear()
+        verify(privatePaykitRepo).endProfileDeletion()
+    }
+
+    @Test
     fun `deleteProfile should emit success when repository delete succeeds`() = test {
         whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
 
@@ -347,29 +390,6 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
         assertFalse(sut.uiState.value.isDeleting)
         verify(privatePaykitRepo, never()).closeAndClear()
-    }
-
-    @Test
-    fun `deleteProfile should continue when private cleanup fails`() = test {
-        val sut = createSut()
-        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true)) }
-            .thenReturn(Result.failure(TestAppError("cleanup failed")))
-        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
-        advanceUntilIdle()
-
-        sut.effects.test {
-            sut.deleteProfile()
-            advanceUntilIdle()
-
-            assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
-        }
-        assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        assertFalse(sut.uiState.value.isDeleting)
-        inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
-            verify(pubkyRepo).deleteProfile()
-            verify(privatePaykitRepo).closeAndClear()
-        }
     }
 
     @Test
