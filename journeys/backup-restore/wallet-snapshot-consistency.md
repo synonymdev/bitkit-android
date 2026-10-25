@@ -35,7 +35,11 @@ do not reset a funded wallet.
 1. Hold a scheduled backup in its cancellable debounce, stop observation, and
    request a manual metadata backup while cancellation cleanup remains held.
    Verify a same-category manual upload and observation restart wait for cleanup.
-   Release cleanup; verify pending wallet work remains required and resumes.
+   Change synchronized settings after requesting restart while cleanup is still
+   held. Release cleanup; verify those settings and pending wallet work upload
+   without another edit, and no upload or client setup ran before the drain.
+   Repeat with a retained temporary-failure retry for another category becoming
+   due during the wait; that automatic retry must wait too.
 2. Request a new USDT recovery backup during cleanup and again after observation
    is stopped. Verify both can finish without restarting Lightning, and transient
    backup failures retain bounded retry without repeating the payment.

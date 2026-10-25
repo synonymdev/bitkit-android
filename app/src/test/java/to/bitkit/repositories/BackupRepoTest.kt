@@ -1455,6 +1455,108 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `settings changed during restart cleanup remain pending without another edit`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val statuses = MutableStateFlow(
+            mapOf(
+                BackupCategory.WIDGETS to BackupItemStatus(required = 1_000),
+                BackupCategory.SETTINGS to BackupItemStatus(required = 1_000, synced = 1_000),
+            )
+        )
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        var widgetAttempts = 0
+        whenever { vssBackupClient.putObject(eq(BackupCategory.WIDGETS.name), any()) }.doSuspendableAnswer {
+            widgetAttempts += 1
+            if (widgetAttempts == 1) {
+                entered.complete(Unit)
+                try {
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) { release.await() }
+                }
+            }
+            Result.success(VssItem(key = BackupCategory.WIDGETS.name, value = byteArrayOf(), version = 1))
+        }
+        sut.startObservingBackups()
+        advanceTimeBy(5_000)
+        runCurrent()
+        entered.await()
+        sut.stopObservingBackups()
+        sut.startObservingBackups()
+        try {
+            runCurrent()
+            settingsData.update { it.copy(selectedCurrency = "EUR") }
+            runCurrent()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.SETTINGS.name), any())
+            release.complete(Unit)
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            val payload = argumentCaptor<ByteArray>()
+            verify(vssBackupClient).putObject(eq(BackupCategory.SETTINGS.name), payload.capture())
+            assertTrue(payload.firstValue.decodeToString().contains("EUR"))
+            assertFalse(statuses.value.getValue(BackupCategory.SETTINGS).isRequired)
+        } finally {
+            release.complete(Unit)
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `temporary retry waits for other category cleanup during restart`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val statuses = MutableStateFlow(
+            mapOf(
+                BackupCategory.WIDGETS to BackupItemStatus(required = 1_000),
+                BackupCategory.WALLET to BackupItemStatus(required = 1_000),
+            )
+        )
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        whenever { privatePaykitRepo.backupSnapshot() }
+            .thenReturn(Result.failure(PaykitException.SharedStateBusy("shared_state_busy", "locked")))
+            .thenReturn(Result.success(PrivatePaykitBackupSnapshot(null, 0)))
+        var widgetAttempts = 0
+        whenever { vssBackupClient.putObject(eq(BackupCategory.WIDGETS.name), any()) }.doSuspendableAnswer {
+            widgetAttempts += 1
+            if (widgetAttempts == 1) {
+                entered.complete(Unit)
+                try {
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) { release.await() }
+                }
+            }
+            Result.success(VssItem(key = BackupCategory.WIDGETS.name, value = byteArrayOf(), version = 1))
+        }
+        sut.startObservingBackups()
+        advanceTimeBy(5_000)
+        runCurrent()
+        entered.await()
+        verify(privatePaykitRepo).backupSnapshot()
+        sut.stopObservingBackups()
+        sut.startObservingBackups()
+        try {
+            advanceTimeBy(20_000)
+            runCurrent()
+            verify(privatePaykitRepo, times(1)).backupSnapshot()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+            release.complete(Unit)
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), any())
+            assertFalse(statuses.value.getValue(BackupCategory.WALLET).isRequired)
+        } finally {
+            release.complete(Unit)
+            sut.reset()
+        }
+    }
+
+    @Test
     fun `full backup requested during observer cleanup resumes without restart`() = test {
         val entered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()

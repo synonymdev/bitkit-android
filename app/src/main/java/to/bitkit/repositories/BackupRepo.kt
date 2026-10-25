@@ -4,6 +4,7 @@ import android.content.Context
 import com.synonym.bitkitcore.UsdtException
 import com.synonym.vssclient.VssException
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -168,7 +169,9 @@ class BackupRepo @Inject constructor(
     private val temporaryFailureSince = ConcurrentHashMap<BackupCategory, Long>()
     private var lastNotificationTime = 0L
 
-    private class Observation(val scope: CoroutineScope, val generation: Long)
+    private class Observation(val scope: CoroutineScope, val generation: Long) {
+        val ready = CompletableDeferred<Unit>()
+    }
 
     private fun newBackupScope(parent: CoroutineScope) =
         CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext[Job]))
@@ -259,8 +262,11 @@ class BackupRepo @Inject constructor(
             retiringObservations.add(parent)
             parent.invokeOnCompletion { synchronized(lifecycleLock) { retiringObservations.remove(parent) } }
             owner.scope.launch(start = CoroutineStart.LAZY) {
+                // Record new changes during the drain; only uploads and client setup must wait.
+                startDataStoreListeners(owner)
                 previous.joinAll()
                 currentCoroutineContext().ensureActive()
+                owner.ready.complete(Unit)
                 startObservation(owner)
             }
         }
@@ -305,7 +311,6 @@ class BackupRepo @Inject constructor(
         }
 
         startBackupStatusObservers(owner)
-        startDataStoreListeners(owner)
         startPeriodicBackupFailureCheck(owner)
     }
 
@@ -525,6 +530,7 @@ class BackupRepo @Inject constructor(
             val jobScope = owner?.scope ?: pendingScope
             jobScope.launch(start = CoroutineStart.LAZY) {
                 try {
+                    owner?.ready?.await()
                     categoryMutexes.getValue(category).withLock {
                         runningBackups += category
                         try {
