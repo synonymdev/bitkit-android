@@ -83,7 +83,6 @@
     <string name="common__ok">OK</string>
     <string name="common__ok_random">Awesome!\nNice!\nCool!\nGreat!\nFantastic!\nSweet!\nExcellent!\nTerrific!</string>
     <string name="common__preview">Preview</string>
-    <string name="common__read_more">Read More</string>
     <string name="common__ready">Ready</string>
     <string name="common__remove">Remove</string>
     <string name="common__remove_tag">Remove %1$s tag</string>
@@ -314,6 +313,7 @@
     <string name="lightning__force_title">Force\n&lt;accent&gt;Transfer&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Transfer from Savings</string>
     <string name="lightning__funding__button2">Use Other Wallet</string>
+    <string name="lightning__funding__button_hw">Transfer from HW wallet</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
     <string name="lightning__funding__text">The easiest option is to use your Bitkit savings or send bitcoin from a different wallet.</string>
     <string name="lightning__funding__title">Fund your &lt;accent&gt;spending balance&lt;/accent&gt;</string>
@@ -443,7 +443,6 @@
     <string name="lightning__transfer_success__title_spending">Funds moved\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
     <string name="lightning__transfer_unavailable__nav_title">Transfer Unavailable</string>
     <string name="lightning__transfer_unavailable__text">Automatic transfers to your spending balance are no longer available. Use your own node, or set up a connection with another provider.</string>
-    <string name="lightning__transfer_unavailable__text_receive">Receiving to your spending balance through Bitkit is no longer available. Use your own node, or set up a connection with another provider.</string>
     <string name="lightning__transfer_unavailable__title">&lt;accent&gt;Manual setup&lt;/accent&gt;\nrequired</string>
     <string name="lightning__wait_text_top">Please wait for Bitkit to connect to the payment network (±10 seconds).</string>
     <string name="lightning__wallet_balances">Wallet Balances</string>

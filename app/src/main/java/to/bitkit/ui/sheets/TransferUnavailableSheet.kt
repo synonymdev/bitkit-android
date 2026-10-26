@@ -47,13 +47,13 @@ fun TransferUnavailableContent(
         image = R.drawable.lightning,
         continueText = stringResource(R.string.common__continue),
         onContinue = onContinue,
-        cancelText = stringResource(R.string.common__read_more),
+        cancelText = stringResource(R.string.common__learn_more),
         onCancel = {
             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Env.BLOCKTANK_SUNSET_URL.toUri())) }
         },
         onBack = onBack,
         testTag = "TransferUnavailable",
-        cancelTestTag = "TransferUnavailableReadMore",
+        cancelTestTag = "TransferUnavailableLearnMore",
         continueTestTag = "TransferUnavailableContinue",
         modifier = modifier,
     )

@@ -17,8 +17,8 @@ fun LocationBlockScreen(
     modifier: Modifier = Modifier,
 ) {
     TransferUnavailableContent(
-        navTitle = stringResource(R.string.wallet__receive_bitcoin),
-        description = stringResource(R.string.lightning__transfer_unavailable__text_receive),
+        navTitle = stringResource(R.string.lightning__transfer_unavailable__nav_title),
+        description = stringResource(R.string.lightning__transfer_unavailable__text),
         onContinue = navigateAdvancedSetup,
         onBack = onBackPressed,
         modifier = modifier,

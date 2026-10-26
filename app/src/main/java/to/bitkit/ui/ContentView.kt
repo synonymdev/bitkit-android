@@ -1150,11 +1150,7 @@ private fun RootNavHost(
 
                 FundingScreen(
                     onTransfer = {
-                        if (isGeoBlocked) {
-                            appViewModel.showSheet(Sheet.TransferUnavailable)
-                        } else {
-                            navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
-                        }
+                        navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                     },
                     onFund = {
                         scope.launch {
