@@ -420,10 +420,14 @@
     <string name="profile__auth_approval_authorize">Autoryzuj</string>
     <string name="profile__auth_approval_details">Szczegóły</string>
     <string name="profile__auth_approval_title">Autoryzuj</string>
+    <string name="profile__cleanup_pending">Czyszczenie profilu nie zostało ukończone. Odłącz się lokalnie, aby usunąć dostęp tego urządzenia bez ponawiania zdalnego usuwania.</string>
     <string name="profile__create_nav_title">Utwórz profil</string>
+    <string name="profile__delete_review_description">Niektóre zmiany mogły zostać ukończone. Sprawdź bieżący stan przed ponownym potwierdzeniem lub odłącz się lokalnie.</string>
+    <string name="profile__disconnect_local_description">Usuń dostęp tego urządzenia i dokończ lokalne czyszczenie. Nie spowoduje to usunięcia profilu z Pubky.</string>
     <string name="profile__edit_nav_title">Edytuj profil</string>
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Spróbuj ponownie</string>
+    <string name="profile__review_removal">Sprawdź</string>
     <string name="profile__suggestions">Sugestie</string>
     <string name="profile__suggestions_to_add">Sugestie do dodania</string>
     <string name="profile__unlink_confirm">Tak, odłącz</string>

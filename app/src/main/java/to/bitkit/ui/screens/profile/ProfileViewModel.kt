@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -22,16 +21,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.data.PubkyCachedProfile
-import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
-import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyProfileOwner
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.usecases.ProfileRemovalConfirmation
+import to.bitkit.usecases.ProfileRemovalCoordinator
+import to.bitkit.usecases.ProfileRemovalFailure
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -40,13 +40,19 @@ import kotlin.time.Duration.Companion.seconds
 class ProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
-    private val privatePaykitRepo: PrivatePaykitRepo,
+    private val removalCoordinator: ProfileRemovalCoordinator,
 ) : ViewModel() {
     companion object {
         private const val TAG = "ProfileViewModel"
         private val COPIED_POPUP_DURATION = 3.seconds
     }
 
+    private var displayedOwner = pubkyRepo.profileOwner()
+    private var ownerBoundToSession = displayedOwner.signIn != null
+    private var removalConfirmation: ProfileRemovalConfirmation? = null
+    private var removalFailure: ProfileRemovalFailure? = null
+    private var preparationRevision = 0L
+    private val _localDisconnect = MutableStateFlow(false)
     private val _showSignOutDialog = MutableStateFlow(false)
     private val _isSigningOut = MutableStateFlow(false)
     private val _showAddTagSheet = MutableStateFlow(false)
@@ -63,13 +69,23 @@ class ProfileViewModel @Inject constructor(
         pubkyRepo.isRestoringSession,
         _isRefreshing,
     ) { loading, restoring, refreshing -> loading || restoring || refreshing }
-    private val controls = combine(
+    private val dialogControls = combine(
         _showSignOutDialog,
         _isSigningOut,
         _showAddTagSheet,
         _copiedPublicKey,
     ) { showSignOutDialog, isSigningOut, showAddTagSheet, copiedPublicKey ->
-        ProfileControls(showSignOutDialog, isSigningOut, showAddTagSheet, copiedPublicKey)
+        ProfileControls(
+            showSignOutDialog = showSignOutDialog,
+            isSigningOut = isSigningOut,
+            showAddTagSheet = showAddTagSheet,
+            copiedPublicKey = copiedPublicKey
+        )
+    }
+
+    private val controls = combine(dialogControls, pubkyRepo.profileRecoveryPending, _localDisconnect) {
+            controls, pending, localOnly ->
+        controls.copy(recoveryPending = pending, localDisconnect = localOnly)
     }
 
     init {
@@ -92,7 +108,7 @@ class ProfileViewModel @Inject constructor(
             publicKey = pubkyRepo.publicKey.value,
             isLoading = pubkyRepo.isLoadingProfile.value || pubkyRepo.isRestoringSession.value || _isRefreshing.value,
             cachedProfile = pubkyRepo.cachedProfile.value,
-            controls = ProfileControls(),
+            controls = ProfileControls(recoveryPending = pubkyRepo.profileRecoveryPending.value),
         ),
     )
 
@@ -122,7 +138,7 @@ class ProfileViewModel @Inject constructor(
         profileLoadJob = viewModelScope.launch {
             _isRefreshing.update { true }
             try {
-                load()
+                if (pubkyRepo.profileRecoveryPending.first { it != null } == false) load()
             } finally {
                 _isRefreshing.update { false }
             }
@@ -130,11 +146,36 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun showSignOutConfirmation() {
-        _showSignOutDialog.update { true }
+        if (_isSigningOut.value) return
+        val owner = uiState.value.owner ?: return
+        val revision = ++preparationRevision
+        _isSigningOut.value = true
+        viewModelScope.launch {
+            try {
+                val failure = removalFailure
+                val result = if (failure != null) {
+                    removalCoordinator.prepareLocalDisconnect(failure)
+                } else {
+                    removalCoordinator.prepareSignOut(owner)
+                }
+                result.onSuccess { confirmation ->
+                    if (revision != preparationRevision || !removalCoordinator.isCurrent(confirmation.owner)) {
+                        return@onSuccess
+                    }
+                    removalConfirmation = confirmation
+                    _localDisconnect.value = confirmation.localOnly
+                    _showSignOutDialog.value = true
+                }.onFailure { showRemovalError(it) }
+            } finally {
+                _isSigningOut.value = false
+            }
+        }
     }
 
     fun dismissSignOutDialog() {
-        _showSignOutDialog.update { false }
+        preparationRevision++
+        removalConfirmation = null
+        _showSignOutDialog.value = false
     }
 
     fun showAddTagSheet() {
@@ -157,33 +198,35 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun signOut() {
+        if (_isSigningOut.value) return
+        val confirmation = removalConfirmation ?: return
+        removalConfirmation = null
+        _isSigningOut.value = true
+        _showSignOutDialog.value = false
         viewModelScope.launch {
-            if (_isSigningOut.value) return@launch
-            _isSigningOut.update { true }
-            _showSignOutDialog.update { false }
             try {
-                val result = runSuspendCatching {
-                    withContext(NonCancellable) {
-                        if (!pubkyRepo.forgetUnrestoredIdentity().getOrThrow()) {
-                            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG).getOrThrow()
-                            pubkyRepo.signOut().getOrThrow()
-                        }
-                        privatePaykitRepo.closeAndClear()
-                    }
-                }
-                if (result.isSuccess) {
-                    _effects.emit(ProfileEffect.SignedOut)
-                } else {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.profile__sign_out_title),
-                        description = result.exceptionOrNull()?.message,
-                    )
+                removalCoordinator.remove(confirmation).onSuccess { endedOwner ->
+                    removalFailure = null
+                    if (removalCoordinator.isCurrent(endedOwner)) _effects.emit(ProfileEffect.SignedOut(endedOwner))
+                }.onFailure {
+                    removalFailure = (it as? ProfileRemovalFailure) ?: removalFailure
+                    showRemovalError(it)
                 }
             } finally {
-                _isSigningOut.update { false }
+                removalFailure = removalCoordinator.failureFor(confirmation) ?: removalFailure
+                _isSigningOut.value = false
             }
         }
+    }
+
+    fun isRemovalCurrent(effect: ProfileEffect.SignedOut): Boolean = removalCoordinator.isCurrent(effect.owner)
+
+    private suspend fun showRemovalError(error: Throwable) {
+        ToastEventBus.send(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.profile__sign_out_title),
+            description = error.message,
+        )
     }
 
     fun copyPublicKey() {
@@ -208,17 +251,32 @@ class ProfileViewModel @Inject constructor(
         isLoading: Boolean,
         cachedProfile: PubkyCachedProfile?,
         controls: ProfileControls,
-    ) = ProfileUiState(
-        profile = profile,
-        cachedProfile = cachedProfile?.takeIf { isLoading && it.publicKey == publicKey },
-        publicKey = publicKey ?: profile?.publicKey,
-        canEdit = publicKey != null && publicKey == pubkyRepo.profile.value?.publicKey,
-        isLoading = isLoading,
-        showSignOutDialog = controls.showSignOutDialog,
-        isSigningOut = controls.isSigningOut,
-        showAddTagSheet = controls.showAddTagSheet,
-        copiedPublicKey = controls.copiedPublicKey,
-    )
+    ): ProfileUiState {
+        if (!ownerBoundToSession) {
+            val restoredOwner = pubkyRepo.profileOwner()
+            if (restoredOwner.storedRevision == displayedOwner.storedRevision && restoredOwner.signIn != null) {
+                displayedOwner = restoredOwner
+                ownerBoundToSession = true
+            }
+        }
+        return ProfileUiState(
+            profile = profile?.takeIf { controls.recoveryPending == false },
+            cachedProfile = cachedProfile?.takeIf {
+                controls.recoveryPending == false && isLoading && it.publicKey == publicKey
+            },
+            publicKey = publicKey ?: profile?.publicKey,
+            canEdit = controls.recoveryPending == false && publicKey != null &&
+                publicKey == pubkyRepo.profile.value?.publicKey,
+            isLoading = controls.recoveryPending == null || (controls.recoveryPending == false && isLoading),
+            recoveryPending = controls.recoveryPending == true,
+            localDisconnect = controls.localDisconnect,
+            owner = displayedOwner,
+            showSignOutDialog = controls.showSignOutDialog,
+            isSigningOut = controls.isSigningOut,
+            showAddTagSheet = controls.showAddTagSheet,
+            copiedPublicKey = controls.copiedPublicKey,
+        )
+    }
 
     private fun updateTags(
         transform: (List<String>) -> List<String>,
@@ -226,6 +284,7 @@ class ProfileViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             tagUpdateMutex.withLock {
+                if (pubkyRepo.profileRecoveryPending.value != false) return@withLock
                 val profile = pubkyRepo.profile.value ?: return@withLock
                 val tags = transform(profile.tags)
                 if (tags == profile.tags) {
@@ -260,6 +319,9 @@ data class ProfileUiState(
     val cachedProfile: PubkyCachedProfile? = null,
     val publicKey: String? = null,
     val canEdit: Boolean = false,
+    val recoveryPending: Boolean = false,
+    val localDisconnect: Boolean = false,
+    val owner: PubkyProfileOwner? = null,
     val isLoading: Boolean = true,
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,
@@ -268,6 +330,8 @@ data class ProfileUiState(
 )
 
 private data class ProfileControls(
+    val recoveryPending: Boolean? = null,
+    val localDisconnect: Boolean = false,
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,
     val showAddTagSheet: Boolean = false,
@@ -275,5 +339,5 @@ private data class ProfileControls(
 )
 
 sealed interface ProfileEffect {
-    data object SignedOut : ProfileEffect
+    data class SignedOut(val owner: PubkyProfileOwner) : ProfileEffect
 }

@@ -441,10 +441,14 @@
     <string name="profile__add_link_label_placeholder">Bijvoorbeeld \'Website\'</string>
     <string name="profile__add_link_note">Let op: Iedere link die u toevoegt is openbaar beschikbaar.</string>
     <string name="profile__add_tag">Tag toevoegen</string>
+    <string name="profile__cleanup_pending">Het opschonen van het profiel is niet voltooid. Verbreek lokaal de verbinding om de toegang van dit apparaat te verwijderen zonder de verwijdering op afstand opnieuw te proberen.</string>
     <string name="profile__create_nav_title">Profiel aanmaken</string>
+    <string name="profile__delete_review_description">Sommige wijzigingen zijn mogelijk voltooid. Controleer de huidige status voordat je opnieuw bevestigt, of verbreek lokaal de verbinding.</string>
+    <string name="profile__disconnect_local_description">Verwijder de toegang van dit apparaat en voltooi het lokaal opschonen. Dit verwijdert het profiel niet uit Pubky.</string>
     <string name="profile__edit_nav_title">Profiel Bewerken</string>
     <string name="profile__nav_title">Profiel</string>
     <string name="profile__retry_load">Probeer opnieuw</string>
+    <string name="profile__review_removal">Controleren</string>
     <string name="profile__suggestions">Suggesties</string>
     <string name="profile__suggestions_to_add">Suggesties Om Toe Te Voegen</string>
     <string name="profile__unlink_confirm">Ja, ontkoppelen</string>

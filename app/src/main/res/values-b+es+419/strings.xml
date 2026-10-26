@@ -447,10 +447,14 @@
     <string name="profile__auth_approval_authorize">Autorizar</string>
     <string name="profile__auth_approval_details">Detalles</string>
     <string name="profile__auth_approval_title">Autorizar</string>
+    <string name="profile__cleanup_pending">La limpieza del perfil está incompleta. Desconéctate localmente para retirar el acceso de este dispositivo sin volver a intentar la eliminación remota.</string>
     <string name="profile__create_nav_title">Crear perfil</string>
+    <string name="profile__delete_review_description">Es posible que algunos cambios se hayan completado. Revisa el estado actual antes de confirmar de nuevo o desconéctate localmente.</string>
+    <string name="profile__disconnect_local_description">Retira el acceso de este dispositivo y completa la limpieza local. Esto no elimina el perfil de Pubky.</string>
     <string name="profile__edit_nav_title">Editar Perfil</string>
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Inténtelo de nuevo</string>
+    <string name="profile__review_removal">Revisar</string>
     <string name="profile__suggestions">Sugerencias</string>
     <string name="profile__suggestions_to_add">Sugerencias para añadir</string>
     <string name="profile__unlink_confirm">Sí, desvincular</string>

@@ -87,12 +87,12 @@ fun ProfileScreen(
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                ProfileEffect.SignedOut -> onBackClick()
+                is ProfileEffect.SignedOut -> if (viewModel.isRemovalCurrent(it)) onBackClick()
             }
         }
     }
 
-    Content(
+    ProfileContent(
         uiState = uiState,
         onBackClick = onBackClick,
         onClickEdit = onEditProfile,
@@ -111,7 +111,7 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun Content(
+internal fun ProfileContent(
     uiState: ProfileUiState,
     onBackClick: () -> Unit,
     onClickEdit: () -> Unit,
@@ -139,6 +139,20 @@ private fun Content(
     }
 
     when {
+        uiState.recoveryPending -> ScreenColumn {
+            topBar(Modifier)
+            VerticalSpacer(32.dp)
+            BodyM(text = stringResource(R.string.profile__cleanup_pending))
+            VerticalSpacer(24.dp)
+            PrimaryButton(
+                text = stringResource(R.string.profile__sign_out),
+                onClick = onClickSignOut,
+                enabled = !uiState.isSigningOut,
+                modifier = Modifier.testTag("ProfileRecoveryDisconnect"),
+            )
+            if (uiState.isSigningOut) GradientCircularProgressIndicator(Modifier.size(32.dp))
+        }
+
         currentProfile != null -> Box(modifier = Modifier.screen()) {
             ProfileBody(
                 profile = currentProfile,
@@ -178,7 +192,13 @@ private fun Content(
     if (uiState.showSignOutDialog) {
         AppAlertDialog(
             title = stringResource(R.string.profile__sign_out_title),
-            text = stringResource(R.string.profile__sign_out_description),
+            text = stringResource(
+                if (uiState.localDisconnect) {
+                    R.string.profile__disconnect_local_description
+                } else {
+                    R.string.profile__sign_out_description
+                }
+            ),
             confirmText = stringResource(R.string.profile__sign_out),
             onConfirm = onConfirmSignOut,
             onDismiss = onDismissSignOutDialog,
@@ -461,7 +481,7 @@ private fun EmptyState(
 @Composable
 private fun PreviewCached() {
     AppThemeSurface {
-        Content(
+        ProfileContent(
             uiState = ProfileUiState(
                 cachedProfile = PubkyCachedProfile(
                     publicKey = "pk8e3qm5...gxag",
@@ -491,7 +511,7 @@ private fun PreviewCached() {
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Content(
+        ProfileContent(
             uiState = ProfileUiState(
                 profile = PubkyProfile(
                     publicKey = "pk8e3qm5...gxag",

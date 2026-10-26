@@ -463,10 +463,14 @@
     <string name="profile__auth_approval_details">Подробности</string>
     <string name="profile__auth_approval_ok">Ок</string>
     <string name="profile__auth_approval_title">Авторизовать</string>
+    <string name="profile__cleanup_pending">Очистка профиля не завершена. Отключитесь локально, чтобы убрать доступ этого устройства без повторной попытки удалённого удаления.</string>
     <string name="profile__create_nav_title">Создать Профиль</string>
+    <string name="profile__delete_review_description">Некоторые изменения могли быть выполнены. Проверьте текущее состояние перед повторным подтверждением или отключитесь локально.</string>
+    <string name="profile__disconnect_local_description">Уберите доступ этого устройства и завершите локальную очистку. Профиль в Pubky удалён не будет.</string>
     <string name="profile__edit_nav_title">Редактировать Профиль</string>
     <string name="profile__nav_title">Профиль</string>
     <string name="profile__retry_load">Попробовать снова</string>
+    <string name="profile__review_removal">Проверить</string>
     <string name="profile__suggestions">Рекомендации</string>
     <string name="profile__suggestions_to_add">Рекомендации для добавления</string>
     <string name="profile__unlink_confirm">Да, Отвязать</string>

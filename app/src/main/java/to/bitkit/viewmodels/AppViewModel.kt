@@ -3415,7 +3415,7 @@ class AppViewModel @Inject constructor(
             val timeout = if (isContactLink) PubkyService.AUTHORIZATION_TIMEOUT else PUBKY_AUTH_DEEPLINK_TIMEOUT
             val isInitializationReady = withTimeoutOrNull(timeout) {
                 pubkyRepo.awaitInitialization()
-                if (!isContactLink) awaitPubkyAuthIdentity()
+                if (!isContactLink && !awaitPubkyAuthIdentity()) return@withTimeoutOrNull false
                 awaitContactDataForDeeplink(isContactLink)
             } ?: false
             if (!isInitializationReady) {
@@ -3444,19 +3444,28 @@ class AppViewModel @Inject constructor(
         return isPaykitUiEnabledFromSettings() && walletRepo.walletExists()
     }
 
-    private suspend fun awaitPubkyAuthIdentity() {
-        while (pubkyRepo.awaitIdentityReady() == PubkyIdentityReadiness.Unavailable) {
-            if (isOnline.value == ConnectivityState.CONNECTED && pubkyRepo.localIdentityPublicKey() != null) {
-                Logger.debug("Continuing sign-in link with the stored Pubky key", context = TAG)
-                return
+    private suspend fun awaitPubkyAuthIdentity(): Boolean {
+        while (true) {
+            when (pubkyRepo.awaitIdentityReady()) {
+                PubkyIdentityReadiness.RecoveryRequired -> return false
+                PubkyIdentityReadiness.Ready, PubkyIdentityReadiness.Missing -> return true
+                PubkyIdentityReadiness.Unavailable -> {
+                    if (pubkyRepo.requiresProfileRecovery()) return false
+                    if (isOnline.value == ConnectivityState.CONNECTED && pubkyRepo.localIdentityPublicKey() != null) {
+                        return !pubkyRepo.requiresProfileRecovery()
+                    }
+                    delay(PUBKY_AUTH_DEEPLINK_RETRY_INTERVAL)
+                    // A pending local cleanup must end this wait even while connectivity stays offline.
+                    combine(isOnline, pubkyRepo.profileRecoveryPending) { online, pending ->
+                        online == ConnectivityState.CONNECTED || pending == true
+                    }.first { it }
+                }
             }
-            delay(PUBKY_AUTH_DEEPLINK_RETRY_INTERVAL)
-            isOnline.first { it == ConnectivityState.CONNECTED }
-            Logger.debug("Retrying Pubky session restore for a sign-in link", context = TAG)
         }
     }
 
     private suspend fun showPubkyAuthWaitToastIfRestoring() {
+        if (pubkyRepo.requiresProfileRecovery()) return
         if (pubkyRepo.publicKey.value != null) return
         if (!isPaykitUiEnabledFromSettings() || !walletRepo.walletExists()) return
         if (!runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(false)) return
@@ -7060,6 +7069,11 @@ class AppViewModel @Inject constructor(
             }
             // A stale amount above inbound liquidity would hide the Auto tab until the receive state refreshes
             if (sheetType is Sheet.Receive) walletRepo.setBip21AmountSats(null)
+            if (sheetType is Sheet.PubkyAuth && pubkyRepo.requiresProfileRecovery()) {
+                hidePubkyAuthWaitToast()
+                showPubkyIdentityUnavailableToast()
+                return@launch
+            }
             _currentSheet.update { sheetType }
         }
         sheetTransitionJob = nextJob
@@ -8101,6 +8115,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handlePubkyAuth(authUrl: String) {
+        if (pubkyRepo.requiresProfileRecovery()) return showPubkyIdentityUnavailableToast()
         val isSignup = PubkyAuthRequest.isSignupUrl(authUrl)
         val createsIdentity = isSignup &&
             (
@@ -8109,12 +8124,14 @@ class AppViewModel @Inject constructor(
                 )
         if (createsIdentity) {
             if (rejectPubkySignupForExistingIdentity()) return
+            if (pubkyRepo.requiresProfileRecovery()) return showPubkyIdentityUnavailableToast()
             showSheet(Sheet.PubkyAuth(authUrl))
             return
         }
 
         if (pubkyRepo.publicKey.value == null) {
             if (pubkyRepo.localIdentityPublicKey() == null) return showPubkyIdentityUnavailableToast()
+            if (pubkyRepo.requiresProfileRecovery()) return showPubkyIdentityUnavailableToast()
             showSheet(Sheet.PubkyAuth(authUrl))
             return
         }
@@ -8127,10 +8144,20 @@ class AppViewModel @Inject constructor(
             )
             return
         }
+        if (pubkyRepo.requiresProfileRecovery()) return showPubkyIdentityUnavailableToast()
         showSheet(Sheet.PubkyAuth(authUrl))
     }
 
     private suspend fun showPubkyIdentityUnavailableToast() {
+        if (pubkyRepo.requiresProfileRecovery()) {
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.profile__nav_title),
+                description = context.getString(R.string.profile__cleanup_pending),
+                visibilityTime = Toast.VISIBILITY_TIME_LONG,
+            )
+            return
+        }
         val hasIdentity = runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(true)
         if (hasIdentity) {
             ToastEventBus.send(

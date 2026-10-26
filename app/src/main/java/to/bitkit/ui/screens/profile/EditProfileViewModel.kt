@@ -12,22 +12,22 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import to.bitkit.R
-import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
-import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyProfileOwner
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.usecases.ProfileRemovalConfirmation
+import to.bitkit.usecases.ProfileRemovalCoordinator
+import to.bitkit.usecases.ProfileRemovalFailure
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -35,11 +35,16 @@ import javax.inject.Inject
 class EditProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
-    private val privatePaykitRepo: PrivatePaykitRepo,
+    private val removalCoordinator: ProfileRemovalCoordinator,
 ) : ViewModel() {
     companion object {
         private const val TAG = "EditProfileViewModel"
     }
+
+    private val screenOwner = pubkyRepo.profileOwner()
+    private var preparationRevision = 0L
+    private var removalConfirmation: ProfileRemovalConfirmation? = null
+    private var removalFailure: ProfileRemovalFailure? = null
 
     private val _uiState = MutableStateFlow(EditProfileUiState())
     val uiState = _uiState.asStateFlow()
@@ -57,6 +62,10 @@ class EditProfileViewModel @Inject constructor(
             val profile = pubkyRepo.profile.value
             val publicKey = pubkyRepo.publicKey.value.orEmpty()
             val removal = if (pubkyRepo.isRingAdoptedIdentity()) ProfileRemoval.UNLINK else ProfileRemoval.DELETE
+            if (!removalCoordinator.isCurrent(screenOwner)) {
+                _uiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
             if (profile != null) {
                 _uiState.update {
                     it.copy(
@@ -161,12 +170,51 @@ class EditProfileViewModel @Inject constructor(
     }
 
     fun showDeleteConfirmation() {
-        if (_uiState.value.isBusy) return
-        _uiState.update { it.copy(showDeleteDialog = true) }
+        if (_uiState.value.isBusy || _uiState.value.isLoading) return
+        viewModelScope.launch {
+            prepareConfirmation { removalCoordinator.prepareDeletion(screenOwner) }
+        }
     }
 
     fun dismissDeleteDialog() {
-        _uiState.update { it.copy(showDeleteDialog = false) }
+        preparationRevision++
+        removalConfirmation = null
+        _uiState.update {
+            it.copy(
+                showDeleteDialog = false,
+                showDeleteFailureDialog = removalFailure != null,
+                canReviewRemoval = removalFailure?.canReview == true,
+            )
+        }
+    }
+
+    private suspend fun prepareConfirmation(prepare: suspend () -> Result<ProfileRemovalConfirmation>) {
+        if (_uiState.value.isBusy) return
+        val revision = ++preparationRevision
+        _uiState.update { it.copy(isPreparingRemoval = true) }
+        try {
+            prepare().onSuccess { confirmation ->
+                if (revision != preparationRevision || !removalCoordinator.isCurrent(confirmation.owner)) {
+                    return@onSuccess
+                }
+                removalConfirmation = confirmation
+                _uiState.update {
+                    it.copy(
+                        showDeleteDialog = true,
+                        showDeleteFailureDialog = false,
+                        isLocalDisconnect = confirmation.localOnly
+                    )
+                }
+            }.onFailure { error ->
+                ToastEventBus.send(
+                    Toast.ToastType.ERROR,
+                    context.getString(R.string.profile__disconnect_error),
+                    error.message
+                )
+            }
+        } finally {
+            _uiState.update { it.copy(isPreparingRemoval = false) }
+        }
     }
 
     fun save() {
@@ -217,90 +265,72 @@ class EditProfileViewModel @Inject constructor(
     }
 
     fun deleteProfile() {
-        viewModelScope.launch {
-            attemptDeleteProfile()
-        }
+        if (_uiState.value.isBusy) return
+        val confirmation = removalConfirmation ?: return
+        removalConfirmation = null
+        viewModelScope.launch { performRemoval(confirmation) }
     }
 
     fun retryDeleteProfile() {
-        viewModelScope.launch {
-            attemptDeleteProfile()
-        }
+        if (_uiState.value.isBusy) return
+        val failure = removalFailure ?: return
+        viewModelScope.launch { prepareConfirmation { removalCoordinator.reviewAgain(failure) } }
     }
 
     fun dismissDeleteFailureDialog() {
+        preparationRevision++
+        removalConfirmation = null
         _uiState.update { it.copy(showDeleteFailureDialog = false) }
     }
 
     fun disconnectProfile() {
+        if (_uiState.value.isBusy) return
+        val failure = removalFailure ?: return
         viewModelScope.launch {
-            if (_uiState.value.isBusy) return@launch
-            _uiState.update { it.copy(showDeleteFailureDialog = false, isDeleting = true) }
-            try {
-                val result = runSuspendCatching {
-                    withContext(NonCancellable) {
-                        if (!pubkyRepo.forgetUnrestoredIdentity().getOrThrow()) {
-                            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG).getOrThrow()
-                            pubkyRepo.signOut().getOrThrow()
-                        }
-                        privatePaykitRepo.closeAndClear().getOrThrow()
-                    }
+            prepareConfirmation { removalCoordinator.prepareLocalDisconnect(failure) }
+        }
+    }
+
+    private suspend fun performRemoval(confirmation: ProfileRemovalConfirmation) {
+        if (_uiState.value.isBusy) return
+        _uiState.update { it.copy(showDeleteDialog = false, showDeleteFailureDialog = false, isDeleting = true) }
+        try {
+            removalCoordinator.remove(confirmation).onSuccess { endedOwner ->
+                removalFailure = null
+                if (removalCoordinator.isCurrent(endedOwner)) {
+                    _effects.emit(EditProfileEffect.RemovalCompleted(endedOwner))
                 }
-                if (result.isSuccess) {
-                    _effects.emit(EditProfileEffect.DisconnectSuccess)
+            }.onFailure { error ->
+                removalFailure = (error as? ProfileRemovalFailure) ?: removalFailure
+                if (removalFailure != null) {
+                    _uiState.update {
+                        it.copy(
+                            showDeleteFailureDialog = true,
+                            canReviewRemoval = requireNotNull(removalFailure).canReview,
+                        )
+                    }
                 } else {
                     ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.profile__disconnect_error),
-                        description = result.exceptionOrNull()?.message,
+                        Toast.ToastType.ERROR,
+                        context.getString(R.string.profile__disconnect_error),
+                        error.message,
                     )
                 }
-            } finally {
-                _uiState.update { it.copy(isDeleting = false) }
+            }
+        } finally {
+            removalFailure = removalCoordinator.failureFor(confirmation) ?: removalFailure
+            _uiState.update {
+                it.copy(
+                    isDeleting = false,
+                    showDeleteFailureDialog = removalFailure != null,
+                    canReviewRemoval = removalFailure?.canReview == true,
+                )
             }
         }
     }
 
-    private suspend fun attemptDeleteProfile() {
-        if (_uiState.value.isBusy) return
-        _uiState.update {
-            it.copy(
-                showDeleteDialog = false,
-                showDeleteFailureDialog = false,
-                isDeleting = true,
-            )
-        }
-        try {
-            privatePaykitRepo.beginProfileDeletion()
-            val result = runSuspendCatching {
-                privatePaykitRepo.removePublishedEndpointsForCleanup(TAG, deferAppSync = true).getOrThrow()
-                pubkyRepo.deleteProfile().getOrThrow()
-            }
-            if (result.isSuccess) {
-                privatePaykitRepo.closeAndClear().onFailure {
-                    Logger.error("Failed to clear local state after profile deletion", it, context = TAG)
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = it.message,
-                    )
-                    return
-                }
-                ToastEventBus.send(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(_uiState.value.removal.successToast),
-                )
-                _effects.emit(EditProfileEffect.DeleteSuccess)
-            } else {
-                val error = requireNotNull(result.exceptionOrNull()) { "Profile delete failed without an error" }
-                Logger.error("Failed to delete profile", error, context = TAG)
-                _uiState.update { it.copy(showDeleteFailureDialog = true) }
-            }
-        } finally {
-            withContext(NonCancellable) { privatePaykitRepo.endProfileDeletion() }
-            _uiState.update { it.copy(isDeleting = false) }
-        }
-    }
+    fun isRemovalCurrent(effect: EditProfileEffect.RemovalCompleted): Boolean =
+        removalCoordinator.isCurrent(effect.owner)
 }
 
 @Stable
@@ -317,12 +347,15 @@ data class EditProfileUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val isDeleting: Boolean = false,
+    val isPreparingRemoval: Boolean = false,
+    val isLocalDisconnect: Boolean = false,
+    val canReviewRemoval: Boolean = true,
     val showDeleteDialog: Boolean = false,
     val showDeleteFailureDialog: Boolean = false,
     val showAddLinkSheet: Boolean = false,
     val showAddTagSheet: Boolean = false,
 ) {
-    val isBusy: Boolean get() = isSaving || isDeleting
+    val isBusy: Boolean get() = isSaving || isDeleting || isPreparingRemoval
 }
 
 enum class ProfileRemoval(
@@ -362,6 +395,5 @@ enum class ProfileRemoval(
 
 sealed interface EditProfileEffect {
     data object SaveSuccess : EditProfileEffect
-    data object DeleteSuccess : EditProfileEffect
-    data object DisconnectSuccess : EditProfileEffect
+    data class RemovalCompleted(val owner: PubkyProfileOwner) : EditProfileEffect
 }

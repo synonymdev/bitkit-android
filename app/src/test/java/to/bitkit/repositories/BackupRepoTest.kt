@@ -194,6 +194,13 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `profile backup retry admission does not retry unrelated storage failures`() {
+        assertFalse(PaykitException.Storage("wallet_wipe_in_progress", "wipe").isTemporaryBackupFailure())
+        assertFalse(AppError(PaykitException.Storage("wallet_wipe_in_progress", "wipe")).isTemporaryBackupFailure())
+        assertFalse(PaykitException.Storage("unknown", "profile_removal_in_progress").isTemporaryBackupFailure())
+    }
+
+    @Test
     fun `metadata backup preserves complete data when identity records cannot be read`() = test {
         stubMetadataBackupReads()
         val error = AppError("keychain unavailable")
@@ -1223,6 +1230,45 @@ class BackupRepoTest : BaseUnitTest() {
             // still one attempt: the failed timestamp suppresses a retry until data changes again
             verify(privatePaykitRepo, times(1)).backupSnapshot()
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `wallet backup retains pending work while profile removal owns the SDK`() = test {
+        whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(3_000))
+        whenever { privatePaykitRepo.backupSnapshot() }
+            .thenReturn(
+                Result.failure(AppError(PaykitException.Storage("profile_removal_in_progress", "removal owns SDK")))
+            )
+            .thenReturn(Result.success(PrivatePaykitBackupSnapshot(null, 0)))
+        val backupStatuses = MutableStateFlow(
+            mapOf(
+                BackupCategory.WALLET to BackupItemStatus(
+                    synced = 1_000,
+                    required = 2_000,
+                ),
+            )
+        )
+        val allowWalletClear = CompletableDeferred<Unit>().apply { complete(Unit) }
+        stubBackupStatuses(backupStatuses, allowWalletClear) {}
+        stubBackupObservers()
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(privatePaykitRepo, times(1)).backupSnapshot()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+
+            advanceTimeBy(20_000)
+            runCurrent()
+
+            verify(privatePaykitRepo, times(2)).backupSnapshot()
+            verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), any())
+            assertFalse(backupStatuses.value.getValue(BackupCategory.WALLET).isRequired)
         } finally {
             sut.stopObservingBackups()
         }

@@ -249,7 +249,7 @@ import com.synonym.bitkitcore.Activity as BitkitActivity
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(application = android.app.Application::class, sdk = [34])
 class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private lateinit var sut: AppViewModel
@@ -731,6 +731,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { pubkyRepo.awaitIdentityReady() }.thenAnswer {
             if (pubkyPublicKey.value != null) PubkyIdentityReadiness.Ready else PubkyIdentityReadiness.Missing
         }
+        whenever { pubkyRepo.requiresProfileRecovery() }.thenReturn(false)
+        whenever(pubkyRepo.profileRecoveryPending).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
         whenever { pubkyRepo.refreshContacts() }.thenReturn(true)
         whenever { pubkyRepo.importShopContacts() }.thenReturn(Result.success(Unit))
@@ -4955,6 +4957,74 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `pending removal blocks scanner and signup authorization before retained key fallback`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        whenever(pubkyRepo.requiresProfileRecovery()).thenReturn(true)
+        whenever(pubkyRepo.localIdentityPublicKey()).thenReturn(testPublicKey)
+        whenever(context.getString(R.string.profile__cleanup_pending)).thenReturn("Complete local cleanup")
+        listOf("pubkyauth://signin_grant", grantSignupAuthUrl, legacyAuthorizedSignupAuthUrl).forEach { authUrl ->
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            advanceUntilIdle()
+            assertNull(sut.currentSheet.value)
+            sut.showScannerSheet()
+            advanceUntilIdle()
+            sut.onScannerSheetResult(authUrl)
+            advanceUntilIdle()
+            assertFalse(sut.currentSheet.value is Sheet.PubkyAuth)
+            sut.hideSheet()
+            advanceUntilIdle()
+        }
+        verify(pubkyRepo, never()).localIdentityPublicKey()
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(context, atLeastOnce()).getString(R.string.profile__cleanup_pending)
+    }
+
+    @Test
+    fun `pending removal ends offline auth waiting and releases the scan queue`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        val pending = MutableStateFlow<Boolean?>(false)
+        whenever(pubkyRepo.profileRecoveryPending).thenReturn(pending)
+        whenever(pubkyRepo.requiresProfileRecovery()).thenAnswer { pending.value == true }
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        whenever(pubkyRepo.awaitIdentityReady()).thenAnswer {
+            if (pending.value == true) PubkyIdentityReadiness.RecoveryRequired else PubkyIdentityReadiness.Unavailable
+        }
+        connectivityState.value = ConnectivityState.DISCONNECTED
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
+        advanceTimeBy(10_000)
+        runCurrent()
+        pending.value = true
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).dismiss(check { assertTrue(it.isLoading) })
+        verify(pubkyRepo, never()).localIdentityPublicKey()
+        val bolt11 = "lnbcrt1postpendingcleanupscan"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        connectivityState.value = ConnectivityState.CONNECTED
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        assertTrue(sut.currentSheet.value is Sheet.Send)
+    }
+
+    @Test
+    fun `auth sheet cannot install after pending starts during its transition`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.showScannerSheet()
+        advanceUntilIdle()
+        sut.showSheet(Sheet.PubkyAuth("pubkyauth://signin_grant"))
+        runCurrent()
+        whenever(pubkyRepo.requiresProfileRecovery()).thenReturn(true)
+        advanceUntilIdle()
+        assertNull(sut.currentSheet.value)
+        verify(context).getString(R.string.profile__cleanup_pending)
     }
 
     @Test

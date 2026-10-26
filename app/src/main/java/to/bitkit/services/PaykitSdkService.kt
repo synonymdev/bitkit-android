@@ -110,6 +110,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
 import to.bitkit.async.BaseCoroutineScope
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -257,6 +258,7 @@ class PaykitSdkService @Inject constructor(
     sharedPubky: SharedPubkyClient,
     @IoDispatcher ioDispatcher: CoroutineDispatcher,
     private val settingsStore: SettingsStore,
+    private val profileRemovalStore: ProfileRemovalStore,
 ) : BaseCoroutineScope(ioDispatcher, TAG) {
     private val sessionProvider = PaykitSdkSessionProvider(keychain, sharedPubky)
     private val paymentAdapter = PaykitSdkPaymentAdapter()
@@ -276,12 +278,13 @@ class PaykitSdkService @Inject constructor(
     private var nextIdentityRepublishAt = 0L
     private var lastIdentityRepublishAt = 0L
     private val handleMutex = Mutex()
-    private val operationLock = PaykitSdkOperationLock()
+    private val operationLock = PaykitSdkOperationLock { profileRemovalStore.requireAccess() }
     private val publicReadSlots = PaykitPublicReadSlots(PUBLIC_READ_PERMITS)
     private val bulkReadPermits = Semaphore(BULK_READ_PERMITS)
     private val setupMutex = Mutex()
     private var isSetup = CompletableDeferred<Unit>()
     private var setupFailed = false
+    private var publicRecoverySetup = false
     private var platformInitializer: () -> Unit = { PaykitAndroid.initializeOrThrow(context) }
 
     @Volatile
@@ -317,8 +320,9 @@ class PaykitSdkService @Inject constructor(
         sharedPubky: SharedPubkyClient = SharedPubkyClient(context, ioDispatcher),
         platformInitializer: (() -> Unit)? = null,
         settingsStore: SettingsStore,
+        profileRemovalStore: ProfileRemovalStore = ProfileRemovalStore.inMemoryForTesting(),
         sdkFactory: () -> PaykitSdk,
-    ) : this(context, keychain, pubkyStore, sharedPubky, ioDispatcher, settingsStore) {
+    ) : this(context, keychain, pubkyStore, sharedPubky, ioDispatcher, settingsStore, profileRemovalStore) {
         this.sdkFactory = sdkFactory
         if (bootstrapFactory != null) this.bootstrapFactory = bootstrapFactory
         if (platformInitializer == null) {
@@ -330,6 +334,39 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun initialize() {
         initialize { initializeRuntime() }
+    }
+
+    /** Makes public reads and explicit local recovery available without restoring or publishing saved access. */
+    internal suspend fun preparePublicProfileRecovery() {
+        setupMutex.withLock {
+            if (isSetup.isCompleted && !setupFailed) return
+            if (setupFailed) isSetup = CompletableDeferred()
+            try {
+                platformInitializer()
+                setupFailed = false
+                publicRecoverySetup = true
+                // Preserve the barrier that callers may already be awaiting on a cold start.
+                isSetup.complete(Unit)
+            } catch (error: Throwable) {
+                setupFailed = true
+                isSetup.completeExceptionally(error)
+                throw error
+            }
+        }
+    }
+
+    /** Local credential removal only; it must not initialize a retained session or swallow storage failures. */
+    internal suspend fun forgetLocalProfileAccess() {
+        operationLock.requireProfileRemoval()
+        operationLock.withLock {
+            operationLock.requireProfileRemoval()
+            try {
+                sessionProvider.clearSessionAccess()
+            } finally {
+                resetRuntime()
+                notifyBackupStateChanged()
+            }
+        }
     }
 
     fun setPaymentSubmissionActive(active: Boolean) {
@@ -352,17 +389,23 @@ class PaykitSdkService @Inject constructor(
 
     private suspend fun initialize(activate: suspend () -> Unit) {
         setupMutex.withLock {
-            if (isSetup.isCompleted && !setupFailed) return
-            if (setupFailed) {
+            // A cleanup permit authorizes the original operation, never restoration/publication of saved access.
+            profileRemovalStore.requireNoPending()
+            if (isSetup.isCompleted && !setupFailed && !publicRecoverySetup) return
+            val promotingPublicSetup = publicRecoverySetup
+            if (setupFailed || promotingPublicSetup) {
                 isSetup = CompletableDeferred()
                 setupFailed = false
             }
-
             try {
-                platformInitializer()
-                launch { republishIdentityIfNeeded() }
-                operationLock.withLock { activate() }
+                if (!promotingPublicSetup) platformInitializer()
+                operationLock.withLock {
+                    if (promotingPublicSetup) resetRuntime()
+                    publicRecoverySetup = false
+                    activate()
+                }
                 isSetup.complete(Unit)
+                launch { republishIdentityIfNeeded() }
             } catch (t: Throwable) {
                 setupFailed = true
                 isSetup.completeExceptionally(t)
@@ -398,6 +441,8 @@ class PaykitSdkService @Inject constructor(
     }
 
     suspend fun republishIdentityIfNeeded(publicKey: String? = null, now: Long = nowMillis()) {
+        profileRemovalStore.requireNoPending()
+        operationLock.requireNoProfileRemoval()
         val publication = launchIdentityRepublish(publicKey, now)
         withTimeoutOrNull(IDENTITY_REPUBLISH_WAIT_TIMEOUT) {
             publication.join()
@@ -408,12 +453,16 @@ class PaykitSdkService @Inject constructor(
 
     private suspend fun launchIdentityRepublish(publicKey: String?, now: Long = nowMillis()): Job {
         currentCoroutineContext().ensureActive()
+        val generation = runtimeGeneration
         return launch {
             if (!identityRepublishMutex.tryLock()) return@launch
             identityRepublishJob = currentCoroutineContext().job
             try {
                 withTimeoutOrNull(IDENTITY_REPUBLISH_TIMEOUT) {
                     runSuspendCatching {
+                        profileRemovalStore.requireNoPending()
+                        operationLock.requireNoProfileRemoval()
+                        if (generation != runtimeGeneration) return@runSuspendCatching
                         if (!isSetup.isCompleted) PaykitAndroid.initializeOrThrow(context)
                         val key = publicKey ?: sessionProvider.loadLocalSecretKey()?.let(::pubkyPublicKeyFromSecret)
                         val identity = key?.let(PubkyPublicKeyFormat::normalized) ?: return@runSuspendCatching
@@ -425,6 +474,9 @@ class PaykitSdkService @Inject constructor(
                             return@runSuspendCatching
                         }
 
+                        profileRemovalStore.requireNoPending()
+                        operationLock.requireNoProfileRemoval()
+                        if (generation != runtimeGeneration) return@runSuspendCatching
                         republishPublicKey = identity
                         lastIdentityRepublishAt = now
                         nextIdentityRepublishAt = now + IDENTITY_REPUBLISH_RETRY_INTERVAL.inWholeMilliseconds
@@ -444,8 +496,16 @@ class PaykitSdkService @Inject constructor(
 
     /** Rebroadcasts the identity record when one exists. Returns false only when the network reports none. */
     suspend fun hasIdentityRecord(publicKey: String): Boolean {
+        profileRemovalStore.requireNoPending()
+        operationLock.requireNoProfileRemoval()
+        val generation = runtimeGeneration
         isSetup.await()
-        return bootstrap().republishIdentity(publicKey)
+        return identityRepublishMutex.withLock {
+            profileRemovalStore.requireNoPending()
+            operationLock.requireNoProfileRemoval()
+            check(generation == runtimeGeneration) { "Pubky runtime changed before identity publication" }
+            bootstrap().republishIdentity(publicKey)
+        }
     }
 
     suspend fun currentPublicKey(): String? {
@@ -622,7 +682,7 @@ class PaykitSdkService @Inject constructor(
         return operationLock.withLock {
             withPaykitKey { handle ->
                 val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
-                val current = handle.fetchPaykitProfile(publicKey)
+                val current = completeSdkCall { handle.fetchPaykitProfile(publicKey) }
                 completeSdkCall {
                     handle.publishPaykitProfile(profile, current?.revision).also { notifyBackupStateChanged() }
                 }
@@ -646,12 +706,66 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    internal suspend fun captureProfileDeletion(
+        expectedIdentity: String,
+        isStillCurrent: () -> Boolean,
+    ): PaykitProfileDeletionSnapshot {
+        isSetup.await()
+        return operationLock.withLock {
+            withPaykitKey { handle ->
+                check(isStillCurrent()) { "Profile removal identity changed" }
+                val identity = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
+                check(PubkyPublicKeyFormat.matches(identity, expectedIdentity)) { "Profile removal identity changed" }
+                val profile = completeSdkCall { handle.fetchPaykitProfile(identity) }
+                val contacts = completeSdkCall { handle.contactRecords() }
+                check(isStillCurrent()) { "Profile removal identity changed" }
+                PaykitProfileDeletionSnapshot(identity, profile?.revision, contacts.toList())
+            }
+        }
+    }
+
+    internal suspend fun validateProfileDeletion(snapshot: PaykitProfileDeletionSnapshot) {
+        isSetup.await()
+        operationLock.withLock {
+            withPaykitKey { handle ->
+                val identity = completeSdkCall { handle.identityStatus() }?.publicKey
+                check(PubkyPublicKeyFormat.matches(identity, snapshot.publicKey)) { "Profile removal identity changed" }
+                val profile = completeSdkCall { handle.fetchPaykitProfile(snapshot.publicKey) }
+                check(profile?.revision == snapshot.profileRevision) { "Profile changed; review it before removing it" }
+                val contacts = completeSdkCall { handle.contactRecords() }
+                check(
+                    contacts.toSet() == snapshot.contacts.toSet()
+                ) { "Contacts changed; review them before removing the profile" }
+            }
+        }
+    }
+
+    internal suspend fun deletePaykitProfile(snapshot: PaykitProfileDeletionSnapshot) {
+        isSetup.await()
+        operationLock.withLock {
+            withPaykitKey { handle ->
+                val identity = completeSdkCall { handle.identityStatus() }?.publicKey
+                check(PubkyPublicKeyFormat.matches(identity, snapshot.publicKey)) { "Profile removal identity changed" }
+                if (snapshot.profileRevision == null) {
+                    check(completeSdkCall { handle.fetchPaykitProfile(snapshot.publicKey) } == null) {
+                        "Profile changed; review it before removing it"
+                    }
+                } else {
+                    completeSdkCall {
+                        handle.deletePaykitProfile(snapshot.profileRevision)
+                        notifyBackupStateChanged()
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun deletePaykitProfile() {
         isSetup.await()
         operationLock.withLock {
             withPaykitKey { handle ->
                 val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
-                val current = handle.fetchPaykitProfile(publicKey)
+                val current = completeSdkCall { handle.fetchPaykitProfile(publicKey) }
                 completeSdkCall {
                     current?.let { handle.deletePaykitProfile(it.revision) }
                     notifyBackupStateChanged()
@@ -924,7 +1038,8 @@ class PaykitSdkService @Inject constructor(
                 if (updates.isEmpty()) return@withStateRevisionTracking null
                 val publicKey = completeSdkCall { handle.identityStatus() }?.publicKey
                 if (publicKey != null) {
-                    val app = handle.paykitAppRegistry(publicKey)?.apps?.find { it.appId == "bitkit" }
+                    val app = completeSdkCall { handle.paykitAppRegistry(publicKey) }
+                        ?.apps?.find { it.appId == "bitkit" }
                     if (app?.capabilities?.privatePayments == false) return@withStateRevisionTracking null
                 }
                 for (update in updates) {
@@ -1542,6 +1657,20 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    /** The caller retains this admission through its private and local teardown, not only native calls. */
+    internal suspend fun <T> withProfileRemoval(
+        isOwnerCurrent: () -> Boolean,
+        operation: suspend () -> T,
+    ): T {
+        isSetup.await()
+        // Reserve SDK admission first, so wipe can revoke a removal waiting for publication to drain.
+        return operationLock.withProfileRemoval(isOwnerCurrent) {
+            identityRepublishMutex.withLock { operation() }
+        }
+    }
+
+    internal suspend fun requireWalletWipe() = operationLock.requireWalletWipe()
+
     suspend fun clearSessionAccess() = operationLock.withLock { clearRegisteredIdentityActivationLocked() }
 
     suspend fun forgetSessionAccess() {
@@ -1561,14 +1690,20 @@ class PaykitSdkService @Inject constructor(
     suspend fun <T> withWalletWipe(operation: suspend () -> T): T {
         // Drain setup before closing admission, so cleanup cannot await setup queued behind its own barrier.
         runSuspendCatching { initialize() }
-            .onFailure { Logger.warn("Failed to initialize Paykit before wallet wipe", it, context = TAG) }
+            .onFailure {
+                Logger.warn("Failed to initialize Paykit before wallet wipe", it, context = TAG)
+                preparePublicProfileRecovery()
+            }
         return operationLock.withWalletWipe {
-            resetRuntime()
-            try {
-                operation()
-            } finally {
-                sessionProvider.clearLiveSessionAccess()
+            // Removal has drained. Bootstrap publication never waits for the SDK lock.
+            identityRepublishMutex.withLock {
                 resetRuntime()
+                try {
+                    operation()
+                } finally {
+                    sessionProvider.clearLiveSessionAccess()
+                    resetRuntime()
+                }
             }
         }
     }
@@ -1581,22 +1716,27 @@ class PaykitSdkService @Inject constructor(
     }
 
     private suspend fun refreshPaykitKey(force: Boolean = false) {
+        operationLock.checkProfileRemoval()
         if (force) {
             cachedPaykitKey = null
             cachedBackupState = null
         }
-        val root = sessionProvider.loadLocalSecretKey() ?: run {
+        val root = sessionProvider.loadLocalSecretKey()
+        operationLock.checkProfileRemoval()
+        if (root == null) {
             if (cachedPaykitKey != null) cachedBackupState = null
             cachedPaykitKey = null
             return
         }
         val publicKey = pubkyPublicKeyFromSecret(root)
         val savedGeneration = keychain.loadString("${Keychain.Key.PAYKIT_KEY_GENERATION.name}:$publicKey")?.toULong()
+        operationLock.checkProfileRemoval()
         val cached = cachedPaykitKey
         if (cached != null && cached.publicKey == publicKey && cached.generation == savedGeneration) return
         cachedPaykitKey = null
         cachedBackupState = null
         val key = paykitKey(root)
+        operationLock.checkProfileRemoval()
         sessionProvider.setPaykitIdentitySecretKey(key)
         cachedPaykitKey = PaykitKeyGeneration(publicKey, key.keyGeneration())
     }
@@ -1609,9 +1749,10 @@ class PaykitSdkService @Inject constructor(
 
     private suspend fun paykitKey(root: PubkyLocalSecretKey): PaykitIdentitySecretKey {
         val publicKey = pubkyPublicKeyFromSecret(root)
-        val generation = handle().paykitAppRegistry(publicKey)?.keyGeneration ?: 1uL
+        val generation = completeSdkCall { handle().paykitAppRegistry(publicKey) }?.keyGeneration ?: 1uL
         val storageKey = "${Keychain.Key.PAYKIT_KEY_GENERATION.name}:$publicKey"
         val saved = keychain.loadString(storageKey)?.toULong()
+        operationLock.checkProfileRemoval()
         check(generation >= (saved ?: 1uL)) { "The Paykit App Registry has an older key generation" }
         if (saved != generation) keychain.upsertString(storageKey, generation.toString())
         return root.derivePaykitIdentitySecretKey(generation)
@@ -1638,6 +1779,7 @@ class PaykitSdkService @Inject constructor(
         }
         resetRuntime()
         refreshPaykitKey()
+        operationLock.checkProfileRemoval()
         val handle = handle()
         val identityStatus = completeSdkCall { handle.initialize() }
         if (result.sessionAccess.exportLocalSecretKey() != null) {
@@ -1711,6 +1853,7 @@ class PaykitSdkService @Inject constructor(
     private suspend fun <T> withPaykitKey(block: suspend (PaykitSdk) -> T): T {
         val started = TimeSource.Monotonic.markNow()
         refreshPaykitKey()
+        operationLock.checkProfileRemoval()
         if (BuildConfig.DEBUG) Logger.debug("Prepared Paykit key duration='${started.elapsedNow()}'", context = TAG)
         return runSuspendCatching { block(handle()) }
             .onFailure(::invalidatePaykitKeyIfNeeded)
@@ -1769,6 +1912,7 @@ class PaykitSdkService @Inject constructor(
 
     private suspend fun <T> completeSdkCall(operation: suspend () -> T): T {
         currentCoroutineContext().ensureActive()
+        operationLock.checkProfileRemoval()
         val result = withContext(NonCancellable) { runSuspendCatching { operation() } }
             .onFailure(::invalidatePaykitKeyIfNeeded)
         currentCoroutineContext().ensureActive()
@@ -1802,7 +1946,7 @@ class PaykitSdkService @Inject constructor(
     ): T {
         isSetup.await()
         return operationLock.withoutLock {
-            val existing = sdk ?: operationLock.withLock { handle() }
+            val existing = sdk ?: operationLock.withPublicReadInitialization { handle() }
             val read: suspend () -> T = { withReadTimeout(timeout) { block(existing) } }
             when (lane) {
                 PaykitReadLane.Interactive -> publicReadSlots.withSlot(lane, read)
@@ -1924,22 +2068,32 @@ internal suspend fun <T> withPaykitBackupStateTracking(
                 onChange()
                 return@withContext
             }
-            val nextStateRevision = runSuspendCatching { readStateRevision() }.getOrNull()
-            val observedSnapshot = runSuspendCatching { readObservedSnapshot() }.getOrNull()
-                ?.takeIf { it.stateRevision == nextStateRevision }
-            val nextRevision = observedSnapshot?.backupRevision
-                ?: runSuspendCatching { readRevision() }.getOrNull()
-            val stateRevision = observedSnapshot?.stateRevision
-                ?: runSuspendCatching { readStateRevision() }.getOrNull()
-            onSnapshot(
-                if (stateRevision != null && nextRevision != null) {
-                    PaykitBackupStateSnapshot(stateRevision, nextRevision)
-                } else {
-                    null
-                },
-            )
-            if (previousRevision == null || nextRevision == null || previousRevision != nextRevision) {
-                onChange()
+            var recordedRevision = false
+            try {
+                val nextStateRevision = runSuspendCatching { readStateRevision() }.getOrNull()
+                val observedSnapshot = runSuspendCatching { readObservedSnapshot() }.getOrNull()
+                    ?.takeIf { it.stateRevision == nextStateRevision }
+                val nextRevision = observedSnapshot?.backupRevision
+                    ?: runSuspendCatching { readRevision() }.getOrNull()
+                val stateRevision = observedSnapshot?.stateRevision
+                    ?: runSuspendCatching { readStateRevision() }.getOrNull()
+                onSnapshot(
+                    if (stateRevision != null && nextRevision != null) {
+                        PaykitBackupStateSnapshot(stateRevision, nextRevision)
+                    } else {
+                        null
+                    },
+                )
+                if (previousRevision == null || nextRevision == null || previousRevision != nextRevision) {
+                    onChange()
+                }
+                recordedRevision = true
+            } finally {
+                // The mutation completed even when its original caller no longer admits a revision read.
+                if (!recordedRevision) {
+                    onSnapshot(null)
+                    onChange()
+                }
             }
         }
     }
@@ -2136,3 +2290,10 @@ internal fun <T> paykitStorageCallback(code: String, operation: () -> T): T =
         if (it is PaykitException) throw it
         throw PaykitException.Storage(code = code, context = "Platform Paykit storage operation failed")
     }
+
+/** The exact remote records presented for one confirmed profile removal. */
+internal data class PaykitProfileDeletionSnapshot(
+    val publicKey: String,
+    val profileRevision: String?,
+    val contacts: List<ContactRecord>,
+)

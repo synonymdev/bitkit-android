@@ -395,6 +395,7 @@ class ActivityService(
         val generation: Long,
         val activityRevision: Long,
         val reservationVersion: Long,
+        val recoveryGeneration: Long,
     )
 
     internal suspend fun invalidatePaykitContactBackfill() = ServiceQueue.CORE.background {
@@ -604,6 +605,10 @@ class ActivityService(
 
     suspend fun backfillPaykitContacts(): Boolean = ServiceQueue.CORE.background {
         val resolver = privatePaykitContactResolver.get()
+        if (!resolver.hasProfileAccess()) {
+            lastPaykitContactBackfill = null
+            return@background false
+        }
         val contacts = resolver.receivedPaymentContacts
         if (contacts === PaykitReceivedPaymentContacts.Empty) {
             lastPaykitContactBackfill = null
@@ -614,6 +619,7 @@ class ActivityService(
             generation = resolver.receivedPaymentContactsGeneration,
             activityRevision = paykitActivityRevision,
             reservationVersion = resolver.reservationVersion,
+            recoveryGeneration = resolver.recoveryGeneration,
         )
         if (snapshot == lastPaykitContactBackfill) return@background false
         val activities = getActivities(
@@ -647,13 +653,14 @@ class ActivityService(
         changed
     }
 
-    private fun isCurrentPaykitContactBackfill(
+    private suspend fun isCurrentPaykitContactBackfill(
         resolver: PrivatePaykitContactResolver,
         snapshot: PaykitContactBackfillState,
-    ): Boolean = resolver.receivedPaymentContacts === snapshot.contacts &&
+    ): Boolean = resolver.hasProfileAccess() && resolver.receivedPaymentContacts === snapshot.contacts &&
         resolver.receivedPaymentContactsGeneration == snapshot.generation &&
         paykitActivityRevision == snapshot.activityRevision &&
-        resolver.reservationVersion == snapshot.reservationVersion
+        resolver.reservationVersion == snapshot.reservationVersion &&
+        resolver.recoveryGeneration == snapshot.recoveryGeneration
 
     private suspend fun attributedPaykitActivity(
         activity: Activity,
@@ -1022,7 +1029,7 @@ class ActivityService(
     private suspend fun findPrivateReservedAddress(details: BitkitCoreTransactionDetails): String? {
         for (output in details.outputs) {
             val address = output.scriptpubkeyAddress ?: continue
-            if (privatePaykitContactResolver.get().contactPublicKeyForReservedAddress(address) != null) return address
+            if (privatePaykitContactResolver.get().isReservedReceiveAddress(address)) return address
         }
         return null
     }

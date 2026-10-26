@@ -66,6 +66,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import org.mockito.verification.VerificationMode
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.data.PubkyImageCacheEpoch
 import to.bitkit.data.PubkyStore
@@ -82,14 +83,19 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.services.PaykitProfileDeletionSnapshot
 import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyRingAuthTimeoutError
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.forEachCase
+import to.bitkit.usecases.ProfileRemovalCoordinator
+import to.bitkit.usecases.ProfileRemovalFailure
 import to.bitkit.utils.AppError
+import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -129,11 +135,172 @@ class PubkyRepoTest : BaseUnitTest() {
 
     private lateinit var sut: PubkyRepo
 
+    @Test
+    fun `removal rejects every competing identity entry before it changes credentials or settings`() = test {
+        advanceUntilIdle()
+        whenever { pubkyService.withProfileRemoval<Unit>(any(), any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(1).invoke()
+        }
+        val release = CompletableDeferred<Unit>()
+        val removal = async { sut.performProfileRemoval(sut.profileOwner()) { release.await() } }
+        runCurrent()
+        clearInvocations(pubkyService, keychain, settingsStore)
+        val entries = listOf<suspend () -> Result<*>>(
+            { sut.initialize() },
+            { sut.checkAdoptedSource() },
+            { sut.adoptRingIdentity(VALID_SELF_KEY) },
+            { sut.createIdentity("Name", "", emptyList(), emptyList(), null) },
+            { sut.saveProfile("Name", "", emptyList(), emptyList(), null) },
+            { sut.approveSignupAuth(directSignupRequest()) },
+            { sut.approveAuth("auth", "capabilities", "client") },
+            { sut.approveAuthWithCompanionClaim("auth", "client", byteArrayOf()) },
+            { sut.restoreSessionBackupState(null) },
+            { sut.signOut() },
+            { sut.forgetUnrestoredIdentity() },
+        )
+        try {
+            entries.forEach { assertSame(PubkyIdentityBusy, it().exceptionOrNull()) }
+            assertFalse(sut.hasSecretKey())
+            assertFalse(sut.restoreSessionIfNeeded())
+            assertFailsWith<PubkyIdentityBusy> { sut.wipeLocalState() }
+            verify(keychain, never()).delete(any())
+            verify(keychain, never()).upsertString(any(), any())
+            verify(settingsStore, never()).update(any())
+            verify(pubkyService, never()).signOut()
+            verify(pubkyService, never()).forgetSessionAccess()
+        } finally {
+            release.complete(Unit)
+        }
+        assertTrue(removal.await().isSuccess)
+    }
+
+    @Test
+    fun `removal cannot start during the local tail of Ring adoption`() = test {
+        advanceUntilIdle()
+        val ringPubky = stubRingCredential()
+        val releaseContacts = CompletableDeferred<Unit>()
+        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+            releaseContacts.await()
+            emptyList()
+        }
+        val adoption = async { sut.adoptRingIdentity(ringPubky) }
+        try {
+            runCurrent()
+            assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+            assertFalse(adoption.isCompleted)
+            val removal = sut.performProfileRemoval(sut.profileOwner()) { error("removal admitted during adoption") }
+            assertSame(PubkyIdentityBusy, removal.exceptionOrNull())
+        } finally {
+            releaseContacts.complete(Unit)
+        }
+        assertTrue(adoption.await().isSuccess)
+    }
+
+    @Test
+    fun `removal preserves its original owner and returns the ended generation after signout`() = test {
+        authenticateForTesting()
+        whenever { pubkyService.withProfileRemoval<Unit>(any(), any()) }.doSuspendableAnswer {
+            assertTrue(it.getArgument<() -> Boolean>(0).invoke())
+            it.getArgument<suspend () -> Unit>(1).invoke()
+        }
+        val original = sut.profileOwner()
+        val completion = sut.performProfileRemoval(original) { sut.finishProfileRemovalLocally() }.getOrThrow()
+        assertFalse(sut.isProfileOwnerCurrent(original))
+        assertTrue(sut.isProfileOwnerCurrent(completion))
+        assertNull(sut.publicKey.value)
+        assertTrue(sut.performProfileRemoval(original) { error("obsolete owner admitted") }.isFailure)
+    }
+
+    @Test
+    fun `pending removal restart refuses activation and settles restoration without clearing credentials`() = test {
+        advanceUntilIdle()
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved-session")
+        clearInvocations(pubkyService, keychain)
+        val restarted = createSut()
+        advanceUntilIdle()
+        assertFalse(restarted.isRestoringSession.value)
+        assertTrue(restarted.sessionRestorationFailed.value)
+        assertFalse(restarted.restoreSessionIfNeeded())
+        assertEquals(PubkyIdentityReadiness.RecoveryRequired, restarted.awaitIdentityReady())
+        assertTrue(restarted.initialize().isFailure)
+        verify(pubkyService, never()).initialize()
+        verify(pubkyService, never()).initializeAndImportSession(any())
+        verify(keychain, never()).delete(any())
+        assertEquals(id, profileRemovalStore.pendingAttempt())
+    }
+
+    @Test
+    fun `pending removal rejects new identity and reports unavailable even with an old active profile`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        clearInvocations(pubkyService, keychain)
+        assertEquals(PubkyIdentityReadiness.RecoveryRequired, sut.awaitIdentityReady())
+        assertTrue(sut.adoptRingIdentity(VALID_CONTACT_KEY_A).isFailure)
+        assertTrue(sut.restoreSessionBackupState(null).isFailure)
+        assertTrue(sut.republishIdentityIfNeeded().isFailure)
+        verify(keychain, never()).delete(any())
+        assertEquals(id, profileRemovalStore.pendingAttempt())
+    }
+
+    @Test
+    fun `pending removal grants exact marker scope before SDK admission`() = test {
+        advanceUntilIdle()
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        whenever { pubkyService.withProfileRemoval<Unit>(any(), any()) }.doSuspendableAnswer {
+            profileRemovalStore.requireAccess()
+            it.getArgument<suspend () -> Unit>(1).invoke()
+        }
+        var reached = false
+        assertTrue(sut.performProfileRemoval(sut.profileOwner(), id) { reached = true }.isSuccess)
+        assertTrue(reached)
+        assertTrue(sut.performProfileRemoval(sut.profileOwner(), UUID.randomUUID().toString()) {}.isFailure)
+        assertEquals(id, profileRemovalStore.pendingAttempt())
+    }
+
+    @Test
+    fun `strict local completion does not clear metadata when credentials cannot be forgotten`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val owner = sut.profileOwner()
+        whenever { pubkyService.withProfileRemoval<Unit>(any(), any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(1).invoke()
+        }
+        whenever { pubkyService.forgetLocalProfileAccess() }.thenAnswer { error("keychain unavailable") }
+        clearInvocations(pubkyStore, settingsStore)
+        assertTrue(sut.performProfileRemoval(owner) { sut.finishProfileRemovalLocally() }.isFailure)
+        assertTrue(sut.isProfileOwnerCurrent(owner))
+        verify(pubkyStore, never()).reset()
+        verify(settingsStore, never()).update(any())
+        verify(pubkyService, never()).signOut()
+    }
+
+    @Test
+    fun `strict local completion ends old writers before reset and propagates cache failure`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val owner = sut.profileOwner()
+        val version = sut.backupStateVersion.value
+        whenever { pubkyService.withProfileRemoval<Unit>(any(), any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(1).invoke()
+        }
+        whenever { pubkyStore.reset() }.thenAnswer {
+            assertFalse(sut.isProfileOwnerCurrent(owner))
+            error("cache unavailable")
+        }
+        assertTrue(sut.performProfileRemoval(owner) { sut.finishProfileRemovalLocally() }.isFailure)
+        assertNull(sut.publicKey.value)
+        assertTrue(sut.backupStateVersion.value > version)
+        verify(pubkyService).forgetLocalProfileAccess()
+    }
+
     private val pubkyService = mock<PubkyService>()
     private val keychain = mock<Keychain>()
     private val sharedPubkyClient = mock<SharedPubkyClient>()
     private val imageLoader = mock<ImageLoader>()
     private val imageCacheEpoch = PubkyImageCacheEpoch()
+    private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
     private val pubkyStore = mock<PubkyStore>()
     private val settingsStore = mock<SettingsStore>()
     private val settingsFlow = MutableStateFlow(SettingsData())
@@ -173,6 +340,18 @@ class PubkyRepoTest : BaseUnitTest() {
             adoptedSource = null
             Unit
         }
+        whenever { pubkyService.withProfileRemoval<Unit>(any(), any()) }.doSuspendableAnswer {
+            check(it.getArgument<() -> Boolean>(0).invoke())
+            it.getArgument<suspend () -> Unit>(1).invoke()
+        }
+        whenever { pubkyService.captureProfileDeletion(any(), any()) }.doSuspendableAnswer {
+            PaykitProfileDeletionSnapshot(it.getArgument(0), "revision", pubkyService.contactRecords())
+        }
+        whenever { pubkyService.forgetLocalProfileAccess() }.doSuspendableAnswer {
+            keychain.delete(Keychain.Key.PAYKIT_SESSION.name)
+            keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+            keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+        }
         sut = createSut()
     }
 
@@ -187,6 +366,44 @@ class PubkyRepoTest : BaseUnitTest() {
         settingsStore = settingsStore,
         httpClient = httpClient,
         clock = clock,
+        profileRemovalStore = profileRemovalStore,
+    )
+
+    private fun PubkyRepo.removalCoordinatorForTest(): ProfileRemovalCoordinator {
+        val privateRepo = mock<PrivatePaykitRepo>()
+        val sharing = mock<ContactPaymentSettingsRepo>()
+        whenever { sharing.withProfileRemoval<PubkyProfileOwner>(any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> PubkyProfileOwner>(0).invoke()
+        }
+        whenever { privateRepo.withProfileDeletionPaused<Unit>(any()) }.doSuspendableAnswer {
+            it.getArgument<suspend (PrivatePaykitRepo.ProfileDeletionPause) -> Unit>(0)
+                .invoke(PrivatePaykitRepo.ProfileDeletionPause())
+        }
+        whenever { privateRepo.removePublishedEndpointsForCleanup(any(), eq(true)) }.thenReturn(Result.success(Unit))
+        whenever { privateRepo.finishProfileRemoval(any()) }.thenReturn(Result.success(Unit))
+        return ProfileRemovalCoordinator(this, privateRepo, sharing, profileRemovalStore)
+    }
+
+    private suspend fun PubkyRepo.signOut(): Result<Unit> = runSuspendCatching {
+        val coordinator = removalCoordinatorForTest()
+        coordinator.remove(coordinator.prepareSignOut(profileOwner()).getOrThrow()).repositoryResult().getOrThrow()
+    }
+
+    private suspend fun PubkyRepo.deleteProfile(): Result<Unit> = runSuspendCatching {
+        val coordinator = removalCoordinatorForTest()
+        coordinator.remove(coordinator.prepareDeletion(profileOwner()).getOrThrow()).repositoryResult().getOrThrow()
+    }
+
+    private suspend fun PubkyRepo.forgetUnrestoredIdentity(): Result<Boolean> = runSuspendCatching {
+        check(publicKey.value == null)
+        signOut().getOrThrow()
+        true
+    }
+
+    /** These cases assert the repository failure; coordinator failure metadata has its own integration coverage. */
+    private fun Result<PubkyProfileOwner>.repositoryResult(): Result<Unit> = fold(
+        onSuccess = { Result.success(Unit) },
+        onFailure = { Result.failure((it as? ProfileRemovalFailure)?.cause ?: it) },
     )
 
     private fun stubAdoptedRingSource() {
@@ -1139,18 +1356,148 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `hasSecretKey should mark backup state changed when stale local secret is removed`() = test {
+    fun `credential availability remains readable while failed removal retains its identity`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("current_secret")
+        whenever(pubkyService.publicKeyFromSecret("current_secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        whenever { pubkyService.withProfileRemoval<Unit>(any(), any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(1).invoke()
+        }
+        val release = CompletableDeferred<Unit>()
+        val removal = async {
+            sut.performProfileRemoval(sut.profileOwner()) {
+                release.await()
+                throw TestAppError("unknown deletion outcome")
+            }
+        }
+        try {
+            runCurrent()
+            assertTrue(sut.hasSecretKey(), "temporary removal admission is not absence of the credential")
+        } finally {
+            release.complete(Unit)
+        }
+        assertTrue(removal.await().isFailure)
+        assertTrue(sut.hasSecretKey())
+    }
+
+    @Test
+    fun `cancelled credential derivation preserves the managed secret`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("current_secret")
+        val entered = CompletableDeferred<Unit>()
+        whenever(pubkyService.publicKeyFromSecret("current_secret")).doSuspendableAnswer {
+            entered.complete(Unit)
+            awaitCancellation()
+        }
+        clearInvocations(keychain)
+        val read = launch { sut.hasSecretKey() }
+        entered.await()
+        read.cancelAndJoin()
+        verify(keychain, never()).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+    }
+
+    @Test
+    fun `credential validation drains before identity replacement can install its secret`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val ringPubky = stubRingCredential(VALID_CONTACT_KEY_A)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("current_secret")
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(pubkyService.publicKeyFromSecret("current_secret")).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            VALID_SELF_KEY.removePrefix("pubky")
+        }
+        val read = async { sut.hasSecretKey() }
+        entered.await()
+        val adoption = async { sut.adoptRingIdentity(ringPubky) }
+        try {
+            runCurrent()
+            assertFalse(adoption.isCompleted, "replacement must not overtake managed credential validation")
+            assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        } finally {
+            release.complete(Unit)
+        }
+        assertTrue(read.await())
+        assertTrue(adoption.await().isSuccess)
+        assertEquals(VALID_CONTACT_KEY_A, sut.publicKey.value)
+    }
+
+    @Test
+    fun `credential availability never deletes a stale local secret`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val staleSecret = "stale_secret"
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(staleSecret)
         whenever(pubkyService.publicKeyFromSecret(staleSecret)).thenReturn(VALID_CONTACT_KEY_A.removePrefix("pubky"))
         val backupVersion = sut.backupStateVersion.value
+        clearInvocations(keychain)
 
-        val result = sut.hasSecretKey()
+        assertFalse(sut.hasSecretKey())
 
-        assertFalse(result)
+        assertEquals(backupVersion, sut.backupStateVersion.value)
+        verify(keychain, never()).delete(any())
+    }
+
+    @Test
+    fun `credential availability can read the matching Ring key without removing a stale local key`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        stubAdoptedRingSource()
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("stale_secret")
+        whenever(pubkyService.publicKeyFromSecret("stale_secret")).thenReturn(VALID_CONTACT_KEY_A.removePrefix("pubky"))
+        whenever(sharedPubkyClient.ringCredential(VALID_SELF_KEY.removePrefix("pubky")))
+            .thenReturn(Result.success("ring_secret"))
+        clearInvocations(keychain)
+
+        assertTrue(sut.hasSecretKey())
+        verify(keychain, never()).delete(any())
+    }
+
+    @Test
+    fun `authorization uses the matching Ring credential on its first attempt after stale key cleanup`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        stubAdoptedRingSource()
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("stale_secret")
+        whenever(pubkyService.publicKeyFromSecret("stale_secret")).thenReturn(VALID_CONTACT_KEY_A.removePrefix("pubky"))
+        whenever(sharedPubkyClient.ringCredential(VALID_SELF_KEY.removePrefix("pubky")))
+            .thenReturn(Result.success("ring_secret"))
+
+        assertTrue(sut.hasSecretKey())
+        assertTrue(sut.approveAuth("auth", "capabilities", "client").isSuccess)
+
+        verify(keychain).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+        verify(pubkyService).approveAuth("auth", "capabilities", "client", "ring_secret")
+    }
+
+    @Test
+    fun `authorization invalidates its captured owner when removing a stale managed credential`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("stale_secret")
+        whenever(pubkyService.publicKeyFromSecret("stale_secret")).thenReturn(VALID_CONTACT_KEY_A.removePrefix("pubky"))
+        val owner = sut.profileOwner()
+        val backupVersion = sut.backupStateVersion.value
+
+        assertTrue(sut.approveAuth("auth", "capabilities", "client").isFailure)
+
+        assertFalse(sut.isProfileOwnerCurrent(owner))
         assertEquals(backupVersion + 1, sut.backupStateVersion.value)
-        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+        verify(keychain).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+        verify(pubkyService, never()).approveAuth(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `cancelled authorization derivation preserves the managed credential`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("current_secret")
+        val entered = CompletableDeferred<Unit>()
+        whenever(pubkyService.publicKeyFromSecret("current_secret")).doSuspendableAnswer {
+            entered.complete(Unit)
+            awaitCancellation()
+        }
+        clearInvocations(keychain)
+        val approval = launch { sut.approveAuth("auth", "capabilities", "client") }
+        entered.await()
+        approval.cancelAndJoin()
+        verify(keychain, never()).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
     }
 
     @Test
@@ -1202,7 +1549,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signOut should continue when endpoint cleanup fails`() = test {
+    fun `signOut retains identity and durable recovery when endpoint cleanup fails`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         settingsFlow.value = SettingsData(
             hasConfirmedPublicPaykitEndpoints = true,
@@ -1215,34 +1562,34 @@ class PubkyRepoTest : BaseUnitTest() {
 
         val result = sut.signOut()
 
-        assertTrue(result.isSuccess)
-        assertNull(sut.publicKey.value)
-        assertFalse(sut.isAuthenticated.value)
-        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
-        assertFalse(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
-        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
-        assertEquals("", settingsFlow.value.publicPaykitBolt11)
-        assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
-        assertEquals(0, settingsFlow.value.publicPaykitBolt11ExpiresAtMillis)
-        verifyBlocking(pubkyService) { signOut() }
-        verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        assertTrue(result.isFailure)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isAuthenticated.value)
+        assertNotNull(profileRemovalStore.pendingAttempt())
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertEquals("lnbc1old", settingsFlow.value.publicPaykitBolt11)
+        assertEquals("010203", settingsFlow.value.publicPaykitBolt11PaymentHash)
+        assertEquals(123L, settingsFlow.value.publicPaykitBolt11ExpiresAtMillis)
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
     }
 
     @Test
-    fun `signOut should keep cleanup pending when private-only endpoint cleanup fails`() = test {
+    fun `signOut preserves private sharing and pending removal on endpoint failure`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
         whenever(pubkyService.removeBitkitPaymentEndpoints()).thenAnswer { throw TestAppError("Cleanup failed") }
 
         val result = sut.signOut()
 
-        assertTrue(result.isSuccess)
-        assertNull(sut.publicKey.value)
-        assertFalse(sut.isAuthenticated.value)
-        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
-        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        verifyBlocking(pubkyService) { signOut() }
-        verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        assertTrue(result.isFailure)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isAuthenticated.value)
+        assertNotNull(profileRemovalStore.pendingAttempt())
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
     }
 
     @Test
@@ -1338,7 +1685,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val screenLookup = async { sut.resolvePendingContactProfile(VALID_CONTACT_KEY_A) }
         val deletionStarted = CompletableDeferred<Unit>()
         val finishDeletion = CompletableDeferred<Unit>()
-        whenever(pubkyService.contactRecords()).doSuspendableAnswer {
+        whenever(pubkyService.removeContacts(records.map { it.publicKey })).doSuspendableAnswer {
             deletionStarted.complete(Unit)
             finishDeletion.await()
             records
@@ -1381,7 +1728,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertEquals(listOf(VALID_CONTACT_KEY_B), sut.contacts.value.map { it.publicKey })
         assertEquals(setOf(VALID_CONTACT_KEY_B), stored.contactProfileOverrides.keys)
-        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).deletePaykitProfile(any<PaykitProfileDeletionSnapshot>())
         verify(pubkyService, never()).signOut()
     }
 
@@ -1397,7 +1744,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertSame(error, result.exceptionOrNull())
         verify(pubkyStore, never()).update(any())
         verify(pubkyService, never()).removeContacts(any())
-        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).deletePaykitProfile(any<PaykitProfileDeletionSnapshot>())
         verify(pubkyService, never()).signOut()
     }
 
@@ -1417,7 +1764,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertSame(error, result.exceptionOrNull())
         assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
         verify(pubkyStore, never()).update(any())
-        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).deletePaykitProfile(any<PaykitProfileDeletionSnapshot>())
         verify(pubkyService, never()).signOut()
     }
 
@@ -1429,7 +1776,7 @@ class PubkyRepoTest : BaseUnitTest() {
             sharesPrivatePaykitEndpoints = true,
         )
         val error = TestAppError("Delete failed: HTTP 404 Not Found at session endpoint")
-        whenever(pubkyService.deletePaykitProfile()).thenAnswer { throw error }
+        whenever(pubkyService.deletePaykitProfile(any<PaykitProfileDeletionSnapshot>())).thenAnswer { throw error }
 
         val result = sut.deleteProfile()
 
@@ -1441,7 +1788,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `deleteProfile should fail when signOut fails`() = test {
+    fun `deleteProfile retains local evidence when revocation is uncertain`() = test {
         authenticateForTesting()
         settingsFlow.value = SettingsData(
             sharesPublicPaykitEndpoints = true,
@@ -1453,9 +1800,10 @@ class PubkyRepoTest : BaseUnitTest() {
         val result = sut.deleteProfile()
 
         assertTrue(result.isFailure)
-        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
-        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertNotNull(profileRemovalStore.pendingAttempt())
+        verify(pubkyService, never()).forgetLocalProfileAccess()
     }
 
     @Test
@@ -1465,12 +1813,14 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
         whenever(pubkyService.publicKeyFromSecret(secretKey)).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
         val uncertainResponse = TestAppError("Connection closed after profile deletion")
-        whenever(pubkyService.deletePaykitProfile()).thenAnswer { throw uncertainResponse }.thenReturn(Unit)
+        whenever(pubkyService.deletePaykitProfile(any<PaykitProfileDeletionSnapshot>())).thenAnswer {
+            throw uncertainResponse
+        }.thenReturn(Unit)
 
         val result = sut.deleteProfile()
 
         assertSame(uncertainResponse, result.exceptionOrNull())
-        verify(pubkyService).deletePaykitProfile()
+        verify(pubkyService).deletePaykitProfile(any<PaykitProfileDeletionSnapshot>())
         verify(pubkyService, never()).signIn(any())
         verify(pubkyService, never()).signOut()
     }
@@ -1484,25 +1834,26 @@ class PubkyRepoTest : BaseUnitTest() {
         val deletionStarted = CompletableDeferred<Unit>()
         val finishDeletion = CompletableDeferred<Unit>()
         val uncertainResponse = TestAppError("Connection closed after profile deletion")
-        whenever(pubkyService.deletePaykitProfile()).doSuspendableAnswer {
+        whenever(pubkyService.deletePaykitProfile(any<PaykitProfileDeletionSnapshot>())).doSuspendableAnswer {
             deletionStarted.complete(Unit)
             withContext(NonCancellable) { finishDeletion.await() }
             throw uncertainResponse
         }
         val deletion = async { sut.deleteProfile() }
         deletionStarted.await()
-        sut.signOut().getOrThrow()
+        assertTrue(sut.signOut().isFailure)
         finishDeletion.complete(Unit)
 
         assertSame(uncertainResponse, deletion.await().exceptionOrNull())
+        sut.signOut().getOrThrow()
         assertNull(sut.publicKey.value)
         assertFalse(sut.isAuthenticated.value)
         verify(pubkyService, never()).signIn(any())
-        verify(pubkyService).deletePaykitProfile()
+        verify(pubkyService).deletePaykitProfile(any<PaykitProfileDeletionSnapshot>())
     }
 
     @Test
-    fun `forgetUnrestoredIdentity clears an expired imported grant without remote calls`() = test {
+    fun `local disconnect clears an expired imported grant without remote calls`() = test {
         sut.awaitInitialization()
         var session: String? = "expired_session"
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { session }
@@ -1518,15 +1869,15 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(sut.hasIdentity())
         assertNull(sut.profile.value)
         assertTrue(sut.contacts.value.isEmpty())
-        verify(pubkyService).forgetSessionAccess()
+        verify(pubkyService).forgetLocalProfileAccess()
         verify(pubkyService, never()).signOut()
         verify(pubkyService, never()).removeBitkitPaymentEndpoints()
-        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).deletePaykitProfile(any<PaykitProfileDeletionSnapshot>())
         verify(pubkyStore).reset()
     }
 
     @Test
-    fun `forgetUnrestoredIdentity preserves identity restored while waiting for auth lock`() = test {
+    fun `local disconnect rejects an identity whose restoration is still admitted`() = test {
         sut.awaitInitialization()
         val importStarted = CompletableDeferred<Unit>()
         val finishImport = CompletableDeferred<String>()
@@ -1539,13 +1890,13 @@ class PubkyRepoTest : BaseUnitTest() {
         val initialize = async { sut.initialize() }
         importStarted.await()
         val disconnect = async(start = CoroutineStart.UNDISPATCHED) { sut.forgetUnrestoredIdentity() }
-        assertFalse(disconnect.isCompleted)
+        assertTrue(disconnect.isCompleted)
         finishImport.complete(VALID_SELF_KEY)
         initialize.await()
 
-        assertEquals(false, disconnect.await().getOrThrow())
+        assertSame(PubkyIdentityBusy, disconnect.await().exceptionOrNull())
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
-        verify(pubkyService, never()).forgetSessionAccess()
+        verify(pubkyService, never()).forgetLocalProfileAccess()
         verify(keychain, never()).delete(Keychain.Key.PAYKIT_SESSION.name)
     }
 
@@ -1561,16 +1912,16 @@ class PubkyRepoTest : BaseUnitTest() {
         val result = sut.signOut()
 
         assertTrue(result.isFailure)
-        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        verifyBlocking(pubkyService, never()) { forgetLocalProfileAccess() }
         verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         assertTrue(sut.isAuthenticated.value)
         assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        assertNotNull(profileRemovalStore.pendingAttempt())
     }
 
     @Test
-    fun `signOut should finish clearing state after caller cancellation`() = test {
+    fun `cancelled unacknowledged signOut retains credentials and durable recovery`() = test {
         val revocationStarted = CompletableDeferred<Unit>()
         val finishRevocation = CompletableDeferred<Unit>()
         authenticateForTesting()
@@ -1585,9 +1936,10 @@ class PubkyRepoTest : BaseUnitTest() {
         finishRevocation.complete(Unit)
         result.join()
 
-        assertFalse(sut.isAuthenticated.value)
-        assertNull(sut.publicKey.value)
-        verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        assertTrue(sut.isAuthenticated.value)
+        assertNotNull(sut.publicKey.value)
+        assertNotNull(profileRemovalStore.pendingAttempt())
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
     }
 
     @Test
@@ -4487,17 +4839,20 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a sign-in taken while a sign-out resets the store ends once the identity is restored`() = test {
+    fun `signOut ends old sign-in before durable reset and later restoration cannot revive it`() = test {
         val store = stubGatedPubkyStore()
         authenticateForTesting(publicKey = VALID_SELF_KEY)
-        var signInDuringSignOut: PubkySignIn? = null
+        val signIn = checkNotNull(sut.currentSignIn())
+        var resetObserved = false
         whenever(pubkyStore.reset()).thenAnswer {
-            signInDuringSignOut = sut.currentSignIn()
+            assertNull(sut.currentSignIn())
+            assertFalse(sut.isCurrent(signIn))
+            resetObserved = true
             store.data = PubkyStoreData()
             Unit
         }
         assertTrue(sut.signOut().isSuccess)
-        val signIn = checkNotNull(signInDuringSignOut)
+        assertTrue(resetObserved)
 
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         val result = sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
@@ -4749,7 +5104,9 @@ class PubkyRepoTest : BaseUnitTest() {
             whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
             val records = listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved"))
             whenever(pubkyService.removeContacts(records.map { it.publicKey })).thenReturn(records)
-            whenever(pubkyService.deletePaykitProfile()).thenAnswer { throw TestAppError("Offline") }
+            whenever(pubkyService.deletePaykitProfile(any<PaykitProfileDeletionSnapshot>())).thenAnswer {
+                throw TestAppError("Offline")
+            }
             val newRead = createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice", "New"))
             val oldRead = holdScreenLookup(VALID_CONTACT_KEY_A, laterRead = newRead)
             val deletionStarted = CompletableDeferred<Unit>()

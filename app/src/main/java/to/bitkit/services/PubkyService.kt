@@ -29,6 +29,10 @@ class PubkyService @Inject constructor(
         internal val AUTHORIZATION_TIMEOUT = 30.seconds
     }
 
+    internal suspend fun preparePublicProfileRecovery() = ServiceQueue.CORE.background {
+        paykitSdkService.preparePublicProfileRecovery()
+    }
+
     suspend fun initialize() = ServiceQueue.CORE.background {
         paykitSdkService.initialize()
     }
@@ -54,9 +58,19 @@ class PubkyService @Inject constructor(
         paykitSdkService.signOut()
     }
 
+    // Keep the initiating Job here, before ServiceQueue replaces it for individual native calls.
+    internal suspend fun <T> withProfileRemoval(isOwnerCurrent: () -> Boolean, operation: suspend () -> T): T =
+        paykitSdkService.withProfileRemoval(isOwnerCurrent, operation)
+
     suspend fun forgetSessionAccess() = ServiceQueue.CORE.background {
         paykitSdkService.forgetSessionAccess()
     }
+
+    internal suspend fun forgetLocalProfileAccess() = ServiceQueue.CORE.background {
+        paykitSdkService.forgetLocalProfileAccess()
+    }
+
+    internal suspend fun requireWalletWipe() = paykitSdkService.requireWalletWipe()
 
     suspend fun clearSessionAccess() = ServiceQueue.CORE.background {
         paykitSdkService.clearSessionAccess()
@@ -205,6 +219,22 @@ class PubkyService @Inject constructor(
 
     suspend fun uploadProfileAvatar(bytes: ByteArray, contentType: String): String = ServiceQueue.CORE.background {
         paykitSdkService.uploadProfileAvatar(bytes, contentType)
+    }
+
+    internal suspend fun captureProfileDeletion(
+        publicKey: String,
+        isStillCurrent: () -> Boolean,
+    ): PaykitProfileDeletionSnapshot = ServiceQueue.CORE.background {
+        paykitSdkService.captureProfileDeletion(publicKey, isStillCurrent)
+    }
+
+    internal suspend fun validateProfileDeletion(snapshot: PaykitProfileDeletionSnapshot) =
+        ServiceQueue.CORE.background {
+            paykitSdkService.validateProfileDeletion(snapshot)
+        }
+
+    internal suspend fun deletePaykitProfile(snapshot: PaykitProfileDeletionSnapshot) = ServiceQueue.CORE.background {
+        paykitSdkService.deletePaykitProfile(snapshot)
     }
 
     suspend fun deletePaykitProfile() = ServiceQueue.CORE.background {

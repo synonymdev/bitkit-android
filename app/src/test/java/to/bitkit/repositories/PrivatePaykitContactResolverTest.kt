@@ -1,19 +1,26 @@
 package to.bitkit.repositories
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.data.PrivatePaykitCacheData
 import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.PrivatePaykitContactCacheData
 import to.bitkit.data.PrivatePaykitStoredInvoiceData
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.test.BaseUnitTest
+import java.util.UUID
 import javax.inject.Provider
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PrivatePaykitContactResolverTest : BaseUnitTest() {
     companion object {
@@ -22,6 +29,7 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
         private const val PRIVATE_ADDRESS = "bcrt1qterdweva9vextackckt6pjy0mmuc54g87g6lsq"
     }
 
+    private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
     private val cacheStore = mock<PrivatePaykitCacheStore>()
     private val addressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val paymentRequestRepo = mock<PaykitPaymentRequestRepo>()
@@ -38,7 +46,71 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
             cacheStore = cacheStore,
             addressReservationRepo = Provider { addressReservationRepo },
             paymentRequestRepo = Provider { paymentRequestRepo },
+            profileRemovalStore = profileRemovalStore,
         )
+    }
+
+    @Test
+    fun `recovery generation discards a cold invoice lookup across completed local cleanup`() = test {
+        val old = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to PrivatePaykitContactCacheData(receivedInvoicePaymentHashes = listOf(PAYMENT_HASH))
+            )
+        )
+        val ready = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                ready.complete(Unit)
+                release.await()
+                emit(old)
+            }
+        )
+        val lookup = async { sut.contactPublicKeyForPrivateInvoicePaymentHash(PAYMENT_HASH) }
+        ready.await()
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) {
+            profileRemovalStore.begin(id)
+            cacheData.value = PrivatePaykitCacheData()
+            profileRemovalStore.complete(id)
+        }
+        release.complete(Unit)
+        assertNull(lookup.await())
+    }
+
+    @Test
+    fun `recovery generation discards a reserved contact lookup across completed local cleanup`() = test {
+        val ready = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS)).doSuspendableAnswer {
+            ready.complete(Unit)
+            release.await()
+            CONTACT_KEY
+        }
+        val lookup = async { sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS) }
+        ready.await()
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) {
+            profileRemovalStore.begin(id)
+            profileRemovalStore.complete(id)
+        }
+        release.complete(Unit)
+        assertNull(lookup.await())
+    }
+
+    @Test
+    fun `pending removal hides invoice and address contacts without erasing reservation state`() = test {
+        val shared = mock<PaykitReceivedPaymentContacts>()
+        whenever(shared.contactsForPaymentHash(PAYMENT_HASH)).thenReturn(setOf(CONTACT_KEY))
+        whenever(shared.contactsForAddresses(listOf(PRIVATE_ADDRESS))).thenReturn(setOf(CONTACT_KEY))
+        whenever(paymentRequestRepo.receivedPaymentContacts).thenReturn(shared)
+        whenever(addressReservationRepo.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS)).thenReturn(CONTACT_KEY)
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        assertNull(sut.contactPublicKeyForPrivateInvoicePaymentHash(PAYMENT_HASH))
+        assertNull(sut.contactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
+        assertNull(sut.contactPublicKeyForPrivateOnchainAddresses(PRIVATE_ADDRESS, listOf(PRIVATE_ADDRESS)))
+        assertTrue(sut.isReservedReceiveAddress(PRIVATE_ADDRESS))
     }
 
     @Test

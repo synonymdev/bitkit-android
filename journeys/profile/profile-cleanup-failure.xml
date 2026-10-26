@@ -5,7 +5,8 @@
     fixture inject an unknown contact-removal response or a partial removal retaining an active peer.
     Also inject a profile-deletion error whose message contains 404 Not Found, without confirming deletion.
     These controls are not available in standard staging. This journey covers stopping on incomplete
-    cleanup, not cross-device conditional deletion or safe manual replay of an uncertain operation.
+    cleanup; profile-removal-recovery.xml covers explicit recovery. Cross-device conditional contact deletion
+    requires the separate native contract.
   </description>
   <actions>
     <action>Open Edit Profile and confirm deletion with the cleanup fault enabled</action>
@@ -13,8 +14,8 @@
     <action>Verify a failed private withdrawal is followed by no contact or profile deletion</action>
     <action>Verify unknown contact removal keeps local contact data and prevents profile deletion</action>
     <action>Verify partial contact removal preserves contacts and overrides not acknowledged as removed</action>
-    <action>Verify an uncertain profile-deletion error preserves the session and sharing settings without success feedback</action>
+    <action>Verify an uncertain profile-deletion error retains recovery information without success feedback and keeps authenticated automatic work paused</action>
     <action>Cancel the failure dialog and verify the app starts no second deletion</action>
-    <action>Restart the app and verify no profile deletion is automatically replayed</action>
+    <action>Restart the app and verify pending local cleanup is shown without automatic profile deletion or authenticated reactivation</action>
   </actions>
 </journey>

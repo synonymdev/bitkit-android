@@ -15,7 +15,8 @@
     <action>Open the existing profile from the Home header</action>
     <action>Open Edit Profile</action>
     <action>Scroll to Delete Profile and tap it</action>
-    <action>Confirm deletion</action>
+    <action>Wait for profile removal preparation to finish and verify the confirmation dialog appears without deleting the profile</action>
+    <action>Confirm deletion once</action>
     <action>Verify a progress indicator is visible while deletion is pending and profile actions cannot be used</action>
     <action>Wait for deletion to finish and verify profile onboarding is shown</action>
     <action>Return Home and reopen Profile; verify the deleted profile does not reappear</action>

@@ -27,6 +27,7 @@ import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -36,6 +37,7 @@ import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.PrivatePaykitCacheData
 import to.bitkit.data.PrivatePaykitCacheStore
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.create
@@ -48,6 +50,7 @@ import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.util.UUID
 import javax.inject.Provider
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -63,6 +66,7 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     private val requestRepo = mock<PaykitPaymentRequestRepo>()
     private val reservations = mock<PrivatePaykitAddressReservationRepo>()
     private val privateCacheStore = mock<PrivatePaykitCacheStore>()
+    private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
     private val cacheStore = mock<CacheStore>()
     private val cacheData = MutableStateFlow(AppCacheData(onchainAddress = "wallet-address"))
     private val settingsStore = mock<SettingsStore>()
@@ -74,6 +78,7 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
             cacheStore = privateCacheStore,
             addressReservationRepo = Provider { reservations },
             paymentRequestRepo = Provider { requestRepo },
+            profileRemovalStore = profileRemovalStore,
         )
     }
     private val sut by lazy {
@@ -85,6 +90,28 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     private val reservationVersion = MutableStateFlow(0L)
     private var activityReads = 0
     private var detailReads = 0
+
+    @Test
+    fun `backfill drops a completed recovery generation and retries the current snapshot`() = coreTest {
+        rows = listOf(Activity.Onchain(onchain("request-address")))
+        val outputs = listOf(output("request-address"))
+        details = mock { on { this.outputs }.thenReturn(outputs) }
+        sharedAddresses("request-address" to BUYER)
+        val id = UUID.randomUUID().toString()
+        whenever(reservations.contactPublicKeyForReservedAddress(any())).doSuspendableAnswer {
+            profileRemovalStore.withAccess(id) {
+                profileRemovalStore.begin(id)
+                profileRemovalStore.complete(id)
+            }
+            null
+        }
+
+        assertFalse(sut.backfillPaykitContacts())
+        assertTrue(updates.isEmpty())
+        whenever(reservations.contactPublicKeyForReservedAddress(any())).thenReturn(null)
+        assertTrue(sut.backfillPaykitContacts())
+        assertEquals(2, activityReads)
+    }
 
     @Test
     fun `backfill matches receiving address in outputs and preserves all other onchain metadata`() = coreTest {
