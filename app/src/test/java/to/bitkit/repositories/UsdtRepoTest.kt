@@ -10,20 +10,26 @@ import com.synonym.bitkitcore.UsdtWallet
 import com.synonym.bitkitcore.usdtParseAmount
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Test
 import org.mockito.Mockito.mockStatic
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
+import to.bitkit.data.CacheStore
 import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -40,6 +46,37 @@ class UsdtRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `display cache survives restart and offline refresh but never becomes a spendable balance`() = test {
+        val cache = CacheStore(InMemoryDataStore(AppCacheData()))
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn("wallet-a")
+        whenever(wallet.receiveUri()).thenReturn("uri")
+        whenever(wallet.history()).thenReturn(emptyList())
+        whenever(wallet.refreshTransfers()).thenReturn(emptyList())
+        whenever(wallet.balance()).thenReturn(1_234_567uL)
+        assertTrue(UsdtRepo(service, cache, testDispatcher).refresh(history = false, force = true).isSuccess)
+        whenever(wallet.balance()).thenThrow(UsdtException.NetworkUnavailable())
+        val restarted = UsdtRepo(service, cache, testDispatcher)
+        assertTrue(restarted.refresh(history = false, force = true).isFailure)
+        assertEquals(1_234_567uL, restarted.state.value.cachedBalance)
+        assertNull(restarted.state.value.balance)
+        assertTrue(restarted.state.value.balanceIsStale)
+        assertFalse(restarted.state.value.refreshing)
+        doReturn(0uL).whenever(wallet).balance()
+        assertTrue(restarted.refresh(history = false, force = true).isSuccess)
+        assertEquals(0uL, restarted.state.value.balance)
+        assertFalse(restarted.state.value.balanceIsStale)
+        assertEquals(0uL, cache.data.first().usdtDisplayBalance?.balance)
+        whenever(wallet.receiveAddress()).thenReturn("wallet-b")
+        whenever(wallet.balance()).thenThrow(UsdtException.NetworkUnavailable())
+        assertTrue(restarted.refresh(history = false, force = true).isFailure)
+        assertNull(restarted.state.value.cachedBalance)
+        assertNull(restarted.state.value.balance)
+        restarted.wipe().getOrThrow()
+        assertNull(cache.data.first().usdtDisplayBalance)
+    }
+
+    @Test
     fun `quote rate limits pause manual payment retries and refresh until the cooldown expires`() = test {
         var now = Instant.fromEpochSeconds(1_800_000_000)
         val clock = object : Clock { override fun now() = now }
@@ -47,7 +84,7 @@ class UsdtRepoTest : BaseUnitTest() {
         whenever(wallet.receiveAddress()).thenReturn("sender")
         whenever(wallet.quoteMaxTransfer("recipient", UsdtDestination.ARBITRUM))
             .thenThrow(UsdtException.RateLimited()).thenReturn(quote())
-        val repo = UsdtRepo(service, testDispatcher, clock)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher, clock)
         assertTrue(
             repo.quoteMaximum("recipient", UsdtDestination.ARBITRUM).exceptionOrNull() is UsdtException.RateLimited
         )
@@ -71,7 +108,7 @@ class UsdtRepoTest : BaseUnitTest() {
 
     @Test
     fun `unused disabled wallet does not refresh but stored recovery and opt in do`() {
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         assertEquals(false, repo.shouldRefresh(enabled = false))
         assertTrue(repo.shouldRefresh(enabled = true))
         whenever(service.hasStoredWallet).thenReturn(true)
@@ -84,7 +121,7 @@ class UsdtRepoTest : BaseUnitTest() {
         val address = "0x18503bD685aF84E6A7bC289898bAa1C3f5d8527E"
         whenever(service.wallet()).thenReturn(wallet)
         whenever(wallet.receiveAddress()).thenReturn(address)
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         val recipient = " ${address.lowercase()} "
         assertTrue(repo.quote(recipient, "1", UsdtDestination.ARBITRUM).exceptionOrNull() is UsdtSelfSendError)
         assertTrue(repo.quoteMaximum(recipient, UsdtDestination.ARBITRUM).exceptionOrNull() is UsdtSelfSendError)
@@ -102,7 +139,7 @@ class UsdtRepoTest : BaseUnitTest() {
 
     @Test
     fun `known unsettled deposits protect the wallet until their updated status is settled`() = test {
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         val pending: UsdtDeposit = mock {
             on { id }.thenReturn("deposit-one")
             on { status }.thenReturn("confirming")
@@ -131,7 +168,7 @@ class UsdtRepoTest : BaseUnitTest() {
             finish.await()
             emptyList()
         }
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         val deposits = UsdtDepositRepo(repo)
         val request = launch { deposits.depositNetworks().getOrThrow() }
         started.await()
@@ -156,7 +193,7 @@ class UsdtRepoTest : BaseUnitTest() {
         whenever(wallet.receiveUri()).thenReturn("uri")
         whenever(wallet.history()).thenReturn(listOf(transfer))
         whenever(wallet.balance()).thenThrow(UsdtException.NetworkUnavailable())
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         assertTrue(repo.refresh(true, force = true).isFailure)
         assertEquals(listOf(transfer), repo.state.value.transfers)
         assertEquals("address", repo.state.value.address)
@@ -171,7 +208,7 @@ class UsdtRepoTest : BaseUnitTest() {
         whenever(wallet.balance()).thenReturn(1_000_000uL)
         whenever(wallet.refreshTransfers()).thenThrow(UsdtException.NetworkUnavailable())
         whenever(wallet.syncHistory()).thenReturn(true)
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         assertTrue(repo.refresh(true, force = true).isFailure)
         assertEquals(listOf(incoming("received")), repo.state.value.transfers)
         assertTrue(repo.state.value.historyComplete)
@@ -186,7 +223,7 @@ class UsdtRepoTest : BaseUnitTest() {
         whenever(wallet.history()).thenReturn(emptyList())
         whenever(wallet.balance()).thenReturn(1_000_000uL)
         whenever(wallet.refreshTransfers()).thenThrow(UsdtException.RateLimited())
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         assertTrue(repo.refresh(true, force = true).exceptionOrNull() is UsdtException.RateLimited)
         verify(wallet, never()).syncHistory()
     }
@@ -197,9 +234,9 @@ class UsdtRepoTest : BaseUnitTest() {
         whenever(wallet.receiveAddress()).thenReturn("address")
         whenever(wallet.receiveUri()).thenReturn("uri")
         whenever(wallet.history()).thenReturn(emptyList())
-        whenever(wallet.balance()).thenReturn(0uL)
+        doReturn(0uL).whenever(wallet).balance()
         whenever(wallet.refreshTransfers()).thenThrow(UsdtException.RateLimited())
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         assertTrue(repo.refresh(history = false, force = true).isFailure)
         assertTrue(repo.refresh(history = false, force = true).exceptionOrNull() is UsdtException.RateLimited)
         verify(wallet).balance()
@@ -216,7 +253,7 @@ class UsdtRepoTest : BaseUnitTest() {
         whenever(wallet.syncHistory()).thenReturn(true)
         val balance = CompletableDeferred<ULong>()
         whenever(wallet.balance()).doSuspendableAnswer { balance.await() }
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         val refresh = launch { repo.refresh(true, force = true).getOrThrow() }
         runCurrent()
         repo.isSendPresented = true
@@ -240,7 +277,7 @@ class UsdtRepoTest : BaseUnitTest() {
             release.await()
             emptyList()
         }
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         val preceding = launch { UsdtDepositRepo(repo).depositNetworks().getOrThrow() }
         runCurrent()
         val quote = quote()
@@ -275,7 +312,7 @@ class UsdtRepoTest : BaseUnitTest() {
         )
         val deadline = Instant.parse("2026-10-12T12:00:00.123456789Z")
         whenever(service.send(quote, deadline)).thenReturn(submitted)
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         assertEquals(submitted, repo.send(quote, deadline).getOrThrow())
         verify(service).send(quote, deadline)
         assertEquals(listOf(submitted), repo.state.value.transfers)
@@ -293,7 +330,7 @@ class UsdtRepoTest : BaseUnitTest() {
         whenever(service.send(quote)).thenAnswer { throw error }
         whenever(service.wallet()).thenReturn(wallet)
         whenever(wallet.history()).thenReturn(listOf(queued))
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
 
         assertEquals(error, repo.send(quote).exceptionOrNull())
         assertEquals(listOf(queued), repo.state.value.transfers)
@@ -309,7 +346,7 @@ class UsdtRepoTest : BaseUnitTest() {
             release.await()
             emptyList()
         }
-        val repo = UsdtRepo(service, testDispatcher, clock)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher, clock)
         val preceding = launch { UsdtDepositRepo(repo).depositNetworks().getOrThrow() }
         val quote = quote(now.epochSeconds.toULong() + 120u)
         var authorized = false
@@ -332,7 +369,7 @@ class UsdtRepoTest : BaseUnitTest() {
         var now = Instant.fromEpochSeconds(1_800_000_000)
         val clock = object : Clock { override fun now() = now }
         val quote = quote(now.epochSeconds.toULong() + 120u)
-        val repo = UsdtRepo(service, testDispatcher, clock)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher, clock)
 
         val result = repo.send(quote) { now += 120.seconds }
 
@@ -351,7 +388,7 @@ class UsdtRepoTest : BaseUnitTest() {
         var history = listOf(old)
         whenever(wallet.history()).thenAnswer { history }
         whenever(wallet.refreshTransfers()).thenAnswer { history }
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         repo.refresh(true, force = true).getOrThrow()
         assertTrue(repo.state.value.pendingReceipts.isEmpty())
         val received = incoming("new")
@@ -388,7 +425,7 @@ class UsdtRepoTest : BaseUnitTest() {
         whenever(wallet.balance()).thenReturn(1_000_000uL)
         whenever(wallet.refreshTransfers()).thenReturn(emptyList())
         whenever(wallet.syncHistory()).thenReturn(false, true)
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         repo.refresh(true, force = true).getOrThrow()
         assertEquals(1_000_000uL, repo.state.value.balance)
         assertEquals(listOf(incoming("old")), repo.state.value.transfers)
@@ -408,7 +445,7 @@ class UsdtRepoTest : BaseUnitTest() {
         val sent = incoming("sent").copy(isIncoming = false)
         whenever(wallet.checkRecentExecution("sent")).thenReturn(sent)
         whenever(wallet.checkRecentExecution("limited")).thenThrow(UsdtException.RateLimited())
-        val repo = UsdtRepo(service, testDispatcher)
+        val repo = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         repo.refresh(false).getOrThrow()
         repo.waitForTransfer("sent").getOrThrow()
         assertEquals(listOf(sent), repo.state.value.transfers)

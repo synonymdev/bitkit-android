@@ -137,6 +137,7 @@ class CurrencyRepo @Inject constructor(
     private suspend fun refresh() {
         if (isRefreshing) return
         isRefreshing = true
+        _currencyState.update { it.copy(isRefreshing = true) }
         try {
             runSuspendCatching {
                 val fetchedRates = currencyService.fetchLatestRates()
@@ -160,6 +161,7 @@ class CurrencyRepo @Inject constructor(
             }
         } finally {
             isRefreshing = false
+            _currencyState.update { it.copy(isRefreshing = false) }
         }
     }
 
@@ -273,6 +275,7 @@ data class CurrencyState(
     val displayUnit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
     val primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
     val lastSuccessfulRefresh: Long? = null,
+    val isRefreshing: Boolean = false,
 )
 
 val CurrencyState.paykitRate: PaykitExchangeRate?

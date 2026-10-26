@@ -1732,4 +1732,5 @@
     <string name="widgets__widget__settings">إعدادات الأداة</string>
     <string name="widgets__widget__size_small">صغير</string>
     <string name="widgets__widget__size_wide">عريض</string>
+    <string name="wallet__balance_updating">جارٍ تحديث الرصيد…</string>
 </resources>

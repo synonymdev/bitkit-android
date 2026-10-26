@@ -225,7 +225,9 @@ class CurrencyRepoTest : BaseUnitTest() {
 
         sut = createSut()
         val job = launch { sut.triggerRefresh() }
+        assertTrue(sut.currencyState.value.isRefreshing)
         job.cancelAndJoin()
+        assertFalse(sut.currencyState.value.isRefreshing)
 
         assertNull(sut.currencyState.value.error)
 

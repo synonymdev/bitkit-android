@@ -21,18 +21,23 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import to.bitkit.data.CacheStore
+import to.bitkit.data.CachedUsdtBalance
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PaykitUsdt
 import to.bitkit.services.UsdtService
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
+import java.security.MessageDigest
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import javax.inject.Inject
@@ -44,9 +49,16 @@ import kotlin.time.Instant
 @Singleton
 class UsdtRepo @Inject constructor(
     private val service: UsdtService,
+    private val cacheStore: CacheStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val clock: Clock = Clock.System,
 ) {
+    companion object {
+        private const val TAG = "UsdtRepo"
+    }
+
+    private val displayCacheNetwork = MessageDigest.getInstance("SHA-256")
+        .digest("${Env.network}:${Env.usdtRpcUrl}:${Env.usdtBundlerUrl}".encodeToByteArray()).contentToString()
     private val mutex = Mutex()
 
     @Volatile var isSendPresented = false
@@ -65,35 +77,55 @@ class UsdtRepo @Inject constructor(
             if (clock.now().toEpochMilliseconds() < refreshAfter) {
                 return@withLock if (force) Result.failure(UsdtException.RateLimited()) else Result.success(Unit)
             }
-            runSuspendCatching {
-                val wallet = service.wallet()
-                val address = wallet.receiveAddress()
-                if (_state.value.address != address) _state.update { UsdtWalletState(address = address) }
-                val previous = _state.value.transfers.takeIf { _state.value.historyComplete }
-                val saved = wallet.history().toImmutableList()
-                _state.update { it.copy(receiveUri = wallet.receiveUri(), transfers = saved) }
-                val settlement = runSuspendCatching {
-                    val balance = wallet.balance()
-                    _state.update { it.copy(balance = balance) }
-                    val transfers = wallet.refreshTransfers().toImmutableList()
-                    _state.update { it.copy(transfers = transfers) }
+            _state.update { it.copy(refreshing = true, balanceIsStale = true) }
+            try {
+                runSuspendCatching {
+                    val wallet = service.wallet()
+                    val address = wallet.receiveAddress()
+                    if (_state.value.address != address) {
+                        _state.update { UsdtWalletState(address = address, refreshing = true) }
+                    }
+                    if (_state.value.balance == null) {
+                        runSuspendCatching { cacheStore.data.first().usdtDisplayBalance }
+                            .onSuccess { cached ->
+                                _state.update {
+                                    it.copy(cachedBalance = cached?.balanceFor(address, displayCacheNetwork))
+                                }
+                            }.onFailure { Logger.warn("Failed to load display balance", it, context = TAG) }
+                    }
+                    val previous = _state.value.transfers.takeIf { _state.value.historyComplete }
+                    val saved = wallet.history().toImmutableList()
+                    _state.update { it.copy(receiveUri = wallet.receiveUri(), transfers = saved) }
+                    val settlement = runSuspendCatching {
+                        val balance = wallet.balance()
+                        _state.update { it.copy(balance = balance, balanceIsStale = false) }
+                        runSuspendCatching {
+                            cacheStore.update {
+                                it.copy(usdtDisplayBalance = CachedUsdtBalance(address, displayCacheNetwork, balance))
+                            }
+                        }.onFailure { Logger.warn("Failed to cache display balance", it, context = TAG) }
+                        val transfers = wallet.refreshTransfers().toImmutableList()
+                        _state.update { it.copy(transfers = transfers) }
+                    }
+                    if (settlement.exceptionOrNull() is UsdtException.RateLimited) settlement.getOrThrow()
+                    if (history && !isSendPresented) {
+                        val complete = wallet.syncHistory()
+                        val current = wallet.history().toImmutableList()
+                        _state.update { it.copy(historyComplete = it.historyComplete || complete, transfers = current) }
+                        announceNewReceipts(previous, current)
+                    }
+                    settlement.getOrThrow()
+                }.also {
+                    if (it.exceptionOrNull() is UsdtException.RateLimited) {
+                        rateLimitedUntil = clock.now().toEpochMilliseconds() + 60.seconds.inWholeMilliseconds
+                    }
+                    nextRefresh = maxOf(
+                        rateLimitedUntil,
+                        clock.now().toEpochMilliseconds() + 10.seconds.inWholeMilliseconds
+                    )
                 }
-                if (settlement.exceptionOrNull() is UsdtException.RateLimited) settlement.getOrThrow()
-                if (history && !isSendPresented) {
-                    val complete = wallet.syncHistory()
-                    val current = wallet.history().toImmutableList()
-                    _state.update { it.copy(historyComplete = it.historyComplete || complete, transfers = current) }
-                    announceNewReceipts(previous, current)
-                }
-                settlement.getOrThrow()
-            }.also {
-                if (it.exceptionOrNull() is UsdtException.RateLimited) {
-                    rateLimitedUntil = clock.now().toEpochMilliseconds() + 60.seconds.inWholeMilliseconds
-                }
-                nextRefresh = maxOf(
-                    rateLimitedUntil,
-                    clock.now().toEpochMilliseconds() + 10.seconds.inWholeMilliseconds
-                )
+            } finally {
+                _state.update { it.copy(refreshing = false) }
             }
         }
     }
@@ -155,9 +187,13 @@ class UsdtRepo @Inject constructor(
             runSuspendCatching {
                 val wallet = service.wallet(requiresNetwork = false)
                 wallet.restoreBackup(snapshot)
+                cacheStore.update { it.copy(usdtDisplayBalance = null) }
                 _state.update {
                     it.copy(
                         address = wallet.receiveAddress(),
+                        balance = null,
+                        cachedBalance = null,
+                        balanceIsStale = true,
                         transfers = wallet.history().toImmutableList(),
                         historyComplete = false,
                         pendingReceipts = persistentListOf(),
@@ -194,6 +230,7 @@ class UsdtRepo @Inject constructor(
 
     suspend fun wipe(clearCredentials: suspend () -> Unit = {}) = withContext(ioDispatcher) {
         mutex.withLock {
+            cacheStore.update { it.copy(usdtDisplayBalance = null) }
             clearCredentials()
             runSuspendCatching { service.wipe() }.also {
                 _state.update { UsdtWalletState() }
@@ -264,6 +301,9 @@ data class UsdtWalletState(
     val address: String = "",
     val receiveUri: String = "",
     val balance: ULong? = null,
+    val cachedBalance: ULong? = null,
+    val balanceIsStale: Boolean = true,
+    val refreshing: Boolean = false,
     val transfers: ImmutableList<UsdtTransfer> = persistentListOf(),
     val historyComplete: Boolean = false,
     val pendingReceipts: ImmutableList<UsdtTransfer> = persistentListOf(),
