@@ -1238,11 +1238,11 @@ class TransferViewModel @Inject constructor(
                 val signedOrder = _spendingUiState.value.order
                 val isBroadcastRetry = signedOrder != null &&
                     pendingHwFundingBroadcast?.matches(signedOrder, walletId, signedOrder.fundingAddress) == true
+                if (!isBroadcastRetry && isTransferUnavailable()) return@launch
                 if (!isBroadcastRetry && hwWalletRepo.needsPassphrase(walletId)) {
                     _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
                     return@launch
                 }
-                if (!isBroadcastRetry && isTransferUnavailable()) return@launch
                 val order = ensureSpendingOrder() ?: return@launch
                 val address = order.fundingAddress
                 if (address.isEmpty()) {

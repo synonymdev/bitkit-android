@@ -729,7 +729,9 @@ class LightningRepo @Inject constructor(
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
                 lightningService.stop()
                 clearProbeOutcomes()
-                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                _lightningState.update {
+                    LightningState(nodeLifecycleState = NodeLifecycleState.Stopped, isGeoBlocked = it.isGeoBlocked)
+                }
             }
         }.onFailure {
             Logger.error("Node stop error", it, context = TAG)
@@ -740,7 +742,9 @@ class LightningRepo @Inject constructor(
                 _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
             } else {
                 // Node appears stopped, update state
-                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                _lightningState.update {
+                    LightningState(nodeLifecycleState = NodeLifecycleState.Stopped, isGeoBlocked = it.isGeoBlocked)
+                }
             }
         }
     }
