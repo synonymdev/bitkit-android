@@ -136,7 +136,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                 onBack = whenCurrent(isCurrent, back).takeIf { target != ReceivePage.ADDRESS },
                 action = if (target == ReceivePage.ADDRESS && onContacts != null) {
                     {
-                        IconButton(onClick = onContacts) {
+                        IconButton(onClick = whenCurrent(isCurrent, onContacts)) {
                             Icon(
                                 painterResource(R.drawable.ic_users),
                                 stringResource(R.string.wallet__payment_request_choose_recipient)
@@ -155,7 +155,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                     tabs = tabs,
                     currentTabIndex = tabs.indexOf(ReceiveTab.USDT),
                     labelOverrides = tabLabels,
-                    onTabChange = onSelectTab
+                    onTabChange = whenCurrentOf(isCurrent, onSelectTab)
                 )
                 VerticalSpacer(16.dp)
             }
@@ -167,7 +167,12 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                     .fillMaxWidth()
                     .then(
                         if (target == ReceivePage.ADDRESS) {
-                            Modifier.swipeToChangeTab(tabIndex, tabs.size, { onSelectTab(tabs[it]) }, wrapAround = true)
+                            Modifier.swipeToChangeTab(
+                                tabIndex,
+                                tabs.size,
+                                whenCurrentOf(isCurrent) { onSelectTab(tabs[it]) },
+                                wrapAround = true,
+                            )
                         } else {
                             Modifier
                         }
