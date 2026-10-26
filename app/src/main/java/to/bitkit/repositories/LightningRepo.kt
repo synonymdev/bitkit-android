@@ -2309,9 +2309,13 @@ class LightningRepo @Inject constructor(
     fun getChannels(): List<ChannelDetails>? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
 
+    /**
+     * Whether Lightning can be received, through a usable channel or Spark; Paykit publishes a Lightning endpoint
+     * only then.
+     */
     fun canReceive(): Boolean {
         val isRunning = _lightningState.value.nodeLifecycleState.isRunning()
-        return isRunning && lightningService.canReceive()
+        return isRunning && (lightningService.canReceive() || sparkRepo.canReceive())
     }
 
     suspend fun bumpFeeByRbf(
