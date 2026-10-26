@@ -282,7 +282,7 @@
     <string name="notification__channel_node__name">Notifikace Lightning uzlu</string>
     <string name="notification__received__body_amount">Přijato %s</string>
     <string name="notification__received__title">Platba přijata</string>
-    <string name="notification__service__body">Bitkit běží na pozadí, abyste mohli přijímat Lightning platby</string>
+    <string name="notification__service__body">Bitkit běží na pozadí, abyste mohli přijímat platby a žádosti</string>
     <string name="notification__service__stop">Zastavit aplikaci</string>
     <string name="onboarding__advanced">Pokročilé</string>
     <string name="onboarding__advanced_setup">Pokročilé nastavení</string>

@@ -284,7 +284,7 @@
     <string name="notification__channel_node__name">Powiadomienie węzła Lightning</string>
     <string name="notification__received__body_amount">Otrzymano %s</string>
     <string name="notification__received__title">Płatność otrzymana</string>
-    <string name="notification__service__body">Bitkit działa w tle, abyś mógł otrzymywać płatności Lightning</string>
+    <string name="notification__service__body">Bitkit działa w tle, abyś mógł otrzymywać płatności i prośby</string>
     <string name="notification__service__stop">Zatrzymaj aplikację</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;warunki użytkowania&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Warunki użytkowania</string>

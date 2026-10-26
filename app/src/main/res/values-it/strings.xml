@@ -281,7 +281,7 @@
     <string name="notification__channel_node__name">Notifica nodo Lightning</string>
     <string name="notification__received__body_amount">Ricevuto %s</string>
     <string name="notification__received__title">Pagamento Ricevuto</string>
-    <string name="notification__service__body">Bitkit e\' in esecuzione in background per permetterti di ricevere pagamenti Lightning</string>
+    <string name="notification__service__body">Bitkit è in esecuzione in background per permetterti di ricevere pagamenti e richieste</string>
     <string name="notification__service__stop">Ferma App</string>
     <string name="onboarding__advanced">Avanzate</string>
     <string name="onboarding__advanced_setup">Impostazioni Avanzate</string>

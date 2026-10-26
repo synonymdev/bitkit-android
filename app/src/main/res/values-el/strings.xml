@@ -276,7 +276,7 @@
     <string name="notification__channel_node__name">Ειδοποίηση κόμβου Lightning</string>
     <string name="notification__received__body_amount">Ελήφθησαν %s</string>
     <string name="notification__received__title">Ελήφθη πληρωμή</string>
-    <string name="notification__service__body">Το Bitkit εκτελείται στο παρασκήνιο για να μπορείς να λαμβάνεις πληρωμές Lightning</string>
+    <string name="notification__service__body">Το Bitkit εκτελείται στο παρασκήνιο για να μπορείς να λαμβάνεις πληρωμές και αιτήματα</string>
     <string name="notification__service__stop">Διακοπή εφαρμογής</string>
     <string name="onboarding__advanced">Για προχωρημένους</string>
     <string name="onboarding__advanced_setup">Ρύθμιση για προχωρημένους</string>

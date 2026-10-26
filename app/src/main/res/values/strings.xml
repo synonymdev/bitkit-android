@@ -455,7 +455,7 @@
     <string name="notification__channel_node__name">Lightning node notification</string>
     <string name="notification__received__body_amount">Received %s</string>
     <string name="notification__received__title">Payment Received</string>
-    <string name="notification__service__body">Bitkit is running in background so you can receive Lightning payments</string>
+    <string name="notification__service__body">Bitkit is running in the background so you can receive payments and requests</string>
     <string name="notification__service__stop">Stop App</string>
     <string name="onboarding__advanced">Advanced</string>
     <string name="onboarding__advanced_setup">Advanced Setup</string>

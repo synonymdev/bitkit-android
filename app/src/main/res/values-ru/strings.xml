@@ -297,7 +297,7 @@
     <string name="notification__channel_node__name">Уведомление Lightning ноды</string>
     <string name="notification__received__body_amount">Получено %s</string>
     <string name="notification__received__title">Платёж получен</string>
-    <string name="notification__service__body">Bitkit работает в фоновом режиме, чтобы вы могли получать Lightning платежи</string>
+    <string name="notification__service__body">Bitkit работает в фоновом режиме, чтобы вы могли получать платежи и запросы</string>
     <string name="notification__service__stop">Остановить приложение</string>
     <string name="onboarding__advanced">Дополнительно</string>
     <string name="onboarding__advanced_setup">Дополнительно</string>

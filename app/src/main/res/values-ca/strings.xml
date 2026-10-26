@@ -279,7 +279,7 @@
     <string name="notification__channel_node__name">Notificació del node Lightning</string>
     <string name="notification__received__body_amount">Rebut %s</string>
     <string name="notification__received__title">Pagament rebut</string>
-    <string name="notification__service__body">Bitkit s\'executa en segon pla perquè puguis rebre pagaments Lightning</string>
+    <string name="notification__service__body">Bitkit s\'executa en segon pla perquè puguis rebre pagaments i sol·licituds</string>
     <string name="notification__service__stop">Aturar aplicació</string>
     <string name="onboarding__advanced">Avançat</string>
     <string name="onboarding__advanced_setup">Configuració avançada</string>

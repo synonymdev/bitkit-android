@@ -277,7 +277,7 @@
     <string name="notification__channel_node__name">Notificação do nó Lightning</string>
     <string name="notification__received__body_amount">Recebido %s</string>
     <string name="notification__received__title">Pagamento Recebido</string>
-    <string name="notification__service__body">A Bitkit está rodando em segundo plano para você receber pagamentos Lightning</string>
+    <string name="notification__service__body">A Bitkit está a ser executada em segundo plano para poder receber pagamentos e pedidos</string>
     <string name="notification__service__stop">Parar App</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;termos de uso&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Termos de uso</string>

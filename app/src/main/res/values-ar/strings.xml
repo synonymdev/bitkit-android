@@ -275,7 +275,7 @@
     <string name="notification__channel_node__name">إشعار عقدة Lightning</string>
     <string name="notification__received__body_amount">تم استلام %s</string>
     <string name="notification__received__title">تم استلام الدفع</string>
-    <string name="notification__service__body">Bitkit يعمل في الخلفية حتى تتمكن من استلام مدفوعات Lightning</string>
+    <string name="notification__service__body">Bitkit يعمل في الخلفية حتى تتمكن من استلام المدفوعات والطلبات</string>
     <string name="notification__service__stop">إيقاف التطبيق</string>
     <string name="onboarding__advanced">متقدم</string>
     <string name="onboarding__advanced_setup">إعداد متقدم</string>

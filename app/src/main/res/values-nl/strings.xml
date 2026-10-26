@@ -280,7 +280,7 @@
     <string name="notification__channel_node__name">Lightning node notificatie</string>
     <string name="notification__received__body_amount">%s ontvangen</string>
     <string name="notification__received__title">Betaling ontvangen</string>
-    <string name="notification__service__body">Bitkit draait op de achtergrond zodat je Lightning-betalingen kunt ontvangen</string>
+    <string name="notification__service__body">Bitkit draait op de achtergrond zodat je betalingen en verzoeken kunt ontvangen</string>
     <string name="notification__service__stop">App stoppen</string>
     <string name="onboarding__advanced">Geavanceerd</string>
     <string name="onboarding__advanced_setup">Geavanceerde configuratie</string>

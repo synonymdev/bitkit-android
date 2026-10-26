@@ -282,7 +282,7 @@
     <string name="notification__channel_node__name">Lightning-Node-Benachrichtigung</string>
     <string name="notification__received__body_amount">%s empfangen</string>
     <string name="notification__received__title">Zahlung empfangen</string>
-    <string name="notification__service__body">Bitkit läuft im Hintergrund, damit du Lightning-Zahlungen empfangen kannst</string>
+    <string name="notification__service__body">Bitkit läuft im Hintergrund, damit du Zahlungen und Anfragen empfangen kannst</string>
     <string name="notification__service__stop">App stoppen</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;Nutzungs-bedingungen&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Nutzungsbedingungen</string>
