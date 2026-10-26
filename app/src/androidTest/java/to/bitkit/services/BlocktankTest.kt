@@ -12,6 +12,7 @@ import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
+import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.env.Env
@@ -85,6 +86,7 @@ class BlocktankTest {
         assertTrue(info.onchain.feeRates.slow > 0u, "Slow fee rate should be greater than 0")
     }
 
+    @Ignore("Blocktank staging no longer creates orders or CJIT entries (synonymdev/blocktank-lsp-http#168)")
     @Test
     fun testCreateCjitEntry() = runBlocking {
         // Test creating a CJIT order
@@ -135,6 +137,7 @@ class BlocktankTest {
         assertEquals(entries.first().id, cjitEntry.id, "Retrieved entry should match created entry")
     }
 
+    @Ignore("Blocktank staging no longer creates orders or CJIT entries (synonymdev/blocktank-lsp-http#168)")
     @Test
     fun testOrders() = runBlocking {
         // Test creating an order
