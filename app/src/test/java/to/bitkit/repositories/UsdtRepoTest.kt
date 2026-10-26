@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import androidx.datastore.core.DataStore
 import com.synonym.bitkitcore.UsdtDeposit
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtException
@@ -11,6 +12,7 @@ import com.synonym.bitkitcore.usdtParseAmount
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Test
@@ -27,6 +29,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.InMemoryDataStore
+import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -75,6 +78,56 @@ class UsdtRepoTest : BaseUnitTest() {
         restarted.wipe().getOrThrow()
         assertNull(cache.data.first().usdtDisplayBalance)
     }
+
+    @Test
+    fun `display cache write failure does not prevent credential and wallet cleanup`() = test {
+        val repo = UsdtRepo(service, failingCache(), testDispatcher)
+        val pending: UsdtDeposit = mock {
+            on { id }.thenReturn("pending")
+            on { status }.thenReturn("confirming")
+        }
+        repo.updateDeposits(listOf(pending))
+        var credentialsCleared = false
+
+        repo.wipe { credentialsCleared = true }.getOrThrow()
+
+        assertTrue(credentialsCleared)
+        verify(service).wipe()
+        assertEquals(UsdtWalletState(), repo.state.value)
+        val walletError = UsdtException.Storage("wallet cleanup failed")
+        whenever(service.wipe()).thenAnswer { throw walletError }
+        assertEquals(walletError, repo.wipe().exceptionOrNull())
+    }
+
+    @Test
+    fun `display cache write failure does not leave old state after wallet restoration`() = test {
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(service.wallet(requiresNetwork = false)).thenReturn(wallet)
+        whenever(wallet.receiveAddress()).thenReturn("original")
+        whenever(wallet.receiveUri()).thenReturn("uri")
+        whenever(wallet.history()).thenReturn(emptyList())
+        whenever(wallet.refreshTransfers()).thenReturn(emptyList())
+        whenever(wallet.balance()).thenReturn(1_000_000uL)
+        val repo = UsdtRepo(service, failingCache(), testDispatcher)
+        repo.refresh(history = false, force = true).getOrThrow()
+        whenever(wallet.receiveAddress()).thenReturn("restored")
+        whenever(wallet.history()).thenReturn(listOf(incoming("restored-payment")))
+
+        repo.restoreBackup("snapshot").getOrThrow()
+
+        verify(wallet).restoreBackup("snapshot")
+        assertEquals("restored", repo.state.value.address)
+        assertEquals(listOf(incoming("restored-payment")), repo.state.value.transfers)
+        assertNull(repo.state.value.balance)
+        assertNull(repo.state.value.cachedBalance)
+        assertTrue(repo.state.value.balanceIsStale)
+    }
+
+    private fun failingCache() = CacheStore(object : DataStore<AppCacheData> {
+        override val data = flowOf(AppCacheData())
+        override suspend fun updateData(transform: suspend (AppCacheData) -> AppCacheData): AppCacheData =
+            throw IOException("cache unavailable")
+    })
 
     @Test
     fun `quote rate limits pause manual payment retries and refresh until the cooldown expires`() = test {

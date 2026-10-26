@@ -187,7 +187,7 @@ class UsdtRepo @Inject constructor(
             runSuspendCatching {
                 val wallet = service.wallet(requiresNetwork = false)
                 wallet.restoreBackup(snapshot)
-                cacheStore.update { it.copy(usdtDisplayBalance = null) }
+                clearDisplayBalance()
                 _state.update {
                     it.copy(
                         address = wallet.receiveAddress(),
@@ -230,7 +230,7 @@ class UsdtRepo @Inject constructor(
 
     suspend fun wipe(clearCredentials: suspend () -> Unit = {}) = withContext(ioDispatcher) {
         mutex.withLock {
-            cacheStore.update { it.copy(usdtDisplayBalance = null) }
+            clearDisplayBalance()
             clearCredentials()
             runSuspendCatching { service.wipe() }.also {
                 _state.update { UsdtWalletState() }
@@ -238,6 +238,11 @@ class UsdtRepo @Inject constructor(
                 rateLimitedUntil = 0L
             }
         }
+    }
+
+    private suspend fun clearDisplayBalance() {
+        runSuspendCatching { cacheStore.update { it.copy(usdtDisplayBalance = null) } }
+            .onFailure { Logger.warn("Failed to clear display balance", it, context = TAG) }
     }
 
     suspend fun quote(
