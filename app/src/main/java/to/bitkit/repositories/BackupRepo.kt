@@ -164,6 +164,7 @@ class BackupRepo @Inject constructor(
     private var observation: Observation? = null
     private val retiringObservations = mutableSetOf<Job>()
     private val backupJobs = mutableMapOf<BackupCategory, Job>()
+    private val explicitBackups = mutableSetOf<BackupCategory>()
     private val categoryMutexes = BackupCategory.entries.associateWith { Mutex() }
 
     private val runningBackups = ConcurrentHashMap.newKeySet<BackupCategory>() // Tracks active jobs since app start
@@ -203,6 +204,7 @@ class BackupRepo @Inject constructor(
                     vssBackupClientLdk.reset()
                     synchronized(lifecycleLock) {
                         backupJobs.clear()
+                        explicitBackups.clear()
                         failedBackupRequired.clear()
                         temporaryFailureRetries.clear()
                         temporaryFailureSince.clear()
@@ -527,6 +529,7 @@ class BackupRepo @Inject constructor(
             ) {
                 return
             }
+            if (owner == null) explicitBackups += category
             val existing = backupJobs[category]
             if (existing != null && !existing.isCompleted && !existing.isCancelled) return
             val expectedGeneration = generation
@@ -543,7 +546,9 @@ class BackupRepo @Inject constructor(
                                 paykitSdkService.isPaymentSubmissionActive.first { !it }
                             }
                             val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
-                            if (status.isRequired && !shouldSkipBackup(category)) {
+                            if (status.isRequired && !shouldSkipBackup(category) &&
+                                !failedBackupRequired.containsKey(category)
+                            ) {
                                 performBackup(category, expectedGeneration)
                             }
                         } finally {
@@ -553,17 +558,37 @@ class BackupRepo @Inject constructor(
                 } finally {
                     val currentJob = currentCoroutineContext()[Job]
                     synchronized(lifecycleLock) { backupJobs.remove(category, currentJob) }
-                    val nextOwner = synchronized(lifecycleLock) {
-                        observation?.takeIf { generation == expectedGeneration && (owner == null || owner === it) }
-                    }
-                    if (nextOwner != null && nextOwner.scope.isActive) {
-                        val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
-                        if (status.shouldBackup(category)) scheduleBackup(category, nextOwner)
+                    withContext(NonCancellable) {
+                        schedulePendingBackup(category, expectedGeneration, owner)
                     }
                 }
             }.also { backupJobs[category] = it }
         }
         job.start()
+    }
+
+    private suspend fun schedulePendingBackup(
+        category: BackupCategory,
+        expectedGeneration: Long,
+        previousOwner: Observation? = null,
+    ) {
+        var status = BackupItemStatus()
+        updateBackupStatus(category, expectedGeneration) {
+            status = it
+            if (!it.isRequired) explicitBackups -= category
+            it
+        }
+        synchronized(lifecycleLock) {
+            if (resetting || generation != expectedGeneration) return
+            if (failedBackupRequired.containsKey(category)) return
+            if (!status.shouldBackup(category)) return
+            if (category in explicitBackups) {
+                scheduleBackup(category, requestedGeneration = expectedGeneration)
+            } else {
+                val owner = observation?.takeIf { previousOwner == null || previousOwner === it } ?: return
+                if (owner.scope.isActive) scheduleBackup(category, owner)
+            }
+        }
     }
 
     private suspend fun finishBackup(category: BackupCategory, expectedGeneration: Long) = withContext(NonCancellable) {
@@ -612,34 +637,67 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withBackupOperation { expectedGeneration ->
+    suspend fun triggerBackup(category: BackupCategory): Result<Unit> = performExplicitBackup(category)
+
+    private suspend fun performExplicitBackup(
+        category: BackupCategory,
+        usdtSnapshot: String? = null,
+    ): Result<Unit> = withBackupOperation { expectedGeneration ->
+        var reservedRequired: Long? = null
+        if (usdtSnapshot != null) {
+            withContext(NonCancellable) {
+                updateBackupStatus(category, expectedGeneration) {
+                    val required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1)
+                    reservedRequired = required
+                    it.copy(required = required)
+                }
+            }
+        }
         categoryMutexes.getValue(category).withLock {
             if (synchronized(lifecycleLock) { resetting || generation != expectedGeneration }) {
                 return@withLock Result.failure(UsdtException.BackupUnavailable())
             }
             runningBackups += category
             try {
-                performBackup(category, expectedGeneration)
+                performBackup(
+                    category,
+                    expectedGeneration,
+                    usdtSnapshot,
+                    explicitAttempt = true,
+                    reservedRequired = reservedRequired,
+                )
             } finally {
                 finishBackup(category, expectedGeneration)
+                withContext(NonCancellable) {
+                    schedulePendingBackup(category, expectedGeneration)
+                }
             }
         }
     }
 
-    private suspend fun performBackup(category: BackupCategory, expectedGeneration: Long): Result<Unit> {
+    private suspend fun performBackup(
+        category: BackupCategory,
+        expectedGeneration: Long,
+        usdtSnapshot: String? = null,
+        explicitAttempt: Boolean = false,
+        reservedRequired: Long? = null,
+    ): Result<Unit> {
         Logger.debug("Backup starting for: '$category'", context = TAG)
-        var backupRequired = currentTimeMillis()
+        var backupRequired = reservedRequired ?: currentTimeMillis()
         updateBackupStatus(category, expectedGeneration) {
-            failedBackupRequired -= category
-            backupRequired = maxOf(backupRequired, it.required, it.synced + 1)
-            it.copy(running = true, required = backupRequired)
+            if (reservedRequired == null) {
+                val required = if (explicitAttempt) it.required + 1 else it.required
+                backupRequired = maxOf(backupRequired, required, it.synced + 1)
+            }
+            if ((failedBackupRequired[category] ?: 0) <= backupRequired) failedBackupRequired -= category
+            it.copy(running = true, required = maxOf(it.required, backupRequired))
         }
         if (synchronized(lifecycleLock) { resetting || generation != expectedGeneration }) {
             return Result.failure(UsdtException.BackupUnavailable())
         }
         val upload = when (category) {
             BackupCategory.WALLET -> uploadWalletBackup()
-            BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup()
+            BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup(usdtSnapshot)
             else -> runSuspendCatching {
                 vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
             }
@@ -648,15 +706,22 @@ class BackupRepo @Inject constructor(
             .onSuccess {
                 withContext(NonCancellable) {
                     updateBackupStatus(category, expectedGeneration) {
-                        failedBackupRequired -= category
-                        temporaryFailureRetries -= category
-                        temporaryFailureSince -= category
-                        it.copy(running = false, synced = backupRequired)
+                        if ((failedBackupRequired[category] ?: 0) <= backupRequired) {
+                            failedBackupRequired -= category
+                            temporaryFailureRetries -= category
+                            temporaryFailureSince -= category
+                        }
+                        if (it.required <= backupRequired) {
+                            explicitBackups -= category
+                        } else if (explicitAttempt) {
+                            explicitBackups += category
+                        }
+                        it.copy(running = false, synced = maxOf(it.synced, backupRequired))
                     }
                 }
                 Logger.info("Backup succeeded for: '$category'", context = TAG)
             }
-            .onFailure { markBackupFailed(category, backupRequired, expectedGeneration, it) }
+            .onFailure { markBackupFailed(category, backupRequired, expectedGeneration, it, explicitAttempt) }
             .map { }
     }
 
@@ -664,14 +729,8 @@ class BackupRepo @Inject constructor(
         uploadWalletBackup().onFailure { markBackupRequired(BackupCategory.WALLET, expectedGeneration) }
     }
 
-    suspend fun persistUsdtRecoveryBackup(snapshot: String): Result<Unit> = withBackupOperation { expectedGeneration ->
-        runSuspendCatching {
-            updateBackupStatus(BackupCategory.USDT_RECOVERY, expectedGeneration) {
-                it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
-            }
-            uploadUsdtRecoveryBackup(snapshot).getOrThrow()
-        }.onFailure { markBackupRequired(BackupCategory.USDT_RECOVERY, expectedGeneration) }
-    }
+    suspend fun persistUsdtRecoveryBackup(snapshot: String): Result<Unit> =
+        performExplicitBackup(BackupCategory.USDT_RECOVERY, snapshot)
 
     private suspend fun withBackupOperation(
         operation: suspend (Long) -> Result<Unit>,
@@ -733,12 +792,18 @@ class BackupRepo @Inject constructor(
         backupRequired: Long,
         expectedGeneration: Long,
         e: Throwable,
+        explicitAttempt: Boolean,
     ) {
+        val temporary = e.isTemporaryBackupFailure()
         withContext(NonCancellable) {
             updateBackupStatus(category, expectedGeneration) {
+                if (temporary && explicitAttempt) explicitBackups += category
+                if (!temporary && e !is WalletBackupSnapshotChanged && it.required == backupRequired) {
+                    explicitBackups -= category
+                }
                 if (it.required == backupRequired && e !is WalletBackupSnapshotChanged) {
                     failedBackupRequired[category] = backupRequired
-                } else {
+                } else if ((failedBackupRequired[category] ?: 0) <= backupRequired) {
                     failedBackupRequired -= category
                 }
                 it.copy(running = false)
@@ -747,7 +812,7 @@ class BackupRepo @Inject constructor(
         when {
             e is WalletBackupSnapshotChanged ->
                 Logger.debug("Deferred changing backup snapshot for: '$category'", context = TAG)
-            e.isTemporaryBackupFailure() -> retryAfterTemporaryFailure(category, backupRequired, expectedGeneration, e)
+            temporary -> retryAfterTemporaryFailure(category, backupRequired, expectedGeneration, e)
             else -> Logger.error("Backup failed for: '$category'", e, context = TAG)
         }
     }
@@ -759,7 +824,11 @@ class BackupRepo @Inject constructor(
         e: Throwable,
     ) {
         val job = synchronized(lifecycleLock) {
-            if (resetting || generation != expectedGeneration) return
+            if (resetting || generation != expectedGeneration ||
+                (failedBackupRequired[category] ?: 0) > backupRequired
+            ) {
+                return
+            }
             val attempt = temporaryFailureRetries.merge(category, 1, Int::plus) ?: 1
             temporaryFailureSince.putIfAbsent(category, backupRequired)
             val retryDelay = (TEMPORARY_FAILURE_RETRY_DELAY * (1 shl (attempt - 1).coerceAtMost(MAX_RETRY_SHIFT)))
@@ -767,14 +836,16 @@ class BackupRepo @Inject constructor(
             Logger.warn("Retrying backup for: '$category' in '$retryDelay'", e, context = TAG)
             pendingScope.launch(start = CoroutineStart.LAZY) {
                 delay(retryDelay)
-                val owner = synchronized(lifecycleLock) {
-                    if (generation != expectedGeneration || !failedBackupRequired.remove(category, backupRequired)) {
+                synchronized(lifecycleLock) {
+                    if (resetting || generation != expectedGeneration) return@launch
+                    val failed = failedBackupRequired[category]
+                    if (failed == backupRequired) {
+                        failedBackupRequired.remove(category, backupRequired)
+                    } else if (failed != null || category !in explicitBackups) {
                         return@launch
                     }
-                    observation
-                } ?: return@launch
-                val status = cacheStore.backupStatuses.first()[category] ?: return@launch
-                if (status.shouldBackup(category)) scheduleBackup(category, owner)
+                }
+                schedulePendingBackup(category, expectedGeneration)
             }
         }
         job.start()

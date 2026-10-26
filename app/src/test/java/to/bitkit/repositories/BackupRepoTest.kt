@@ -22,6 +22,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -178,6 +179,7 @@ class BackupRepoTest : BaseUnitTest() {
             cacheData.update(transform)
         }
         whenever(cacheStore.data).thenReturn(cacheData)
+        whenever(cacheStore.backupStatuses).thenReturn(cacheData.map { it.backupStatuses })
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever { settingsStore.update(any()) }.thenReturn(Unit)
         whenever(widgetsStore.data).thenReturn(widgetsData)
@@ -988,16 +990,20 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(privatePaykitRepo.backupSnapshot()).thenReturn(
             Result.failure(PaykitException.SharedStateBusy("shared_state_busy", "lock unavailable")),
         )
-        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
-        sut.persistUsdtRecoveryBackup("same-signed-operation").getOrThrow()
-        val payload = argumentCaptor<ByteArray>()
-        verify(vssBackupClient).putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, payload.capture())
-        assertEquals(
-            "same-signed-operation",
-            json.decodeFromString<UsdtRecoveryBackupV1>(payload.firstValue.decodeToString()).usdtWallet,
-        )
-        verify(privatePaykitRepo, times(1)).backupSnapshot()
-        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+        try {
+            assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+            sut.persistUsdtRecoveryBackup("same-signed-operation").getOrThrow()
+            val payload = argumentCaptor<ByteArray>()
+            verify(vssBackupClient).putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, payload.capture())
+            assertEquals(
+                "same-signed-operation",
+                json.decodeFromString<UsdtRecoveryBackupV1>(payload.firstValue.decodeToString()).usdtWallet,
+            )
+            verify(privatePaykitRepo, times(1)).backupSnapshot()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+        } finally {
+            sut.reset()
+        }
     }
 
     @Test
@@ -1734,6 +1740,469 @@ class BackupRepoTest : BaseUnitTest() {
             assertFalse(statuses.value.getValue(category).running)
             assertFalse(statuses.value.getValue(category).isRequired)
         } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `failed explicit USDT callback retries backup after observation stops without acknowledging Core`() = test {
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        sut.startObservingBackups()
+        sut.stopObservingBackups()
+        runCurrent()
+        val service = UsdtService(keychain, Provider { sut })
+        whenever(usdtRepo.backupSnapshot()).thenReturn("same-signed-operation")
+        whenever { vssBackupClient.putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, any()) }
+            .thenReturn(
+                Result.failure(
+                    VssException.UnknownException("error sending request for url (http://127.0.0.1:1/putObjects)")
+                )
+            )
+            .thenReturn(Result.success(VssItem(key = "recovery", value = byteArrayOf(), version = 1)))
+        try {
+            assertTrue(runCatching { service.recoveryBackup.persist("same-signed-operation") }.isFailure)
+            assertEquals(0L, service.recoveryGeneration)
+            advanceTimeBy(15_001)
+            runCurrent()
+            assertFalse(statuses.value.getValue(BackupCategory.USDT_RECOVERY).isRequired)
+            assertEquals(0L, service.recoveryGeneration)
+            service.recoveryBackup.persist("same-signed-operation")
+            assertEquals(1L, service.recoveryGeneration)
+            val keys = argumentCaptor<String>()
+            val payloads = argumentCaptor<ByteArray>()
+            verify(vssBackupClient, times(3)).putObject(keys.capture(), payloads.capture())
+            assertEquals(1, keys.allValues.distinct().size)
+            assertTrue(payloads.allValues.all { it.contentEquals(payloads.firstValue) })
+            verify(privatePaykitRepo, never()).backupSnapshot()
+        } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `manual backup failure retries without observation`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        whenever { vssBackupClient.putObject(eq(category.name), any()) }
+            .thenReturn(Result.failure(VssException.NetworkException("offline")))
+            .thenReturn(Result.success(VssItem(key = category.name, value = byteArrayOf(), version = 1)))
+        try {
+            assertTrue(sut.triggerBackup(category).isFailure)
+            advanceTimeBy(15_001)
+            runCurrent()
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `reset and wipe revoke explicit retry admission before client replacement`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        whenever { vssBackupClient.putObject(eq(category.name), any()) }
+            .thenReturn(Result.failure(VssException.NetworkException("offline")))
+            .thenReturn(Result.success(VssItem(key = category.name, value = byteArrayOf(), version = 1)))
+        assertTrue(sut.triggerBackup(category).isFailure)
+        sut.setWiping(true)
+        sut.reset()
+        advanceTimeBy(20_000)
+        runCurrent()
+        verify(vssBackupClient, times(1)).putObject(eq(category.name), any())
+        assertTrue(sut.triggerBackup(category).isFailure)
+        sut.setWiping(false)
+        sut.triggerBackup(category).getOrThrow()
+        advanceTimeBy(20_000)
+        runCurrent()
+        verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+        assertFalse(statuses.value.getValue(category).isRequired)
+        sut.reset()
+    }
+
+    @Test
+    fun `explicit retry retains newer required data until the successor succeeds`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        var attempts = 0
+        whenever { vssBackupClient.putObject(eq(category.name), any()) }.doSuspendableAnswer {
+            attempts += 1
+            if (attempts == 1) return@doSuspendableAnswer Result.failure(VssException.NetworkException("offline"))
+            if (attempts == 2) {
+                statuses.update { data ->
+                    val current = data.getValue(category)
+                    data + (category to current.copy(required = current.required + 1))
+                }
+            }
+            Result.success(VssItem(key = category.name, value = byteArrayOf(), version = 1))
+        }
+        try {
+            assertTrue(sut.triggerBackup(category).isFailure)
+            advanceTimeBy(20_001)
+            runCurrent()
+            assertEquals(3, attempts)
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `full request survives coalescing with a cancelled observer upload`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var attempts = 0
+        whenever { vssBackupClient.putObject(eq(category.name), any()) }.doSuspendableAnswer {
+            attempts += 1
+            if (attempts == 1) {
+                entered.complete(Unit)
+                try {
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) { release.await() }
+                }
+            }
+            Result.success(VssItem(key = category.name, value = byteArrayOf(), version = 1))
+        }
+        sut.startObservingBackups()
+        advanceTimeBy(5_000)
+        runCurrent()
+        entered.await()
+        sut.scheduleFullBackup()
+        sut.stopObservingBackups()
+        try {
+            advanceTimeBy(20_000)
+            runCurrent()
+            assertEquals(1, attempts)
+            release.complete(Unit)
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            assertEquals(2, attempts)
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            release.complete(Unit)
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `permanent failure and caller cancellation do not admit explicit retry`() = test {
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        val entered = CompletableDeferred<Unit>()
+        var attempts = 0
+        whenever { vssBackupClient.putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, any()) }
+            .doSuspendableAnswer {
+                attempts += 1
+                if (attempts == 1) {
+                    Result.failure(VssException.UnknownException("invalid credentials"))
+                } else {
+                    entered.complete(Unit)
+                    awaitCancellation()
+                }
+            }
+        assertTrue(sut.persistUsdtRecoveryBackup("signed").isFailure)
+        advanceTimeBy(600_000)
+        runCurrent()
+        assertEquals(1, attempts)
+        val caller = launch { sut.persistUsdtRecoveryBackup("signed") }
+        entered.await()
+        caller.cancelAndJoin()
+        advanceTimeBy(600_000)
+        runCurrent()
+        assertEquals(2, attempts)
+        assertTrue(statuses.value.getValue(BackupCategory.USDT_RECOVERY).isRequired)
+        sut.reset()
+    }
+
+    @Test
+    fun `manual success follows a consumed change after observers stop`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000, synced = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        sut.startObservingBackups()
+        runCurrent()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var attempts = 0
+        whenever { vssBackupClient.putObject(eq(category.name), any()) }.doSuspendableAnswer {
+            attempts += 1
+            if (attempts == 1) {
+                entered.complete(Unit)
+                release.await()
+            }
+            Result.success(VssItem(key = category.name, value = byteArrayOf(), version = 1))
+        }
+        val manual = async { sut.triggerBackup(category) }
+        entered.await()
+        settingsData.update { it.copy(selectedCurrency = "EUR") }
+        runCurrent()
+        sut.stopObservingBackups()
+        try {
+            release.complete(Unit)
+            manual.await().getOrThrow()
+            advanceTimeBy(5_001)
+            runCurrent()
+            assertEquals(2, attempts)
+            assertFalse(statuses.value.getValue(category).isRequired)
+            val payloads = argumentCaptor<ByteArray>()
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), payloads.capture())
+            assertTrue(payloads.secondValue.decodeToString().contains("EUR"))
+        } finally {
+            release.complete(Unit)
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `consumed change cannot orphan a retained explicit retry timer`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000, synced = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        sut.startObservingBackups()
+        runCurrent()
+        whenever { vssBackupClient.putObject(eq(category.name), any()) }
+            .thenReturn(Result.failure(VssException.NetworkException("offline")))
+            .thenReturn(Result.success(VssItem(key = category.name, value = byteArrayOf(), version = 1)))
+        assertTrue(sut.triggerBackup(category).isFailure)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var holdNextWrite = true
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            if (holdNextWrite) {
+                holdNextWrite = false
+                entered.complete(Unit)
+                release.await()
+            }
+            statuses.update { current -> transform(AppCacheData(backupStatuses = current)).backupStatuses }
+        }
+        settingsData.update { it.copy(selectedCurrency = "EUR") }
+        entered.await()
+        sut.stopObservingBackups()
+        try {
+            release.complete(Unit)
+            runCurrent()
+            advanceTimeBy(15_001)
+            runCurrent()
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            release.complete(Unit)
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `older retry timer cannot shorten a newer explicit failure backoff`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        var attempts = 0
+        whenever { vssBackupClient.putObject(eq(category.name), any()) }.doSuspendableAnswer {
+            attempts += 1
+            if (attempts < 3) {
+                Result.failure(VssException.NetworkException("offline"))
+            } else {
+                Result.success(VssItem(key = category.name, value = byteArrayOf(), version = 1))
+            }
+        }
+        try {
+            assertTrue(sut.triggerBackup(category).isFailure)
+            advanceTimeBy(5_000)
+            assertTrue(sut.triggerBackup(category).isFailure)
+            advanceTimeBy(15_000)
+            runCurrent()
+            assertEquals(2, attempts)
+            advanceTimeBy(10_001)
+            runCurrent()
+            assertEquals(3, attempts)
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `stale timer continuation respects a concurrent explicit failure backoff`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        var attempts = 0
+        whenever { vssBackupClient.putObject(eq(category.name), any()) }.doSuspendableAnswer {
+            attempts += 1
+            if (attempts < 3) {
+                Result.failure(VssException.NetworkException("offline"))
+            } else {
+                Result.success(VssItem(key = category.name, value = byteArrayOf(), version = 1))
+            }
+        }
+        assertTrue(sut.triggerBackup(category).isFailure)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var holdNextReturn = true
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            statuses.update { current -> transform(AppCacheData(backupStatuses = current)).backupStatuses }
+            if (holdNextReturn) {
+                holdNextReturn = false
+                entered.complete(Unit)
+                release.await()
+            }
+        }
+        advanceTimeBy(10_000)
+        runCurrent()
+        entered.await()
+        try {
+            assertTrue(sut.triggerBackup(category).isFailure)
+            release.complete(Unit)
+            runCurrent()
+            advanceTimeBy(5_001)
+            runCurrent()
+            assertEquals(2, attempts)
+            advanceTimeBy(20_000)
+            runCurrent()
+            assertEquals(3, attempts)
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            release.complete(Unit)
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `cancelled queued USDT callback retains its required revision`() = test {
+        val category = BackupCategory.USDT_RECOVERY
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        val release = CompletableDeferred<Unit>()
+        val uploads = mutableListOf<String?>()
+        val service = UsdtService(keychain, Provider { sut })
+        whenever(usdtRepo.backupSnapshot()).thenReturn("older")
+        whenever { vssBackupClient.putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, any()) }
+            .doSuspendableAnswer {
+                val payload = json.decodeFromString<UsdtRecoveryBackupV1>(it.getArgument<ByteArray>(1).decodeToString())
+                uploads += payload.usdtWallet
+                release.await()
+                Result.success(VssItem(key = "recovery", value = byteArrayOf(), version = 1))
+            }
+        val older = async { sut.triggerBackup(category) }
+        runCurrent()
+        val olderRequired = statuses.value.getValue(category).required
+        val queued = launch { service.recoveryBackup.persist("newer") }
+        try {
+            runCurrent()
+            queued.cancelAndJoin()
+            release.complete(Unit)
+            older.await().getOrThrow()
+            runCurrent()
+            val status = statuses.value.getValue(category)
+            assertTrue(status.required > olderRequired)
+            assertTrue(status.isRequired)
+            assertEquals(0L, service.recoveryGeneration)
+            assertEquals(listOf<String?>("older"), uploads)
+        } finally {
+            queued.cancelAndJoin()
+            release.complete(Unit)
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `queued USDT callback cannot satisfy a later cancelled revision`() = test {
+        val category = BackupCategory.USDT_RECOVERY
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        val release = CompletableDeferred<Unit>()
+        val uploads = mutableListOf<String?>()
+        whenever(usdtRepo.backupSnapshot()).thenReturn("older")
+        whenever { vssBackupClient.putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, any()) }
+            .doSuspendableAnswer {
+                val payload = json.decodeFromString<UsdtRecoveryBackupV1>(it.getArgument<ByteArray>(1).decodeToString())
+                uploads += payload.usdtWallet
+                if (payload.usdtWallet == "older") release.await()
+                Result.success(VssItem(key = "recovery", value = byteArrayOf(), version = 1))
+            }
+        val older = async { sut.triggerBackup(category) }
+        runCurrent()
+        val first = async { sut.persistUsdtRecoveryBackup("first") }
+        runCurrent()
+        val second = launch { sut.persistUsdtRecoveryBackup("second") }
+        try {
+            runCurrent()
+            second.cancelAndJoin()
+            release.complete(Unit)
+            older.await().getOrThrow()
+            first.await().getOrThrow()
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).isRequired)
+            assertEquals(listOf<String?>("older", "first"), uploads)
+        } finally {
+            second.cancelAndJoin()
+            release.complete(Unit)
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `older reserved callback preserves a newer failure backoff`() = test {
+        val category = BackupCategory.USDT_RECOVERY
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        whenever(usdtRepo.backupSnapshot()).thenReturn("newer")
+        val uploads = mutableListOf<String?>()
+        whenever { vssBackupClient.putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, any()) }
+            .doSuspendableAnswer {
+                val payload = json.decodeFromString<UsdtRecoveryBackupV1>(it.getArgument<ByteArray>(1).decodeToString())
+                uploads += payload.usdtWallet
+                if (uploads.size == 1) {
+                    Result.failure(VssException.NetworkException("offline"))
+                } else {
+                    Result.success(VssItem(key = "recovery", value = byteArrayOf(), version = 1))
+                }
+            }
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var holdNextReturn = true
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            statuses.update { current -> transform(AppCacheData(backupStatuses = current)).backupStatuses }
+            if (holdNextReturn) {
+                holdNextReturn = false
+                entered.complete(Unit)
+                release.await()
+            }
+        }
+        val older = async { sut.persistUsdtRecoveryBackup("older") }
+        entered.await()
+        try {
+            assertTrue(sut.persistUsdtRecoveryBackup("newer").isFailure)
+            advanceTimeBy(5_000)
+            release.complete(Unit)
+            older.await().getOrThrow()
+            runCurrent()
+            advanceTimeBy(5_001)
+            runCurrent()
+            assertEquals(listOf<String?>("newer", "older"), uploads)
+            assertTrue(statuses.value.getValue(category).isRequired)
+            advanceTimeBy(5_000)
+            runCurrent()
+            assertEquals(listOf<String?>("newer", "older", "newer"), uploads)
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            release.complete(Unit)
             sut.reset()
         }
     }
