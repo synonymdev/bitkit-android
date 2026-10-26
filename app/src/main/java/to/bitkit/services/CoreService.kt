@@ -978,7 +978,9 @@ class ActivityService(
      * Returns the first address found in pre-activity metadata that matches a transaction output
      */
     private suspend fun fetchTransactionDetails(txid: String): BitkitCoreTransactionDetails? = runCatching {
-        getTransactionDetails(txid)
+        ServiceQueue.CORE.background {
+            getBitkitCoreTransactionDetails(walletId = defaultWalletId, txId = txid)
+        }
     }.onFailure {
         Logger.warn("Failed to fetch stored transaction details for '$txid'", it, context = TAG)
     }.getOrNull()
