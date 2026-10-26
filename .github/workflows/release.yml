@@ -74,6 +74,8 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.BITKIT_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.BITKIT_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.BITKIT_KEY_PASSWORD }}
+          # Optional: without it the build passes and Spark (Lightning without channels) stays off.
+          BREEZ_API_KEY: ${{ secrets.BREEZ_API_KEY }}
         run: |
           set -euo pipefail
           ./gradlew assembleMainnetRelease bundleMainnetRelease --no-daemon --stacktrace
