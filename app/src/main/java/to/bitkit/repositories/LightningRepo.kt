@@ -1028,13 +1028,13 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    private suspend fun validateRgsUrl(url: String): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun validateRgsUrl(url: String): Result<Unit> = withContext(bgDispatcher) {
         val initialTimestamp = 0
         val testUrl = "${url.trimEnd('/')}/$initialTimestamp"
         urlValidator.validate(testUrl)
     }
 
-    private suspend fun validateElectrumServer(url: String): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun validateElectrumServer(url: String): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching { ElectrumServer.parse(url) }
             .fold(
                 onSuccess = { electrumProbeService.probe(it) },
@@ -2661,13 +2661,20 @@ class LightningRepo @Inject constructor(
      */
     suspend fun restartNodeDetached(): Result<Unit> = scope.async { restartNode() }.await()
 
-    suspend fun restartNode(channelMigration: ChannelDataMigration? = null): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun restartNode(
+        channelMigration: ChannelDataMigration? = null,
+        walletIndex: Int = 0,
+    ): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Restarting node", context = TAG)
         stop().onFailure {
             Logger.error("Failed to stop node during restart", it, context = TAG)
             return@withContext Result.failure(it)
         }
-        startNode(channelMigration = channelMigration, shouldRetryYieldToStop = true).onFailure {
+        startNode(
+            walletIndex = walletIndex,
+            channelMigration = channelMigration,
+            shouldRetryYieldToStop = true
+        ).onFailure {
             if (it is NodeStartYieldedToStopError) {
                 Logger.info("Deferred node restart to a requested stop", context = TAG)
             } else {

@@ -509,33 +509,42 @@ internal fun paymentRequestStatus(
             ?: stringResource(R.string.wallet__payment_request_pending)
     }
 
-    return paymentRequestLifecycleStatus(request, isPending)
+    return stringResource(paymentRequestLifecycleStatusRes(request, isPending))
 }
 
-@Composable
-private fun paymentRequestLifecycleStatus(request: PaykitPaymentRequest, isPending: Boolean): String {
-    if (request.lifecycleState == PaymentRequestLifecycleState.PROPOSED && request.isExpired(Clock.System.now())) {
-        return stringResource(R.string.wallet__payment_request_status_expired)
+@StringRes
+internal fun paymentRequestLifecycleStatusRes(request: PaykitPaymentRequest, isPending: Boolean): Int {
+    val canExpire = request.lifecycleState == PaymentRequestLifecycleState.PROPOSED ||
+        request.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING
+    if (canExpire && request.isExpired(Clock.System.now())) {
+        return R.string.wallet__payment_request_status_expired
     }
 
     return when (request.lifecycleState) {
-        PaymentRequestLifecycleState.PROPOSED -> stringResource(proposedPaymentRequestStatusRes(request, isPending))
+        PaymentRequestLifecycleState.PROPOSED -> proposedPaymentRequestStatusRes(request, isPending)
         PaymentRequestLifecycleState.PROPOSAL_EXPIRED ->
-            stringResource(R.string.wallet__payment_request_status_expired)
+            R.string.wallet__payment_request_status_expired
         PaymentRequestLifecycleState.ACCEPTED ->
-            stringResource(R.string.wallet__payment_request_pending)
+            R.string.wallet__payment_request_pending
         PaymentRequestLifecycleState.REJECTED ->
-            stringResource(R.string.wallet__payment_request_status_rejected)
+            R.string.wallet__payment_request_status_rejected
         PaymentRequestLifecycleState.CANCELED ->
-            stringResource(R.string.wallet__payment_request_status_canceled)
+            R.string.wallet__payment_request_status_canceled
         PaymentRequestLifecycleState.PROOF_SUBMITTED ->
-            stringResource(R.string.wallet__payment_request_status_proof_submitted)
+            R.string.wallet__payment_request_status_proof_submitted
         PaymentRequestLifecycleState.RECOVERY_REQUIRED ->
-            stringResource(R.string.wallet__payment_request_status_action_required)
+            R.string.wallet__payment_request_status_action_required
+        PaymentRequestLifecycleState.ACTIVE_RECURRING ->
+            if (request.billingPeriod != null &&
+                request.direction == PaykitPaymentRequestDirection.Incoming && isPending
+            ) {
+                R.string.wallet__payment_request_waiting
+            } else {
+                R.string.wallet__payment_request_status_unavailable
+            }
         PaymentRequestLifecycleState.INVALID_CONFLICT,
-        PaymentRequestLifecycleState.ACTIVE_RECURRING,
         PaymentRequestLifecycleState.UNKNOWN,
-        -> stringResource(R.string.wallet__payment_request_status_unavailable)
+        -> R.string.wallet__payment_request_status_unavailable
     }
 }
 

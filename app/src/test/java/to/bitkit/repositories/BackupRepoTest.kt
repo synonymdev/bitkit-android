@@ -56,6 +56,7 @@ import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WatchOnlyAccountBackupSnapshot
 import to.bitkit.data.WatchOnlyAccountData
@@ -88,6 +89,7 @@ import to.bitkit.services.PaykitSdkOperationLock
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import java.nio.file.Files
 import java.util.concurrent.Executors
@@ -2853,6 +2855,22 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(lightningService.syncStatusChanged).thenReturn(MutableSharedFlow())
     }
 
+    @Test
+    fun `native restore gate survives malformed connection correction`() = test {
+        whenever(keychain.loadString(WalletConnectionRecovery.KEY, 0)).thenReturn("malformed")
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(keychain).upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, "")
+        verify(vssBackupClient, never()).getObject(any())
+    }
+
+    @Test
+    fun `legacy USDT restore gate precedes malformed connection correction`() = test {
+        whenever(keychain.loadString(WalletConnectionRecovery.KEY, 0)).thenReturn("malformed")
+        assertTrue(sut.restoreUsdtRecoveryAfterLegacyMigration().isFailure)
+        verify(keychain).upsertString(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name, "")
+        verify(vssBackupClient, never()).getObject(any())
+    }
+
     private fun createSut(
         backupCache: CacheStore = cacheStore,
         dispatcher: CoroutineDispatcher = testDispatcher,
@@ -2889,6 +2907,7 @@ class BackupRepoTest : BaseUnitTest() {
         lightningService = lightningService,
         clock = clock,
         db = db,
+        connectionRecovery = connectionRecoveryFixture(settingsStore, keychain),
     )
 
     private class BackupRepoTestError(message: String) : AppError(message)

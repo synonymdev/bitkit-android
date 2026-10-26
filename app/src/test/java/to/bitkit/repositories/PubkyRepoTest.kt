@@ -48,6 +48,8 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.clearInvocations
@@ -2431,6 +2433,34 @@ class PubkyRepoTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         verify(pubkyService).importSession("restored_session")
+    }
+
+    @Test
+    fun `scheduled metadata refresh preserves an identity already activated by restore`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        assertTrue(sut.restoreSessionIfNeeded())
+        val originalSignIn = assertNotNull(sut.currentSignIn())
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        clearInvocations(pubkyService)
+        whenever(pubkyService.importSession("restored_session")).doSuspendableAnswer {
+            throw PaykitException.Transport("transport_error", "controlled unavailable re-import")
+        }
+        val refreshed = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            refreshed.complete(Unit)
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Refreshed"))
+        }
+        sut.scheduleInitializationAfterRestore()
+        yield()
+        advanceUntilIdle()
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isCurrent(originalSignIn))
+        assertFalse(sut.sessionRestorationFailed.value)
+        verify(pubkyService, never()).importSession(any())
+        withTimeout(1.seconds) { refreshed.await() }
+        verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
     }
 
     @Test

@@ -299,6 +299,8 @@
     <string name="notification__service__stop">Zastavit aplikaci</string>
     <string name="onboarding__advanced">Pokročilé</string>
     <string name="onboarding__advanced_setup">Pokročilé nastavení</string>
+    <string name="onboarding__connection_saved">Uloženo. Zkuste to znovu a pokračujte v obnově.</string>
+    <string name="onboarding__connection_settings">Nastavení připojení</string>
     <string name="onboarding__create_new_wallet">Vytvořit novou peněženku</string>
     <string name="onboarding__empty_wallet">Chcete-li\nzačít\n&lt;accent&gt;pošlete\nbitcoin&lt;/accent&gt;\ndo vaší\npeněženky</string>
     <string name="onboarding__get_started">Začít</string>
