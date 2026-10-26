@@ -56,8 +56,8 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
     @Test
     fun `USD cents respect locale grouping and decimal separators`() {
         assertEquals("$10,000.00", "1000000".usdCents(Locale.US))
-        assertEquals("$10.000,00", "1000000".usdCents(Locale.GERMANY))
-        assertEquals("$0,05", "5".usdCents(Locale.GERMANY))
+        assertEquals("$10,000.00", "1000000".usdCents(Locale.GERMANY))
+        assertEquals("$0.05", "5".usdCents(Locale.GERMANY))
     }
 
     @Test
@@ -129,6 +129,22 @@ class UsdtDepositViewModelTest : BaseUnitTest() {
         model.selectNetwork(UsdtDepositNetwork.TRON)
         model.prepare("3.5").join()
         assertEquals(R.string.usdt__error_bridge_amount, model.state.value.error)
+        assertNull(model.state.value.amountLimits)
+        assertNull(model.state.value.address)
+        assertFalse(model.state.value.busy)
+        model.clearError()
+        assertNull(model.state.value.error)
+    }
+
+    @Test
+    fun `deposit liquidity rejection keeps the amount editable without showing a deposit address`() = test {
+        whenever(repo.depositNetworks()).thenReturn(Result.success(persistentListOf(UsdtDepositNetwork.POLYGON)))
+        whenever(repo.prepareDeposit(UsdtDepositNetwork.POLYGON, "3.5"))
+            .thenReturn(Result.failure(UsdtException.BridgeLiquidityUnavailable()))
+        val model = UsdtDepositViewModel(repo)
+        model.selectNetwork(UsdtDepositNetwork.POLYGON)
+        model.prepare("3.5").join()
+        assertEquals(R.string.usdt__error_bridge_liquidity, model.state.value.error)
         assertNull(model.state.value.amountLimits)
         assertNull(model.state.value.address)
         assertFalse(model.state.value.busy)

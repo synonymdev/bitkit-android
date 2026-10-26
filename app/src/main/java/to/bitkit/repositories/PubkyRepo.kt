@@ -101,7 +101,7 @@ sealed class PubkyContactError(message: String) : AppError(message) {
  */
 class PubkySignIn internal constructor(val publicKey: String, internal val generation: Long)
 
-private fun Throwable.hasCause(error: PubkyContactError): Boolean =
+private fun Throwable.hasCause(error: AppError): Boolean =
     generateSequence(this) { it.cause }.any { it == error }
 
 private fun Throwable.isPaykitReadTimeout(): Boolean =
@@ -150,6 +150,9 @@ class PubkyRepo @Inject constructor(
 
         /** Shortest time between two contact list updates of a background profile refresh. */
         internal val CONTACT_REFRESH_BATCH_WINDOW = 300.milliseconds
+
+        /** Delay before retrying a contact observation deferred by payment review or submission. */
+        private val CONTACT_LOAD_RETRY_INTERVAL = 500.milliseconds
 
         /** Maximum automatic restore attempts during one foreground recovery window. */
         private const val DEFERRED_RESTORE_ATTEMPTS = 8
@@ -1240,8 +1243,13 @@ class PubkyRepo @Inject constructor(
                     loaded = true
                     shouldMarkLoadCompleted = true
                 }.onFailure {
-                    shouldMarkLoadCompleted = isCurrent(signIn)
-                    Logger.error("Failed to load contacts", it, context = TAG)
+                    if (it.hasCause(PaykitPaymentRequestError.OperationInProgress)) {
+                        reload = isCurrent(signIn)
+                        if (reload) delay(CONTACT_LOAD_RETRY_INTERVAL)
+                    } else {
+                        shouldMarkLoadCompleted = isCurrent(signIn)
+                        Logger.error("Failed to load contacts", it, context = TAG)
+                    }
                 }
             } while (reload && isCurrent(signIn))
         } finally {
@@ -1540,6 +1548,15 @@ class PubkyRepo @Inject constructor(
     suspend fun hasLocalSecretKey(): Boolean = withContext(ioDispatcher) {
         keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name) && !keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)
     }
+
+    /** Whether the signed-in pubky was adopted from Pubky Ring, so removing it from Bitkit only unlinks it. */
+    suspend fun isRingAdoptedIdentity(): Boolean = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val publicKey = _publicKey.value ?: return@withContext false
+            val adoptedPubky = adoptedRingPubky() ?: return@withContext false
+            PubkyPublicKeyFormat.matches(adoptedPubky, publicKey)
+        }
+    }.getOrDefault(false)
 
     /**
      * The identity of the key Bitkit stores for the saved session, read without restoring the session.
@@ -2089,11 +2106,13 @@ class PubkyRepo @Inject constructor(
         null
     }
 
-    private suspend fun adoptedSecretKeyHex(): String? {
-        val pubky = runCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.getOrNull()
+    private suspend fun adoptedRingPubky(): String? =
+        runCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.getOrNull()
             ?.substringAfter(SharedPubkyContract.RING_SOURCE_PREFIX, "")
             ?.takeIf { it.isNotBlank() }
-            ?: return null
+
+    private suspend fun adoptedSecretKeyHex(): String? {
+        val pubky = adoptedRingPubky() ?: return null
         return sharedPubkyClient.ringCredential(pubky)
             .onFailure { Logger.warn("Failed to read adopted ring credential", it, context = TAG) }
             .getOrNull()

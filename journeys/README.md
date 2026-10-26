@@ -123,7 +123,7 @@ journey PR, which is what made this file conflict on every merge.
 
 | Capability | Provided by |
 | --- | --- |
-| USDT wallet navigation without funding | an onboarded build with USDT configured; provider errors may remain visible while offline — [USDT QA](../docs/usdt-qa.md) |
+| USDT wallet navigation without funding | an onboarded build with USDT configured; wallet syncing remains silent while offline; payment-action errors remain available — [USDT QA](../docs/usdt-qa.md) |
 | Controlled USDT quotes, provider history, funded submission and recovery | an explicitly configured local USDT gateway/RPC/bundler fixture with owned test accounts and funds; absent from the standard journey environment. Report these steps as blocked unless that setup and transfer authorization are supplied — [USDT QA](../docs/usdt-qa.md) |
 | On-chain funds and blocks on regtest | `./lsp` deposit and mine against the staging LSP — [Backend preconditions](#backend-preconditions) |
 | Several separate on-chain UTXOs to choose between | three or more `./lsp` deposits, each mined, so manual coin selection has inputs to list — [Backend preconditions](#backend-preconditions) |
@@ -166,6 +166,8 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `restore-wallet/paste-seed-fragment.xml` | not ported — the iOS Restore screen still has the 12/24-only paste guard, so the behaviour does not exist there yet |
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
+| `send/recovery-pin-system-back.xml` | not ported — iOS has no system Back button, and `SendPinScreen` already answers cancel in `onDisappear` |
+| `send/retry-original-dialog-style.xml` | not ported — iOS shows the two Retry original payment steps as native alerts |
 | `send/prepared-fee-recovery.md` | Same four manual fault cases and file on both platforms; the recipe records original-send versus replacement fee retention and iOS Max/identity-flow adaptations. These faults are not journey capabilities. |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
@@ -221,11 +223,15 @@ subscription payment-method switches: preserve the originally entered denominati
 
 ### Paykit payment-method review
 
-In `paykit-quoted-usdt.xml`, Android returns to Amount whenever a quoted request changes payment
-method. iOS keeps confirmation open when the exact amount, quote and validity window are unchanged
-and still valid; changed or expired terms return to Amount. Verify the selected method and exact
-payable amount on both platforms, and close without signing. The optional Savings/Spending
-confirmation check requires existing Bitcoin regtest funds and a usable Lightning channel.
+In `paykit-quoted-usdt.xml`, Android keeps confirmation open when a Savings/Spending switch can
+bind valid quoted Bitcoin terms, showing the selected method's exact amount and refreshed fees.
+Unavailable or expired terms, or a Lightning amount below its minimum, return to Amount for review.
+Opening Amount manually after a valid switch and then tapping Back closes the sheet. These checks
+complement `payment-requests/fixed-quoted-confirmation.xml`. iOS keeps confirmation open when the
+exact amount, quote and validity window are unchanged and still valid; changed or expired terms
+return to Amount. Verify the selected method and exact payable amount on both platforms, and close
+without signing. The optional Savings/Spending confirmation check requires existing Bitcoin
+regtest funds and a usable Lightning channel.
 
 ### USDT full-balance errors
 

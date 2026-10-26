@@ -14,6 +14,7 @@ import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentRequestLifecycleState
+import com.synonym.paykit.PrivateMessageSchedulingSnapshot
 import com.synonym.paykit.PrivatePaymentListDeliveryFailure
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
@@ -165,6 +166,13 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.pendingOutboundPrivateCounterparties(any())).doSuspendableAnswer {
             paykitSdkService.pendingOutboundPrivateCounterparties()
         }
+        doSuspendableAnswer {
+            val priority = it.getArgument<Priority>(0)
+            PrivateMessageSchedulingSnapshot(
+                paykitSdkService.linkedPeers(priority),
+                paykitSdkService.pendingOutboundPrivateCounterparties(priority),
+            )
+        }.whenever(paykitSdkService).privateMessageSchedulingSnapshot(any())
         whenever(paykitSdkService.processOutboundPrivateMessages(any(), any())).doSuspendableAnswer {
             paykitSdkService.processOutboundPrivateMessages(it.getArgument(0))
         }
@@ -1028,6 +1036,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val pending = mutableSetOf<String>()
         whenever(paykitSdkService.linkedPeers()).thenAnswer { states.map { linkedPeer(it.key, it.value) } }
         whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenAnswer { pending.toList() }
+        doSuspendableAnswer {
+            PrivateMessageSchedulingSnapshot(states.map { linkedPeer(it.key, it.value) }, pending.toList())
+        }.whenever(paykitSdkService).privateMessageSchedulingSnapshot(any())
         sut.prepareSavedContacts(keys).getOrThrow()
         clearInvocations(paykitSdkService)
         whenever(paykitSdkService.ensureLinkWithPeer(CONTACT_KEY)).thenAnswer {
@@ -1043,8 +1054,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         try {
             advanceTimeBy(1_000)
             runCurrent()
-            verify(paykitSdkService, times(6)).linkedPeers(Priority.Background)
-            verify(paykitSdkService, times(4)).pendingOutboundPrivateCounterparties(Priority.Background)
+            verify(paykitSdkService, times(2)).privateMessageSchedulingSnapshot(Priority.Background)
+            verify(paykitSdkService, times(4)).linkedPeers(Priority.Background)
+            verify(paykitSdkService, times(2)).pendingOutboundPrivateCounterparties(Priority.Background)
             verify(paykitSdkService).processOutboundPrivateMessages(CONTACT_KEY, Priority.Background)
             verify(paykitSdkService).receivePrivateMessages(CONTACT_KEY, Priority.Background)
             verify(paykitSdkService, never()).receivePrivateMessages(OTHER_CONTACT_KEY, Priority.Background)
@@ -1055,6 +1067,36 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             verify(paykitSdkService, never()).ensureLinkWithPeer(eq(CONTACT_KEY), any(), any())
             verify(paykitSdkService).ensureLinkWithPeer(OTHER_CONTACT_KEY, priority = Priority.Background)
             states[OTHER_CONTACT_KEY] = LinkedPeerState.BLOCKED
+            advanceTimeBy(8_000)
+            runCurrent()
+            clearInvocations(paykitSdkService)
+            advanceTimeBy(120_000)
+            runCurrent()
+            verifyNoInteractions(paykitSdkService)
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `failed scheduling snapshot retains retry intent until a fresh read succeeds`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        sut.prepareSavedContacts(listOf(CONTACT_KEY)).getOrThrow()
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        doSuspendableAnswer {
+            throw IllegalStateException("Scheduling unavailable")
+        }.whenever(paykitSdkService).privateMessageSchedulingSnapshot(any())
+        try {
+            advanceTimeBy(1_000)
+            runCurrent()
+            clearInvocations(paykitSdkService)
+            advanceTimeBy(3_000)
+            runCurrent()
+            verify(paykitSdkService, atLeast(1)).privateMessageSchedulingSnapshot(Priority.Background)
+            doSuspendableAnswer {
+                PrivateMessageSchedulingSnapshot(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)), emptyList())
+            }.whenever(paykitSdkService).privateMessageSchedulingSnapshot(any())
             advanceTimeBy(8_000)
             runCurrent()
             clearInvocations(paykitSdkService)
@@ -1094,20 +1136,27 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val keys = listOf(CONTACT_KEY, OTHER_CONTACT_KEY)
         for (invalidation in listOf("background", "identity", "deletion")) {
             settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+            doSuspendableAnswer {
+                val priority = it.getArgument<Priority>(0)
+                PrivateMessageSchedulingSnapshot(
+                    paykitSdkService.linkedPeers(priority),
+                    paykitSdkService.pendingOutboundPrivateCounterparties(priority),
+                )
+            }.whenever(paykitSdkService).privateMessageSchedulingSnapshot(any())
             whenever(paykitSdkService.linkedPeers(any())).doSuspendableAnswer { paykitSdkService.linkedPeers() }
             whenever(paykitSdkService.linkedPeers()).thenReturn(keys.map { linkedPeer(it, LinkedPeerState.LINKING) })
             sut.prepareSavedContacts(keys).getOrThrow()
             val completion = CompletableDeferred<Unit>()
-            whenever(paykitSdkService.linkedPeers(Priority.Background)).doSuspendableAnswer {
+            doSuspendableAnswer {
                 withContext(NonCancellable) { completion.await() }
-                keys.map { linkedPeer(it, LinkedPeerState.LINKING) }
-            }
+                PrivateMessageSchedulingSnapshot(keys.map { linkedPeer(it, LinkedPeerState.LINKING) }, emptyList())
+            }.whenever(paykitSdkService).privateMessageSchedulingSnapshot(Priority.Background)
             clearInvocations(paykitSdkService)
 
             try {
                 advanceTimeBy(1_000)
                 runCurrent()
-                verify(paykitSdkService).linkedPeers(Priority.Background)
+                verify(paykitSdkService).privateMessageSchedulingSnapshot(Priority.Background)
                 when (invalidation) {
                     "background" -> sut.setContactPreparationActive(false)
                     "identity" -> whenever(paykitSdkService.identityStatus()).thenReturn(
@@ -1146,10 +1195,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.prepareSavedContacts(keys).getOrThrow()
         whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY))).thenReturn(privateListDeliveryReport())
         val completion = CompletableDeferred<Unit>()
-        whenever(paykitSdkService.linkedPeers(Priority.Background)).doSuspendableAnswer {
+        doSuspendableAnswer {
             completion.await()
-            keys.map { linkedPeer(it, LinkedPeerState.LINKING) }
-        }
+            PrivateMessageSchedulingSnapshot(keys.map { linkedPeer(it, LinkedPeerState.LINKING) }, emptyList())
+        }.whenever(paykitSdkService).privateMessageSchedulingSnapshot(Priority.Background)
         try {
             advanceTimeBy(1_000)
             runCurrent()
@@ -1178,16 +1227,17 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         states[OTHER_CONTACT_KEY] = LinkedPeerState.LINKED
         val completion = CompletableDeferred<Unit>()
         var reads = 0
-        whenever(paykitSdkService.pendingOutboundPrivateCounterparties(Priority.Background)).doSuspendableAnswer {
+        doSuspendableAnswer {
+            val snapshot = PrivateMessageSchedulingSnapshot(states.map { linkedPeer(it.key, it.value) }, emptyList())
             if (++reads == 1) completion.await()
-            emptyList()
-        }
+            snapshot
+        }.whenever(paykitSdkService).privateMessageSchedulingSnapshot(Priority.Background)
         clearInvocations(paykitSdkService)
 
         try {
             advanceTimeBy(500)
             runCurrent()
-            verify(paykitSdkService).linkedPeers(Priority.Background)
+            verify(paykitSdkService).privateMessageSchedulingSnapshot(Priority.Background)
             states[OTHER_CONTACT_KEY] = LinkedPeerState.LINKING
             advanceTimeBy(500)
             runCurrent()

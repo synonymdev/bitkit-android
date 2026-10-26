@@ -1,0 +1,16 @@
+<journey name="custom fee confirmation estimate">
+  <description>
+    Verifies that a custom on-chain fee shows the confirmation time of the fee tier it reaches,
+    the same text the preset speeds use, instead of "Depends on the fee". Preconditions: a synced
+    regtest wallet with at least 30,000 confirmed sats in Savings and the current fee tiers loaded.
+    The custom rate of 50 ₿/vbyte is above the regtest backend's Fast tier; on a backend whose Fast
+    tier is higher, use a rate above it.
+  </description>
+  <actions>
+    <action>Start an on-chain send of 5,000 sats from Savings to a fresh regtest address and reach the confirmation screen (testTag "SendConfirmContent")</action>
+    <action>Tap Show details (testTag "SendConfirmToggleDetails")</action>
+    <action>Open the speed picker by tapping the Speed and Fee value, then tap Custom (testTag "fee_CUSTOM_button")</action>
+    <action>On the custom fee screen (testTag "fee_screen"), clear the field with Remove (testTag "NRemove") and enter 50 with the number pad (testTags "N5", "N0"), then tap Continue (testTag "continue_btn")</action>
+    <action>Back on confirmation with details shown, verify Speed and Fee reads Custom and Confirming In reads "±10-20 minutes", the Fast speed's time, not "Depends on the fee"</action>
+  </actions>
+</journey>

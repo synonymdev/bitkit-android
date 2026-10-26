@@ -95,6 +95,7 @@ Reference: [USDT designs](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bi
 - [ ] Open address details, verify Copy and QR target the same address, and return to the QR.
 - [ ] Back out of an unprepared network and verify the displayed network always matches the QR. Return to Arbitrum and verify its original wallet address.
 - [ ] With an authorized incoming transfer or an explicitly identified fixture, verify teal receive confetti, Details and OK; Details opens that transfer.
+- [ ] With an authorized send or an explicitly identified fixture, send more than half the USDT balance: the warning reads "It appears you are sending over 50% of your USDT balance. Do you want to continue?", while a bitcoin send over half the total balance keeps the total balance copy.
 - [ ] With an authorized send or an explicitly identified fixture, check the swipe after warning and PIN prompts: loading and the completed checkmark stay at the right end, the swipe label is hidden, and confirmation keeps its side spacing until the success screen appears.
 - [ ] Verify bridge review, estimated fees and deposit history round displayed amounts to cents without changing the exact payment, QR or support-export values. Check a nonzero sub-cent value displays <0.01.
 - [ ] In delayed, failed, refunding, refunded and support-needed bridge details, verify Contact Support and Copy Details are small 40-point buttons in one row, matching Request refund / Hide details. Copy Details retains the full references; Contact Support opens the prefilled report without submitting it.

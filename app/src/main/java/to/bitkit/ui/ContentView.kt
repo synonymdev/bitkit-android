@@ -17,6 +17,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -126,6 +127,7 @@ import to.bitkit.ui.screens.settings.VssDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen
+import to.bitkit.ui.screens.subscriptions.AllowanceSheet
 import to.bitkit.ui.screens.subscriptions.CreateSubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionDetailScreen
 import to.bitkit.ui.screens.subscriptions.SubscriptionSheet
@@ -503,6 +505,9 @@ fun ContentView(
         val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
+        val lifecycleState by lifecycle.currentStateFlow.collectAsState()
+        val isUsdtIntro = (currentSheet as? Sheet.TimedSheet)?.type == TimedSheetType.USDT
+        val isIntroUncovered = !LocalIsAppLocked.current && lifecycleState == Lifecycle.State.RESUMED
         val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
         val hwSendViewModel = hiltViewModel<HwSendViewModel>()
         val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
@@ -546,8 +551,10 @@ fun ContentView(
             SheetHost(
                 shouldExpand = currentSheet != null,
                 onDismiss = { appViewModel.hideSheet() },
-                visibilityKey = currentSheet,
-                onVisible = { appViewModel.onSheetVisible(currentSheet) },
+                visibilityKey = if (isUsdtIntro) currentSheet to isIntroUncovered else currentSheet,
+                onVisible = {
+                    if (!isUsdtIntro || isIntroUncovered) appViewModel.onSheetVisible(currentSheet)
+                },
                 dismissEnabled = !isCreatingPaymentRequest &&
                     !isAcceptingSubscription &&
                     !isRetryingInitialSubscriptionPayment &&
@@ -561,7 +568,7 @@ fun ContentView(
                     usesFlatSheetStyle || currentSheet is Sheet.Widgets -> Colors.Gray7
                     // Meet the top of the subscription sheets' own gradient, so the grabber strip
                     // does not sit a shade darker than the content right below it.
-                    currentSheet is Sheet.Subscription -> Colors.Gray6
+                    currentSheet is Sheet.Subscription || currentSheet is Sheet.Allowance -> Colors.Gray6
                     else -> DefaultSheetContainerColor
                 },
                 sheets = {
@@ -618,6 +625,8 @@ fun ContentView(
                         Sheet.CreateSubscription -> CreateSubscriptionSheet(appViewModel)
 
                         is Sheet.Subscription -> SubscriptionSheet(appViewModel, sheet.route)
+
+                        is Sheet.Allowance -> AllowanceSheet(appViewModel, sheet.route)
 
                         is Sheet.ActivityDateRangeSelector -> DateRangeSelectorSheet()
                         is Sheet.ActivityTagSelector -> TagSelectorSheet()

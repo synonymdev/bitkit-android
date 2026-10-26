@@ -1,0 +1,26 @@
+<journey name="PIN Gates Allowance Changes">
+  <description>
+    When the payer requires a PIN for payments, setting an allowance and ending it ask for the same
+    PIN (or biometrics) as Send before anything changes, and a cancelled check changes nothing. The
+    payee's wallet accepts the offer by itself and never asks. Automatic payments under an accepted
+    allowance never ask: the checked grant is their authorisation.
+
+    Precondition: the two-instance setup in README.md, with no allowance between them yet. On the
+    payer, enable a PIN you choose under Settings ▸ Security ▸ PIN Code and turn on "Also require for
+    payments"; no biometrics enrolled on the emulator, so the PIN pad shows directly. Never enter a
+    wrong PIN more than once.
+  </description>
+  <actions>
+    <action>On the payer instance, open Subscriptions, tap the Allowances tab, tap Add (testTag "AllowanceAdd"), pick the payee and keep $5 a payment and $50 a month</action>
+    <action>Tap Save Allowance (testTag "AllowanceSave")</action>
+    <action>Verify the PIN pad shows over the sheet, then press back</action>
+    <action>Verify the Set sheet (testTag "SetAllowance") is still showing with the same payee and limits, and the payee instance gets no "Allowance Added" notification</action>
+    <action>Tap Save Allowance again and enter the PIN</action>
+    <action>Verify the sheet dismisses and the payer's row reads "Waiting for an answer"</action>
+    <action>On the payee instance, verify "Allowance Added" arrives with no review sheet (testTag "AllowanceReview"), no tap and no PIN, and the payer's row turns Active</action>
+    <action>On the payee instance, send the payer a one-time Payment Request for $2 and verify the payer pays it automatically with no PIN pad, per auto-pay-under-limit.xml</action>
+    <action>On the payer instance, tap the payee's row and swipe "Swipe To End Allowance" to the end</action>
+    <action>Verify the PIN pad shows, press back, and verify the detail sheet (testTag "AllowanceDetail") is back with the swipe control at its start and the allowance still Active</action>
+    <action>Swipe it to the end again, enter the PIN, and verify the row reads "Ended · $2.00 paid automatically"</action>
+  </actions>
+</journey>
