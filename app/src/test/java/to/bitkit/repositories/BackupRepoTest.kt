@@ -190,6 +190,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { sparkRepo.exitBackup() }.thenReturn(Result.success(null))
         whenever { sparkRepo.restoreExitBackup(any(), any()) }.thenReturn(Result.success(Unit))
         whenever(sparkRepo.exitStateChanged).thenReturn(MutableSharedFlow())
+        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState()))
 
         sut = createSut()
     }
@@ -210,6 +211,26 @@ class BackupRepoTest : BaseUnitTest() {
         sut.performFullRestoreFromLatestBackup().getOrThrow()
 
         verify(sparkRepo).restoreExitBackup(backup, 0)
+    }
+
+    @Test
+    fun `spark exit backup uploads when Spark was ready before observing started`() = test {
+        val statuses = MutableStateFlow(mapOf(BackupCategory.SPARK_EXIT to BackupItemStatus(synced = 1, required = 1)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState(isSupported = true, isReady = true)))
+        val backup = SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "state")
+        whenever(sparkRepo.exitBackup()).thenReturn(Result.success(backup))
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(6_000)
+            runCurrent()
+
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
     }
 
     @Test

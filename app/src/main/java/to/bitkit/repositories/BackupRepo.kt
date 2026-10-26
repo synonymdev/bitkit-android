@@ -18,8 +18,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -407,10 +409,14 @@ class BackupRepo @Inject constructor(
         // payment and sync traffic does not re-upload the whole metadata envelope.
         dataListenerJobs.add(observeBackupChanges(activityRepo.activityTagsChanged, BackupCategory.METADATA))
 
-        // SPARK_EXIT - Spark announces when its unilateral exit data changes
+        // SPARK_EXIT - back up once Spark is ready, which replays when observing starts after it connected,
+        // and again whenever Spark announces its unilateral exit data changed
         dataListenerJobs.add(
             scope.launch {
-                sparkRepo.exitStateChanged.collect {
+                merge(
+                    sparkRepo.state.map { it.isReady }.distinctUntilChanged().filter { it },
+                    sparkRepo.exitStateChanged,
+                ).collect {
                     if (shouldSkipBackup()) return@collect
                     markBackupRequired(BackupCategory.SPARK_EXIT)
                 }
