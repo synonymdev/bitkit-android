@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -79,6 +80,36 @@ class UsdtPaymentContentTest {
     @After
     fun teardown() {
         Locale.setDefault(originalLocale)
+    }
+
+    @Test
+    fun lockedReviewAmountKeepsReviewOpenWhileBackAndEditableAmountsStillNavigate() {
+        val editable = mutableStateOf(false)
+        var pageChanges = 0
+        var backPresses = 0
+        val payment = quote.copy(destination = UsdtDestination.ARBITRUM, bridgeProvider = null)
+        composeTestRule.setContent {
+            Content(
+                UsdtSendState(quote = payment), UsdtPage.AMOUNT,
+                amountEditable = editable.value,
+                onPageChange = { pageChanges++ },
+                onBack = { backPresses++ },
+            )
+        }
+        composeTestRule.onNodeWithText("3.00").performClick()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            assertEquals(0, pageChanges)
+            assertEquals(0, backPresses)
+        }
+        composeTestRule.onNodeWithTag("NavigationBack").performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(1, backPresses)
+            editable.value = true
+        }
+        SystemClock.sleep(600)
+        composeTestRule.onNodeWithText("3.00").performClick()
+        composeTestRule.runOnIdle { assertEquals(1, pageChanges) }
     }
 
     @Test
@@ -312,6 +343,43 @@ class UsdtPaymentContentTest {
         composeTestRule.onAllNodesWithText("The payment request has expired.").assertCountEquals(0)
     }
 
+    @Test
+    fun backupRetryKeepsTheSubmittedPaymentAndNeverReopensConfirmation() {
+        val payment = transfer(quote, UsdtTransferStatus.PENDING)
+        val state = mutableStateOf(
+            UsdtSendState(
+                quote = quote,
+                submitted = true,
+                canRetryRecovery = true,
+                error = R.string.common__error_body,
+                submissionErrorStatus = UsdtTransferStatus.PENDING,
+            )
+        )
+        var retries = 0
+        var confirmations = 0
+        composeTestRule.setContent {
+            Content(
+                state.value,
+                UsdtPage.AMOUNT,
+                UsdtWalletState(transfers = persistentListOf(payment)),
+                amountEditable = false,
+                onRetryRecovery = {
+                    retries += 1
+                    state.value = state.value.copy(retryingRecovery = true)
+                },
+                onConfirm = { confirmations += 1 },
+            )
+        }
+        composeTestRule.onNodeWithTag("UsdtRetryRecovery").performClick()
+        composeTestRule.onNodeWithText("Retry").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.runOnIdle {
+            assertEquals(1, retries)
+            assertEquals(0, confirmations)
+            assertEquals(quote.id, state.value.quote?.id)
+        }
+    }
+
     private fun assertCompletionTransition(destination: UsdtDestination, pendingStatus: UsdtTransferStatus) {
         val payment = quote.copy(destination = destination)
         val transfer = transfer(payment, pendingStatus)
@@ -350,6 +418,11 @@ class UsdtPaymentContentTest {
         state: UsdtSendState,
         page: UsdtPage,
         wallet: UsdtWalletState = UsdtWalletState(),
+        amountEditable: Boolean = true,
+        onPageChange: (UsdtPage) -> Unit = {},
+        onBack: () -> Unit = {},
+        onRetryRecovery: (() -> Unit)? = null,
+        onConfirm: () -> Unit = {},
         onDetails: () -> Unit = {},
     ) {
         AppThemeSurface {
@@ -365,12 +438,14 @@ class UsdtPaymentContentTest {
                         onRecipientChange = {},
                         onAmountChange = {},
                         onRecipientContinue = {},
-                        onPageChange = {},
-                        onBack = {},
+                        onPageChange = onPageChange,
+                        onBack = onBack,
                         onReview = {},
-                        onConfirm = {},
+                        onConfirm = onConfirm,
                         onDone = {},
                         onDetails = onDetails,
+                        onRetryRecovery = onRetryRecovery,
+                        amountEditable = amountEditable,
                     )
                 }
             }
