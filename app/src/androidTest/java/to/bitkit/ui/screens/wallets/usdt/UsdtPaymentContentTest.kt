@@ -14,8 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -36,6 +38,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.R
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.scaffold.AppTopBar
@@ -277,6 +280,36 @@ class UsdtPaymentContentTest {
         composeTestRule.onNodeWithTag("UsdtSendSuccess").assertDoesNotExist()
         composeTestRule.mainClock.advanceTimeBy(700)
         composeTestRule.onNodeWithTag("UsdtSendSuccess").assertIsDisplayed()
+    }
+
+    @Test
+    fun deadlineExpiryRetainsItsTitleAndBodyWhenRecoveryFailsTheSamePayment() {
+        val payment = transfer(quote, UsdtTransferStatus.PENDING)
+        val wallet = mutableStateOf(UsdtWalletState(transfers = persistentListOf(payment)))
+        val state = UsdtSendState(
+            quote = quote,
+            submitted = true,
+            error = R.string.wallet__payment_request_expired,
+            submissionErrorStatus = UsdtTransferStatus.PENDING,
+            submissionDeadlineExpired = true,
+        )
+        composeTestRule.setContent { Content(state, UsdtPage.AMOUNT, wallet.value) }
+        composeTestRule.onAllNodesWithText("The payment request has expired.").assertCountEquals(2)
+        composeTestRule.runOnIdle {
+            wallet.value = wallet.value.copy(transfers = persistentListOf(payment.copy(status = UsdtTransferStatus.FAILED)))
+        }
+        composeTestRule.onAllNodesWithText("The payment request has expired.").assertCountEquals(2)
+        composeTestRule.onNodeWithText("Transaction Failed").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.runOnIdle {
+            wallet.value = wallet.value.copy(transfers = persistentListOf(payment.copy(status = UsdtTransferStatus.REPLACED)))
+        }
+        composeTestRule.onAllNodesWithText("The payment request has expired.").assertCountEquals(0)
+        composeTestRule.onNodeWithText("Transaction Failed").assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            wallet.value = wallet.value.copy(transfers = persistentListOf(payment.copy(status = UsdtTransferStatus.CONFIRMED)))
+        }
+        composeTestRule.onAllNodesWithText("The payment request has expired.").assertCountEquals(0)
     }
 
     private fun assertCompletionTransition(destination: UsdtDestination, pendingStatus: UsdtTransferStatus) {

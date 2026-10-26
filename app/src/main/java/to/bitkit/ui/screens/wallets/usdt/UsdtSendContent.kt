@@ -183,9 +183,9 @@ internal fun UsdtPaymentContent(
     val title = when {
         showSubmitted && status == UsdtTransferStatus.BRIDGE_REFUNDED -> R.string.usdt__deposit_refunded
         showSubmitted && bridgeNeedsAttention -> R.string.usdt__bridge_attention
-        showSubmitted && failed -> R.string.wallet__send_error_tx_failed
         showSubmitted && submissionError == R.string.wallet__payment_request_expired ->
             R.string.wallet__payment_request_expired
+        showSubmitted && failed -> R.string.wallet__send_error_tx_failed
         showSubmitted && submissionError != null -> R.string.common__error
         showSubmitted -> R.string.usdt__submitted
         quote != null && isPaymentRequest -> R.string.wallet__payment_request

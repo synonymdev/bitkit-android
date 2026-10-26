@@ -479,7 +479,10 @@ class UsdtViewModelTest : BaseUnitTest() {
 
     @Test
     fun `recorded payment that exceeds its deadline retains recovery with an expiry error`() = test {
-        val retained: UsdtTransfer = mock { on { id }.thenReturn(quote.id) }
+        val retained: UsdtTransfer = mock {
+            on { id }.thenReturn(quote.id)
+            on { status }.thenReturn(UsdtTransferStatus.PENDING)
+        }
         val model = createViewModel(walletState = UsdtWalletState(transfers = persistentListOf(retained)))
         settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
         whenever(repo.send(eq(quote), anyOrNull(), any()))
@@ -489,6 +492,20 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertTrue(model.state.value.submitted)
         assertEquals(quote, model.state.value.quote)
         assertEquals(R.string.wallet__payment_request_expired, model.state.value.error)
+        assertEquals(
+            R.string.wallet__payment_request_expired,
+            model.state.value.submissionError(UsdtTransferStatus.PENDING)
+        )
+        assertEquals(
+            R.string.wallet__payment_request_expired,
+            model.state.value.submissionError(UsdtTransferStatus.FAILED)
+        )
+        for (status in UsdtTransferStatus.entries.filterNot {
+            it == UsdtTransferStatus.PENDING || it == UsdtTransferStatus.FAILED
+        }) {
+            assertNull(model.state.value.submissionError(status))
+        }
+        assertNull(model.state.value.submissionError(null))
         model.confirm().join()
         verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
     }
