@@ -37,7 +37,7 @@ class ProfileRemovalStoreTest {
     val folder = TemporaryFolder()
 
     @Test
-    fun `observation fails closed with bounded retries and restarts after explicit durable completion`() = runTest {
+    fun `observation fails closed with backoff and restarts after explicit durable completion`() = runTest {
         val id = UUID.randomUUID().toString()
         val state = MutableStateFlow(ProfileRemovalState(attemptId = id))
         var unavailable = true
@@ -54,7 +54,7 @@ class ProfileRemovalStoreTest {
         val observed = mutableListOf<Boolean>()
         backgroundScope.launch { store.pending.collect { observed += it } }
         runCurrent()
-        advanceTimeBy(10_000)
+        advanceTimeBy(1_750)
         runCurrent()
         assertEquals(4, reads)
         assertEquals(true, observed.last())
@@ -63,6 +63,34 @@ class ProfileRemovalStoreTest {
         runCurrent()
         assertEquals(false, observed.last())
         assertNull(store.pendingAttempt())
+    }
+
+    @Test
+    fun `observation recovers from prolonged read errors without a cleanup mutation`() = runTest {
+        var available = false
+        var reads = 0
+        val store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = flow {
+                reads++
+                if (!available) throw IOException("Local storage unavailable")
+                emit(ProfileRemovalState())
+            }
+            override suspend fun updateData(
+                transform: suspend (ProfileRemovalState) -> ProfileRemovalState
+            ): ProfileRemovalState =
+                error("Read-only recovery must not mutate cleanup state")
+        })
+        val observed = mutableListOf<Boolean>()
+        backgroundScope.launch { store.pending.collect { observed += it } }
+        runCurrent()
+        advanceTimeBy(10_000)
+        runCurrent()
+        assertEquals(true, observed.last())
+        available = true
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertEquals(false, observed.last())
+        assertTrue(reads <= 12, "Local recovery must retain capped backoff")
     }
 
     @Test

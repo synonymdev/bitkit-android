@@ -121,7 +121,13 @@ class PubkyAuthManifestTest {
                 .setPackage(packageName)
             val resolved = packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
             if (alias == null) {
-                assertTrue(resolved.isEmpty(), it)
+                val actual = resolved.map { result ->
+                    val activity = result.activityInfo
+                    val component = ComponentName(packageName, activity.name)
+                    val override = packageManager.getComponentEnabledSetting(component)
+                    "${activity.name}: enabled=${activity.enabled}, override=$override"
+                }
+                assertTrue(resolved.isEmpty(), "$it resolved to $actual")
             } else {
                 val activity = resolved.single().activityInfo
                 assertEquals(alias.className, activity.name, it)

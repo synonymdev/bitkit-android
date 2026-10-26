@@ -147,7 +147,12 @@ class ProfileViewModel @Inject constructor(
 
     fun showSignOutConfirmation() {
         if (_isSigningOut.value) return
-        val owner = uiState.value.owner ?: return
+        val state = uiState.value
+        val owner = if (state.recoveryPending) {
+            pubkyRepo.profileOwner().takeIf { it.signIn == null } ?: state.owner
+        } else {
+            state.owner
+        } ?: return
         val revision = ++preparationRevision
         _isSigningOut.value = true
         viewModelScope.launch {

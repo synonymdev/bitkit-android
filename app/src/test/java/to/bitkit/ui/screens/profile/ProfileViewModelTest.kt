@@ -442,6 +442,30 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `existing profile screen can finish its ended profile cleanup locally`() = test {
+        val pending = MutableStateFlow<Boolean?>(false)
+        val sut = createSut(recoveryPending = pending)
+        advanceUntilIdle()
+        sut.uiState.test {
+            awaitItem()
+            val id = UUID.randomUUID().toString()
+            fixture.store.withAccess(id) { fixture.store.begin(id) }
+            fixture.current = fixture.ended
+            pending.value = true
+            advanceUntilIdle()
+            sut.showSignOutConfirmation()
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.showSignOutDialog)
+            assertTrue(sut.uiState.value.localDisconnect)
+            sut.signOut()
+            advanceUntilIdle()
+            assertNull(fixture.store.pendingAttempt())
+            verify(pubkyRepo, never()).signOutForProfileRemoval()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `sign out waits for confirmation and delayed effect is bound to ended owner`() = test {
         val sut = createSut(createProfile())
         advanceUntilIdle()

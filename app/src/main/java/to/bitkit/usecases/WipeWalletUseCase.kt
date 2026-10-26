@@ -66,6 +66,7 @@ class WipeWalletUseCase @Inject constructor(
         if (!wipeMutex.tryLock()) return Result.failure(WipeAlreadyInProgress())
         backupRepo.setWiping(true)
         lightningRepo.setWiping(true)
+        var credentialsMayBeErased = false
         val result = try {
             runSuspendCatching {
                 contactPaymentSettingsRepo.get().withWalletWipe(pubkyRepo::withWalletWipeAdmission) {
@@ -77,7 +78,7 @@ class WipeWalletUseCase @Inject constructor(
                                 stopNode().getOrThrow()
                                 profileRemovalStore.begin(attemptId)
                                 if (pending == null) cleanupRemote()
-                                wipeLocal(walletIndex, pause).getOrThrow()
+                                wipeLocal(walletIndex, pause) { credentialsMayBeErased = true }.getOrThrow()
                                 profileRemovalStore.complete(attemptId)
                                 resetWalletState()
                                 onSuccess()
@@ -85,6 +86,9 @@ class WipeWalletUseCase @Inject constructor(
                         }
                     }
                 }
+            }.let { outcome ->
+                val error = outcome.exceptionOrNull()
+                if (error != null && credentialsMayBeErased) Result.failure(WipeIncomplete(error)) else outcome
             }
         } finally {
             lightningRepo.setWiping(false)
@@ -112,12 +116,13 @@ class WipeWalletUseCase @Inject constructor(
     private suspend fun wipeLocal(
         walletIndex: Int,
         pause: PrivatePaykitRepo.ProfileDeletionPause,
+        onCredentialWipe: () -> Unit,
     ): Result<Unit> {
         lightningRepo.wipeStorage(walletIndex).onFailure { return Result.failure(it) }
         step("clear post-migration sync flag") { migrationService.setNeedsPostMigrationSync(false) }
         step("clear migration data") { migrationService.cleanupAfterMigration() }
-        runSuspendCatching { usdtRepo.wipe { keychain.wipe() }.getOrThrow() }
-            .getOrElse { return Result.failure(WipeIncomplete(it)) }
+        onCredentialWipe()
+        usdtRepo.wipe { keychain.wipe() }.getOrThrow()
         paykitUsdtPaymentRepo.resetForWipe()
         // Consumption watermarks survive until the keychain wipe is acknowledged. Pending remains on any failure.
         privatePaykitRepo.get().finishProfileRemoval(pause).getOrElse { return Result.failure(it) }

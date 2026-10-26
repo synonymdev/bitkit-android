@@ -310,7 +310,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             onSuccess = { onSetWalletExistsStateCalled = true },
         )
 
-        assertEquals(failure.message, result.exceptionOrNull()?.message)
+        assertEquals(failure.message, assertIs<WipeIncomplete>(result.exceptionOrNull()).cause?.message)
         verify(keychain).wipe()
         verify(privatePaykitRepo).finishProfileRemoval(profilePause)
         verify(privatePaykitAddressReservationRepo, never()).clear()
@@ -329,7 +329,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             onSuccess = { onSetWalletExistsStateCalled = true },
         )
 
-        assertEquals(failure.message, result.exceptionOrNull()?.message)
+        assertEquals(failure.message, assertIs<WipeIncomplete>(result.exceptionOrNull()).cause?.message)
         verify(keychain).wipe()
         verify(pubkyRepo).finishProfileWipeLocally()
         verify(privatePaykitAddressReservationRepo).clear()
@@ -448,7 +448,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             onSuccess = { onSetWalletExistsStateCalled = true },
         )
 
-        assertTrue(result.isFailure)
+        assertEquals("clear failed", assertIs<WipeIncomplete>(result.exceptionOrNull()).cause?.message)
         verify(keychain).wipe()
         assertFalse(onSetWalletExistsStateCalled)
         assertFalse(onWipeCalled)
@@ -465,7 +465,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             onSuccess = { onSetWalletExistsStateCalled = true },
         )
 
-        assertEquals(error, assertIs<WipeIncomplete>(result.exceptionOrNull()).cause)
+        val failure = assertIs<WipeIncomplete>(result.exceptionOrNull())
+        assertTrue(generateSequence(failure.cause) { it.cause }.any { it === error })
         verify(lightningRepo).wipeStorage(0)
         verify(db, never()).clearAllTables()
         verify(settingsStore, never()).reset()

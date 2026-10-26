@@ -587,6 +587,14 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
 
+    /** Retry a complete WALLET capture only after durable removal recovery has been acknowledged. */
+    internal suspend fun notifyProfileRemovalCompleted(pause: ProfileDeletionPause) = withContext(
+        serializedDispatcher
+    ) {
+        check(pause in profileDeletionPauses) { "Profile removal has already finished" }
+        notifyBackupStateChanged()
+    }
+
     private suspend fun clearLocalPaymentState() {
         clearPendingMessageDrainRetries()
         knownSavedContactKeys.clear()

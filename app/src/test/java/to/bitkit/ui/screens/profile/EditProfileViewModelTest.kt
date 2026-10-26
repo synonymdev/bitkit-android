@@ -19,12 +19,15 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyProfileOwner
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -65,6 +68,21 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `completed removal shows success only for its ended owner`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        ToastEventBus.events.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+            val toast = expectMostRecentItem()
+            assertEquals(Toast.ToastType.SUCCESS, toast.type)
+            assertEquals("Profile deleted", toast.title)
+        }
+    }
+
+    @Test
     fun `uncertain deletion review reads state and requires fresh confirmation`() = test {
         val sut = createSut()
         whenever(pubkyRepo.deleteProfile(fixture.deletion)).thenReturn(Result.failure(TestAppError("lost response")))
@@ -101,10 +119,13 @@ class EditProfileViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.showDeleteDialog)
         assertTrue(sut.uiState.value.isLocalDisconnect)
         verify(pubkyRepo, never()).finishProfileRemovalLocally()
-        sut.effects.test {
-            sut.deleteProfile()
-            advanceUntilIdle()
-            assertIs<EditProfileEffect.RemovalCompleted>(awaitItem())
+        ToastEventBus.events.test {
+            sut.effects.test {
+                sut.deleteProfile()
+                advanceUntilIdle()
+                assertIs<EditProfileEffect.RemovalCompleted>(awaitItem())
+            }
+            assertEquals("Pubky unlinked", expectMostRecentItem().title)
         }
         verify(pubkyRepo, times(1)).deleteProfile(fixture.deletion)
         verify(pubkyRepo, never()).signOutForProfileRemoval()
@@ -374,6 +395,8 @@ class EditProfileViewModelTest : BaseUnitTest() {
         ringCheck: CompletableDeferred<Boolean>? = null,
     ): EditProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
+        whenever(context.getString(R.string.profile__delete_success)).thenReturn("Profile deleted")
+        whenever(context.getString(R.string.profile__unlink_success)).thenReturn("Pubky unlinked")
         if (ringCheck != null) {
             whenever { pubkyRepo.isRingAdoptedIdentity() }.doSuspendableAnswer { ringCheck.await() }
         } else {

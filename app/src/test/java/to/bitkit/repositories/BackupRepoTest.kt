@@ -41,6 +41,7 @@ import to.bitkit.data.BlocktankRefundAddress
 import to.bitkit.data.CacheStore
 import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WatchOnlyAccountAllocationState
@@ -73,6 +74,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.util.UUID
 import javax.inject.Provider
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
@@ -1230,6 +1232,58 @@ class BackupRepoTest : BaseUnitTest() {
             // still one attempt: the failed timestamp suppresses a retry until data changes again
             verify(privatePaykitRepo, times(1)).backupSnapshot()
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `acknowledged removal wakes the suppressed wallet category after delayed completion`() = test {
+        val removal = ProfileRemovalStore.inMemoryForTesting()
+        val attempt = UUID.randomUUID().toString()
+        removal.withAccess(attempt) { removal.begin(attempt) }
+        whenever(clock.now()).thenAnswer { Instant.fromEpochMilliseconds(3_000 + currentTime) }
+        val statuses = MutableStateFlow(
+            mapOf(BackupCategory.WALLET to BackupItemStatus(synced = 1_000, required = 2_000))
+        )
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        stubMetadataBackupReads()
+        val metadataVersion = MutableStateFlow(0L)
+        val walletVersion = MutableStateFlow(0L)
+        whenever(pubkyRepo.backupStateVersion).thenReturn(metadataVersion)
+        whenever(privatePaykitRepo.backupStateVersion).thenReturn(walletVersion)
+        whenever { privatePaykitRepo.backupSnapshot() }.doSuspendableAnswer {
+            runCatching {
+                removal.requireNoPending()
+                PrivatePaykitBackupSnapshot(null, 0)
+            }
+        }
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(privatePaykitRepo, times(1)).backupSnapshot()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+            advanceTimeBy(20_000)
+            runCurrent()
+            verify(privatePaykitRepo, times(1)).backupSnapshot()
+            removal.withAccess(attempt) { removal.complete(attempt) }
+            metadataVersion.value++
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            // Pubky metadata notifications cannot release a failed WALLET capture.
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+            assertTrue(statuses.value.getValue(BackupCategory.WALLET).isRequired)
+            walletVersion.value++
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(privatePaykitRepo, times(2)).backupSnapshot()
+            verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), any())
+            assertFalse(statuses.value.getValue(BackupCategory.WALLET).isRequired)
         } finally {
             sut.stopObservingBackups()
         }

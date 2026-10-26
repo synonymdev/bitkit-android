@@ -362,10 +362,15 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     fun `profile removal finalization is local and rejects an ended pause`() = test {
         val pause = sut.beginProfileDeletion()
         assertTrue(sut.finishProfileRemoval(pause).isSuccess)
+        val beforeCompletion = sut.backupStateVersion.value
+        sut.notifyProfileRemovalCompleted(pause)
+        assertEquals(beforeCompletion + 1, sut.backupStateVersion.value)
         verify(paykitSdkService, never()).clearState()
         sut.endProfileDeletion(pause)
         clearInvocations(cacheStore)
         assertTrue(sut.finishProfileRemoval(pause).isFailure)
+        assertFailsWith<IllegalStateException> { sut.notifyProfileRemovalCompleted(pause) }
+        assertEquals(beforeCompletion + 1, sut.backupStateVersion.value)
         verify(cacheStore, never()).reset()
     }
 

@@ -376,7 +376,7 @@ class PubkyRepo @Inject constructor(
             _sessionRestorationFailed.value = true
             runSuspendCatching { pubkyService.preparePublicProfileRecovery() }
                 .onFailure { Logger.warn("Failed to prepare public profile access", it, context = TAG) }
-            throw failure
+            throw if (failure is ProfileRemovalPending) failure else ProfileRemovalPending(failure)
         }
     }
 
@@ -1971,6 +1971,11 @@ class PubkyRepo @Inject constructor(
         identityOperations.requireRemoval()
         pubkyService.forgetLocalProfileAccess()
         clearProfileMetadataAfterCredentialTeardown()
+    }
+
+    internal suspend fun notifyProfileRemovalCompleted() {
+        identityOperations.requireRemoval()
+        notifyBackupStateChanged()
     }
 
     /** The wallet wipe has acknowledged keychain deletion and still owns both teardown barriers. */

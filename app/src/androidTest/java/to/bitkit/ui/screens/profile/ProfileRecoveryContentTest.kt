@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.espresso.Espresso.pressBackUnconditionally
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
@@ -30,12 +31,13 @@ class ProfileRecoveryContentTest {
     fun restartRecoveryWithoutCredentialsRequiresLocalConfirmation() {
         var state by mutableStateOf(ProfileUiState(recoveryPending = true, localDisconnect = true))
         var confirmations = 0
+        var back = 0
         compose.setContent {
             AppThemeSurface {
                 CompositionLocalProvider(LocalInspectionMode provides true) {
                     ProfileContent(
                         uiState = state,
-                        onBackClick = {},
+                        onBackClick = { back++ },
                         onClickEdit = { error("Pending recovery must not offer editing") },
                         onClickCopy = {},
                         onClickShare = {},
@@ -67,6 +69,11 @@ class ProfileRecoveryContentTest {
         compose.onNodeWithTag("DialogConfirm").performClick()
         compose.runOnIdle { assertEquals(1, confirmations) }
         compose.onNodeWithTag("ProfileRecoveryDisconnect").assertIsNotEnabled()
+        compose.onNodeWithTag("NavigationBack").performClick()
+        compose.onNodeWithTag("HeaderMenu").assertDoesNotExist()
+        pressBackUnconditionally()
+        compose.onNodeWithTag("ProfileRecoveryDisconnect").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, back) }
     }
 
     @Test

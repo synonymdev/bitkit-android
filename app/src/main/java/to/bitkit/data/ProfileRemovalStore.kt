@@ -14,7 +14,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -73,14 +72,9 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
         store.data.map { it.attemptId != null }
             .retryWhen { _, attempt ->
                 emit(true)
-                if (attempt < 3) {
-                    delay((250L shl attempt.toInt()).milliseconds)
-                    true
-                } else {
-                    false
-                }
+                delay((250L shl attempt.coerceAtMost(8).toInt()).coerceAtMost(60_000).milliseconds)
+                true
             }
-            .catch { emit(true) }
     }
 
     internal suspend fun pendingAttempt(): String? = store.data.first().attemptId
@@ -195,6 +189,7 @@ internal object ProfileRemovalSerializer : Serializer<ProfileRemovalState> {
     }
 }
 
-internal class ProfileRemovalPending : AppError(
-    "Profile cleanup is pending. Disconnect the profile to finish local recovery."
+internal class ProfileRemovalPending(cause: Throwable? = null) : AppError(
+    "Profile cleanup is pending. Disconnect the profile to finish local recovery.",
+    cause,
 )

@@ -1692,7 +1692,8 @@ class PaykitSdkService @Inject constructor(
         runSuspendCatching { initialize() }
             .onFailure {
                 Logger.warn("Failed to initialize Paykit before wallet wipe", it, context = TAG)
-                preparePublicProfileRecovery()
+                runSuspendCatching { preparePublicProfileRecovery() }
+                    .onFailure { Logger.warn("Failed to prepare public access before wallet wipe", it, context = TAG) }
             }
         return operationLock.withWalletWipe {
             // Removal has drained. Bootstrap publication never waits for the SDK lock.

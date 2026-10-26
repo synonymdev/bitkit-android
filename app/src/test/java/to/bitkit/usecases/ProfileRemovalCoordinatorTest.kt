@@ -101,6 +101,16 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
             events += "local credentials and metadata"
             current = ended
         }
+        whenever { privateRepo.notifyProfileRemovalCompleted(pause) }.doSuspendableAnswer {
+            assertNull(store.pendingAttempt())
+            events += "wallet backup ready"
+            Unit
+        }
+        whenever { pubky.notifyProfileRemovalCompleted() }.doSuspendableAnswer {
+            assertNull(store.pendingAttempt())
+            events += "backup ready"
+            Unit
+        }
         whenever { privateRepo.finishProfileRemoval(pause) }.doSuspendableAnswer {
             assertNotNull(store.pendingAttempt())
             events += "private local"
@@ -121,13 +131,47 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
                 "profile",
                 "revoke",
                 "local credentials and metadata",
-                "private local"
+                "private local",
+                "wallet backup ready",
+                "backup ready"
             ),
             events
         )
         assertNull(store.pendingAttempt())
         assertFalse(sut.isCurrent(original))
         assertTrue(sut.isCurrent(ended))
+    }
+
+    @Test
+    fun `backup readiness waits for delayed durable marker completion`() = test {
+        val data = MutableStateFlow(ProfileRemovalState())
+        val completing = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = data
+            override suspend fun updateData(
+                transform: suspend (ProfileRemovalState) -> ProfileRemovalState
+            ): ProfileRemovalState {
+                val next = transform(data.value)
+                if (next.attemptId == null) {
+                    completing.complete(Unit)
+                    release.await()
+                }
+                data.value = next
+                return next
+            }
+        })
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        val removal = async { sut.remove(confirmation) }
+        completing.await()
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        verify(privateRepo, never()).notifyProfileRemovalCompleted(any())
+        verify(pubky, never()).notifyProfileRemovalCompleted()
+        release.complete(Unit)
+        assertTrue(removal.await().isSuccess)
+        verify(privateRepo).notifyProfileRemovalCompleted(pause)
+        verify(pubky).notifyProfileRemovalCompleted()
+        assertNull(store.pendingAttempt())
     }
 
     @Test
@@ -307,16 +351,16 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
-    fun `explicit local disconnect remains available after precondition failure without a marker`() = test {
+    fun `changed confirmation before any cleanup permits a fresh deletion without uncertainty`() = test {
         whenever { pubky.validateProfileDeletion(deletion) }.thenAnswer { error("profile changed") }
-        val failure = assertIs<ProfileRemovalFailure>(
-            sut.remove(sut.prepareDeletion(original).getOrThrow()).exceptionOrNull()
-        )
-        assertNull(store.pendingAttempt())
-        assertTrue(sut.remove(sut.prepareLocalDisconnect(failure).getOrThrow()).isSuccess)
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        val failure = sut.remove(confirmation).exceptionOrNull()
+        assertIs<IllegalStateException>(failure)
+        assertNull(sut.failureFor(confirmation))
         assertNull(store.pendingAttempt())
         verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>())
-        verify(pubky, never()).signOutForProfileRemoval()
+        verify(privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        assertTrue(sut.prepareDeletion(original).isSuccess)
     }
 
     @Test
@@ -389,8 +433,12 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
         assertSame(ended, failure.recoveryOwner)
         assertEquals(confirmation.attemptId, store.pendingAttempt())
         assertTrue(sut.reviewAgain(failure).isFailure)
+        verify(privateRepo, never()).notifyProfileRemovalCompleted(any())
+        verify(pubky, never()).notifyProfileRemovalCompleted()
         rejectCompletion = false
         assertTrue(sut.remove(sut.prepareLocalDisconnect(failure).getOrThrow()).isSuccess)
+        verify(privateRepo).notifyProfileRemovalCompleted(pause)
+        verify(pubky).notifyProfileRemovalCompleted()
         assertNull(store.pendingAttempt())
         verify(pubky, times(1)).deleteProfile(deletion)
         verify(pubky, times(1)).signOutForProfileRemoval()

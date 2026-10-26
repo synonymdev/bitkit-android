@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import androidx.datastore.core.DataStore
 import app.cash.turbine.test
 import coil3.ImageLoader
 import coil3.disk.DiskCache
@@ -39,6 +40,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
@@ -66,6 +68,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import org.mockito.verification.VerificationMode
+import to.bitkit.data.ProfileRemovalState
 import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.data.PubkyImageCacheEpoch
@@ -93,6 +96,7 @@ import to.bitkit.test.forEachCase
 import to.bitkit.usecases.ProfileRemovalCoordinator
 import to.bitkit.usecases.ProfileRemovalFailure
 import to.bitkit.utils.AppError
+import java.io.IOException
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -209,6 +213,42 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(sut.isProfileOwnerCurrent(completion))
         assertNull(sut.publicKey.value)
         assertTrue(sut.performProfileRemoval(original) { error("obsolete owner admitted") }.isFailure)
+    }
+
+    @Test
+    fun `completed removal schedules a new backup under its original admission`() = test {
+        advanceUntilIdle()
+        whenever { pubkyService.withProfileRemoval<Unit>(any(), any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(1).invoke()
+        }
+        val version = sut.backupStateVersion.value
+        sut.performProfileRemoval(sut.profileOwner()) {
+            sut.notifyProfileRemovalCompleted()
+        }.getOrThrow()
+        assertEquals(version + 1, sut.backupStateVersion.value)
+        assertFailsWith<IllegalStateException> { sut.notifyProfileRemovalCompleted() }
+    }
+
+    @Test
+    fun `unreadable removal state fails restoration closed without escaping resume`() = test {
+        var unavailable = true
+        val store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = flow {
+                if (unavailable) throw IOException("Local read unavailable")
+                emit(ProfileRemovalState())
+            }
+            override suspend fun updateData(
+                transform: suspend (ProfileRemovalState) -> ProfileRemovalState,
+            ): ProfileRemovalState = error("Resume must not change recovery state")
+        })
+        val resumed = createSut(removalStore = store)
+        try {
+            assertFalse(resumed.restoreSessionIfNeeded())
+            assertFalse(resumed.isRestoringSession.value)
+            assertTrue(resumed.sessionRestorationFailed.value)
+        } finally {
+            unavailable = false
+        }
     }
 
     @Test
@@ -355,7 +395,10 @@ class PubkyRepoTest : BaseUnitTest() {
         sut = createSut()
     }
 
-    private fun createSut(httpClient: HttpClient = mock()) = PubkyRepo(
+    private fun createSut(
+        httpClient: HttpClient = mock(),
+        removalStore: ProfileRemovalStore = profileRemovalStore,
+    ) = PubkyRepo(
         ioDispatcher = testDispatcher,
         pubkyService = pubkyService,
         keychain = keychain,
@@ -366,7 +409,7 @@ class PubkyRepoTest : BaseUnitTest() {
         settingsStore = settingsStore,
         httpClient = httpClient,
         clock = clock,
-        profileRemovalStore = profileRemovalStore,
+        profileRemovalStore = removalStore,
     )
 
     private fun PubkyRepo.removalCoordinatorForTest(): ProfileRemovalCoordinator {

@@ -298,7 +298,18 @@ class EditProfileViewModel @Inject constructor(
             removalCoordinator.remove(confirmation).onSuccess { endedOwner ->
                 removalFailure = null
                 if (removalCoordinator.isCurrent(endedOwner)) {
-                    _effects.emit(EditProfileEffect.RemovalCompleted(endedOwner))
+                    val successToast = if (confirmation.localOnly) {
+                        ProfileRemoval.UNLINK.successToast
+                    } else {
+                        _uiState.value.removal.successToast
+                    }
+                    ToastEventBus.send(
+                        type = Toast.ToastType.SUCCESS,
+                        title = context.getString(successToast),
+                    )
+                    if (removalCoordinator.isCurrent(endedOwner)) {
+                        _effects.emit(EditProfileEffect.RemovalCompleted(endedOwner))
+                    }
                 }
             }.onFailure { error ->
                 removalFailure = (error as? ProfileRemovalFailure) ?: removalFailure

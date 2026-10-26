@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.profile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -127,13 +128,15 @@ internal fun ProfileContent(
     onSaveTag: (String) -> Unit,
     onDismissCopiedPopup: () -> Unit,
 ) {
+    BackHandler(enabled = uiState.isSigningOut) {}
+
     val currentProfile = uiState.profile
     val cachedProfile = uiState.cachedProfile
     val topBar = @Composable { modifier: Modifier ->
         AppTopBar(
             titleText = stringResource(R.string.profile__nav_title),
-            onBackClick = onBackClick,
-            actions = { DrawerNavIcon() },
+            onBackClick = { if (!uiState.isSigningOut) onBackClick() },
+            actions = { if (!uiState.isSigningOut) DrawerNavIcon() },
             modifier = modifier,
         )
     }

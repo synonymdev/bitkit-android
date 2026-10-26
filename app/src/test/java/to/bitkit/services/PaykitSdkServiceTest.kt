@@ -2181,6 +2181,22 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `wallet wipe remains available when platform initialization keeps failing`() = runTest {
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            platformInitializer = { throw AppError("Native setup unavailable") },
+            settingsStore = mock(),
+            sdkFactory = { error("A failed setup must not create an SDK handle") },
+        )
+        var localCleanup = false
+        service.withWalletWipe { localCleanup = true }
+        assertTrue(localCleanup)
+    }
+
+    @Test
     fun `wallet wipe drains initialization before cleanup and allows fresh work`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.contactRecords()).thenReturn(emptyList())

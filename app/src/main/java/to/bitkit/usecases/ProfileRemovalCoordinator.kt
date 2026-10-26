@@ -118,12 +118,14 @@ class ProfileRemovalCoordinator @Inject constructor(
         sharingRepo.withProfileRemoval {
             pubkyRepo.performProfileRemoval(confirmation.owner, confirmation.attemptId) {
                 var localCompletionStarted = false
+                var removalMayHaveStarted = removalStore.pendingAttempt() != null
                 try {
                     check(confirmation.deletion == null || confirmation.reviewCeiling.get() === confirmation.deletion) {
                         "This confirmation was replaced by a later review"
                     }
                     privatePaykitRepo.withProfileDeletionPaused { pause ->
                         confirmation.deletion?.let { pubkyRepo.validateProfileDeletion(it) }
+                        removalMayHaveStarted = true
                         removalStore.begin(confirmation.attemptId)
                         if (!confirmation.localOnly) {
                             privatePaykitRepo.removePublishedEndpointsForCleanup(TAG, deferAppSync = true).getOrThrow()
@@ -136,12 +138,15 @@ class ProfileRemovalCoordinator @Inject constructor(
                         withContext(NonCancellable) {
                             privatePaykitRepo.finishProfileRemoval(pause).getOrThrow()
                             removalStore.complete(confirmation.attemptId)
+                            privatePaykitRepo.notifyProfileRemovalCompleted(pause)
+                            pubkyRepo.notifyProfileRemovalCompleted()
                         }
                     }
                 } catch (error: CancellationException) {
-                    captureFailure(error, confirmation, localCompletionStarted)
+                    if (removalMayHaveStarted) captureFailure(error, confirmation, localCompletionStarted)
                     throw error
                 } catch (error: Throwable) {
+                    if (!removalMayHaveStarted) throw error
                     throw captureFailure(error, confirmation, localCompletionStarted)
                 }
             }.getOrThrow()
