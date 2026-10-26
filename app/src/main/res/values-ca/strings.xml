@@ -154,7 +154,6 @@
     <string name="lightning__fee_rate_update_time">Temps d\'actualització de la memòria cau de tarifes</string>
     <string name="lightning__fees">Tarifes</string>
     <string name="lightning__force_button">Forçar transferència</string>
-    <string name="lightning__force_channels_skipped">Algunes connexions no s\'han pogut tancar.</string>
     <string name="lightning__force_failed_msg">No es possible transferir els teus fons de tornada a estalvis. Si us plau, intenta-ho de nou.</string>
     <string name="lightning__force_failed_title">Transferència forçada fallida</string>
     <string name="lightning__force_init_msg">Els teus fons seran accessibles en ±14 dies.</string>

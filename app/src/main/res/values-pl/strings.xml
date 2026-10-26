@@ -250,7 +250,6 @@
     <string name="lightning__force_init_title">Wymuszenie transferu zainicjowane</string>
     <string name="lightning__force_init_msg">Środki będą dostępne w ciągu ±14 dni.</string>
     <string name="lightning__force_failed_title">Wymuszenie transferu nie powiodło się</string>
-    <string name="lightning__force_channels_skipped">Niektórych połączeń nie można było zamknąć.</string>
     <string name="lightning__force_failed_msg">Nie można przelać środków z powrotem na saldo oszczędności. Proszę spróbować ponownie.</string>
     <string name="lightning__channel_opened_title">Saldo wydatków gotowe</string>
     <string name="lightning__channel_opened_msg">Teraz możesz zapłacić każdemu, gdziekolwiek, natychmiast.</string>

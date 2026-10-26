@@ -154,7 +154,6 @@
     <string name="lightning__fee_rate_update_time">Vergoedingstarief cache update tijd</string>
     <string name="lightning__fees">Vergoedingen</string>
     <string name="lightning__force_button">Forceer overboeking</string>
-    <string name="lightning__force_channels_skipped">Sommige verbindingen konden niet worden gesloten.</string>
     <string name="lightning__force_failed_msg">Kon het geld niet terugboeken naar spaargeld. Probeer het opnieuw.</string>
     <string name="lightning__force_failed_title">Geforceerde overboeking mislukt</string>
     <string name="lightning__force_init_msg">Je geld is beschikbaar in ±14 dagen.</string>

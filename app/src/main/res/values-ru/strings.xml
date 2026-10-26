@@ -166,7 +166,6 @@
     <string name="lightning__fee_rate_update_time">Время обновления кэша комиссии</string>
     <string name="lightning__fees">Комиссии</string>
     <string name="lightning__force_button">Принудительный Перевод</string>
-    <string name="lightning__force_channels_skipped">Некоторые соединения не удалось закрыть.</string>
     <string name="lightning__force_failed_msg">Не удалось перевести ваши средства обратно в сбережения. Пожалуйста, попробуйте снова.</string>
     <string name="lightning__force_failed_title">Неудачный Принудительный Перевод</string>
     <string name="lightning__force_init_msg">Ваши средства будут доступны через ±14 дней.</string>

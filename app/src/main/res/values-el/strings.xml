@@ -150,7 +150,6 @@
     <string name="lightning__fee_rate_update_time">Χρόνος ενημέρωσης cache τελών</string>
     <string name="lightning__fees">Τέλη</string>
     <string name="lightning__force_button">Αναγκαστική μεταφορά</string>
-    <string name="lightning__force_channels_skipped">Κάποιες συνδέσεις δεν μπόρεσαν να κλείσουν.</string>
     <string name="lightning__force_failed_msg">Δεν ήταν δυνατή η μεταφορά των κεφαλαίων σου στις αποταμιεύσεις. Δοκίμασε ξανά.</string>
     <string name="lightning__force_failed_title">Αποτυχία αναγκαστικής μεταφοράς</string>
     <string name="lightning__force_init_msg">Τα κεφάλαιά σου θα είναι διαθέσιμα σε ±14 ημέρες.</string>

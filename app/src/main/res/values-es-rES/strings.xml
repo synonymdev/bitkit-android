@@ -156,7 +156,6 @@
     <string name="lightning__fee_rate_update_time">Hora de actualización de caché de tasas</string>
     <string name="lightning__fees">Comisiones</string>
     <string name="lightning__force_button">Fuerzar transferencia</string>
-    <string name="lightning__force_channels_skipped">Algunas conexiones no pudieron cerrarse.</string>
     <string name="lightning__force_failed_msg">No se han podido transferir tus fondos a ahorros. Por favor, inténtalo de nuevo.</string>
     <string name="lightning__force_failed_title">Transferencia forzada falló</string>
     <string name="lightning__force_init_msg">Sus fondos estarán accesibles en ±14 días.</string>

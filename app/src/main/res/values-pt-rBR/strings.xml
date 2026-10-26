@@ -158,7 +158,6 @@
     <string name="lightning__fee_rate_update_time">Atualização do Cache de Taxa</string>
     <string name="lightning__fees">Taxas</string>
     <string name="lightning__force_button">Forçar Transferência</string>
-    <string name="lightning__force_channels_skipped">Algumas conexões não puderam ser fechadas.</string>
     <string name="lightning__force_failed_msg">Não foi possível transferir seus fundos de volta para sua poupança. Por favor, tente novamente.</string>
     <string name="lightning__force_failed_title">Falha na transferência forçada</string>
     <string name="lightning__force_init_msg">Seus fundos estarão disponíveis em ±14 dias.</string>

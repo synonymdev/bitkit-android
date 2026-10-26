@@ -303,7 +303,6 @@
     <string name="lightning__fee_rate_update_time">Fee Rate Cache Update Time</string>
     <string name="lightning__fees">Fees</string>
     <string name="lightning__force_button">Force Transfer</string>
-    <string name="lightning__force_channels_skipped">Some connections could not be closed.</string>
     <string name="lightning__force_failed_msg">Unable to transfer your funds back to savings. Please try again.</string>
     <string name="lightning__force_failed_title">Force Transfer Failed</string>
     <string name="lightning__force_init_msg">Your funds will be accessible in ±14 days.</string>

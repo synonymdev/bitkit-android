@@ -70,7 +70,6 @@ import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
-import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
@@ -189,7 +188,6 @@ class LightningRepo @Inject constructor(
                     }
 
                     if (_lightningState.value.nodeLifecycleState.isRunning()) {
-                        connectToTrustedPeers()
                         scheduleOrdinaryFollowupRetry()
                     }
 
@@ -301,28 +299,16 @@ class LightningRepo @Inject constructor(
         channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
         runSuspendCatching {
-            val trustedPeers = fetchTrustedPeers()
             lightningService.setup(
                 walletIndex,
                 customServerUrl,
                 customRgsServerUrl,
-                trustedPeers,
                 channelMigration,
             )
         }.onFailure {
             Logger.error("Node setup error", it, context = TAG)
         }
     }
-
-    private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runSuspendCatching {
-        val info = coreService.blocktank.info(refresh = false)
-            ?: coreService.blocktank.info(refresh = true)
-        info?.nodes?.toPeerDetailsList()?.also {
-            Logger.info("Fetched ${it.size} trusted peers from remote", context = TAG)
-        }
-    }.onFailure {
-        Logger.warn("fetchTrustedPeers error", it, context = TAG)
-    }.getOrNull()
 
     suspend fun start(
         walletIndex: Int = 0,
@@ -434,10 +420,10 @@ class LightningRepo @Inject constructor(
                 }
 
                 // Post-startup tasks (non-blocking)
-                connectToTrustedPeers().onFailure {
-                    Logger.error("Failed to connect to trusted peers", it, context = TAG)
+                disconnectIdlePeers().onFailure {
+                    Logger.error("Failed to disconnect idle peers", it, context = TAG)
                 }
-                logNodeSupportSummary("trusted peers connected")
+                logNodeSupportSummary("idle peers disconnected")
 
                 sync().onFailure { e ->
                     Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
@@ -1263,8 +1249,8 @@ class LightningRepo @Inject constructor(
         return@withContext Result.success(Unit)
     }
 
-    suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
-        runCatching { lightningService.connectToTrustedPeers() }.also {
+    suspend fun disconnectIdlePeers(): Result<Unit> = executeWhenNodeRunning("disconnectIdlePeers") {
+        runSuspendCatching { lightningService.disconnectIdlePeers() }.also {
             syncState()
         }
     }
@@ -2254,8 +2240,6 @@ class LightningRepo @Inject constructor(
         val isRunning = _lightningState.value.nodeLifecycleState.isRunning()
         return isRunning && lightningService.canReceive()
     }
-
-    fun separateTrustedChannels(channels: List<ChannelDetails>) = lightningService.separateTrustedChannels(channels)
 
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,

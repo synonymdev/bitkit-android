@@ -1873,10 +1873,6 @@ class TransferViewModel @Inject constructor(
     /** Closes the channels selected earlier, pending closure */
     suspend fun closeSelectedChannels() = closeChannels(channelsToClose)
 
-    fun separateTrustedChannels(
-        channels: List<ChannelDetails>,
-    ): Pair<List<ChannelDetails>, List<ChannelDetails>> = lightningRepo.separateTrustedChannels(channels)
-
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
         lightningRepo.awaitPeerConnected()
         val channelsFailedToClose = coroutineScope {
@@ -1908,7 +1904,6 @@ class TransferViewModel @Inject constructor(
     fun startCoopCloseRetries(
         channels: List<ChannelDetails>,
         onGiveUp: () -> Unit,
-        onTransferUnavailable: () -> Unit,
     ) {
         val startTimeMs = clock.now().toEpochMilliseconds()
         channelsToClose = channels
@@ -1932,59 +1927,20 @@ class TransferViewModel @Inject constructor(
                 delay(RETRY_INTERVAL_MS)
             }
 
-            Logger.info("Giving up on coop close. Checking if force close is possible.", context = TAG)
-
-            // Check if any channels can be force closed (filter out trusted peers)
-            val (_, nonTrustedChannels) = lightningRepo.separateTrustedChannels(channelsToClose)
-
-            if (nonTrustedChannels.isNotEmpty()) {
-                onGiveUp()
-            } else {
-                Logger.warn("All channels are with trusted peers. Cannot force close.", context = TAG)
-                channelsToClose = emptyList()
-                onTransferUnavailable()
-            }
+            Logger.info("Giving up on coop close.", context = TAG)
+            onGiveUp()
         }
     }
 
     fun forceTransfer(onComplete: () -> Unit) = viewModelScope.launch {
         _isForceTransferLoading.value = true
         runCatching {
-            // Filter out trusted peer channels (cannot force close LSP channels)
-            val (trustedChannels, nonTrustedChannels) = lightningRepo.separateTrustedChannels(channelsToClose)
-
-            if (trustedChannels.isNotEmpty()) {
-                Logger.warn("Skipping ${trustedChannels.size} trusted peer channel(s)", context = TAG)
-            }
-
-            if (nonTrustedChannels.isEmpty()) {
-                channelsToClose = emptyList()
-                Logger.error("Cannot force close channels with trusted peer", context = TAG)
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.lightning__force_failed_title),
-                    description = context.getString(R.string.lightning__force_failed_msg)
-                )
-                return@runCatching
-            }
-
-            val failedChannels = forceCloseChannels(nonTrustedChannels)
-
-            // Remove successfully closed channels and trusted peer channels from the list
-            val successfulChannelIds = nonTrustedChannels
-                .filterNot { channel -> failedChannels.any { it.channelId == channel.channelId } }
-                .map { it.channelId }
-                .toSet()
-            val trustedChannelIds = trustedChannels.map { it.channelId }.toSet()
-            channelsToClose = channelsToClose.filterNot {
-                it.channelId in successfulChannelIds || it.channelId in trustedChannelIds
-            }
+            val failedChannels = forceCloseChannels(channelsToClose)
+            channelsToClose = failedChannels
 
             if (failedChannels.isEmpty()) {
                 Logger.info("Force close initiated successfully for all channels", context = TAG)
-                val initMsg = context.getString(R.string.lightning__force_init_msg)
-                val skippedMsg = context.getString(R.string.lightning__force_channels_skipped)
-                val description = if (trustedChannels.isNotEmpty()) "$initMsg $skippedMsg" else initMsg
+                val description = context.getString(R.string.lightning__force_init_msg)
                 ToastEventBus.send(
                     type = Toast.ToastType.LIGHTNING,
                     title = context.getString(R.string.lightning__force_init_title),

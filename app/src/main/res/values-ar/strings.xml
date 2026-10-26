@@ -150,7 +150,6 @@
     <string name="lightning__fee_rate_update_time">وقت تحديث ذاكرة التخزين المؤقت لمعدل الرسوم</string>
     <string name="lightning__fees">الرسوم</string>
     <string name="lightning__force_button">تحويل إجباري</string>
-    <string name="lightning__force_channels_skipped">تعذر إغلاق بعض الاتصالات.</string>
     <string name="lightning__force_failed_msg">تعذر تحويل أموالك إلى المدخرات. يرجى المحاولة مرة أخرى.</string>
     <string name="lightning__force_failed_title">فشل التحويل الإجباري</string>
     <string name="lightning__force_init_msg">ستكون أموالك متاحة خلال ±14 يومًا.</string>

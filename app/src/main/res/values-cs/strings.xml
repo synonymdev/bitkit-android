@@ -157,7 +157,6 @@
     <string name="lightning__fee_rate_update_time">Čas aktualizace mezipaměti poplatků</string>
     <string name="lightning__fees">Poplatky</string>
     <string name="lightning__force_button">Vynutit převod</string>
-    <string name="lightning__force_channels_skipped">Některá spojení se nepodařilo uzavřít.</string>
     <string name="lightning__force_failed_msg">Nelze převést vaše prostředky zpět do úspor. Zkuste to prosím znovu.</string>
     <string name="lightning__force_failed_title">Vynucení převodu selhalo.</string>
     <string name="lightning__force_init_msg">Vaše prostředky budou dostupné do ±14 dnů.</string>

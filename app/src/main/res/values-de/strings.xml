@@ -249,7 +249,6 @@
     <string name="lightning__force_init_title">Forcierte Übertragung initiiert</string>
     <string name="lightning__force_init_msg">Dein Guthaben wird in ±14 Tagen zur Verfügung stehen.</string>
     <string name="lightning__force_failed_title">Forcierte Übertragung fehlgeschlagen</string>
-    <string name="lightning__force_channels_skipped">Einige Verbindungen konnten nicht geschlossen werden.</string>
     <string name="lightning__force_failed_msg">Dein Guthaben konnte nicht auf dein Sparkonto übertragen werden. Bitte versuche es erneut.</string>
     <string name="lightning__channel_opened_title">Ausgabenguthaben bereit</string>
     <string name="lightning__channel_opened_msg">Du kannst jetzt jedermann, überall, instant bezahlen.</string>

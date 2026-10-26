@@ -18,10 +18,15 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.lightningdevkit.ldknode.AddressInfo
 import org.lightningdevkit.ldknode.AddressType
+import org.lightningdevkit.ldknode.AnchorChannelsConfig
+import org.lightningdevkit.ldknode.BalanceSource
+import org.lightningdevkit.ldknode.Config
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.KeychainKind
+import org.lightningdevkit.ldknode.LightningBalance
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -33,6 +38,8 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.PendingSweepBalance
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -626,6 +633,73 @@ class LightningServiceTest : BaseUnitTest() {
         assertEquals(listOf(1u, 5u), configs.map { it.accountIndex })
         assertEquals(listOf(enabled.xpub, authorizing.xpub), configs.map { it.xpub })
     }
+
+    @Test
+    fun `node config trusts no peer for zero-conf or force-close broadcasts`() {
+        val lspNodeIds = listOf("lspNodeId")
+        val base = Config(
+            storageDirPath = "",
+            network = Network.REGTEST,
+            listeningAddresses = null,
+            announcementAddresses = null,
+            nodeAlias = null,
+            trustedPeers0conf = lspNodeIds,
+            probingLiquidityLimitMultiplier = 3uL,
+            anchorChannelsConfig = AnchorChannelsConfig(
+                trustedPeersNoReserve = lspNodeIds,
+                perChannelReserveSats = 25_000uL
+            ),
+            routeParameters = null,
+            scoringFeeParams = null,
+            scoringDecayParams = null,
+            includeUntrustedPendingInSpendable = false,
+            addressType = AddressType.NATIVE_SEGWIT,
+            addressTypesToMonitor = emptyList(),
+            onchainWalletAccounts = emptyList(),
+        )
+
+        val config = nodeConfig(base = base, storageDirPath = "ldk", onchainWalletAccounts = emptyList())
+
+        assertTrue(config.trustedPeers0conf.isEmpty())
+        assertEquals(emptyList(), config.anchorChannelsConfig?.trustedPeersNoReserve)
+        assertEquals(1uL, config.anchorChannelsConfig?.perChannelReserveSats)
+    }
+
+    @Test
+    fun `idle peers are stored peers with no channel and no claimable balance`() {
+        val peers = listOf(
+            peer("idle"),
+            peer("withChannel"),
+            peer("withClaim"),
+            peer("notStored", isPersisted = false),
+        )
+        val channels = listOf(createChannelDetails().copy(counterpartyNodeId = "withChannel"))
+        val claims = listOf(
+            LightningBalance.ClaimableAwaitingConfirmations(
+                channelId = "closed",
+                counterpartyNodeId = "withClaim",
+                amountSatoshis = 1_000uL,
+                confirmationHeight = 100u,
+                source = BalanceSource.HOLDER_FORCE_CLOSED,
+            ),
+        )
+
+        val idle = idlePeerIds(peers, channels, claims, pendingSweeps = emptyList())
+
+        assertEquals(listOf("idle"), idle)
+    }
+
+    @Test
+    fun `no peer is idle while a closed channel awaits its sweep`() {
+        val sweeps = listOf(PendingSweepBalance.PendingBroadcast(channelId = "closed", amountSatoshis = 1_000uL))
+
+        val idle = idlePeerIds(listOf(peer("idle")), emptyList(), emptyList(), sweeps)
+
+        assertTrue(idle.isEmpty())
+    }
+
+    private fun peer(nodeId: String, isPersisted: Boolean = true) =
+        PeerDetails(nodeId = nodeId, address = "127.0.0.1:9735", isPersisted = isPersisted, isConnected = true)
 
     @Test
     fun `reconciliation pre-reveals index 999 for an already tracked authorizing account`() = test {

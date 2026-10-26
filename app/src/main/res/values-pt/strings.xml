@@ -265,7 +265,6 @@
     <string name="lightning__inbound_htlc_max">Máximo do HTLC de Entrada</string>
     <string name="lightning__inbound_htlc_min">Mínimo do HTLC de Entrada</string>
     <string name="lightning__monitor_height">Altura do Arquivo do Monitor de Canal</string>
-    <string name="lightning__force_channels_skipped">Algumas conexões não puderam ser fechadas.</string>
     <string name="lightning__transfer_in_progress">TRANSFERÊNCIA EM ANDAMENTO</string>
     <string name="lightning__conn_onboarding_button">Começar</string>
     <string name="lightning__conn_onboarding_text">Configure o seu saldo de despesas para desfrutar de transações instantâneas e económicas com amigos, familiares e comerciantes.</string>

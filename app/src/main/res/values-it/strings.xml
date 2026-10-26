@@ -155,7 +155,6 @@
     <string name="lightning__fee_rate_update_time">Tempo di Aggiornamento Cache Commissioni</string>
     <string name="lightning__fees">Commissioni</string>
     <string name="lightning__force_button">Trasferimento Forzato</string>
-    <string name="lightning__force_channels_skipped">Alcune connessioni non sono state chiuse.</string>
     <string name="lightning__force_failed_msg">Impossibile trasferire nuovamente i fondi nei risparmi. Per favore riprova.</string>
     <string name="lightning__force_failed_title">Trasferimento Forzato Fallito</string>
     <string name="lightning__force_init_msg">I tuoi fondi saranno accessibili in ±14 giorni.</string>

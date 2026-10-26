@@ -1451,10 +1451,7 @@ class MigrationService internal constructor(
             val peers = json.decodeFromString<List<BackupPeerEntry>>(String(data))
             if (peers.isEmpty()) return emptyList()
 
-            val trustedIds = Env.trustedLnPeers.map { it.nodeId }.toSet()
-            val uris = peers
-                .filter { it.pubKey !in trustedIds }
-                .map { "${it.pubKey}@${it.address}:${it.port}" }
+            val uris = peers.map { "${it.pubKey}@${it.address}:${it.port}" }
 
             Logger.info("Migration peer recovery: fetched ${uris.size} peer(s) from remote backup", context = TAG)
             uris
