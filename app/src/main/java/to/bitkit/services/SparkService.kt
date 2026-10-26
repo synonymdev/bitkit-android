@@ -165,6 +165,9 @@ class SparkService @Inject constructor(
         return requireSdk().sendPayment(SendPaymentRequest(prepared, options)).payment
     }
 
+    /** The fastest recommended fee rate, in sat/vB, from the SDK's own fee source. */
+    suspend fun fastestFeeRate(): ULong = requireSdk().recommendedFees().fastestFee
+
     suspend fun listUnclaimedDeposits(): List<DepositInfo> =
         requireSdk().listUnclaimedDeposits(ListUnclaimedDepositsRequest).deposits
 

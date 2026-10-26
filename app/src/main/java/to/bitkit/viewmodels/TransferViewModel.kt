@@ -217,6 +217,9 @@ class TransferViewModel @Inject constructor(
                 return@launch
             }
             onEstimateReady(clientBalanceSat = amountSats, lspBalanceSat = 0uL, feeSat = amountSats, isSpark = true)
+            sparkRepo.estimateDepositClaimFeeSats()
+                .onSuccess { fee -> _spendingUiState.update { it.copy(sparkClaimFeeSats = fee) } }
+                .onFailure { Logger.warn("Failed to estimate Spark claim fee", it, context = TAG) }
         }
     }
 
@@ -2152,6 +2155,8 @@ data class TransferToSpendingUiState(
     val isAdvanced: Boolean = false,
     /** Funds the Spark wallet instead of buying a Blocktank channel. */
     val isSpark: Boolean = false,
+    /** Estimated fee Spark keeps from the deposit to claim it into Spending. */
+    val sparkClaimFeeSats: ULong = 0uL,
     val maxAllowedToSend: Long = 0,
     val balanceAfterFee: Long = 0,
     val quarterAmount: Long = 0,

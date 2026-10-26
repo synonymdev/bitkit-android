@@ -180,7 +180,16 @@ private fun Content(
                     .verticalScroll(rememberScrollState())
             ) {
                 val clientBalance = state.clientBalanceSat
-                val lspFee = state.feeSat.safe() - clientBalance.safe()
+                val lspFee = if (state.isSpark) {
+                    state.sparkClaimFeeSats
+                } else {
+                    state.feeSat.safe() - clientBalance.safe()
+                }
+                val toSpending = if (state.isSpark) {
+                    clientBalance.safe() - state.sparkClaimFeeSats.safe()
+                } else {
+                    clientBalance
+                }
                 val total = state.confirmLeavingAmountSats
                 val lspBalance = state.lspBalanceSat
 
@@ -197,7 +206,13 @@ private fun Content(
                         amount = miningFeeSats.toLong(),
                     )
                     FeeInfo(
-                        label = stringResource(R.string.lightning__spending_confirm__lsp_fee),
+                        label = stringResource(
+                            if (state.isSpark) {
+                                R.string.lightning__spark_claim_fee
+                            } else {
+                                R.string.lightning__spending_confirm__lsp_fee
+                            }
+                        ),
                         amount = lspFee.toLong(),
                     )
                 }
@@ -207,7 +222,7 @@ private fun Content(
                 ) {
                     FeeInfo(
                         label = stringResource(R.string.lightning__spending_confirm__amount),
-                        amount = clientBalance.toLong(),
+                        amount = toSpending.toLong(),
                     )
                     FeeInfo(
                         label = stringResource(R.string.lightning__spending_confirm__total),
