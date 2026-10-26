@@ -107,7 +107,8 @@ class SparkRepo @Inject constructor(
     suspend fun estimateFeeSats(bolt11: String, amountSats: ULong?): Result<ULong> = withContext(bgDispatcher) {
         runSuspendCatching {
             val method = sparkService.prepareSend(bolt11, amountSats).paymentMethod
-            (method as SendPaymentMethod.Bolt11Invoice).lightningFeeSats
+            val bolt11 = method as SendPaymentMethod.Bolt11Invoice
+            bolt11.sparkTransferFeeSats?.takeIf { sparkService.prefersSpark } ?: bolt11.lightningFeeSats
         }
     }
 

@@ -80,6 +80,12 @@ class SparkService @Inject constructor(
 
     val isConnected: Boolean get() = sdk != null
 
+    /**
+     * Spark's regtest has no Lightning network, so there a Lightning invoice from another Spark wallet is paid as a
+     * Spark transfer, which lets two dev builds pay each other's invoices.
+     */
+    val prefersSpark: Boolean get() = Env.network == Network.REGTEST
+
     suspend fun connect(walletIndex: Int) = mutex.withLock {
         if (sdk != null) return@withLock
         val network = sparkNetwork() ?: throw SparkError.Unsupported()
@@ -150,7 +156,7 @@ class SparkService @Inject constructor(
     suspend fun send(prepared: PrepareSendPaymentResponse): Payment {
         val options = when (prepared.paymentMethod) {
             is SendPaymentMethod.Bolt11Invoice -> SendPaymentOptions.Bolt11Invoice(
-                preferSpark = false,
+                preferSpark = prefersSpark,
                 completionTimeoutSecs = SEND_COMPLETION_TIMEOUT_SECS,
             )
             is SendPaymentMethod.BitcoinAddress -> SendPaymentOptions.BitcoinAddress(OnchainConfirmationSpeed.MEDIUM)

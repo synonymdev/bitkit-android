@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.SparkRepo
 import javax.inject.Inject
@@ -29,6 +31,17 @@ class SparkDetailViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             sparkRepo.state.collect { state -> _uiState.update { it.copy(spark = state.toUi(lightningRepo)) } }
         }
+        if (Env.network == Network.REGTEST) {
+            viewModelScope.launch(bgDispatcher) {
+                sparkRepo.depositAddress().onSuccess { address ->
+                    _uiState.update {
+                        it.copy(
+                            depositAddress = address
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun onPullToRefresh() {
@@ -46,4 +59,6 @@ class SparkDetailViewModel @Inject constructor(
 data class SparkDetailUiState(
     val spark: SparkUi? = null,
     val isRefreshing: Boolean = false,
+    /** Spark's on-chain deposit address, shown on regtest to fund Spark from Lightspark's regtest faucet. */
+    val depositAddress: String? = null,
 )

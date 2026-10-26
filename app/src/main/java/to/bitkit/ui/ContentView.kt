@@ -202,8 +202,8 @@ import to.bitkit.ui.settings.general.WidgetsSettingsScreen
 import to.bitkit.ui.settings.lightning.ChannelDetailScreen
 import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
-import to.bitkit.ui.settings.lightning.SparkDetailScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
+import to.bitkit.ui.settings.lightning.SparkDetailScreen
 import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
@@ -1965,7 +1965,8 @@ private fun NavGraphBuilder.lightningConnections(
             )
         }
         deepLinkableComposable<Routes.SparkDetail> {
-            val hasSeenSavingsIntro = settingsViewModel?.hasSeenSavingsIntro?.collectAsStateWithLifecycle()?.value == true
+            val hasSeenSavingsIntro = settingsViewModel?.hasSeenSavingsIntro
+                ?.collectAsStateWithLifecycle()?.value == true
             SparkDetailScreen(
                 onBack = { navController.popBackStack() },
                 onTransferToSavings = {

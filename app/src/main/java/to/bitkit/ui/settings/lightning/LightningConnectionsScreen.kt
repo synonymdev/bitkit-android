@@ -52,8 +52,8 @@ import to.bitkit.models.msatFloorOf
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
-import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight

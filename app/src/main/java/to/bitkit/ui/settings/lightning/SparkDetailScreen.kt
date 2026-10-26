@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
@@ -24,6 +26,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.ext.setClipboardText
 import to.bitkit.repositories.SparkDeposit
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CaptionB
@@ -54,6 +57,7 @@ fun SparkDetailScreen(
         onBack = onBack,
         onRefresh = viewModel::onPullToRefresh,
         onOpenTx = { txId -> context.startActivity(Intent(Intent.ACTION_VIEW, getBlockExplorerUrl(txId).toUri())) },
+        onCopyText = { context.setClipboardText(it) },
         onTransferToSavings = onTransferToSavings,
     )
 }
@@ -65,6 +69,7 @@ private fun Content(
     onBack: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onOpenTx: (String) -> Unit = {},
+    onCopyText: (String) -> Unit = {},
     onTransferToSavings: () -> Unit = {},
 ) {
     val spark = uiState.spark ?: SparkUi(balanceSats = 0uL)
@@ -104,6 +109,22 @@ private fun Content(
                 )
                 VerticalSpacer(12.dp)
                 BodyS(text = stringResource(R.string.lightning__spark_trust), color = Colors.White64)
+
+                uiState.depositAddress?.let { address ->
+                    SectionRow(
+                        name = stringResource(R.string.wallet__activity_address),
+                        valueContent = {
+                            CaptionB(
+                                text = address,
+                                maxLines = 1,
+                                overflow = TextOverflow.MiddleEllipsis,
+                                textAlign = TextAlign.End,
+                            )
+                        },
+                        onClick = { onCopyText(address) },
+                        modifier = Modifier.testTag("SparkDepositAddress"),
+                    )
+                }
 
                 SectionTitle(stringResource(R.string.lightning__balance))
                 SectionRow(

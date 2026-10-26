@@ -23,9 +23,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.createChannelDetails
@@ -326,7 +328,9 @@ data class SparkDepositUi(
 )
 
 internal suspend fun SparkState.toUi(lightningRepo: LightningRepo): SparkUi? {
-    if (!isReady || (balanceSats == 0uL && deposits.isEmpty())) return null
+    if (!isReady) return null
+    // On regtest Spark always shows, so testers reach its deposit address to fund it from the faucet.
+    if (balanceSats == 0uL && deposits.isEmpty() && Env.network != Network.REGTEST) return null
     return SparkUi(
         balanceSats = balanceSats,
         deposits = deposits.map {
