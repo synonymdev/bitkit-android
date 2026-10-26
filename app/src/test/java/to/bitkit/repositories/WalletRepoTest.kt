@@ -286,6 +286,7 @@ class WalletRepoTest : BaseUnitTest() {
             coreService,
             lightningRepo,
             cacheStore,
+            keychain,
         )
         sut = createSut(reservationRepo = reservationRepo)
 
@@ -352,6 +353,7 @@ class WalletRepoTest : BaseUnitTest() {
             coreService,
             lightningRepo,
             cacheStore,
+            keychain,
         )
         sut = createSut(reservationRepo = reservationRepo)
 

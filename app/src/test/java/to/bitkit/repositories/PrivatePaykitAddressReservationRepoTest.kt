@@ -24,6 +24,8 @@ import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.PrivatePaykitStoredAssignmentData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.BackupCategory
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
@@ -45,6 +47,8 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
     private val coreService = mock<CoreService>()
     private val lightningRepo = mock<LightningRepo>()
     private val cacheStore = mock<CacheStore>()
+    private val keychain = mock<Keychain>()
+    private val keychainValues = mutableMapOf<String, String>()
     private val cacheData = MutableStateFlow(AppCacheData())
     private val reservationData = MutableStateFlow(PrivatePaykitReservationData())
     private val settingsData = MutableStateFlow(SettingsData())
@@ -67,7 +71,21 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
             settingsData.update(transform)
         }
         whenever(cacheStore.data).thenReturn(cacheData)
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            cacheData.update(transform)
+        }
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
+        whenever(keychain.exists(any())).thenAnswer { it.getArgument<String>(0) in keychainValues }
+        whenever(keychain.loadString(any())).thenAnswer { keychainValues[it.getArgument<String>(0)] }
+        whenever { keychain.upsertString(any(), any()) }.thenAnswer {
+            keychainValues[it.getArgument(0)] = it.getArgument(1)
+            Unit
+        }
+        whenever { keychain.delete(any()) }.thenAnswer {
+            keychainValues.remove(it.getArgument<String>(0))
+            Unit
+        }
 
         sut = PrivatePaykitAddressReservationRepo(
             ioDispatcher = testDispatcher,
@@ -76,6 +94,7 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
             coreService = coreService,
             lightningRepo = lightningRepo,
             cacheStore = cacheStore,
+            keychain = keychain,
         )
     }
 
@@ -111,7 +130,7 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
         whenever(lightningRepo.getAddressBalance(any())).thenReturn(Result.success(0u))
         assertEquals("bcrt1qpublic", sut.currentOrRotatedPublicAddress(CONTACT_KEY).getOrThrow())
         sut = PrivatePaykitAddressReservationRepo(
-            testDispatcher, reservationStore, settingsStore, coreService, lightningRepo, cacheStore,
+            testDispatcher, reservationStore, settingsStore, coreService, lightningRepo, cacheStore, keychain,
         )
         assertEquals("bcrt1qpublic", sut.currentOrRotatedPublicAddress(CONTACT_KEY).getOrThrow())
         whenever(coreService.isAddressUsed("bcrt1qpublic")).thenReturn(true)
@@ -282,6 +301,97 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
         verify(lightningRepo, never()).newAddressInfoForType(any())
     }
 
+    @Test
+    fun `pending exposure blocks cached and allocated addresses until quarantine is durable`() = test {
+        val assignment = PrivatePaykitStoredAssignmentData("nativeSegwit", 1, PRIVATE_ADDRESS)
+        reservationData.update {
+            it.copy(
+                publicAssignments = mapOf(CONTACT_KEY to assignment),
+                contactAssignments = mapOf(CONTACT_KEY to assignment),
+            )
+        }
+        val key = Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name
+        val reading = """{"type":"reading"}"""
+        val source = """{"type":"source","fingerprint":"${"0".repeat(64)}"}"""
+        val address = """{"type":"address","address":"$PRIVATE_ADDRESS"}"""
+        for (pending in listOf(reading, source, address)) {
+            keychain.upsertString(key, pending)
+            assertTrue(sut.nextReusableReceiveAddress().isFailure)
+            assertTrue(sut.currentOrRotatedAddress(CONTACT_KEY).isFailure)
+            assertTrue(sut.currentOrRotatedPublicAddress(CONTACT_KEY).isFailure)
+            assertFailsWith<PrivatePaykitAddressReservationError.PublicAddressRestorePending> {
+                sut.isUnavailableForReusableReceive(PRIVATE_ADDRESS)
+            }
+            var publicAddressMatches = true
+            sut.withPublicAddressMatch(CONTACT_KEY, PRIVATE_ADDRESS) { publicAddressMatches = it }
+            assertFalse(publicAddressMatches)
+            assertTrue(sut.backupSnapshot().isFailure)
+            assertTrue(sut.restoreBackup(null).isFailure)
+            assertEquals(pending, keychain.loadString(key))
+        }
+        verify(lightningRepo, never()).newAddressInfoForType(any())
+        verify(reservationStore, never()).update(any())
+
+        assertFalse(sut.preparePublicAddressRestore())
+        assertEquals(setOf(PRIVATE_ADDRESS), reservationData.value.quarantinedPublicAddresses)
+        assertTrue(cacheData.value.backupStatuses.getValue(BackupCategory.WALLET).isRequired)
+        assertTrue(cacheData.value.backupStatuses.getValue(BackupCategory.METADATA).isRequired)
+        assertEquals(reading, keychain.loadString(key))
+        sut.finishPublicAddressRestoreWithoutMetadata()
+        assertNull(keychain.loadString(key))
+        assertTrue(sut.isUnavailableForReusableReceive(PRIVATE_ADDRESS))
+    }
+
+    @Test
+    fun `malformed public address recovery records remain blocked and unchanged`() = test {
+        val key = Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name
+        val records = listOf(
+            "",
+            PRIVATE_ADDRESS,
+            "{",
+            """{"type":"unknown"}""",
+            """{"type":"reading","address":"$PRIVATE_ADDRESS"}""",
+            """{"type":"source","fingerprint":""}""",
+            """{"type":"source"}""",
+            """{"type":"address","address":""}""",
+        )
+        for (record in records) {
+            keychain.upsertString(key, record)
+            assertFailsWith<Exception> { sut.preparePublicAddressRestore() }
+            assertFailsWith<Exception> { sut.finishPublicAddressRestoreWithoutMetadata() }
+            assertEquals(record, keychain.loadString(key))
+            assertTrue(sut.nextReusableReceiveAddress().isFailure)
+            assertTrue(sut.backupSnapshot().isFailure)
+        }
+        verify(reservationStore, never()).update(any())
+        verify(lightningRepo, never()).newAddressInfoForType(any())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `exposure recovery waits for an admitted allocation before blocking new allocations`() = test {
+        val allocationStarted = CompletableDeferred<Unit>()
+        val finishAllocation = CompletableDeferred<Unit>()
+        whenever(lightningRepo.newAddressInfoForType(any())).doSuspendableAnswer {
+            allocationStarted.complete(Unit)
+            finishAllocation.await()
+            Result.success(AddressDerivationInfo("bcrt1qreceive", 0))
+        }
+        val allocation = async { sut.nextReusableReceiveAddress() }
+        allocationStarted.await()
+        val recovery = async { sut.preparePublicAddressRestore() }
+        runCurrent()
+        assertFalse(recovery.isCompleted)
+        assertFalse(keychain.exists(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name))
+
+        finishAllocation.complete(Unit)
+        assertEquals("bcrt1qreceive", allocation.await().getOrThrow())
+        assertFalse(recovery.await())
+        assertTrue(keychain.exists(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name))
+        assertTrue(sut.nextReusableReceiveAddress().isFailure)
+        verify(lightningRepo, times(1)).newAddressInfoForType(any())
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `contact cleanup rechecks snapshot after ledger load and lock handoff`() = test {
@@ -302,7 +412,7 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
                 },
             )
             sut = PrivatePaykitAddressReservationRepo(
-                testDispatcher, reservationStore, settingsStore, coreService, lightningRepo, cacheStore,
+                testDispatcher, reservationStore, settingsStore, coreService, lightningRepo, cacheStore, keychain,
             )
             var isCurrent = true
             val loading = async { sut.backupSnapshot().getOrThrow() }

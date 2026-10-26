@@ -7318,6 +7318,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             coreService,
             lightningRepo,
             cacheStore,
+            keychain,
         )
         val sdk = mock<PaykitSdkService>()
         val publications = mutableListOf<String>()
