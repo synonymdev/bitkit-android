@@ -158,6 +158,18 @@ class WalletConnectionRecovery @Inject constructor(
             checkOwner(owner)
         }
 
+        /** Publish local UI state only while this original owner still holds admission. */
+        internal suspend fun <T> commitCurrentState(block: () -> T): T {
+            checkCurrent()
+            return synchronized(stateLock) {
+                job.ensureActive()
+                check(active) { "Connection recovery operation ended" }
+                checkAdmission()
+                if (owner.generation != generation) throw CancellationException("Wallet recovery owner changed")
+                block()
+            }
+        }
+
         private suspend fun read(): ConnectionChoices? {
             checkCurrent()
             val encoded = keychain.loadString(KEY, owner.walletIndex) ?: return null

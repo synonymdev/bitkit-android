@@ -31,6 +31,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
+import to.bitkit.data.ConnectionRecoveryOwnerChanged
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.di.BgDispatcher
@@ -127,9 +128,10 @@ class WalletViewModel @Inject constructor(
     val connectionEditor = _connectionEditor.asStateFlow()
     private val connectionEditorGeneration = AtomicLong()
     private var connectionRetryJob: Job? = null
+    private val startupAttempt = AtomicLong()
     private val _connectionRetryBusy = MutableStateFlow(false)
     val connectionRetryBusy = _connectionRetryBusy.asStateFlow()
-    private val _connectionStartupError = MutableStateFlow<String?>(null)
+    private val _connectionStartupError = MutableStateFlow<ConnectionStartupFailure?>(null)
     val connectionStartupError = _connectionStartupError.asStateFlow()
     private var connectionEditorJob: Job? = null
 
@@ -137,22 +139,40 @@ class WalletViewModel @Inject constructor(
         if (_connectionEditor.value != null) return
         val id = connectionEditorGeneration.incrementAndGet()
         _connectionEditor.update { ConnectionRecoveryUiState(id = id, busy = true) }
-        connectionEditorJob = viewModelScope.launch(bgDispatcher) {
-            runSuspendCatching {
-                val owner = connectionRecovery.captureOwner()
-                connectionRecovery.withOperation(owner) { session ->
-                    session.replay()
-                    settingsStore.data.first()
-                }.also {
-                    updateConnectionEditor(id) { _ ->
+        launchConnectionEditorOperation(id) {
+            val owner = connectionRecovery.captureOwner()
+            connectionRecovery.withOperation(owner) { session ->
+                session.replay()
+                val settings = settingsStore.data.first()
+                session.commitCurrentState {
+                    updateConnectionEditor(id) {
                         ConnectionRecoveryUiState(
-                            id = id, owner = owner, electrum = it.electrumServer,
-                            rgs = it.rgsServerUrl.orEmpty()
+                            id = id,
+                            owner = owner,
+                            electrum = settings.electrumServer,
+                            rgs = settings.rgsServerUrl.orEmpty()
                         )
                     }
                 }
-            }.onFailure { error ->
-                updateConnectionEditor(id) { it.copy(busy = false, error = error.message) }
+            }
+        }
+    }
+
+    private fun launchConnectionEditorOperation(id: Long, operation: suspend () -> Unit) {
+        connectionEditorJob = viewModelScope.launch(bgDispatcher) {
+            try {
+                runSuspendCatching { operation() }.onFailure { error ->
+                    if (error is ConnectionRecoveryOwnerChanged) {
+                        invalidateConnectionEditor(id, error)
+                    } else {
+                        updateConnectionEditor(id) { it.copy(error = error.message) }
+                    }
+                }
+            } catch (error: CancellationException) {
+                invalidateConnectionEditor(id, error)
+                throw error
+            } finally {
+                updateConnectionEditor(id) { it.copy(busy = false) }
             }
         }
     }
@@ -179,35 +199,31 @@ class WalletViewModel @Inject constructor(
         val owner = state.owner ?: return
         if (state.busy) return
         _connectionEditor.update { it?.copy(busy = true, saved = false, error = null) }
-        connectionEditorJob = viewModelScope.launch(bgDispatcher) {
-            runSuspendCatching {
-                connectionRecovery.withOperation(owner) { session ->
-                    if (electrum) {
-                        val url = state.electrum.trim()
-                        lightningRepo.validateElectrumServer(url).getOrThrow()
-                        session.save(electrum = url)
-                    } else {
-                        val input = state.rgs.trim()
-                        val url = when {
-                            input.isBlank() -> Env.ldkRgsServerUrl
-                            input.startsWith("https://") || input.startsWith("http://") -> input
-                            else -> "https://$input"
-                        }
-                        url?.let { lightningRepo.validateRgsUrl(it).getOrThrow() }
-                        session.save(rgs = WalletConnectionRecovery.RgsChoice(url))
+        launchConnectionEditorOperation(state.id) {
+            connectionRecovery.withOperation(owner) { session ->
+                val settings = if (electrum) {
+                    val url = state.electrum.trim()
+                    lightningRepo.validateElectrumServer(url).getOrThrow()
+                    session.save(electrum = url)
+                } else {
+                    val input = state.rgs.trim()
+                    val url = when {
+                        input.isBlank() -> Env.ldkRgsServerUrl
+                        input.startsWith("https://") || input.startsWith("http://") -> input
+                        else -> "https://$input"
+                    }
+                    url?.let { lightningRepo.validateRgsUrl(it).getOrThrow() }
+                    session.save(rgs = WalletConnectionRecovery.RgsChoice(url))
+                }
+                session.commitCurrentState {
+                    updateConnectionEditor(state.id) {
+                        it.copy(
+                            saved = true,
+                            electrum = if (electrum) settings.electrumServer else it.electrum,
+                            rgs = if (!electrum) settings.rgsServerUrl.orEmpty() else it.rgs,
+                        )
                     }
                 }
-            }.onSuccess { settings ->
-                updateConnectionEditor(state.id) {
-                    it.copy(
-                        busy = false,
-                        saved = true,
-                        electrum = if (electrum) settings.electrumServer else it.electrum,
-                        rgs = if (!electrum) settings.rgsServerUrl.orEmpty() else it.rgs,
-                    )
-                }
-            }.onFailure { error ->
-                updateConnectionEditor(state.id) { it.copy(busy = false, error = error.message) }
             }
         }
     }
@@ -232,25 +248,78 @@ class WalletViewModel @Inject constructor(
     ): Job {
         connectionRetryJob?.takeIf { it.isActive }?.let { return it }
         _connectionRetryBusy.update { true }
+        val attempt = startupAttempt.incrementAndGet()
         return viewModelScope.launch(bgDispatcher) {
+            var attemptOwner = owner
             try {
                 runSuspendCatching {
-                    retryRecovery(owner ?: connectionRecovery.captureRuntimeOwner(), backupOnly)
-                }.onSuccess { editorId?.let { updateConnectionEditor(it) { null } } }
-                    .onFailure { error ->
-                        if (editorId == null) {
-                            _connectionStartupError.update {
-                                error.message ?: context.getString(R.string.common__error_body)
-                            }
-                            ToastEventBus.send(error)
-                        } else {
-                            updateConnectionEditor(editorId) { it.copy(busy = false, error = error.message) }
-                        }
+                    val admittedOwner = attemptOwner ?: connectionRecovery.captureRuntimeOwner().also {
+                        attemptOwner = it
                     }
+                    retryRecovery(admittedOwner, backupOnly, attempt)
+                }.onSuccess { editorId?.let { updateConnectionEditor(it) { null } } }
+                    .onFailure { error -> reportStartupFailure(attemptOwner, error, attempt, editorId) }
+            } catch (error: CancellationException) {
+                editorId?.let { invalidateConnectionEditor(it, error) }
+                throw error
             } finally {
+                editorId?.let { updateConnectionEditor(it) { state -> state.copy(busy = false) } }
                 _connectionRetryBusy.update { false }
             }
         }.also { connectionRetryJob = it }
+    }
+
+    private suspend fun reportStartupFailure(
+        owner: WalletConnectionRecovery.Owner?,
+        error: Throwable,
+        attempt: Long,
+        editorId: Long? = null,
+    ) {
+        if (error is ConnectionRecoveryOwnerChanged) {
+            if (startupAttempt.get() == attempt) _connectionStartupError.update { null }
+            editorId?.let { invalidateConnectionEditor(it, error) }
+            return
+        }
+        if (error is RecoveryModeError || error is WipeInProgressError || error is NodeStartYieldedToStopError) return
+        Logger.error("Wallet connection recovery startup failed", error, context = TAG)
+        if (startupAttempt.get() != attempt) return
+        if (owner == null) {
+            _connectionStartupError.update {
+                ConnectionStartupFailure(error.message ?: context.getString(R.string.common__error_body))
+            }
+            editorId?.let { updateConnectionEditor(it) { state -> state.copy(busy = false, error = error.message) } }
+            ToastEventBus.send(error)
+            return
+        }
+        runSuspendCatching {
+            connectionRecovery.withOperation(owner) { session ->
+                val markersClear = runSuspendCatching { !backupRepo.hasPendingWalletRestore() }.getOrDefault(false)
+                val published = session.commitCurrentState {
+                    if (startupAttempt.get() != attempt) return@commitCurrentState false
+                    _connectionStartupError.update {
+                        ConnectionStartupFailure(
+                            message = error.message ?: context.getString(R.string.common__error_body),
+                            canProceedWithoutRestore = markersClear,
+                            owner = owner,
+                        )
+                    }
+                    editorId?.let {
+                        updateConnectionEditor(
+                            it
+                        ) { state -> state.copy(busy = false, error = error.message) }
+                    }
+                    true
+                }
+                if (published) ToastEventBus.send(error)
+            }
+        }.onFailure {
+            if (it is ConnectionRecoveryOwnerChanged) editorId?.let { id -> invalidateConnectionEditor(id, it) }
+            Logger.warn("Startup failure owner is no longer available", it, context = TAG)
+        }
+    }
+
+    private fun invalidateConnectionEditor(id: Long, error: Throwable) = updateConnectionEditor(id) {
+        it.copy(owner = null, busy = false, error = error.message)
     }
 
     private var syncJob: Job? = null
@@ -477,8 +546,11 @@ class WalletViewModel @Inject constructor(
 
     fun onRestoreRetry() = requestRecoveryRetry(owner = null, editorId = null)
 
-    private suspend fun retryRecovery(owner: WalletConnectionRecovery.Owner, backupOnly: Boolean) {
+    private suspend fun retryRecovery(owner: WalletConnectionRecovery.Owner, backupOnly: Boolean, attempt: Long) {
         connectionRecovery.withOperation(owner) { session ->
+            session.commitCurrentState {
+                if (startupAttempt.get() == attempt) _connectionStartupError.update { null }
+            }
             val revision = session.replay()
             if (!backupOnly || revision != null) {
                 if (!backupRepo.hasPendingWalletRestore()) _restoreState.update { it.countRetry() }
@@ -498,12 +570,16 @@ class WalletViewModel @Inject constructor(
                 restoreFromBackup(resumePendingWalletBackup = true, connectionSession = session)
                 if (_restoreState.value !is RestoreState.Completed) {
                     // Restore failures carry their own required-state gate; optional profile work is not a node error.
-                    _connectionStartupError.update { null }
+                    session.commitCurrentState {
+                        if (startupAttempt.get() == attempt) _connectionStartupError.update { null }
+                    }
                     return@withOperation
                 }
             }
             session.complete(revision)
-            _connectionStartupError.update { null }
+            session.commitCurrentState {
+                if (startupAttempt.get() == attempt) _connectionStartupError.update { null }
+            }
         }
     }
 
@@ -511,15 +587,46 @@ class WalletViewModel @Inject constructor(
 
     @Suppress("ForbiddenComment")
     fun onProceedWithoutRestore(onDone: () -> Unit) = viewModelScope.launch {
-        if (runSuspendCatching { backupRepo.hasPendingWalletRestore() }.getOrDefault(true)) return@launch
-        // TODO start LDK without trying to restore backup state from VSS if possible
-        if (lightningState.value.nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
-            lightningRepo.stop()
-            delay(LOADING_MS.milliseconds)
+        val failure = _connectionStartupError.value
+        val attempt = startupAttempt.get()
+        if (_connectionRetryBusy.value || isStarting) return@launch
+        if (failure?.canProceedWithoutRestore == false) return@launch
+        if (failure == null && _restoreState.value !is RestoreState.BackupFailed) return@launch
+        runSuspendCatching {
+            val owner = failure?.owner ?: connectionRecovery.captureRuntimeOwner()
+            connectionRecovery.withOperation(owner) { session ->
+                if (!canStillProceed(session, failure, attempt)) return@withOperation
+                // TODO start LDK without trying to restore backup state from VSS if possible
+                if (lightningState.value.nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
+                    lightningRepo.stop().getOrThrow()
+                    delay(LOADING_MS.milliseconds)
+                }
+                if (!canStillProceed(session, failure, attempt)) return@withOperation
+                session.commitCurrentState {
+                    if (startupAttempt.get() != attempt || _connectionStartupError.value !== failure) {
+                        return@commitCurrentState
+                    }
+                    _connectionStartupError.update { null }
+                    _restoreState.update { RestoreState.Settled }
+                    onDone()
+                }
+            }
+        }.onFailure { Logger.error("Proceed without restore admission failed", it, context = TAG) }
+    }
+
+    private suspend fun canStillProceed(
+        session: WalletConnectionRecovery.Session,
+        failure: ConnectionStartupFailure?,
+        attempt: Long,
+    ): Boolean {
+        if (runSuspendCatching { !backupRepo.hasPendingWalletRestore() }.getOrDefault(false)) return true
+        session.commitCurrentState {
+            if (startupAttempt.get() == attempt && _connectionStartupError.value === failure) {
+                _connectionStartupError.update { it?.copy(canProceedWithoutRestore = false) }
+                _restoreState.update { (it as? RestoreState.BackupFailed)?.copy(hasPendingWalletRestore = true) ?: it }
+            }
         }
-        if (runSuspendCatching { backupRepo.hasPendingWalletRestore() }.getOrDefault(true)) return@launch
-        _restoreState.update { RestoreState.Settled }
-        onDone()
+        return false
     }
 
     fun setInitNodeLifecycleState() = lightningRepo.setInitNodeLifecycleState()
@@ -575,30 +682,34 @@ class WalletViewModel @Inject constructor(
             )
         }
 
-    private suspend fun startNode(walletIndex: Int = 0): Result<Unit> = runSuspendCatching {
-        val owner = connectionRecovery.captureRuntimeOwner()
-        require(owner.walletIndex == walletIndex) { "Wallet startup owner changed" }
-        val revision = connectionRecovery.withStartup(owner) { session ->
-            val revision = session.replay()
-            migrationService.lockChannelMigration()
-            try {
-                // A skipped start of a running node cannot acknowledge a newly saved configuration.
-                startNodeOwned(walletIndex, buildChannelMigrationIfAvailable(), isRestoreRetry = revision != null)
-                    .getOrThrow()
-            } finally {
-                migrationService.unlockChannelMigration()
+    private suspend fun startNode(walletIndex: Int = 0): Result<Unit> {
+        val attempt = startupAttempt.incrementAndGet()
+        var owner: WalletConnectionRecovery.Owner? = null
+        return runSuspendCatching {
+            val admittedOwner = connectionRecovery.captureRuntimeOwner().also { owner = it }
+            require(admittedOwner.walletIndex == walletIndex) { "Wallet startup owner changed" }
+            val revision = connectionRecovery.withStartup(admittedOwner) { session ->
+                session.commitCurrentState {
+                    if (startupAttempt.get() == attempt) _connectionStartupError.update { null }
+                }
+                val revision = session.replay()
+                migrationService.lockChannelMigration()
+                try {
+                    // A skipped start of a running node cannot acknowledge a newly saved configuration.
+                    startNodeOwned(walletIndex, buildChannelMigrationIfAvailable(), isRestoreRetry = revision != null)
+                        .getOrThrow()
+                } finally {
+                    migrationService.unlockChannelMigration()
+                }
+                revision
             }
-            revision
-        }
-        connectionRecovery.withOperation(owner) { it.complete(revision) }
-        _connectionStartupError.update { null }
-    }.onFailure {
-        if (it is RecoveryModeError || it is WipeInProgressError || it is NodeStartYieldedToStopError) {
-            return@onFailure
-        }
-        Logger.error("Wallet connection recovery startup failed", it, context = TAG)
-        _connectionStartupError.update { _ -> it.message ?: context.getString(R.string.common__error_body) }
-        ToastEventBus.send(it)
+            connectionRecovery.withOperation(admittedOwner) { session ->
+                session.complete(revision)
+                session.commitCurrentState {
+                    if (startupAttempt.get() == attempt) _connectionStartupError.update { null }
+                }
+            }
+        }.onFailure { reportStartupFailure(owner, it, attempt) }
     }
 
     private suspend fun startNodeOwned(
@@ -625,14 +736,6 @@ class WalletViewModel @Inject constructor(
                 }
                 ensureSwapUpdatesRunning()
                 // checkForOrphanedChannelMonitorRecovery()
-            }
-            .onFailure {
-                if (it is RecoveryModeError || it is WipeInProgressError || it is NodeStartYieldedToStopError) {
-                    Logger.debug("Skipped node start: '${it.message}'", context = TAG)
-                    return@onFailure
-                }
-                Logger.error("Node startup error", it, context = TAG)
-                ToastEventBus.send(it)
             }
     }
 
@@ -966,3 +1069,13 @@ data class ConnectionRecoveryUiState(
     val saved: Boolean = false,
     val error: String? = null,
 )
+
+@Immutable
+data class ConnectionStartupFailure(
+    val message: String,
+    val canProceedWithoutRestore: Boolean = false,
+    internal val owner: WalletConnectionRecovery.Owner? = null,
+)
+
+fun canProceedWithoutRestore(restoreState: RestoreState, startupClearance: Boolean?): Boolean =
+    startupClearance ?: ((restoreState as? RestoreState.BackupFailed)?.hasPendingWalletRestore == false)

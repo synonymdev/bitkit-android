@@ -253,6 +253,7 @@ import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferEffect
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import to.bitkit.viewmodels.canProceedWithoutRestore
 
 internal fun shouldFinishWalletInitialization(
     nodeLifecycleState: NodeLifecycleState,
@@ -421,8 +422,10 @@ fun ContentView(
 
     val connectionFailure by walletViewModel.connectionStartupError.collectAsStateWithLifecycle()
     val connectionRetryBusy by walletViewModel.connectionRetryBusy.collectAsStateWithLifecycle()
-    val canProceedWithoutRestore = connectionFailure == null &&
-        (restoreState as? RestoreState.BackupFailed)?.hasPendingWalletRestore != true
+    val canProceedWithoutRestore = canProceedWithoutRestore(
+        restoreState,
+        connectionFailure?.canProceedWithoutRestore,
+    )
 
     val connectionEditor by walletViewModel.connectionEditor.collectAsStateWithLifecycle()
     if (connectionEditor != null) {
