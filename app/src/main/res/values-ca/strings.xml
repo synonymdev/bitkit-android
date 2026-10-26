@@ -815,6 +815,7 @@
     <string name="usdt__error_fee_collection">No es pot pagar la tarifa de la transacció en USDT. Prova amb un import més petit.</string>
     <string name="usdt__error_network">No s\'ha pogut actualitzar USDT. Comprova la connexió i torna-ho a provar.</string>
     <string name="usdt__error_pending">Encara hi ha un pagament pendent. Espera la confirmació abans de tornar a enviar.</string>
+    <string name="usdt__error_quote_refreshed">La cotització de la tarifa ha caducat i s’ha actualitzat. Revisa la tarifa i torna a lliscar.</string>
     <string name="usdt__error_rate_limit">Massa sol·licituds. Torna-ho a provar d\'aquí a una estona.</string>
     <string name="usdt__error_rejected">La xarxa USDT ha rebutjat la sol·licitud. Torna-ho a provar.</string>
     <string name="usdt__error_response">El servei USDT ha retornat una resposta no vàlida. Torna-ho a provar més tard.</string>

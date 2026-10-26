@@ -815,6 +815,7 @@
     <string name="usdt__error_fee_collection">No se pudo pagar la comisión de la transacción en USDT. Pruebe con una cantidad menor.</string>
     <string name="usdt__error_network">No se pudo actualizar USDT. Compruebe su conexión e inténtelo de nuevo.</string>
     <string name="usdt__error_pending">Aún hay un pago pendiente. Espere a que se confirme antes de volver a enviar.</string>
+    <string name="usdt__error_quote_refreshed">La cotización de la comisión ha caducado y se ha actualizado. Revise la comisión y deslice de nuevo.</string>
     <string name="usdt__error_rate_limit">Demasiadas solicitudes. Inténtelo de nuevo en breve.</string>
     <string name="usdt__error_rejected">La red USDT rechazó la solicitud. Inténtelo de nuevo.</string>
     <string name="usdt__error_response">El servicio USDT devolvió una respuesta no válida. Inténtelo de nuevo más tarde.</string>

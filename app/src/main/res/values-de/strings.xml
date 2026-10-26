@@ -817,6 +817,7 @@
     <string name="usdt__error_fee_collection">Die Transaktionsgebühr kann nicht in USDT bezahlt werden. Versuche einen kleineren Betrag.</string>
     <string name="usdt__error_network">USDT konnte nicht aktualisiert werden. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="usdt__error_pending">Eine Zahlung ist noch ausstehend. Warte auf die Bestätigung, bevor du erneut sendest.</string>
+    <string name="usdt__error_quote_refreshed">Das Gebührenangebot ist abgelaufen und wurde aktualisiert. Prüfe die Gebühr und wische erneut.</string>
     <string name="usdt__error_rate_limit">Zu viele Anfragen. Bitte versuche es gleich erneut.</string>
     <string name="usdt__error_rejected">Das USDT-Netzwerk hat die Anfrage abgelehnt. Bitte versuche es erneut.</string>
     <string name="usdt__error_response">Der USDT-Dienst hat eine ungültige Antwort zurückgegeben. Bitte versuche es später erneut.</string>

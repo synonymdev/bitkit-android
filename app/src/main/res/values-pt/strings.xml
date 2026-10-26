@@ -1029,6 +1029,7 @@
     <string name="usdt__error_fee_collection">Não foi possível pagar a taxa da transação em USDT. Tente um montante menor.</string>
     <string name="usdt__error_network">Não foi possível atualizar o USDT. Verifique a ligação e tente novamente.</string>
     <string name="usdt__error_pending">Ainda há um pagamento pendente. Aguarde a confirmação antes de enviar novamente.</string>
+    <string name="usdt__error_quote_refreshed">A cotação da taxa expirou e foi atualizada. Verifique a taxa e deslize novamente.</string>
     <string name="usdt__error_rate_limit">Demasiados pedidos. Tente novamente daqui a pouco.</string>
     <string name="usdt__error_rejected">A rede USDT rejeitou o pedido. Tente novamente.</string>
     <string name="usdt__error_response">O serviço USDT devolveu uma resposta inválida. Tente novamente mais tarde.</string>

@@ -805,6 +805,7 @@
     <string name="usdt__error_fee_collection">تعذر دفع رسوم المعاملة بـ USDT. جرّب مبلغًا أصغر.</string>
     <string name="usdt__error_network">تعذر تحديث USDT. تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="usdt__error_pending">لا يزال هناك دفع معلق. انتظر التأكيد قبل الإرسال مرة أخرى.</string>
+    <string name="usdt__error_quote_refreshed">انتهت صلاحية عرض الرسوم وتم تحديثه. تحقق من الرسوم واسحب مرة أخرى.</string>
     <string name="usdt__error_rate_limit">طلبات كثيرة جدًا. يرجى المحاولة مرة أخرى بعد قليل.</string>
     <string name="usdt__error_rejected">رفضت شبكة USDT الطلب. يرجى المحاولة مرة أخرى.</string>
     <string name="usdt__error_response">أعادت خدمة USDT استجابة غير صالحة. يرجى المحاولة مرة أخرى لاحقًا.</string>
