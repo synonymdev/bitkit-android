@@ -32,6 +32,13 @@ internal object Env {
     }
 
     val breezApiKey: String? get() = BuildConfig.BREEZ_API_KEY.takeIf { it.isNotBlank() }
+
+    /**
+     * Esplora endpoint for the node's chain source on regtest builds, set to put the wallet on Spark's regtest chain
+     * through `scripts/spark-regtest-esplora.py`; Electrum is used when unset.
+     */
+    val regtestEsploraUrl: String?
+        get() = BuildConfig.ESPLORA_URL.takeIf { it.isNotBlank() && network == Network.REGTEST }
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
     const val isGeoblockingEnabled = BuildConfig.GEO
