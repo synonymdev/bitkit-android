@@ -299,6 +299,8 @@
     <string name="notification__received__title">Płatność otrzymana</string>
     <string name="notification__service__body">Bitkit działa w tle, abyś mógł otrzymywać płatności Lightning</string>
     <string name="notification__service__stop">Zatrzymaj aplikację</string>
+    <string name="onboarding__connection_saved">Zapisano. Spróbuj ponownie, aby kontynuować przywracanie.</string>
+    <string name="onboarding__connection_settings">Ustawienia połączenia</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;warunki użytkowania&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Warunki użytkowania</string>
     <string name="onboarding__tos_checkbox_value">Kontynuując, oświadczasz, że zapoznałeś się i akceptujesz warunki użytkowania.</string>

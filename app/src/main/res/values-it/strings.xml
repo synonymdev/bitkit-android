@@ -298,6 +298,8 @@
     <string name="notification__service__stop">Ferma App</string>
     <string name="onboarding__advanced">Avanzate</string>
     <string name="onboarding__advanced_setup">Impostazioni Avanzate</string>
+    <string name="onboarding__connection_saved">Salvato. Riprova per continuare il ripristino.</string>
+    <string name="onboarding__connection_settings">Impostazioni di connessione</string>
     <string name="onboarding__create_new_wallet">Crea Nuovo Wallet</string>
     <string name="onboarding__empty_wallet">Per\niniziare\n&lt;accent&gt;invia\nBitcoin&lt;/accent&gt;\nal tuo\nportafoglio</string>
     <string name="onboarding__get_started">Inizia</string>

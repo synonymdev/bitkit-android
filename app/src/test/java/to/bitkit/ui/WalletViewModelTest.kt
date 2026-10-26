@@ -3,6 +3,7 @@ package to.bitkit.ui
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -18,6 +19,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -26,6 +28,8 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletConnectionRecovery
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
@@ -44,6 +48,7 @@ import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.PendingChannelMigration
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.WalletViewModel
@@ -61,6 +66,8 @@ class WalletViewModelTest : BaseUnitTest() {
     private val walletRepo = mock<WalletRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val settingsStore = mock<SettingsStore>()
+    private val recoveryKeychain = mock<Keychain>()
+    private lateinit var connectionRecovery: WalletConnectionRecovery
     private val backupRepo = mock<BackupRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
@@ -92,6 +99,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(1uL))
 
+        connectionRecovery = connectionRecoveryFixture(settingsStore, recoveryKeychain)
         sut = WalletViewModel(
             context = context,
             bgDispatcher = testDispatcher,
@@ -104,6 +112,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            connectionRecovery = connectionRecovery,
         )
     }
 
@@ -274,13 +283,13 @@ class WalletViewModelTest : BaseUnitTest() {
 
         walletState.value = walletState.value.copy(walletExists = true)
 
-        verify(backupRepo, never()).performFullRestoreFromLatestBackup()
+        verify(backupRepo, never()).performFullRestoreFromLatestBackup(any(), anyOrNull())
     }
 
     @Test
     fun `onBackupRestoreSuccess should reset restoreState`() = test {
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
         walletState.value = walletState.value.copy(walletExists = true)
         sut.restoreWallet("mnemonic", "passphrase")
         assertEquals(RestoreState.InProgress.Wallet, sut.restoreState.value)
@@ -326,7 +335,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `failed backup restore can retry without restarting node`() = test {
         val testError = AppError("restore failed")
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any())).thenReturn(
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(
             Result.failure(testError),
             Result.success(Unit),
         )
@@ -340,7 +349,7 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(RestoreState.Completed, sut.restoreState.value)
-        verify(backupRepo, times(2)).performFullRestoreFromLatestBackup(any())
+        verify(backupRepo, times(2)).performFullRestoreFromLatestBackup(any(), anyOrNull())
         verify(lightningRepo, never()).restartNode()
     }
 
@@ -351,12 +360,14 @@ class WalletViewModelTest : BaseUnitTest() {
 
         assertEquals(RestoreState.Retry(1), sut.restoreState.value)
         verify(lightningRepo).restartNode()
-        verify(backupRepo, never()).performFullRestoreFromLatestBackup(any())
+        verify(backupRepo, never()).performFullRestoreFromLatestBackup(any(), anyOrNull())
     }
 
     @Test
     fun `node retry preserves pending backup recovery and increments retry count`() = test {
         whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("backup still unavailable")))
         walletState.value = walletState.value.copy(walletExists = true)
         lightningState.value = lightningState.value.copy(
             nodeLifecycleState = NodeLifecycleState.ErrorStarting(AppError("start failed")),
@@ -369,14 +380,16 @@ class WalletViewModelTest : BaseUnitTest() {
 
         assertEquals(RestoreState.BackupFailed(2), sut.restoreState.value)
         verify(lightningRepo).restartNode()
-        verify(backupRepo, never()).performFullRestoreFromLatestBackup(any())
+        verify(backupRepo).performFullRestoreFromLatestBackup(any(), anyOrNull())
     }
 
     @Test
     fun `onProceedWithoutRestore should exit failed backup restore without stopping running node`() = test {
         val testError = AppError("restore failed")
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any())).thenReturn(Result.failure(testError))
+        whenever(
+            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
+        ).thenReturn(Result.failure(testError))
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
@@ -412,7 +425,7 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `completed wallet restore does not wait for optional identity activation`() = test {
         val release = CompletableDeferred<Unit>()
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any())).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(pubkyRepo.initialize()).doSuspendableAnswer {
             release.await()
             Result.success(Unit)
@@ -431,11 +444,15 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `proceed rechecks safety markers after an optional restore failure`() = test {
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any()))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
             .thenReturn(Result.failure(AppError("metadata cache unavailable")))
         sut.onBackupRestoreRetry()
         advanceUntilIdle()
         assertEquals(RestoreState.BackupFailed(1, hasPendingWalletRestore = false), sut.restoreState.value)
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        assertEquals(RestoreState.BackupFailed(2, hasPendingWalletRestore = false), sut.restoreState.value)
+        assertEquals(null, sut.connectionStartupError.value)
         verify(pubkyRepo, never()).scheduleInitializationAfterRestore()
 
         whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
@@ -450,12 +467,14 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertTrue(dismissed)
         assertEquals(RestoreState.Settled, sut.restoreState.value)
-        verify(backupRepo, times(1)).performFullRestoreFromLatestBackup(any())
+        verify(backupRepo, times(2)).performFullRestoreFromLatestBackup(any(), anyOrNull())
     }
 
     @Test
     fun `failed safety marker inspection keeps restore failure closed`() = test {
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any())).thenReturn(Result.failure(AppError("offline")))
+        whenever(
+            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
+        ).thenReturn(Result.failure(AppError("offline")))
         whenever(backupRepo.hasPendingWalletRestore()).doSuspendableAnswer { throw AppError("keychain unavailable") }
         sut.onBackupRestoreRetry()
         advanceUntilIdle()
@@ -471,7 +490,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `overlapping backup retries perform one restore`() = test {
         val finishRestore = CompletableDeferred<Unit>()
         var calls = 0
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any())).doSuspendableAnswer {
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).doSuspendableAnswer {
             calls++
             finishRestore.await()
             Result.success(Unit)
@@ -497,7 +516,7 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(RestoreState.BackupFailed(1), sut.restoreState.value)
-        verify(backupRepo, never()).performFullRestoreFromLatestBackup(any())
+        verify(backupRepo, never()).performFullRestoreFromLatestBackup(any(), anyOrNull())
     }
 
     @Test
@@ -505,7 +524,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(migrationService.getRNRemoteBackupTimestamp()).thenReturn(2uL)
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
         whenever(
-            backupRepo.restoreUsdtRecoveryAfterLegacyMigration(),
+            backupRepo.restoreUsdtRecoveryAfterLegacyMigration(anyOrNull()),
         ).thenReturn(Result.failure(AppError("VSS offline")))
         whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
         sut.restoreWallet("mnemonic", "passphrase")
@@ -513,8 +532,8 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(RestoreState.BackupFailed(1, hasPendingWalletRestore = false), sut.restoreState.value)
         verify(migrationService).restoreFromRNRemoteBackup()
-        verify(backupRepo).restoreUsdtRecoveryAfterLegacyMigration()
-        verify(backupRepo, never()).performFullRestoreFromLatestBackup(any())
+        verify(backupRepo).restoreUsdtRecoveryAfterLegacyMigration(anyOrNull())
+        verify(backupRepo, never()).performFullRestoreFromLatestBackup(any(), anyOrNull())
     }
 
     @Test
@@ -522,7 +541,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
         whenever { migrationService.getRNRemoteBackupTimestamp() }.thenReturn(2uL)
         whenever(backupRepo.getLatestBackupTime()).thenReturn(null)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any())).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
 
@@ -530,14 +549,14 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(RestoreState.Completed, sut.restoreState.value)
-        verify(backupRepo).performFullRestoreFromLatestBackup(any())
+        verify(backupRepo).performFullRestoreFromLatestBackup(any(), anyOrNull())
         verify(migrationService, never()).restoreFromRNRemoteBackup()
     }
 
     @Test
     fun `cancelled wallet restore retry clears transient backup gate`() = test {
         whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any()))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
             .thenReturn(Result.failure(CancellationException("cancelled")))
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
@@ -553,7 +572,7 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `restore state should transition as expected`() = test {
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
         assertEquals(RestoreState.Initial, sut.restoreState.value)
 
         sut.restoreWallet("mnemonic", "passphrase")
@@ -570,7 +589,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `restore should hold ordinary backups from its start until it completes`() = test {
         whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
 
         sut.restoreWallet("mnemonic", "passphrase")
 
@@ -603,7 +622,7 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `backup restore should reinitialize pubky state after metadata restore`() = test {
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
 
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
@@ -652,6 +671,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            connectionRecovery = connectionRecovery,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -718,6 +738,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            connectionRecovery = connectionRecovery,
         )
 
         testSut.start()
@@ -773,6 +794,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            connectionRecovery = connectionRecovery,
         )
 
         // Trigger restore to put state in non-idle
@@ -812,6 +834,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            connectionRecovery = connectionRecovery,
         )
 
         testSut.restoreWallet("mnemonic", null)
@@ -830,14 +853,14 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `restore retry rebuilds the node with the pending channel file`() = test {
         val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
         whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
-        whenever(lightningRepo.restartNode(anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
 
         sut.onRestoreRetry()
         advanceUntilIdle()
 
         verifyNodeNotStarted(lightningRepo)
         val migration = argumentCaptor<ChannelDataMigration>()
-        verify(lightningRepo).restartNode(migration.capture())
+        verify(lightningRepo).restartNode(migration.capture(), eq(0))
         assertEquals(listOf(1.toUByte()), migration.firstValue.channelManager)
         assertEquals(listOf(listOf(2.toUByte())), migration.firstValue.channelMonitors)
         inOrder(migrationService) {
@@ -852,13 +875,13 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `restore retry keeps pending channels when restart fails`() = test {
         val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
         whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
-        whenever(lightningRepo.restartNode(anyOrNull())).thenReturn(Result.failure(AppError("restart failed")))
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.failure(AppError("restart failed")))
 
         sut.onRestoreRetry()
         advanceUntilIdle()
 
         verifyNodeNotStarted(lightningRepo)
-        verify(lightningRepo).restartNode(anyOrNull())
+        verify(lightningRepo).restartNode(anyOrNull(), any())
         verify(migrationService, never()).consumePendingChannelMigration()
         verify(migrationService).unlockChannelMigration()
     }
@@ -867,7 +890,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `restore retry keeps pending channels when restart yields to background stop`() = test {
         val pending = PendingChannelMigration(channelManager = byteArrayOf(1), channelMonitors = listOf(byteArrayOf(2)))
         whenever(migrationService.peekPendingChannelMigration()).thenReturn(pending)
-        whenever(lightningRepo.restartNode(anyOrNull())).thenReturn(
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(
             Result.failure(NodeStartYieldedToStopError(AppError("start failed"))),
         )
 
@@ -875,7 +898,7 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verifyNodeNotStarted(lightningRepo)
-        verify(lightningRepo).restartNode(anyOrNull())
+        verify(lightningRepo).restartNode(anyOrNull(), any())
         verify(migrationService, never()).consumePendingChannelMigration()
         verify(migrationService).unlockChannelMigration()
     }
@@ -902,6 +925,7 @@ class WalletViewModelTest : BaseUnitTest() {
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
+            connectionRecovery = connectionRecovery,
         )
         advanceUntilIdle()
 
@@ -966,5 +990,144 @@ class WalletViewModelTest : BaseUnitTest() {
             Unit
         }
         return settingsData
+    }
+
+    @Test
+    fun `leaving recovery editor during required restore does not cancel the coordinator`() = test {
+        val restoring = CompletableDeferred<Unit>()
+        val releaseRestore = CompletableDeferred<Unit>()
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
+        whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).doSuspendableAnswer {
+            restoring.complete(Unit)
+            releaseRestore.await()
+            Result.success(Unit)
+        }
+        sut.openConnectionRecovery()
+        advanceUntilIdle()
+        sut.retryRecoveryConnection()
+        restoring.await()
+        sut.closeConnectionRecovery()
+        assertEquals(null, sut.connectionEditor.value)
+        releaseRestore.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        verify(backupRepo).performFullRestoreFromLatestBackup(any(), anyOrNull())
+    }
+
+    @Test
+    fun `unavailable correction on restart is a reachable fail closed restore error`() = test {
+        whenever(
+            recoveryKeychain.loadString(WalletConnectionRecovery.KEY, 0)
+        ).thenAnswer { throw AppError("unavailable") }
+        sut.openConnectionRecovery()
+        advanceUntilIdle()
+        assertFalse(checkNotNull(sut.connectionEditor.value).busy)
+        assertEquals("unavailable", sut.connectionEditor.value?.error)
+        assertEquals(null, sut.connectionEditor.value?.owner)
+        verify(
+            lightningRepo,
+            never()
+        ).start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `saving Electrum does not require broken RGS or discard its unsaved draft`() = test {
+        val stored = MutableStateFlow(
+            SettingsData(electrumServer = "ssl://old.example:50002", rgsServerUrl = "https://old-rgs.example")
+        )
+        var record: String? = null
+        whenever(settingsStore.data).thenReturn(stored)
+        whenever(settingsStore.update(any())).doSuspendableAnswer {
+            stored.value = it.getArgument<(SettingsData) -> SettingsData>(0)(stored.value)
+        }
+        whenever(recoveryKeychain.loadString(WalletConnectionRecovery.KEY, 0)).thenAnswer { record }
+        whenever(recoveryKeychain.upsertString(any(), any(), any())).thenAnswer {
+            record = it.getArgument(1)
+            Unit
+        }
+        whenever(lightningRepo.validateElectrumServer(any())).thenReturn(Result.success(Unit))
+        sut.openConnectionRecovery()
+        advanceUntilIdle()
+        sut.editRecoveryElectrum("ssl://chosen.example:50002")
+        sut.editRecoveryRgs("https://draft-rgs.example")
+        sut.saveRecoveryConnection(electrum = true)
+        advanceUntilIdle()
+        assertTrue(checkNotNull(sut.connectionEditor.value).saved)
+        assertEquals("ssl://chosen.example:50002", stored.value.electrumServer)
+        assertEquals("https://old-rgs.example", stored.value.rgsServerUrl)
+        assertEquals("https://draft-rgs.example", sut.connectionEditor.value?.rgs)
+        verify(lightningRepo, never()).validateRgsUrl(any())
+        verify(lightningRepo, never()).restartNode(anyOrNull(), any())
+    }
+
+    @Test
+    fun `connection recovery outer retry applies saved settings after editor closes`() = test {
+        val stored = MutableStateFlow(SettingsData())
+        var record: String? = null
+        whenever(settingsStore.data).thenReturn(stored)
+        whenever(settingsStore.update(any())).doSuspendableAnswer {
+            stored.value = it.getArgument<(SettingsData) -> SettingsData>(0)(stored.value)
+        }
+        whenever(recoveryKeychain.loadString(WalletConnectionRecovery.KEY, 0)).thenAnswer { record }
+        whenever(recoveryKeychain.upsertString(any(), any(), any())).thenAnswer {
+            record = it.getArgument(1)
+            Unit
+        }
+        whenever(lightningRepo.validateElectrumServer(any())).thenReturn(Result.success(Unit))
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.success(Unit))
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+        sut.openConnectionRecovery()
+        advanceUntilIdle()
+        sut.editRecoveryElectrum("ssl://corrected.example:50002")
+        sut.saveRecoveryConnection(electrum = true)
+        advanceUntilIdle()
+        sut.closeConnectionRecovery()
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        verify(lightningRepo).restartNode(anyOrNull(), eq(0))
+        verify(backupRepo).performFullRestoreFromLatestBackup(any(), anyOrNull())
+        assertEquals(RestoreState.Completed, sut.restoreState.value)
+    }
+
+    @Test
+    fun `connection recovery cancellation preserves wallet state observation`() = test {
+        val restoring = CompletableDeferred<Unit>()
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).doSuspendableAnswer {
+            restoring.complete(Unit)
+            awaitCancellation()
+        }
+        sut.restoreWallet("mnemonic", "passphrase")
+        walletState.value = walletState.value.copy(walletExists = true)
+        restoring.await()
+        connectionRecovery.withIdentityChange { }
+        walletState.value = walletState.value.copy(walletExists = false)
+        runCurrent()
+        assertFalse(sut.walletExists)
+    }
+
+    @Test
+    fun `connection recovery cancelled restore does not strand a newly created wallet`() = test {
+        val restoring = CompletableDeferred<Unit>()
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).doSuspendableAnswer {
+            restoring.complete(Unit)
+            awaitCancellation()
+        }
+        sut.restoreWallet("mnemonic", "passphrase")
+        walletState.value = walletState.value.copy(walletExists = true)
+        restoring.await()
+        connectionRecovery.withIdentityChange { }
+        walletState.value = walletState.value.copy(walletExists = false)
+        runCurrent()
+        whenever(walletRepo.createWallet(anyOrNull())).thenReturn(Result.success(Unit))
+        sut.createWallet(null)
+        walletState.value = walletState.value.copy(walletExists = true)
+        runCurrent()
+        assertEquals(RestoreState.Initial, sut.restoreState.value)
+        assertTrue(shouldFinishWalletInitialization(NodeLifecycleState.Running, sut.restoreState.value, false))
     }
 }

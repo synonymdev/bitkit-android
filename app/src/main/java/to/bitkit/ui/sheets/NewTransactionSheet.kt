@@ -203,7 +203,7 @@ private fun TransactionHeader(details: NewTransactionSheetDetails) {
 private val ConfettiShade = Color(0xFF8E8E93)
 
 @Composable
-private fun TransactionConfetti(details: NewTransactionSheetDetails) {
+internal fun TransactionConfetti(details: NewTransactionSheetDetails) {
     val composition by rememberLottieComposition(
         if (details.type == NewTransactionSheetType.ONCHAIN) {
             LottieCompositionSpec.RawRes(R.raw.confetti_orange)

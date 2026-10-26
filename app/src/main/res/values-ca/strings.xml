@@ -296,6 +296,8 @@
     <string name="notification__service__stop">Aturar aplicació</string>
     <string name="onboarding__advanced">Avançat</string>
     <string name="onboarding__advanced_setup">Configuració avançada</string>
+    <string name="onboarding__connection_saved">Desat. Torna-ho a provar per continuar restaurant.</string>
+    <string name="onboarding__connection_settings">Configuració de connexió</string>
     <string name="onboarding__create_new_wallet">Crear una nova cartera</string>
     <string name="onboarding__empty_wallet">Per començar\n&lt;accent&gt;envia\nBitcoin&lt;/accent&gt;\na la teva\ncartera</string>
     <string name="onboarding__get_started">Començar</string>

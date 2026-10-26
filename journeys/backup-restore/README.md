@@ -56,3 +56,11 @@ recovery phrase, and what the app is allowed to upload while that restore is sti
   `SpendingIntro-button`, `SpendingAmount`, `SpendingAmountContinue`, `GRAB`,
   `TransferSuccess-button`.
 - Lightning connections: `Channel`, `CloseConnection`, `CloseConnectionButton`, `ChannelsClosed`.
+
+## Required-restore connection recovery
+
+`connection-recovery.xml` covers the restricted Electrum/RGS editor while required restoration is
+pending. Its setup is independent of the older reset-based journey above and does not authorize a
+wallet reset. Use only disposable fixture identities. The matching iOS gated AppScene integration
+is unfinished; the Android journey must be ported and run there when that behavior is available.
+Component UI and repository tests are recorded separately from the complete authenticated journey.

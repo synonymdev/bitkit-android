@@ -307,6 +307,7 @@ class UsdtViewModel @Inject constructor(
                         quote = quote.takeIf { recorded },
                         error = error.messageResource(),
                         submissionErrorStatus = transfer?.status,
+                        submissionDeadlineExpired = error is UsdtException.SubmissionDeadlineExpired,
                         canRetryRecovery = recorded && error is UsdtException.BackupUnavailable,
                     )
                 }
@@ -323,6 +324,7 @@ data class UsdtSendState(
     val retryingRecovery: Boolean = false,
     val canRetryRecovery: Boolean = false,
     val submissionErrorStatus: UsdtTransferStatus? = null,
+    val submissionDeadlineExpired: Boolean = false,
     val authenticationRequired: Boolean = false,
     val warning: SanityWarning? = null,
     val confirmedWarnings: ImmutableList<SanityWarning> = persistentListOf(),
@@ -333,8 +335,11 @@ data class UsdtSendState(
     val canQuote: Boolean
         get() = !busy && !submitted && !authenticationRequired && warning == null
 
-    fun submissionError(status: UsdtTransferStatus?): Int? = error.takeIf {
-        status != null && status != UsdtTransferStatus.CONFIRMED && status == submissionErrorStatus
+    fun submissionError(status: UsdtTransferStatus?): Int? {
+        if (status == null || status == UsdtTransferStatus.CONFIRMED) return null
+        val expiredFailure = submissionDeadlineExpired && submissionErrorStatus == UsdtTransferStatus.PENDING &&
+            status == UsdtTransferStatus.FAILED
+        return error.takeIf { status == submissionErrorStatus || expiredFailure }
     }
 }
 

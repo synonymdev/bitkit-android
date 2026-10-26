@@ -87,6 +87,7 @@ import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
@@ -231,6 +232,7 @@ class LightningRepoTest : BaseUnitTest() {
             transferRepo = mock(),
             activityRepo = mock(),
             hwWalletRepo = hardware,
+            connectionRecovery = connectionRecoveryFixture(settingsStore),
         )
     }
 

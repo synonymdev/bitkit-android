@@ -292,6 +292,8 @@
     <string name="notification__service__stop">إيقاف التطبيق</string>
     <string name="onboarding__advanced">متقدم</string>
     <string name="onboarding__advanced_setup">إعداد متقدم</string>
+    <string name="onboarding__connection_saved">تم الحفظ. أعد المحاولة لمتابعة الاستعادة.</string>
+    <string name="onboarding__connection_settings">إعدادات الاتصال</string>
     <string name="onboarding__create_new_wallet">إنشاء محفظة جديدة</string>
     <string name="onboarding__empty_wallet">للبدء\n&lt;accent&gt;أرسل\nBitcoin&lt;/accent&gt;\nإلى\nمحفظتك</string>
     <string name="onboarding__get_started">ابدأ</string>
