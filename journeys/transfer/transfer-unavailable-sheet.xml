@@ -1,0 +1,26 @@
+<journey name="transfer unavailable sheet">
+  <description>
+    Verifies that Bitkit points users to Manual Setup now that Blocktank no longer sells Lightning channels.
+    Blocktank's geocheck answers 403, so the app is geo-blocked, and every Transfer To Spending entry point
+    opens the "Transfer Unavailable" sheet (testTag "TransferUnavailable") instead of the transfer flow. The
+    sheet shows "MANUAL SETUP REQUIRED" (testTag "TransferUnavailableTitle") and the buttons "Read More"
+    (testTag "TransferUnavailableReadMore"), which opens https://bitkit.to/ in the browser, and "Continue"
+    (testTag "TransferUnavailableContinue"), which opens the existing Manual Setup screen. Receive's Lightning
+    path shows the same layout with copy for receiving.
+
+    Precondition: dev build with geoblocking on (the default; `GEO=false` turns it off), onboarded wallet with
+    a positive on-chain Savings balance and no channels. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the Savings balance card (testTag "ActivitySavings") and verify "Transfer To Spending" (testTag "TransferToSpending") is shown</action>
+    <action>Tap "Transfer To Spending" and verify the sheet titled "Transfer Unavailable" shows "MANUAL SETUP REQUIRED" and "Automatic transfers to your spending balance are no longer available. Use your own node, or set up a connection with another provider."</action>
+    <action>Tap "Read More" and verify the browser opens bitkit.to, then return to Bitkit</action>
+    <action>Tap "Continue" and verify the sheet closes and the "MANUAL SETUP" screen shows the node id (testTag "NodeIdInput"), host (testTag "HostInput") and port (testTag "PortInput") fields</action>
+    <action>Go back to the wallet home, tap the Spending balance card (testTag "ActivitySpending"), tap the transfer button (testTag "TransferFromSavings") and verify the same sheet opens; close it</action>
+    <action>Open Settings › Advanced › Lightning Connections, tap add connection (testTag "add_connection_button") and verify the screen text reads "Automatic transfers to your spending balance are no longer available. Use your own node, or set up a connection with another provider."</action>
+    <action>Tap "Transfer from Savings" (testTag "FundTransfer") and verify the same sheet opens; close it and go back to the wallet home</action>
+    <action>Tap "Receive" (testTag "Receive"), select the Spending tab (testTag "Tab-spending") and tap "Receive Lightning funds"</action>
+    <action>Verify the screen titled "Receive Bitcoin" shows "MANUAL SETUP REQUIRED" and "Receiving to your spending balance through Bitkit is no longer available. Use your own node, or set up a connection with another provider.", with a back button</action>
+    <action>Tap "Continue" and verify the sheet closes and the "MANUAL SETUP" screen opens</action>
+  </actions>
+</journey>

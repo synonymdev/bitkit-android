@@ -480,7 +480,6 @@ class TransferViewModel @Inject constructor(
             )
     }
 
-    /** Blocktank no longer sells channels, so neither a new order nor one held from before may be paid. */
     private suspend fun isTransferUnavailable(): Boolean {
         lightningRepo.updateGeoBlockState()
         if (!lightningRepo.lightningState.value.isGeoBlocked) return false
