@@ -62,6 +62,7 @@ import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.SettingsBackupV1
+import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.models.Toast
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
@@ -128,6 +129,7 @@ class BackupRepo @Inject constructor(
     private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val transferRepo: Provider<TransferRepo>,
     private val lightningRepo: Provider<LightningRepo>,
+    private val sparkRepo: SparkRepo,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val lightningService: LightningService,
@@ -405,6 +407,16 @@ class BackupRepo @Inject constructor(
         // payment and sync traffic does not re-upload the whole metadata envelope.
         dataListenerJobs.add(observeBackupChanges(activityRepo.activityTagsChanged, BackupCategory.METADATA))
 
+        // SPARK_EXIT - Spark announces when its unilateral exit data changes
+        dataListenerJobs.add(
+            scope.launch {
+                sparkRepo.exitStateChanged.collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.SPARK_EXIT)
+                }
+            }
+        )
+
         // LIGHTNING_CONNECTIONS - Only display sync timestamp, ldk-node manages its own backups
         @OptIn(FlowPreview::class)
         val lightningConnectionsJob = scope.launch {
@@ -543,6 +555,8 @@ class BackupRepo @Inject constructor(
 
             val upload = if (category == BackupCategory.WALLET) {
                 uploadWalletBackup(null)
+            } else if (category == BackupCategory.SPARK_EXIT) {
+                uploadSparkExitBackup()
             } else {
                 runSuspendCatching {
                     vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
@@ -570,6 +584,15 @@ class BackupRepo @Inject constructor(
                 }
             }
         }
+    }
+
+    /** Nothing to back up until Spark connects, which marks [BackupCategory.SPARK_EXIT] required again. */
+    private suspend fun uploadSparkExitBackup(): Result<Unit> = runSuspendCatching {
+        val backup = sparkRepo.exitBackup().getOrThrow() ?: return@runSuspendCatching
+        vssBackupClient.putObject(
+            key = BackupCategory.SPARK_EXIT.name,
+            data = json.encodeToString(backup).toByteArray(),
+        ).getOrThrow()
     }
 
     suspend fun persistWalletBackup(usdt: String? = null): Result<Unit> =
@@ -672,6 +695,11 @@ class BackupRepo @Inject constructor(
         }
 
         BackupCategory.LIGHTNING_CONNECTIONS -> throw NotImplementedError("LIGHTNING backup is managed by ldk-node")
+
+        BackupCategory.SPARK_EXIT -> {
+            val backup = checkNotNull(sparkRepo.exitBackup().getOrThrow()) { "Spark is not connected" }
+            json.encodeToString(backup).toByteArray()
+        }
     }
 
     private suspend fun getMetadataBackupDataBytes(): ByteArray = withContext(ioDispatcher) {
@@ -842,6 +870,11 @@ class BackupRepo @Inject constructor(
                     val restored = restoreActivityBackup(dataBytes)
                     if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.ACTIVITY
                     restored.createdAt
+                }
+                performRestore(BackupCategory.SPARK_EXIT) { dataBytes ->
+                    val parsed = json.decodeFromString<SparkExitBackupV1>(String(dataBytes))
+                    sparkRepo.restoreExitBackup(parsed, backupWalletIndex()).getOrThrow()
+                    parsed.createdAt
                 }
 
                 Logger.info("Full restore success", context = TAG)

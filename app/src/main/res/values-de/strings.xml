@@ -647,6 +647,7 @@
     <string name="settings__backup__category_transaction_log">Transaktionshistorie</string>
     <string name="settings__backup__category_wallet">Boosts &amp; Übertragungen</string>
     <string name="settings__backup__category_settings">Einstellungen</string>
+    <string name="settings__backup__category_spark_exit">Spark-Ausstiegsdaten</string>
     <string name="settings__backup__category_widgets">Widgets</string>
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_profile">Profil</string>

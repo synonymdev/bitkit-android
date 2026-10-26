@@ -597,6 +597,7 @@
     <string name="settings__backup__category_contacts">Contatos</string>
     <string name="settings__backup__category_profile">Perfil</string>
     <string name="settings__backup__category_settings">Ajustes</string>
+    <string name="settings__backup__category_spark_exit">Dados de saída do Spark</string>
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_transaction_log">Histórico de transações</string>
     <string name="settings__backup__category_wallet">Boosts e transferências</string>

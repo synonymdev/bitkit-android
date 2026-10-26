@@ -574,6 +574,7 @@
     <string name="settings__backup__category_contacts">جهات الاتصال</string>
     <string name="settings__backup__category_profile">الملف الشخصي</string>
     <string name="settings__backup__category_settings">الإعدادات</string>
+    <string name="settings__backup__category_spark_exit">بيانات الخروج من Spark</string>
     <string name="settings__backup__category_tags">العلامات</string>
     <string name="settings__backup__category_transaction_log">سجل المعاملات</string>
     <string name="settings__backup__category_wallet">التعزيزات والتحويلات</string>

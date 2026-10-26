@@ -575,6 +575,7 @@
     <string name="settings__backup__category_contacts">Επαφές</string>
     <string name="settings__backup__category_profile">Προφίλ</string>
     <string name="settings__backup__category_settings">Ρυθμίσεις</string>
+    <string name="settings__backup__category_spark_exit">Δεδομένα εξόδου Spark</string>
     <string name="settings__backup__category_tags">Ετικέτες</string>
     <string name="settings__backup__category_transaction_log">Αρχείο συναλλαγών</string>
     <string name="settings__backup__category_wallet">Ενισχύσεις &amp; Μεταφορές</string>

@@ -229,6 +229,10 @@ internal object Env {
 
     fun sparkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "spark")
 
+    /** A restored Spark exit data backup waiting to be imported once Spark connects; outside Spark's storage. */
+    fun sparkExitRestorePath(walletIndex: Int) =
+        Path(storagePathOf(walletIndex, network.name.lowercase(), "spark-restore"), "exit-state.json").toString()
+
     fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")
     }

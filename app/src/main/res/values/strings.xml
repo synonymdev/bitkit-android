@@ -911,6 +911,7 @@
     <string name="settings__backup__category_contacts" tools:ignore="UnusedResources">Contacts</string>
     <string name="settings__backup__category_profile" tools:ignore="UnusedResources">Profile</string>
     <string name="settings__backup__category_settings">Settings</string>
+    <string name="settings__backup__category_spark_exit">Spark exit data</string>
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_transaction_log">Transaction Log</string>
     <string name="settings__backup__category_wallet">Boosts &amp; Transfers</string>

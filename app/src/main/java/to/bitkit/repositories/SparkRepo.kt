@@ -31,10 +31,14 @@ import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.async.appScope
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.create
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.services.SparkService
 import to.bitkit.utils.Logger
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
@@ -80,11 +84,18 @@ class SparkRepo @Inject constructor(
     private val _nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 64)
     val nodeEvents: SharedFlow<Event> = _nodeEvents.asSharedFlow()
 
+    private val _exitStateChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Fires once Spark connects and whenever its unilateral exit data changes, so the exit data backup is redone. */
+    val exitStateChanged: SharedFlow<Unit> = _exitStateChanged.asSharedFlow()
+
     suspend fun start(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         if (!sparkService.isSupported) return@withContext Result.success(Unit)
         runSuspendCatching {
             if (eventsJob == null) eventsJob = scope.launch { sparkService.events.collect { onSdkEvent(it) } }
             sparkService.connect(walletIndex)
+            importRestoredExitState(walletIndex)
+            _exitStateChanged.emit(Unit)
             refresh()
             syncActivities()
         }.onFailure {
@@ -182,6 +193,46 @@ class SparkRepo @Inject constructor(
         )
     }
 
+    /** The exit data backup, or null while Spark is not connected and there is nothing to back up. */
+    suspend fun exitBackup(): Result<SparkExitBackupV1?> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val network = sparkService.networkName
+            if (!sparkService.isConnected || network == null) return@runSuspendCatching null
+            SparkExitBackupV1(createdAt = nowMillis(), network = network, exitState = sparkService.exportExitState())
+        }
+    }
+
+    /**
+     * Puts a restored exit data backup back: at once while Spark is connected, otherwise right after it connects,
+     * before it is used, so a restored wallet can exit on-chain even while the Spark operators are unreachable.
+     */
+    suspend fun restoreExitBackup(backup: SparkExitBackupV1, walletIndex: Int): Result<Unit> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                if (backup.network != sparkService.networkName) {
+                    Logger.warn("Skipped Spark exit data from network '${backup.network}'", context = TAG)
+                    return@runSuspendCatching
+                }
+                File(Env.sparkExitRestorePath(walletIndex)).writeText(backup.exitState)
+                if (sparkService.isConnected) importRestoredExitState(walletIndex)
+            }
+        }
+
+    private suspend fun importRestoredExitState(walletIndex: Int) {
+        val file = File(Env.sparkExitRestorePath(walletIndex))
+        if (!file.exists()) return
+        runSuspendCatching { sparkService.importExitState(file.readText()) }
+            .onSuccess {
+                file.delete()
+                Logger.info(
+                    "Imported Spark exit data: '${it.importedLeaves}' leaves, '${it.skippedForeignLeaves}' foreign, " +
+                        "'${it.skippedConflictingLeaves}' conflicting",
+                    context = TAG,
+                )
+            }
+            .onFailure { Logger.error("Failed to import Spark exit data", it, context = TAG) }
+    }
+
     suspend fun refreshState(): Result<Unit> = withContext(bgDispatcher) {
         if (!sparkService.isConnected) return@withContext Result.success(Unit)
         runSuspendCatching { refresh() }.onFailure { Logger.warn("Failed to refresh Spark state", it, context = TAG) }
@@ -232,6 +283,7 @@ class SparkRepo @Inject constructor(
                     context = TAG,
                 )
                 is SdkEvent.NewDeposits -> refresh()
+                is SdkEvent.UnilateralExitStateChanged -> _exitStateChanged.emit(Unit)
                 is SdkEvent.ClaimedDeposits -> {
                     refresh()
                     settingsStore.update {

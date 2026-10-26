@@ -620,6 +620,7 @@
     <string name="settings__backup__category_connection_receipts">Registro de Conexiones</string>
     <string name="settings__backup__category_transaction_log">Registro de Transacciones</string>
     <string name="settings__backup__category_settings">Ajustes</string>
+    <string name="settings__backup__category_spark_exit">Datos de salida de Spark</string>
     <string name="settings__backup__category_widgets">Widgets</string>
     <string name="settings__backup__category_tags">Etiquetas</string>
     <string name="settings__backup__category_profile">Perfil</string>

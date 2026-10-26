@@ -612,6 +612,7 @@
     <string name="settings__backup__category_contacts">Контакты</string>
     <string name="settings__backup__category_profile">Профиль</string>
     <string name="settings__backup__category_settings">Настройки</string>
+    <string name="settings__backup__category_spark_exit">Данные выхода из Spark</string>
     <string name="settings__backup__category_tags">Теги</string>
     <string name="settings__backup__category_transaction_log">Журнал Транзакций</string>
     <string name="settings__backup__category_wallet">Ускорения и Переводы</string>

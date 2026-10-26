@@ -634,6 +634,7 @@
     <string name="settings__backup__category_transaction_log">Journal des transactions</string>
     <string name="settings__backup__category_wallet">Boosts et transferts</string>
     <string name="settings__backup__category_settings">Réglages</string>
+    <string name="settings__backup__category_spark_exit">Données de sortie Spark</string>
     <string name="settings__backup__category_widgets">Widgets</string>
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_profile">Profil</string>

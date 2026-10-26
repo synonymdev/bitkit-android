@@ -589,6 +589,7 @@
     <string name="settings__backup__category_contacts">Contactes</string>
     <string name="settings__backup__category_profile">Perfil</string>
     <string name="settings__backup__category_settings">Configuracions</string>
+    <string name="settings__backup__category_spark_exit">Dades de sortida de Spark</string>
     <string name="settings__backup__category_tags">Etiquetes</string>
     <string name="settings__backup__category_transaction_log">Registre de transaccions</string>
     <string name="settings__backup__category_wallet">Impulsos i transferències</string>

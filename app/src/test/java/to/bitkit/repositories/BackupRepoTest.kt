@@ -61,6 +61,7 @@ import to.bitkit.models.KnownDevice
 import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitUsdtStateBackup
+import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.models.TransportType
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
@@ -110,6 +111,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
     private val transferRepo = mock<TransferRepo>()
+    private val sparkRepo = mock<SparkRepo>()
     private val vssStoreIdProvider = mock<to.bitkit.data.backup.VssStoreIdProvider>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val lightningService = mock<LightningService>()
@@ -185,7 +187,36 @@ class BackupRepoTest : BaseUnitTest() {
             privatePaykitAddressReservationRepo.reconcileReservedIndexesWithLdk()
         }.thenReturn(Result.success(Unit))
 
+        whenever { sparkRepo.exitBackup() }.thenReturn(Result.success(null))
+        whenever { sparkRepo.restoreExitBackup(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever(sparkRepo.exitStateChanged).thenReturn(MutableSharedFlow())
+
         sut = createSut()
+    }
+
+    @Test
+    fun `spark exit backup uploads the exported state and restores it`() = test {
+        val backup = SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "{\"pedigrees\":[]}")
+        whenever(sparkRepo.exitBackup()).thenReturn(Result.success(backup))
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        val data = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), data.capture())
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name)).thenReturn(
+            Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = data.firstValue, version = 1))
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        verify(sparkRepo).restoreExitBackup(backup, 0)
+    }
+
+    @Test
+    fun `spark exit backup uploads nothing while Spark is not connected`() = test {
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
     }
 
     @Test
@@ -2102,6 +2133,7 @@ class BackupRepoTest : BaseUnitTest() {
         onchainSendAttemptStore = onchainSendAttemptStore,
         transferRepo = Provider { transferRepo },
         lightningRepo = Provider { lightningRepo },
+        sparkRepo = sparkRepo,
         vssStoreIdProvider = vssStoreIdProvider,
         preActivityMetadataRepo = preActivityMetadataRepo,
         lightningService = lightningService,

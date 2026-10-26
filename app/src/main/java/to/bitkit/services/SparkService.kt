@@ -7,6 +7,8 @@ import breez_sdk_spark.EventListener
 import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
+import breez_sdk_spark.ImportUnilateralExitStateRequest
+import breez_sdk_spark.ImportUnilateralExitStateResponse
 import breez_sdk_spark.ListPaymentsRequest
 import breez_sdk_spark.ListUnclaimedDepositsRequest
 import breez_sdk_spark.MaxFee
@@ -181,6 +183,13 @@ class SparkService @Inject constructor(
 
     /** Exports what a unilateral exit needs if the Spark operators stop cooperating; it can reach several MB. */
     suspend fun exportExitState(): String = requireSdk().exportUnilateralExitState().exitState
+
+    /** Merges an exported exit state back in, without contacting the Spark operators. */
+    suspend fun importExitState(exitState: String): ImportUnilateralExitStateResponse =
+        requireSdk().importUnilateralExitState(ImportUnilateralExitStateRequest(exitState))
+
+    /** The Spark network this build runs on, as exit data backups record it. */
+    val networkName: String? get() = sparkNetwork()?.name?.lowercase()
 
     private fun requireSdk(): BreezSdk = sdk ?: throw SparkError.NotConnected()
 

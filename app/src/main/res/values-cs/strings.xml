@@ -594,6 +594,7 @@
     <string name="settings__backup__category_contacts">Kontakty</string>
     <string name="settings__backup__category_profile">Profil</string>
     <string name="settings__backup__category_settings">Nastavení</string>
+    <string name="settings__backup__category_spark_exit">Data pro výstup ze Spark</string>
     <string name="settings__backup__category_tags">Tagy</string>
     <string name="settings__backup__category_transaction_log">Transakční protokol</string>
     <string name="settings__backup__category_wallet">Posílení a převody</string>

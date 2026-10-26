@@ -633,6 +633,7 @@
     <string name="settings__backup__category_transaction_log">Log transakcji</string>
     <string name="settings__backup__category_wallet">Przyśpieszenia i transfery</string>
     <string name="settings__backup__category_settings">Ustawienia</string>
+    <string name="settings__backup__category_spark_exit">Dane wyjścia ze Spark</string>
     <string name="settings__backup__category_widgets">Widgety</string>
     <string name="settings__backup__category_tags">Tagi</string>
     <string name="settings__backup__category_profile">Profil</string>

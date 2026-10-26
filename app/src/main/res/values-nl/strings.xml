@@ -590,6 +590,7 @@
     <string name="settings__backup__category_contacts">Contacten</string>
     <string name="settings__backup__category_profile">Profiel</string>
     <string name="settings__backup__category_settings">Instellingen</string>
+    <string name="settings__backup__category_spark_exit">Spark-exitgegevens</string>
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_transaction_log">Transactielog</string>
     <string name="settings__backup__category_wallet">Boosts &amp; overboekingen</string>
