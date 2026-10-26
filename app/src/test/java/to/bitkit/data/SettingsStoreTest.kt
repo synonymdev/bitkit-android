@@ -107,4 +107,14 @@ class SettingsStoreTest : BaseUnitTest() {
 
         assertEquals(900L, sut.data.first().restoreSyncedBlockHeight)
     }
+
+    @Test
+    fun `wiped wallet shows paykit and keeps a later dev settings off`() = test {
+        assertTrue(sut.isPaykitUiResetDone())
+        assertTrue(sut.isPaykitEnabled.first())
+
+        sut.setIsPaykitEnabled(false)
+
+        assertFalse(SettingsStore(context).isPaykitEnabled.first())
+    }
 }

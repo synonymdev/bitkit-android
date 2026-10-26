@@ -63,6 +63,7 @@ data class PaykitPaymentStateBackup(
         val hardwareDispatchAttempted: Boolean? = null,
         val privatePaymentListVersion: ULong? = null,
         val previousPrivatePaymentListVersion: ULong? = null,
+        val allowanceId: String? = null,
     ) {
         init {
             require(
@@ -93,7 +94,8 @@ data class PaykitPaymentStateBackup(
             hardwareTotalSpent = proof.hardwareTotalSpent,
             hardwareDispatchAttempted = proof.hardwareDispatchAttempted,
             privatePaymentListVersion = proof.privatePaymentListVersion,
-            previousPrivatePaymentListVersion = proof.previousPrivatePaymentListVersion
+            previousPrivatePaymentListVersion = proof.previousPrivatePaymentListVersion,
+            allowanceId = proof.allowanceId,
         )
 
         fun restored() = PendingPaykitPaymentProof(
@@ -118,7 +120,8 @@ data class PaykitPaymentStateBackup(
             hardwareTotalSpent = hardwareTotalSpent,
             hardwareDispatchAttempted = hardwareDispatchAttempted,
             privatePaymentListVersion = privatePaymentListVersion,
-            previousPrivatePaymentListVersion = previousPrivatePaymentListVersion
+            previousPrivatePaymentListVersion = previousPrivatePaymentListVersion,
+            allowanceId = allowanceId,
         )
     }
 }

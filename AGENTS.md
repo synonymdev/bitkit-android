@@ -6,6 +6,169 @@ This file provides guidance to Codex, Claude Code, and Cursor when working with 
 
 Durable shared agent command specs live in `.agents/commands/`. For PR creation, follow `.agents/commands/pr.md`; `.claude/commands` is a compatibility symlink to the same files.
 
+## Agent workflow
+
+### Verification
+
+- For code changes, keep the full gate: run `just compile`, `just test`, and `just lint` before
+  reporting completion or the final PR creation/update/push. Follow the batching and focused rerun
+  guidance under Rules; targeted checks during development do not replace this gate.
+- Fix relevant local check failures caused by the change and rerun the affected checks before
+  reporting work as complete, asking the user to run those checks, pushing, or creating/updating a PR.
+- If a check is blocked by missing prerequisites or fails for an unrelated reason, investigate and
+  report the command, cause, and remaining verification. Do not mark blocked, skipped, or unrun
+  checks as passed or describe validation as complete.
+- For user-visible changes, run the relevant journeys when their prerequisites are available; report
+  any missing prerequisites and untested flows explicitly.
+- In the final handoff, report the commands run and their results, including failures and blockers.
+  Documentation-only changes need documentation checks such as `git diff --check` and validation of
+  changed references, not an application build or device run.
+
+### Device-test setup
+
+When requesting journeys or manual device tests, give the reviewer enough setup instructions to
+reproduce their required environment. Under `#### Setup` in PR QA Notes, provide executable steps
+or a reproducible shared recipe and describe PR-specific deviations. Include only relevant details:
+service/library versions or pinned revisions, staging versus local backend/network, configuration
+and flags, prerequisites, fixture accounts/identities, preparation and reset steps. For a recipe on
+a branch, record its resolved commit. Do not assume a required Shop/Marketplace, Pubky Ring,
+homeserver or library version is available in standard staging; state how to obtain/configure the
+compatible version, or identify the missing prerequisite. Keep setup proportional to the requested
+cases; documentation-only/no-runtime changes can use `N/A — no device testing required.` with the
+reason. Preserve existing authored QA notes when updating a description.
+
+### Stable QA case IDs
+
+Assign explicit IDs to PR QA cases: manual tests `1.`, `2.`, etc., sub-cases `2a`,
+`2b`, and journeys `J1`, `J2`, etc. IDs are scoped to the PR and remain fixed once
+it is open, including while in draft. Use literal labels inside task-list items
+(for example `- [ ] 1. ...` and `- [ ] J1: new ...`), not automatically renumbered
+ordered lists.
+
+When updating the description, preserve IDs for the same cases even if their order
+changes. Append new IDs after the highest previously assigned ID in that category;
+do not fill gaps or reuse removed IDs. Record retired IDs and why the cases were
+removed, without leaving them as runnable unchecked tasks. A replacement testing a
+different behavior gets a new ID; clarify edits to an existing case so earlier
+results are not treated as evidence for changed expectations. Adding or renaming
+an ID is not execution evidence. `N/A` sections do not need IDs.
+
+Reviews, author Evidence/Gaps notes and test reports should refer to these IDs,
+together with the tested revision and relevant environment. Preserve historical
+results at their original revisions; an unchanged ID does not make a result fresh.
+
+### Author verification
+
+Authors are strongly encouraged to run the tests they ask reviewers to perform before requesting
+review. In PR QA Notes, briefly record what was verified, on which app commit/build and environment,
+the observed results, and supporting evidence where useful. For anything not verified, identify the
+affected cases, why they were not run, and any missing prerequisites. Report failures honestly;
+partial verification must not be presented as a complete pass. This recommendation complements
+mandatory checks above and does not make them optional. For documentation-only changes, report
+documentation checks and a justified runtime `N/A`.
+
+### Draft status and review readiness
+
+Open work-in-progress PRs as drafts. Mark ready for review only when the change is ready after
+applicable verification; draft status does not waive the checks above. For an already-ready PR,
+do not cycle draft/ready merely to suppress automated reviews while addressing feedback. Returning
+to ready can trigger an additional review even when an ordinary push to a ready PR would not;
+check the configured review triggers. Return to draft when the change is no longer ready for review
+or the user requests it. Preserve an explicit request to keep a PR draft; a description update
+alone must not undraft it.
+
+AI PR reviewers should check the current draft status before starting and before publishing a
+review, skip drafts, and wait until ready for review. This does not prevent author-requested local
+validation or an independent pre-publication review of a frozen local candidate.
+
+Draft is a readiness signal, not a guarantee that every automation stops. The manually dispatched
+`.github/workflows/claude-code-review.yml` has no workflow-level draft guard, and its comment
+minimization step runs before the review plugin. A hard skip before those steps needs a separate
+workflow change; external reviewers also need to honor draft status in their own configuration.
+
+### Independent review (recommended)
+
+Before marking a PR ready for human review, preferably run an independent review using a subagent
+with fresh context. Give the reviewer the requirements, scope, acceptance criteria, applicable
+repository guidelines, and base/head revisions (or the working-tree diff for uncommitted changes).
+Include intentional platform differences, but do not pass the implementation conversation or its
+justification of the solution. The reviewer should inspect the diff, callers, and surrounding code
+independently. Address actionable findings and recheck the affected changes.
+
+The reviewer may use the same model as the implementation agent. A separate context is the
+recommendation; using a different model is not required. If subagents are unavailable, use a separate
+review session when practical. Do not describe a self-review as an independent review.
+
+### Resolving model metadata
+
+Resolve the actual model and reasoning effort for each contributing session before writing a review
+footer or updating Models used. This applies to any agent, model provider or runner. Missing values
+in the prompt or a reviewer's reply do not establish that metadata is unavailable.
+
+- Check authoritative metadata tied to the actual execution: the host's run/session details,
+  provider response metadata, a recorded reviewer invocation, or structured execution logs. Use
+  whichever sources the environment exposes; no particular product, file path or log schema is
+  required. A configuration default or requested model alias alone does not prove what ran.
+- Match records to the contributing run/session and relevant turns using their recorded identity,
+  timestamps and parent/reviewer linkage where available. Record the reported model identifier and
+  reasoning setting for that work. Do not apply current settings retroactively; list each distinct
+  model/effort pair when they changed across contributing turns.
+- Ask independent reviewers/subagents to include their own model, reasoning effort and the metadata
+  source in their internal handoff. If a reply omits metadata or reports a fallback, the parent
+  should check accessible records for that reviewer before final reporting. Do not assume the
+  reviewer used the parent's or implementation agent's model or effort. A self-reported model
+  identity without supporting run metadata is not verification.
+- Read only the identifiers, linkage, timestamps, model and effort needed for this lookup. Do not
+  dump session logs, prompts, private reasoning, credentials or unrelated sessions into outputs.
+- Use `Unknown` only when the value is absent from relevant accessible records, or those records
+  cannot be located/read. Use `Not exposed` for reasoning only after checking the available sources
+  and establishing that they do not expose a setting. Add a brief metadata note explaining the
+  missing field or unavailable source; do not claim values are unexposed merely because the prompt
+  did not supply them. Never infer identity/effort from a tool name or invent a value to avoid a
+  fallback. This lookup does not require new access permissions or exposing private records.
+- Preserve verified historical pairs. Replace an earlier fallback only when records establish the
+  model/effort for that earlier work; otherwise keep it and add newly verified pairs separately.
+
+### Review summary metadata
+
+AI reviewers should end each review summary with `Reviewer model: <model name>` and
+`Reasoning effort: <effort>` on separate lines, including reviews with no findings. Include this
+footer once per review, not on each inline comment. It describes that review round and complements
+the PR's Models used section; it is informational, not an approval or quality claim.
+
+Use the model and effort actually used for the review, following Resolving model metadata above,
+including its lookup and fallback-note requirements. Never copy the implementation model or infer
+settings from tool names. If multiple model/effort combinations contributed, list each pair in the
+footer. Unassisted human
+reviews do not need it; AI-assisted human reviews should identify the AI model and effort used.
+
+### PR relationships
+
+Use optional `Twin:`, `Companion:`, and `Dependency:` lines for confirmed related PRs, following
+`.agents/commands/pr.md`. A twin is the matching change in the other native Bitkit app; a companion
+is related coordinated work such as E2E coverage; a dependency is a prerequisite. Omit absent
+relationships and use repository-qualified PR references so cross-repository numbers are unambiguous.
+
+### Models used
+
+Include `### Models used` in the PR body with `Planning/scoping`, `Implementation`, and a single
+`Review` entry. Record the model names reported by the tools as work proceeds, including subagent
+reviews. For each phase, list each distinct model/effort pair once, separated by commas; repeated
+reviews with the same pair do not add entries. The same model may appear in all three phases.
+Do not add per-round model rows. Optionally add `Review rounds: N` when the number of completed
+review passes is known; omit the count when unknown and do not count parallel reviewers as rounds.
+
+Record reasoning effort alongside each model as `` `model-name` (reasoning: `medium`) ``. Follow
+Resolving model metadata above before using `Unknown` or `reasoning: Not exposed`, and include its
+brief metadata note when a fallback remains. Do not infer effort from the model name or apply the
+current setting to earlier work. Preserve all known model/effort pairs when
+updating the section; collapse older per-round rows into the single Review entry.
+
+This section is informational, not a quality score, verification result, or approval requirement.
+Use `Not used` when a phase had no AI involvement and `Unknown` when the model was not recorded;
+never infer a model from a tool name. If no review occurred, write `Review: Not performed`.
+`Not used` and `Not performed` need no reasoning value. See `.agents/commands/pr.md` for formatting.
+
 ### Review Findings
 
 When addressing review feedback on any PR, release PRs included, PR babysitters and the author's agent keep the PR in scope:
@@ -351,6 +514,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add business logic to repository layer via methods returning `Result<T>` and use it in ViewModels
 - ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice versa for downstream
 - ALWAYS add new localizable string resources in alphabetical order in `strings.xml`
+- ALWAYS give rail-specific copy of a shared message its own key with the rail as suffix (`wallet__send_dialog2_usdt` next to `wallet__send_dialog2`) and leave the shared key unchanged
+- ALWAYS add or update the translation in every `values-*/strings.xml` in the same PR when adding or changing an English string; translations live in this repository, not in Transifex
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
 - ALWAYS reference test files in PR descriptions/QA Notes by bare file name only (e.g. `HwWalletRepoTest.kt`), NEVER the full path; only when two referenced test files share the same name, prefix the shortest leading path segment(s) that disambiguate them (e.g. `repositories/FooTest.kt` vs `viewmodels/FooTest.kt`)

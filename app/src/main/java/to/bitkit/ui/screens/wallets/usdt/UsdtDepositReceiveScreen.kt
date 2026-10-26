@@ -56,6 +56,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.UsdtAmountHeader
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.usdDisplayAmount
 import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
@@ -64,8 +65,6 @@ import to.bitkit.ui.shared.modifiers.swipeToChangeTab
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.Transitions
-import java.text.DecimalFormatSymbols
-import java.text.NumberFormat
 import java.util.Locale
 
 @Composable
@@ -367,8 +366,7 @@ internal val UsdtDepositNetwork.label: String
 internal fun String.depositNetwork(): UsdtDepositNetwork? =
     UsdtDepositNetwork.entries.firstOrNull { it.name.equals(this, ignoreCase = true) }
 internal fun String.usdCents(locale: Locale = Locale.getDefault()): String = toULongOrNull()?.let {
-    val whole = NumberFormat.getIntegerInstance(locale).format((it / 100u).toLong())
-    "$$whole${DecimalFormatSymbols.getInstance(locale).decimalSeparator}${(it % 100u).toString().padStart(2, '0')}"
+    "$" + usdDisplayAmount(it, locale)
 } ?: "—"
 internal fun depositStatus(status: String, code: String?): Int = when (status) {
     "completed" -> R.string.usdt__confirmed

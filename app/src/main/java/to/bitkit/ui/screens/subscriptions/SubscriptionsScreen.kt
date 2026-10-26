@@ -49,6 +49,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
@@ -65,6 +66,8 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.dateTimeFormatterOf
 import to.bitkit.ext.nowMillis
+import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
@@ -72,6 +75,7 @@ import to.bitkit.models.PaykitExchangeRate
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitRecurrenceUnit
@@ -81,6 +85,7 @@ import to.bitkit.repositories.canceledPaidThrough
 import to.bitkit.repositories.paykitRate
 import to.bitkit.repositories.runsUntilPaidThrough
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.components.AllowanceRoute
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -105,11 +110,13 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.scaffold.rememberChromeHazeStyle
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestCard
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestsScreen
+import to.bitkit.ui.screens.paymentrequests.hasPaymentEvidence
 import to.bitkit.ui.screens.paymentrequests.paymentRequestDate
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.sheets.TransactionConfetti
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
@@ -131,6 +138,7 @@ fun SubscriptionsScreen(
     onDetails: (PaykitSubscriptionId) -> Unit,
     onPaymentRequestDetails: (PaykitPaymentRequestId) -> Unit,
     showPayments: Boolean = false,
+    allowancesViewModel: AllowancesViewModel = hiltViewModel(),
 ) {
     val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
@@ -154,6 +162,7 @@ fun SubscriptionsScreen(
         },
         onCreateSubscription = onCreateSubscription,
         paymentsContent = { topPadding ->
+            val autoPaidRequestIds by allowancesViewModel.autoPaidRequestIds.collectAsStateWithLifecycle()
             PaymentRequestsScreen(
                 appViewModel = appViewModel,
                 onBack = onBack,
@@ -161,6 +170,18 @@ fun SubscriptionsScreen(
                 onDetails = onPaymentRequestDetails,
                 showsNavigationBar = false,
                 topPadding = topPadding,
+                autoPaidRequestIds = autoPaidRequestIds,
+            )
+        },
+        allowancesContent = { topPadding ->
+            AllowancesScreen(
+                topPadding = topPadding,
+                onClickAdd = { appViewModel.showSheet(Sheet.Allowance(AllowanceRoute.Set)) },
+                onClickAllowance = {
+                    val route = if (it.isAnswerable) AllowanceRoute.Review(it.id) else AllowanceRoute.Details(it.id)
+                    appViewModel.showSheet(Sheet.Allowance(route))
+                },
+                viewModel = allowancesViewModel,
             )
         },
     )
@@ -178,6 +199,7 @@ internal fun SubscriptionsContent(
     onSubscription: (PaykitSubscription) -> Unit,
     onCreateSubscription: () -> Unit,
     paymentsContent: @Composable (topPadding: Dp) -> Unit,
+    allowancesContent: @Composable (topPadding: Dp) -> Unit = {},
 ) {
     val sections = subscriptionSections(subscriptions, acceptedAt, now)
     val hasVisibleSubscriptions = with(sections) {
@@ -204,6 +226,8 @@ internal fun SubscriptionsContent(
         ) {
             if (selectedTab == SubscriptionTab.Payments) {
                 paymentsContent(headerHeight)
+            } else if (selectedTab == SubscriptionTab.Allowances) {
+                allowancesContent(headerHeight)
             } else if (!hasVisibleSubscriptions) {
                 SubscriptionEmptyState(
                     Modifier
@@ -300,6 +324,15 @@ internal fun SubscriptionsContent(
     }
 }
 
+internal fun subscriptionPayments(
+    subscription: PaykitSubscription,
+    history: List<PaykitPaymentRequest>,
+): List<PaykitPaymentRequest> = if (subscription.isCreatedByUser) {
+    subscription.receivedPaymentRequests()
+} else {
+    history.filter { it.belongsTo(subscription) && it.hasPaymentEvidence }
+}
+
 internal data class SubscriptionSections(
     val proposals: List<PaykitSubscription>,
     val active: List<PaykitSubscription>,
@@ -351,7 +384,7 @@ private fun SubscriptionTabs(
     onTabChange: (SubscriptionTab) -> Unit,
 ) {
     CustomTabRowWithSpacing(
-        tabs = persistentListOf(SubscriptionTab.Overview, SubscriptionTab.Payments),
+        tabs = persistentListOf(SubscriptionTab.Overview, SubscriptionTab.Allowances, SubscriptionTab.Payments),
         currentTabIndex = selectedTab.ordinal,
         selectedColor = Colors.White,
         onTabChange = onTabChange,
@@ -362,12 +395,14 @@ private fun SubscriptionTabs(
 
 internal enum class SubscriptionTab : TabItem {
     Overview,
+    Allowances,
     Payments;
 
     override val uiText: String
         @Composable get() = stringResource(
             when (this) {
                 Overview -> R.string.subscriptions__overview
+                Allowances -> R.string.subscriptions__allowances
                 Payments -> R.string.subscriptions__payments
             }
         )
@@ -499,11 +534,7 @@ fun SubscriptionDetailScreen(
                 }
             }
             item { SubscriptionDetailsGrid(subscription, now) }
-            val payments = if (subscription.isCreatedByUser) {
-                subscription.receivedPaymentRequests()
-            } else {
-                paymentHistory.filter { it.belongsTo(subscription) }
-            }
+            val payments = subscriptionPayments(subscription, paymentHistory)
             if (payments.isNotEmpty()) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -908,21 +939,32 @@ fun SubscriptionSuccess(
     onClose: () -> Unit,
     paymentType: NewTransactionSheetType?,
     modifier: Modifier = Modifier,
+    usdtAmount: ULong? = null,
 ) {
     Box(
         modifier = modifier
             .fillMaxSize()
             .navigationBarsPadding()
     ) {
-        val composition by rememberLottieComposition(
-            LottieCompositionSpec.RawRes(subscriptionConfettiResource(paymentType))
-        )
-        LottieAnimation(
-            composition = composition,
-            contentScale = ContentScale.Crop,
-            iterations = 100,
-            modifier = Modifier.fillMaxSize()
-        )
+        if (usdtAmount != null) {
+            TransactionConfetti(
+                NewTransactionSheetDetails(
+                    type = NewTransactionSheetType.ONCHAIN,
+                    direction = NewTransactionSheetDirection.SENT,
+                    usdtAmount = usdtAmount,
+                )
+            )
+        } else {
+            val composition by rememberLottieComposition(
+                LottieCompositionSpec.RawRes(subscriptionConfettiResource(paymentType))
+            )
+            LottieAnimation(
+                composition = composition,
+                contentScale = ContentScale.Crop,
+                iterations = 100,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()

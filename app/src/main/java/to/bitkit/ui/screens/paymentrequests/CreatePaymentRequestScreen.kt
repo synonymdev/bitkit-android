@@ -43,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -104,7 +103,6 @@ import to.bitkit.ui.utils.NumberPadInputHandler
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.AppViewModel
-import java.text.DecimalFormatSymbols
 import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -160,13 +158,11 @@ internal fun PaymentRequestAmountContent(
 ) {
     val currencies = LocalCurrencies.current
     val amountState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
-    val locale = LocalConfiguration.current.locales[0]
-    val decimalSeparator = remember(locale) { DecimalFormatSymbols.getInstance(locale).decimalSeparator }
 
     var asset by remember(initialDraft.amount.asset) { mutableStateOf(initialDraft.amount.asset) }
     var dollars by remember(initialDraft.amount) {
         mutableStateOf(
-            if (initialDraft.amount.asset != PaykitAsset.BTC && initialDraft.amount.atomic > 0uL) {
+            if (initialDraft.amount.asset != PaykitAsset.BTC && initialDraft.amount.atomic != 0uL) {
                 initialDraft.amount.inputValue
             } else {
                 ""
@@ -235,7 +231,7 @@ internal fun PaymentRequestAmountContent(
                             )
                         } else {
                             NumberPadAmountText(
-                                value = dollars.ifEmpty { "0" }.replace('.', decimalSeparator),
+                                value = dollars.ifEmpty { "0" },
                                 symbol = "$",
                                 modifier = Modifier.testTag("PaymentRequestAmountField")
                             )
@@ -248,7 +244,7 @@ internal fun PaymentRequestAmountContent(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountActions"),
                         ) {
-                            PaymentRequestAssetSelector(
+                            PaymentRequestDenominationToggle(
                                 asset = asset,
                                 amount = entered,
                                 allowedAssets = allowedAssets,
@@ -306,7 +302,6 @@ internal fun PaymentRequestAmountContent(
                                     )
                                 },
                                 type = NumberPadType.DECIMAL,
-                                decimalSeparator = decimalSeparator.toString(),
                                 modifier = padModifier
                             )
                         }
@@ -353,7 +348,7 @@ private fun PaymentRequestDenominationLayout(
 private const val MAX_USD_INPUT_LENGTH = 18
 
 @Composable
-private fun PaymentRequestAssetSelector(
+private fun PaymentRequestDenominationToggle(
     asset: PaykitAsset,
     amount: PaykitAmount?,
     onConverted: (PaykitAmount) -> Unit,
@@ -362,28 +357,27 @@ private fun PaymentRequestAssetSelector(
     conversion: PaykitAmountConversion,
 ) {
     val currencies = LocalCurrencies.current
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        allowedAssets.forEach { option ->
-            NumberPadActionButton(
-                text = option.code.uppercase(),
-                outlined = asset != option,
-                color = if (option == PaykitAsset.BTC) Colors.Brand else Colors.Usdt,
-                modifier = Modifier.testTag("PaymentRequestAsset${option.name}"),
-                onClick = {
-                    if (option != asset) {
-                        runCatching {
-                            conversion.convert(
-                                amount,
-                                option,
-                                currencies.paykitRate,
-                                Clock.System.now().toEpochMilliseconds()
-                            )
-                        }.onSuccess(onConverted).onFailure { onUnavailable() }
-                    }
-                },
-            )
-        }
-    }
+    val nextAsset = allowedAssets.firstOrNull { it != asset }
+    NumberPadActionButton(
+        text = asset.code.uppercase(),
+        icon = if (nextAsset != null) R.drawable.ic_transfer else null,
+        color = Colors.Brand,
+        clickable = nextAsset != null,
+        debounce = Duration.ZERO,
+        onClick = {
+            if (nextAsset != null) {
+                runCatching {
+                    conversion.convert(
+                        amount,
+                        nextAsset,
+                        currencies.paykitRate,
+                        Clock.System.now().toEpochMilliseconds()
+                    )
+                }.onSuccess(onConverted).onFailure { onUnavailable() }
+            }
+        },
+        modifier = Modifier.testTag("PaymentRequestDenominationToggle")
+    )
 }
 
 @Composable

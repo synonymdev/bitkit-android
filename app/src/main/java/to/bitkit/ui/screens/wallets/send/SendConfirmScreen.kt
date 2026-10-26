@@ -213,7 +213,7 @@ fun SendConfirmScreen(
 }
 
 @Composable
-private fun AutoPayOverlay(
+internal fun AutoPayOverlay(
     isVisible: Boolean,
     content: (@Composable () -> Unit)?,
 ) {
@@ -602,7 +602,7 @@ private fun OnChainDetails(
             }
             SendCell(
                 caption = stringResource(
-                    if (uiState.isOneOffPaymentRequest) {
+                    if (uiState.isOneOffPaymentRequest && !uiState.isMerchantPaymentRequest) {
                         R.string.wallet__payment_request_contact
                     } else {
                         R.string.wallet__send_to
@@ -700,7 +700,12 @@ private fun OnChainDetails(
                         tint = Colors.Brand,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(stringResource(feeUi.rate.description))
+                    val confirmationRate = if (feeUi.rate == FeeRate.CUSTOM) {
+                        FeeRate.forConfirmation(uiState.speed, uiState.feeRates)
+                    } else {
+                        feeUi.rate
+                    }
+                    BodySSB(stringResource(confirmationRate.description))
                 }
             }
         }
@@ -748,7 +753,7 @@ private fun LightningDetails(
             }
             SendCell(
                 caption = stringResource(
-                    if (uiState.isOneOffPaymentRequest) {
+                    if (uiState.isOneOffPaymentRequest && !uiState.isMerchantPaymentRequest) {
                         R.string.wallet__payment_request_contact
                     } else {
                         R.string.wallet__send_to
