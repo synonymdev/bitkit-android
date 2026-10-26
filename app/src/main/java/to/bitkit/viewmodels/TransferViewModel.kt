@@ -75,6 +75,7 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainTransferContext
+import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
@@ -107,6 +108,7 @@ class TransferViewModel @Inject constructor(
     private val boltzService: BoltzService,
     private val currencyRepo: CurrencyRepo,
     private val clock: Clock,
+    private val sparkRepo: SparkRepo,
 ) : ViewModel() {
 
     /** Paired hardware wallets, for screens that render vendor-specific device visuals. */
@@ -145,6 +147,7 @@ class TransferViewModel @Inject constructor(
 
     fun onConfirmAmount(satsAmount: Long) {
         if (confirmPayJob?.isActive == true || hwTransferSignJob?.isActive == true) return
+        if (isSparkFunding()) return onConfirmSparkAmount(satsAmount.toULong())
         val values = blocktankRepo.calculateLiquidityOptions(satsAmount.toULong()).getOrNull()
         if (values == null || values.maxLspBalanceSat == 0uL) {
             setTransferEffect(
@@ -194,6 +197,26 @@ class TransferViewModel @Inject constructor(
             onEstimateReady(satsAmount.toULong(), lspBalance, feeSat)
             delay(1.seconds)
             _spendingUiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    /** Blocktank no longer sells channels, so Spending is funded by a deposit into the Spark wallet. */
+    private fun isSparkFunding(): Boolean = sparkRepo.state.value.isReady
+
+    private fun onConfirmSparkAmount(amountSats: ULong) {
+        viewModelScope.launch {
+            if (!canFundOrder(amountSats)) {
+                setTransferEffect(
+                    TransferEffect.ToastError(
+                        title = context.getString(R.string.lightning__spending_amount__error_balance__title),
+                        description = context.getString(
+                            R.string.lightning__spending_amount__error_balance__description
+                        ),
+                    )
+                )
+                return@launch
+            }
+            onEstimateReady(clientBalanceSat = amountSats, lspBalanceSat = 0uL, feeSat = amountSats, isSpark = true)
         }
     }
 
@@ -295,9 +318,14 @@ class TransferViewModel @Inject constructor(
         confirmFeeJob = viewModelScope.launch {
             _spendingUiState.update { it.copy(isConfirmFeeReady = false) }
             val order = _spendingUiState.value.order
+            val address = if (_spendingUiState.value.isSpark) {
+                sparkRepo.depositAddress().onFailure { ToastEventBus.send(it) }.getOrNull()
+            } else {
+                order?.fundingAddress ?: spendingSizingAddress()
+            }
             val target = SpendingFundingTarget(
                 feeSat = _spendingUiState.value.feeSat,
-                address = order?.fundingAddress ?: spendingSizingAddress() ?: return@launch,
+                address = address ?: return@launch,
                 orderId = order?.id,
             )
             buildSpendingConfirmFundingPlan(target)
@@ -337,6 +365,7 @@ class TransferViewModel @Inject constructor(
         confirmPayJob = viewModelScope.launch {
             try {
                 val paid = runSuspendCatching {
+                    if (state.isSpark) return@runSuspendCatching paySparkDeposit(state)
                     val order = getOrCreateSpendingOrder() ?: return@runSuspendCatching false
                     paySpendingConfirmOrder(order, shown = state)
                 }.onFailure {
@@ -353,6 +382,34 @@ class TransferViewModel @Inject constructor(
                 confirmPayJob = null
             }
         }
+    }
+
+    private suspend fun paySparkDeposit(shown: TransferToSpendingUiState): Boolean {
+        val plan = spendingConfirmFundingPlan?.takeIf { it.miningFeeSats > 0uL } ?: run {
+            ToastEventBus.send(type = Toast.ToastType.ERROR, title = context.getString(R.string.common__try_again))
+            return false
+        }
+        val address = sparkRepo.depositAddress().getOrThrow()
+        val outcome = lightningRepo.sendOnChain(
+            address = address,
+            sats = shown.clientBalanceSat,
+            speed = TransactionSpeed.Fast,
+            utxosToSpend = if (plan.shouldUseSendAll) null else plan.selectedUtxos,
+            feeRates = plan.feeRates,
+            isTransfer = true,
+            isMaxAmount = plan.shouldUseSendAll,
+        ).getOrThrow()
+        if (outcome !is OnchainSendOutcome.Accepted) {
+            showRetainedFundingPending()
+            return false
+        }
+        withContext(NonCancellable) {
+            runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(orderId = null, txid = outcome.txid) }
+                .onFailure { Logger.warn("Failed to finish accepted Spark funding locally", it, context = TAG) }
+        }
+        settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_2) }
+        Logger.info("Funded Spark wallet with '${shown.clientBalanceSat}' sats in '${outcome.txid}'", context = TAG)
+        return true
     }
 
     private suspend fun getOrCreateSpendingOrder(): IBtOrder? {
@@ -826,7 +883,12 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private suspend fun onEstimateReady(clientBalanceSat: ULong, lspBalanceSat: ULong, feeSat: ULong) {
+    private suspend fun onEstimateReady(
+        clientBalanceSat: ULong,
+        lspBalanceSat: ULong,
+        feeSat: ULong,
+        isSpark: Boolean = false,
+    ) {
         settingsStore.update { it.copy(lightningSetupStep = 0) }
         if (confirmPayJob?.isActive == true || hwTransferSignJob?.isActive == true) return
         pendingHwFundingBroadcast = null
@@ -839,6 +901,7 @@ class TransferViewModel @Inject constructor(
                 feeSat = feeSat,
                 order = null,
                 isAdvanced = false,
+                isSpark = isSpark,
                 isConfirmPaying = false,
                 hasPendingHwBroadcast = false,
                 hwMiningFeeSats = 0uL,
@@ -856,6 +919,19 @@ class TransferViewModel @Inject constructor(
             val fundingBudget = loadFundingBudget()
             _spendingUiState.update { it.copy(fundingBudgetSats = fundingBudget, hwFundingWalletId = null) }
             val availableAmount = fundingBudget ?: 0uL
+
+            if (isSparkFunding()) {
+                val maxSend = availableAmount.toLong()
+                _spendingUiState.update {
+                    it.copy(
+                        maxAllowedToSend = maxSend,
+                        isLoading = false,
+                        balanceAfterFee = maxSend,
+                        quarterAmount = (maxSend.toDouble() * 0.25).roundToLong(),
+                    )
+                }
+                return@launch
+            }
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -1871,7 +1947,20 @@ class TransferViewModel @Inject constructor(
         if (_savingsSwapState.value.quote != null) SavingsTransferMode.SWAP else SavingsTransferMode.CLOSE
 
     /** Closes the channels selected earlier, pending closure */
-    suspend fun closeSelectedChannels() = closeChannels(channelsToClose)
+    suspend fun closeSelectedChannels(): List<ChannelDetails> {
+        withdrawSparkToSavings()
+        return closeChannels(channelsToClose)
+    }
+
+    private suspend fun withdrawSparkToSavings() {
+        val balance = sparkRepo.state.value.balanceSats
+        if (balance == 0uL) return
+        val address = lightningRepo.newAddress().getOrElse {
+            Logger.error("Failed to get address for Spark withdrawal", it, context = TAG)
+            return
+        }
+        sparkRepo.withdrawAll(address).onFailure { ToastEventBus.send(it) }
+    }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
         lightningRepo.awaitPeerConnected()
@@ -2061,6 +2150,8 @@ data class TransferToSpendingUiState(
     val feeSat: ULong = 0uL,
     val order: IBtOrder? = null,
     val isAdvanced: Boolean = false,
+    /** Funds the Spark wallet instead of buying a Blocktank channel. */
+    val isSpark: Boolean = false,
     val maxAllowedToSend: Long = 0,
     val balanceAfterFee: Long = 0,
     val quarterAmount: Long = 0,

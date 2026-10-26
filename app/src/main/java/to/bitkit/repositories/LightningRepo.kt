@@ -67,6 +67,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
+import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
@@ -78,6 +79,7 @@ import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
@@ -128,6 +130,7 @@ class LightningRepo @Inject constructor(
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val urlValidator: UrlValidator,
     private val electrumProbeService: ElectrumProbeService,
+    private val sparkRepo: SparkRepo,
 ) : OnchainReleasing {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -173,6 +176,7 @@ class LightningRepo @Inject constructor(
 
     init {
         observeConnectivityForSyncRetry()
+        scope.launch { sparkRepo.nodeEvents.collect { onSparkEvent(it) } }
     }
 
     private fun observeConnectivityForSyncRetry() {
@@ -351,6 +355,9 @@ class LightningRepo @Inject constructor(
 
         // The geocheck needs no node, so screens gated on it are right before the node is up.
         scope.launch { updateGeoBlockState() }
+
+        // Spark needs no node, so it starts alongside it and stays up while the node stops in background.
+        scope.launch { sparkRepo.start(walletIndex) }
 
         eventHandler?.let { _eventHandlers.add(it) }
 
@@ -599,6 +606,14 @@ class LightningRepo @Inject constructor(
                 settledReceiveAddress = settledReceiveAddress,
             ),
         )
+    }
+
+    private suspend fun onSparkEvent(event: Event) {
+        val settledReceiveInvoice = (event as? Event.PaymentReceived)?.let { invalidateSettledReceiveInvoice(it) }
+        _eventHandlers.toList().forEach {
+            runCatching { it.invoke(event) }
+        }
+        _nodeEventUpdates.emit(NodeEventUpdate(event = event, settledReceiveInvoice = settledReceiveInvoice))
     }
 
     private suspend fun invalidateSettledReceiveInvoice(event: Event.PaymentReceived): SettledReceiveInvoice? {
@@ -913,6 +928,7 @@ class LightningRepo @Inject constructor(
                 Logger.debug("node stopped, calling wipeStorage", context = TAG)
                 lastKnownNodeId = null
                 lightningService.wipeStorage(walletIndex)
+                sparkRepo.wipe(walletIndex)
                 clearProbeOutcomes()
                 _lightningState.update {
                     LightningState(
@@ -1307,6 +1323,9 @@ class LightningRepo @Inject constructor(
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
         updateGeoBlockState()
+        if (shouldReceiveWithSpark(amountSats)) {
+            return@executeWhenNodeRunning sparkRepo.createInvoice(amountSats, description, expirySeconds)
+        }
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
@@ -1316,7 +1335,32 @@ class LightningRepo @Inject constructor(
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
         updateGeoBlockState()
+        if (shouldReceiveWithSpark(amountMsats / MSATS_PER_SAT)) {
+            val amountSats = (amountMsats / MSATS_PER_SAT).takeIf { it > 0uL }
+            return@executeWhenNodeRunning sparkRepo.createInvoice(amountSats, description, expirySeconds)
+        }
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
+    }
+
+    /** Receives on Spark when no ready channel has the inbound capacity for [amountSats]. */
+    private fun shouldReceiveWithSpark(amountSats: ULong?): Boolean {
+        if (!sparkRepo.canReceive()) return false
+        val readyChannels = _lightningState.value.channels.filter { it.isChannelReady }
+        return !ReceiveLiquidityDecision.canCreateLightningInvoice(
+            hasReadyChannels = readyChannels.isNotEmpty(),
+            inboundCapacitySats = readyChannels.calculateRemoteBalance(),
+            invoiceAmountSats = amountSats,
+        )
+    }
+
+    /** Pays with Spark when no channel has the outbound capacity for the invoice amount. */
+    private fun shouldPayWithSpark(bolt11: String, sats: ULong?): Boolean {
+        val amountSats = sats ?: runCatching { Bolt11Invoice.fromStr(bolt11).amountMilliSatoshis() }.getOrNull()
+            ?.let { it / MSATS_PER_SAT } ?: return false
+        val state = _lightningState.value
+        val ldkCanSend = state.nodeLifecycleState.canRun() &&
+            state.channels.totalNextOutboundHtlcLimitSats() >= amountSats
+        return !ldkCanSend && sparkRepo.canSend(amountSats)
     }
 
     suspend fun fetchLnurlInvoice(
@@ -1405,6 +1449,20 @@ class LightningRepo @Inject constructor(
     ): Result<PaymentId> = payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat = null, onBeforeSend)
 
     suspend fun payInvoice(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        maxTotalRoutingFeeMsat: ULong?,
+        onBeforeSend: suspend () -> Boolean,
+    ): Result<PaymentId> {
+        if (shouldPayWithSpark(bolt11, sats)) {
+            if (!onBeforeSend()) return Result.failure(PaymentAbortedBeforeSend())
+            return sparkRepo.payInvoice(bolt11, sats)
+        }
+        return payInvoiceWithLdk(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, onBeforeSend)
+    }
+
+    private suspend fun payInvoiceWithLdk(
         bolt11: String,
         sats: ULong?,
         paymentDeadlineAt: Instant?,
@@ -1863,9 +1921,10 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun completeAcceptedTransferFollowup(orderId: String, txid: String) {
-        val attempt = onchainSendAttemptStore.current()
-        if (attempt?.orderId == orderId && attempt.txid.equals(txid, ignoreCase = true) &&
+    /** Finishes an accepted transfer locally; [orderId] is null for a transfer that funds the Spark wallet. */
+    suspend fun completeAcceptedTransferFollowup(orderId: String?, txid: String) {
+        val attempt = onchainSendAttemptStore.current() ?: return
+        if (attempt.isTransfer && attempt.orderId == orderId && attempt.txid.equals(txid, ignoreCase = true) &&
             attempt.hasPositiveEvidence
         ) {
             finishOnchainSendLocally(attempt)
@@ -2191,6 +2250,7 @@ class LightningRepo @Inject constructor(
 
     fun canSend(amountSats: ULong): Boolean {
         val state = _lightningState.value
+        if (sparkRepo.canSend(amountSats)) return true
         if (!state.nodeLifecycleState.canRun()) return false
         return state.channels.totalNextOutboundHtlcLimitSats() >= amountSats
     }
@@ -2306,6 +2366,7 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> = executeWhenNodeRunning("estimateRoutingFees") {
+        if (shouldPayWithSpark(bolt11, null)) return@executeWhenNodeRunning sparkRepo.estimateFeeSats(bolt11, null)
         Logger.info("Estimating routing fees for bolt11: $bolt11", context = TAG)
         lightningService.estimateRoutingFees(bolt11).onSuccess {
             Logger.info("Routing fees estimated: '$it'", context = TAG)
@@ -2316,6 +2377,9 @@ class LightningRepo @Inject constructor(
 
     suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> =
         executeWhenNodeRunning("estimateRoutingFeesForAmount") {
+            if (shouldPayWithSpark(bolt11, amountSats)) {
+                return@executeWhenNodeRunning sparkRepo.estimateFeeSats(bolt11, amountSats)
+            }
             Logger.info("Estimating routing fees for amount: '$amountSats'", context = TAG)
             lightningService.estimateRoutingFeesForAmount(bolt11, amountSats).onSuccess {
                 Logger.info("Routing fees estimated: '$it'", context = TAG)
@@ -2610,6 +2674,7 @@ class LightningRepo @Inject constructor(
         private const val VSS_KEY_EXTERNAL_SCORES_CACHE = "external_pathfinding_scores_cache"
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
+        private const val MSATS_PER_SAT = 1_000uL
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val CHANNELS_USABLE_POLL_DELAY = 1.seconds

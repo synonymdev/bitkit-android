@@ -31,6 +31,7 @@ internal object Env {
         ).filter { it.first in enabled }.map { it.second }
     }
 
+    val breezApiKey: String? get() = BuildConfig.BREEZ_API_KEY.takeIf { it.isNotBlank() }
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
     const val isGeoblockingEnabled = BuildConfig.GEO
@@ -218,6 +219,8 @@ internal object Env {
         }
 
     fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
+
+    fun sparkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "spark")
 
     fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")

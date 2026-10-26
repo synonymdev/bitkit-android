@@ -92,6 +92,7 @@ fun ReceiveSheet(
     var editInvoiceSourceTab by remember { mutableStateOf(ReceiveTab.SAVINGS) }
     var isAdditionalLiquidityAmountEntry by remember { mutableStateOf(false) }
     val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
+    val sparkState by wallet.sparkState.collectAsStateWithLifecycle()
     val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     val paymentRequestContacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     var paymentRequestDraft by remember {
@@ -157,6 +158,7 @@ fun ReceiveSheet(
                         cjitInvoice = cjitSessionState.cjitInvoice,
                         walletState = walletState,
                         lightningState = lightningState,
+                        canReceiveWithSpark = sparkState.isReady,
                         onClickReceiveCjit = {
                             if (lightningState.isGeoBlocked) {
                                 navController.navigateTo(ReceiveRoute.GeoBlock)

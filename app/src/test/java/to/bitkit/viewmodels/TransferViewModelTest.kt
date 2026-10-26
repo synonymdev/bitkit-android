@@ -99,6 +99,7 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.idleSparkRepo
 import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.screens.transfer.previewSpendingState
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -120,6 +121,7 @@ class TransferViewModelTest : BaseUnitTest() {
     private lateinit var sut: TransferViewModel
 
     private val context = mock<Context>()
+    private val sparkRepo = idleSparkRepo()
     private val lightningRepo = mock<LightningRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
@@ -204,6 +206,7 @@ class TransferViewModelTest : BaseUnitTest() {
             cacheStore = cacheStore,
             transferRepo = transferRepo,
             clock = clock,
+            sparkRepo = sparkRepo,
             boltzService = boltzService,
             currencyRepo = currencyRepo,
         )
@@ -2864,6 +2867,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 cacheStore = cacheStore,
                 transferRepo = transferRepo,
                 clock = clock,
+                sparkRepo = sparkRepo,
                 boltzService = boltzService,
                 currencyRepo = currencyRepo,
             )

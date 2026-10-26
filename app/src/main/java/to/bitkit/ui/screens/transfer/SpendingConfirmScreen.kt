@@ -248,23 +248,29 @@ private fun Content(
                         onClick = onLearnMoreClick,
                         modifier = Modifier.testTag("SpendingConfirmMore")
                     )
-                    PrimaryButton(
-                        text = stringResource(
-                            if (isAdvanced) R.string.lightning__spending_confirm__default else R.string.common__advanced
-                        ),
-                        size = ButtonSize.Small,
-                        fullWidth = false,
-                        onClick = {
-                            if (isAdvanced) {
-                                onUseDefaultLspBalanceClick()
-                            } else {
-                                onAdvancedClick()
-                            }
-                        },
-                        modifier = Modifier.testTag(
-                            if (isAdvanced) "SpendingConfirmDefault" else "SpendingConfirmAdvanced"
+                    if (!state.isSpark) {
+                        PrimaryButton(
+                            text = stringResource(
+                                if (isAdvanced) {
+                                    R.string.lightning__spending_confirm__default
+                                } else {
+                                    R.string.common__advanced
+                                }
+                            ),
+                            size = ButtonSize.Small,
+                            fullWidth = false,
+                            onClick = {
+                                if (isAdvanced) {
+                                    onUseDefaultLspBalanceClick()
+                                } else {
+                                    onAdvancedClick()
+                                }
+                            },
+                            modifier = Modifier.testTag(
+                                if (isAdvanced) "SpendingConfirmDefault" else "SpendingConfirmAdvanced"
+                            )
                         )
-                    )
+                    }
                 }
                 VerticalSpacer(16.dp)
 
