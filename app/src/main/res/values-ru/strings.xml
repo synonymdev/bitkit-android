@@ -314,6 +314,8 @@
     <string name="notification__service__stop">Остановить приложение</string>
     <string name="onboarding__advanced">Дополнительно</string>
     <string name="onboarding__advanced_setup">Дополнительно</string>
+    <string name="onboarding__connection_saved">Сохранено. Повторите попытку, чтобы продолжить восстановление.</string>
+    <string name="onboarding__connection_settings">Настройки подключения</string>
     <string name="onboarding__create_new_wallet">Создать Новый Кошелёк</string>
     <string name="onboarding__empty_wallet">Чтобы начать\nработу\n&lt;accent&gt;отправьте\nбиткойны&lt;/accent&gt;\nв ваш\nкошелёк</string>
     <string name="onboarding__get_started">Начать</string>

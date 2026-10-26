@@ -82,6 +82,7 @@ import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.onboarding.InitializingWalletView
+import to.bitkit.ui.onboarding.WalletConnectionRecoveryView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.scaffold.AppAlertDialog
@@ -416,19 +417,40 @@ fun ContentView(
         }
     }
 
-    val backupRestoreFailed =
-        restoreState is RestoreState.BackupFailed && nodeLifecycleState == NodeLifecycleState.Running
+    val backupRestoreFailed = restoreState is RestoreState.BackupFailed
 
-    val canProceedWithoutRestore = (restoreState as? RestoreState.BackupFailed)?.hasPendingWalletRestore != true
+    val connectionFailure by walletViewModel.connectionStartupError.collectAsStateWithLifecycle()
+    val connectionRetryBusy by walletViewModel.connectionRetryBusy.collectAsStateWithLifecycle()
+    val canProceedWithoutRestore = connectionFailure == null &&
+        (restoreState as? RestoreState.BackupFailed)?.hasPendingWalletRestore != true
 
-    if (walletIsInitializing || backupRestoreFailed) {
-        if (nodeLifecycleState is NodeLifecycleState.ErrorStarting || backupRestoreFailed) {
+    val connectionEditor by walletViewModel.connectionEditor.collectAsStateWithLifecycle()
+    if (connectionEditor != null) {
+        WalletConnectionRecoveryView(
+            state = checkNotNull(connectionEditor).let { it.copy(busy = it.busy || connectionRetryBusy) },
+            onBack = walletViewModel::closeConnectionRecovery,
+            onElectrum = walletViewModel::editRecoveryElectrum,
+            onRgs = walletViewModel::editRecoveryRgs,
+            onResetElectrum = { walletViewModel.editRecoveryElectrum(Env.electrumServerUrl) },
+            onResetRgs = { walletViewModel.editRecoveryRgs(Env.ldkRgsServerUrl.orEmpty()) },
+            onSave = walletViewModel::saveRecoveryConnection,
+            onRetry = walletViewModel::retryRecoveryConnection,
+        )
+        return
+    }
+
+    if (walletIsInitializing || backupRestoreFailed || connectionFailure != null) {
+        if (nodeLifecycleState is NodeLifecycleState.ErrorStarting ||
+            backupRestoreFailed || connectionFailure != null
+        ) {
             WalletRestoreErrorView(
                 retryCount = restoreState.retryCount(),
                 allowProceedWithoutRestore = canProceedWithoutRestore,
+                isBusy = connectionRetryBusy,
+                onConnectionSettings = walletViewModel::openConnectionRecovery,
                 hazeState = hazeState,
                 onRetry = {
-                    if (backupRestoreFailed) {
+                    if (backupRestoreFailed && nodeLifecycleState == NodeLifecycleState.Running) {
                         walletIsInitializing = true
                         walletViewModel.onBackupRestoreRetry()
                     } else {

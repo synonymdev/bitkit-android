@@ -12,14 +12,17 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -49,6 +52,7 @@ import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
@@ -78,6 +82,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val onchainService = mock<OnchainService>()
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
+    private val connectionRecovery = connectionRecoveryFixture(settingsStore)
 
     companion object Fixtures {
         const val ACTIVITY_TAG = "testTag"
@@ -173,6 +178,7 @@ class WalletRepoTest : BaseUnitTest() {
         transferRepo = transferRepo,
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
+        connectionRecovery = connectionRecovery,
     )
 
     private fun lightningInvoice(bolt11: String, isExpired: Boolean = false) = LightningInvoice(
@@ -1782,5 +1788,17 @@ class WalletRepoTest : BaseUnitTest() {
             startIndex = 3u,
             count = 2u,
         )
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `connection recovery admits the newly published restored wallet`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        val observed = async(UnconfinedTestDispatcher(testScheduler)) {
+            sut.walletState.first { it.walletExists }
+            runCatching { connectionRecovery.captureRuntimeOwner() }
+        }
+        sut.restoreWallet("restored-mnemonic", null).getOrThrow()
+        assertTrue(observed.await().isSuccess)
     }
 }

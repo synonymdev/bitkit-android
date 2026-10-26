@@ -213,7 +213,7 @@ fun SendConfirmScreen(
 }
 
 @Composable
-private fun AutoPayOverlay(
+internal fun AutoPayOverlay(
     isVisible: Boolean,
     content: (@Composable () -> Unit)?,
 ) {

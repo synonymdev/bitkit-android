@@ -9,15 +9,20 @@ import com.synonym.bitkitcore.UsdtTransferStatus
 import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.Mockito
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -33,7 +38,9 @@ import to.bitkit.repositories.UsdtSelfSendError
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.repositories.parseUsdtPaymentRequest
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SanityWarning
+import to.bitkit.viewmodels.SendUiState
 import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -42,6 +49,112 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class UsdtViewModelTest : BaseUnitTest() {
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `initial subscription prepares before authorization and cancellation requires explicit retry`() = test {
+        val viewModel = createViewModel()
+        val app = mock<AppViewModel>()
+        whenever(app.takeInitialUsdtSubscriptionAuthorization()).thenReturn(true, false)
+        val uiState = SendUiState(usdtRecipient = quote.recipient, paykitAmount = "1")
+        val ready = CompletableDeferred<Result<UsdtQuote>>()
+        whenever(repo.quote(any(), any(), any(), any())).doSuspendableAnswer { ready.await() }
+        var automaticPayment = false
+        val preparation = launch { preparePayment(viewModel, app, uiState) { automaticPayment = it } }
+        advanceUntilIdle()
+        assertTrue(automaticPayment)
+        assertFalse(viewModel.state.value.authenticationRequired)
+        verify(repo, never()).send(any(), anyOrNull(), any())
+        ready.complete(Result.success(quote))
+        preparation.join()
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.authenticationRequired)
+        viewModel.cancelAuthentication()
+        preparePayment(viewModel, app, uiState) { automaticPayment = it }
+        assertFalse(automaticPayment)
+        advanceUntilIdle()
+        assertFalse(viewModel.state.value.authenticationRequired)
+        verify(repo, times(1)).quote(any(), any(), any(), any())
+        verify(repo, never()).send(any(), anyOrNull(), any())
+
+        viewModel.confirm().join()
+        assertTrue(viewModel.state.value.authenticationRequired)
+        viewModel.authenticationVerified()
+        advanceUntilIdle()
+        preparePayment(viewModel, app, uiState)
+        viewModel.authenticationVerified()
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.submitted)
+        verify(repo, times(1)).send(any(), anyOrNull(), any())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `manual initial subscription preparation never shows automatic progress or authorizes`() = test {
+        val viewModel = createViewModel()
+        val app = mock<AppViewModel>()
+        whenever(app.takeInitialUsdtSubscriptionAuthorization()).thenReturn(false)
+        val uiState = SendUiState(
+            usdtRecipient = quote.recipient,
+            paykitAmount = "1",
+            isInitialSubscriptionPayment = true,
+        )
+        val ready = CompletableDeferred<Result<UsdtQuote>>()
+        whenever(repo.quote(any(), any(), any(), any())).doSuspendableAnswer { ready.await() }
+        var automaticPayment = true
+        val preparation = launch { preparePayment(viewModel, app, uiState) { automaticPayment = it } }
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.busy)
+        assertFalse(automaticPayment)
+        ready.complete(Result.success(quote))
+        preparation.join()
+        advanceUntilIdle()
+        assertEquals(quote, viewModel.state.value.quote)
+        assertFalse(viewModel.state.value.authenticationRequired)
+        verify(repo, never()).send(any(), anyOrNull(), any())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `failed initial subscription quote cannot authorize automatically after recovery`() = test {
+        for (error in listOf(UsdtException.InsufficientBalance(), UsdtException.QuoteExpired())) {
+            val viewModel = createViewModel()
+            val app = mock<AppViewModel>()
+            whenever(app.takeInitialUsdtSubscriptionAuthorization()).thenReturn(true, false)
+            val uiState = SendUiState(usdtRecipient = quote.recipient, paykitAmount = "1")
+            whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.failure(error), Result.success(quote))
+            preparePayment(viewModel, app, uiState)
+            advanceUntilIdle()
+            assertNull(viewModel.state.value.quote)
+            assertFalse(viewModel.state.value.authenticationRequired)
+            preparePayment(viewModel, app, uiState)
+            advanceUntilIdle()
+            assertEquals(quote, viewModel.state.value.quote)
+            assertFalse(viewModel.state.value.authenticationRequired)
+            verify(repo, never()).send(any(), anyOrNull(), any())
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `cancelled initial subscription preparation cannot authorize when quote finishes`() = test {
+        val viewModel = createViewModel()
+        val app = mock<AppViewModel>()
+        whenever(app.takeInitialUsdtSubscriptionAuthorization()).thenReturn(true, false)
+        val uiState = SendUiState(usdtRecipient = quote.recipient, paykitAmount = "1")
+        val ready = CompletableDeferred<Result<UsdtQuote>>()
+        whenever(repo.quote(any(), any(), any(), any())).doSuspendableAnswer { ready.await() }
+        val preparation = launch { preparePayment(viewModel, app, uiState) }
+        advanceUntilIdle()
+        preparation.cancelAndJoin()
+        ready.complete(Result.success(quote))
+        advanceUntilIdle()
+        preparePayment(viewModel, app, uiState)
+        advanceUntilIdle()
+        assertEquals(quote, viewModel.state.value.quote)
+        assertFalse(viewModel.state.value.authenticationRequired)
+        verify(repo, never()).send(any(), anyOrNull(), any())
+    }
+
     @Test
     fun `settled payment rejects replacement quotes until explicitly edited`() = test {
         val viewModel = createViewModel(walletState = UsdtWalletState(address = "sender"))
@@ -479,7 +592,10 @@ class UsdtViewModelTest : BaseUnitTest() {
 
     @Test
     fun `recorded payment that exceeds its deadline retains recovery with an expiry error`() = test {
-        val retained: UsdtTransfer = mock { on { id }.thenReturn(quote.id) }
+        val retained: UsdtTransfer = mock {
+            on { id }.thenReturn(quote.id)
+            on { status }.thenReturn(UsdtTransferStatus.PENDING)
+        }
         val model = createViewModel(walletState = UsdtWalletState(transfers = persistentListOf(retained)))
         settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
         whenever(repo.send(eq(quote), anyOrNull(), any()))
@@ -489,6 +605,20 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertTrue(model.state.value.submitted)
         assertEquals(quote, model.state.value.quote)
         assertEquals(R.string.wallet__payment_request_expired, model.state.value.error)
+        assertEquals(
+            R.string.wallet__payment_request_expired,
+            model.state.value.submissionError(UsdtTransferStatus.PENDING)
+        )
+        assertEquals(
+            R.string.wallet__payment_request_expired,
+            model.state.value.submissionError(UsdtTransferStatus.FAILED)
+        )
+        for (status in UsdtTransferStatus.entries.filterNot {
+            it == UsdtTransferStatus.PENDING || it == UsdtTransferStatus.FAILED
+        }) {
+            assertNull(model.state.value.submissionError(status))
+        }
+        assertNull(model.state.value.submissionError(null))
         model.confirm().join()
         verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
     }

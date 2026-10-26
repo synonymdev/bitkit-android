@@ -39,6 +39,8 @@ fun WalletRestoreErrorView(
     onProceedWithoutRestore: () -> Unit,
     modifier: Modifier = Modifier,
     allowProceedWithoutRestore: Boolean = true,
+    isBusy: Boolean = false,
+    onConnectionSettings: (() -> Unit)? = null,
     hazeState: HazeState = rememberHazeState(),
 ) {
     var showDialog by remember { mutableStateOf(false) }
@@ -73,14 +75,26 @@ fun WalletRestoreErrorView(
         PrimaryButton(
             text = stringResource(R.string.common__try_again),
             onClick = onRetry,
+            enabled = !isBusy,
             modifier = Modifier.testTag("TryAgainButton")
         )
+
+        onConnectionSettings?.let {
+            VerticalSpacer(12.dp)
+            SecondaryButton(
+                text = stringResource(R.string.onboarding__connection_settings),
+                onClick = it,
+                enabled = !isBusy,
+                modifier = Modifier.testTag("ConnectionRecoveryButton")
+            )
+        }
 
         if (allowProceedWithoutRestore && retryCount > 1) {
             VerticalSpacer(12.dp)
             SecondaryButton(
                 text = stringResource(R.string.onboarding__restore_no_backup_button),
                 onClick = { showDialog = true },
+                enabled = !isBusy,
                 modifier = Modifier.testTag("ProceedWithoutBackupButton")
             )
         }
