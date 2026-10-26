@@ -86,6 +86,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.jsonLogOf
+import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
@@ -1412,5 +1413,13 @@ internal fun Throwable.isTemporaryBackupFailure(): Boolean = isPaykitTemporarily
     is VssException.StoreException,
     is VssException.PutException,
     -> true
+    is VssException.UnknownException -> isVssRequestSendFailure(errorDetails)
     else -> false
+}
+
+private fun isVssRequestSendFailure(details: String): Boolean {
+    val prefix = "error sending request for url ("
+    if (!details.startsWith(prefix) || !details.endsWith(")")) return false
+    val url = runCatching { URI(details.removePrefix(prefix).dropLast(1)) }.getOrNull() ?: return false
+    return url.scheme in setOf("http", "https") && !url.host.isNullOrEmpty() && url.path.endsWith("/putObjects")
 }

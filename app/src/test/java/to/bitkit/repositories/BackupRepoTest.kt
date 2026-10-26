@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStoreFactory
 import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.paykit.PaykitException
+import com.synonym.vssclient.VssException
 import com.synonym.vssclient.VssItem
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -1248,6 +1249,59 @@ class BackupRepoTest : BaseUnitTest() {
             // still one attempt: the failed timestamp suppresses a retry until data changes again
             verify(privatePaykitRepo, times(1)).backupSnapshot()
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `released VSS connection failure is temporary without broad unknown retry`() {
+        assertTrue(
+            VssException.UnknownException("error sending request for url (http://127.0.0.1:1/putObjects)")
+                .isTemporaryBackupFailure(),
+        )
+        listOf(
+            "invalid ciphertext",
+            "permission denied",
+            "HTTP status client error (401 Unauthorized)",
+            "error sending request for url (not a URL)",
+            "prefix error sending request for url (https://example.com)",
+            "error sending request for url (https://example.com/getObject)",
+            "error sending request for url (file://example.com/putObjects)",
+            "error sending request for url (https:///putObjects)",
+            "error sending request for url (https://example.com/putObjects) suffix",
+        ).forEach { assertFalse(VssException.UnknownException(it).isTemporaryBackupFailure()) }
+    }
+
+    @Test
+    fun `settings backup retries the released VSS connection error and acknowledges recovery`() = test {
+        whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(3_000))
+        val category = BackupCategory.SETTINGS
+        val backupStatuses = MutableStateFlow(mapOf(category to BackupItemStatus(synced = 1_000, required = 2_000)))
+        stubBackupStatuses(backupStatuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        var attempts = 0
+        whenever(vssBackupClient.putObject(eq(category.name), any())).doSuspendableAnswer {
+            attempts += 1
+            if (attempts == 1) {
+                Result.failure(
+                    VssException.UnknownException("error sending request for url (http://127.0.0.1:1/putObjects)")
+                )
+            } else {
+                Result.success(VssItem(category.name, it.getArgument(1), 1))
+            }
+        }
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+            assertEquals(1, attempts)
+            assertTrue(backupStatuses.value.getValue(category).isRequired)
+            advanceTimeBy(20_000)
+            runCurrent()
+            assertEquals(2, attempts)
+            assertFalse(backupStatuses.value.getValue(category).isRequired)
         } finally {
             sut.stopObservingBackups()
         }
