@@ -35,6 +35,7 @@ import to.bitkit.ext.create
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.services.SparkService
 import to.bitkit.utils.Logger
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -68,6 +69,9 @@ class SparkRepo @Inject constructor(
     }
 
     private val scope = appScope(bgDispatcher, TAG)
+
+    /** Deposits this app broadcast that Spark hasn't listed yet, by txid, so they show as pending at once. */
+    private val broadcastDeposits = ConcurrentHashMap<String, ULong>()
     private var eventsJob: Job? = null
 
     private val _state = MutableStateFlow(SparkState(isSupported = sparkService.isSupported))
@@ -151,6 +155,33 @@ class SparkRepo @Inject constructor(
         }
     }
 
+    /**
+     * Lists a deposit the app just broadcast as pending right away, then syncs so Spark sees it sooner than its
+     * minute-long background sync; Spark's own deposit state replaces it once listed.
+     */
+    fun onDepositBroadcast(txid: String, amountSats: ULong) {
+        broadcastDeposits[txid] = amountSats
+        _state.update { it.withBroadcastDeposits() }
+        scope.launch {
+            runSuspendCatching {
+                sparkService.syncWallet()
+                refresh()
+            }.onFailure { Logger.warn("Failed to sync Spark after deposit '$txid'", it, context = TAG) }
+        }
+    }
+
+    private fun SparkState.withBroadcastDeposits(): SparkState {
+        val known = deposits.map { it.txid }.toSet()
+        val local = broadcastDeposits.filterKeys { it !in known }
+            .map { (txid, amount) -> SparkDeposit(txid = txid, amountSats = amount, isClaimed = false) }
+        if (local.isEmpty()) return this
+        val all = local + deposits
+        return copy(
+            deposits = all.toImmutableList(),
+            pendingDepositSats = all.filterNot { it.isClaimed }.sumOf { it.amountSats },
+        )
+    }
+
     suspend fun refreshState(): Result<Unit> = withContext(bgDispatcher) {
         if (!sparkService.isConnected) return@withContext Result.success(Unit)
         runSuspendCatching { refresh() }.onFailure { Logger.warn("Failed to refresh Spark state", it, context = TAG) }
@@ -173,6 +204,7 @@ class SparkRepo @Inject constructor(
                     claimedAt = payment.timestamp,
                 )
             }
+        (pending + claimed).forEach { broadcastDeposits.remove(it.txid) }
         _state.update {
             it.copy(
                 isReady = true,
@@ -180,7 +212,7 @@ class SparkRepo @Inject constructor(
                 pendingDepositSats = pending.sumOf { deposit -> deposit.amountSats },
                 deposits = (pending + claimed).toImmutableList(),
                 recoverableFundsSats = info.recoverableFundsSats,
-            )
+            ).withBroadcastDeposits()
         }
     }
 

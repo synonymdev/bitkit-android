@@ -410,6 +410,7 @@ class TransferViewModel @Inject constructor(
             runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(orderId = null, txid = outcome.txid) }
                 .onFailure { Logger.warn("Failed to finish accepted Spark funding locally", it, context = TAG) }
         }
+        sparkRepo.onDepositBroadcast(outcome.txid, shown.clientBalanceSat)
         settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_2) }
         Logger.info("Funded Spark wallet with '${shown.clientBalanceSat}' sats in '${outcome.txid}'", context = TAG)
         return true

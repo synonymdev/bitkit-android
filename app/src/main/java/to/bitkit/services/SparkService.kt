@@ -23,6 +23,7 @@ import breez_sdk_spark.Seed
 import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SendPaymentOptions
 import breez_sdk_spark.SendPaymentRequest
+import breez_sdk_spark.SyncWalletRequest
 import breez_sdk_spark.connect
 import breez_sdk_spark.defaultConfig
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -123,6 +124,11 @@ class SparkService @Inject constructor(
     suspend fun wipeStorage(walletIndex: Int) {
         disconnect()
         File(Env.sparkStoragePath(walletIndex)).deleteRecursively()
+    }
+
+    /** Syncs with Spark now instead of waiting for the SDK's next background sync. */
+    suspend fun syncWallet() {
+        requireSdk().syncWallet(SyncWalletRequest)
     }
 
     suspend fun getInfo(): GetInfoResponse = requireSdk().getInfo(GetInfoRequest(ensureSynced = false))
