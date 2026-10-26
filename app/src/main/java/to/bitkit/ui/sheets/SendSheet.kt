@@ -360,11 +360,29 @@ fun SendSheet(
                 }
                 composableWithDefaultTransitions<SendRoute.UsdtReview> {
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                    val initialSubscriptionId = uiState.incomingPaymentRequestId
+                        ?.takeIf { uiState.isInitialSubscriptionPayment }
+                        ?.let { id -> PaykitSubscriptionId(id.paymentRequestId, id.counterparty) }
+                    val initialSubscription = remember(initialSubscriptionId) {
+                        initialSubscriptionId?.let(appViewModel::subscription)
+                    }
                     PaykitUsdtReview(
                         uiState = uiState,
                         app = appViewModel,
-                        onBack = { navController.popBackStack() },
-                        onDone = { appViewModel.hideSheet() }
+                        onBack = {
+                            if (!navController.popBackStack()) {
+                                appViewModel.hideSheet()
+                            }
+                        },
+                        onDone = { appViewModel.hideSheet() },
+                        autoPayContent = initialSubscription?.let { subscription ->
+                            {
+                                SubscriptionFirstPaymentProgress(
+                                    subscription = subscription,
+                                    contact = contacts.contactFor(subscription),
+                                )
+                            }
+                        },
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.Amount> {
