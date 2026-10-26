@@ -124,6 +124,7 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
                 is NodeException.NoSpendableOutputs -> "No spendable outputs"
                 is NodeException.TransactionAlreadyConfirmed -> "Transaction already confirmed"
                 is NodeException.TransactionNotFound -> "Transaction not found"
+                is NodeException.TransactionNotBroadcastByWallet -> "Transaction not broadcast by this wallet"
                 is NodeException.RouteNotFound -> "Failed to find a route for fee estimation."
                 else -> exception.message
             }?.let { "LDK Node error: $it" }
