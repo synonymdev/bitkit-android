@@ -1,0 +1,488 @@
+{
+  "schema_version": 1,
+  "qualified_on": "2026-10-26",
+  "protocol": {
+    "reference_repository": "https://github.com/coreyphillips/beignet",
+    "reference_commit": "4f7b54df449dd2303849e0741b51aaa0cdb74bb4",
+    "ffor_receive_bits": [
+      440,
+      441
+    ],
+    "ffor_concurrent_bits": [
+      442,
+      443
+    ],
+    "beignet_async_service_bits": [
+      444,
+      445
+    ],
+    "retired_ffor_bits": [
+      560,
+      561,
+      562,
+      563
+    ],
+    "retired_beignet_async_service_bits": [
+      260,
+      261
+    ],
+    "notes": "The rebuilt native library uses the FFOR allocation that avoids Eclair on-the-fly funding. Kotlin has no separate feature-bit allocation. Bitkit primary-wallet behavior remains LFBW; offline FFOR and async receive clients are not enabled."
+  },
+  "sources": {
+    "bitkit_android": {
+      "path": "/Users/coreyphillips/Documents/synonym/bitkit-android",
+      "branch": "feat/primary-node-wallet",
+      "baseline_commit": "eadda6c440390a8179a1e70da1c9e4120579c3cc",
+      "dirty": true,
+      "status": [
+        " M .gitignore",
+        " M app/build.gradle.kts",
+        " M app/src/androidTest/java/to/bitkit/ui/screens/wallets/receive/ReceiveAutoTabSelectionTest.kt",
+        " M app/src/androidTest/java/to/bitkit/ui/screens/wallets/receive/ReceiveHardwareFlowTest.kt",
+        " M app/src/androidTest/java/to/bitkit/ui/screens/wallets/send/SendAmountContentTest.kt",
+        " M app/src/androidTest/java/to/bitkit/ui/screens/wallets/send/SendConfirmNavigationTest.kt",
+        " M app/src/main/java/to/bitkit/data/SettingsStore.kt",
+        " M app/src/main/java/to/bitkit/data/keychain/Keychain.kt",
+        " M app/src/main/java/to/bitkit/env/Env.kt",
+        " M app/src/main/java/to/bitkit/ext/Activities.kt",
+        " M app/src/main/java/to/bitkit/fcm/FcmService.kt",
+        " M app/src/main/java/to/bitkit/repositories/ActivityRepo.kt",
+        " M app/src/main/java/to/bitkit/repositories/BlocktankRepo.kt",
+        " M app/src/main/java/to/bitkit/repositories/LightningRepo.kt",
+        " M app/src/main/java/to/bitkit/repositories/SuggestionsRepo.kt",
+        " M app/src/main/java/to/bitkit/repositories/WalletRepo.kt",
+        " M app/src/main/java/to/bitkit/services/CoreService.kt",
+        " M app/src/main/java/to/bitkit/services/LightningService.kt",
+        " M app/src/main/java/to/bitkit/ui/ContentView.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/transfer/SavingsProgressScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/HardwareWalletScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/HomeScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/HomeUiState.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/HomeViewModel.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/activity/ActivityDetailScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/activity/components/ActivityIcon.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/activity/components/ActivityRow.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/receive/EditInvoiceScreen.kt",
+        " D app/src/main/java/to/bitkit/ui/screens/wallets/receive/EditInvoiceVM.kt",
+        " D app/src/main/java/to/bitkit/ui/screens/wallets/receive/LocationBlockScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveAmountScreen.kt",
+        " D app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveCjitErrorPresenter.kt",
+        " D app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveConfirmScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveInvoiceUtils.kt",
+        " D app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveLiquidityScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveQrScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveSheet.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveTab.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/send/SendAmountScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/send/SendConfirmScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/wallets/send/SendFeeViewModel.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/widgets/AddWidgetsScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/screens/widgets/suggestions/SuggestionsPreviewScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/settings/SettingsScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/settings/lightning/CloseConnectionScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/settings/lightning/CloseConnectionViewModel.kt",
+        " M app/src/main/java/to/bitkit/ui/settings/lightning/LightningConnectionsScreen.kt",
+        " M app/src/main/java/to/bitkit/ui/utils/ActivityItems.kt",
+        " M app/src/main/java/to/bitkit/usecases/DeriveBalanceStateUseCase.kt",
+        " M app/src/main/java/to/bitkit/utils/timedsheets/sheets/NotificationsTimedSheet.kt",
+        " M app/src/main/java/to/bitkit/viewmodels/ActivityListViewModel.kt",
+        " M app/src/main/java/to/bitkit/viewmodels/AppViewModel.kt",
+        " M app/src/main/java/to/bitkit/viewmodels/FeeSettingsViewModel.kt",
+        " M app/src/main/java/to/bitkit/viewmodels/SettingsViewModel.kt",
+        " M app/src/main/java/to/bitkit/viewmodels/TransferViewModel.kt",
+        " M app/src/main/java/to/bitkit/viewmodels/WalletViewModel.kt",
+        " M app/src/main/res/values-ar/strings.xml",
+        " M app/src/main/res/values-b+es+419/strings.xml",
+        " M app/src/main/res/values-ca/strings.xml",
+        " M app/src/main/res/values-cs/strings.xml",
+        " M app/src/main/res/values-de/strings.xml",
+        " M app/src/main/res/values-el/strings.xml",
+        " M app/src/main/res/values-es-rES/strings.xml",
+        " M app/src/main/res/values-es/strings.xml",
+        " M app/src/main/res/values-fr/strings.xml",
+        " M app/src/main/res/values-it/strings.xml",
+        " M app/src/main/res/values-nl/strings.xml",
+        " M app/src/main/res/values-pl/strings.xml",
+        " M app/src/main/res/values-pt-rBR/strings.xml",
+        " M app/src/main/res/values-pt/strings.xml",
+        " M app/src/main/res/values-ru/strings.xml",
+        " M app/src/main/res/values/strings.xml",
+        " M app/src/test/java/to/bitkit/repositories/ActivityRepoTest.kt",
+        " M app/src/test/java/to/bitkit/repositories/BlocktankRepoTest.kt",
+        " M app/src/test/java/to/bitkit/repositories/LightningRepoTest.kt",
+        " M app/src/test/java/to/bitkit/repositories/SuggestionsRepoTest.kt",
+        " M app/src/test/java/to/bitkit/repositories/WalletRepoTest.kt",
+        " M app/src/test/java/to/bitkit/services/ActivityServiceTest.kt",
+        " M app/src/test/java/to/bitkit/services/LightningServiceTest.kt",
+        " M app/src/test/java/to/bitkit/ui/WalletViewModelTest.kt",
+        " M app/src/test/java/to/bitkit/ui/screens/wallets/HomeViewModelTest.kt",
+        " D app/src/test/java/to/bitkit/ui/screens/wallets/receive/CjitEntryDetailsTest.kt",
+        " D app/src/test/java/to/bitkit/ui/screens/wallets/receive/EditInvoiceVMTest.kt",
+        " D app/src/test/java/to/bitkit/ui/screens/wallets/receive/ReceiveAutoTabSwitchTest.kt",
+        " M app/src/test/java/to/bitkit/ui/screens/wallets/receive/ReceiveInvoiceEditStateTest.kt",
+        " M app/src/test/java/to/bitkit/ui/screens/wallets/receive/ReceiveInvoiceUtilsTest.kt",
+        " M app/src/test/java/to/bitkit/usecases/DeriveBalanceStateUseCaseTest.kt",
+        " M app/src/test/java/to/bitkit/utils/timedsheets/sheets/NotificationsTimedSheetTest.kt",
+        " M app/src/test/java/to/bitkit/viewmodels/AppViewModelSendFlowTest.kt",
+        " M app/src/test/java/to/bitkit/viewmodels/SettingsViewModelTest.kt",
+        " M docs/screens-map.md",
+        " M gradle/libs.versions.toml",
+        " M journeys/hardware-wallet/detail-overview.xml",
+        "?? .agents/skills/source-command-release/SKILL.md",
+        "?? app/src/androidTest/java/to/bitkit/ui/screens/wallets/receive/EditInvoiceAmountLayoutTest.kt",
+        "?? app/src/androidTest/java/to/bitkit/ui/screens/wallets/receive/PrimaryReceiveConfirmLayoutTest.kt",
+        "?? app/src/androidTest/java/to/bitkit/ui/screens/wallets/receive/ReceiveAmountLayoutTest.kt",
+        "?? app/src/androidTest/java/to/bitkit/ui/screens/wallets/send/SendAmountLayoutTest.kt",
+        "?? app/src/androidTest/java/to/bitkit/ui/settings/lightning/CloseConnectionScreenTest.kt",
+        "?? app/src/main/java/to/bitkit/models/PrimaryNode.kt",
+        "?? app/src/main/java/to/bitkit/repositories/PrimaryNodeRepo.kt",
+        "?? app/src/main/java/to/bitkit/services/PrimaryWalletError.kt",
+        "?? app/src/main/java/to/bitkit/services/PrimaryWalletNodeService.kt",
+        "?? app/src/main/java/to/bitkit/services/PrimaryWalletOperationStore.kt",
+        "?? app/src/main/java/to/bitkit/services/PrimaryWalletService.kt",
+        "?? app/src/main/java/to/bitkit/ui/screens/wallets/receive/PrimaryReceiveConfirmScreen.kt",
+        "?? app/src/main/java/to/bitkit/ui/screens/wallets/receive/PrimaryReceiveViewModel.kt",
+        "?? app/src/main/java/to/bitkit/ui/settings/primaryNode/PrimaryNodeScreen.kt",
+        "?? app/src/main/java/to/bitkit/ui/settings/primaryNode/PrimaryNodeViewModel.kt",
+        "?? app/src/main/java/to/bitkit/viewmodels/SendFundingOptions.kt",
+        "?? app/src/test/java/to/bitkit/models/PrimaryNodeTest.kt",
+        "?? app/src/test/java/to/bitkit/repositories/PrimaryNodeRepoTest.kt",
+        "?? app/src/test/java/to/bitkit/services/PrimaryWalletErrorTest.kt",
+        "?? app/src/test/java/to/bitkit/services/PrimaryWalletNodeServiceTest.kt",
+        "?? app/src/test/java/to/bitkit/services/PrimaryWalletServiceTest.kt",
+        "?? app/src/test/java/to/bitkit/ui/screens/wallets/receive/PrimaryReceiveViewModelTest.kt",
+        "?? app/src/test/java/to/bitkit/ui/screens/wallets/receive/ReceiveTabTest.kt",
+        "?? app/src/test/java/to/bitkit/ui/settings/lightning/CloseConnectionViewModelTest.kt",
+        "?? app/src/test/java/to/bitkit/ui/settings/primaryNode/PrimaryNodeViewModelTest.kt",
+        "?? app/src/test/java/to/bitkit/ui/utils/PrimaryFundingActivityTest.kt",
+        "?? app/src/test/java/to/bitkit/viewmodels/SendFundingOptionsTest.kt",
+        "?? changelog.d/next/primary-node-wallet.changed.md",
+        "?? docs/primary-node-wallet.md",
+        "?? journeys/primary-node/README.md",
+        "?? journeys/primary-node/close-and-resume-funding.xml",
+        "?? journeys/primary-node/force-close-cancel.xml",
+        "?? journeys/primary-node/pair-primary-node.xml",
+        "?? journeys/primary-node/receive-primary-quote.xml",
+        "?? journeys/primary-node/send-primary-onchain.xml",
+        "?? journeys/primary-node/send-single-bitcoin-source.xml",
+        "?? journeys/primary-node/unified-wallet.xml",
+        "?? plan.json",
+        "?? spar.toml"
+      ],
+      "tracked_diff_sha256": "8352d4c4b49af13de27b186b3debad5150e324992f586a26a11c19734c5f5808",
+      "untracked_file_sha256": {
+        ".agents/skills/source-command-release/SKILL.md": "bda04f58d6c7f73494a6b8c2d66c971476d418d8295a931bb102a5eb1573a705",
+        "app/src/androidTest/java/to/bitkit/ui/screens/wallets/receive/EditInvoiceAmountLayoutTest.kt": "e5fc9e9845219deca9d5a3f6bf34de42e5f3c36b12f60fb7ddbf9213400335c0",
+        "app/src/androidTest/java/to/bitkit/ui/screens/wallets/receive/PrimaryReceiveConfirmLayoutTest.kt": "ddd87903b80b422d5447ffc888e71e13eac85c7ca74a6860f13af029bab6703c",
+        "app/src/androidTest/java/to/bitkit/ui/screens/wallets/receive/ReceiveAmountLayoutTest.kt": "eabbf232ff4786175d18370a63783e1dc94622c983348f637dd003e1590572e6",
+        "app/src/androidTest/java/to/bitkit/ui/screens/wallets/send/SendAmountLayoutTest.kt": "71eae2924a39acc50fa477f1801774c102b6b4d940d8f125b1927b852c37c8f3",
+        "app/src/androidTest/java/to/bitkit/ui/settings/lightning/CloseConnectionScreenTest.kt": "35215e63f786c093cd926193320f5d5c645964d0c38fe30f8f6cfc5f9003c60c",
+        "app/src/main/java/to/bitkit/models/PrimaryNode.kt": "6972b7bce47bdf2ad5b3c744742b62d6ba75cbbab226cff48b46525b1eba307a",
+        "app/src/main/java/to/bitkit/repositories/PrimaryNodeRepo.kt": "4de0b50faf61b7cdbaa2f5f6e9604afa499da1cfa4d27c96510ecb82e05b543b",
+        "app/src/main/java/to/bitkit/services/PrimaryWalletError.kt": "b78445ea020c2771b7dc51795851b7708ffe59585f1900ea4c0649a7d564eb7a",
+        "app/src/main/java/to/bitkit/services/PrimaryWalletNodeService.kt": "03a27f5534bce75ae57944f6efece942aff7ba225f459337a2cd66bd10b0f7bd",
+        "app/src/main/java/to/bitkit/services/PrimaryWalletOperationStore.kt": "ba1055d10a2de6bd2d2568180af85b416de073894c2c35e6f45901c0fc5cf971",
+        "app/src/main/java/to/bitkit/services/PrimaryWalletService.kt": "290e6f719912eeb71e034d560912b6f2aab314d17716c5cad21676e05d2ae305",
+        "app/src/main/java/to/bitkit/ui/screens/wallets/receive/PrimaryReceiveConfirmScreen.kt": "500f44b35e6ae2a28cc3b1b94c248100453d231e6d159620926c003a443d032b",
+        "app/src/main/java/to/bitkit/ui/screens/wallets/receive/PrimaryReceiveViewModel.kt": "af2f50d08ddc0c54fea74d00264c260c403959b8af5b64be0aca1e92e83c48f5",
+        "app/src/main/java/to/bitkit/ui/settings/primaryNode/PrimaryNodeScreen.kt": "b55ba2967ef2c2c2ee704804d18e61281599b30bf2803de3fdb7244b35decd78",
+        "app/src/main/java/to/bitkit/ui/settings/primaryNode/PrimaryNodeViewModel.kt": "e02bee9023c943c2111c0dff87ef4bb882d90a6530c532615a094b0606feb89b",
+        "app/src/main/java/to/bitkit/viewmodels/SendFundingOptions.kt": "e392946b0d66ea55cdfcc582a9d3c006f9b10b1c82437d0bae1f32a3ea32485b",
+        "app/src/test/java/to/bitkit/models/PrimaryNodeTest.kt": "af06e6ebe0e9f5df192236f4d1dfdbccd1d6785d55b2537841bc24f8cdd236a9",
+        "app/src/test/java/to/bitkit/repositories/PrimaryNodeRepoTest.kt": "5a1234aee66fb05d1a827b9323506ba3fb25fb4f92450bb3cf4d9b5c4c98f2f9",
+        "app/src/test/java/to/bitkit/services/PrimaryWalletErrorTest.kt": "8d65b31ac6188e4c5078aecc23759d02f080e7f2432a9a2a4ab4ab984fea2737",
+        "app/src/test/java/to/bitkit/services/PrimaryWalletNodeServiceTest.kt": "a449e87d2f0dedc6715e112e6d1fa34bfd6fee7977e4342909dda976d83b3105",
+        "app/src/test/java/to/bitkit/services/PrimaryWalletServiceTest.kt": "ee2cffea18577b1c61a6cff4a9f3029820cae95f06ffb879a910d9598a339c5e",
+        "app/src/test/java/to/bitkit/ui/screens/wallets/receive/PrimaryReceiveViewModelTest.kt": "b9b692b88ce860972a00ca8bacfc03be17137b7a6815781bfeabbd31ab98f50b",
+        "app/src/test/java/to/bitkit/ui/screens/wallets/receive/ReceiveTabTest.kt": "cea4d83d33be744e12b654081e847ce55451239fde7e5da27a70f6b8d38349eb",
+        "app/src/test/java/to/bitkit/ui/settings/lightning/CloseConnectionViewModelTest.kt": "2a0b1b3053f10baa1da368b1c8d8384ae3493fca3c39c5a15a3d7d9aa5010b60",
+        "app/src/test/java/to/bitkit/ui/settings/primaryNode/PrimaryNodeViewModelTest.kt": "db86b7f27d169de31dae28da42b8a92f2e9116cd5155635eab9d25a50d306339",
+        "app/src/test/java/to/bitkit/ui/utils/PrimaryFundingActivityTest.kt": "68ecbc763b3f6ea89ca61a7677becf2b20681de85dc06b49f545c6f57b172033",
+        "app/src/test/java/to/bitkit/viewmodels/SendFundingOptionsTest.kt": "90aee3b67db726dd72be9e84af705757c222a22bbfec71814e89b764fce84adc",
+        "changelog.d/next/primary-node-wallet.changed.md": "8e307d1315288a8275b348b989334b983e466a5e7bcdfd3e12448bc2088f8287",
+        "docs/primary-node-wallet.md": "58f923dcd029edf8d74700a0a2a4402e0656fb1ee22c31aa99bad41157662416",
+        "journeys/primary-node/README.md": "28f10993d2456b815b1f926304da08b940219e901f46ca2972eba4ab2c7d62b7",
+        "journeys/primary-node/close-and-resume-funding.xml": "b3f88bcc5c991534ebe7c043e906e2bf3ce3f3a891acfef9c15096a8afb046b7",
+        "journeys/primary-node/force-close-cancel.xml": "04d3342d2da4a44daaf3754857dbdc0043e16bf8cdea7c1f0e391d826608b5af",
+        "journeys/primary-node/pair-primary-node.xml": "f36abcc7b978c69e86bba7d0bff8e8007deebff4f5ab622b78009bef06ddb247",
+        "journeys/primary-node/receive-primary-quote.xml": "49eff5a2887ea720f51534f80e42952233a42fded690248bfea292cadacd9c71",
+        "journeys/primary-node/send-primary-onchain.xml": "3849be2bfefbf55573c6f360e1d14fc57a1cd4a463a934248883710a7fc5f108",
+        "journeys/primary-node/send-single-bitcoin-source.xml": "05a0bd533394696cdb2de2946559b486a90448906f18010cbbacd1442fabd873",
+        "journeys/primary-node/unified-wallet.xml": "35e15490b00cc66772c70a2b002dfb19e0c0fe07440e12363da60e37c408c6bc",
+        "plan.json": "1b88549c0a4ea9a1f45c7b15edc1978c80f690c66e17b0cb742ec1ddb2bd0dcf",
+        "spar.toml": "8df49faffaca2b237df5fd079177b816d5bf400bcb589c3e548bc7d850c43bbc"
+      },
+      "reproduction_note": "The baseline commit alone does not contain all feature code. Preserve the recorded local working tree and supplied native AAR when reproducing this build."
+    },
+    "ldk_node": {
+      "path": "/Users/coreyphillips/Documents/synonym/ldk-node",
+      "branch": "feat/lfbw-wallet-client",
+      "baseline_commit": "756b74b3487a032426a7c37e760c1bb6db305344",
+      "dirty": true,
+      "status": [
+        " M bindgen.sh",
+        " M bindings/kotlin/ldk-node-android/lib/src/main/kotlin/org/lightningdevkit/ldknode/ldk_node.android.kt",
+        " M bindings/kotlin/ldk-node-android/lib/src/main/kotlin/org/lightningdevkit/ldknode/ldk_node.common.kt",
+        " M bindings/ldk_node.udl",
+        " M examples/chicory-primary.rs",
+        " M src/builder.rs",
+        " M src/chain/bitcoind.rs",
+        " M src/chain/chicory/backend_tests.rs",
+        " M src/chain/electrum.rs",
+        " M src/chain/esplora.rs",
+        " M src/chain/mod.rs",
+        " M src/chicory/mod.rs",
+        " M src/chicory/service.rs",
+        " M src/chicory/wire.rs",
+        " M src/config.rs",
+        " M src/error.rs",
+        " M src/event.rs",
+        " M src/lib.rs",
+        " M src/message_handler.rs",
+        " M src/wallet/mod.rs",
+        " M vendor/lightning/src/ln/channel.rs",
+        " M vendor/lightning/src/ln/channel_open_tests.rs",
+        " M vendor/lightning/src/ln/channel_state.rs",
+        " M vendor/lightning/src/routing/router.rs",
+        " M vendor/lightning/src/util/config.rs",
+        "?? docs/primary-wallet-client.md",
+        "?? docs/qualification/primary-wallet-client.json",
+        "?? scripts/primary-wallet-beignet.cjs",
+        "?? scripts/primary-wallet-regtest.py",
+        "?? spar.toml",
+        "?? src/primary.rs"
+      ],
+      "tracked_diff_sha256": "6225694ecb343ef41555e4066c2b745bdf897ae8bada2396e2042acdd9385899",
+      "untracked_file_sha256": {
+        "docs/primary-wallet-client.md": "c55f7e818d2026e44e1fb20d964d5d874fff1b353afa2f92205d36ee04c54141",
+        "docs/qualification/primary-wallet-client.json": "996f3c91445b4f52b608be02d70e0223d7e13f6383c01d2d448628f088f84959",
+        "scripts/primary-wallet-beignet.cjs": "2a1f8a738faefabcdf043f6904267400bc64730657b1affba1b92ee8096c19a1",
+        "scripts/primary-wallet-regtest.py": "88e9bbe2ac2dae235c4e7a52e6f894706cff5fd586f26832fd8a525f466b7725",
+        "spar.toml": "8df49faffaca2b237df5fd079177b816d5bf400bcb589c3e548bc7d850c43bbc",
+        "src/primary.rs": "8014b03b299e96a292dfee757857fc267e06ebb5366b730f9ece7c621dd7a4a6"
+      },
+      "reproduction_note": "The baseline commit alone does not contain all feature code. Preserve the recorded local working tree and supplied native AAR when reproducing this build."
+    }
+  },
+  "native_artifact": {
+    "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/.local-native/ldk-node-feature-bits-198.aar",
+    "sha256": "e7bcdf7c2559408e61fdb45f6f8cd033cfae31fdc90bb6eb7fd4f2b51570a88f",
+    "bytes": 22788296,
+    "library_sha256_by_abi": {
+      "arm64-v8a": "b2fd8b25e125fb4637e6999c44278e253526fdcbf08bfa179f8ef9caf3151952",
+      "armeabi-v7a": "0ece1618ec1f5da386004f204c2c7bccc1f6b55c911b132f14758d1d166def7e",
+      "x86_64": "061aa954b69d261526974b746b2c214ff5ac051d8045e8121fa7514c4abe5cce"
+    }
+  },
+  "build_environment": {
+    "JAVA_HOME": "/Applications/Android Studio.app/Contents/jbr/Contents/Home",
+    "ANDROID_HOME": "/Users/coreyphillips/Library/Android/sdk",
+    "ORG_GRADLE_PROJECT_ldkNodeAar": "/Users/coreyphillips/Documents/synonym/bitkit-android/.local-native/ldk-node-feature-bits-198.aar",
+    "PATH_prefix": "/private/tmp/bitkit-tools/bin",
+    "native_build_command": "./bindgen.sh android",
+    "native_build_jdk": "Java 17",
+    "native_build_ndk": "28.2.13676358",
+    "android_build_tools": "36.0.0",
+    "regtest_environment": {
+      "E2E": "true",
+      "E2E_BACKEND": "local",
+      "E2E_ELECTRUM_URL": "tcp://192.168.50.211:60401",
+      "E2E_HOMEGATE_URL": "https://homegate.staging.pubky.app",
+      "GEO": "false",
+      "TREZOR_BRIDGE": "false"
+    },
+    "mainnet_environment": {
+      "E2E": "false",
+      "E2E_BACKEND": "network",
+      "GEO": "true",
+      "TREZOR_BRIDGE": "false"
+    }
+  },
+  "rebuild_commands": {
+    "mainnet": "python3 /Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-mainnet/feature-bits-198/build-and-verify.py mainnet",
+    "regtest": "python3 /Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-regtest/feature-bits-198/build-and-verify.py regtest"
+  },
+  "checks": [
+    {
+      "check": "compile",
+      "command": [
+        "just",
+        "compile"
+      ],
+      "exit": 0,
+      "seconds": 52.4,
+      "log": "/private/tmp/bitkit-feature-bits-compile.log"
+    },
+    {
+      "check": "test",
+      "command": [
+        "just",
+        "test"
+      ],
+      "exit": 0,
+      "seconds": 106.8,
+      "log": "/private/tmp/bitkit-feature-bits-test.log"
+    },
+    {
+      "check": "lint",
+      "command": [
+        "just",
+        "lint"
+      ],
+      "exit": 0,
+      "seconds": 154.4,
+      "log": "/private/tmp/bitkit-feature-bits-lint.log"
+    }
+  ],
+  "unit_tests": {
+    "tests": 4501,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "suites": 252
+  },
+  "artifacts": {
+    "mainnet": {
+      "command": [
+        "./gradlew",
+        "-I",
+        "/private/tmp/bitkit-primary-feature-bits.init.gradle",
+        "assembleMainnetDebug",
+        "--console=plain"
+      ],
+      "build_config": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/generated/source/buildConfig/mainnet/debug/to/bitkit/BuildConfig.java",
+      "build_config_fields": {
+        "APPLICATION_ID": "to.bitkit.primary",
+        "NETWORK": "BITCOIN",
+        "E2E_BACKEND": "network"
+      },
+      "artifacts": [
+        {
+          "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-mainnet/feature-bits-198/bitkit-primary-mainnet-debug-198-arm64-v8a.apk",
+          "abi": "arm64-v8a",
+          "bytes": 220667472,
+          "sha256": "16780a3b882b6bc4d39c46340201d70eb6b643d37e0cd56863bbd3b80668c0a8",
+          "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+          "application_id": "to.bitkit.primary",
+          "label": "Bitkit Primary",
+          "version_code": 198,
+          "network": "BITCOIN",
+          "e2e": false,
+          "zip_alignment": "passed",
+          "packaged_build_config_verified": true,
+          "ldk_native_sha256": {
+            "arm64-v8a": "b2fd8b25e125fb4637e6999c44278e253526fdcbf08bfa179f8ef9caf3151952"
+          },
+          "ldk_native_matches_supplied_aar": true
+        },
+        {
+          "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-mainnet/feature-bits-198/bitkit-primary-mainnet-debug-198-universal.apk",
+          "abi": "universal",
+          "bytes": 362230592,
+          "sha256": "d9cff7e9a2bdb774e77bcf7a5d4d5ec4b42f25b512912e983600bdd1e95dba0a",
+          "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+          "application_id": "to.bitkit.primary",
+          "label": "Bitkit Primary",
+          "version_code": 198,
+          "network": "BITCOIN",
+          "e2e": false,
+          "zip_alignment": "passed",
+          "packaged_build_config_verified": true,
+          "ldk_native_sha256": {
+            "arm64-v8a": "b2fd8b25e125fb4637e6999c44278e253526fdcbf08bfa179f8ef9caf3151952",
+            "armeabi-v7a": "0ece1618ec1f5da386004f204c2c7bccc1f6b55c911b132f14758d1d166def7e",
+            "x86_64": "061aa954b69d261526974b746b2c214ff5ac051d8045e8121fa7514c4abe5cce"
+          },
+          "ldk_native_matches_supplied_aar": true
+        }
+      ]
+    },
+    "regtest": {
+      "command": [
+        "./gradlew",
+        "-I",
+        "/private/tmp/bitkit-primary-feature-bits.init.gradle",
+        "assembleDevDebug",
+        "--console=plain"
+      ],
+      "build_config": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/generated/source/buildConfig/dev/debug/to/bitkit/BuildConfig.java",
+      "build_config_fields": {
+        "APPLICATION_ID": "to.bitkit.primary.regtest",
+        "NETWORK": "REGTEST",
+        "E2E_BACKEND": "local",
+        "E2E_ELECTRUM_URL": "tcp://192.168.50.211:60401",
+        "E2E_HOMEGATE_URL": "https://homegate.staging.pubky.app"
+      },
+      "artifacts": [
+        {
+          "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-regtest/feature-bits-198/bitkit-primary-regtest-debug-198-arm64-v8a.apk",
+          "abi": "arm64-v8a",
+          "bytes": 220667492,
+          "sha256": "494b481ed223415630c0eb3fae3b24aa803015c5b8ad42a2fa6921e54f1cd783",
+          "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+          "application_id": "to.bitkit.primary.regtest",
+          "label": "Bitkit Primary Regtest",
+          "version_code": 198,
+          "network": "REGTEST",
+          "e2e": true,
+          "zip_alignment": "passed",
+          "packaged_build_config_verified": true,
+          "ldk_native_sha256": {
+            "arm64-v8a": "b2fd8b25e125fb4637e6999c44278e253526fdcbf08bfa179f8ef9caf3151952"
+          },
+          "ldk_native_matches_supplied_aar": true
+        },
+        {
+          "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-regtest/feature-bits-198/bitkit-primary-regtest-debug-198-universal.apk",
+          "abi": "universal",
+          "bytes": 362230612,
+          "sha256": "ed74adeab053667c879adf44492de80345b1d945ab8527e443fe6f8be5c88ade",
+          "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+          "application_id": "to.bitkit.primary.regtest",
+          "label": "Bitkit Primary Regtest",
+          "version_code": 198,
+          "network": "REGTEST",
+          "e2e": true,
+          "zip_alignment": "passed",
+          "packaged_build_config_verified": true,
+          "ldk_native_sha256": {
+            "arm64-v8a": "b2fd8b25e125fb4637e6999c44278e253526fdcbf08bfa179f8ef9caf3151952",
+            "armeabi-v7a": "0ece1618ec1f5da386004f204c2c7bccc1f6b55c911b132f14758d1d166def7e",
+            "x86_64": "061aa954b69d261526974b746b2c214ff5ac051d8045e8121fa7514c4abe5cce"
+          },
+          "ldk_native_matches_supplied_aar": true
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "Custom app IDs retain the existing debug signing certificate and install alongside stock Bitkit.",
+    "Placeholder Firebase configuration is used for these custom packages; Firebase push is unavailable.",
+    "Regtest uses the Mint LAN Electrum endpoint and requires access to that network.",
+    "Mainnet payment and full funded journey tests were not performed for this build."
+  ],
+  "regtest_smoke_test": {
+    "device": "emulator-5554",
+    "abi": "arm64-v8a",
+    "application_id": "to.bitkit.primary.regtest",
+    "previous_version_code": 197,
+    "installed_version_code": 198,
+    "result": "passed",
+    "observed": [
+      "Installed as an in-place upgrade without clearing app data.",
+      "Launched successfully and reached Home after dismissing the optional QuickPay introduction.",
+      "Existing 18,879 sat regtest balance and prior 19,880 sat receive and 1,001 sat send history remained visible.",
+      "No fatal exception, fatal signal, or native-library load error in the running app log."
+    ],
+    "payments_sent": false,
+    "full_journey_suite_executed": false,
+    "layout_evidence": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-regtest/feature-bits-198/smoke-layout.json",
+    "commands": [
+      "android run --sdk=/Users/coreyphillips/Library/Android/sdk --device=emulator-5554 --apks=/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-regtest/feature-bits-198/bitkit-primary-regtest-debug-198-arm64-v8a.apk",
+      "adb -s emulator-5554 shell input tap 204 1132",
+      "android layout --sdk=/Users/coreyphillips/Library/Android/sdk --device=emulator-5554",
+      "adb -s emulator-5554 shell dumpsys package to.bitkit.primary.regtest",
+      "adb -s emulator-5554 logcat -d --pid 24794"
+    ]
+  }
+}
