@@ -169,7 +169,11 @@ private fun Content(
                         .fillMaxSize()
                 ) {
                     VerticalSpacer(16.dp)
-                    LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
+                    LightningBalancesSection(
+                        uiState.localBalance,
+                        uiState.remoteBalance,
+                        isReceivingUnlimited = uiState.isSparkReceiving
+                    )
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
                     EmptyStateContent(modifier = Modifier.weight(1f))
@@ -194,7 +198,7 @@ private fun Content(
                     LightningBalancesSection(
                         uiState.localBalance,
                         uiState.remoteBalance,
-                        isReceivingUnlimited = uiState.spark != null
+                        isReceivingUnlimited = uiState.isSparkReceiving
                     )
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
@@ -328,10 +332,6 @@ private fun BalanceColumn(
     Column {
         Caption13Up(text = label, color = Colors.White64)
         VerticalSpacer(8.dp)
-        if (valueText != null) {
-            BodyM(text = valueText, color = Colors.White64)
-            return@Column
-        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -341,7 +341,7 @@ private fun BalanceColumn(
                 tint = color,
                 modifier = Modifier.size(22.dp)
             )
-            Title(text = balance.toLong().formatToModernDisplay(), color = color)
+            Title(text = valueText ?: balance.toLong().formatToModernDisplay(), color = color)
         }
     }
 }

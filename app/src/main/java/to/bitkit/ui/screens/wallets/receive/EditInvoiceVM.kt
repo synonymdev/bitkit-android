@@ -41,6 +41,12 @@ class EditInvoiceVM @Inject constructor(
         isGeoBlocked: Boolean,
     ) {
         viewModelScope.launch {
+            if (walletRepo.canReceiveWithSpark()) {
+                editInvoiceEffect(
+                    EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.None)
+                )
+                return@launch
+            }
             _isLoading.update { true }
             val inboundCapacitySats = walletRepo.inboundLiquiditySats()
             val maxCjitAmountSats = maxCjitAmountSats(source, amountSats, inboundCapacitySats, isGeoBlocked)

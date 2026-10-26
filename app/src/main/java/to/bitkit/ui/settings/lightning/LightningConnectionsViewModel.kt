@@ -124,6 +124,7 @@ class LightningConnectionsViewModel @Inject constructor(
                         localBalance = calculateLocalBalance(channels).safe() + sparkState.balanceSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
                         spark = sparkState.toUi(lightningRepo),
+                        isSparkReceiving = sparkState.isReady,
                     )
                 }
             }
@@ -310,6 +311,7 @@ data class LightningConnectionsUiState(
     val localBalance: ULong = 0u,
     val remoteBalance: ULong = 0u,
     val spark: SparkUi? = null,
+    val isSparkReceiving: Boolean = false,
 )
 
 /** The Spark wallet shown as a connection, present once it holds a balance or a deposit. */

@@ -974,6 +974,9 @@ class WalletRepo @Inject constructor(
         }
     }
 
+    /** Spark receives any amount without inbound liquidity, so no channel or CJIT is needed. */
+    fun canReceiveWithSpark(): Boolean = sparkRepo.canReceive()
+
     suspend fun inboundLiquiditySats(): ULong = withContext(bgDispatcher) {
         return@withContext currentReadyChannels().calculateRemoteBalance()
     }

@@ -50,6 +50,26 @@ class EditInvoiceVMTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onClickContinue should emit none for spending above inbound when Spark can receive`() = test {
+        whenever(walletRepo.canReceiveWithSpark()).thenReturn(true)
+
+        sut.editInvoiceEffect.test {
+            sut.onClickContinue(
+                source = ReceiveLiquiditySource.SPENDING,
+                amountSats = 10_000u,
+                isGeoBlocked = true,
+            )
+
+            assertEquals(
+                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.None),
+                awaitItem(),
+            )
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(walletRepo, times(0)).inboundLiquiditySats()
+    }
+
+    @Test
     fun `onClickContinue should emit choose amount for spending below CJIT minimum`() = test {
         whenever(blocktankRepo.maxCjitAmountSats()).thenReturn(Result.success(100_000u))
 
