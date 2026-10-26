@@ -669,6 +669,13 @@ class LightningRepo @Inject constructor(
 
     fun setWiping(enabled: Boolean) = run { isWiping = enabled }
 
+    /** Blocks a transfer to spending unless the geocheck confirms the region is allowed. */
+    suspend fun isTransferBlocked(): Boolean = withContext(bgDispatcher) {
+        coreService.isGeoBlocked(blockOnError = true).also { blocked ->
+            _lightningState.update { it.copy(isGeoBlocked = blocked) }
+        }
+    }
+
     suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
         _lightningState.update {
             it.copy(isGeoBlocked = coreService.isGeoBlocked())

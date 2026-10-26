@@ -171,8 +171,9 @@ class CoreService @Inject constructor(
         }
     }
 
+    /** @param blockOnError whether a failed or unexpected geocheck counts as blocked. */
     @Suppress("KotlinConstantConditions")
-    suspend fun isGeoBlocked(): Boolean {
+    suspend fun isGeoBlocked(blockOnError: Boolean = false): Boolean {
         val tag = "GeoCheck"
         if (!Env.isGeoblockingEnabled) {
             Logger.verbose("Geoblocking disabled via build config", context = tag)
@@ -197,15 +198,15 @@ class CoreService @Inject constructor(
 
                     else -> {
                         Logger.warn(
-                            "Unexpected status code: ${response.status.value}, defaulting to false",
+                            "Unexpected status code: ${response.status.value}, defaulting to '$blockOnError'",
                             context = tag
                         )
-                        false
+                        blockOnError
                     }
                 }
             }.onFailure {
-                Logger.warn("Error. defaulting isGeoBlocked to false", context = tag)
-            }.getOrDefault(false)
+                Logger.warn("Failed geocheck, defaulting isGeoBlocked to '$blockOnError'", it, context = tag)
+            }.getOrDefault(blockOnError)
         }
     }
 

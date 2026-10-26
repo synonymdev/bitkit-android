@@ -481,8 +481,7 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun isTransferUnavailable(): Boolean {
-        lightningRepo.updateGeoBlockState()
-        if (!lightningRepo.lightningState.value.isGeoBlocked) return false
+        if (!lightningRepo.isTransferBlocked()) return false
         Logger.warn("Skipped paying spending order: transfers are unavailable", context = TAG)
         transferEffects.emit(TransferEffect.OnTransferUnavailable)
         return true

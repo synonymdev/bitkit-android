@@ -168,6 +168,7 @@ class TransferViewModelTest : BaseUnitTest() {
         }
             .thenReturn(Result.success("transfer-id"))
         whenever { hwWalletRepo.needsPassphrase(any()) }.thenReturn(false)
+        whenever { lightningRepo.isTransferBlocked() }.thenReturn(false)
         val nodeStatus = mock<NodeStatus>()
         whenever(nodeStatus.isRunning).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
@@ -1214,10 +1215,7 @@ class TransferViewModelTest : BaseUnitTest() {
         backgroundScope.launch { sut.transferEffects.collect { effects += it } }
         quoteOrder(order)
         prepareConfirm()
-        val nodeStatus = mock<NodeStatus>()
-        whenever(nodeStatus.isRunning).thenReturn(true)
-        whenever(lightningRepo.lightningState)
-            .thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus, isGeoBlocked = true)))
+        whenever(lightningRepo.isTransferBlocked()).thenReturn(true)
 
         sut.onTransferToSpendingConfirm()
         advanceUntilIdle()
