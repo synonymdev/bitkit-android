@@ -1542,7 +1542,7 @@
     <string name="subscriptions__name_placeholder">اسم الاشتراك</string>
     <string name="subscriptions__ongoing">مستمر</string>
     <string name="subscriptions__overview">نظرة عامة</string>
-    <string name="subscriptions__payment_due_description">افتح Bitkit لمراجعة دفعة اشتراك.</string>
+    <string name="subscriptions__payment_due_description">افتح Bitkit لمراجعة الدفعة</string>
     <string name="subscriptions__payment_due_title">دفعة اشتراك مستحقة</string>
     <string name="subscriptions__payment_methods">طرق الدفع</string>
     <string name="subscriptions__per_day">يوميًا</string>

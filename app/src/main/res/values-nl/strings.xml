@@ -1554,7 +1554,7 @@
     <string name="subscriptions__name_placeholder">Naam abonnement</string>
     <string name="subscriptions__ongoing">Doorlopend</string>
     <string name="subscriptions__overview">Overzicht</string>
-    <string name="subscriptions__payment_due_description">Open Bitkit om een abonnementsbetaling te bekijken.</string>
+    <string name="subscriptions__payment_due_description">Open Bitkit om de betaling te bekijken</string>
     <string name="subscriptions__payment_due_title">Abonnementsbetaling verschuldigd</string>
     <string name="subscriptions__payment_methods">Betaalmethoden</string>
     <string name="subscriptions__per_day">Per dag</string>

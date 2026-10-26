@@ -1555,7 +1555,7 @@
     <string name="subscriptions__name_placeholder">Nazwa subskrypcji</string>
     <string name="subscriptions__ongoing">W toku</string>
     <string name="subscriptions__overview">Przegląd</string>
-    <string name="subscriptions__payment_due_description">Otwórz Bitkit, aby przejrzeć płatność za subskrypcję.</string>
+    <string name="subscriptions__payment_due_description">Otwórz Bitkit, aby przejrzeć płatność</string>
     <string name="subscriptions__payment_due_title">Termin płatności za subskrypcję</string>
     <string name="subscriptions__payment_methods">Metody płatności</string>
     <string name="subscriptions__per_day">Dziennie</string>

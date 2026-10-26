@@ -1556,7 +1556,7 @@
     <string name="subscriptions__name_placeholder">Nome abbonamento</string>
     <string name="subscriptions__ongoing">In corso</string>
     <string name="subscriptions__overview">Panoramica</string>
-    <string name="subscriptions__payment_due_description">Apri Bitkit per controllare un pagamento di abbonamento.</string>
+    <string name="subscriptions__payment_due_description">Apri Bitkit per controllare il pagamento</string>
     <string name="subscriptions__payment_due_title">Pagamento Abbonamento Dovuto</string>
     <string name="subscriptions__payment_methods">Metodi di pagamento</string>
     <string name="subscriptions__per_day">Al Giorno</string>

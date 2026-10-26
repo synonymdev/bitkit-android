@@ -1552,7 +1552,7 @@
     <string name="subscriptions__name_placeholder">Nombre de la suscripción</string>
     <string name="subscriptions__ongoing">En curso</string>
     <string name="subscriptions__overview">Resumen</string>
-    <string name="subscriptions__payment_due_description">Abra Bitkit para revisar un pago de suscripción.</string>
+    <string name="subscriptions__payment_due_description">Abra Bitkit para revisar el pago</string>
     <string name="subscriptions__payment_due_title">Pago de suscripción pendiente</string>
     <string name="subscriptions__payment_methods">Métodos de pago</string>
     <string name="subscriptions__per_day">Al día</string>

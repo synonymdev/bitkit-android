@@ -1548,7 +1548,7 @@
     <string name="subscriptions__name_placeholder">Όνομα συνδρομής</string>
     <string name="subscriptions__ongoing">Σε εξέλιξη</string>
     <string name="subscriptions__overview">Επισκόπηση</string>
-    <string name="subscriptions__payment_due_description">Άνοιξε το Bitkit για να ελέγξεις μια πληρωμή συνδρομής.</string>
+    <string name="subscriptions__payment_due_description">Άνοιξε το Bitkit για να ελέγξεις την πληρωμή</string>
     <string name="subscriptions__payment_due_title">Οφειλόμενη πληρωμή συνδρομής</string>
     <string name="subscriptions__payment_methods">Τρόποι πληρωμής</string>
     <string name="subscriptions__per_day">Ανά ημέρα</string>

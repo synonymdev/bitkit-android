@@ -1553,7 +1553,7 @@
     <string name="subscriptions__name_placeholder">Nom de l\'abonnement</string>
     <string name="subscriptions__ongoing">En cours</string>
     <string name="subscriptions__overview">Aperçu</string>
-    <string name="subscriptions__payment_due_description">Ouvrez Bitkit pour examiner un paiement d\'abonnement.</string>
+    <string name="subscriptions__payment_due_description">Ouvrez Bitkit pour examiner le paiement</string>
     <string name="subscriptions__payment_due_title">Paiement d\'abonnement dû</string>
     <string name="subscriptions__payment_methods">Moyens de paiement</string>
     <string name="subscriptions__per_day">Par jour</string>

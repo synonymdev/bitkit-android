@@ -1583,7 +1583,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="subscriptions__name_placeholder">Название подписки</string>
     <string name="subscriptions__ongoing">Бессрочно</string>
     <string name="subscriptions__overview">Обзор</string>
-    <string name="subscriptions__payment_due_description">Откройте Bitkit, чтобы проверить платёж по подписке.</string>
+    <string name="subscriptions__payment_due_description">Откройте Bitkit, чтобы проверить платёж</string>
     <string name="subscriptions__payment_due_title">Пора Оплатить Подписку</string>
     <string name="subscriptions__payment_methods">Способы оплаты</string>
     <string name="subscriptions__per_day">В День</string>

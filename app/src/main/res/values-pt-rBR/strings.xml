@@ -1556,7 +1556,7 @@
     <string name="subscriptions__name_placeholder">Nome da assinatura</string>
     <string name="subscriptions__ongoing">Em andamento</string>
     <string name="subscriptions__overview">Visão Geral</string>
-    <string name="subscriptions__payment_due_description">Abra a Bitkit para revisar um pagamento de assinatura.</string>
+    <string name="subscriptions__payment_due_description">Abra a Bitkit para revisar o pagamento</string>
     <string name="subscriptions__payment_due_title">Pagamento de Assinatura Pendente</string>
     <string name="subscriptions__payment_methods">Formas de pagamento</string>
     <string name="subscriptions__per_day">Por Dia</string>

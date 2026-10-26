@@ -1171,7 +1171,7 @@
     <string name="subscriptions__name_placeholder">Subscription name</string>
     <string name="subscriptions__ongoing">Ongoing</string>
     <string name="subscriptions__overview">Overview</string>
-    <string name="subscriptions__payment_due_description">Open Bitkit to review a subscription payment.</string>
+    <string name="subscriptions__payment_due_description">Open Bitkit to review payment</string>
     <string name="subscriptions__payment_due_title">Subscription Payment Due</string>
     <string name="subscriptions__payment_methods">Payment methods</string>
     <string name="subscriptions__payments">Payments</string>

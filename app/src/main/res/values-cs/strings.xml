@@ -1556,7 +1556,7 @@
     <string name="subscriptions__name_placeholder">Název předplatného</string>
     <string name="subscriptions__ongoing">Průběžné</string>
     <string name="subscriptions__overview">Přehled</string>
-    <string name="subscriptions__payment_due_description">Otevřete Bitkit a zkontrolujte platbu předplatného.</string>
+    <string name="subscriptions__payment_due_description">Otevřete Bitkit a zkontrolujte platbu</string>
     <string name="subscriptions__payment_due_title">Splatná platba předplatného</string>
     <string name="subscriptions__payment_methods">Platební metody</string>
     <string name="subscriptions__per_day">Za den</string>

@@ -1555,7 +1555,7 @@
     <string name="subscriptions__name_placeholder">Name des Abonnements</string>
     <string name="subscriptions__ongoing">Laufend</string>
     <string name="subscriptions__overview">Übersicht</string>
-    <string name="subscriptions__payment_due_description">Öffne Bitkit, um eine Abonnementzahlung zu prüfen.</string>
+    <string name="subscriptions__payment_due_description">Öffne Bitkit, um die Zahlung zu prüfen</string>
     <string name="subscriptions__payment_due_title">Abonnementzahlung fällig</string>
     <string name="subscriptions__payment_methods">Zahlungsmethoden</string>
     <string name="subscriptions__per_day">Pro Tag</string>
