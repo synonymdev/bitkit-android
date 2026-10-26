@@ -451,6 +451,13 @@
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Zkusit znovu</string>
     <string name="profile__suggestions">Návrhy</string>
+    <string name="profile__unlink_confirm">Ano, zrušit propojení</string>
+    <string name="profile__unlink_confirm_description">Tímto smažete svá data Paykit a zrušíte propojení tohoto pubky s Bitkitem. V Pubky Ring zůstane k dispozici.</string>
+    <string name="profile__unlink_confirm_title">Zrušit propojení pubky?</string>
+    <string name="profile__unlink_error_description">Vaše data Paykit se nepodařilo smazat. Zkuste to znovu, nebo tento pubky od Bitkitu odpojte.</string>
+    <string name="profile__unlink_error_title">Propojení pubky nelze zrušit</string>
+    <string name="profile__unlink_pubky">Zrušit propojení pubky</string>
+    <string name="profile__unlink_success">Propojení pubky zrušeno</string>
     <string name="profile__your_name">Vaše jméno</string>
     <string name="security__backup_button">Zálohování</string>
     <string name="security__backup_funds">Nyní, když máte v peněžence nějaké prostředky, je čas je zálohovat!</string>
@@ -832,7 +839,6 @@
     <string name="usdt__fee_note">Všechny poplatky se platí v USDT. Konečný poplatek může být nižší.</string>
     <string name="usdt__from_address">Z adresy</string>
     <string name="usdt__hide_details">Skrýt podrobnosti</string>
-    <string name="usdt__history_sync">Starší aktivita se stále synchronizuje. Když je připojení k dispozici, je váš zůstatek aktuální.</string>
     <string name="usdt__intro_decline">Ne, děkuji</string>
     <string name="usdt__intro_description">V srdci bitcoin. Dolary, když je potřebujete. Zapněte USDT (Tether) a posílejte a přijímejte digitální dolary s Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLARY?&lt;/accent&gt;\nVAŠE VOLBA</string>
@@ -1403,6 +1409,7 @@
     <string name="profile__edit_save_error">Profil se nepodařilo uložit</string>
     <string name="profile__edit_save_success">Profil uložen</string>
     <string name="profile__edit_tags">TAGY</string>
+    <string name="profile__edit_unlink_section">ZRUŠIT PROPOJENÍ</string>
     <string name="profile__empty_state">Váš profil nelze načíst.</string>
     <string name="profile__intro_description">Díky přenosnému profilu vás kontakty mohou kdekoli zastihnout a zaplatit vám.</string>
     <string name="profile__intro_title">PŘENOSNÝ\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>

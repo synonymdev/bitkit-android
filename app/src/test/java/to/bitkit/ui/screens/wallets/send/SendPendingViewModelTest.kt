@@ -8,7 +8,9 @@ import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -16,6 +18,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -38,6 +41,7 @@ import to.bitkit.viewmodels.SanityWarning
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -102,6 +106,145 @@ class SendPendingViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         authorization.await()
         assertNull(sut.uiState.value.recoveryApproval)
+    }
+
+    @Test
+    fun `declined or cancelled recovery approval returns to idle pending`() = test {
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32),
+            emptyList(),
+            "original",
+            1_000uL,
+            feeRateSatsPerVByte = 10uL,
+            miningFeeSats = 600uL
+        )
+        for (usePin in listOf(false, true)) {
+            for (cancelCaller in listOf(false, true)) {
+                val authorization = launch {
+                    sut.approveRecoveryFee(receipt, emptyList(), requiresPin = true, useBiometrics = true)
+                }
+                runCurrent()
+                assertEquals(RecoveryApproval.Fee(receipt), sut.uiState.value.recoveryApproval)
+                if (usePin) {
+                    sut.answerRecoveryApproval(true)
+                    runCurrent()
+                    sut.useRecoveryPin()
+                    assertTrue(sut.openRecoveryPin())
+                }
+                if (cancelCaller) {
+                    authorization.cancelAndJoin()
+                } else {
+                    if (usePin) sut.answerRecoveryPin(false) else sut.answerRecoveryApproval(false)
+                    runCurrent()
+                }
+                assertTrue(authorization.isCancelled)
+                assertNull(sut.uiState.value.recoveryApproval)
+            }
+        }
+    }
+
+    @Test
+    fun `declined recovery pin preserves the original and allows one authorized retry`() = test {
+        val original = pendingOriginal()
+        val receipt = OnchainPreparedReceipt(
+            requireNotNull(original.txid),
+            emptyList(),
+            original.address,
+            original.amountSats,
+            feeRateSatsPerVByte = 2uL,
+            miningFeeSats = 600uL,
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        runCurrent()
+        var preparations = 0
+        var sends = 0
+        val retry: suspend (OnchainSendAttempt, ULong) -> Result<OnchainSendOutcome> = { attempt, _ ->
+            assertEquals(original, attempt)
+            preparations++
+            sut.approveRecoveryFee(receipt, emptyList(), requiresPin = true, useBiometrics = true)
+            sends++
+            Result.success(OnchainSendOutcome.Unknown(requireNotNull(original.txid)))
+        }
+
+        for (approved in listOf(false, true)) {
+            sut.retryOriginal(2uL, retry)
+            sut.retryOriginal(2uL, retry)
+            runCurrent()
+            assertEquals(RecoveryApproval.Fee(receipt), sut.uiState.value.recoveryApproval)
+            sut.answerRecoveryApproval(true)
+            runCurrent()
+            assertEquals(RecoveryApproval.Biometrics, sut.uiState.value.recoveryApproval)
+            sut.useRecoveryPin()
+            assertTrue(sut.openRecoveryPin())
+            sut.answerRecoveryPin(approved)
+            runCurrent()
+            sut.answerRecoveryPin(true)
+            runCurrent()
+
+            assertNull(sut.uiState.value.recoveryApproval)
+            assertEquals(false, sut.uiState.value.isRecovering)
+            assertEquals(original, sut.uiState.value.recoveryAttempt)
+            assertEquals(if (approved) original.txid else null, sut.uiState.value.currentTxid)
+            assertNull(sut.uiState.value.recoveredTxid)
+            assertEquals(if (approved) 1 else 0, sends)
+        }
+        assertEquals(2, preparations)
+    }
+
+    @Test
+    fun `declined recovery pin preserves expired payment until a later authorized release`() = test {
+        val original = pendingOriginal().copy(
+            requestId = PaykitPaymentRequestId("request", "payee"),
+            orderId = "order",
+            payerIdentity = "payer",
+        )
+        val receipt = OnchainPreparedReceipt(
+            "cd".repeat(32),
+            emptyList(),
+            "release-address",
+            original.amountSats,
+            feeRateSatsPerVByte = 2uL,
+            miningFeeSats = 600uL,
+        )
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(true)
+        var preparations = 0
+        var releases = 0
+        whenever(paykitPaymentProofRepo.abandonUnbroadcastOnchainPayment(any(), any(), any()))
+            .doSuspendableAnswer {
+                assertEquals(original, it.getArgument<OnchainSendAttempt>(0))
+                preparations++
+                it.getArgument<suspend (OnchainPreparedReceipt) -> Unit>(2)(receipt)
+                releases++
+                Result.success(Unit)
+            }
+        sut.initOnchain(original.txid, amount)
+        runCurrent()
+
+        for (approved in listOf(false, true)) {
+            sut.abandonExpired(requiresPin = true, useBiometrics = true)
+            sut.abandonExpired(requiresPin = true, useBiometrics = true)
+            runCurrent()
+            assertEquals(RecoveryApproval.Release(receipt), sut.uiState.value.recoveryApproval)
+            sut.answerRecoveryApproval(true)
+            runCurrent()
+            assertEquals(RecoveryApproval.Biometrics, sut.uiState.value.recoveryApproval)
+            sut.useRecoveryPin()
+            assertTrue(sut.openRecoveryPin())
+            sut.answerRecoveryPin(approved)
+            runCurrent()
+            sut.answerRecoveryPin(true)
+            runCurrent()
+
+            assertNull(sut.uiState.value.recoveryApproval)
+            assertEquals(false, sut.uiState.value.isAbandoning)
+            assertEquals(approved, sut.uiState.value.abandoned)
+            assertEquals(if (approved) null else original, sut.uiState.value.recoveryAttempt)
+            assertEquals(if (approved) null else original, sut.uiState.value.abandonableAttempt)
+            assertEquals(if (approved) 1 else 0, releases)
+        }
+        assertEquals(2, preparations)
     }
 
     @Test

@@ -425,6 +425,13 @@
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Réessayer</string>
     <string name="profile__suggestions_to_add">Suggestions à ajouter</string>
+    <string name="profile__unlink_confirm">Oui, dissocier</string>
+    <string name="profile__unlink_confirm_description">Cela supprimera vos données Paykit et dissociera ce pubky de Bitkit. Il restera disponible dans Pubky Ring.</string>
+    <string name="profile__unlink_confirm_title">Dissocier le pubky ?</string>
+    <string name="profile__unlink_error_description">Nous n\'avons pas pu supprimer vos données Paykit. Réessayez ou déconnectez ce pubky de Bitkit.</string>
+    <string name="profile__unlink_error_title">Impossible de dissocier le pubky</string>
+    <string name="profile__unlink_pubky">Dissocier le pubky</string>
+    <string name="profile__unlink_success">Pubky dissocié</string>
     <string name="profile__your_name">Votre nom</string>
     <string name="other__update_text">Veuillez mettre à jour Bitkit à la dernière version pour bénéficier des nouvelles fonctionnalités et des corrections de bugs !</string>
     <string name="other__update_button">Mise à jour</string>
@@ -832,7 +839,6 @@
     <string name="usdt__fee_note">Tous les frais sont payés en USDT. Les frais finaux peuvent être inférieurs.</string>
     <string name="usdt__from_address">Adresse d\'envoi</string>
     <string name="usdt__hide_details">Masquer les détails</string>
-    <string name="usdt__history_sync">L\'activité plus ancienne est encore en cours de synchronisation. Votre solde est à jour lorsque la connexion est disponible.</string>
     <string name="usdt__intro_decline">Non merci</string>
     <string name="usdt__intro_description">Bitcoin dans l\'âme. Des dollars quand vous en avez besoin. Activez USDT (Tether) pour envoyer et recevoir des dollars numériques avec Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DES DOLLARS ?&lt;/accent&gt;\nÀ VOUS DE VOIR</string>
@@ -1399,6 +1405,7 @@
     <string name="profile__edit_save_error">Échec de l\'enregistrement du profil</string>
     <string name="profile__edit_save_success">Profil enregistré</string>
     <string name="profile__edit_tags">ÉTIQUETTES</string>
+    <string name="profile__edit_unlink_section">DISSOCIER</string>
     <string name="profile__empty_state">Impossible de charger votre profil.</string>
     <string name="profile__intro_description">Grâce à votre profil portable, vos contacts peuvent vous joindre et vous payer partout.</string>
     <string name="profile__intro_title">PROFIL\n&lt;accent&gt;PORTABLE&lt;/accent&gt;</string>

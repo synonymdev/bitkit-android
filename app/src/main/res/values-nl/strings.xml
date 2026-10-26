@@ -447,6 +447,13 @@
     <string name="profile__retry_load">Probeer opnieuw</string>
     <string name="profile__suggestions">Suggesties</string>
     <string name="profile__suggestions_to_add">Suggesties Om Toe Te Voegen</string>
+    <string name="profile__unlink_confirm">Ja, ontkoppelen</string>
+    <string name="profile__unlink_confirm_description">Hiermee worden uw Paykit-gegevens verwijderd en wordt deze pubky losgekoppeld van Bitkit. Deze blijft beschikbaar in Pubky Ring.</string>
+    <string name="profile__unlink_confirm_title">pubky ontkoppelen?</string>
+    <string name="profile__unlink_error_description">We konden uw Paykit-gegevens niet verwijderen. Probeer het opnieuw, of ontkoppel deze pubky van Bitkit.</string>
+    <string name="profile__unlink_error_title">Kan pubky niet ontkoppelen</string>
+    <string name="profile__unlink_pubky">pubky ontkoppelen</string>
+    <string name="profile__unlink_success">pubky ontkoppeld</string>
     <string name="profile__your_name">Uw Naam</string>
     <string name="security__backup_button">Back-up maken</string>
     <string name="security__backup_funds">Nu je wat geld in je wallet hebt, is het tijd om een back-up te maken van je geld!</string>
@@ -827,7 +834,6 @@
     <string name="usdt__fee_note">Alle vergoedingen worden in USDT betaald. De uiteindelijke vergoeding kan lager zijn.</string>
     <string name="usdt__from_address">Van adres</string>
     <string name="usdt__hide_details">Details verbergen</string>
-    <string name="usdt__history_sync">Oudere activiteit wordt nog gesynchroniseerd. Uw saldo is actueel zodra er verbinding is.</string>
     <string name="usdt__intro_decline">Nee, bedankt</string>
     <string name="usdt__intro_description">Bitcoin in hart en nieren. Dollars wanneer u ze nodig heeft. Schakel USDT (Tether) in om digitale dollars te verzenden en ontvangen met Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nU BESLIST</string>
@@ -1401,6 +1407,7 @@
     <string name="profile__edit_save_error">Profiel opslaan mislukt</string>
     <string name="profile__edit_save_success">Profiel opgeslagen</string>
     <string name="profile__edit_tags">TAGS</string>
+    <string name="profile__edit_unlink_section">ONTKOPPELEN</string>
     <string name="profile__empty_state">Kan uw profiel niet laden.</string>
     <string name="profile__intro_description">Met uw draagbare profiel kunnen uw contacten u overal bereiken en betalen.</string>
     <string name="profile__intro_title">DRAAGBAAR\n&lt;accent&gt;PROFIEL&lt;/accent&gt;</string>

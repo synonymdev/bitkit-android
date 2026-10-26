@@ -708,6 +708,7 @@
     <string name="profile__edit_save_error">Failed to save profile</string>
     <string name="profile__edit_save_success">Profile saved</string>
     <string name="profile__edit_tags">TAGS</string>
+    <string name="profile__edit_unlink_section">UNLINK</string>
     <string name="profile__empty_state">Unable to load your profile.</string>
     <string name="profile__intro_description">With your portable profile your contacts can reach you and pay you anywhere.</string>
     <string name="profile__intro_title">PORTABLE\n&lt;accent&gt;PROFILE&lt;/accent&gt;</string>
@@ -731,6 +732,13 @@
     <string name="profile__source_lost">This pubky is no longer available in Pubky Ring. Your profile has been disconnected.</string>
     <string name="profile__suggestions">Suggestions</string>
     <string name="profile__suggestions_to_add">Suggestions To Add</string>
+    <string name="profile__unlink_confirm">Yes, Unlink</string>
+    <string name="profile__unlink_confirm_description">This will delete your Paykit data and unlink this pubky from Bitkit. It will still be available in Pubky Ring.</string>
+    <string name="profile__unlink_confirm_title">Unlink pubky?</string>
+    <string name="profile__unlink_error_description">We couldn\'t delete your Paykit data. Retry, or disconnect this pubky from Bitkit.</string>
+    <string name="profile__unlink_error_title">Unable to Unlink Pubky</string>
+    <string name="profile__unlink_pubky">Unlink pubky</string>
+    <string name="profile__unlink_success">Pubky unlinked</string>
     <string name="profile__your_name">Your Name</string>
     <string name="profile__your_pubky">Your Pubky</string>
     <string name="pubky_auth__already_signed_in">Already signed in</string>
@@ -1287,7 +1295,6 @@
     <string name="usdt__fee_note">All fees are paid in USDT. Final fee may be lower.</string>
     <string name="usdt__from_address">From address</string>
     <string name="usdt__hide_details">Hide details</string>
-    <string name="usdt__history_sync">Older activity is still syncing. Your balance is up to date when the connection is available.</string>
     <string name="usdt__intro_decline">No Thanks</string>
     <string name="usdt__intro_description">Bitcoin at heart. Dollars when you need them. Enable USDT (Tether) to send and receive digital dollars with Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nYOUR CALL</string>

@@ -31,6 +31,7 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.UsdtQuote
+import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentRequestLifecycleState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -1153,7 +1154,7 @@ class AppViewModel @Inject constructor(
     private suspend fun refreshIncomingPaykitPaymentRequests(
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
         forceFresh: Boolean = false,
-        messagePriority: Priority = Priority.Ordered,
+        messagePriority: Priority = Priority.Background,
         onlyWhileActive: Boolean = false,
         reconcileProofs: Boolean = mode == PaykitPaymentRequestRefreshMode.FULL,
     ): Result<Unit> {
@@ -1164,6 +1165,17 @@ class AppViewModel @Inject constructor(
             onlyWhileActive && isPaymentRequestPollingStopped.value
         ) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+        }
+        if (onlyWhileActive && reconcileProofs) {
+            val signIn = pubkyRepo.currentSignIn()
+                ?: return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+            paykitPaymentRequestRepo.isPaymentSubmissionActive.first { !it }
+            currentCoroutineContext().ensureActive()
+            if (!pubkyRepo.isCurrent(signIn) || !isPaykitEnabled.value || !walletRepo.walletExists() ||
+                isPaymentRequestPollingStopped.value || privatePaykitRepo.isProfileDeletionInProgress.value
+            ) {
+                return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+            }
         }
         if (reconcileProofs) paykitPaymentProofRepo.reconcile()
         if (privatePaykitRepo.isProfileDeletionInProgress.value ||
@@ -3764,9 +3776,24 @@ class AppViewModel @Inject constructor(
         }
         refreshPaykitRequestAmount()
         updateCanSwitchWallet()
-        if (!openPaykitRequestConfirmation(fromMainScanner)) {
+        val initialPayment = payment.initialUsdtSubscriptionPayment(Clock.System.now())?.takeIf { useUsdt }
+        if (initialPayment != null) {
+            paykitReviewedAmount = initialPayment.amount
+            paykitPaymentTerms = initialPayment
+            _sendUiState.update { it.copy(requiresAmountReview = false) }
+            navigateToSendRoute(fromMainScanner, SendRoute.UsdtReview, SendEffect.NavigateToUsdtReview)
+        } else if (!openPaykitRequestConfirmation(fromMainScanner)) {
             navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
         }
+    }
+
+    fun takeInitialUsdtSubscriptionAuthorization(): Boolean {
+        val state = _sendUiState.value
+        if (!state.initialSubscriptionPaymentAutoStartPending || !state.paykitUsesUsdt) return false
+        _sendUiState.update { it.copy(initialSubscriptionPaymentAutoStartPending = false) }
+        val payment = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+            ?.initialUsdtSubscriptionPayment(Clock.System.now()) ?: return false
+        return state.shouldAutomaticallyPay && payment == paykitPaymentTerms && payment.amount == paykitReviewedAmount
     }
 
     /**
@@ -5731,7 +5758,9 @@ class AppViewModel @Inject constructor(
         }
         val preparedPaymentProofRequest = proofPreparation.getOrNull()
 
-        contactPaymentContext?.incomingPaymentRequest?.let { request ->
+        contactPaymentContext?.incomingPaymentRequest?.takeIf {
+            !it.requiresAcceptance || requiresPrivatePaymentListConsumption(contactPaymentContext)
+        }?.let { request ->
             paykitPaymentRequestRepo.claimForPayment(request).onFailure {
                 cancelPaymentProofPreparation(preparedPaymentProofRequest)
                 handlePaymentPreparationFailure(it, contactPaymentContext)
@@ -5949,6 +5978,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun isUnsentBlockedRequest(
+        sendAttempted: Boolean,
+        previous: OnchainSendAttempt?,
+        request: PaykitPaymentRequest?,
+    ): Boolean = !sendAttempted && previous != null && request != null && previous.requestId != request.id
+
     private suspend fun handleOnchainPaymentFailure(
         error: Throwable,
         sendAttempted: Boolean,
@@ -5964,10 +5999,11 @@ class AppViewModel @Inject constructor(
             (sendAttempted && error !is OnchainSendNotDispatchedError)
         if (unresolved) {
             Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
-            finishManualAllowancePayment(allowanceAttemptId, succeeded = null)
+            val previous = (error as? OnchainSendBlockedError)?.attempt
+            val unsentRequest = isUnsentBlockedRequest(sendAttempted, previous, incomingPaymentRequest)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = if (unsentRequest) false else null)
             if (!sendAttempted) releasePrivatePaymentListIfNeeded(contactPaymentContext)
             if (!paymentProofStarted) cancelPaymentProofPreparation(preparedPaymentProofRequest)
-            val previous = (error as? OnchainSendBlockedError)?.attempt
             if (previous != null &&
                 (incomingPaymentRequest == null || previous.requestId != incomingPaymentRequest.id)
             ) {
@@ -6307,18 +6343,21 @@ class AppViewModel @Inject constructor(
 
     private suspend fun prepareContactPayment(
         contactPaymentContext: ContactPaymentContext?,
-        beforePrivateConsumption: suspend () -> Result<Unit> = { Result.success(Unit) },
+        beforePrivateConsumption: (suspend () -> Result<Unit>)? = null,
     ): Boolean {
         if (isPreparedContactPayment(contactPaymentContext)) return true
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return false
 
-        contactPaymentContext?.incomingPaymentRequest?.let { request ->
+        contactPaymentContext?.incomingPaymentRequest?.takeIf {
+            beforePrivateConsumption != null || !it.requiresAcceptance ||
+                requiresPrivatePaymentListConsumption(contactPaymentContext)
+        }?.let { request ->
             paykitPaymentRequestRepo.claimForPayment(request).onFailure {
                 handlePaymentPreparationFailure(it, contactPaymentContext)
                 return false
             }
         }
-        beforePrivateConsumption().onFailure {
+        beforePrivateConsumption?.invoke()?.onFailure {
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return false
@@ -6380,15 +6419,19 @@ class AppViewModel @Inject constructor(
         if (preparation == null) return
         val quoteId = paykitPaymentTerms?.quoteId
         viewModelScope.launch {
-            paykitPaymentProofRepo.completeOnchainPayment(
-                request = paymentRequest,
-                txid = txId,
-                paymentEndpointIdentifier = preparation.endpointIdentifier,
-                paymentAppId = preparation.appId,
-                acceptedOutcome = acceptedOutcome,
-                conversionQuoteId = quoteId,
-            )
-            if (paymentRequest.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
+            runSuspendCatching {
+                paykitPaymentProofRepo.completeOnchainPayment(
+                    request = paymentRequest,
+                    txid = txId,
+                    paymentEndpointIdentifier = preparation.endpointIdentifier,
+                    paymentAppId = preparation.appId,
+                    acceptedOutcome = acceptedOutcome,
+                    conversionQuoteId = quoteId,
+                )
+                if (paymentRequest.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
+            }.onFailure {
+                Logger.warn("Deferred on-chain Paykit proof completion for reconciliation", context = TAG)
+            }
         }
     }
 
@@ -7366,6 +7409,8 @@ class AppViewModel @Inject constructor(
 
     fun beginHardwarePaymentSubmission(): () -> Unit = beginPaymentSubmission()
 
+    fun beginPaymentReview(): () -> Unit = paykitPaymentRequestRepo.beginPaymentReview()
+
     private fun beginPaymentSubmission(): () -> Unit {
         val submission = Any()
         synchronized(activePaymentSubmissions) {
@@ -7643,6 +7688,9 @@ class AppViewModel @Inject constructor(
             )
         }
     }
+
+    private fun requiresPrivatePaymentListConsumption(context: ContactPaymentContext?): Boolean =
+        !_sendUiState.value.paykitUsesUsdt && context?.privatePaymentContext?.paymentListVersion != null
 
     private suspend fun consumePrivatePaymentListIfNeeded(context: ContactPaymentContext?): Result<Unit> {
         context ?: return Result.success(Unit)
@@ -8449,7 +8497,28 @@ data class ContactPaymentContext(
     val isInitialSubscriptionPayment: Boolean = false,
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val endpoints: List<Endpoint> = emptyList(),
-)
+) {
+    fun initialUsdtSubscriptionPayment(at: Instant): PaykitRequestPayment? {
+        val request = incomingPaymentRequest ?: return null
+        if (!isInitialSubscriptionPayment || request.billingPeriod == null || request.isExpired(at)) return null
+        if (request.acceptedPaymentEndpointIdentifiers.toSet() != setOf(MethodId.UsdtArbitrum.rawValue) ||
+            endpoints.isEmpty() || endpoints.any { it.methodId != MethodId.UsdtArbitrum }
+        ) {
+            return null
+        }
+        val unchangedAmount = when (request.amount.asset) {
+            PaykitAsset.USDT -> request.pricing.conversion == null
+            PaykitAsset.USD -> {
+                val rates = (request.pricing.conversion as? PaymentConversion.Fixed)?.rates.orEmpty()
+                val rate = rates.firstOrNull { it.asset == "usdt-arbitrum" } ?: rates.firstOrNull { it.asset == "usdt" }
+                rate?.value?.toBigDecimalOrNull()?.compareTo(BigDecimal.ONE) == 0
+            }
+            else -> false
+        }
+        if (!unchangedAmount) return null
+        return runCatching { request.payment(MethodId.UsdtArbitrum, at) }.getOrNull()?.takeIf { it.isValid(at) }
+    }
+}
 
 private data class PaymentProofPreparation(
     val endpointIdentifier: String,

@@ -820,7 +820,6 @@
     <string name="usdt__fee_note">Όλα τα τέλη πληρώνονται σε USDT. Το τελικό τέλος μπορεί να είναι χαμηλότερο.</string>
     <string name="usdt__from_address">Από διεύθυνση</string>
     <string name="usdt__hide_details">Απόκρυψη λεπτομερειών</string>
-    <string name="usdt__history_sync">Η παλαιότερη δραστηριότητα συγχρονίζεται ακόμα. Το υπόλοιπό σου είναι ενημερωμένο όταν υπάρχει σύνδεση.</string>
     <string name="usdt__intro_decline">Όχι, ευχαριστώ</string>
     <string name="usdt__intro_description">Bitcoin στην καρδιά. Δολάρια όταν τα χρειάζεσαι. Ενεργοποίησε το USDT (Tether) για να στέλνεις και να λαμβάνεις ψηφιακά δολάρια με το Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;ΔΟΛΑΡΙΑ;&lt;/accent&gt;\nΔΙΚΗ ΣΟΥ ΕΠΙΛΟΓΗ</string>
@@ -1393,6 +1392,7 @@
     <string name="profile__edit_save_error">Αποτυχία αποθήκευσης προφίλ</string>
     <string name="profile__edit_save_success">Το προφίλ αποθηκεύτηκε</string>
     <string name="profile__edit_tags">ΕΤΙΚΕΤΕΣ</string>
+    <string name="profile__edit_unlink_section">ΑΠΟΣΥΝΔΕΣΗ</string>
     <string name="profile__empty_state">Δεν ήταν δυνατή η φόρτωση του προφίλ σου.</string>
     <string name="profile__intro_description">Με το φορητό προφίλ σου, οι επαφές σου μπορούν να σε βρουν και να σε πληρώσουν οπουδήποτε.</string>
     <string name="profile__intro_title">ΦΟΡΗΤΟ\n&lt;accent&gt;ΠΡΟΦΙΛ&lt;/accent&gt;</string>
@@ -1413,6 +1413,13 @@
     <string name="profile__sign_out_title">Αποσύνδεση προφίλ</string>
     <string name="profile__source_lost">Αυτό το pubky δεν είναι πλέον διαθέσιμο στο Pubky Ring. Το προφίλ σου αποσυνδέθηκε.</string>
     <string name="profile__suggestions_to_add">Προτάσεις για προσθήκη</string>
+    <string name="profile__unlink_confirm">Ναι, Αποσύνδεση</string>
+    <string name="profile__unlink_confirm_description">Αυτό θα διαγράψει τα δεδομένα Paykit σου και θα αποσυνδέσει αυτό το pubky από το Bitkit. Θα παραμείνει διαθέσιμο στο Pubky Ring.</string>
+    <string name="profile__unlink_confirm_title">Αποσύνδεση pubky;</string>
+    <string name="profile__unlink_error_description">Δεν μπορέσαμε να διαγράψουμε τα δεδομένα Paykit σου. Δοκίμασε ξανά ή αποσύνδεσε αυτό το pubky από το Bitkit.</string>
+    <string name="profile__unlink_error_title">Αδυναμία αποσύνδεσης pubky</string>
+    <string name="profile__unlink_pubky">Αποσύνδεση pubky</string>
+    <string name="profile__unlink_success">Το pubky αποσυνδέθηκε</string>
     <string name="profile__your_name">Το όνομά σου</string>
     <string name="profile__your_pubky">Το pubky σου</string>
     <string name="pubky_auth__already_signed_in">Είσαι ήδη συνδεδεμένος</string>

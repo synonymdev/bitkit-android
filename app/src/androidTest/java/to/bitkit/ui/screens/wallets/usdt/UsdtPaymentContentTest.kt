@@ -79,7 +79,37 @@ class UsdtPaymentContentTest {
     }
 
     @Test
-    fun decimalKeyMatchesAmountLocaleWithoutChangingInputEncoding() {
+    fun lockedReviewAmountKeepsReviewOpenWhileBackAndEditableAmountsStillNavigate() {
+        val editable = mutableStateOf(false)
+        var pageChanges = 0
+        var backPresses = 0
+        val payment = quote.copy(destination = UsdtDestination.ARBITRUM, bridgeProvider = null)
+        composeTestRule.setContent {
+            Content(
+                UsdtSendState(quote = payment), UsdtPage.AMOUNT,
+                amountEditable = editable.value,
+                onPageChange = { pageChanges++ },
+                onBack = { backPresses++ },
+            )
+        }
+        composeTestRule.onNodeWithText("3.00").performClick()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            assertEquals(0, pageChanges)
+            assertEquals(0, backPresses)
+        }
+        composeTestRule.onNodeWithTag("NavigationBack").performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(1, backPresses)
+            editable.value = true
+        }
+        SystemClock.sleep(600)
+        composeTestRule.onNodeWithText("3.00").performClick()
+        composeTestRule.runOnIdle { assertEquals(1, pageChanges) }
+    }
+
+    @Test
+    fun decimalKeyUsesDotInCommaRegionsWithoutChangingInputEncoding() {
         Locale.setDefault(Locale.GERMANY)
         val amount = mutableStateOf("5")
         composeTestRule.setContent {
@@ -97,11 +127,37 @@ class UsdtPaymentContentTest {
                 }
             }
         }
-        composeTestRule.onNodeWithText(",").assertIsDisplayed()
+        composeTestRule.onNodeWithText(".").assertIsDisplayed()
         composeTestRule.onNodeWithTag("NDecimal").performClick()
         composeTestRule.onNodeWithTag("N5").performClick()
-        composeTestRule.onNodeWithText("5,5").assertIsDisplayed()
+        composeTestRule.onNodeWithText("5.5").assertIsDisplayed()
         composeTestRule.runOnIdle { assertEquals("5.5", amount.value) }
+    }
+
+    @Test
+    fun walletDistinguishesUnknownAndConfirmedBalancesSilentlyAndKeepsPrivacy() {
+        Locale.setDefault(Locale.GERMANY)
+        val wallet = mutableStateOf(UsdtWalletState())
+        val hidden = mutableStateOf(false)
+        composeTestRule.setContent {
+            AppThemeSurface {
+                UsdtWalletContent(
+                    wallet = wallet.value,
+                    hideBalance = hidden.value,
+                    onReceive = {}, onSend = {}, onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("—").assertIsDisplayed()
+        composeTestRule.onNodeWithText("0.00").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtHistorySync").assertDoesNotExist()
+        composeTestRule.runOnIdle { wallet.value = wallet.value.copy(balance = 0uL) }
+        composeTestRule.onNodeWithText("0.00").assertIsDisplayed()
+        composeTestRule.onNodeWithText("—").assertDoesNotExist()
+        composeTestRule.runOnIdle { wallet.value = wallet.value.copy(balance = 1_234_567_890uL) }
+        composeTestRule.onNodeWithText("1,234.57").assertIsDisplayed()
+        composeTestRule.runOnIdle { hidden.value = true }
+        composeTestRule.onNodeWithText("1,234.57").assertDoesNotExist()
     }
 
     @Test
@@ -291,6 +347,9 @@ class UsdtPaymentContentTest {
         state: UsdtSendState,
         page: UsdtPage,
         wallet: UsdtWalletState = UsdtWalletState(),
+        amountEditable: Boolean = true,
+        onPageChange: (UsdtPage) -> Unit = {},
+        onBack: () -> Unit = {},
         onDetails: () -> Unit = {},
     ) {
         AppThemeSurface {
@@ -306,12 +365,13 @@ class UsdtPaymentContentTest {
                         onRecipientChange = {},
                         onAmountChange = {},
                         onRecipientContinue = {},
-                        onPageChange = {},
-                        onBack = {},
+                        onPageChange = onPageChange,
+                        onBack = onBack,
                         onReview = {},
                         onConfirm = {},
                         onDone = {},
                         onDetails = onDetails,
+                        amountEditable = amountEditable,
                     )
                 }
             }

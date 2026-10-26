@@ -377,6 +377,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     fun setPaymentSubmissionActive(active: Boolean) = paykitSdkService.setPaymentSubmissionActive(active)
 
+    fun beginPaymentReview(): () -> Unit = paykitSdkService.beginPaymentReview()
+
     @Volatile
     private var activeIdentity: String? = null
 
@@ -575,7 +577,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun refresh(
         mode: PaykitPaymentRequestRefreshMode,
         forceFresh: Boolean,
-        messagePriority: Priority = Priority.Ordered,
+        messagePriority: Priority = Priority.Background,
     ): Result<Unit> {
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity
@@ -599,7 +601,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     } ?: return@refresh
                     val snapshot = runSuspendCatching {
                         val priority = if (forceFresh) Priority.Ordered else Priority.Background
-                        fetchRequestSnapshot(expectedIdentity, mode, priority, messagePriority, observationOnly = true)
+                        fetchRequestSnapshot(
+                            expectedIdentity,
+                            mode,
+                            priority,
+                            if (forceFresh) Priority.Ordered else messagePriority,
+                            observationOnly = true,
+                        )
                     }
                     operationMutex.withLock {
                         if (!isCurrentState(generation, expectedIdentity)) return@withLock
@@ -622,7 +630,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                 }
             }.onFailure {
-                Logger.warn("Failed to refresh incoming Paykit payment requests", it, context = TAG)
+                if (it != PaykitPaymentRequestError.OperationInProgress) {
+                    Logger.warn("Failed to refresh incoming Paykit payment requests", it, context = TAG)
+                }
             }
         }
     }
@@ -1073,6 +1083,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     if (it.proposalStreamItemId != proposalStreamItemId) {
                         throw PaykitPaymentRequestError.RequestUnavailable
                     }
+                    if (it.isExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
+                    if (!isLocallyPayable(it)) throw PaykitPaymentRequestError.RequestUnavailable
+                    // The SDK checks the current peer while atomically claiming and queueing acceptance.
                     withAcceptanceIntent(it) {
                         paykitSdkService.acceptPaymentRequest(
                             counterparty = it.counterparty,
@@ -1098,7 +1111,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
     ): Result<T> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (!request.requiresAcceptance) throw PaykitPaymentRequestError.RequestUnavailable
-            operationMutex.withLock { withAcceptanceIntent(request, accept) }
+            operationMutex.withLock {
+                ensurePaymentAllowed(request, forExecution = false).getOrThrow()
+                withAcceptanceIntent(request, accept)
+            }
         }.onFailure {
             Logger.warn("Failed to accept an incoming Paykit payment request for this install", it, context = TAG)
         }
@@ -1108,7 +1124,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun <T> withAcceptanceIntent(request: PaykitPaymentRequest, operation: suspend () -> T): T {
         val identity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
         val generation = stateGeneration.get()
-        ensurePaymentAllowed(request, forExecution = false).getOrThrow()
         val alreadySaved = request.id in presentationStore.loadAcceptedOneTimeIds(identity)
         val acceptedIds = presentationStore.addAcceptedOneTimeId(identity, request.id)
         requireCurrentState(generation, identity)
@@ -1357,23 +1372,16 @@ class PaykitPaymentRequestRepo @Inject constructor(
             .flatten()
             .filter {
                 it.lifecycleState != PaymentRequestLifecycleState.PROOF_SUBMITTED &&
+                    !it.isExpired(now) &&
                     it.id !in locallyCompletedRequestIds &&
                     it.id !in locallyInFlightRequestIds &&
                     it.id !in updatedDismissedPaymentIds
             }
         val recurringHistory = allSubscriptions.filter { it.isPayer }.flatMap { subscription ->
-            updatedSubscriptionAcceptedAt[subscription.id]
+            val requests = updatedSubscriptionAcceptedAt[subscription.id]
                 ?.let { subscription.requestsThrough(subscriptionNow, it) }
                 .orEmpty()
-        }.mapNotNull { request ->
-            when {
-                request.lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED -> request
-                request.id in locallyCompletedRequestIds -> request.copy(
-                    lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED,
-                    paymentProofKind = locallyCompletedProofKinds[request.id],
-                )
-                else -> null
-            }
+            subscriptionHistory(subscription, requests, now, locallyCompletedProofKinds)
         }
         val oneTimeIncoming = availableRecords.mapNotNull { record ->
             when (val result = record.parseIncomingPaykitPaymentRequest(now)) {
@@ -1445,6 +1453,24 @@ class PaykitPaymentRequestRepo @Inject constructor(
     ): List<PaykitPaymentRequest> {
         val acceptedAt = subscriptionAcceptedAt[subscription.id] ?: return emptyList()
         return subscription.requestsThrough(now, acceptedAt)
+    }
+
+    private fun subscriptionHistory(
+        subscription: PaykitSubscription,
+        requests: List<PaykitPaymentRequest>,
+        now: Instant,
+        completedProofKinds: Map<PaykitPaymentRequestId, PaykitPaymentProofKind> = emptyMap(),
+    ): List<PaykitPaymentRequest> = requests.mapNotNull { request ->
+        when {
+            request.lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED -> request
+            request.id in completedProofKinds -> request.copy(
+                lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED,
+                paymentProofKind = completedProofKinds[request.id],
+            )
+            subscription.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING &&
+                request.isExpired(now) -> request
+            else -> null
+        }
     }
 
     private fun isCurrentState(generation: Long, expectedIdentity: String?): Boolean =
@@ -1690,23 +1716,24 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
 
         val recurringRequests = requestsThroughAcceptance(subscription, now)
+        val paymentNow = clock.now()
         val unpaidRequests = if (
             subscription.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING
         ) {
-            recurringRequests.filter { it.lifecycleState != PaymentRequestLifecycleState.PROOF_SUBMITTED }
+            recurringRequests.filter {
+                it.lifecycleState != PaymentRequestLifecycleState.PROOF_SUBMITTED && !it.isExpired(paymentNow)
+            }
         } else {
             emptyList()
         }
-        val paidRequests = recurringRequests.filter {
-            it.lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED
-        }
+        val historyRequests = subscriptionHistory(subscription, recurringRequests, paymentNow)
         val existingPending = _pendingRequests.value.filterNot { it.belongsTo(subscription) }
         _pendingRequests.update {
             (unpaidRequests + existingPending).sortedBy { it.createdAt }
         }
         val existingHistory = _paymentRequestHistory.value.filterNot { it.belongsTo(subscription) }
         _paymentRequestHistory.update {
-            (paidRequests + existingHistory).sortedByDescending { it.createdAt }
+            (historyRequests + existingHistory).sortedByDescending { it.createdAt }
         }
         prunePresentedSubscriptionProposalIds(_subscriptions.value)
         subscriptionNotificationScheduler.synchronize(
@@ -1738,7 +1765,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
             }
         }
             .onSuccess(::logOutboundFailures)
-            .onFailure { Logger.warn("Failed to deliver pending Paykit private messages", it, context = TAG) }
+            .onFailure {
+                if (it == PaykitPaymentRequestError.OperationInProgress) throw it
+                Logger.warn("Failed to deliver pending Paykit private messages", it, context = TAG)
+            }
             .getOrDefault(emptyList())
 
     private fun logOutboundFailures(reports: List<OutboundPrivateCounterpartySendReport>) {
@@ -1790,9 +1820,15 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val now = clock.now()
         val subscriptionNow = subscriptionClock.now()
         val expiredProposals = expiredProposals(now, handledRequestId)
+        val expiredPeriods = _pendingRequests.value.filter { it.billingPeriod != null && it.isExpired(now) }
+        _paymentRequestHistory.update { requests ->
+            (requests + expiredPeriods)
+                .distinctBy { it.id }
+                .withExpiredLifecycle(now)
+                .sortedByDescending { it.createdAt }
+        }
         _pendingRequests.update { requests -> requests.filterNot { it.isExpired(now) } }
         if (expiredProposals.isNotEmpty()) _expiredProposals.tryEmit(expiredProposals)
-        _paymentRequestHistory.update { requests -> requests.withExpiredLifecycle(now) }
         _subscriptions.update { subscriptions -> subscriptions.map { it.withExpiredLifecycle(subscriptionNow) } }
         prunePresentedRequestIds(_pendingRequests.value)
         prunePresentedSubscriptionProposalIds(_subscriptions.value)

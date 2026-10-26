@@ -449,6 +449,13 @@
     <string name="profile__retry_load">Riprova</string>
     <string name="profile__suggestions">Consigli</string>
     <string name="profile__suggestions_to_add">Suggerimenti Da Aggiungere</string>
+    <string name="profile__unlink_confirm">Sì, Scollega</string>
+    <string name="profile__unlink_confirm_description">I tuoi dati Paykit verranno eliminati e questo pubky verrà scollegato da Bitkit. Resterà disponibile in Pubky Ring.</string>
+    <string name="profile__unlink_confirm_title">Scollegare il pubky?</string>
+    <string name="profile__unlink_error_description">Non è stato possibile eliminare i tuoi dati Paykit. Riprova, oppure disconnetti questo pubky da Bitkit.</string>
+    <string name="profile__unlink_error_title">Impossibile Scollegare il Pubky</string>
+    <string name="profile__unlink_pubky">Scollega pubky</string>
+    <string name="profile__unlink_success">Pubky scollegato</string>
     <string name="profile__your_name">Tuo Nome</string>
     <string name="security__backup_button">Backup</string>
     <string name="security__backup_funds">Ora che ha dei fondi nel tuo wallet, è il momento di fare il backup!</string>
@@ -831,7 +838,6 @@
     <string name="usdt__fee_note">Tutte le commissioni sono pagate in USDT. La commissione finale potrebbe essere inferiore.</string>
     <string name="usdt__from_address">Indirizzo mittente</string>
     <string name="usdt__hide_details">Nascondi dettagli</string>
-    <string name="usdt__history_sync">Le attività meno recenti sono ancora in sincronizzazione. Il tuo saldo è aggiornato quando la connessione è disponibile.</string>
     <string name="usdt__intro_decline">No Grazie</string>
     <string name="usdt__intro_description">Bitcoin nel cuore. Dollari quando ti servono. Attiva USDT (Tether) per inviare e ricevere dollari digitali con Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARI?&lt;/accent&gt;\nDECIDI TU</string>
@@ -1404,6 +1410,7 @@
     <string name="profile__edit_save_error">Impossibile salvare il profilo</string>
     <string name="profile__edit_save_success">Profilo salvato</string>
     <string name="profile__edit_tags">TAG</string>
+    <string name="profile__edit_unlink_section">SCOLLEGA</string>
     <string name="profile__empty_state">Impossibile caricare il tuo profilo.</string>
     <string name="profile__intro_description">Con il tuo profilo portatile i tuoi contatti possono raggiungerti e pagarti ovunque.</string>
     <string name="profile__intro_title">PROFILO\n&lt;accent&gt;PORTATILE&lt;/accent&gt;</string>

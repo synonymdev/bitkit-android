@@ -432,6 +432,13 @@
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Erneut versuchen</string>
     <string name="profile__suggestions">Vorschläge</string>
+    <string name="profile__unlink_confirm">Ja, aufheben</string>
+    <string name="profile__unlink_confirm_description">Dadurch werden deine Paykit-Daten gelöscht und die Verknüpfung dieses pubky mit Bitkit aufgehoben. In Pubky Ring bleibt er weiterhin verfügbar.</string>
+    <string name="profile__unlink_confirm_title">pubky-Verknüpfung aufheben?</string>
+    <string name="profile__unlink_error_description">Wir konnten deine Paykit-Daten nicht löschen. Versuche es erneut oder trenne diesen pubky von Bitkit.</string>
+    <string name="profile__unlink_error_title">pubky-Verknüpfung kann nicht aufgehoben werden</string>
+    <string name="profile__unlink_pubky">pubky-Verknüpfung aufheben</string>
+    <string name="profile__unlink_success">pubky-Verknüpfung aufgehoben</string>
     <string name="profile__your_name">Dein Name</string>
     <string name="other__update_text">Bitte aktualisiere Bitkit auf die neueste Version für neue Funktionen und Fehlerbehebungen!</string>
     <string name="other__update_button">Aktualisieren</string>
@@ -830,7 +837,6 @@
     <string name="usdt__fee_note">Alle Gebühren werden in USDT bezahlt. Die endgültige Gebühr kann niedriger sein.</string>
     <string name="usdt__from_address">Absenderadresse</string>
     <string name="usdt__hide_details">Details ausblenden</string>
-    <string name="usdt__history_sync">Ältere Aktivitäten werden noch synchronisiert. Dein Guthaben ist aktuell, sobald eine Verbindung besteht.</string>
     <string name="usdt__intro_decline">Nein danke</string>
     <string name="usdt__intro_description">Im Herzen Bitcoin. Dollar, wenn du sie brauchst. Aktiviere USDT (Tether), um mit Bitkit digitale Dollar zu senden und zu empfangen.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLAR?&lt;/accent&gt;\nDU ENTSCHEIDEST</string>
@@ -1401,6 +1407,7 @@
     <string name="profile__edit_save_error">Profil konnte nicht gespeichert werden</string>
     <string name="profile__edit_save_success">Profil gespeichert</string>
     <string name="profile__edit_tags">TAGS</string>
+    <string name="profile__edit_unlink_section">VERKNÜPFUNG AUFHEBEN</string>
     <string name="profile__empty_state">Dein Profil kann nicht geladen werden.</string>
     <string name="profile__intro_description">Mit deinem portablen Profil können deine Kontakte dich überall erreichen und bezahlen.</string>
     <string name="profile__intro_title">PORTABLES\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>
