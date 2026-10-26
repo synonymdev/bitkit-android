@@ -191,7 +191,11 @@ private fun Content(
                         .verticalScroll(rememberScrollState())
                 ) {
                     VerticalSpacer(16.dp)
-                    LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
+                    LightningBalancesSection(
+                        uiState.localBalance,
+                        uiState.remoteBalance,
+                        isReceivingUnlimited = uiState.spark != null
+                    )
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
                     uiState.spark?.let { spark ->
@@ -291,7 +295,7 @@ private fun Content(
 }
 
 @Composable
-private fun LightningBalancesSection(localBalance: ULong, remoteBalance: ULong) {
+private fun LightningBalancesSection(localBalance: ULong, remoteBalance: ULong, isReceivingUnlimited: Boolean = false) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -307,12 +311,20 @@ private fun LightningBalancesSection(localBalance: ULong, remoteBalance: ULong) 
             balance = remoteBalance,
             icon = R.drawable.ic_received,
             color = Colors.White,
+            // Spark receives without inbound liquidity, so no channel caps receiving.
+            valueText = stringResource(R.string.lightning__spark_receiving_unlimited).takeIf { isReceivingUnlimited },
         )
     }
 }
 
 @Composable
-private fun BalanceColumn(label: String, balance: ULong, @DrawableRes icon: Int, color: Color) {
+private fun BalanceColumn(
+    label: String,
+    balance: ULong,
+    @DrawableRes icon: Int,
+    color: Color,
+    valueText: String? = null,
+) {
     Column {
         Caption13Up(text = label, color = Colors.White64)
         VerticalSpacer(8.dp)
@@ -325,7 +337,7 @@ private fun BalanceColumn(label: String, balance: ULong, @DrawableRes icon: Int,
                 tint = color,
                 modifier = Modifier.size(22.dp)
             )
-            Title(text = balance.toLong().formatToModernDisplay(), color = color)
+            Title(text = valueText ?: balance.toLong().formatToModernDisplay(), color = color)
         }
     }
 }
@@ -431,6 +443,7 @@ private fun SparkItem(
             localBalance = spark.balanceSats.toLong(),
             remoteBalance = 0L,
             status = ChannelStatusUi.OPEN,
+            showReceiving = false,
         )
         spark.pendingDeposits.forEach { SparkDepositRow(it, onOpenTx) }
         VerticalSpacer(16.dp)

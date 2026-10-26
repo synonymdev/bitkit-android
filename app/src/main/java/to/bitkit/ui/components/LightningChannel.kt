@@ -39,6 +39,7 @@ fun LightningChannel(
     modifier: Modifier = Modifier,
     status: ChannelStatusUi = ChannelStatusUi.PENDING,
     showLabels: Boolean = false,
+    showReceiving: Boolean = true,
 ) {
     val spendingColor = if (status == ChannelStatusUi.CLOSED) Colors.Gray5 else Colors.Purple50
     val spendingAvailableColor = if (status == ChannelStatusUi.CLOSED) Colors.Gray3 else Colors.Purple
@@ -58,7 +59,9 @@ fun LightningChannel(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Caption13Up(text = stringResource(R.string.lightning__spending_label), color = Colors.White64)
-                Caption13Up(text = stringResource(R.string.lightning__receiving_label), color = Colors.White64)
+                if (showReceiving) {
+                    Caption13Up(text = stringResource(R.string.lightning__receiving_label), color = Colors.White64)
+                }
             }
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -78,17 +81,19 @@ fun LightningChannel(
                     color = spendingAvailableColor,
                 )
             }
-            Row(verticalAlignment = CenterVertically) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_received),
-                    contentDescription = null,
-                    tint = receivingAvailableColor,
-                    modifier = Modifier.size(14.dp)
-                )
-                MoneyCaptionB(
-                    sats = remoteBalance,
-                    color = receivingAvailableColor,
-                )
+            if (showReceiving) {
+                Row(verticalAlignment = CenterVertically) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_received),
+                        contentDescription = null,
+                        tint = receivingAvailableColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    MoneyCaptionB(
+                        sats = remoteBalance,
+                        color = receivingAvailableColor,
+                    )
+                }
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -102,16 +107,17 @@ fun LightningChannel(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .background(spendingColor, RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                    .background(spendingColor, if (showReceiving) SpendingHalfShape else FullBarShape)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(spendingAvailableFraction)
                         .align(Alignment.CenterEnd)
-                        .background(spendingAvailableColor, RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                        .background(spendingAvailableColor, if (showReceiving) SpendingHalfShape else FullBarShape)
                 )
             }
+            if (!showReceiving) return@Row
             Spacer(modifier = Modifier.width(4.dp))
             Box(
                 modifier = Modifier
@@ -129,6 +135,9 @@ fun LightningChannel(
         }
     }
 }
+
+private val SpendingHalfShape = RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp)
+private val FullBarShape = RoundedCornerShape(8.dp)
 
 // region preview
 

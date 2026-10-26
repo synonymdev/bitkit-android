@@ -253,6 +253,7 @@
     <string name="lightning__spark_deposits_pending">Депозиты в обработке</string>
     <string name="lightning__spark_provider">Провайдер</string>
     <string name="lightning__spark_provider_value">Spark через Breez</string>
+    <string name="lightning__spark_receiving_unlimited">Без ограничений</string>
     <string name="lightning__spark_trust">Этот баланс хранится в Spark, которым управляют Lightspark, Breez и Flashnet. Он в безопасности, пока хотя бы один из них действует честно. Они могут приостановить доступ, а выход без них требует ончейн-вывода.</string>
     <string name="lightning__spendable_onchain">Доступно Onchain</string>
     <string name="lightning__spending">Расходы</string>

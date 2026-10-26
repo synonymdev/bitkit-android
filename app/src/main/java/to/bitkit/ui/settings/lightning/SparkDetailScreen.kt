@@ -98,6 +98,7 @@ private fun Content(
                     localBalance = spark.balanceSats.toLong(),
                     remoteBalance = 0L,
                     status = ChannelStatusUi.OPEN,
+                    showReceiving = false,
                 )
                 VerticalSpacer(32.dp)
                 HorizontalDivider()

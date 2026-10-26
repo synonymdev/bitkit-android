@@ -110,6 +110,7 @@
     <string name="lightning__spark_deposits_pending">Wpłaty w toku</string>
     <string name="lightning__spark_provider">Dostawca</string>
     <string name="lightning__spark_provider_value">Spark przez Breez</string>
+    <string name="lightning__spark_receiving_unlimited">Bez limitu</string>
     <string name="lightning__spark_trust">To saldo jest przechowywane na Spark, prowadzonym przez Lightspark, Breez i Flashnet. Jest bezpieczne, dopóki co najmniej jeden z nich działa uczciwie. Mogą wstrzymać dostęp, a wyjście bez nich wymaga wyjścia on-chain.</string>
     <string name="lightning__transfer_intro__title">Saldo \n&lt;accent&gt;Wydatków&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Zasil swoje saldo wydatków, aby cieszyć się natychmiastowymi i tanimi transakcjami z przyjaciółmi, rodziną i sprzedawcami.</string>

@@ -395,6 +395,7 @@
     <string name="lightning__spark_deposits_pending">Deposits in progress</string>
     <string name="lightning__spark_provider">Provider</string>
     <string name="lightning__spark_provider_value">Spark via Breez</string>
+    <string name="lightning__spark_receiving_unlimited">No limit</string>
     <string name="lightning__spark_trust">This balance is held on Spark, run by Lightspark, Breez and Flashnet. It is safe while at least one of them acts honestly. They can pause access, and leaving without them takes an on-chain exit.</string>
     <string name="lightning__spendable_onchain">Spendable Onchain</string>
     <string name="lightning__spending">Spending</string>

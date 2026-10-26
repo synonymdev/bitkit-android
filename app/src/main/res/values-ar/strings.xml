@@ -233,6 +233,7 @@
     <string name="lightning__spark_deposits_pending">إيداعات قيد التنفيذ</string>
     <string name="lightning__spark_provider">المزوّد</string>
     <string name="lightning__spark_provider_value">Spark عبر Breez</string>
+    <string name="lightning__spark_receiving_unlimited">بلا حد</string>
     <string name="lightning__spark_trust">يُحفظ هذا الرصيد على Spark الذي تديره Lightspark وBreez وFlashnet. يبقى آمنًا ما دام أحدهم على الأقل يتصرف بأمانة. يمكنهم إيقاف الوصول مؤقتًا، والخروج من دونهم يتطلب خروجًا على السلسلة.</string>
     <string name="lightning__spendable_onchain">قابل للإنفاق على السلسلة</string>
     <string name="lightning__spending">الإنفاق</string>

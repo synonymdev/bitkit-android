@@ -237,6 +237,7 @@
     <string name="lightning__spark_deposits_pending">Dipòsits en curs</string>
     <string name="lightning__spark_provider">Proveïdor</string>
     <string name="lightning__spark_provider_value">Spark mitjançant Breez</string>
+    <string name="lightning__spark_receiving_unlimited">Sense límit</string>
     <string name="lightning__spark_trust">Aquest saldo es guarda a Spark, gestionat per Lightspark, Breez i Flashnet. Està segur mentre almenys un d’ells actuï amb honestedat. Poden pausar l’accés, i sortir-ne sense ells requereix una sortida on-chain.</string>
     <string name="lightning__spendable_onchain">Gastable Onchain</string>
     <string name="lightning__spending">Despesa</string>

@@ -237,6 +237,7 @@
     <string name="lightning__spark_deposits_pending">Lopende stortingen</string>
     <string name="lightning__spark_provider">Aanbieder</string>
     <string name="lightning__spark_provider_value">Spark via Breez</string>
+    <string name="lightning__spark_receiving_unlimited">Geen limiet</string>
     <string name="lightning__spark_trust">Dit saldo staat op Spark, beheerd door Lightspark, Breez en Flashnet. Het is veilig zolang ten minste één van hen eerlijk handelt. Zij kunnen de toegang pauzeren, en vertrekken zonder hen vereist een on-chain exit.</string>
     <string name="lightning__spendable_onchain">Besteedbaar onchain</string>
     <string name="lightning__spending">Bestedingssaldo</string>

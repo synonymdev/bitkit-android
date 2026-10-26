@@ -233,6 +233,7 @@
     <string name="lightning__spark_deposits_pending">Καταθέσεις σε εξέλιξη</string>
     <string name="lightning__spark_provider">Πάροχος</string>
     <string name="lightning__spark_provider_value">Spark μέσω Breez</string>
+    <string name="lightning__spark_receiving_unlimited">Χωρίς όριο</string>
     <string name="lightning__spark_trust">Αυτό το υπόλοιπο φυλάσσεται στο Spark, που λειτουργούν οι Lightspark, Breez και Flashnet. Είναι ασφαλές όσο τουλάχιστον ένας από αυτούς ενεργεί έντιμα. Μπορούν να αναστείλουν την πρόσβαση, και η έξοδος χωρίς αυτούς απαιτεί έξοδο on-chain.</string>
     <string name="lightning__spendable_onchain">Διαθέσιμα onchain</string>
     <string name="lightning__spending">Δαπάνες</string>

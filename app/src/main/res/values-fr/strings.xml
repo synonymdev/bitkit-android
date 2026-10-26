@@ -108,6 +108,7 @@
     <string name="lightning__spark_deposits_pending">Dépôts en cours</string>
     <string name="lightning__spark_provider">Fournisseur</string>
     <string name="lightning__spark_provider_value">Spark via Breez</string>
+    <string name="lightning__spark_receiving_unlimited">Sans limite</string>
     <string name="lightning__spark_trust">Ce solde est détenu sur Spark, géré par Lightspark, Breez et Flashnet. Il est en sécurité tant qu’au moins l’un d’eux agit honnêtement. Ils peuvent suspendre l’accès, et en sortir sans eux nécessite une sortie on-chain.</string>
     <string name="lightning__transfer_intro__title">Dépenses \n&lt;accent&gt;Solde&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Alimentez votre solde de dépenses pour profiter de transactions instantanées et bon marché avec vos amis, votre famille et les commerçants.</string>

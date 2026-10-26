@@ -244,26 +244,27 @@ private fun Content(
                     VerticalSpacer(16.dp)
                 }
 
-                SettingsSwitchRow(
-                    title = stringResource(R.string.settings__bg__setup),
-                    isChecked = hasNotificationPermission,
-                    colors = AppSwitchDefaults.colorsPurple,
-                    onClick = onSwitchClick,
-                    switchTestTag = "SpendingConfirmNotificationSwitch",
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                VerticalSpacer(16.dp)
-
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    PrimaryButton(
-                        text = stringResource(R.string.common__learn_more),
-                        size = ButtonSize.Small,
-                        fullWidth = false,
-                        onClick = onLearnMoreClick,
-                        modifier = Modifier.testTag("SpendingConfirmMore")
+                // Blocktank's order-paid push and channel liquidity don't apply to funding Spark.
+                if (!state.isSpark) {
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings__bg__setup),
+                        isChecked = hasNotificationPermission,
+                        colors = AppSwitchDefaults.colorsPurple,
+                        onClick = onSwitchClick,
+                        switchTestTag = "SpendingConfirmNotificationSwitch",
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    if (!state.isSpark) {
+
+                    VerticalSpacer(16.dp)
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        PrimaryButton(
+                            text = stringResource(R.string.common__learn_more),
+                            size = ButtonSize.Small,
+                            fullWidth = false,
+                            onClick = onLearnMoreClick,
+                            modifier = Modifier.testTag("SpendingConfirmMore")
+                        )
                         PrimaryButton(
                             text = stringResource(
                                 if (isAdvanced) {

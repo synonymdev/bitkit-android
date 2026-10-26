@@ -240,6 +240,7 @@
     <string name="lightning__spark_deposits_pending">Probíhající vklady</string>
     <string name="lightning__spark_provider">Poskytovatel</string>
     <string name="lightning__spark_provider_value">Spark přes Breez</string>
+    <string name="lightning__spark_receiving_unlimited">Bez limitu</string>
     <string name="lightning__spark_trust">Tento zůstatek je uložen na Spark, který provozují Lightspark, Breez a Flashnet. Je v bezpečí, dokud alespoň jeden z nich jedná poctivě. Mohou pozastavit přístup a odchod bez nich vyžaduje on-chain výstup.</string>
     <string name="lightning__spendable_onchain">Utratitelné onchain</string>
     <string name="lightning__spending">Útraty</string>

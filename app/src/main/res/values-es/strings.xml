@@ -171,6 +171,7 @@
     <string name="lightning__spark_deposits_pending">Depósitos en curso</string>
     <string name="lightning__spark_provider">Proveedor</string>
     <string name="lightning__spark_provider_value">Spark mediante Breez</string>
+    <string name="lightning__spark_receiving_unlimited">Sin límite</string>
     <string name="lightning__spark_trust">Este saldo se guarda en Spark, operado por Lightspark, Breez y Flashnet. Está seguro mientras al menos uno de ellos actúe con honestidad. Pueden pausar el acceso, y salir sin ellos requiere una salida on-chain.</string>
     <string name="lightning__spendable_onchain">Gastable onchain</string>
     <string name="lightning__spending_advanced__fee">Comisión de liquidez</string>
