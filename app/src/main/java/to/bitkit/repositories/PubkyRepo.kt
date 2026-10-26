@@ -373,7 +373,7 @@ class PubkyRepo @Inject constructor(
         runSuspendCatching { profileRemovalStore.requireNoPending() }.exceptionOrNull()?.let { failure ->
             // Retained credentials must not activate while local teardown is unresolved or unreadable.
             _isRestoringSession.value = false
-            _sessionRestorationFailed.value = true
+            _sessionRestorationFailed.update { false }
             runSuspendCatching { pubkyService.preparePublicProfileRecovery() }
                 .onFailure { Logger.warn("Failed to prepare public profile access", it, context = TAG) }
             throw if (failure is ProfileRemovalPending) failure else ProfileRemovalPending(failure)

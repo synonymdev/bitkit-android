@@ -245,7 +245,8 @@ class PubkyRepoTest : BaseUnitTest() {
         try {
             assertFalse(resumed.restoreSessionIfNeeded())
             assertFalse(resumed.isRestoringSession.value)
-            assertTrue(resumed.sessionRestorationFailed.value)
+            assertFalse(resumed.sessionRestorationFailed.value)
+            assertTrue(resumed.requiresProfileRecovery())
         } finally {
             unavailable = false
         }
@@ -261,8 +262,13 @@ class PubkyRepoTest : BaseUnitTest() {
         val restarted = createSut()
         advanceUntilIdle()
         assertFalse(restarted.isRestoringSession.value)
-        assertTrue(restarted.sessionRestorationFailed.value)
-        assertFalse(restarted.restoreSessionIfNeeded())
+        assertFalse(restarted.sessionRestorationFailed.value)
+        repeat(3) {
+            restarted.clearSessionRestorationFailed()
+            assertFalse(restarted.restoreSessionIfNeeded())
+            assertFalse(restarted.sessionRestorationFailed.value)
+            assertTrue(restarted.requiresProfileRecovery())
+        }
         assertEquals(PubkyIdentityReadiness.RecoveryRequired, restarted.awaitIdentityReady())
         assertTrue(restarted.initialize().isFailure)
         verify(pubkyService, never()).initialize()

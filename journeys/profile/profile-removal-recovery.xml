@@ -18,6 +18,7 @@
     <action>Confirm local Disconnect while credential erasure is unavailable and verify recovery remains pending without clearing consumed-payment-list safety state</action>
     <action>Restore local storage, restart after credential erasure but before local completion and open Profile</action>
     <action>Verify pending cleanup and Disconnect remain visible with no stored identity, no authenticated activation and no automatic remote mutation</action>
+    <action>Background and foreground the app, then reconnect the test device network; verify cleanup guidance remains available without an expired-session or reconnect-profile error</action>
     <action>Confirm local Disconnect and verify all required local cleanup finishes before leaving Profile</action>
     <action>In a fresh fixture, replace the sign-in before an old confirmation or completion is delivered and verify it cannot act on or navigate away from the replacement</action>
     <action>Open ordinary receive and verify address accounting remains available while profile cleanup is pending</action>
