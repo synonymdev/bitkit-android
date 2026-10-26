@@ -284,6 +284,12 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | - | - |
 | AppStatusScreen.kt | Support & App Status › App Status OK |
 
+## ui/settings/backgroundPayments
+
+| Android | Figma |
+| - | - |
+| BackgroundPaymentsIntroScreen.kt | Settings > General › BackgroundPayments Intro |
+
 ## ui/settings/backups
 
 | Android | Figma |

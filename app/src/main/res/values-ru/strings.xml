@@ -9,6 +9,8 @@
     <string name="cards__invite__title">Пригласить</string>
     <string name="cards__lightning__description">Мгновенные платежи</string>
     <string name="cards__lightning__title">Тратить</string>
+    <string name="cards__notifications__description">Напоминания об оплате</string>
+    <string name="cards__notifications__title">Уведомления</string>
     <string name="cards__pin__description">Установите PIN-код</string>
     <string name="cards__pin__title">Безопасность</string>
     <string name="cards__quickpay__description">Сканируйте и платите</string>
@@ -291,19 +293,8 @@
     <string name="migration__nav_title">Миграция кошелька</string>
     <string name="migration__title">МИГРАЦИЯ
 &lt;accent&gt;КОШЕЛЬКА&lt;/accent&gt;</string>
-    <string name="notification__channel_closed__mutual_body">Баланс перемещён с расходов на сбережения</string>
-    <string name="notification__channel_closed__reason_body">Причина: %s</string>
-    <string name="notification__channel_closed__title">Канал закрыт</string>
     <string name="notification__channel_node__body">Канал уведомлений для фоновой службы Lightning ноды</string>
     <string name="notification__channel_node__name">Уведомление Lightning ноды</string>
-    <string name="notification__channel_open_bg_failed_title">Не удалось открыть канал в фоновом режиме</string>
-    <string name="notification__channel_open_failed_title">Не удалось открыть канал</string>
-    <string name="notification__channel_opened_title">Канал открыт</string>
-    <string name="notification__channel_pending_body">В ожидании</string>
-    <string name="notification__channel_ready_body">Готов к отправке</string>
-    <string name="notification__lightning_error_title">Ошибка Lightning</string>
-    <string name="notification__payment_failed_title">Платёж не удался</string>
-    <string name="notification__please_try_again_body">Пожалуйста, попробуйте снова</string>
     <string name="notification__received__body_amount">Получено %s</string>
     <string name="notification__received__title">Платёж получен</string>
     <string name="notification__service__body">Bitkit работает в фоновом режиме, чтобы вы могли получать Lightning платежи</string>
@@ -624,9 +615,17 @@
     <string name="settings__backup__status_success">Последнее Резервное Копирование: {time}</string>
     <string name="settings__backup__wallet">Создать Резервную Копию Кошелька</string>
     <string name="settings__backup__data">Резервные копии данных</string>
+    <string name="settings__bg__customize">Настроить в настройках Android Bitkit</string>
+    <string name="settings__bg__disabled">Уведомления отключены, потому что вы их запретили.</string>
+    <string name="settings__bg__enabled">Уведомления включены. Bitkit может напоминать о подписках и запросах на оплату.</string>
+    <string name="settings__bg__intro_desc">Включите уведомления, чтобы получать напоминания о подписках и запросах на оплату.</string>
+    <string name="settings__bg__intro_title">Будьте\n&lt;accent&gt;в курсе&lt;/accent&gt;</string>
+    <string name="settings__bg__notifications_header">Уведомления</string>
     <string name="settings__bg__off">Выкл</string>
     <string name="settings__bg__on">Вкл</string>
     <string name="settings__bg__setup">Настроить в фоне</string>
+    <string name="settings__bg__switch_title">Разрешить уведомления</string>
+    <string name="settings__bg__title">Уведомления</string>
     <string name="settings__cs__bnb_desc">Находит точные совпадения сумм для минимизации сдачи</string>
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Случайный выбор для приватности</string>
@@ -1480,6 +1479,9 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="settings__addr_type__settings_updated">Настройки обновлены</string>
     <string name="settings__addr_type__title">Тип Адреса</string>
     <string name="settings__adv__addr_type_currently_selected">Выбрано сейчас</string>
+    <string name="settings__bg__intro_button">Включить</string>
+    <string name="settings__bg__keep_active_desc">Если Bitkit остаётся активным, платежи проходят надёжнее. Пока эта функция включена, Android может показывать постоянное уведомление.</string>
+    <string name="settings__bg__keep_active_title">Держать Bitkit активным в фоне</string>
     <string name="settings__es__server_error_certificate">Сертификат этого сервера не является доверенным. Используйте сервер с доверенным сертификатом или подключитесь к его TCP-порту.</string>
     <string name="settings__es__server_error_network">Этот сервер работает в другой сети Bitcoin. Выберите сервер для сети, которую использует Bitkit.</string>
     <string name="settings__es__server_error_protocol">Не удалось установить защищённое соединение. Проверьте, что протокол (TCP или TLS) соответствует порту сервера.</string>

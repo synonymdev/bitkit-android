@@ -9,7 +9,6 @@ import to.bitkit.BuildConfig
 import to.bitkit.BuildConfig.VERSION_NAME
 import to.bitkit.ext.ensureDir
 import to.bitkit.ext.of
-import to.bitkit.models.BlocktankNotificationType
 import to.bitkit.models.NodePeer
 import to.bitkit.utils.Logger
 import java.io.File
@@ -70,9 +69,6 @@ internal object Env {
     const val fxRateRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
     const val fxRateStaleThreshold = 10 * 60 * 1000L // 10 minutes in millis
     const val lspOrdersRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
-
-    val pushNotificationFeatures = BlocktankNotificationType.entries
-    const val derivationName = "bitkit-notifications"
 
     const val FILE_PROVIDER_AUTHORITY = "${BuildConfig.APPLICATION_ID}.fileprovider"
     const val SUPPORT_EMAIL = "support@synonym.to"
@@ -139,11 +135,6 @@ internal object Env {
         get() = when (network) {
             Network.BITCOIN -> "$blocktankBaseUrl/api"
             else -> "$blocktankBaseUrl/blocktank/api/v2"
-        }
-    val blocktankNotificationApiUrl
-        get() = when (network) {
-            Network.BITCOIN -> "$blocktankBaseUrl/api/notifications"
-            else -> "$blocktankBaseUrl/notifications/api"
         }
 
     val btcRatesServer

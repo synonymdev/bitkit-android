@@ -255,6 +255,7 @@ import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
 import to.bitkit.utils.timedsheets.sheets.BackupTimedSheet
 import to.bitkit.utils.timedsheets.sheets.HighBalanceTimedSheet
+import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
 import java.math.BigDecimal
@@ -314,6 +315,7 @@ class AppViewModel @Inject constructor(
     private val samRockRepo: SamRockRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
+    private val notificationsSheet: NotificationsTimedSheet,
     private val quickPaySheet: QuickPayTimedSheet,
     private val usdtSheet: UsdtTimedSheet,
     private val usdtPreferences: UsdtPreferencesRepo,
@@ -546,6 +548,7 @@ class AppViewModel @Inject constructor(
         registerSheet(appUpdateSheet)
         registerSheet(usdtSheet)
         registerSheet(backupSheet)
+        registerSheet(notificationsSheet)
         registerSheet(quickPaySheet)
         registerSheet(highBalanceSheet)
     }

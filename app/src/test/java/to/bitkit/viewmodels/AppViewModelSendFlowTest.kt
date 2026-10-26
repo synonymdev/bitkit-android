@@ -929,6 +929,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         samRockRepo = samRockRepo,
         appUpdateSheet = mock { on { type } doReturn TimedSheetType.APP_UPDATE },
         backupSheet = backupSheet,
+        notificationsSheet = mock { on { type } doReturn TimedSheetType.NOTIFICATIONS },
         quickPaySheet = mock { on { type } doReturn TimedSheetType.QUICK_PAY },
         usdtSheet = usdtSheet,
 

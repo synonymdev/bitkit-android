@@ -61,6 +61,7 @@ class SuggestionsRepo @Inject constructor(
         hasHardwareWallet: Boolean,
     ) = listOfNotNull(
         Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
+        Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
         Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
         Suggestion.SHOP,
         Suggestion.PROFILE.takeIf { !profileAuthenticated },
