@@ -121,6 +121,18 @@ class FundingScreenTest {
     }
 
     @Test
+    fun whenGeoBlocked_transferStillInvokesOnTransferForTheUnavailableSheet() {
+        setContent(isGeoBlocked = true)
+
+        clickableTransferOption().performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, transferClicks)
+        assertEquals(0, fundClicks)
+        assertEquals(0, manualClicks)
+    }
+
+    @Test
     fun whenFundableBalanceIsZero_transferShouldNotRouteToTheTransferFlow() {
         setContent(fundableBalance = 0uL)
 

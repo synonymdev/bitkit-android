@@ -357,7 +357,9 @@ class TransferViewModel @Inject constructor(
 
     private suspend fun getOrCreateSpendingOrder(): IBtOrder? {
         val state = _spendingUiState.value
-        return state.order ?: blocktankRepo.createOrder(
+        state.order?.let { return it }
+        if (isTransferUnavailable()) return null
+        return blocktankRepo.createOrder(
             spendingBalanceSats = state.clientBalanceSat,
             receivingBalanceSats = state.lspBalanceSat,
         ).getOrElse {
@@ -414,6 +416,7 @@ class TransferViewModel @Inject constructor(
             return false
         }
         if (cacheStore.data.first().paidOrders.containsKey(order.id)) return true
+        if (isTransferUnavailable()) return false
         val plan = resolveSpendingConfirmPlan(order, shown) ?: return false
 
         Logger.debug(
@@ -475,6 +478,15 @@ class TransferViewModel @Inject constructor(
                     false
                 }
             )
+    }
+
+    /** Blocktank no longer sells channels, so neither a new order nor one held from before may be paid. */
+    private suspend fun isTransferUnavailable(): Boolean {
+        lightningRepo.updateGeoBlockState()
+        if (!lightningRepo.lightningState.value.isGeoBlocked) return false
+        Logger.warn("Skipped paying spending order: transfers are unavailable", context = TAG)
+        transferEffects.emit(TransferEffect.OnTransferUnavailable)
+        return true
     }
 
     private suspend fun showRetainedFundingPending(): Boolean {
@@ -1231,6 +1243,7 @@ class TransferViewModel @Inject constructor(
                     _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
                     return@launch
                 }
+                if (!isBroadcastRetry && isTransferUnavailable()) return@launch
                 val order = ensureSpendingOrder() ?: return@launch
                 val address = order.fundingAddress
                 if (address.isEmpty()) {
@@ -2170,6 +2183,7 @@ sealed interface TransferEffect {
     data object OnSpendingFundingPaid : TransferEffect
     data class OnFundingPending(val attempt: to.bitkit.repositories.OnchainSendAttempt) : TransferEffect
     data object OnHwTxSigned : TransferEffect
+    data object OnTransferUnavailable : TransferEffect
     data class ToastException(val e: Throwable) : TransferEffect
     data class ToastError(val title: String, val description: String) : TransferEffect
 }

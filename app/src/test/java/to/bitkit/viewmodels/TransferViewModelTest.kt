@@ -1201,6 +1201,51 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransferToSpendingConfirm pays no held order when transfers are unavailable`() = test {
+        val order = spendingOrder(feeSat = 99_000uL)
+        stubSpendableBalances(spendable = 200_000u)
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(listOf(stubUtxo(200_000u))))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(500uL))
+        stubSendOnChain()
+        val effects = mutableListOf<TransferEffect>()
+        backgroundScope.launch { sut.transferEffects.collect { effects += it } }
+        quoteOrder(order)
+        prepareConfirm()
+        val nodeStatus = mock<NodeStatus>()
+        whenever(nodeStatus.isRunning).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus, isGeoBlocked = true)))
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        assertTrue(TransferEffect.OnTransferUnavailable in effects)
+        assertEquals(false, sut.spendingUiState.value.isConfirmPaying)
+        verify(lightningRepo, never()).sendOnChain(
+            address = any(),
+            sats = any(),
+            speed = any(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `onTransferToSpendingConfirm does not drain when normal fee leaves non-dust change`() = test {
         val order = spendingOrder(feeSat = 35_341uL)
         val selected = listOf(stubUtxo(41_000u))

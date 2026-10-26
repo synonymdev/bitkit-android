@@ -368,6 +368,9 @@ class LightningRepo @Inject constructor(
 
         if (shouldCancelPendingStop) cancelPendingStop()
 
+        // The geocheck needs no node, so screens gated on it are right before the node is up.
+        scope.launch { updateGeoBlockState() }
+
         eventHandler?.let { _eventHandlers.add(it) }
 
         // Track retry state outside mutex to avoid deadlock (Mutex is non-reentrant)

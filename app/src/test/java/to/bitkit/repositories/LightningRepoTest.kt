@@ -626,6 +626,20 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `start updates geo block state before the node is up`() = test {
+        stubNodeStatus { false }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).doSuspendableAnswer { awaitCancellation() }
+        whenever(coreService.isGeoBlocked()).thenReturn(true)
+
+        val job = launch { sut.start(shouldRetry = false) }
+        runCurrent()
+
+        assertTrue(sut.lightningState.value.isGeoBlocked)
+        job.cancelAndJoin()
+    }
+
+    @Test
     fun `start restores the initial state when cancelled during node setup`() = test {
         stubNodeStatus { false }
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))

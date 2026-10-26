@@ -83,6 +83,7 @@
     <string name="common__ok">OK</string>
     <string name="common__ok_random">Awesome!\nNice!\nCool!\nGreat!\nFantastic!\nSweet!\nExcellent!\nTerrific!</string>
     <string name="common__preview">Preview</string>
+    <string name="common__read_more">Read More</string>
     <string name="common__ready">Ready</string>
     <string name="common__remove">Remove</string>
     <string name="common__remove_tag">Remove %1$s tag</string>
@@ -315,8 +316,6 @@
     <string name="lightning__funding__button2">Use Other Wallet</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
     <string name="lightning__funding__text">The easiest option is to use your Bitkit savings or send bitcoin from a different wallet.</string>
-    <string name="lightning__funding__text_blocked">Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes directly.</string>
-    <string name="lightning__funding__text_blocked_cjit">Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes directly.</string>
     <string name="lightning__funding__title">Fund your &lt;accent&gt;spending balance&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button1">LNURL Channel QR</string>
     <string name="lightning__funding_advanced__button2">Manual Setup</string>
@@ -442,6 +441,10 @@
     <string name="lightning__transfer_success__text_spending">Your funds have been transferred and your spending balance is ready to use.</string>
     <string name="lightning__transfer_success__title_savings">Funds moved\n&lt;accent&gt;to savings&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__title_spending">Funds moved\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
+    <string name="lightning__transfer_unavailable__nav_title">Transfer Unavailable</string>
+    <string name="lightning__transfer_unavailable__text">Automatic transfers to your spending balance are no longer available. Use your own node, or set up a connection with another provider.</string>
+    <string name="lightning__transfer_unavailable__text_receive">Receiving to your spending balance through Bitkit is no longer available. Use your own node, or set up a connection with another provider.</string>
+    <string name="lightning__transfer_unavailable__title">&lt;accent&gt;Manual setup&lt;/accent&gt;\nrequired</string>
     <string name="lightning__wait_text_top">Please wait for Bitkit to connect to the payment network (±10 seconds).</string>
     <string name="lightning__wallet_balances">Wallet Balances</string>
     <string name="migration__description">Please wait while your old wallet data migrates to this new Bitkit version. This usually takes less than a minute.</string>

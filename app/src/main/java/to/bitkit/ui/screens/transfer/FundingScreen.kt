@@ -62,7 +62,7 @@ fun FundingScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             val text = if (isGeoBlocked) {
-                stringResource(R.string.lightning__funding__text_blocked)
+                stringResource(R.string.lightning__transfer_unavailable__text)
             } else {
                 stringResource(R.string.lightning__funding__text)
             }
@@ -78,7 +78,7 @@ fun FundingScreen(
                         label = stringResource(R.string.lightning__funding__button1),
                         icon = R.drawable.ic_transfer,
                         iconTint = Colors.Purple,
-                        enabled = canTransfer && !isGeoBlocked,
+                        enabled = canTransfer,
                         onClick = onTransfer,
                         modifier = Modifier.testTag("FundTransfer")
                     )
