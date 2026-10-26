@@ -940,7 +940,7 @@ private fun RootNavHost(
         contacts(navController, settingsViewModel, appViewModel)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel, appViewModel)
-        generalSettingsSubScreens(navController, appViewModel, settingsViewModel)
+        generalSettingsSubScreens(navController, appViewModel)
         advancedSettingsSubScreens(navController)
         transactionSpeedSettings(navController)
         pinManagement(navController)
@@ -1741,7 +1741,6 @@ private fun NavGraphBuilder.shop(
 private fun NavGraphBuilder.generalSettingsSubScreens(
     navController: NavHostController,
     appViewModel: AppViewModel,
-    settingsViewModel: SettingsViewModel,
 ) {
     deepLinkableComposable<Routes.WidgetsSettings> {
         WidgetsSettingsScreen(navController)

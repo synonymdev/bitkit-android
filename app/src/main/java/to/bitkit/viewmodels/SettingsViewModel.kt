@@ -204,7 +204,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-
     val isPinForPaymentsEnabled = settingsStore.data.map { it.isPinForPaymentsEnabled }
         .asStateFlow(initialValue = false)
 
