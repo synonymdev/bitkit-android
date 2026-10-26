@@ -7,9 +7,8 @@ The manager checks sheets two seconds after the home screen resumes and cancels 
 1. App update
 2. USDT
 3. Backup
-4. Background payments
-5. QuickPay
-6. High balance
+4. QuickPay
+5. High balance
 
 A busy sheet host leaves prompts queued for a later Home visit. While an unseen, undecided USDT intro has not yet been presented in this app session, becoming idle on Home also retries the queue after the same two-second delay. Once the intro is presented, closing sheets does not advance other timed prompts. Eligibility checks that finish after leaving Home or opening another flow cannot open a sheet.
 
@@ -54,16 +53,6 @@ Backup uses a snooze model instead of a permanent seen flag:
 - `Continue` starts the backup flow and does not immediately mark the prompt as ignored. Closing the timed backup flow through its dismissal callback records `backupWarningIgnoredMillis`.
 
 After the one-day ask interval passes, the Backup timed sheet can appear again if the backup is still unverified and the wallet still has a balance.
-
-## Background Payments
-
-The Background Payments timed sheet is eligible when notification permission has not been granted, the wallet has a Lightning balance, and `notificationsIgnoredMillis` is older than one week.
-
-- `Later` marks the background-payments intro as seen and dismisses the sheet. Dismissal records `notificationsIgnoredMillis`.
-- `Enable` marks the intro as seen, dismisses the sheet, records `notificationsIgnoredMillis`, and requests notification permission.
-- A generic timed sheet dismissal records `notificationsIgnoredMillis` without marking the intro as seen.
-
-After the one-week ask interval passes, the timed sheet can appear again if notification permission is still not granted and the wallet still has a Lightning balance. The full-screen settings intro is a separate route with only an enable action.
 
 ## High Balance
 

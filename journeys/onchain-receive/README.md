@@ -25,7 +25,6 @@ throwaway emulator, since it wipes the app and restores a public test seed.
 - Wallet sync runs every 10s. For the confirmed-only journeys, run the deposit and the mine in one
   shell command, then check the log: an `OnchainTransactionReceived` line for the txid means the
   sync saw the mempool first and the run tested the other path.
-- The background journey needs background payments enabled (Settings > Notifications).
 - Every event the node emits is logged by `LightningService` as `LDK event fired: <json>` under the
   `APP` logcat tag, so `adb logcat -d -s APP:V` is enough to tell the two paths apart.
 - The Receive sheet's tabs carry no test tag; select the Savings tab by its label.

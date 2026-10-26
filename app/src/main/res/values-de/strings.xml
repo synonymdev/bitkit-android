@@ -19,8 +19,6 @@
     <string name="cards__support__description">Hilfe bekommen</string>
     <string name="cards__buyBitcoin__title">Kaufen</string>
     <string name="cards__buyBitcoin__description">Kaufe bitcoin</string>
-    <string name="cards__notifications__description">Wenn Bitkit geschlossen ist</string>
-    <string name="cards__notifications__title">Empfangen</string>
     <string name="coming_soon__button">Wallet-Übersicht</string>
     <string name="coming_soon__description">Diese Funktion wird derzeit entwickelt und ist bald verfügbar.</string>
     <string name="coming_soon__headline">Bald\n&lt;accent&gt;verfügbar&lt;/accent&gt;</string>
@@ -609,14 +607,6 @@
     <string name="settings__quickpay__settings__label">Quickpay-Schwelle</string>
     <string name="settings__quickpay__settings__note">* Bitkit QuickPay unterstützt ausschließlich Zahlungen von deinem Guthaben.</string>
     <string name="settings__quickpay__sheet__description">QuickPay beschleunigt den Bezahlvorgang, indem gescannte QR-Codes automatisch bezahlt werden.</string>
-    <string name="settings__bg__title">Hintergrund-Zahlungen</string>
-    <string name="settings__bg__intro_title">PASSIV\n&lt;accent&gt;EMPFANGEN&lt;/accent&gt;</string>
-    <string name="settings__bg__intro_desc">Aktiviere Benachrichtigungen, um Zahlungen zu empfangen, auch wenn deine Bitkit-App geschlossen ist.</string>
-    <string name="settings__bg__enabled">Hintergrund-Zahlungen sind aktiviert. Du kannst Gelder empfangen, auch wenn die App geschlossen ist (wenn dein Gerät mit dem Internet verbunden ist).</string>
-    <string name="settings__bg__disabled">Hintergrund-Zahlungen sind deaktiviert, da du Benachrichtigungen abgelehnt hast.</string>
-    <string name="settings__bg__notifications_header">Benachrichtigungen</string>
-    <string name="settings__bg__switch_title">Empfange Zahlungen wenn Bitkit geschlossen ist</string>
-    <string name="settings__bg__customize">In Android Bitkit-Einstellungen anpassen</string>
     <string name="settings__bg__on">An</string>
     <string name="settings__bg__off">Aus</string>
     <string name="settings__bg__setup">Im Hintergrund einrichten</string>
@@ -1461,9 +1451,6 @@
     <string name="settings__addr_type__settings_updated">Einstellungen aktualisiert</string>
     <string name="settings__addr_type__title">Adresstyp</string>
     <string name="settings__adv__addr_type_currently_selected">Derzeit ausgewählt</string>
-    <string name="settings__bg__intro_button">Aktivieren</string>
-    <string name="settings__bg__keep_active_desc">Wenn Bitkit aktiv bleibt, sind Zahlungen zuverlässiger. Android zeigt möglicherweise eine dauerhafte Benachrichtigung an, solange dies aktiviert ist.</string>
-    <string name="settings__bg__keep_active_title">Bitkit im Hintergrund aktiv halten</string>
     <string name="settings__es__server_error_certificate">Das Zertifikat dieses Servers ist nicht vertrauenswürdig. Verwende einen Server mit vertrauenswürdigem Zertifikat oder verbinde dich mit seinem TCP-Port.</string>
     <string name="settings__es__server_error_network">Dieser Server befindet sich in einem anderen Bitcoin-Netzwerk. Wähle einen Server für das Netzwerk, das Bitkit verwendet.</string>
     <string name="settings__es__server_error_protocol">Sichere Verbindung fehlgeschlagen. Überprüfe, ob das Protokoll (TCP oder TLS) zum Server-Port passt.</string>

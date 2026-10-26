@@ -1,7 +1,6 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
-import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtInfo
@@ -82,7 +81,6 @@ import to.bitkit.services.ElectrumProbeError
 import to.bitkit.services.ElectrumProbeService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
-import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
@@ -122,8 +120,6 @@ class LightningRepoTest : BaseUnitTest() {
     private val lightningService = mock<LightningService>()
     private val settingsStore = mock<SettingsStore>()
     private val coreService = mock<CoreService>()
-    private val lspNotificationsService = mock<LspNotificationsService>()
-    private val firebaseMessaging = mock<FirebaseMessaging>()
     private val keychain = mock<Keychain>()
     private val cacheStore = mock<CacheStore>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
@@ -155,8 +151,6 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService = lightningService,
             settingsStore = settingsStore,
             coreService = coreService,
-            lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging,
             keychain = keychain,
             lnurlService = lnurlService,
             cacheStore = cacheStore,
@@ -1970,8 +1964,6 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService = lightningService,
             settingsStore = settingsStore,
             coreService = coreService,
-            lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging,
             keychain = keychain,
             lnurlService = lnurlService,
             cacheStore = cacheStore,
@@ -2400,8 +2392,8 @@ class LightningRepoTest : BaseUnitTest() {
         val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
         sut = LightningRepo(
             bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
-            coreService = coreService, lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging, keychain = keychain, lnurlService = lnurlService,
+            coreService = coreService,
+            keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
@@ -2470,8 +2462,8 @@ class LightningRepoTest : BaseUnitTest() {
         val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
         sut = LightningRepo(
             bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
-            coreService = coreService, lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging, keychain = keychain, lnurlService = lnurlService,
+            coreService = coreService,
+            keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
@@ -2551,8 +2543,8 @@ class LightningRepoTest : BaseUnitTest() {
         }.whenever(store).broadcastPreparedCandidate(any(), any(), any(), any())
         sut = LightningRepo(
             bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
-            coreService = coreService, lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging, keychain = keychain, lnurlService = lnurlService,
+            coreService = coreService,
+            keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
@@ -2758,12 +2750,6 @@ class LightningRepoTest : BaseUnitTest() {
             any(),
             paymentDeadlineAt = anyOrNull()
         )
-    }
-
-    @Test
-    fun `registerForNotifications should fail when node is not running`() = test {
-        val result = sut.registerForNotifications()
-        assertTrue(result.isFailure)
     }
 
     @Test
@@ -3033,8 +3019,6 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService = lightningService,
             settingsStore = settingsStore,
             coreService = coreService,
-            lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging,
             keychain = keychain,
             lnurlService = lnurlService,
             cacheStore = cacheStore,

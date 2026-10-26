@@ -1,7 +1,6 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
-import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.FeeRates
@@ -37,7 +36,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
@@ -96,7 +94,6 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlChannelResponse
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LnurlWithdrawResponse
-import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
@@ -123,8 +120,6 @@ class LightningRepo @Inject constructor(
     private val lightningService: LightningService,
     private val settingsStore: SettingsStore,
     private val coreService: CoreService,
-    private val lspNotificationsService: LspNotificationsService,
-    private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
     private val lnurlService: LnurlService,
     private val cacheStore: CacheStore,
@@ -447,7 +442,6 @@ class LightningRepo @Inject constructor(
                 sync().onFailure { e ->
                     Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
                 }
-                scope.launch { registerForNotifications() }
                 Result.success(Unit)
             }.getOrElse { e ->
                 if (e is CancellationException) {
@@ -2255,32 +2249,6 @@ class LightningRepo @Inject constructor(
     }
 
     fun separateTrustedChannels(channels: List<ChannelDetails>) = lightningService.separateTrustedChannels(channels)
-
-    @Suppress("KotlinConstantConditions")
-    suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
-        if (Env.isE2eTest) {
-            Logger.info("Skipped push registration in E2E build", context = TAG)
-            return@executeWhenNodeRunning Result.success(Unit)
-        }
-
-        runCatching {
-            val token = token ?: firebaseMessaging.token.await()
-            val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
-
-            require(token.isNotEmpty()) { "FCM token is empty or null" }
-
-            if (cachedToken == token) {
-                Logger.debug("registerForNotifications skipped, device token already registered")
-                return@executeWhenNodeRunning Result.success(Unit)
-            }
-
-            lspNotificationsService.registerDevice(token)
-        }.onFailure {
-            Logger.error("registerForNotifications error", it, context = TAG)
-        }
-    }
-
-    fun registerForNotificationsAsync(token: String) = scope.launch { registerForNotifications(token) }
 
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,

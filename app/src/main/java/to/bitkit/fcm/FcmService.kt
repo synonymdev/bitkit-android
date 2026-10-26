@@ -18,7 +18,6 @@ import to.bitkit.env.Env.derivationName
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.fromHex
 import to.bitkit.models.BlocktankNotificationType
-import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Crypto
 import to.bitkit.utils.Logger
@@ -39,9 +38,6 @@ class FcmService : FirebaseMessagingService() {
 
     @Inject
     lateinit var keychain: Keychain
-
-    @Inject
-    lateinit var lightningRepo: LightningRepo
 
     /**
      * Act on received messages. [Debug](https://goo.gl/39bRNJ)
@@ -154,7 +150,6 @@ class FcmService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         Logger.debug("Got new FCM token via FirebaseMessagingService.onNewToken: '$token'", context = TAG)
-        lightningRepo.registerForNotificationsAsync(token)
     }
 }
 

@@ -1,11 +1,7 @@
 
 package to.bitkit.ui
 
-import android.Manifest
 import android.content.Intent
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.DrawerState
@@ -191,8 +187,6 @@ import to.bitkit.ui.settings.advanced.ElectrumConfigScreen
 import to.bitkit.ui.settings.advanced.RgsServerScreen
 import to.bitkit.ui.settings.advanced.WatchOnlyAccountsScreen
 import to.bitkit.ui.settings.appStatus.AppStatusScreen
-import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsIntroScreen
-import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsSettings
 import to.bitkit.ui.settings.backups.ResetAndRestoreScreen
 import to.bitkit.ui.settings.general.DefaultUnitSettingsScreen
 import to.bitkit.ui.settings.general.HardwareWalletsSettingsScreen
@@ -212,7 +206,6 @@ import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.sheets.BTCPayConnectionSheet
-import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
 import to.bitkit.ui.sheets.ChangePinSheet
@@ -240,7 +233,6 @@ import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.deepLinkableComposable
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
 import to.bitkit.ui.utils.rememberIs24HourFormat
-import to.bitkit.ui.utils.rememberRequestNotificationPermission
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -295,11 +287,6 @@ fun ContentView(
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
     val keepActiveInBackground by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
     val walletExists = walletUiState.walletExists
-
-    val requestNotificationPermission = rememberRequestNotificationPermission(
-        onPermissionResult = { granted -> settingsViewModel.setNotificationPreference(granted) },
-        onPreTiramisu = { navController.navigateTo(Routes.BackgroundPaymentsSettings) },
-    )
 
     // Effects on app entering fg (ON_START) / bg (ON_STOP)
     DisposableEffect(lifecycle) {
@@ -694,20 +681,6 @@ fun ContentView(
                                     BackupSheet(
                                         sheet = Sheet.Backup(BackupRoute.Intro),
                                         onDismiss = { appViewModel.dismissTimedSheet() }
-                                    )
-                                }
-
-                                TimedSheetType.NOTIFICATIONS -> {
-                                    BackgroundPaymentsIntroSheet(
-                                        onLater = {
-                                            appViewModel.dismissTimedSheet()
-                                            settingsViewModel.setBgPaymentsIntroSeen(true)
-                                        },
-                                        onEnable = {
-                                            appViewModel.dismissTimedSheet()
-                                            settingsViewModel.setBgPaymentsIntroSeen(true)
-                                            requestNotificationPermission()
-                                        },
                                     )
                                 }
 
@@ -1783,27 +1756,6 @@ private fun NavGraphBuilder.generalSettingsSubScreens(
             onClickAdd = { appViewModel.showSheet(Sheet.Hardware()) },
         )
     }
-    deepLinkableComposable<Routes.BackgroundPaymentsSettings> {
-        BackgroundPaymentsSettings(
-            onBack = { navController.popBackStack() },
-        )
-    }
-    deepLinkableComposable<Routes.BackgroundPaymentsIntro> {
-        val notificationPermissionLauncher = rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { granted ->
-            settingsViewModel.setNotificationPreference(granted)
-        }
-        BackgroundPaymentsIntroScreen(
-            onBack = { navController.popBackStack() },
-            onEnable = {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-                navController.navigateTo(Routes.BackgroundPaymentsSettings)
-            },
-        )
-    }
 }
 
 private fun NavGraphBuilder.advancedSettingsSubScreens(navController: NavHostController) {
@@ -2631,12 +2583,6 @@ sealed interface Routes {
 
     @Serializable
     data object RecoveryMnemonic : Routes.InternalOnly
-
-    @Serializable
-    data object BackgroundPaymentsIntro : Routes.DeepLinkable
-
-    @Serializable
-    data object BackgroundPaymentsSettings : Routes.DeepLinkable
 
     @Serializable
     data object AllActivity : Routes.DeepLinkable

@@ -4,17 +4,14 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.LegacyRnCloseRecoveryScanResult
 import com.synonym.bitkitcore.LegacyRnCloseRecoverySweepPreview
-import com.synonym.bitkitcore.testNotification
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import to.bitkit.R
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
@@ -48,7 +45,6 @@ data class LegacyRnRecoveryUiState(
 @HiltViewModel
 class DevSettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val firebaseMessaging: FirebaseMessaging,
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
     private val widgetsStore: WidgetsStore,
@@ -164,30 +160,6 @@ class DevSettingsViewModel @Inject constructor(
                 ToastEventBus.send(type = Toast.ToastType.INFO, title = "Channel pending")
             }
             .onFailure { ToastEventBus.send(it) }
-    }
-
-    fun registerForNotifications() = viewModelScope.launch {
-        lightningRepo.registerForNotifications()
-            .onSuccess {
-                @Suppress("KotlinConstantConditions")
-                val title = if (Env.isE2eTest) "Skipped push registration" else "Registered for notifications"
-                ToastEventBus.send(type = Toast.ToastType.INFO, title = title)
-            }
-            .onFailure { ToastEventBus.send(it) }
-    }
-
-    fun testLspNotification() = viewModelScope.launch {
-        runCatching {
-            testNotification(
-                deviceToken = firebaseMessaging.token.await(),
-                secretMessage = "hello",
-                notificationType = "incomingHtlc",
-                customUrl = Env.blocktankNotificationApiUrl,
-            )
-            ToastEventBus.send(type = Toast.ToastType.INFO, title = "LSP notification sent to this device")
-        }.onFailure {
-            ToastEventBus.send(type = Toast.ToastType.WARNING, title = "Error testing LSP notification")
-        }
     }
 
     fun fakeBgReceive() = viewModelScope.launch {

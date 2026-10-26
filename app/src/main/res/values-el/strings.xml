@@ -9,8 +9,6 @@
     <string name="cards__invite__title">Πρόσκληση</string>
     <string name="cards__lightning__description">Άμεσες πληρωμές</string>
     <string name="cards__lightning__title">Δαπάνη</string>
-    <string name="cards__notifications__description">Όταν το Bitkit είναι κλειστό</string>
-    <string name="cards__notifications__title">Λήψη πληρωμών</string>
     <string name="cards__pin__description">Καταχωρήστε κωδικό PIN</string>
     <string name="cards__pin__title">Ασφάλεια</string>
     <string name="cards__quickpay__description">Σάρωσε και πλήρωσε</string>
@@ -589,17 +587,9 @@
     <string name="settings__backup__status_success">Τελευταίο αντίγραφο: {time}</string>
     <string name="settings__backup__wallet">Αντίγραφο ασφαλείας πορτοφολιού</string>
     <string name="settings__backup__data">Αντίγραφα δεδομένων</string>
-    <string name="settings__bg__customize">Προσαρμογή στις ρυθμίσεις Android Bitkit</string>
-    <string name="settings__bg__disabled">Οι πληρωμές παρασκηνίου είναι απενεργοποιημένες επειδή αρνήθηκες τις ειδοποιήσεις.</string>
-    <string name="settings__bg__enabled">Οι πληρωμές παρασκηνίου είναι ενεργοποιημένες. Μπορείς να λαμβάνεις κεφάλαια ακόμα και όταν η εφαρμογή είναι κλειστή (αν η συσκευή σου είναι συνδεδεμένη στο διαδίκτυο).</string>
-    <string name="settings__bg__intro_desc">Ενεργοποίησε τις ειδοποιήσεις για να λαμβάνεις πληρωμές ακόμα και όταν η εφαρμογή Bitkit είναι κλειστή.</string>
-    <string name="settings__bg__intro_title">ΛΑΒΕ ΠΛΗΡΩΜΕΣ\n&lt;accent&gt;ΠΑΘΗΤΙΚΑ&lt;/accent&gt;</string>
-    <string name="settings__bg__notifications_header">Ειδοποιήσεις</string>
     <string name="settings__bg__off">Ανενεργό</string>
     <string name="settings__bg__on">Ενεργό</string>
     <string name="settings__bg__setup">Ρύθμιση στο παρασκήνιο</string>
-    <string name="settings__bg__switch_title">Λήψη πληρωμών όταν το Bitkit είναι κλειστό</string>
-    <string name="settings__bg__title">Πληρωμές παρασκηνίου</string>
     <string name="settings__cs__bnb_desc">Βρίσκει ακριβείς αντιστοιχίσεις ποσού για ελαχιστοποίηση ρέστων</string>
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Τυχαία επιλογή για απόρρητο</string>
@@ -1454,9 +1444,6 @@
     <string name="settings__addr_type__settings_updated">Οι ρυθμίσεις ενημερώθηκαν</string>
     <string name="settings__addr_type__title">Τύπος διεύθυνσης</string>
     <string name="settings__adv__addr_type_currently_selected">Τρέχουσα επιλογή</string>
-    <string name="settings__bg__intro_button">Ενεργοποίηση</string>
-    <string name="settings__bg__keep_active_desc">Η διατήρηση του Bitkit ενεργού κάνει τις πληρωμές πιο αξιόπιστες. Το Android μπορεί να εμφανίζει μόνιμη ειδοποίηση όσο είναι ενεργό.</string>
-    <string name="settings__bg__keep_active_title">Διατήρηση του Bitkit ενεργού στο παρασκήνιο</string>
     <string name="settings__es__server_error_certificate">Το πιστοποιητικό αυτού του διακομιστή δεν είναι αξιόπιστο. Χρησιμοποίησε διακομιστή με αξιόπιστο πιστοποιητικό ή σύνδεσου στη θύρα TCP του.</string>
     <string name="settings__es__server_error_network">Αυτός ο διακομιστής είναι σε διαφορετικό δίκτυο Bitcoin. Επίλεξε διακομιστή για το δίκτυο που χρησιμοποιεί το Bitkit.</string>
     <string name="settings__es__server_error_protocol">Η ασφαλής σύνδεση απέτυχε. Έλεγξε ότι το πρωτόκολλο (TCP ή TLS) αντιστοιχεί στη θύρα του διακομιστή.</string>

@@ -115,4 +115,3 @@ Hardcoded strings in `@Preview` functions throughout the codebase do not need tr
 | File | Line | String | Notes |
 |------|------|--------|-------|
 | NotificationPreview.kt | 63 | 3m ago | Placeholder in notification mockup |
-| BackgroundPaymentsSettings.kt | 111 | ₿ 21 000 | Example amount in preview |

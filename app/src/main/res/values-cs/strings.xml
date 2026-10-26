@@ -9,8 +9,6 @@
     <string name="cards__invite__title">Pozvat</string>
     <string name="cards__lightning__description">Okamžité platby</string>
     <string name="cards__lightning__title">Utratit</string>
-    <string name="cards__notifications__description">Když je Bitkit zavřený</string>
-    <string name="cards__notifications__title">Přijímat platby</string>
     <string name="cards__pin__description">Nastavte PIN kód</string>
     <string name="cards__pin__title">Zabezpečit</string>
     <string name="cards__quickpay__description">Naskenuj a zaplať</string>
@@ -608,17 +606,9 @@
     <string name="settings__backup__status_success">Poslední záloha: {time}</string>
     <string name="settings__backup__wallet">Zálohujte svou peněženku</string>
     <string name="settings__backup__data">Zálohy dat</string>
-    <string name="settings__bg__customize">Přizpůsobit v nastavení Android Bitkit</string>
-    <string name="settings__bg__disabled">Platby na pozadí jsou zakázány, protože jste odmítli oznámení.</string>
-    <string name="settings__bg__enabled">Platby na pozadí jsou povoleny. Prostředky můžete přijímat i při zavřené aplikaci (pokud je zařízení připojeno k internetu).</string>
-    <string name="settings__bg__intro_desc">Zapněte oznámení, abyste dostávali platby i když je aplikace Bitkit zavřená.</string>
-    <string name="settings__bg__intro_title">DOSTÁVAT PLATBY\n<accent>PASIVNĚ</accent></string>
-    <string name="settings__bg__notifications_header">Oznámení</string>
     <string name="settings__bg__off">Vypnuto</string>
     <string name="settings__bg__on">Zapnuto</string>
     <string name="settings__bg__setup">Nastavit na pozadí</string>
-    <string name="settings__bg__switch_title">Dostávat platby když je Bitkit zavřený</string>
-    <string name="settings__bg__title">Platby na pozadí</string>
     <string name="settings__cs__bnb_desc">Najde přesné shody částek pro minimalizaci zbytku</string>
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Náhodný výběr pro soukromí</string>
@@ -1463,9 +1453,6 @@
     <string name="settings__addr_type__settings_updated">Nastavení aktualizováno</string>
     <string name="settings__addr_type__title">Typ adresy</string>
     <string name="settings__adv__addr_type_currently_selected">Aktuálně vybráno</string>
-    <string name="settings__bg__intro_button">Povolit</string>
-    <string name="settings__bg__keep_active_desc">Udržování Bitkitu aktivního vede ke spolehlivějším platbám. Android může při zapnutí této funkce zobrazovat trvalé oznámení.</string>
-    <string name="settings__bg__keep_active_title">Udržovat Bitkit aktivní na pozadí</string>
     <string name="settings__es__server_error_certificate">Certifikát tohoto serveru není důvěryhodný. Použijte server s důvěryhodným certifikátem, nebo se připojte k jeho TCP portu.</string>
     <string name="settings__es__server_error_network">Tento server je v jiné síti Bitcoin. Vyberte server pro síť, kterou Bitkit používá.</string>
     <string name="settings__es__server_error_protocol">Zabezpečené připojení se nezdařilo. Zkontrolujte, zda protokol (TCP nebo TLS) odpovídá portu serveru.</string>

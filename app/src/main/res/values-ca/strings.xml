@@ -9,8 +9,6 @@
     <string name="cards__invite__title">Convidar</string>
     <string name="cards__lightning__description">Pagaments instantanis</string>
     <string name="cards__lightning__title">Gastar</string>
-    <string name="cards__notifications__description">Quan Bitkit està tancat</string>
-    <string name="cards__notifications__title">Rep pagaments</string>
     <string name="cards__pin__description">Configurar un codi PIN</string>
     <string name="cards__pin__title">Segur</string>
     <string name="cards__quickpay__description">Escaneja i paga</string>
@@ -603,17 +601,9 @@
     <string name="settings__backup__status_success">Última còpia de seguretat: {time}</string>
     <string name="settings__backup__wallet">Fes còpia de seguretat de la cartera</string>
     <string name="settings__backup__data">Còpies de seguretat</string>
-    <string name="settings__bg__customize">Personalitza a la configuració de Bitkit d\'Android</string>
-    <string name="settings__bg__disabled">Els pagaments en segon pla estan desactivats perquè has denegat les notificacions.</string>
-    <string name="settings__bg__enabled">Els pagaments en segon pla estan habilitats. Pots rebre fons fins i tot quan l\'aplicació està tancada (si el teu dispositiu està connectat a Internet).</string>
-    <string name="settings__bg__intro_desc">Activa les notificacions per rebre pagaments, fins i tot quan la teva aplicació Bitkit està tancada.</string>
-    <string name="settings__bg__intro_title">REP PAGAMENTS\n&lt;accent&gt;PASSIVAMENT&lt;/accent&gt;</string>
-    <string name="settings__bg__notifications_header">Notificacions</string>
     <string name="settings__bg__off">Desactivat</string>
     <string name="settings__bg__on">Activat</string>
     <string name="settings__bg__setup">Configurar en segon pla</string>
-    <string name="settings__bg__switch_title">Rep pagaments quan Bitkit està tancat</string>
-    <string name="settings__bg__title">Pagaments en segon pla</string>
     <string name="settings__cs__bnb_desc">Troba coincidències d\'import exactes per minimitzar el canvi</string>
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Selecció aleatòria per a privacitat</string>
@@ -1461,9 +1451,6 @@
     <string name="settings__addr_type__settings_updated">Configuració actualitzada</string>
     <string name="settings__addr_type__title">Tipus d\'adreça</string>
     <string name="settings__adv__addr_type_currently_selected">Seleccionat actualment</string>
-    <string name="settings__bg__intro_button">Activar</string>
-    <string name="settings__bg__keep_active_desc">Mantenir Bitkit actiu fa que els pagaments siguin més fiables. Android pot mostrar una notificació persistent mentre això estigui activat.</string>
-    <string name="settings__bg__keep_active_title">Mantenir Bitkit actiu en segon pla</string>
     <string name="settings__es__server_error_certificate">El certificat d\'aquest servidor no és de confiança. Utilitza un servidor amb un certificat de confiança o connecta\'t al seu port TCP.</string>
     <string name="settings__es__server_error_network">Aquest servidor és d\'una xarxa Bitcoin diferent. Tria un servidor per a la xarxa que utilitza Bitkit.</string>
     <string name="settings__es__server_error_protocol">Ha fallat la connexió segura. Comprova que el protocol (TCP o TLS) coincideix amb el port del servidor.</string>

@@ -250,7 +250,6 @@ fun HomeScreen(
     val profileDisplayName by homeViewModel.profileDisplayName.collectAsStateWithLifecycle()
     val profileDisplayImageUri by homeViewModel.profileDisplayImageUri.collectAsStateWithLifecycle()
     val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
-    val bgPaymentsIntroSeen: Boolean by settingsViewModel.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
     val latestActivities by activityListViewModel.latestActivities.collectAsStateWithLifecycle()
     val hardwareIds by activityListViewModel.hardwareIds.collectAsStateWithLifecycle()
@@ -364,14 +363,6 @@ fun HomeScreen(
                         rootNavController.navigateTo(Routes.QuickPayIntro)
                     } else {
                         rootNavController.navigateTo(Routes.QuickPaySettings)
-                    }
-                }
-
-                Suggestion.NOTIFICATIONS -> {
-                    if (bgPaymentsIntroSeen) {
-                        rootNavController.navigateTo(Routes.BackgroundPaymentsSettings)
-                    } else {
-                        rootNavController.navigateTo(Routes.BackgroundPaymentsIntro)
                     }
                 }
             }

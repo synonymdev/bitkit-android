@@ -9,8 +9,6 @@
     <string name="cards__invite__title">Uitnodiging</string>
     <string name="cards__lightning__description">Directe betalingen</string>
     <string name="cards__lightning__title">Besteed</string>
-    <string name="cards__notifications__description">Als Bitkit gesloten is</string>
-    <string name="cards__notifications__title">Ontvang betaling</string>
     <string name="cards__pin__description">Pincode instellen</string>
     <string name="cards__pin__title">Beveilig</string>
     <string name="cards__quickpay__description">Scan en betaal</string>
@@ -604,17 +602,9 @@
     <string name="settings__backup__status_success">Laatste backup: {time}</string>
     <string name="settings__backup__wallet">Back-up maken van je wallet</string>
     <string name="settings__backup__data">Gegevensback-ups</string>
-    <string name="settings__bg__customize">Aanpassen in Android Bitkit-instellingen</string>
-    <string name="settings__bg__disabled">Achtergrondbetalingen zijn uitgeschakeld omdat je notificaties hebt geweigerd.</string>
-    <string name="settings__bg__enabled">Achtergrondbetalingen zijn ingeschakeld. Je kunt geld ontvangen zelfs als de app gesloten is (als je apparaat verbonden is met internet).</string>
-    <string name="settings__bg__intro_desc">Schakel notificaties in om betaald te worden, zelfs als je Bitkit-app gesloten is.</string>
-    <string name="settings__bg__intro_title">ONTVANG BETALING\n&lt;accent&gt;PASSIEF&lt;/accent&gt;</string>
-    <string name="settings__bg__notifications_header">Notificaties</string>
     <string name="settings__bg__off">Uit</string>
     <string name="settings__bg__on">Aan</string>
     <string name="settings__bg__setup">Op achtergrond instellen</string>
-    <string name="settings__bg__switch_title">Ontvang betaling als Bitkit gesloten is</string>
-    <string name="settings__bg__title">Achtergrondbetalingen</string>
     <string name="settings__cs__bnb_desc">Vindt exacte bedragovereenkomsten om wisselgeld te minimaliseren</string>
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Willekeurige selectie voor privacy</string>
@@ -1460,9 +1450,6 @@
     <string name="settings__addr_type__settings_updated">Instellingen bijgewerkt</string>
     <string name="settings__addr_type__title">Adrestype</string>
     <string name="settings__adv__addr_type_currently_selected">Momenteel geselecteerd</string>
-    <string name="settings__bg__intro_button">Inschakelen</string>
-    <string name="settings__bg__keep_active_desc">Bitkit actief houden zorgt voor betrouwbaardere betalingen. Android kan een permanente melding tonen zolang dit is ingeschakeld.</string>
-    <string name="settings__bg__keep_active_title">Bitkit actief houden op de achtergrond</string>
     <string name="settings__es__server_error_certificate">Het certificaat van deze server wordt niet vertrouwd. Gebruik een server met een vertrouwd certificaat, of maak verbinding met de TCP-poort.</string>
     <string name="settings__es__server_error_network">Deze server zit op een ander Bitcoin-netwerk. Kies een server voor het netwerk dat Bitkit gebruikt.</string>
     <string name="settings__es__server_error_protocol">Beveiligde verbinding mislukt. Controleer of het protocol (TCP of TLS) overeenkomt met de serverpoort.</string>

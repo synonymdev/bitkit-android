@@ -9,8 +9,6 @@
     <string name="cards__invite__title">Пригласить</string>
     <string name="cards__lightning__description">Мгновенные платежи</string>
     <string name="cards__lightning__title">Тратить</string>
-    <string name="cards__notifications__description">Когда Bitkit закрыт</string>
-    <string name="cards__notifications__title">Получать платежи</string>
     <string name="cards__pin__description">Установите PIN-код</string>
     <string name="cards__pin__title">Безопасность</string>
     <string name="cards__quickpay__description">Сканируйте и платите</string>
@@ -626,18 +624,9 @@
     <string name="settings__backup__status_success">Последнее Резервное Копирование: {time}</string>
     <string name="settings__backup__wallet">Создать Резервную Копию Кошелька</string>
     <string name="settings__backup__data">Резервные копии данных</string>
-    <string name="settings__bg__customize">Настроить в настройках Android Bitkit</string>
-    <string name="settings__bg__disabled">Фоновые платежи отключены, потому что вы отклонили уведомления.</string>
-    <string name="settings__bg__enabled">Фоновые платежи включены. Вы можете получать средства, даже когда приложение закрыто (если ваше устройство подключено к интернету).</string>
-    <string name="settings__bg__intro_desc">Включите уведомления, чтобы получать платежи, даже когда приложение Bitkit закрыто.</string>
-    <string name="settings__bg__intro_title">ПОЛУЧАЙТЕ
-&lt;accent&gt;ПАССИВНО&lt;/accent&gt;</string>
-    <string name="settings__bg__notifications_header">Уведомления</string>
     <string name="settings__bg__off">Выкл</string>
     <string name="settings__bg__on">Вкл</string>
     <string name="settings__bg__setup">Настроить в фоне</string>
-    <string name="settings__bg__switch_title">Получать платежи при закрытом Bitkit</string>
-    <string name="settings__bg__title">Фоновые платежи</string>
     <string name="settings__cs__bnb_desc">Находит точные совпадения сумм для минимизации сдачи</string>
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Случайный выбор для приватности</string>
@@ -1491,9 +1480,6 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="settings__addr_type__settings_updated">Настройки обновлены</string>
     <string name="settings__addr_type__title">Тип Адреса</string>
     <string name="settings__adv__addr_type_currently_selected">Выбрано сейчас</string>
-    <string name="settings__bg__intro_button">Включить</string>
-    <string name="settings__bg__keep_active_desc">Если Bitkit остаётся активным, платежи проходят надёжнее. Пока эта функция включена, Android может показывать постоянное уведомление.</string>
-    <string name="settings__bg__keep_active_title">Держать Bitkit активным в фоне</string>
     <string name="settings__es__server_error_certificate">Сертификат этого сервера не является доверенным. Используйте сервер с доверенным сертификатом или подключитесь к его TCP-порту.</string>
     <string name="settings__es__server_error_network">Этот сервер работает в другой сети Bitcoin. Выберите сервер для сети, которую использует Bitkit.</string>
     <string name="settings__es__server_error_protocol">Не удалось установить защищённое соединение. Проверьте, что протокол (TCP или TLS) соответствует порту сервера.</string>

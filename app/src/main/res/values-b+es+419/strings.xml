@@ -9,8 +9,6 @@
     <string name="cards__invite__title">Invitar</string>
     <string name="cards__lightning__description">Pagos instantáneos</string>
     <string name="cards__lightning__title">Gastar</string>
-    <string name="cards__notifications__description">Sin Bitkit abierto</string>
-    <string name="cards__notifications__title">Cobrar</string>
     <string name="cards__pin__description">Configurar un código PIN</string>
     <string name="cards__pin__title">PROTEGER</string>
     <string name="cards__quickpay__description">Escanear y pagar</string>
@@ -610,17 +608,9 @@
     <string name="settings__backup__status_success">Última Copia de Seguridad: {time}</string>
     <string name="settings__backup__wallet">Haga una copia de seguridad de su cartera</string>
     <string name="settings__backup__data">Copias de seguridad</string>
-    <string name="settings__bg__customize">Personalizar en Ajustes de Bitkit en Android</string>
-    <string name="settings__bg__disabled">Los pagos en segundo plano están desactivados porque has denegado las notificaciones.</string>
-    <string name="settings__bg__enabled">Los pagos en segundo plano están activados. Puedes recibir fondos incluso cuando la app está cerrada (si tu dispositivo está conectado a internet).</string>
-    <string name="settings__bg__intro_desc">Activa las notificaciones para recibir pagos, incluso cuando tu app Bitkit está cerrada.</string>
-    <string name="settings__bg__intro_title">RECIBE PAGOS\n&lt;accent&gt;PASIVAMENTE&lt;/accent&gt;</string>
-    <string name="settings__bg__notifications_header">Notificaciones</string>
     <string name="settings__bg__off">Apagado</string>
     <string name="settings__bg__on">Encendido</string>
     <string name="settings__bg__setup">Configurar en segundo plano</string>
-    <string name="settings__bg__switch_title">Recibir pagos cuando Bitkit está cerrado</string>
-    <string name="settings__bg__title">Pagos en segundo plano</string>
     <string name="settings__cs__bnb_desc">Encuentra coincidencias exactas de monto para minimizar el cambio</string>
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Selección aleatoria para mayor privacidad</string>
@@ -1464,9 +1454,6 @@
     <string name="settings__addr_type__settings_updated">Ajustes actualizados</string>
     <string name="settings__addr_type__title">Tipo de dirección</string>
     <string name="settings__adv__addr_type_currently_selected">Seleccionado actualmente</string>
-    <string name="settings__bg__intro_button">Activar</string>
-    <string name="settings__bg__keep_active_desc">Mantener Bitkit activo hace que los pagos sean más confiables. Android puede mostrar una notificación persistente mientras esto esté activado.</string>
-    <string name="settings__bg__keep_active_title">Mantener Bitkit activo en segundo plano</string>
     <string name="settings__es__server_error_certificate">El certificado de este servidor no es de confianza. Use un servidor con un certificado de confianza o conéctese a su puerto TCP.</string>
     <string name="settings__es__server_error_network">Este servidor está en otra red de Bitcoin. Elija un servidor de la red que usa Bitkit.</string>
     <string name="settings__es__server_error_protocol">Falló la conexión segura. Verifique que el protocolo (TCP o TLS) coincida con el puerto del servidor.</string>

@@ -91,8 +91,6 @@ fun SettingsScreen(
     val showWidgets by settings.showWidgets.collectAsStateWithLifecycle()
     val isQuickPayEnabled by settings.isQuickpayEnabled.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settings.quickPayIntroSeen.collectAsStateWithLifecycle()
-    val bgPaymentsIntroSeen by settings.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
-    val notificationsGranted by settings.notificationsGranted.collectAsStateWithLifecycle()
     val isPubkyAuthenticated by settings.isPubkyAuthenticated.collectAsStateWithLifecycle()
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
     val contactPaymentsEnabled by settings.contactPaymentsEnabled.collectAsStateWithLifecycle()
@@ -136,7 +134,6 @@ fun SettingsScreen(
             showWidgets = showWidgets,
             tagCount = lastUsedTags.size,
             isQuickPayEnabled = isQuickPayEnabled,
-            notificationsGranted = notificationsGranted,
             isPubkyAuthenticated = isPubkyAuthenticated,
             isPaykitEnabled = isPaykitEnabled,
             contactPaymentsEnabled = contactPaymentsEnabled,
@@ -179,13 +176,6 @@ fun SettingsScreen(
                 }
                 SettingsEvent.UsdtClick -> settings.setUsdtEnabled(!isUsdtEnabled)
                 SettingsEvent.QuickPayClick -> navController.navigateToQuickPaySettings(quickPayIntroSeen)
-                SettingsEvent.BgPaymentsClick -> {
-                    if (bgPaymentsIntroSeen || notificationsGranted) {
-                        navController.navigateTo(Routes.BackgroundPaymentsSettings)
-                    } else {
-                        navController.navigateTo(Routes.BackgroundPaymentsIntro)
-                    }
-                }
                 SettingsEvent.HardwareWalletsClick -> navController.navigateTo(Routes.HardwareWalletsSettings)
                 SettingsEvent.BackupWalletClick -> app.showSheet(Sheet.Backup())
                 SettingsEvent.DataBackupsClick -> navController.navigateTo(Routes.BackupSettings)
@@ -366,17 +356,6 @@ private fun GeneralTabContent(
             ),
             onClick = { onEvent(SettingsEvent.QuickPayClick) },
             modifier = Modifier.testTag("QuickpaySettings")
-        )
-        SettingsButtonRow(
-            title = stringResource(R.string.settings__bg__title),
-            icon = { SettingsIcon(R.drawable.ic_bell) },
-            value = SettingsButtonValue.StringValue(
-                stringResource(
-                    if (state.notificationsGranted) R.string.settings__bg__on else R.string.settings__bg__off
-                )
-            ),
-            onClick = { onEvent(SettingsEvent.BgPaymentsClick) },
-            modifier = Modifier.testTag("BackgroundPaymentSettings")
         )
         SettingsButtonRow(
             title = stringResource(R.string.settings__hardware_wallets__nav_title),
@@ -654,7 +633,6 @@ private fun PreviewGeneral() {
                 selectedLanguage = "System Settings",
                 tagCount = 8,
                 isQuickPayEnabled = true,
-                notificationsGranted = true,
             ),
         )
     }
@@ -703,7 +681,6 @@ sealed interface SettingsEvent {
     data object ContactPaymentsClick : SettingsEvent
     data object UsdtClick : SettingsEvent
     data object QuickPayClick : SettingsEvent
-    data object BgPaymentsClick : SettingsEvent
     data object HardwareWalletsClick : SettingsEvent
 
     // Security
@@ -745,7 +722,6 @@ data class GeneralTabState(
     val showWidgets: Boolean = true,
     val tagCount: Int = 0,
     val isQuickPayEnabled: Boolean = false,
-    val notificationsGranted: Boolean = false,
     val isPubkyAuthenticated: Boolean = false,
     val isPaykitEnabled: Boolean = false,
     val contactPaymentsEnabled: Boolean = false,

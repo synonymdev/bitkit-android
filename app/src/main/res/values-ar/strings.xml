@@ -9,8 +9,6 @@
     <string name="cards__invite__title">دعوة</string>
     <string name="cards__lightning__description">مدفوعات فورية</string>
     <string name="cards__lightning__title">إنفاق</string>
-    <string name="cards__notifications__description">عندما يكون Bitkit مغلقًا</string>
-    <string name="cards__notifications__title">استلم أموالك</string>
     <string name="cards__pin__description">إعداد رمز PIN</string>
     <string name="cards__pin__title">تأمين</string>
     <string name="cards__quickpay__description">امسح وادفع</string>
@@ -588,17 +586,9 @@
     <string name="settings__backup__status_success">آخر نسخة احتياطية: {time}</string>
     <string name="settings__backup__wallet">نسخ محفظتك احتياطيًا</string>
     <string name="settings__backup__data">نسخ البيانات الاحتياطية</string>
-    <string name="settings__bg__customize">تخصيص في إعدادات Bitkit على Android</string>
-    <string name="settings__bg__disabled">المدفوعات في الخلفية معطلة، لأنك رفضت الإشعارات.</string>
-    <string name="settings__bg__enabled">المدفوعات في الخلفية مفعلة. يمكنك استلام الأموال حتى عندما يكون التطبيق مغلقًا (إذا كان جهازك متصلاً بالإنترنت).</string>
-    <string name="settings__bg__intro_desc">فعّل الإشعارات لاستلام الأموال، حتى عندما يكون تطبيق Bitkit مغلقًا.</string>
-    <string name="settings__bg__intro_title">استلم الأموال\n&lt;accent&gt;بشكل سلبي&lt;/accent&gt;</string>
-    <string name="settings__bg__notifications_header">الإشعارات</string>
     <string name="settings__bg__off">إيقاف</string>
     <string name="settings__bg__on">تشغيل</string>
     <string name="settings__bg__setup">الإعداد في الخلفية</string>
-    <string name="settings__bg__switch_title">استلم الأموال عندما يكون Bitkit مغلقًا</string>
-    <string name="settings__bg__title">المدفوعات في الخلفية</string>
     <string name="settings__cs__bnb_desc">يجد تطابقات دقيقة للمبلغ لتقليل الصرف</string>
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">اختيار عشوائي للخصوصية</string>
@@ -1448,9 +1438,6 @@
     <string name="settings__addr_type__settings_updated">تم تحديث الإعدادات</string>
     <string name="settings__addr_type__title">نوع العنوان</string>
     <string name="settings__adv__addr_type_currently_selected">محدد حاليًا</string>
-    <string name="settings__bg__intro_button">تفعيل</string>
-    <string name="settings__bg__keep_active_desc">يؤدي إبقاء Bitkit نشطًا إلى مدفوعات أكثر موثوقية. قد يعرض Android إشعارًا دائمًا أثناء تفعيل هذا الخيار.</string>
-    <string name="settings__bg__keep_active_title">إبقاء Bitkit نشطًا في الخلفية</string>
     <string name="settings__es__server_error_certificate">شهادة هذا الخادم غير موثوقة. استخدم خادمًا بشهادة موثوقة، أو اتصل بمنفذ TCP الخاص به.</string>
     <string name="settings__es__server_error_network">هذا الخادم على شبكة Bitcoin مختلفة. اختر خادمًا للشبكة التي يستخدمها Bitkit.</string>
     <string name="settings__es__server_error_protocol">فشل الاتصال الآمن. تحقق من أن البروتوكول (TCP أو TLS) يطابق منفذ الخادم.</string>

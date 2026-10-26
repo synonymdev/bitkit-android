@@ -73,13 +73,6 @@ enum class Suggestion(
         color = Colors.Green24,
         icon = R.drawable.fast_forward
     ),
-    NOTIFICATIONS(
-        title = R.string.cards__notifications__title,
-        description = R.string.cards__notifications__description,
-        color = Colors.Purple24,
-        icon = R.drawable.bell,
-        dismissible = true,
-    ),
 }
 
 fun String.toSuggestionOrNull() = Suggestion.entries.firstOrNull { it.name == this }
