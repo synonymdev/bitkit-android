@@ -101,6 +101,15 @@
     <string name="fee__custom__description">Abhängig von der Gebühr</string>
     <string name="fee__custom__duration">Abhängig von der Gebühr</string>
     <string name="fee__custom__shortDescription">Abhängig von der Gebühr</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Einlösegebühr</string>
+    <string name="lightning__spark_confirmations">%1$d/3 Bestätigungen</string>
+    <string name="lightning__spark_deposit">Einzahlung</string>
+    <string name="lightning__spark_deposits_claimed">Eingelöste Einzahlungen</string>
+    <string name="lightning__spark_deposits_pending">Laufende Einzahlungen</string>
+    <string name="lightning__spark_provider">Anbieter</string>
+    <string name="lightning__spark_provider_value">Spark über Breez</string>
+    <string name="lightning__spark_trust">Dieses Guthaben liegt auf Spark, betrieben von Lightspark, Breez und Flashnet. Es ist sicher, solange mindestens einer von ihnen ehrlich handelt. Sie können den Zugang sperren, und ein Ausstieg ohne sie erfordert einen On-Chain-Exit.</string>
     <string name="lightning__transfer_intro__title">Spending\n&lt;accent&gt;Balance&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Fülle dein Guthaben auf, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu genießen.</string>
     <string name="lightning__transfer_intro__button">Los geht\'s</string>

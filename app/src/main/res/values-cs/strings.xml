@@ -232,6 +232,15 @@
     <string name="lightning__setting_up_step3">Ve frontě na otevření</string>
     <string name="lightning__setting_up_step4">Otevírání spojení</string>
     <string name="lightning__setting_up_text">Počkejte prosím, probíhá převod finančních prostředků. To by mělo trvat &lt;accent&gt;±10 minut.&lt;/accent&gt;</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Poplatek za připsání</string>
+    <string name="lightning__spark_confirmations">%1$d/3 potvrzení</string>
+    <string name="lightning__spark_deposit">Vklad</string>
+    <string name="lightning__spark_deposits_claimed">Připsané vklady</string>
+    <string name="lightning__spark_deposits_pending">Probíhající vklady</string>
+    <string name="lightning__spark_provider">Poskytovatel</string>
+    <string name="lightning__spark_provider_value">Spark přes Breez</string>
+    <string name="lightning__spark_trust">Tento zůstatek je uložen na Spark, který provozují Lightspark, Breez a Flashnet. Je v bezpečí, dokud alespoň jeden z nich jedná poctivě. Mohou pozastavit přístup a odchod bez nich vyžaduje on-chain výstup.</string>
     <string name="lightning__spendable_onchain">Utratitelné onchain</string>
     <string name="lightning__spending">Útraty</string>
     <string name="lightning__spending_advanced__fee">Poplatek za likviditu</string>

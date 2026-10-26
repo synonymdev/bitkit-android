@@ -229,6 +229,15 @@
     <string name="lightning__setting_up_step3">En cua per obrir</string>
     <string name="lightning__setting_up_step4">Obertura de connexió</string>
     <string name="lightning__setting_up_text">Si us plau, espera, la transferència de fons està en curs. Hauria de trigar &lt;accent&gt;±10 minuts.&lt;/accent&gt;</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Comissió de reclamació</string>
+    <string name="lightning__spark_confirmations">%1$d/3 confirmacions</string>
+    <string name="lightning__spark_deposit">Dipòsit</string>
+    <string name="lightning__spark_deposits_claimed">Dipòsits reclamats</string>
+    <string name="lightning__spark_deposits_pending">Dipòsits en curs</string>
+    <string name="lightning__spark_provider">Proveïdor</string>
+    <string name="lightning__spark_provider_value">Spark mitjançant Breez</string>
+    <string name="lightning__spark_trust">Aquest saldo es guarda a Spark, gestionat per Lightspark, Breez i Flashnet. Està segur mentre almenys un d’ells actuï amb honestedat. Poden pausar l’accés, i sortir-ne sense ells requereix una sortida on-chain.</string>
     <string name="lightning__spendable_onchain">Gastable Onchain</string>
     <string name="lightning__spending">Despesa</string>
     <string name="lightning__spending_advanced__fee">Tarifa de liquiditat</string>

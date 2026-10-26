@@ -245,6 +245,15 @@
     <string name="lightning__setting_up_step3">В Очереди на Открытие</string>
     <string name="lightning__setting_up_step4">Открытие Соединения</string>
     <string name="lightning__setting_up_text">Пожалуйста, подождите, ваш перевод средств выполняется. Это займёт &lt;accent&gt;±10 минут.&lt;/accent&gt;</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Комиссия за зачисление</string>
+    <string name="lightning__spark_confirmations">%1$d/3 подтверждений</string>
+    <string name="lightning__spark_deposit">Депозит</string>
+    <string name="lightning__spark_deposits_claimed">Зачисленные депозиты</string>
+    <string name="lightning__spark_deposits_pending">Депозиты в обработке</string>
+    <string name="lightning__spark_provider">Провайдер</string>
+    <string name="lightning__spark_provider_value">Spark через Breez</string>
+    <string name="lightning__spark_trust">Этот баланс хранится в Spark, которым управляют Lightspark, Breez и Flashnet. Он в безопасности, пока хотя бы один из них действует честно. Они могут приостановить доступ, а выход без них требует ончейн-вывода.</string>
     <string name="lightning__spendable_onchain">Доступно Onchain</string>
     <string name="lightning__spending">Расходы</string>
     <string name="lightning__spending_advanced__fee">Комиссия за Ликвидность</string>

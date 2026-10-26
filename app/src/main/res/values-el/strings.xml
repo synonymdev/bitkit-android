@@ -225,6 +225,15 @@
     <string name="lightning__setting_up_step3">Σε ουρά για άνοιγμα</string>
     <string name="lightning__setting_up_step4">Άνοιγμα σύνδεσης</string>
     <string name="lightning__setting_up_text">Περίμενε, η μεταφορά κεφαλαίων σου είναι σε εξέλιξη. Αυτό θα διαρκέσει &lt;accent&gt;±10 λεπτά.&lt;/accent&gt;</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Χρέωση εξαργύρωσης</string>
+    <string name="lightning__spark_confirmations">%1$d/3 επιβεβαιώσεις</string>
+    <string name="lightning__spark_deposit">Κατάθεση</string>
+    <string name="lightning__spark_deposits_claimed">Εξαργυρωμένες καταθέσεις</string>
+    <string name="lightning__spark_deposits_pending">Καταθέσεις σε εξέλιξη</string>
+    <string name="lightning__spark_provider">Πάροχος</string>
+    <string name="lightning__spark_provider_value">Spark μέσω Breez</string>
+    <string name="lightning__spark_trust">Αυτό το υπόλοιπο φυλάσσεται στο Spark, που λειτουργούν οι Lightspark, Breez και Flashnet. Είναι ασφαλές όσο τουλάχιστον ένας από αυτούς ενεργεί έντιμα. Μπορούν να αναστείλουν την πρόσβαση, και η έξοδος χωρίς αυτούς απαιτεί έξοδο on-chain.</string>
     <string name="lightning__spendable_onchain">Διαθέσιμα onchain</string>
     <string name="lightning__spending">Δαπάνες</string>
     <string name="lightning__spending_advanced__fee">Τέλος ρευστότητας</string>

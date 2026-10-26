@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.Payment
 import breez_sdk_spark.PaymentDetails
+import breez_sdk_spark.PaymentMethod
 import breez_sdk_spark.PaymentStatus
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.SendPaymentMethod
@@ -10,6 +11,9 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -135,14 +139,34 @@ class SparkRepo @Inject constructor(
         }
     }
 
+    suspend fun refreshState(): Result<Unit> = withContext(bgDispatcher) {
+        if (!sparkService.isConnected) return@withContext Result.success(Unit)
+        runSuspendCatching { refresh() }.onFailure { Logger.warn("Failed to refresh Spark state", it, context = TAG) }
+    }
+
     private suspend fun refresh() {
         val info = sparkService.getInfo()
-        val pendingDepositSats = sparkService.listUnclaimedDeposits().sumOf { it.amountSats }
+        val pending = sparkService.listUnclaimedDeposits().map {
+            SparkDeposit(txid = it.txid, amountSats = it.amountSats, isClaimed = false)
+        }
+        val claimed = sparkService.listPayments()
+            .filter { it.method == PaymentMethod.DEPOSIT && it.status == PaymentStatus.COMPLETED }
+            .mapNotNull { payment ->
+                val deposit = payment.details as? PaymentDetails.Deposit ?: return@mapNotNull null
+                SparkDeposit(
+                    txid = deposit.txId,
+                    amountSats = payment.amount.toLong().toULong(),
+                    isClaimed = true,
+                    feeSats = payment.fees.toLong().toULong(),
+                    claimedAt = payment.timestamp,
+                )
+            }
         _state.update {
             it.copy(
                 isReady = true,
                 balanceSats = info.balanceSats,
-                pendingDepositSats = pendingDepositSats,
+                pendingDepositSats = pending.sumOf { deposit -> deposit.amountSats },
+                deposits = (pending + claimed).toImmutableList(),
                 recoverableFundsSats = info.recoverableFundsSats,
             )
         }
@@ -236,5 +260,15 @@ data class SparkState(
     val balanceSats: ULong = 0uL,
     /** Deposits seen on-chain that Spark claims into [balanceSats] after 3 confirmations. */
     val pendingDepositSats: ULong = 0uL,
+    val deposits: ImmutableList<SparkDeposit> = persistentListOf(),
     val recoverableFundsSats: ULong = 0uL,
+)
+
+/** An on-chain deposit into Spark: pending until Spark claims it after 3 confirmations. */
+data class SparkDeposit(
+    val txid: String,
+    val amountSats: ULong,
+    val isClaimed: Boolean,
+    val feeSats: ULong = 0uL,
+    val claimedAt: ULong? = null,
 )

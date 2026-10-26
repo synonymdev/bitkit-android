@@ -37,6 +37,9 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
+import to.bitkit.repositories.SparkDeposit
+import to.bitkit.repositories.SparkRepo
+import to.bitkit.repositories.SparkState
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -50,6 +53,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val logsRepo: LogsRepo,
     private val activityRepo: ActivityRepo,
+    private val sparkRepo: SparkRepo,
 ) : ViewModel() {
 
     companion object {
@@ -96,9 +100,10 @@ class LightningConnectionsViewModel @Inject constructor(
             combine(
                 lightningRepo.lightningState,
                 blocktankRepo.blocktankState,
-            ) { lightningState, blocktankState ->
-                Pair(lightningState, blocktankState)
-            }.collect { (lightningState, blocktankState) ->
+                sparkRepo.state,
+            ) { lightningState, blocktankState, sparkState ->
+                Triple(lightningState, blocktankState, sparkState)
+            }.collect { (lightningState, blocktankState, sparkState) ->
                 val channels = lightningState.channels
                 val connectionText = context.getString(R.string.lightning__connection)
 
@@ -114,8 +119,9 @@ class LightningConnectionsViewModel @Inject constructor(
                         failedOrders = getFailedOrdersAsChannels(blocktankState.paidOrders)
                             .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) }
                             .reversed().toImmutableList(),
-                        localBalance = calculateLocalBalance(channels),
+                        localBalance = calculateLocalBalance(channels).safe() + sparkState.balanceSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
+                        spark = sparkState.toUi(lightningRepo),
                     )
                 }
             }
@@ -149,6 +155,7 @@ class LightningConnectionsViewModel @Inject constructor(
     }
 
     suspend fun refreshObservedState() {
+        sparkRepo.refreshState()
         lightningRepo.sync()
         blocktankRepo.refreshOrders()
         loadClosedChannels()
@@ -300,7 +307,33 @@ data class LightningConnectionsUiState(
     val closedChannels: ImmutableList<ChannelUi> = persistentListOf(),
     val localBalance: ULong = 0u,
     val remoteBalance: ULong = 0u,
+    val spark: SparkUi? = null,
 )
+
+/** The Spark wallet shown as a connection, present once it holds a balance or a deposit. */
+data class SparkUi(
+    val balanceSats: ULong,
+    val deposits: ImmutableList<SparkDepositUi> = persistentListOf(),
+) {
+    val pendingDeposits get() = deposits.filterNot { it.deposit.isClaimed }
+    val claimedDeposits get() = deposits.filter { it.deposit.isClaimed }
+}
+
+data class SparkDepositUi(
+    val deposit: SparkDeposit,
+    /** On-chain confirmations, known for deposits this wallet sent. */
+    val confirmations: UInt? = null,
+)
+
+internal suspend fun SparkState.toUi(lightningRepo: LightningRepo): SparkUi? {
+    if (!isReady || (balanceSats == 0uL && deposits.isEmpty())) return null
+    return SparkUi(
+        balanceSats = balanceSats,
+        deposits = deposits.map {
+            SparkDepositUi(it, if (it.isClaimed) null else lightningRepo.onchainConfirmations(it.txid))
+        }.toImmutableList(),
+    )
+}
 
 data class ChannelUi(
     val name: String,

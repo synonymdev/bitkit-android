@@ -46,6 +46,7 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Event
@@ -55,6 +56,7 @@ import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
@@ -1474,6 +1476,17 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }.also {
             syncState()
         }
+    }
+
+    /** Confirmations of an on-chain transaction this wallet sent or received, 0 while unconfirmed. */
+    suspend fun onchainConfirmations(txid: String): UInt? = withContext(bgDispatcher) {
+        val kind = lightningService.listPayments()
+            ?.map { it.kind }
+            ?.filterIsInstance<PaymentKind.Onchain>()
+            ?.firstOrNull { it.txid.equals(txid, ignoreCase = true) } ?: return@withContext null
+        val confirmed = kind.status as? ConfirmationStatus.Confirmed ?: return@withContext 0u
+        val tip = _lightningState.value.block()?.height ?: return@withContext null
+        if (tip < confirmed.height) 0u else tip - confirmed.height + 1u
     }
 
     suspend fun listPaymentsOrNull(): List<PaymentDetails>? = withContext(bgDispatcher) {

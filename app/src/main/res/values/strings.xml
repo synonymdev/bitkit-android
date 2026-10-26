@@ -387,6 +387,15 @@
     <string name="lightning__setting_up_step3">Queued For Opening</string>
     <string name="lightning__setting_up_step4">Opening Connection</string>
     <string name="lightning__setting_up_text">Please wait, your funds transfer is in progress. This should take &lt;accent&gt;±10 minutes.&lt;/accent&gt;</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Claim fee</string>
+    <string name="lightning__spark_confirmations">%1$d/3 confirmations</string>
+    <string name="lightning__spark_deposit">Deposit</string>
+    <string name="lightning__spark_deposits_claimed">Claimed deposits</string>
+    <string name="lightning__spark_deposits_pending">Deposits in progress</string>
+    <string name="lightning__spark_provider">Provider</string>
+    <string name="lightning__spark_provider_value">Spark via Breez</string>
+    <string name="lightning__spark_trust">This balance is held on Spark, run by Lightspark, Breez and Flashnet. It is safe while at least one of them acts honestly. They can pause access, and leaving without them takes an on-chain exit.</string>
     <string name="lightning__spendable_onchain">Spendable Onchain</string>
     <string name="lightning__spending">Spending</string>
     <string name="lightning__spending_advanced__error_balance__description">Your savings cannot cover the liquidity fee for this receiving capacity. Choose a smaller amount.</string>

@@ -233,6 +233,15 @@
     <string name="lightning__setting_up_step3">Na Fila Para Abertura</string>
     <string name="lightning__setting_up_step4">Abrindo Conexão</string>
     <string name="lightning__setting_up_text">Aguarde, sua transferência de fundos está em andamento. Isso deve levar &lt;accent&gt;±10 minutos.&lt;/accent&gt;</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Taxa de resgate</string>
+    <string name="lightning__spark_confirmations">%1$d/3 confirmações</string>
+    <string name="lightning__spark_deposit">Depósito</string>
+    <string name="lightning__spark_deposits_claimed">Depósitos resgatados</string>
+    <string name="lightning__spark_deposits_pending">Depósitos em andamento</string>
+    <string name="lightning__spark_provider">Provedor</string>
+    <string name="lightning__spark_provider_value">Spark via Breez</string>
+    <string name="lightning__spark_trust">Este saldo fica na Spark, operada pela Lightspark, Breez e Flashnet. Ele está seguro enquanto pelo menos um deles agir com honestidade. Eles podem pausar o acesso, e sair sem eles exige uma saída on-chain.</string>
     <string name="lightning__spendable_onchain">Disponível Onchain</string>
     <string name="lightning__spending">Gastos</string>
     <string name="lightning__spending_advanced__fee">Taxa de liquidez</string>

@@ -225,6 +225,15 @@
     <string name="lightning__setting_up_step3">في قائمة انتظار الفتح</string>
     <string name="lightning__setting_up_step4">جارٍ فتح الاتصال</string>
     <string name="lightning__setting_up_text">يرجى الانتظار، جارٍ تحويل أموالك. يجب أن يستغرق هذا &lt;accent&gt;±10 دقائق.&lt;/accent&gt;</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">رسوم المطالبة</string>
+    <string name="lightning__spark_confirmations">%1$d/3 تأكيدات</string>
+    <string name="lightning__spark_deposit">إيداع</string>
+    <string name="lightning__spark_deposits_claimed">إيداعات تمت المطالبة بها</string>
+    <string name="lightning__spark_deposits_pending">إيداعات قيد التنفيذ</string>
+    <string name="lightning__spark_provider">المزوّد</string>
+    <string name="lightning__spark_provider_value">Spark عبر Breez</string>
+    <string name="lightning__spark_trust">يُحفظ هذا الرصيد على Spark الذي تديره Lightspark وBreez وFlashnet. يبقى آمنًا ما دام أحدهم على الأقل يتصرف بأمانة. يمكنهم إيقاف الوصول مؤقتًا، والخروج من دونهم يتطلب خروجًا على السلسلة.</string>
     <string name="lightning__spendable_onchain">قابل للإنفاق على السلسلة</string>
     <string name="lightning__spending">الإنفاق</string>
     <string name="lightning__spending_advanced__fee">رسوم السيولة</string>

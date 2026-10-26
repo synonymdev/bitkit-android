@@ -97,6 +97,15 @@
     <string name="fee__custom__description">Depende da taxa</string>
     <string name="fee__custom__duration">Depende da taxa</string>
     <string name="fee__custom__shortDescription">Depende da taxa</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Taxa de resgate</string>
+    <string name="lightning__spark_confirmations">%1$d/3 confirmações</string>
+    <string name="lightning__spark_deposit">Depósito</string>
+    <string name="lightning__spark_deposits_claimed">Depósitos resgatados</string>
+    <string name="lightning__spark_deposits_pending">Depósitos em curso</string>
+    <string name="lightning__spark_provider">Fornecedor</string>
+    <string name="lightning__spark_provider_value">Spark via Breez</string>
+    <string name="lightning__spark_trust">Este saldo é mantido na Spark, operada pela Lightspark, Breez e Flashnet. Está seguro enquanto pelo menos um deles agir com honestidade. Podem suspender o acesso, e sair sem eles exige uma saída on-chain.</string>
     <string name="lightning__transfer_intro__title">Saldo de\n&lt;accent&gt;Gastos&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Use seu saldo de gastos para desfrutar de transações instantâneas e baratas com amigos, familiares e comerciantes.</string>
     <string name="lightning__transfer_intro__button">Começar</string>

@@ -102,6 +102,15 @@
     <string name="fee__custom__description">Zależy od opłaty</string>
     <string name="fee__custom__duration">Zależy od opłaty</string>
     <string name="fee__custom__shortDescription">Zależy od opłaty</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Opłata za odbiór</string>
+    <string name="lightning__spark_confirmations">%1$d/3 potwierdzeń</string>
+    <string name="lightning__spark_deposit">Wpłata</string>
+    <string name="lightning__spark_deposits_claimed">Odebrane wpłaty</string>
+    <string name="lightning__spark_deposits_pending">Wpłaty w toku</string>
+    <string name="lightning__spark_provider">Dostawca</string>
+    <string name="lightning__spark_provider_value">Spark przez Breez</string>
+    <string name="lightning__spark_trust">To saldo jest przechowywane na Spark, prowadzonym przez Lightspark, Breez i Flashnet. Jest bezpieczne, dopóki co najmniej jeden z nich działa uczciwie. Mogą wstrzymać dostęp, a wyjście bez nich wymaga wyjścia on-chain.</string>
     <string name="lightning__transfer_intro__title">Saldo \n&lt;accent&gt;Wydatków&lt;/accent&gt;</string>
     <string name="lightning__transfer_intro__text">Zasil swoje saldo wydatków, aby cieszyć się natychmiastowymi i tanimi transakcjami z przyjaciółmi, rodziną i sprzedawcami.</string>
     <string name="lightning__transfer_intro__button">Rozpocznij</string>

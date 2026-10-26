@@ -229,6 +229,15 @@
     <string name="lightning__setting_up_step3">In wachtrij voor openen</string>
     <string name="lightning__setting_up_step4">Verbinding openen</string>
     <string name="lightning__setting_up_text">Even geduld, je overboeking is bezig. Dit duurt &lt;accent&gt;±10 minuten.&lt;/accent&gt;</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Claimkosten</string>
+    <string name="lightning__spark_confirmations">%1$d/3 bevestigingen</string>
+    <string name="lightning__spark_deposit">Storting</string>
+    <string name="lightning__spark_deposits_claimed">Geclaimde stortingen</string>
+    <string name="lightning__spark_deposits_pending">Lopende stortingen</string>
+    <string name="lightning__spark_provider">Aanbieder</string>
+    <string name="lightning__spark_provider_value">Spark via Breez</string>
+    <string name="lightning__spark_trust">Dit saldo staat op Spark, beheerd door Lightspark, Breez en Flashnet. Het is veilig zolang ten minste één van hen eerlijk handelt. Zij kunnen de toegang pauzeren, en vertrekken zonder hen vereist een on-chain exit.</string>
     <string name="lightning__spendable_onchain">Besteedbaar onchain</string>
     <string name="lightning__spending">Bestedingssaldo</string>
     <string name="lightning__spending_advanced__fee">Liquiditeitsvergoeding</string>

@@ -522,14 +522,14 @@ private fun ChannelDetailContent(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+internal fun SectionTitle(text: String) {
     VerticalSpacer(32.dp)
     Caption13Up(text = text, color = Colors.White64)
     VerticalSpacer(8.dp)
 }
 
 @Composable
-private fun SectionRow(
+internal fun SectionRow(
     name: String,
     valueContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,

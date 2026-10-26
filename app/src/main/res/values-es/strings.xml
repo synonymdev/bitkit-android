@@ -163,6 +163,15 @@
     <string name="lightning__setting_up_step2">Pago Exitoso</string>
     <string name="lightning__setting_up_step3">En Cola para Apertura</string>
     <string name="lightning__setting_up_text">Por favor espera, la transferencia de tus fondos está en progreso. Esto debería llevar &lt;accent&gt;±10 minutos.&lt;/accent&gt;</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Comisión de reclamo</string>
+    <string name="lightning__spark_confirmations">%1$d/3 confirmaciones</string>
+    <string name="lightning__spark_deposit">Depósito</string>
+    <string name="lightning__spark_deposits_claimed">Depósitos reclamados</string>
+    <string name="lightning__spark_deposits_pending">Depósitos en curso</string>
+    <string name="lightning__spark_provider">Proveedor</string>
+    <string name="lightning__spark_provider_value">Spark mediante Breez</string>
+    <string name="lightning__spark_trust">Este saldo se guarda en Spark, operado por Lightspark, Breez y Flashnet. Está seguro mientras al menos uno de ellos actúe con honestidad. Pueden pausar el acceso, y salir sin ellos requiere una salida on-chain.</string>
     <string name="lightning__spendable_onchain">Gastable onchain</string>
     <string name="lightning__spending_advanced__fee">Comisión de liquidez</string>
     <string name="lightning__spending_advanced__title">Capacidad de\n&lt;accent&gt;recepción&lt;/accent&gt;</string>

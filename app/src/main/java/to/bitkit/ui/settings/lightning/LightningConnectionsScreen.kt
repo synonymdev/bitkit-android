@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
+import android.content.Intent
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -38,6 +39,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.collections.immutable.ImmutableList
@@ -50,11 +52,13 @@ import to.bitkit.models.msatFloorOf
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.LightningChannel
+import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SyncNodeView
@@ -69,6 +73,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareZipFile
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.utils.withAccent
 
 private const val CLOSED_CHANNEL_ALPHA = 0.64f
@@ -101,6 +106,8 @@ fun LightningConnectionsScreen(
         onClickChannel = { channelUi ->
             navController.navigateTo(Routes.ChannelDetail(channelUi.details.channelId))
         },
+        onClickSpark = { navController.navigateTo(Routes.SparkDetail) },
+        onOpenTx = { txId -> context.startActivity(Intent(Intent.ACTION_VIEW, getBlockExplorerUrl(txId).toUri())) },
         onRefresh = {
             viewModel.onPullToRefresh()
         },
@@ -115,6 +122,8 @@ private fun Content(
     onClickAddConnection: () -> Unit = {},
     onClickExportLogs: () -> Unit = {},
     onClickChannel: (ChannelUi) -> Unit = {},
+    onClickSpark: () -> Unit = {},
+    onOpenTx: (String) -> Unit = {},
     onRefresh: () -> Unit = {},
 ) {
     var showClosed by remember { mutableStateOf(false) }
@@ -148,7 +157,8 @@ private fun Content(
             onRefresh = onRefresh,
             modifier = Modifier.fillMaxSize()
         ) {
-            val isEmpty = uiState.openChannels.isEmpty() &&
+            val isEmpty = uiState.spark == null &&
+                uiState.openChannels.isEmpty() &&
                 uiState.pendingConnections.isEmpty() &&
                 uiState.closedChannels.isEmpty()
 
@@ -183,6 +193,12 @@ private fun Content(
                     VerticalSpacer(16.dp)
                     LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+
+                    uiState.spark?.let { spark ->
+                        VerticalSpacer(16.dp)
+                        Caption13Up(stringResource(R.string.lightning__spark), color = Colors.White64)
+                        SparkItem(spark = spark, onClick = onClickSpark, onOpenTx = onOpenTx)
+                    }
 
                     // Pending Channels Section
                     if (uiState.pendingConnections.isNotEmpty()) {
@@ -377,6 +393,87 @@ private fun ChannelItem(
         )
         VerticalSpacer(16.dp)
         HorizontalDivider()
+    }
+}
+
+@Composable
+private fun SparkItem(
+    spark: SparkUi,
+    onClick: () -> Unit,
+    onOpenTx: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickableAlpha { onClick() }
+            .testTag("SparkConnection")
+    ) {
+        VerticalSpacer(16.dp)
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            BodyMSB(
+                text = stringResource(R.string.lightning__spark_provider_value),
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                painter = painterResource(R.drawable.ic_chevron_right),
+                contentDescription = null,
+                tint = Colors.White64,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        VerticalSpacer(8.dp)
+        LightningChannel(
+            capacity = spark.balanceSats.toLong(),
+            localBalance = spark.balanceSats.toLong(),
+            remoteBalance = 0L,
+            status = ChannelStatusUi.OPEN,
+        )
+        spark.pendingDeposits.forEach { SparkDepositRow(it, onOpenTx) }
+        VerticalSpacer(16.dp)
+        HorizontalDivider()
+    }
+}
+
+@Composable
+internal fun SparkDepositRow(
+    depositUi: SparkDepositUi,
+    onOpenTx: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+            .clickableAlpha { onOpenTx(depositUi.deposit.txid) }
+            .testTag("SparkDeposit")
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            CaptionB(text = stringResource(R.string.lightning__spark_deposit))
+            CaptionB(
+                text = depositUi.deposit.txid,
+                color = Colors.White64,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+            )
+        }
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.padding(start = 16.dp)
+        ) {
+            MoneyCaptionB(sats = depositUi.deposit.amountSats.toLong(), symbol = true)
+            depositUi.confirmations?.let {
+                CaptionB(
+                    text = stringResource(R.string.lightning__spark_confirmations, minOf(it.toInt(), 3)),
+                    color = Colors.Purple,
+                )
+            }
+        }
     }
 }
 
