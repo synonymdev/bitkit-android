@@ -194,7 +194,8 @@ class PaykitAllowanceExecutor @Inject constructor(
         updated
     }
 
-    private suspend fun updateLocalStateDurably(
+    /** Like [updateLocalState], but a failed save throws instead of being logged. */
+    suspend fun updateLocalStateDurably(
         identity: String,
         change: (PaykitAllowanceLocalState) -> PaykitAllowanceLocalState,
     ): PaykitAllowanceLocalState = stateMutex.withLock {

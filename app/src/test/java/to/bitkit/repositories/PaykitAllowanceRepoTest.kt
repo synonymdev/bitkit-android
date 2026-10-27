@@ -68,6 +68,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
     private val proposedTerms = mutableListOf<Pair<Instant, List<String>>>()
     private var localState = PaykitAllowanceLocalState()
+    private var failDurableSave = false
     private var records = listOf<AllowanceRecord>()
     private lateinit var sut: PaykitAllowanceRepo
 
@@ -76,6 +77,12 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         whenever(executor.events).thenReturn(executorEvents)
         whenever(executor.localState(any())).thenAnswer { localState }
         whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
+            val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
+            localState = change(localState)
+            localState
+        }
+        whenever(executor.updateLocalStateDurably(any(), any())).doSuspendableAnswer {
+            if (failDurableSave) throw PaykitAllowanceError.Unavailable
             val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
             localState = change(localState)
             localState
@@ -441,6 +448,18 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "It is announced once")
         assertTrue(localState.acceptingOfferIds.isEmpty())
         verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `offer is not accepted while its mark cannot be saved`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+        failDurableSave = true
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
     }
 
     @Test

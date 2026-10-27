@@ -320,10 +320,18 @@ class PaykitAllowanceRepo @Inject constructor(
             for (offer in offers) {
                 if (!isCurrent() || !canContinue()) break
                 val keys = offer.allowances.map { it.key }
-                executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds + keys) }
-                respond(offer) { acceptProposal(it) }
-                    .onSuccess { accepted += offer }
-                    .onFailure { Logger.warn("Failed to accept an allowance offer", it, context = TAG) }
+                // The mark must be saved before the accept, or an accept that commits as the call is cancelled is lost.
+                val isMarked = runSuspendCatching {
+                    executor.updateLocalStateDurably(identity) {
+                        it.copy(acceptingOfferIds = it.acceptingOfferIds + keys)
+                    }
+                }.onFailure { Logger.warn("Failed to mark an allowance offer before accepting it", it, context = TAG) }
+                    .isSuccess
+                if (isMarked) {
+                    respond(offer) { acceptProposal(it) }
+                        .onSuccess { accepted += offer }
+                        .onFailure { Logger.warn("Failed to accept an allowance offer", it, context = TAG) }
+                }
             }
             if (!isCurrent()) return@withContext emptyList()
             // Claimed until the caller announces or releases them, so an overlapping refresh never returns them too.
