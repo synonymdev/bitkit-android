@@ -1730,4 +1730,5 @@
     <string name="widgets__widget__settings">Widgetinstellingen</string>
     <string name="widgets__widget__size_small">Klein</string>
     <string name="widgets__widget__size_wide">Breed</string>
+    <string name="wallet__balance_updating">Saldo bijwerken…</string>
 </resources>
