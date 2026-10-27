@@ -60,6 +60,7 @@ import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.SyncNodeVariant
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.navigateTo
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.subscriptions.SubscriptionFirstPaymentProgress
 import to.bitkit.ui.screens.subscriptions.SubscriptionSuccess
@@ -856,13 +857,20 @@ fun SendSheet(
             enter = fadeIn(),
             exit = fadeOut(),
         ) {
-            SyncNodeView(
-                variant = syncNodeVariant,
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .gradientBackground()
                     .navigationBarsPadding()
-            )
+            ) {
+                SheetTopBar(titleText = stringResource(R.string.wallet__send_bitcoin))
+                SyncNodeView(
+                    variant = syncNodeVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                )
+            }
         }
     }
 }
