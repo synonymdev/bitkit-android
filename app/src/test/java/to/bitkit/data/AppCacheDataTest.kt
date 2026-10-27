@@ -25,6 +25,18 @@ class AppCacheDataTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cached USDT balance round trips exact values and rejects another wallet or network`() {
+        for (balance in listOf(0uL, 1_234_567uL, ULong.MAX_VALUE)) {
+            val original = AppCacheData(usdtDisplayBalance = CachedUsdtBalance("wallet-a", "network-a", balance))
+            val restored = json.decodeFromString<AppCacheData>(json.encodeToString(original)).usdtDisplayBalance!!
+            assertEquals(balance, restored.balanceFor("wallet-a", "network-a"))
+            assertNull(restored.balanceFor("wallet-b", "network-a"))
+            assertNull(restored.balanceFor("wallet-a", "network-b"))
+        }
+        assertNull(json.decodeFromString<AppCacheData>("{}").usdtDisplayBalance)
+    }
+
+    @Test
     fun `AppCacheSerializer reads a legacy receive invoice without a stored payment hash`() = test {
         val cachedReceive = AppCacheSerializer.readFrom(
             """{"bolt11":"$LEGACY_BOLT11","bip21":"bitcoin:bc1qtest?lightning=$LEGACY_BOLT11"}"""

@@ -1732,4 +1732,5 @@
     <string name="widgets__widget__settings">Nastavení widgetu</string>
     <string name="widgets__widget__size_small">Malý</string>
     <string name="widgets__widget__size_wide">Široký</string>
+    <string name="wallet__balance_updating">Aktualizace zůstatku…</string>
 </resources>
