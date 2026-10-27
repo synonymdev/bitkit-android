@@ -597,23 +597,23 @@ class PaykitAllowanceExecutor @Inject constructor(
             )
         }.getOrElse {
             // Nothing was sent, so the reservation is released instead of blocking the manual payment.
-            record(prepared.attemptId, PaymentOutcome.FAILED, identity)
+            failUnconsumed(prepared.attemptId, identity)
             throw it
         }
         val submitted = (handoff as? PaymentAttemptDecision.Ready)?.attempt
         if (submitted == null) {
             val reason = (handoff as? PaymentAttemptDecision.Blocked)?.reason
             Logger.info("Kept an incoming request manual: the allowance handoff is blocked by '$reason'", context = TAG)
-            record(prepared.attemptId, PaymentOutcome.FAILED, identity)
+            failUnconsumed(prepared.attemptId, identity)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
         runSuspendCatching { setStage(Stage.SUBMITTED, submitted.attemptId, identity) }.onFailure {
-            record(submitted.attemptId, PaymentOutcome.FAILED, identity)
+            failUnconsumed(submitted.attemptId, identity)
             throw it
         }
 
         payer.consumePaymentList(request.counterparty, payment.context).onFailure {
-            record(submitted.attemptId, PaymentOutcome.FAILED, identity)
+            failUnconsumed(submitted.attemptId, identity)
             throw it
         }
         payer.prepareProof(request, endpointIdentifier, payment.appId, submitted.allowanceId).onFailure {
@@ -883,6 +883,12 @@ class PaykitAllowanceExecutor @Inject constructor(
         updateLocalStateDurably(identity) { state ->
             state.copy(journal = state.journal.map { if (it.attemptId == attemptId) it.copy(stage = stage) else it })
         }
+    }
+
+    // The list was never consumed, so recovery must not give it back: a later request may have consumed it since.
+    private suspend fun failUnconsumed(attemptId: String, identity: String) {
+        takePaymentListVersion(attemptId, identity)
+        record(attemptId, PaymentOutcome.FAILED, identity)
     }
 
     private suspend fun failUnsent(

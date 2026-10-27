@@ -639,6 +639,20 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovery does not give back a list a failed attempt never consumed`() = test {
+        beginDecision = PaymentAttemptDecision.Blocked(AllowanceAccountingBlock.ManualOnly)
+        sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+        verify(payer, never()).consumePaymentList(any(), any())
+
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence(AUTOMATIC_ATTEMPT_ID, PaymentExecutionStatus.FAILED)),
+        )
+        sut.recover(identity)
+
+        verify(payer, never()).releasePaymentList(any(), any())
+    }
+
+    @Test
     fun `recovery failing an attempt while its settlement records it gives the payment list back once`() = test {
         sut.activate(identity)
         accountingState = fixtures.accountingState(
