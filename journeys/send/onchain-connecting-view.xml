@@ -3,12 +3,13 @@
     Verifies that a send opened while the node is not running, on a wallet with no Lightning
     channels, waits on the bitcoin variant of "Connecting to network": the "Send Bitcoin" header,
     the bitcoin coin inside orange rings, the title with "Connecting" in orange, and the body
-    "Please wait for Bitkit to connect to the bitcoin network (±10 seconds)." A wallet with
-    channels, or a Lightning send, keeps the purple Spending variant.
+    "Please wait for Bitkit to connect to the bitcoin network (±10 seconds)." A wallet whose
+    channels have loaded keeps the purple Spending variant.
 
     The view shows only until the node runs. A cold launch shows home only once the node runs, so
     restart the node from the LDK debug screen and open Send at once; the view then shows for about
-    2 seconds. Take a screenshot or record as soon as Send opens.
+    2 seconds. Take a screenshot or record as soon as Send opens. iOS reaches the view by another
+    route; see its journey and journeys/README.md.
 
     Precondition: onboarded dev wallet with no Lightning channels. Start on the wallet home screen.
   </description>

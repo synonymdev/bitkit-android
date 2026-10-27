@@ -168,6 +168,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
 | `send/recovery-pin-system-back.xml` | not ported — iOS has no system Back button, and `SendPinScreen` already answers cancel in `onDisappear` |
 | `send/retry-original-dialog-style.xml` | not ported — iOS shows the two Retry original payment steps as native alerts |
+| `send/onchain-connecting-view.xml` | ported with another route — on iOS the LDK Debug Restart keeps the node in the running state and a launch shows home only once the node runs, so the iOS journey opens Send while the node is still starting |
 | `send/prepared-fee-recovery.md` | Same four manual fault cases and file on both platforms; the recipe records original-send versus replacement fee retention and iOS Max/identity-flow adaptations. These faults are not journey capabilities. |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
