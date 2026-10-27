@@ -11,6 +11,7 @@ import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.OnchainActivity
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Before
 import org.junit.Rule
@@ -18,12 +19,14 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.env.Env
+import to.bitkit.ext.create
 import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
@@ -31,6 +34,8 @@ import java.io.File
 import java.math.BigInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import com.synonym.bitkitcore.PaymentType as ActivityPaymentType
 
 class SparkRepoTest : BaseUnitTest() {
     private val sparkService = mock<SparkService>()
@@ -89,6 +94,35 @@ class SparkRepoTest : BaseUnitTest() {
         val activities = argumentCaptor<Activity>()
         verify(activityRepo, times(2)).upsertActivity(activities.capture())
         assertEquals(listOf(0uL, 2uL), activities.allValues.map { (it as Activity.Lightning).v1.fee })
+    }
+
+    @Test
+    fun `lists a withdrawal with its fee and marks its arrival in Savings as a transfer`() = test {
+        val arrival = OnchainActivity.create(
+            id = "arrival",
+            txType = ActivityPaymentType.RECEIVED,
+            txId = "withdrawal",
+            value = 4_917uL,
+            fee = 0uL,
+            address = "bc1q",
+            timestamp = 1uL,
+        )
+        whenever { activityRepo.getOnchainActivityByTxId(eq("withdrawal"), any()) }.thenReturn(arrival)
+        whenever { activityRepo.updateActivity(any(), any(), any()) }.thenReturn(Result.success(Unit))
+        val withdrawal = sentPayment(fees = 1_470).copy(
+            method = PaymentMethod.WITHDRAW,
+            details = PaymentDetails.Withdraw("withdrawal"),
+        )
+        whenever { sparkService.listPayments() }.thenReturn(listOf(withdrawal))
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+
+        val updated = argumentCaptor<Activity>()
+        verify(activityRepo).updateActivity(eq("arrival"), updated.capture(), any())
+        assertTrue((updated.firstValue as Activity.Onchain).v1.isTransfer)
+        assertEquals(listOf(SparkWithdrawal("withdrawal", 128uL, 1_470uL)), sut.state.value.withdrawals)
     }
 
     @Test

@@ -267,10 +267,33 @@ class SparkRepo @Inject constructor(
                 balanceSats = info.balanceSats,
                 pendingDepositSats = pending.sumOf { deposit -> deposit.amountSats },
                 deposits = (pending + claimed).toImmutableList(),
+                withdrawals = payments.toWithdrawals(),
                 recoverableFundsSats = info.recoverableFundsSats,
             ).withBroadcastDeposits()
         }
         payments.filter { it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0 }.forEach { recordActivity(it) }
+        markTransfers(payments)
+    }
+
+    private fun List<Payment>.toWithdrawals() = filter { it.status != PaymentStatus.FAILED }
+        .mapNotNull { payment ->
+            val withdraw = payment.details as? PaymentDetails.Withdraw ?: return@mapNotNull null
+            SparkWithdrawal(
+                txid = withdraw.txId,
+                amountSats = payment.amount.toLong().toULong(),
+                feeSats = payment.fees.toLong().toULong(),
+            )
+        }
+        .toImmutableList()
+
+    private suspend fun markTransfers(payments: List<Payment>) {
+        val activities = activityRepo.get()
+        payments.filter { it.status != PaymentStatus.FAILED }
+            .mapNotNull { (it.details as? PaymentDetails.Withdraw)?.txId }
+            .forEach { txid ->
+                val activity = activities.getOnchainActivityByTxId(txid)?.takeUnless { it.isTransfer } ?: return@forEach
+                activities.updateActivity(activity.id, Activity.Onchain(activity.copy(isTransfer = true)))
+            }
     }
 
     /** Payment hashes of the Lightning payments Spark received. */
@@ -390,7 +413,15 @@ data class SparkState(
     /** Deposits seen on-chain that Spark claims into [balanceSats] after 3 confirmations. */
     val pendingDepositSats: ULong = 0uL,
     val deposits: ImmutableList<SparkDeposit> = persistentListOf(),
+    val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
     val recoverableFundsSats: ULong = 0uL,
+)
+
+/** A Transfer to Savings out of Spark, with what Spark kept for it. */
+data class SparkWithdrawal(
+    val txid: String,
+    val amountSats: ULong,
+    val feeSats: ULong,
 )
 
 /** An on-chain deposit into Spark: pending until Spark claims it after 3 confirmations. */

@@ -41,7 +41,8 @@ fun LightningChannel(
     showLabels: Boolean = false,
     showReceiving: Boolean = true,
 ) {
-    val spendingColor = if (status == ChannelStatusUi.CLOSED) Colors.Gray5 else Colors.Purple50
+    val isEmptySpendingBar = !showReceiving && localBalance == 0L
+    val spendingColor = if (status == ChannelStatusUi.CLOSED || isEmptySpendingBar) Colors.Gray5 else Colors.Purple50
     val spendingAvailableColor = if (status == ChannelStatusUi.CLOSED) Colors.Gray3 else Colors.Purple
     val receivingColor = if (status == ChannelStatusUi.CLOSED) Colors.Gray5 else Colors.White64
     val receivingAvailableColor = if (status == ChannelStatusUi.CLOSED) Colors.Gray3 else Colors.White

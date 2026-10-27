@@ -28,6 +28,7 @@ import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.repositories.SparkDeposit
+import to.bitkit.repositories.SparkWithdrawal
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.ChannelStatusUi
@@ -151,6 +152,23 @@ private fun Content(
                     }
                 }
 
+                if (spark.withdrawals.isNotEmpty()) {
+                    SectionTitle(stringResource(R.string.lightning__savings_confirm__label))
+                    spark.withdrawals.forEach { withdrawal ->
+                        SparkTransactionRow(
+                            title = stringResource(R.string.wallet__activity_transfer_to_savings),
+                            txid = withdrawal.txid,
+                            amountSats = withdrawal.amountSats,
+                            onOpenTx = onOpenTx,
+                            modifier = Modifier.testTag("SparkWithdrawal")
+                        )
+                        SectionRow(
+                            name = stringResource(R.string.wallet__activity_fee),
+                            valueContent = { MoneyCaptionB(sats = withdrawal.feeSats.toLong(), symbol = true) },
+                        )
+                    }
+                }
+
                 FillHeight()
                 VerticalSpacer(32.dp)
                 PrimaryButton(
@@ -179,6 +197,7 @@ private fun Preview() {
                         SparkDepositUi(SparkDeposit("6c8706b8a9cbd18f", 15_000uL, isClaimed = false), 1u),
                         SparkDepositUi(SparkDeposit("d0067b2497c7b905", 35_000uL, isClaimed = true, feeSats = 312uL)),
                     ),
+                    withdrawals = persistentListOf(SparkWithdrawal("4f1d0c55e2a9b713", 4_917uL, feeSats = 1_470uL)),
                 ),
             ),
         )

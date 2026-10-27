@@ -461,19 +461,37 @@ internal fun SparkDepositRow(
     onOpenTx: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    SparkTransactionRow(
+        title = stringResource(R.string.lightning__spark_deposit),
+        txid = depositUi.deposit.txid,
+        amountSats = depositUi.deposit.amountSats,
+        confirmations = depositUi.confirmations,
+        onOpenTx = onOpenTx,
+        modifier = modifier.testTag("SparkDeposit")
+    )
+}
+
+@Composable
+internal fun SparkTransactionRow(
+    title: String,
+    txid: String,
+    amountSats: ULong,
+    onOpenTx: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    confirmations: UInt? = null,
+) {
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .padding(top = 12.dp)
-            .clickableAlpha { onOpenTx(depositUi.deposit.txid) }
-            .testTag("SparkDeposit")
+            .clickableAlpha { onOpenTx(txid) }
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            CaptionB(text = stringResource(R.string.lightning__spark_deposit))
+            CaptionB(text = title)
             CaptionB(
-                text = depositUi.deposit.txid,
+                text = txid,
                 color = Colors.White64,
                 maxLines = 1,
                 overflow = TextOverflow.MiddleEllipsis,
@@ -483,8 +501,8 @@ internal fun SparkDepositRow(
             horizontalAlignment = Alignment.End,
             modifier = Modifier.padding(start = 16.dp)
         ) {
-            MoneyCaptionB(sats = depositUi.deposit.amountSats.toLong(), symbol = true)
-            depositUi.confirmations?.let {
+            MoneyCaptionB(sats = amountSats.toLong(), symbol = true)
+            confirmations?.let {
                 CaptionB(
                     text = stringResource(R.string.lightning__spark_confirmations, minOf(it.toInt(), 3)),
                     color = Colors.Purple,

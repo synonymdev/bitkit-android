@@ -42,6 +42,7 @@ import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.SparkDeposit
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
+import to.bitkit.repositories.SparkWithdrawal
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -318,6 +319,7 @@ data class LightningConnectionsUiState(
 data class SparkUi(
     val balanceSats: ULong,
     val deposits: ImmutableList<SparkDepositUi> = persistentListOf(),
+    val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
 ) {
     val pendingDeposits get() = deposits.filterNot { it.deposit.isClaimed }
     val claimedDeposits get() = deposits.filter { it.deposit.isClaimed }
@@ -338,6 +340,7 @@ internal suspend fun SparkState.toUi(lightningRepo: LightningRepo): SparkUi? {
         deposits = deposits.map {
             SparkDepositUi(it, if (it.isClaimed) null else lightningRepo.onchainConfirmations(it.txid))
         }.toImmutableList(),
+        withdrawals = withdrawals,
     )
 }
 
