@@ -3230,7 +3230,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `failed request opened from the full screen stops loading without replacing it with the request sheet`() = test {
+    fun `failed request opened from the full screen stops loading in place`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
         whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
