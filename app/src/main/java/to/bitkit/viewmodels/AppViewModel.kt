@@ -312,6 +312,7 @@ class AppViewModel @Inject constructor(
     private val paykitPaymentRequestDiagnostics: PaykitPaymentRequestDiagnostics,
     private val refreshContactPaykitLink: RefreshContactPaykitLinkUseCase,
     private val usdtRepo: UsdtRepo,
+    private val sparkRepo: SparkRepo,
     val paykitUsdtPayments: PaykitUsdtPaymentRepo,
     private val samRockRepo: SamRockRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
@@ -625,6 +626,14 @@ class AppViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init {
+        viewModelScope.launch {
+            sparkRepo.state.map { it.usd != null }.distinctUntilChanged().collect {
+                if (it && isPaykitEnabled.value) {
+                    refreshPublicPaykitEndpointsIfEnabled()
+                    refreshPrivatePaykitEndpointsIfEnabled("Spark dollar availability", requeueActive = true)
+                }
+            }
+        }
         viewModelScope.launch {
             usdtPreferences.enabled.distinctUntilChanged().collect {
                 updateCanSwitchWallet()
@@ -3763,7 +3772,16 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun openPaykitEndpoints(payment: ContactPaymentContext, fromMainScanner: Boolean) {
-        val decoded = payment.endpoints.filter { it.methodId != MethodId.UsdtArbitrum }
+        val sparkUsdEndpoint = payment.endpoints.firstOrNull { it.methodId == MethodId.UsdbSpark }
+        val holdsSparkUsd = (sparkRepo.state.value.usd?.balance ?: 0uL) > 0uL
+        if (sparkUsdEndpoint != null && holdsSparkUsd && payment.incomingPaymentRequest == null) {
+            clearActiveContactPaymentContext()
+            hideSheet()
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.SparkUsdWallet(sparkUsdEndpoint.value)))
+            return
+        }
+        val decoded = payment.endpoints
+            .filter { it.methodId != MethodId.UsdtArbitrum && it.methodId != MethodId.UsdbSpark }
             .map { coreService.decode(it.paymentRequest) }
         val address = decoded.filterIsInstance<Scanner.OnChain>().lastOrNull()?.invoice?.address.orEmpty()
         val invoice = decoded.filterIsInstance<Scanner.Lightning>().lastOrNull()?.invoice
@@ -4611,7 +4629,7 @@ class AppViewModel @Inject constructor(
 
     private fun requiresPaykitAssetSelection(payment: ContactPaymentContext): Boolean =
         payment.endpoints.isNotEmpty() && (
-            payment.endpoints.any { it.methodId == MethodId.UsdtArbitrum } ||
+            payment.endpoints.any { it.methodId == MethodId.UsdtArbitrum || it.methodId == MethodId.UsdbSpark } ||
                 payment.incomingPaymentRequest?.let {
                     it.amount.asset != PaykitAsset.BTC || it.pricing.conversion != null
                 } == true

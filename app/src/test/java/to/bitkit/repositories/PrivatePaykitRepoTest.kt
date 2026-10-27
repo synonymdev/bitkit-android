@@ -76,6 +76,7 @@ import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -108,7 +109,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val settingsStore = mock<SettingsStore>()
     private val addressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val lightningRepo = mock<LightningRepo>()
-    private val sparkRepo = mock<SparkRepo>()
+    private val sparkRepo = idleSparkRepo()
     private val walletRepo = mock<WalletRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val paymentRequestRepo = mock<PaykitPaymentRequestRepo>()
@@ -2227,6 +2228,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paykitSdkService = paykitSdkService,
             settingsStore = settingsStore,
             usdtRepo = mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
+            sparkRepo = idleSparkRepo(),
             clock = clock,
         )
         for (failureStage in listOf("withdraw", "disable capability")) {

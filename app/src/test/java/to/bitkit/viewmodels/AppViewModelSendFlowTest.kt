@@ -215,6 +215,7 @@ import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PendingChannelMigration
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.idleSparkRepo
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
@@ -925,6 +926,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         paykitPaymentRequestDiagnostics = paykitPaymentRequestDiagnostics,
         refreshContactPaykitLink = refreshContactPaykitLink,
         usdtRepo = usdtRepo,
+        sparkRepo = idleSparkRepo(),
         paykitUsdtPayments = paykitUsdtPayments,
         samRockRepo = samRockRepo,
         appUpdateSheet = mock { on { type } doReturn TimedSheetType.APP_UPDATE },

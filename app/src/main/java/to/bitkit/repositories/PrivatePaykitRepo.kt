@@ -1826,6 +1826,9 @@ class PrivatePaykitRepo @Inject constructor(
                     )
                 }
             }
+            if (PublicPaykitRepo.isLightningPaymentOptionEnabled(settings)) {
+                sparkUsdEndpoint(sparkRepo)?.let { endpoints += it }
+            }
 
             endpoints
         }

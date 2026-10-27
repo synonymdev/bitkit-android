@@ -284,6 +284,10 @@ class SparkService @Inject constructor(
         ),
     )
 
+    /** The wallet's static Spark address; it receives sats and tokens alike. */
+    suspend fun sparkAddress(): String =
+        requireSdk().receivePayment(ReceivePaymentRequest(ReceivePaymentMethod.SparkAddress)).paymentRequest
+
     suspend fun parse(input: String): InputType = requireSdk().parse(input)
 
     /** Prepares a [tokenId] payment; [amount] in token base units, ignored by the SDK when an invoice sets one. */

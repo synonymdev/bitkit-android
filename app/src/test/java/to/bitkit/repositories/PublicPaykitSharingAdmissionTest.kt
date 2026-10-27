@@ -29,6 +29,7 @@ import to.bitkit.data.UsdtPreference
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -64,6 +65,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             settingsStore = settingsStore,
             clock = Clock.System,
             usdtRepo = usdtRepo,
+            sparkRepo = idleSparkRepo(),
         )
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyself"))
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringSession)

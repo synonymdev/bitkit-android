@@ -33,6 +33,7 @@ import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -616,6 +617,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         lightningRepo = lightningRepo,
         coreService = coreService,
         usdtRepo = usdtRepo,
+        sparkRepo = idleSparkRepo(),
         paykitSdkService = paykitSdkService,
         settingsStore = settingsStore,
         clock = clock,

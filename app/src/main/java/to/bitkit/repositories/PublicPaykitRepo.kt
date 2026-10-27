@@ -118,6 +118,7 @@ class PublicPaykitRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val clock: Clock,
     private val usdtRepo: UsdtRepo,
+    private val sparkRepo: SparkRepo,
 ) {
     companion object {
         private val methodIdPattern = Regex("^[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$")
@@ -130,6 +131,7 @@ class PublicPaykitRepo @Inject constructor(
             MethodId.P2sh,
             MethodId.P2pkh,
             MethodId.UsdtArbitrum,
+            MethodId.UsdbSpark,
         )
 
         private val publicBolt11Expiry = 24.hours
@@ -452,6 +454,8 @@ class PublicPaykitRepo @Inject constructor(
             }
         }
 
+        if (includeLightning) sparkUsdEndpoint(sparkRepo)?.let { endpoints += it }
+
         if (endpoints.isEmpty() && requireEndpoint) throw PublicPaykitError.NoSupportedEndpoint
 
         return endpoints
@@ -542,6 +546,7 @@ class PublicPaykitRepo @Inject constructor(
     private suspend fun isPayable(endpoint: Endpoint): Boolean = runSuspendCatching {
         when (endpoint.methodId) {
             MethodId.UsdtArbitrum -> Env.isUsdtEnabled && PaykitUsdt.address(endpoint.rawPayload) != null
+            MethodId.UsdbSpark -> Env.sparkUsdTokenId != null && SparkRepo.isSparkInput(endpoint.value)
             MethodId.Bolt11 -> {
                 val scan = coreService.decode(endpoint.paymentRequest) as? Scanner.Lightning
                     ?: return@runSuspendCatching false
@@ -563,6 +568,16 @@ class PublicPaykitRepo @Inject constructor(
     }.getOrDefault(false)
 }
 
+/**
+ * The Spark dollar endpoint: the wallet's Spark address, published with the Spending endpoints while Spark holds a
+ * dollar token. Payers send the token to it by identifier.
+ */
+internal suspend fun sparkUsdEndpoint(sparkRepo: SparkRepo): Endpoint? {
+    if (Env.sparkUsdTokenId == null || sparkRepo.state.value.usd == null) return null
+    val address = sparkRepo.sparkAddress().getOrNull() ?: return null
+    return Endpoint(MethodId.UsdbSpark, value = address, rawPayload = PublicPaykitRepo.serializePayload(address))
+}
+
 data class Endpoint(
     val methodId: MethodId,
     val value: String,
@@ -582,6 +597,7 @@ enum class MethodId(
     val isBitkitManaged: Boolean = false,
 ) {
     UsdtArbitrum(fixedRawValue = "usdt-arbitrum-address", isBitkitManaged = true),
+    UsdbSpark(fixedRawValue = "usdb-spark-address", isBitkitManaged = true),
     Bolt11(fixedRawValue = "btc-lightning-bolt11", isBitkitManaged = true),
     Lnurl(fixedRawValue = "btc-lightning-lnurl"),
     P2tr(onchainEndpoint = "p2tr", isOnchain = true, isBitkitManaged = true),

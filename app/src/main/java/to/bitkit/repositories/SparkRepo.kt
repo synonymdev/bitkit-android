@@ -189,6 +189,11 @@ class SparkRepo @Inject constructor(
         }
     }
 
+    /** The wallet's static Spark address, published on Paykit as its dollar endpoint. */
+    suspend fun sparkAddress(): Result<String> = withContext(bgDispatcher) {
+        runSuspendCatching { sparkService.sparkAddress() }
+    }
+
     /**
      * Reads a scanned or pasted Spark address or invoice as a dollar payment. An invoice for another token or for
      * sats fails, so it never reaches the dollar send flow.
