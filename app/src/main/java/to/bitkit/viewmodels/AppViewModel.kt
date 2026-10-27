@@ -6624,6 +6624,7 @@ class AppViewModel @Inject constructor(
         sats = amount,
         speed = _sendUiState.value.speed,
         utxosToSpend = _sendUiState.value.selectedUtxos,
+        feeRates = _sendUiState.value.feeRates,
         isMaxAmount = activeIncomingPaymentRequest() == null && _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
             amount == walletRepo.balanceState.value.maxSendOnchainSats,
         tags = tags,

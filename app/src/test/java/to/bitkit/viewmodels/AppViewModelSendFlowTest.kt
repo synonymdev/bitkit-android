@@ -12655,6 +12655,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ordinary send pays the fee rates shown on confirm`() = test {
+        val address = "bcrt1qconfirmedrates"
+        val confirmedRates = FeeRates(fast = 5u, mid = 3u, slow = 1u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        stubSuccessfulOnchainSend(address, 1_000u)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = confirmedRates,
+            )
+        )
+
+        confirmCurrentPayment()
+
+        verify(lightningRepo).sendOnChain(
+            address = eq(address),
+            sats = eq(1_000uL),
+            speed = eq(TransactionSpeed.Medium),
+            utxosToSpend = anyOrNull(),
+            feeRates = eq(confirmedRates),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `blocked ordinary payment never reports an earlier accepted send as its success`() = test {
         val address = "bcrt1qreopened"
         val txid = "ef".repeat(32)
