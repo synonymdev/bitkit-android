@@ -343,7 +343,10 @@ class PaykitAllowanceRepo @Inject constructor(
                 }
             }
             if (!isCurrent()) return@withContext emptyList()
-            if (accepted.isNotEmpty()) _offersToAnnounce.update { it + accepted }
+            _offersToAnnounce.update { queued ->
+                val keys = queuedOfferKeys()
+                queued + accepted.filter { offer -> offer.allowances.none { it.key in keys } }
+            }
             accepted
         } finally {
             isAcceptingOffers.set(false)
@@ -354,16 +357,23 @@ class PaykitAllowanceRepo @Inject constructor(
     suspend fun markOffersAnnounced(offers: List<PaykitAllowanceEntry>) {
         val announced = offers.flatMap { offer -> offer.allowances.map { it.key } }.toSet()
         if (announced.isEmpty()) return
+        // The marks go before the queued offers: a refresh in between still sees one of them and never queues it again.
+        activeIdentity?.let { identity ->
+            withContext(ioDispatcher) {
+                executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - announced) }
+            }
+        }
         _offersToAnnounce.update { pending ->
             pending.filterNot { entry -> entry.allowances.any { it.key in announced } }
         }
-        val identity = activeIdentity ?: return
-        withContext(ioDispatcher) {
-            executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - announced) }
-        }
     }
 
+    private fun queuedOfferKeys(): Set<String> =
+        _offersToAnnounce.value.flatMap { entry -> entry.allowances.map { it.key } }.toSet()
+
     private suspend fun unannouncedOffers(identity: String): List<PaykitAllowanceEntry> {
+        // Read before the marks, the reverse of the order markOffersAnnounced clears them in.
+        val pending = queuedOfferKeys()
         val marked = executor.localState(identity).acceptingOfferIds
         if (marked.isEmpty()) return emptyList()
         val stale = _entries.value.flatMap { it.allowances }
@@ -376,7 +386,6 @@ class PaykitAllowanceRepo @Inject constructor(
         if (stale.isNotEmpty()) {
             executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - stale) }
         }
-        val pending = _offersToAnnounce.value.flatMap { entry -> entry.allowances.map { it.key } }.toSet()
         return _entries.value.filter { entry ->
             entry.allowances.none { it.key in pending } &&
                 entry.allowances.any { it.key in marked && it.lifecycleState == AllowanceLifecycleState.ACCEPTED }

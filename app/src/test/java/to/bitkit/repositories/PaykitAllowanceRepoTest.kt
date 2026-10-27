@@ -444,9 +444,31 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An overlapping refresh never adds it twice")
         sut.markOffersAnnounced(unannounced)
         assertTrue(sut.offersToAnnounce.value.isEmpty())
+        assertTrue(localState.acceptingOfferIds.isEmpty(), "Its mark is cleared with it")
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "It is announced once")
         assertTrue(localState.acceptingOfferIds.isEmpty())
         verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `a refresh while an announced offer's mark is cleared never queues it again`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+        val announced = sut.acceptOffersFromAllowers()
+        var duringClear: List<PaykitAllowanceEntry>? = null
+        whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
+            val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
+            if (duringClear == null) duringClear = sut.acceptOffersFromAllowers()
+            localState = change(localState)
+            localState
+        }
+
+        sut.markOffersAnnounced(announced)
+
+        assertEquals(emptyList(), duringClear)
+        assertTrue(sut.offersToAnnounce.value.isEmpty())
     }
 
     @Test
