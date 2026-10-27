@@ -77,6 +77,7 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -326,7 +327,7 @@ internal fun UsdtWalletContent(
     val allowSwipe by settings?.enableSwipeToHideBalance?.collectAsStateWithLifecycle() ?: remember {
         mutableStateOf(false)
     }
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(Colors.Black).blockPointerInputPassthrough()) {
         UsdtCoinIllustration(
             modifier = Modifier.align(Alignment.TopEnd)
                 .offset(x = 81.dp, y = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 4.dp)

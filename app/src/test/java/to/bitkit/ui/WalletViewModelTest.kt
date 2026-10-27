@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -1561,5 +1562,237 @@ class WalletViewModelTest : BaseUnitTest() {
         runCurrent()
         assertEquals(RestoreState.Initial, sut.restoreState.value)
         assertTrue(shouldFinishWalletInitialization(NodeLifecycleState.Running, sut.restoreState.value, false))
+    }
+    private suspend fun stubRecoveryRecord(): MutableStateFlow<SettingsData> {
+        val stored = MutableStateFlow(SettingsData())
+        var record: String? = null
+        whenever(settingsStore.data).thenReturn(stored)
+        whenever(settingsStore.update(any())).doSuspendableAnswer {
+            stored.value = it.getArgument<(SettingsData) -> SettingsData>(0)(stored.value)
+        }
+        whenever(recoveryKeychain.loadString(WalletConnectionRecovery.KEY, 0)).thenAnswer { record }
+        whenever(recoveryKeychain.upsertString(any(), any(), any())).thenAnswer {
+            record = it.getArgument(1)
+            Unit
+        }
+        whenever(recoveryKeychain.delete(WalletConnectionRecovery.KEY, 0)).thenAnswer {
+            record = null
+            Unit
+        }
+        whenever(lightningRepo.validateElectrumServer(any())).thenReturn(Result.success(Unit))
+        return stored
+    }
+
+    @Test
+    fun `saved correction restarts a running node once while required restore stays pending`() = test {
+        stubRecoveryRecord()
+        whenever(recoveryKeychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("vss down")))
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
+        whenever(
+            lightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()),
+        ).thenReturn(Result.success(Unit))
+        whenever(walletRepo.walletExists()).thenReturn(true)
+        walletState.value = walletState.value.copy(walletExists = true)
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+        advanceUntilIdle()
+        sut.openConnectionRecovery()
+        advanceUntilIdle()
+        sut.editRecoveryElectrum("ssl://corrected.example:50002")
+        sut.saveRecoveryConnection(electrum = true)
+        advanceUntilIdle()
+        sut.closeConnectionRecovery()
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        verify(lightningRepo, times(1)).restartNode(anyOrNull(), any())
+
+        repeat(3) {
+            sut.start()
+            advanceUntilIdle()
+            sut.onBackupRestoreRetry()
+            advanceUntilIdle()
+        }
+
+        verify(lightningRepo, times(1)).restartNode(anyOrNull(), any())
+    }
+
+    @Test
+    fun `wallet removal clears startup failure before the next wallet restore`() = test {
+        whenever(lightningRepo.restartNode(anyOrNull(), any()))
+            .thenReturn(Result.failure(AppError("storage unavailable")))
+        walletState.value = walletState.value.copy(walletExists = true)
+        sut.onRestoreRetry()
+        advanceUntilIdle()
+        assertTrue(sut.connectionStartupError.value != null)
+        walletState.value = walletState.value.copy(walletExists = false)
+        runCurrent()
+
+        val releaseRestore = CompletableDeferred<Unit>()
+        whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).doSuspendableAnswer {
+            releaseRestore.await()
+            Result.success(Unit)
+        }
+        sut.restoreWallet("mnemonic", null)
+        walletState.value = walletState.value.copy(walletExists = true)
+        runCurrent()
+
+        assertEquals(null, sut.connectionStartupError.value)
+        releaseRestore.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `backup only retry with saved correction counts one retry`() = test {
+        stubRecoveryRecord()
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile cache unavailable") }
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        assertEquals(RestoreState.BackupFailed(1, hasPendingWalletRestore = false), sut.restoreState.value)
+        sut.openConnectionRecovery()
+        advanceUntilIdle()
+        sut.editRecoveryElectrum("ssl://corrected.example:50002")
+        sut.saveRecoveryConnection(electrum = true)
+        advanceUntilIdle()
+        sut.closeConnectionRecovery()
+
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+
+        assertEquals(RestoreState.BackupFailed(2, hasPendingWalletRestore = false), sut.restoreState.value)
+    }
+
+    private suspend fun TestScope.savePendingCorrection(url: String = "ssl://corrected.example:50002") {
+        sut.openConnectionRecovery()
+        advanceUntilIdle()
+        sut.editRecoveryElectrum(url)
+        sut.saveRecoveryConnection(electrum = true)
+        advanceUntilIdle()
+        sut.closeConnectionRecovery()
+    }
+
+    private suspend fun TestScope.preparePendingCorrection() {
+        stubRecoveryRecord()
+        whenever(recoveryKeychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("vss down")))
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
+        walletState.value = walletState.value.copy(walletExists = true)
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+        advanceUntilIdle()
+        savePendingCorrection()
+    }
+
+    @Test
+    fun `new correction rebuilds the node again while required restore remains pending`() = test {
+        preparePendingCorrection()
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        savePendingCorrection("ssl://new-correction.example:50002")
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        verify(lightningRepo, times(2)).restartNode(anyOrNull(), any())
+    }
+
+    @Test
+    fun `same seed replacement cannot reuse an earlier lifecycle connection acknowledgement`() = test {
+        preparePendingCorrection()
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        connectionRecovery.withIdentityChange { }
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        verify(lightningRepo, times(2)).restartNode(anyOrNull(), any())
+    }
+
+    @Test
+    fun `failed node restart does not acknowledge the saved correction`() = test {
+        preparePendingCorrection()
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(
+            Result.failure(AppError("node failed")),
+            Result.success(Unit),
+        )
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        verify(lightningRepo, times(2)).restartNode(anyOrNull(), any())
+    }
+
+    @Test
+    fun `local followup failure does not forget the successful node configuration`() = test {
+        preparePendingCorrection()
+        whenever(walletRepo.syncBalances()).doSuspendableAnswer { throw AppError("balance unavailable") }
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        verify(lightningRepo, times(1)).restartNode(anyOrNull(), any())
+    }
+
+    @Test
+    fun `optional profile failure cannot replay a completed correction over later settings`() = test {
+        val stored = stubRecoveryRecord()
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile unavailable") }
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
+        whenever(
+            lightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()),
+        ).thenReturn(Result.success(Unit))
+        whenever(walletRepo.walletExists()).thenReturn(true)
+        walletState.value = walletState.value.copy(walletExists = true)
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+        advanceUntilIdle()
+        savePendingCorrection()
+        repeat(2) {
+            sut.onBackupRestoreRetry()
+            advanceUntilIdle()
+        }
+        var proceeded = false
+        sut.onProceedWithoutRestore { proceeded = true }
+        advanceUntilIdle()
+        assertTrue(proceeded)
+        settingsStore.update { it.copy(electrumServer = "ssl://later-settings.example:50002") }
+        sut.start()
+        advanceUntilIdle()
+        assertEquals("ssl://later-settings.example:50002", stored.value.electrumServer)
+    }
+
+    @Test
+    fun `proceed retains an unapplied correction until explicit retry`() = test {
+        stubRecoveryRecord()
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile unavailable") }
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+        repeat(2) {
+            sut.onBackupRestoreRetry()
+            advanceUntilIdle()
+        }
+        savePendingCorrection()
+        var proceeded = false
+        sut.onProceedWithoutRestore { proceeded = true }
+        advanceUntilIdle()
+        assertFalse(proceeded)
+        assertTrue(recoveryKeychain.loadString(WalletConnectionRecovery.KEY, 0) != null)
+        verify(recoveryKeychain, never()).delete(WalletConnectionRecovery.KEY, 0)
+        assertFalse(checkNotNull(sut.connectionStartupError.value).canProceedWithoutRestore)
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
+        sut.onBackupRestoreRetry()
+        advanceUntilIdle()
+        sut.onProceedWithoutRestore { proceeded = true }
+        advanceUntilIdle()
+        assertTrue(proceeded)
+        assertEquals(null, recoveryKeychain.loadString(WalletConnectionRecovery.KEY, 0))
     }
 }

@@ -230,6 +230,8 @@ class WalletConnectionRecovery @Inject constructor(
             record.revision
         }
 
+        suspend fun pendingRevision(): String? = settingsMutex.withLock { read()?.revision }
+
         suspend fun complete(startedRevision: String?) = settingsMutex.withLock {
             checkCurrent()
             if (keychain.hasPendingWalletRestore()) return@withLock

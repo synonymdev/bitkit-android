@@ -530,6 +530,34 @@ class UsdtViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `closing during recovery retry keeps its failure out of a new send form`() = test {
+        val retained: UsdtTransfer = mock()
+        whenever(retained.id).thenReturn(quote.id)
+        whenever(retained.status).thenReturn(UsdtTransferStatus.PENDING)
+        val viewModel = createViewModel(walletState = UsdtWalletState(transfers = persistentListOf(retained)))
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.BackupUnavailable()))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        val completion = CompletableDeferred<Result<Unit>>()
+        whenever(repo.retryTransfer(quote.id)).doSuspendableAnswer { completion.await() }
+
+        val retry = viewModel.retryRecovery()
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.retryingRecovery)
+        viewModel.edit()
+        val newForm = viewModel.state.value
+        completion.complete(Result.failure(UsdtException.BackupUnavailable()))
+        retry.join()
+
+        assertEquals(newForm, viewModel.state.value)
+        verify(repo, times(1)).retryTransfer(quote.id)
+        verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
+    }
+
+    @Test
     fun `recovery by another observer clears the latest retry failure without a new payment`() = test {
         val retained: UsdtTransfer = mock()
         whenever(retained.id).thenReturn(quote.id)

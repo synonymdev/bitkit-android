@@ -1073,6 +1073,17 @@ class LightningService internal constructor(
         return original.any { it !in spendable }
     }
 
+    suspend fun getTransactionDetails(txid: String, walletIndex: Int): TransactionDetails? {
+        val originalNode = node ?: return null
+        if (currentWalletIndex != walletIndex) return null
+        val details = callOnchainSend {
+            if (currentWalletIndex != walletIndex || node !== originalNode) return@callOnchainSend null
+            originalNode.getTransactionDetails(txid)
+        }
+        if (currentWalletIndex != walletIndex || node !== originalNode) return null
+        return details
+    }
+
     suspend fun walletKnowsTransaction(txid: String): Boolean {
         val originalNode = node ?: return false
         return callOnchainSend { originalNode.getTransactionDetails(txid) != null }

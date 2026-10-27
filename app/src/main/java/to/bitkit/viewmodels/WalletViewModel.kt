@@ -135,6 +135,14 @@ class WalletViewModel @Inject constructor(
     val connectionStartupError = _connectionStartupError.asStateFlow()
     private var connectionEditorJob: Job? = null
 
+    private data class AppliedConnection(val walletIndex: Int, val generation: Long, val revision: String?)
+
+    @Volatile
+    private var appliedConnection: AppliedConnection? = null
+
+    private fun appliedConnection(owner: WalletConnectionRecovery.Owner, revision: String?) =
+        AppliedConnection(owner.walletIndex, owner.generation, revision)
+
     fun openConnectionRecovery() {
         if (_connectionEditor.value != null) return
         val id = connectionEditorGeneration.incrementAndGet()
@@ -420,7 +428,12 @@ class WalletViewModel @Inject constructor(
     private fun collectStates() = viewModelScope.launch {
         walletState.collect {
             walletExists = it.walletExists
-            if (!it.walletExists) return@collect
+            if (!it.walletExists) {
+                appliedConnection = null
+                _connectionStartupError.update { null }
+                closeConnectionRecovery()
+                return@collect
+            }
 
             when (_restoreState.value) {
                 RestoreState.InProgress.Wallet -> supervisorScope {
@@ -552,14 +565,17 @@ class WalletViewModel @Inject constructor(
                 if (startupAttempt.get() == attempt) _connectionStartupError.update { null }
             }
             val revision = session.replay()
-            if (!backupOnly || revision != null) {
-                if (!backupRepo.hasPendingWalletRestore()) _restoreState.update { it.countRetry() }
-                setInitNodeLifecycleState()
-                connectionRecovery.withStartup(owner) {
+            connectionRecovery.withStartup(owner) { startupSession ->
+                val connection = appliedConnection(owner, revision)
+                if (!backupOnly || (revision != null && appliedConnection != connection)) {
+                    if (!backupOnly && !backupRepo.hasPendingWalletRestore()) _restoreState.update { it.countRetry() }
+                    setInitNodeLifecycleState()
                     migrationService.lockChannelMigration()
                     try {
                         val channelMigration = buildChannelMigrationIfAvailable()
-                        startNodeOwned(owner.walletIndex, channelMigration, isRestoreRetry = true).getOrThrow()
+                        startNodeOwned(owner.walletIndex, channelMigration, isRestoreRetry = true) {
+                            startupSession.commitCurrentState { appliedConnection = connection }
+                        }.getOrThrow()
                     } finally {
                         migrationService.unlockChannelMigration()
                     }
@@ -569,6 +585,7 @@ class WalletViewModel @Inject constructor(
                 backupRepo.setRestorePending(true)
                 restoreFromBackup(resumePendingWalletBackup = true, connectionSession = session)
                 if (_restoreState.value !is RestoreState.Completed) {
+                    session.complete(revision)
                     // Restore failures carry their own required-state gate; optional profile work is not a node error.
                     session.commitCurrentState {
                         if (startupAttempt.get() == attempt) _connectionStartupError.update { null }
@@ -596,6 +613,25 @@ class WalletViewModel @Inject constructor(
             val owner = failure?.owner ?: connectionRecovery.captureRuntimeOwner()
             connectionRecovery.withOperation(owner) { session ->
                 if (!canStillProceed(session, failure, attempt)) return@withOperation
+                val revision = session.pendingRevision()
+                if (revision != null) {
+                    if (appliedConnection != appliedConnection(owner, revision) ||
+                        lightningState.value.nodeLifecycleState !is NodeLifecycleState.Running
+                    ) {
+                        session.commitCurrentState {
+                            if (startupAttempt.get() == attempt && _connectionStartupError.value === failure) {
+                                _connectionStartupError.update {
+                                    ConnectionStartupFailure(
+                                        message = context.getString(R.string.onboarding__connection_saved),
+                                        owner = owner,
+                                    )
+                                }
+                            }
+                        }
+                        return@withOperation
+                    }
+                    session.complete(revision)
+                }
                 // TODO start LDK without trying to restore backup state from VSS if possible
                 if (lightningState.value.nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
                     lightningRepo.stop().getOrThrow()
@@ -693,11 +729,17 @@ class WalletViewModel @Inject constructor(
                     if (startupAttempt.get() == attempt) _connectionStartupError.update { null }
                 }
                 val revision = session.replay()
+                val connection = appliedConnection(admittedOwner, revision)
                 migrationService.lockChannelMigration()
                 try {
                     // A skipped start of a running node cannot acknowledge a newly saved configuration.
-                    startNodeOwned(walletIndex, buildChannelMigrationIfAvailable(), isRestoreRetry = revision != null)
-                        .getOrThrow()
+                    startNodeOwned(
+                        walletIndex,
+                        buildChannelMigrationIfAvailable(),
+                        isRestoreRetry = revision != null && appliedConnection != connection,
+                    ) {
+                        session.commitCurrentState { appliedConnection = connection }
+                    }.getOrThrow()
                 } finally {
                     migrationService.unlockChannelMigration()
                 }
@@ -716,6 +758,7 @@ class WalletViewModel @Inject constructor(
         walletIndex: Int,
         channelMigration: ChannelDataMigration?,
         isRestoreRetry: Boolean,
+        onStarted: suspend () -> Unit,
     ): Result<Unit> {
         val result = if (isRestoreRetry) {
             lightningRepo.restartNode(channelMigration, walletIndex)
@@ -724,6 +767,7 @@ class WalletViewModel @Inject constructor(
         }
         return result
             .onSuccess {
+                onStarted()
                 if (channelMigration != null) {
                     migrationService.consumePendingChannelMigration()
                 }

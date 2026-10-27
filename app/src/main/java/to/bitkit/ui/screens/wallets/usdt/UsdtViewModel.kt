@@ -264,7 +264,9 @@ class UsdtViewModel @Inject constructor(
         if (!current.submitted || !current.canRetryRecovery || current.retryingRecovery) return@launch
         _state.update { it.copy(retryingRecovery = true) }
         try {
-            repo.retryTransfer(quote.id)
+            val result = repo.retryTransfer(quote.id)
+            if (!_state.value.submitted || _state.value.quote?.id != quote.id) return@launch
+            result
                 .onSuccess {
                     if (repo.recoveryGeneration != submissionFailureGeneration) {
                         _state.update { it.copy(error = null, canRetryRecovery = false) }
@@ -275,7 +277,9 @@ class UsdtViewModel @Inject constructor(
                     _state.update { it.copy(error = error.messageResource()) }
                 }
         } finally {
-            _state.update { it.copy(retryingRecovery = false) }
+            _state.update {
+                if (it.submitted && it.quote?.id == quote.id) it.copy(retryingRecovery = false) else it
+            }
         }
     }
 
