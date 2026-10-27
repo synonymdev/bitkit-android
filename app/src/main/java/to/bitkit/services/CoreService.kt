@@ -126,7 +126,8 @@ class CoreService @Inject constructor(
     private val settingsStore: SettingsStore,
     private val privatePaykitContactResolver: Provider<PrivatePaykitContactResolver>,
 ) {
-    private var walletIndex: Int = 0
+    internal var walletIndex: Int = 0
+        private set
 
     val activity: ActivityService by lazy {
         ActivityService(
@@ -550,8 +551,19 @@ class ActivityService(
     suspend fun getTransactionDetails(
         txid: String,
         walletId: String = defaultWalletId,
-    ): BitkitCoreTransactionDetails? = ServiceQueue.CORE.background {
-        getBitkitCoreTransactionDetails(walletId = walletId, txId = txid)
+    ): BitkitCoreTransactionDetails? {
+        val cached = ServiceQueue.CORE.background {
+            getBitkitCoreTransactionDetails(walletId = walletId, txId = txid)
+        }
+        if (cached != null) return cached
+        if (walletId != defaultWalletId || txid.length != 64 ||
+            txid.any { it !in '0'..'9' && it !in 'a'..'f' && it !in 'A'..'F' }
+        ) {
+            return null
+        }
+        return lightningService.getTransactionDetails(txid, coreService.walletIndex)?.let {
+            mapToCoreTransactionDetails(txid, it)
+        }
     }
 
     suspend fun getActivity(id: String, walletId: String = defaultWalletId): Activity? = ServiceQueue.CORE.background {
@@ -966,7 +978,9 @@ class ActivityService(
      * Returns the first address found in pre-activity metadata that matches a transaction output
      */
     private suspend fun fetchTransactionDetails(txid: String): BitkitCoreTransactionDetails? = runCatching {
-        getTransactionDetails(txid)
+        ServiceQueue.CORE.background {
+            getBitkitCoreTransactionDetails(walletId = defaultWalletId, txId = txid)
+        }
     }.onFailure {
         Logger.warn("Failed to fetch stored transaction details for '$txid'", it, context = TAG)
     }.getOrNull()
