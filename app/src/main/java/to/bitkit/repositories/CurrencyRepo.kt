@@ -111,21 +111,21 @@ class CurrencyRepo @Inject constructor(
             combine(
                 settingsStore.data.distinctUntilChanged(),
                 cacheStore.data.distinctUntilChanged()
-            ) { settings, cachedData ->
+            ) { settings, cachedData -> settings to cachedData }.collect { (settings, cachedData) ->
                 val selectedRate = cachedData.cachedRates.firstOrNull { rate ->
                     rate.quote == settings.selectedCurrency
                 }
-                _currencyState.value.copy(
-                    rates = cachedData.cachedRates.toImmutableList(),
-                    selectedCurrency = settings.selectedCurrency,
-                    displayUnit = settings.displayUnit,
-                    primaryDisplay = settings.primaryDisplay,
-                    currencySymbol = selectedRate?.currencySymbol ?: "$",
-                    error = null,
-                    hasStaleData = false
-                )
-            }.collect { newState ->
-                _currencyState.update { newState }
+                _currencyState.update {
+                    it.copy(
+                        rates = cachedData.cachedRates.toImmutableList(),
+                        selectedCurrency = settings.selectedCurrency,
+                        displayUnit = settings.displayUnit,
+                        primaryDisplay = settings.primaryDisplay,
+                        currencySymbol = selectedRate?.currencySymbol ?: "$",
+                        error = null,
+                        hasStaleData = false,
+                    )
+                }
             }
         }
     }

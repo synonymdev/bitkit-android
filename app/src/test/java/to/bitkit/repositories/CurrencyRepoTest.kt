@@ -2,10 +2,16 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -25,6 +31,8 @@ import to.bitkit.services.CurrencyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import java.math.BigDecimal
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -32,6 +40,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
@@ -235,6 +244,55 @@ class CurrencyRepoTest : BaseUnitTest() {
 
         assertNull(sut.currencyState.value.error)
         verify(currencyService, times(2)).fetchLatestRates()
+    }
+
+    @Test
+    fun `cached rates should preserve completed refresh state`() = test {
+        val cacheData = MutableStateFlow(AppCacheData())
+        whenever(cacheStore.data).thenReturn(cacheData)
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedCurrency = "EUR")))
+        val refreshedAt = Clock.System.now()
+        whenever(clock.now()).thenReturn(refreshedAt)
+        whenever(currencyService.fetchLatestRates()).thenReturn(testRates)
+        val collectorRead = CompletableDeferred<Unit>()
+        val releaseCollector = CountDownLatch(1)
+        var ratesReads = 0
+        val refreshedCache = mock<AppCacheData>()
+        whenever(refreshedCache.cachedRates).thenAnswer {
+            ratesReads++
+            if (ratesReads == 2) {
+                collectorRead.complete(Unit)
+                assertTrue(releaseCollector.await(5, TimeUnit.SECONDS))
+            }
+            testRates
+        }
+        whenever(cacheStore.update(any())).doSuspendableAnswer {
+            cacheData.update { refreshedCache }
+            collectorRead.await()
+        }
+        sut = CurrencyRepo(
+            bgDispatcher = Dispatchers.Default,
+            currencyService = currencyService,
+            settingsStore = settingsStore,
+            cacheStore = cacheStore,
+            enablePolling = false,
+            clock = clock,
+        )
+
+        try {
+            withContext(Dispatchers.Default) {
+                withTimeout(5.seconds) {
+                    sut.currencyState.first { it.selectedCurrency == "EUR" }
+                    sut.triggerRefresh()
+                    releaseCollector.countDown()
+                    sut.currencyState.first { it.rates == testRates }
+                }
+            }
+            assertFalse(sut.currencyState.value.isRefreshing)
+            assertEquals(refreshedAt.toEpochMilliseconds(), sut.currencyState.value.lastSuccessfulRefresh)
+        } finally {
+            releaseCollector.countDown()
+        }
     }
 }
 
