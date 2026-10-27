@@ -22,6 +22,7 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.navigateIfNotCurrent
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.utils.AppError
+import to.bitkit.viewmodels.ConnectionStartupFailure
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.TransferEffect
 import kotlin.test.assertEquals
@@ -136,6 +137,17 @@ class ContentViewTest {
         }
 
         assertEquals(listOf(false, false, false, false, true, false, false, true), completion)
+    }
+
+    @Test
+    fun `ordinary foreground errors preserve navigation while initialization and required recovery stay restricted`() {
+        val ordinary = ConnectionStartupFailure("offline", requiresRecovery = false)
+        val required = ConnectionStartupFailure("restore incomplete")
+        assertFalse(shouldPresentWalletRecovery(false, RestoreState.Initial, ordinary))
+        assertFalse(shouldPresentWalletRecovery(false, RestoreState.Settled, ordinary))
+        assertTrue(shouldPresentWalletRecovery(true, RestoreState.Initial, ordinary))
+        assertTrue(shouldPresentWalletRecovery(false, RestoreState.BackupFailed(1), ordinary))
+        assertTrue(shouldPresentWalletRecovery(false, RestoreState.Initial, required))
     }
 
     @Test

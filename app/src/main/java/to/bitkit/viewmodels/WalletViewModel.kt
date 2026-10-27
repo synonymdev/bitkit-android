@@ -302,12 +302,16 @@ class WalletViewModel @Inject constructor(
         runSuspendCatching {
             connectionRecovery.withOperation(owner) { session ->
                 val markersClear = runSuspendCatching { !backupRepo.hasPendingWalletRestore() }.getOrDefault(false)
+                val requiresRecovery = !markersClear || runSuspendCatching {
+                    session.pendingRevision() != null
+                }.getOrDefault(true)
                 val published = session.commitCurrentState {
                     if (startupAttempt.get() != attempt) return@commitCurrentState false
                     _connectionStartupError.update {
                         ConnectionStartupFailure(
                             message = error.message ?: context.getString(R.string.common__error_body),
                             canProceedWithoutRestore = markersClear,
+                            requiresRecovery = requiresRecovery,
                             owner = owner,
                         )
                     }
@@ -1118,6 +1122,7 @@ data class ConnectionRecoveryUiState(
 data class ConnectionStartupFailure(
     val message: String,
     val canProceedWithoutRestore: Boolean = false,
+    val requiresRecovery: Boolean = true,
     internal val owner: WalletConnectionRecovery.Owner? = null,
 )
 

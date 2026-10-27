@@ -789,6 +789,64 @@ class WalletViewModelTest : BaseUnitTest() {
             assertEquals("node storage unavailable", awaitItem().description)
             expectNoEvents()
         }
+        assertFalse(shouldPresentWalletRecovery(false, sut.restoreState.value, sut.connectionStartupError.value))
+    }
+
+    @Test
+    fun `foreground failure remains restricted when required recovery is pending or unreadable`() = test {
+        whenever(walletRepo.walletExists()).thenReturn(true)
+        walletState.value = walletState.value.copy(walletExists = true)
+        whenever(
+            lightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()),
+        ).thenReturn(Result.failure(AppError("node unavailable")))
+        for (unreadable in listOf(false, true)) {
+            whenever(backupRepo.hasPendingWalletRestore()).doSuspendableAnswer {
+                if (unreadable) throw AppError("keychain unavailable") else true
+            }
+            sut.start()
+            advanceUntilIdle()
+            val failure = checkNotNull(sut.connectionStartupError.value)
+            assertFalse(failure.canProceedWithoutRestore)
+            assertTrue(shouldPresentWalletRecovery(false, sut.restoreState.value, failure))
+        }
+    }
+
+    @Test
+    fun `foreground failure with a saved correction retains the recovery editor route`() = test {
+        stubRecoveryRecord()
+        savePendingCorrection()
+        sut.closeConnectionRecovery()
+        whenever(walletRepo.walletExists()).thenReturn(true)
+        walletState.value = walletState.value.copy(walletExists = true)
+        whenever(
+            lightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()),
+        ).thenReturn(Result.failure(AppError("node unavailable")))
+
+        whenever(lightningRepo.restartNode(anyOrNull(), any()))
+            .thenReturn(Result.failure(AppError("node unavailable")))
+
+        sut.start()
+        advanceUntilIdle()
+
+        val failure = checkNotNull(sut.connectionStartupError.value)
+        assertTrue(failure.canProceedWithoutRestore)
+        assertTrue(shouldPresentWalletRecovery(false, sut.restoreState.value, failure))
+        assertTrue(recoveryKeychain.loadString(WalletConnectionRecovery.KEY, 0) != null)
+    }
+
+    @Test
+    fun `unreadable correction during foreground startup keeps recovery reachable`() = test {
+        whenever(walletRepo.walletExists()).thenReturn(true)
+        walletState.value = walletState.value.copy(walletExists = true)
+        whenever(recoveryKeychain.loadString(WalletConnectionRecovery.KEY, 0))
+            .thenAnswer { throw AppError("correction unavailable") }
+
+        sut.start()
+        advanceUntilIdle()
+
+        assertTrue(shouldPresentWalletRecovery(false, sut.restoreState.value, sut.connectionStartupError.value))
+        verify(lightningRepo, never())
+            .start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any())
     }
 
     @Test
