@@ -56,14 +56,18 @@ class SparkService @Inject constructor(
     companion object {
         private const val TAG = "SparkService"
 
-        /** Seconds a Lightning send waits for completion before it returns the payment as pending. */
-        private const val SEND_COMPLETION_TIMEOUT_SECS = 30u
-
         /** Leeway in sat/vB over the recommended fee that an automatic deposit claim may pay. */
         private const val DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB = 2uL
 
         /** Share of a deposit, in parts per million, that an automatic deposit claim may pay on top. */
         private const val DEPOSIT_CLAIM_FEE_PPM = 2_000u
+
+        /**
+         * Returns as soon as the payment starts, like ldk-node, so its completion reaches callers as an event they
+         * are already watching for; waiting for completion here fired that event before they watched.
+         */
+        fun bolt11SendOptions(prefersSpark: Boolean): SendPaymentOptions =
+            SendPaymentOptions.Bolt11Invoice(preferSpark = prefersSpark, completionTimeoutSecs = null)
     }
 
     private val mutex = Mutex()
@@ -163,10 +167,7 @@ class SparkService @Inject constructor(
 
     suspend fun send(prepared: PrepareSendPaymentResponse): Payment {
         val options = when (prepared.paymentMethod) {
-            is SendPaymentMethod.Bolt11Invoice -> SendPaymentOptions.Bolt11Invoice(
-                preferSpark = prefersSpark,
-                completionTimeoutSecs = SEND_COMPLETION_TIMEOUT_SECS,
-            )
+            is SendPaymentMethod.Bolt11Invoice -> bolt11SendOptions(prefersSpark)
             is SendPaymentMethod.BitcoinAddress -> SendPaymentOptions.BitcoinAddress(OnchainConfirmationSpeed.MEDIUM)
             else -> null
         }
