@@ -428,14 +428,14 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    /** Coalesces event syncs, then runs [onActivitiesSynced] only after a successful activity sync. */
+    /** Coalesces event syncs, then runs [onActivitiesSynced] only after a successful fresh activity sync. */
     fun debounceSyncByEvent(onActivitiesSynced: suspend () -> Unit = {}) {
         eventSyncJob?.cancel()
         eventSyncJob = repoScope.launch {
             delay(EVENT_SYNC_DEBOUNCE_MS)
             syncBalances()
             transferRepo.syncTransferStates()
-            activityRepo.syncActivities().onSuccess { onActivitiesSynced() }
+            activityRepo.syncActivities(requireFresh = true).onSuccess { onActivitiesSynced() }
         }
     }
 

@@ -504,6 +504,35 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
+    fun `event sync waits for a fresh activity snapshot before publication`() = test {
+        whenever(transferRepo.syncTransferStates()).thenReturn(Result.success(Unit))
+        val staleSnapshot = CompletableDeferred<Unit>()
+        val freshSnapshot = CompletableDeferred<Unit>()
+        whenever(activityRepo.syncActivities(any())).doSuspendableAnswer {
+            if (it.getArgument<Boolean>(0)) freshSnapshot.await() else staleSnapshot.await()
+            Result.success(Unit)
+        }
+        val existingSync = backgroundScope.launch { activityRepo.syncActivities() }
+        testScheduler.runCurrent()
+        var publications = 0
+        sut.debounceSyncByEvent { publications++ }
+        testScheduler.advanceTimeBy(500)
+        testScheduler.runCurrent()
+        assertEquals(0, publications)
+
+        staleSnapshot.complete(Unit)
+        testScheduler.runCurrent()
+        assertTrue(existingSync.isCompleted)
+        assertEquals(0, publications)
+
+        freshSnapshot.complete(Unit)
+        testScheduler.runCurrent()
+        assertEquals(1, publications)
+        verify(activityRepo).syncActivities(requireFresh = true)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun `event sync releases publication only after successful activity persistence`() = test {
         whenever(transferRepo.syncTransferStates()).thenReturn(Result.success(Unit))
         for (success in listOf(false, true)) {
@@ -511,7 +540,7 @@ class WalletRepoTest : BaseUnitTest() {
             val finishPersistence = CompletableDeferred<Unit>()
             var persisted = false
             var publications = 0
-            whenever(activityRepo.syncActivities()).doSuspendableAnswer {
+            whenever(activityRepo.syncActivities(requireFresh = true)).doSuspendableAnswer {
                 persistenceStarted.complete(Unit)
                 finishPersistence.await()
                 if (success) {
@@ -542,7 +571,7 @@ class WalletRepoTest : BaseUnitTest() {
     fun `coalesced event sync retains only the latest completion and cancellation never publishes`() = test {
         whenever(transferRepo.syncTransferStates()).thenReturn(Result.success(Unit))
         val finishPersistence = CompletableDeferred<Unit>()
-        whenever(activityRepo.syncActivities()).doSuspendableAnswer {
+        whenever(activityRepo.syncActivities(requireFresh = true)).doSuspendableAnswer {
             finishPersistence.await()
             Result.success(Unit)
         }
@@ -555,14 +584,14 @@ class WalletRepoTest : BaseUnitTest() {
         finishPersistence.complete(Unit)
         testScheduler.runCurrent()
         assertEquals(listOf("current"), completed)
-        verify(activityRepo).syncActivities()
+        verify(activityRepo).syncActivities(requireFresh = true)
 
         sut.debounceSyncByEvent { completed += "cancelled" }
         sut.cancelSyncByEvent()
         testScheduler.advanceTimeBy(500)
         testScheduler.runCurrent()
         assertEquals(listOf("current"), completed)
-        verify(activityRepo).syncActivities()
+        verify(activityRepo).syncActivities(requireFresh = true)
     }
 
     @Test

@@ -213,7 +213,7 @@ internal fun UsdtPaymentContent(
                 contact,
                 onConfirm,
                 completed,
-                onEditAmount = { onPageChange(UsdtPage.AMOUNT) },
+                onEditAmount = { if (amountEditable) onPageChange(UsdtPage.AMOUNT) },
             )
             page == UsdtPage.AMOUNT -> UsdtAmountContent(
                 amount,
