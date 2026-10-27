@@ -766,6 +766,9 @@
     <string name="subscriptions__pending">Pendiente</string>
     <string name="subscriptions__proposal_queued_title">En cola</string>
     <string name="subscriptions__status">Estatus</string>
+    <string name="usdt__activity_bridge_spark">Movido a USDT</string>
+    <string name="usdt__activity_to_btc_spark">Convertido a bitcoin</string>
+    <string name="usdt__activity_to_usd_spark">Convertido a dólares</string>
     <string name="usdt__address">Dirección de destino</string>
     <string name="usdt__amount">Monto</string>
     <string name="usdt__bridge_attention">El puente requiere atención</string>
@@ -871,6 +874,7 @@
     <string name="usdt__receive_network_title">Red USDT</string>
     <string name="usdt__receive_title">Recibir dólares</string>
     <string name="usdt__received">Recibido</string>
+    <string name="usdt__received_title_spark">Dólares recibidos</string>
     <string name="usdt__receiving_network">Red de recepción</string>
     <string name="usdt__receiving_title">Recibiendo USDT</string>
     <string name="usdt__recipient_gets">Destinatario recibe</string>

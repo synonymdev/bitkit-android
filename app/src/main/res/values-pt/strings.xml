@@ -741,6 +741,9 @@
     <string name="settings__cs__srd_title">Single Random Draw</string>
     <string name="settings__language_system_default">Configurações do sistema</string>
     <string name="settings__language_title">Idioma</string>
+    <string name="usdt__activity_bridge_spark">Movido para USDT</string>
+    <string name="usdt__activity_to_btc_spark">Convertido em bitcoin</string>
+    <string name="usdt__activity_to_usd_spark">Convertido em dólares</string>
     <string name="usdt__bridge_note_spark">Move dólares do Spark para a tua carteira USDT na Arbitrum. O fornecedor da ponte define a taxa.</string>
     <string name="usdt__bridge_spark">Para USDT</string>
     <string name="usdt__convert_failed_spark">A conversão não foi concluída. Tenta novamente daqui a pouco.</string>
@@ -753,6 +756,7 @@
     <string name="usdt__error_address_spark">Introduz um endereço Spark ou uma fatura Spark para este token.</string>
     <string name="usdt__error_balance_spark">Dólares insuficientes no Spark para este montante.</string>
     <string name="usdt__receive_copied_spark">Fatura copiada para a área de transferência.</string>
+    <string name="usdt__received_title_spark">Dólares recebidos</string>
     <string name="usdt__send_title_spark">Enviar dólares</string>
     <string name="usdt__sent_title_spark">Dólares enviados</string>
     <string name="wallet__drawer__wallet">Carteira</string>

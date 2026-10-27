@@ -1220,6 +1220,9 @@
     <string name="subscriptions__weekly_subscription">Weekly Subscription</string>
     <string name="subscriptions__yearly">Yearly</string>
     <string name="subscriptions__yearly_subscription">Yearly Subscription</string>
+    <string name="usdt__activity_bridge_spark">Moved to USDT</string>
+    <string name="usdt__activity_to_btc_spark">Converted to bitcoin</string>
+    <string name="usdt__activity_to_usd_spark">Converted to dollars</string>
     <string name="usdt__address">Recipient address</string>
     <string name="usdt__amount">Amount</string>
     <string name="usdt__bridge_attention">Bridge needs attention</string>
@@ -1328,6 +1331,7 @@
     <string name="usdt__receive_network_title">USDT Network</string>
     <string name="usdt__receive_title">Receive Dollars</string>
     <string name="usdt__received">Received</string>
+    <string name="usdt__received_title_spark">Received Dollars</string>
     <string name="usdt__receiving_network">Receiving network</string>
     <string name="usdt__receiving_title">Receiving USDT</string>
     <string name="usdt__recipient_gets">Recipient gets</string>

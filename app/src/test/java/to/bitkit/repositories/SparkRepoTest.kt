@@ -1,6 +1,13 @@
 package to.bitkit.repositories
 
 import breez_sdk_spark.BitcoinNetwork
+import breez_sdk_spark.Conversion
+import breez_sdk_spark.ConversionAsset
+import breez_sdk_spark.ConversionChain
+import breez_sdk_spark.ConversionDetails
+import breez_sdk_spark.ConversionProvider
+import breez_sdk_spark.ConversionSide
+import breez_sdk_spark.ConversionStatus
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateResponse
 import breez_sdk_spark.InputType
@@ -205,7 +212,7 @@ class SparkRepoTest : BaseUnitTest() {
             ),
         )
         whenever { sparkService.tokenMetadata(tokenId) }.thenReturn(metadata)
-        whenever { sparkService.listTokenPayments(tokenId) }.thenReturn(
+        whenever { sparkService.listPayments() }.thenReturn(
             listOf(
                 tokenPayment("mint", metadata, TokenTransactionType.MINT, 1uL),
                 tokenPayment("in", metadata, TokenTransactionType.TRANSFER, 2uL),
@@ -221,8 +228,49 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals(7_000_000uL, usd.balance)
         val transfer = usd.transfers.single()
         assertEquals("in", transfer.id)
+        assertEquals(SparkUsdTransfer.Kind.RECEIVED, transfer.kind)
         assertTrue(transfer.isIncoming)
         assertEquals(2_000_000uL, transfer.amount)
+    }
+
+    @Test
+    fun `lists a conversion to dollars with its bitcoin side and fee`() = test {
+        val tokenId = requireNotNull(Env.sparkUsdTokenId)
+        val metadata = usdMetadata(tokenId)
+        whenever { sparkService.tokenMetadata(tokenId) }.thenReturn(metadata)
+        val conversion = Conversion(
+            provider = ConversionProvider.AMM,
+            status = ConversionStatus.COMPLETED,
+            from = ConversionSide(
+                chain = ConversionChain.Spark,
+                asset = ConversionAsset("BTC", "btc", 8u),
+                amount = BigInteger.valueOf(2_504),
+                fee = BigInteger.valueOf(801),
+            ),
+            to = ConversionSide(
+                chain = ConversionChain.Spark,
+                asset = ConversionAsset("USDB", tokenId, 6u),
+                amount = BigInteger.valueOf(2_000_000),
+                fee = BigInteger.ZERO,
+            ),
+            amountAdjustment = null,
+        )
+        whenever { sparkService.listPayments() }.thenReturn(
+            listOf(
+                tokenPayment("convert", metadata, TokenTransactionType.TRANSFER, 2uL)
+                    .copy(conversionDetails = ConversionDetails(ConversionStatus.COMPLETED, listOf(conversion))),
+            ),
+        )
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+
+        val transfer = requireNotNull(sut.state.value.usd).transfers.single()
+        assertEquals(SparkUsdTransfer.Kind.TO_USD, transfer.kind)
+        assertEquals(2_000_000uL, transfer.amount)
+        assertEquals(2_504uL, transfer.sats)
+        assertEquals(801uL, transfer.fee)
     }
 
     @Test

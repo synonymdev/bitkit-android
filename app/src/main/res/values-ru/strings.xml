@@ -783,6 +783,9 @@
     <string name="subscriptions__pending">В ожидании</string>
     <string name="subscriptions__proposal_queued_title">В очереди</string>
     <string name="subscriptions__status">Статус</string>
+    <string name="usdt__activity_bridge_spark">Переведено в USDT</string>
+    <string name="usdt__activity_to_btc_spark">Обменено на биткоин</string>
+    <string name="usdt__activity_to_usd_spark">Обменено на доллары</string>
     <string name="usdt__address">Адрес получателя</string>
     <string name="usdt__amount">Сумма</string>
     <string name="usdt__bridge_attention">Мост требует внимания</string>
@@ -888,6 +891,7 @@
     <string name="usdt__receive_network_title">Сеть USDT</string>
     <string name="usdt__receive_title">Получить Доллары</string>
     <string name="usdt__received">Получено</string>
+    <string name="usdt__received_title_spark">Доллары получены</string>
     <string name="usdt__receiving_network">Сеть получения</string>
     <string name="usdt__receiving_title">Получение USDT</string>
     <string name="usdt__recipient_gets">Получатель получит</string>

@@ -11,4 +11,5 @@ import to.bitkit.repositories.SparkState
 fun idleSparkRepo(): SparkRepo = mock {
     on { state } doReturn MutableStateFlow(SparkState())
     on { nodeEvents } doReturn MutableSharedFlow()
+    on { usdReceived } doReturn MutableSharedFlow()
 }

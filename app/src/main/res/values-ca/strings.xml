@@ -759,6 +759,9 @@
     <string name="subscriptions__pending">Pendent</string>
     <string name="subscriptions__proposal_queued_title">A la cua</string>
     <string name="subscriptions__status">Estat</string>
+    <string name="usdt__activity_bridge_spark">Mogut a USDT</string>
+    <string name="usdt__activity_to_btc_spark">Convertit a bitcoin</string>
+    <string name="usdt__activity_to_usd_spark">Convertit a dòlars</string>
     <string name="usdt__address">Adreça del destinatari</string>
     <string name="usdt__amount">Import</string>
     <string name="usdt__bridge_attention">El pont requereix atenció</string>
@@ -864,6 +867,7 @@
     <string name="usdt__receive_network_title">Xarxa USDT</string>
     <string name="usdt__receive_title">Rebre dòlars</string>
     <string name="usdt__received">Rebut</string>
+    <string name="usdt__received_title_spark">Dòlars rebuts</string>
     <string name="usdt__receiving_network">Xarxa de recepció</string>
     <string name="usdt__receiving_title">Rebent USDT</string>
     <string name="usdt__recipient_gets">El destinatari rep</string>

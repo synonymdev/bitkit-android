@@ -742,6 +742,9 @@
     <string name="subscriptions__payments">المدفوعات</string>
     <string name="subscriptions__pending">معلق</string>
     <string name="subscriptions__status">الحالة</string>
+    <string name="usdt__activity_bridge_spark">تم النقل إلى USDT</string>
+    <string name="usdt__activity_to_btc_spark">تم التحويل إلى بيتكوين</string>
+    <string name="usdt__activity_to_usd_spark">تم التحويل إلى دولارات</string>
     <string name="usdt__address">عنوان المستلم</string>
     <string name="usdt__amount">المبلغ</string>
     <string name="usdt__bridge_attention">الجسر بحاجة إلى متابعة</string>
@@ -847,6 +850,7 @@
     <string name="usdt__receive_network_title">شبكة USDT</string>
     <string name="usdt__receive_title">استلام الدولارات</string>
     <string name="usdt__received">مستلم</string>
+    <string name="usdt__received_title_spark">تم استلام الدولارات</string>
     <string name="usdt__receiving_network">شبكة الاستلام</string>
     <string name="usdt__receiving_title">جارٍ استلام USDT</string>
     <string name="usdt__recipient_gets">يحصل المستلم على</string>

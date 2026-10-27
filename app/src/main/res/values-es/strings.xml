@@ -759,6 +759,9 @@
     <string name="settings__rgs__button_connect">Conectar</string>
     <string name="settings__rgs__update_success_description">Bitkit se ha conectado correctamente al servidor Rapid-Gossip-Sync especificado.</string>
     <string name="settings__rgs__update_success_title">Servidor Rapid-Gossip-Sync Actualizado</string>
+    <string name="usdt__activity_bridge_spark">Movido a USDT</string>
+    <string name="usdt__activity_to_btc_spark">Convertido a bitcoin</string>
+    <string name="usdt__activity_to_usd_spark">Convertido a dólares</string>
     <string name="usdt__address">Dirección de destino</string>
     <string name="usdt__amount">Cantidad</string>
     <string name="usdt__bridge_attention">El puente requiere atención</string>
@@ -864,6 +867,7 @@
     <string name="usdt__receive_network_title">Red USDT</string>
     <string name="usdt__receive_title">Recibir dólares</string>
     <string name="usdt__received">Recibido</string>
+    <string name="usdt__received_title_spark">Dólares recibidos</string>
     <string name="usdt__receiving_network">Red de recepción</string>
     <string name="usdt__receiving_title">Recibiendo USDT</string>
     <string name="usdt__recipient_gets">Destinatario recibe</string>

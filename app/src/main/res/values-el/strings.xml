@@ -744,6 +744,9 @@
     <string name="subscriptions__pending">Εκκρεμεί</string>
     <string name="subscriptions__proposal_queued_title">Σε αναμονή</string>
     <string name="subscriptions__status">Κατάσταση</string>
+    <string name="usdt__activity_bridge_spark">Μεταφέρθηκε σε USDT</string>
+    <string name="usdt__activity_to_btc_spark">Μετατράπηκε σε bitcoin</string>
+    <string name="usdt__activity_to_usd_spark">Μετατράπηκε σε δολάρια</string>
     <string name="usdt__address">Διεύθυνση παραλήπτη</string>
     <string name="usdt__amount">Ποσό</string>
     <string name="usdt__bridge_attention">Η γέφυρα χρειάζεται προσοχή</string>
@@ -849,6 +852,7 @@
     <string name="usdt__receive_network_title">Δίκτυο USDT</string>
     <string name="usdt__receive_title">Λήψη δολαρίων</string>
     <string name="usdt__received">Ελήφθη</string>
+    <string name="usdt__received_title_spark">Τα δολάρια ελήφθησαν</string>
     <string name="usdt__receiving_network">Δίκτυο λήψης</string>
     <string name="usdt__receiving_title">Λήψη USDT</string>
     <string name="usdt__recipient_gets">Ο παραλήπτης λαμβάνει</string>

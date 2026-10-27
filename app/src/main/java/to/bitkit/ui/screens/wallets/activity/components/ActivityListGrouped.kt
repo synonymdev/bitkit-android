@@ -30,6 +30,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import to.bitkit.R
 import to.bitkit.ext.scopedId
+import to.bitkit.repositories.SparkUsdTransfer
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
@@ -37,6 +38,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.screens.wallets.usdt.SparkUsdActivityRow
 import to.bitkit.ui.screens.wallets.usdt.UsdtActivityRow
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -63,6 +65,7 @@ fun ActivityListGrouped(
     hardwareIds: ImmutableSet<String> = persistentSetOf(),
     titleProvider: @Composable (Activity) -> String? = { null },
     usdtItems: ImmutableList<UsdtTransfer> = persistentListOf(),
+    sparkUsdItems: ImmutableList<SparkUsdTransfer> = persistentListOf(),
 ) {
     val app = appViewModel
     val settings = settingsViewModel
@@ -72,8 +75,10 @@ fun ActivityListGrouped(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.fillMaxSize()
     ) {
-        if (!items.isNullOrEmpty() || usdtItems.isNotEmpty()) {
-            val groupedItems = remember(items, usdtItems) { groupActivityItems(items.orEmpty(), usdtItems) }
+        if (!items.isNullOrEmpty() || usdtItems.isNotEmpty() || sparkUsdItems.isNotEmpty()) {
+            val groupedItems = remember(items, usdtItems, sparkUsdItems) {
+                groupActivityItems(items.orEmpty(), usdtItems, sparkUsdItems)
+            }
 
             LazyColumn(
                 state = listState,
@@ -90,6 +95,15 @@ fun ActivityListGrouped(
                     when (item) {
                         is UsdtTransfer -> {
                             UsdtActivityRow(item, hideBalance, onClick = { app?.navigateToUsdtActivity(item.id) })
+                            if (index < groupedItems.lastIndex) VerticalSpacer(16.dp)
+                        }
+
+                        is SparkUsdTransfer -> {
+                            SparkUsdActivityRow(
+                                item,
+                                hideBalance,
+                                onClick = { app?.navigateToSparkUsdActivity(item.id) }
+                            )
                             if (index < groupedItems.lastIndex) VerticalSpacer(16.dp)
                         }
 
@@ -188,6 +202,7 @@ private fun ActivityContactRow(
 
 private fun groupedActivityKey(index: Int, item: Any): String = when (item) {
     is UsdtTransfer -> "usdt_${item.id}"
+    is SparkUsdTransfer -> "sparkusd_${item.id}"
     is String -> "header_$item"
     is Activity.Lightning -> "lightning_${item.scopedId()}"
     is Activity.Onchain -> "onchain_${item.scopedId()}"
@@ -286,7 +301,11 @@ fun LazyListScope.activityListGroupedItems(
 }
 
 // region utils
-private fun groupActivityItems(activityItems: List<Activity>, usdtItems: List<UsdtTransfer> = emptyList()): List<Any> {
+private fun groupActivityItems(
+    activityItems: List<Activity>,
+    usdtItems: List<UsdtTransfer> = emptyList(),
+    sparkUsdItems: List<SparkUsdTransfer> = emptyList(),
+): List<Any> {
     val now = Instant.now()
     val zoneId = ZoneId.systemDefault()
     val today = now.atZone(zoneId).truncatedTo(ChronoUnit.DAYS)
@@ -308,12 +327,13 @@ private fun groupActivityItems(activityItems: List<Activity>, usdtItems: List<Us
     val entries = (
         activityItems.map {
             WalletActivity.Bitcoin(it)
-        } + usdtItems.map { WalletActivity.Usdt(it) }
+        } + usdtItems.map { WalletActivity.Usdt(it) } + sparkUsdItems.map { WalletActivity.SparkUsd(it) }
         ).sortedByDescending { it.timestamp }
     for (entry in entries) {
         val item: Any = when (entry) {
             is WalletActivity.Bitcoin -> entry.item
             is WalletActivity.Usdt -> entry.item
+            is WalletActivity.SparkUsd -> entry.item
         }
         val timestamp = entry.timestamp.toLong()
         when {

@@ -14,6 +14,8 @@ data class NewTransactionSheetDetails(
     val sats: Long = 0,
     val usdtAmount: ULong? = null,
     val usdtTransferId: String? = null,
+    /** A Spark dollar activity, shown with [usdtAmount] as its dollar amount. */
+    val sparkUsdTransferId: String? = null,
     val isLoadingDetails: Boolean = false,
 ) {
     companion object {

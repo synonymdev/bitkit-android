@@ -627,6 +627,18 @@ class AppViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            sparkRepo.usdReceived.collect {
+                showTransactionSheet(
+                    NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.LIGHTNING,
+                        direction = NewTransactionSheetDirection.RECEIVED,
+                        usdtAmount = it.amount,
+                        sparkUsdTransferId = it.id,
+                    )
+                )
+            }
+        }
+        viewModelScope.launch {
             sparkRepo.state.map { it.usd != null }.distinctUntilChanged().collect {
                 if (it && isPaykitEnabled.value) {
                     refreshPublicPaykitEndpointsIfEnabled()
@@ -3086,6 +3098,8 @@ class AppViewModel @Inject constructor(
             validateUsdtAddressWithFeedback(input)
             return@withContext
         }
+
+        if (Env.sparkUsdTokenId != null && SparkRepo.isSparkInput(input)) return@withContext
 
         val scanResult = runCatching { coreService.decode(input.removeLightningSchemes()) }
 
@@ -6603,6 +6617,11 @@ class AppViewModel @Inject constructor(
 
     fun onClickActivityDetail() {
         val details = _transactionSheet.value
+        details.sparkUsdTransferId?.let {
+            hideNewTransactionSheet()
+            navigateToSparkUsdActivity(it)
+            return
+        }
         details.usdtTransferId?.let {
             hideNewTransactionSheet()
             navigateToUsdtActivity(it)
@@ -6743,6 +6762,13 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             hideSheet()
             mainScreenEffect(MainScreenEffect.Navigate(Routes.UsdtDeposits))
+        }
+    }
+
+    fun navigateToSparkUsdActivity(transferId: String) {
+        viewModelScope.launch {
+            hideSheet()
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.SparkUsdActivity(transferId)))
         }
     }
 
@@ -7353,6 +7379,7 @@ class AppViewModel @Inject constructor(
         when {
             isUsdtPaymentInput(text.trim()) ->
                 isUsdtEnabled.value && !hasActiveUsdtSend() && parseUsdtPaymentRequest(text.trim()).isSuccess
+            Env.sparkUsdTokenId != null && SparkRepo.isSparkInput(text) -> true
             else -> SamRockSetupRequest.isProtocolUrl(text) || runSuspendCatching { coreService.decode(text) }.isSuccess
         }
     }
@@ -8280,6 +8307,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.restoreSessionIfNeeded()
         }
+        viewModelScope.launch { sparkRepo.syncNow() }
     }
 
     fun onHomeResumed() {

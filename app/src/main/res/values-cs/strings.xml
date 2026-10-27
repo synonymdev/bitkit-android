@@ -763,6 +763,9 @@
     <string name="subscriptions__payments">Platby</string>
     <string name="subscriptions__pending">Čekající</string>
     <string name="subscriptions__proposal_queued_title">Ve frontě</string>
+    <string name="usdt__activity_bridge_spark">Přesunuto do USDT</string>
+    <string name="usdt__activity_to_btc_spark">Převedeno na bitcoin</string>
+    <string name="usdt__activity_to_usd_spark">Převedeno na dolary</string>
     <string name="usdt__address">Adresa příjemce</string>
     <string name="usdt__amount">Částka</string>
     <string name="usdt__bridge_attention">Most vyžaduje pozornost</string>
@@ -868,6 +871,7 @@
     <string name="usdt__receive_network_title">Síť USDT</string>
     <string name="usdt__receive_title">Přijmout dolary</string>
     <string name="usdt__received">Přijato</string>
+    <string name="usdt__received_title_spark">Dolary přijaty</string>
     <string name="usdt__receiving_network">Přijímající síť</string>
     <string name="usdt__receiving_title">Přijímání USDT</string>
     <string name="usdt__recipient_gets">Příjemce obdrží</string>

@@ -8,6 +8,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -23,6 +24,8 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
+import to.bitkit.repositories.SparkState
+import to.bitkit.repositories.SparkUsdTransfer
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.scaffold.AppTopBar
@@ -35,6 +38,7 @@ import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.shared.modifiers.swipeToChangeTab
 import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
 internal fun UsdtTransfer.matchesActivityFilter(
@@ -52,6 +56,26 @@ internal fun UsdtTransfer.matchesActivityFilter(
     }
     val searchMatches = search.isEmpty() || recipient.contains(search, ignoreCase = true) ||
         txHash?.contains(search, ignoreCase = true) == true || search.equals("USDT", ignoreCase = true)
+    return tabMatches && noTagFilter && searchMatches &&
+        (start?.let { timestamp >= (it / 1000).toULong() } != false) &&
+        (end?.let { timestamp <= (it / 1000).toULong() } != false)
+}
+
+internal fun SparkUsdTransfer.matchesActivityFilter(
+    tab: ActivityTab,
+    noTagFilter: Boolean,
+    search: String,
+    start: Long?,
+    end: Long?,
+): Boolean {
+    val tabMatches = when (tab) {
+        ActivityTab.ALL -> true
+        ActivityTab.SENT -> kind == SparkUsdTransfer.Kind.SENT
+        ActivityTab.RECEIVED -> kind == SparkUsdTransfer.Kind.RECEIVED
+        ActivityTab.OTHER -> kind !in listOf(SparkUsdTransfer.Kind.SENT, SparkUsdTransfer.Kind.RECEIVED)
+    }
+    val searchMatches = search.isEmpty() || counterparty?.contains(search, ignoreCase = true) == true ||
+        txHash?.contains(search, ignoreCase = true) == true || search.equals("USDB", ignoreCase = true)
     return tabMatches && noTagFilter && searchMatches &&
         (start?.let { timestamp >= (it / 1000).toULong() } != false) &&
         (end?.let { timestamp <= (it / 1000).toULong() } != false)
@@ -80,12 +104,21 @@ fun AllActivityScreen(
             it.matchesActivityFilter(selectedTab, selectedTags.isEmpty(), searchText, startDate, endDate)
         }.toImmutableList()
     }
+    val sparkState by walletViewModel?.sparkState?.collectAsStateWithLifecycle() ?: remember {
+        mutableStateOf(SparkState())
+    }
+    val sparkUsdItems = remember(sparkState.usd, selectedTab, searchText, selectedTags, startDate, endDate) {
+        sparkState.usd?.transfers.orEmpty().filter {
+            it.matchesActivityFilter(selectedTab, selectedTags.isEmpty(), searchText, startDate, endDate)
+        }.toImmutableList()
+    }
     val tabs = activityTabs
     val currentTabIndex = tabs.indexOf(selectedTab)
 
     AllActivityScreenContent(
         filteredActivities = filteredActivities,
         usdtItems = usdtItems,
+        sparkUsdItems = sparkUsdItems,
         hardwareIds = hardwareIds,
         searchText = searchText,
         onSearchTextChange = { viewModel.setSearchText(it) },
@@ -110,6 +143,7 @@ private fun AllActivityScreenContent(
     searchText: String,
     hardwareIds: ImmutableSet<String> = persistentSetOf(),
     usdtItems: ImmutableList<UsdtTransfer> = persistentListOf(),
+    sparkUsdItems: ImmutableList<SparkUsdTransfer> = persistentListOf(),
     onSearchTextChange: (String) -> Unit,
     hasTagFilter: Boolean,
     selectedTags: ImmutableSet<String>,
@@ -162,6 +196,7 @@ private fun AllActivityScreenContent(
             ActivityListGrouped(
                 items = filteredActivities,
                 usdtItems = usdtItems,
+                sparkUsdItems = sparkUsdItems,
                 onActivityItemClick = onActivityItemClick,
                 onEmptyActivityRowClick = onEmptyActivityRowClick,
                 hardwareIds = hardwareIds,

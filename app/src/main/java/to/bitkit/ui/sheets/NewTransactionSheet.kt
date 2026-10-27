@@ -155,7 +155,7 @@ fun NewTransactionSheetView(
                     hideBalance = hideBalance,
                     onClick = {
                         val hasDetails = details.activityId != null || details.paymentHashOrTxId != null ||
-                            details.usdtTransferId != null
+                            (details.usdtTransferId != null || details.sparkUsdTransferId != null)
                         if (!details.isLoadingDetails && hasDetails) onDetailClick()
                     },
                     modifier = Modifier.testTag("ReceivedTransaction")
@@ -179,6 +179,11 @@ fun NewTransactionSheetView(
 private fun TransactionHeader(details: NewTransactionSheetDetails) {
     val titleText = stringResource(
         when {
+            details.sparkUsdTransferId != null -> if (details.direction == NewTransactionSheetDirection.SENT) {
+                R.string.usdt__sent_title_spark
+            } else {
+                R.string.usdt__received_title_spark
+            }
             details.usdtAmount != null -> if (details.direction == NewTransactionSheetDirection.SENT) {
                 R.string.usdt__payment_sent
             } else {
@@ -252,7 +257,8 @@ private fun TransactionButtons(
     } else {
         null
     }
-    if (details.direction == NewTransactionSheetDirection.SENT || details.usdtTransferId != null) {
+    val hasDollarDetails = details.usdtTransferId != null || details.sparkUsdTransferId != null
+    if (details.direction == NewTransactionSheetDirection.SENT || hasDollarDetails) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
@@ -264,7 +270,7 @@ private fun TransactionButtons(
                 onClick = onDetailClick,
                 textStyle = buttonStyle,
                 enabled = !details.isLoadingDetails && (
-                    details.activityId != null || details.paymentHashOrTxId != null || details.usdtTransferId != null
+                    details.activityId != null || details.paymentHashOrTxId != null || hasDollarDetails
                     ),
                 modifier = Modifier
                     .weight(1f)

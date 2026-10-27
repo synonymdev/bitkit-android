@@ -12,6 +12,7 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.synonym.bitkitcore.usdtFormatAmount
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.launch
@@ -32,8 +33,12 @@ import to.bitkit.domain.commands.NotifyPendingPaymentResolved
 import to.bitkit.domain.commands.NotifyPendingPaymentResolvedHandler
 import to.bitkit.ext.activityManager
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NewTransactionSheetDirection
+import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.SparkRepo
+import to.bitkit.repositories.SparkUsdTransfer
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.services.NodeServiceFgState
@@ -79,6 +84,9 @@ class LightningNodeService : Service() {
     @Inject
     lateinit var nodeServiceFgState: NodeServiceFgState
 
+    @Inject
+    lateinit var sparkRepo: SparkRepo
+
     private var hasStartedNode = false
 
     private val nodeEventHandler: NodeEventHandler = { event ->
@@ -91,6 +99,7 @@ class LightningNodeService : Service() {
     private fun setupService() {
         if (hasStartedNode) return
         hasStartedNode = true
+        serviceScope.launch { sparkRepo.usdReceived.collect { notifySparkUsdReceived(it) } }
 
         serviceScope.launch {
             lightningRepo.start(
@@ -142,6 +151,18 @@ class LightningNodeService : Service() {
         Logger.debug("Showing payment notification: ${notification.title}", context = TAG)
         serviceScope.launch { cacheStore.setBackgroundReceive(sheet) }
         pushNotification(notification.title, notification.body)
+    }
+
+    private suspend fun notifySparkUsdReceived(transfer: SparkUsdTransfer) {
+        if (App.currentActivity?.value != null) return
+        val sheet = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            usdtAmount = transfer.amount,
+            sparkUsdTransferId = transfer.id,
+        )
+        cacheStore.setBackgroundReceive(sheet)
+        pushNotification(getString(R.string.usdt__received_title_spark), "$ " + usdtFormatAmount(transfer.amount))
     }
 
     private suspend fun handlePendingPaymentResolved(event: Event) {

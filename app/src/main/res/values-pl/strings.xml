@@ -765,6 +765,9 @@
     <string name="settings__rgs__button_connect">Połącz</string>
     <string name="settings__rgs__update_success_title">Rapid-Gossip-Sync zaktualizowany</string>
     <string name="settings__rgs__update_success_description">Zmiana może wymagać ponownego uruchomienia aplikacji raz lub dwa razy.</string>
+    <string name="usdt__activity_bridge_spark">Przeniesiono do USDT</string>
+    <string name="usdt__activity_to_btc_spark">Wymieniono na bitcoin</string>
+    <string name="usdt__activity_to_usd_spark">Wymieniono na dolary</string>
     <string name="usdt__address">Adres odbiorcy</string>
     <string name="usdt__amount">Kwota</string>
     <string name="usdt__bridge_attention">Most wymaga uwagi</string>
@@ -870,6 +873,7 @@
     <string name="usdt__receive_network_title">Sieć USDT</string>
     <string name="usdt__receive_title">Otrzymaj dolary</string>
     <string name="usdt__received">Otrzymano</string>
+    <string name="usdt__received_title_spark">Dolary otrzymane</string>
     <string name="usdt__receiving_network">Sieć odbiorcza</string>
     <string name="usdt__receiving_title">Odbieranie USDT</string>
     <string name="usdt__recipient_gets">Odbiorca otrzyma</string>

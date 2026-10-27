@@ -48,8 +48,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import breez_sdk_spark.PaymentStatus
 import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.delay
 import to.bitkit.R
-import to.bitkit.ext.uiDateStyleFor
+import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NewTransactionSheetDirection
+import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.SparkUsdQuote
 import to.bitkit.repositories.SparkUsdState
@@ -81,9 +84,6 @@ import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.screens.wallets.activity.components.ActivityRowSurface
-import to.bitkit.ui.screens.wallets.activity.components.AmountViewContent
-import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
 import to.bitkit.ui.screens.wallets.activity.components.activityGroupTitleResource
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrView
 import to.bitkit.ui.settingsViewModel
@@ -91,11 +91,15 @@ import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
+import to.bitkit.ui.sheets.NewTransactionSheetView
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.NumberPadInputHandler
-import to.bitkit.ui.utils.uiDateText
+import kotlin.time.Duration.Companion.seconds
+
+/** How often the receive screen syncs with Spark, so an incoming payment shows within seconds. */
+private val RECEIVE_POLL_INTERVAL = 5.seconds
 
 /** Home tile for the dollar balance on Spark, next to the Arbitrum USDT one. */
 @Composable
@@ -198,6 +202,7 @@ fun SparkUsdWalletScreen(
                     onConvertDirection = viewModel::setConvertToUsd,
                     onQuote = viewModel::quote,
                     onConfirmQuote = viewModel::confirmQuote,
+                    onPoll = viewModel::syncNow,
                 )
             }
         }
@@ -273,7 +278,11 @@ private fun SparkUsdWalletContent(
                             modifier = Modifier.padding(top = if (index == 0) 0.dp else 16.dp, bottom = 16.dp)
                         )
                     }
-                    SparkUsdActivityRow(transfer, hideBalance)
+                    SparkUsdActivityRow(
+                        transfer,
+                        hideBalance,
+                        onClick = { app?.navigateToSparkUsdActivity(transfer.id) }
+                    )
                     VerticalSpacer(16.dp)
                 }
                 item { VerticalSpacer(120.dp) }
@@ -282,49 +291,6 @@ private fun SparkUsdWalletContent(
         TabBar(onSendClick = onSend, onReceiveClick = onReceive, onScanClick = {
             app?.showScannerSheet(showBackButton = false)
         })
-    }
-}
-
-@Composable
-private fun SparkUsdActivityRow(transfer: SparkUsdTransfer, hideBalance: Boolean) {
-    val color = when (transfer.status) {
-        PaymentStatus.FAILED -> Colors.Red
-        PaymentStatus.PENDING -> Colors.Yellow
-        PaymentStatus.COMPLETED -> Colors.Usdt
-    }
-    val icon = when (transfer.status) {
-        PaymentStatus.FAILED -> R.drawable.ic_x_circle
-        PaymentStatus.PENDING -> R.drawable.ic_hourglass_simple
-        PaymentStatus.COMPLETED -> if (transfer.isIncoming) R.drawable.ic_received else R.drawable.ic_sent
-    }
-    val title = when (transfer.status) {
-        PaymentStatus.FAILED -> R.string.usdt__failed
-        PaymentStatus.PENDING -> R.string.usdt__pending
-        PaymentStatus.COMPLETED -> if (transfer.isIncoming) R.string.usdt__received else R.string.usdt__sent
-    }
-    ActivityRowSurface(onClick = {}, modifier = Modifier.testTag("SparkUsdActivity-" + transfer.id)) {
-        CircularIcon(
-            icon = painterResource(icon),
-            iconColor = color,
-            backgroundColor = color.copy(alpha = 0.16f),
-            size = 40.dp
-        )
-        HorizontalSpacer(16.dp)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
-            BodyMSB(stringResource(title), maxLines = 1)
-            CaptionB(
-                uiDateText(transfer.timestamp, uiDateStyleFor(transfer.timestamp)),
-                color = Colors.White64,
-                maxLines = 1
-            )
-        }
-        HorizontalSpacer(16.dp)
-        AmountViewContent(
-            title = usdtOverviewAmount(transfer.amount),
-            titlePrefix = if (transfer.isIncoming) "+" else "−",
-            subtitle = "$ " + usdtOverviewAmount(transfer.amount),
-            hideBalance = hideBalance
-        )
     }
 }
 
@@ -344,7 +310,28 @@ private fun SparkUsdSheetContent(
     onConvertDirection: (Boolean) -> Unit = {},
     onQuote: () -> Unit = {},
     onConfirmQuote: () -> Unit = {},
+    onPoll: () -> Unit = {},
 ) {
+    val sentTransferId = state.sentTransferId
+    if (state.page == SparkUsdPage.REVIEW && state.completed && sentTransferId != null) {
+        val app = appViewModel
+        NewTransactionSheetView(
+            details = NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.SENT,
+                usdtAmount = state.amount,
+                sparkUsdTransferId = sentTransferId,
+            ),
+            onCloseClick = onDone,
+            onDetailClick = {
+                onDone()
+                app?.navigateToSparkUsdActivity(sentTransferId)
+            },
+            hideBalance = hideBalance,
+            modifier = Modifier.fillMaxSize().testTag("SparkUsdSendSuccess")
+        )
+        return
+    }
     val title = when {
         state.page == SparkUsdPage.RECEIVE -> R.string.usdt__receive_title
         state.page == SparkUsdPage.CONVERT -> R.string.usdt__convert_spark
@@ -358,7 +345,7 @@ private fun SparkUsdSheetContent(
         SheetTopBar(stringResource(title), onBack = onBack.takeUnless { state.busy || state.completed })
         VerticalSpacer(16.dp)
         when (state.page) {
-            SparkUsdPage.RECEIVE -> SparkUsdReceiveContent(state)
+            SparkUsdPage.RECEIVE -> SparkUsdReceiveContent(state, onPoll)
             SparkUsdPage.AMOUNT -> SparkUsdAmountContent(
                 wallet,
                 state,
@@ -382,12 +369,19 @@ private fun SparkUsdSheetContent(
 }
 
 @Composable
-private fun ColumnScope.SparkUsdReceiveContent(state: SparkUsdSendState) {
+private fun ColumnScope.SparkUsdReceiveContent(state: SparkUsdSendState, onPoll: () -> Unit = {}) {
     val request = state.receiveRequest
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(RECEIVE_POLL_INTERVAL)
+            onPoll()
+        }
+    }
     BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
         when {
             request != null -> ReceiveQrView(
-                uri = request,
+                // Bech32 is case-insensitive; uppercase fits QR's alphanumeric mode, a less dense code.
+                uri = request.uppercase(),
                 copyText = request,
                 qrLogoPainter = painterResource(R.drawable.tether_circle),
                 onClickEditInvoice = null,
@@ -639,10 +633,17 @@ private fun Preview() {
     AppThemeSurface {
         SparkUsdWalletContent(
             wallet = SparkUsdState(
-                ticker = "USDT",
+                ticker = "USDB",
                 balance = 12_340_000uL,
                 transfers = persistentListOf(
-                    SparkUsdTransfer("1", true, PaymentStatus.COMPLETED, 5_000_000uL, 0uL, 1_793_098_272uL, "ab"),
+                    SparkUsdTransfer(
+                        id = "1",
+                        kind = SparkUsdTransfer.Kind.RECEIVED,
+                        status = PaymentStatus.COMPLETED,
+                        amount = 5_000_000uL,
+                        fee = 0uL,
+                        timestamp = 1_793_098_272uL,
+                    ),
                 ),
             ),
             hideBalance = false,

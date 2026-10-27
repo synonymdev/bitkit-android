@@ -170,6 +170,7 @@ import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
 import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
+import to.bitkit.ui.screens.wallets.usdt.SparkUsdActivityScreen
 import to.bitkit.ui.screens.wallets.usdt.SparkUsdWalletScreen
 import to.bitkit.ui.screens.wallets.usdt.UsdtDepositsScreen
 import to.bitkit.ui.screens.wallets.usdt.UsdtWalletScreen
@@ -1296,6 +1297,12 @@ private fun NavGraphBuilder.home(
     deepLinkableComposable<Routes.UsdtWallet> {
         UsdtWalletScreen(onBack = { navController.popBackStack() })
     }
+    composableWithDefaultTransitions<Routes.SparkUsdActivity> { entry ->
+        SparkUsdActivityScreen(
+            transferId = entry.toRoute<Routes.SparkUsdActivity>().transferId,
+            onBack = { navController.popBackStack() },
+        )
+    }
     composableWithDefaultTransitions<Routes.SparkUsdWallet> { entry ->
         SparkUsdWalletScreen(
             onBack = { navController.popBackStack() },
@@ -2375,6 +2382,9 @@ sealed interface Routes {
 
     @Serializable
     data class SparkUsdWallet(val recipient: String = "") : Routes.InternalOnly
+
+    @Serializable
+    data class SparkUsdActivity(val transferId: String) : Routes.InternalOnly
 
     @Serializable
     data object Settings : Routes.DeepLinkable

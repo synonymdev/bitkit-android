@@ -761,6 +761,9 @@
     <string name="settings__rgs__button_connect">Verbinden</string>
     <string name="settings__rgs__update_success_title">Rapid-Gossip-Sync-Server aktualisiert</string>
     <string name="settings__rgs__update_success_description">Möglicherweise musst du die App ein- oder zweimal neu starten, damit diese Änderung wirksam wird.</string>
+    <string name="usdt__activity_bridge_spark">Zu USDT verschoben</string>
+    <string name="usdt__activity_to_btc_spark">In Bitcoin umgewandelt</string>
+    <string name="usdt__activity_to_usd_spark">In Dollar umgewandelt</string>
     <string name="usdt__address">Empfängeradresse</string>
     <string name="usdt__amount">Betrag</string>
     <string name="usdt__bridge_attention">Bridge erfordert Prüfung</string>
@@ -866,6 +869,7 @@
     <string name="usdt__receive_network_title">USDT-Netzwerk</string>
     <string name="usdt__receive_title">Dollar empfangen</string>
     <string name="usdt__received">Empfangen</string>
+    <string name="usdt__received_title_spark">Dollar erhalten</string>
     <string name="usdt__receiving_network">Empfangsnetzwerk</string>
     <string name="usdt__receiving_title">USDT wird empfangen</string>
     <string name="usdt__recipient_gets">Empfänger erhält</string>

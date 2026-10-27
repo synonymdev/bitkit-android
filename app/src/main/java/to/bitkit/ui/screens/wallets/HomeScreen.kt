@@ -664,7 +664,8 @@ private fun WalletPage(
         .min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()
     val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val pullToRefreshState = rememberPullToRefreshState()
-    val hasActivity = !latestActivities.isNullOrEmpty() || usdt.transfers.isNotEmpty()
+    val hasActivity = !latestActivities.isNullOrEmpty() || usdt.transfers.isNotEmpty() ||
+        sparkUsd?.transfers?.isNotEmpty() == true
 
     PullToRefreshBox(
         state = pullToRefreshState,
@@ -744,6 +745,7 @@ private fun WalletPage(
                         items = latestActivities,
                         maxItems = (slotCapacity - countNonItemSlots(homeUiState)).coerceAtLeast(0),
                         usdtItems = usdt.transfers,
+                        sparkUsdItems = sparkUsd?.transfers ?: persistentListOf(),
                         onAllActivityClick = onNavigateToAllActivity,
                         onActivityItemClick = onNavigateToActivityItem,
                         hardwareIds = hardwareIds,

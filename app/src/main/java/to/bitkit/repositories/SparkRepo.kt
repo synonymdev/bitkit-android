@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
+import breez_sdk_spark.ConversionChain
 import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.InputType
 import breez_sdk_spark.Payment
@@ -118,6 +119,11 @@ class SparkRepo @Inject constructor(
     private val _nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 64)
     val nodeEvents: SharedFlow<Event> = _nodeEvents.asSharedFlow()
 
+    private val _usdReceived = MutableSharedFlow<SparkUsdTransfer>(extraBufferCapacity = 8)
+
+    /** Fires for each completed incoming dollar transfer, so the app can show its received sheet or notification. */
+    val usdReceived: SharedFlow<SparkUsdTransfer> = _usdReceived.asSharedFlow()
+
     private val _exitStateChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     /** Fires once Spark connects and whenever its unilateral exit data changes, so the exit data backup is redone. */
@@ -201,7 +207,7 @@ class SparkRepo @Inject constructor(
     suspend fun parseUsdRecipient(input: String): Result<SparkUsdRecipient> = withContext(bgDispatcher) {
         runSuspendCatching {
             val tokenId = requireNotNull(Env.sparkUsdTokenId) { "No Spark dollar token on this network" }
-            when (val parsed = sparkService.parse(input.trim())) {
+            when (val parsed = sparkService.parse(input.trim().let { if (isSparkInput(it)) it.lowercase() else it })) {
                 is InputType.SparkAddress -> SparkUsdRecipient(parsed.v1.address, amount = null)
                 is InputType.SparkInvoice if parsed.v1.tokenIdentifier == tokenId -> SparkUsdRecipient(
                     request = parsed.v1.invoice,
@@ -214,9 +220,10 @@ class SparkRepo @Inject constructor(
 
     /**
      * Pays [amount] dollar units of the dollar token to [request], a Spark address or invoice. An invoice that fixes
-     * its amount is paid as it stands, so no rescaled amount can mismatch it.
+     * its amount is paid as it stands, so no rescaled amount can mismatch it. Returns the payment's id, which its
+     * activity carries.
      */
-    suspend fun sendUsd(request: String, amount: ULong, isAmountFixed: Boolean = false): Result<Unit> =
+    suspend fun sendUsd(request: String, amount: ULong, isAmountFixed: Boolean = false): Result<String> =
         withContext(bgDispatcher) {
             runSuspendCatching {
                 val tokenId = requireNotNull(Env.sparkUsdTokenId) { "No Spark dollar token on this network" }
@@ -224,6 +231,7 @@ class SparkRepo @Inject constructor(
                 val payment = sparkService.send(sparkService.prepareTokenSend(request, units, tokenId))
                 Logger.info("Sent Spark dollar payment '${payment.id}' with status '${payment.status}'", context = TAG)
                 refresh()
+                payment.id
             }.onFailure {
                 Logger.error("Failed to send Spark dollar payment", it, context = TAG)
             }
@@ -499,23 +507,68 @@ class SparkRepo @Inject constructor(
     private suspend fun usdState(tokenId: String, balance: BigInteger?): SparkUsdState {
         val metadata = usdMetadata(tokenId)
         val decimals = metadata.decimals.toInt()
-        val transfers = sparkService.listTokenPayments(tokenId).mapNotNull { payment ->
-            val token = payment.details as? PaymentDetails.Token ?: return@mapNotNull null
-            if (token.txType != TokenTransactionType.TRANSFER) return@mapNotNull null
-            SparkUsdTransfer(
-                id = payment.id,
-                isIncoming = payment.paymentType == SparkPaymentType.RECEIVE,
-                status = payment.status,
-                amount = toUsdUnits(payment.amount, decimals),
-                fee = toUsdUnits(payment.fees, decimals),
-                timestamp = payment.timestamp,
-                txHash = token.txHash,
-            )
-        }
+        val transfers = sparkService.listPayments().mapNotNull { it.toUsdTransfer(tokenId, decimals) }
         return SparkUsdState(
             ticker = metadata.ticker.trim(),
             balance = toUsdUnits(balance ?: BigInteger.ZERO, decimals),
             transfers = transfers.sortedByDescending { it.timestamp }.toImmutableList(),
+        )
+    }
+
+    /**
+     * Reads a Spark payment as dollar activity: a token transfer, or a conversion or bridge with the token on one
+     * side. Conversion fees come in USDB units on both sides (Flashnet's fee plus a zero Spark transfer fee).
+     */
+    private fun Payment.toUsdTransfer(tokenId: String, decimals: Int): SparkUsdTransfer? {
+        val usd = { value: BigInteger -> toUsdUnits(value, decimals) }
+        val conversion = conversionDetails?.conversions?.firstOrNull {
+            it.from.asset.identifier == tokenId || it.to.asset.identifier == tokenId
+        }
+        if (conversion != null) {
+            val fee = usd(conversion.from.fee + conversion.to.fee)
+            return when {
+                conversion.to.asset.identifier == tokenId -> SparkUsdTransfer(
+                    id = id,
+                    kind = SparkUsdTransfer.Kind.TO_USD,
+                    status = status,
+                    amount = usd(conversion.to.amount),
+                    fee = fee,
+                    timestamp = timestamp,
+                    sats = conversion.from.amount.toLong().toULong(),
+                )
+                conversion.to.chain is ConversionChain.External -> SparkUsdTransfer(
+                    id = id,
+                    kind = SparkUsdTransfer.Kind.TO_ARBITRUM,
+                    status = status,
+                    amount = usd(conversion.from.amount),
+                    fee = fee,
+                    timestamp = timestamp,
+                )
+                else -> SparkUsdTransfer(
+                    id = id,
+                    kind = SparkUsdTransfer.Kind.TO_BTC,
+                    status = status,
+                    amount = usd(conversion.from.amount),
+                    fee = fee,
+                    timestamp = timestamp,
+                    sats = conversion.to.amount.toLong().toULong(),
+                )
+            }
+        }
+        val token = details as? PaymentDetails.Token ?: return null
+        if (token.metadata.identifier != tokenId || token.txType != TokenTransactionType.TRANSFER) return null
+        return SparkUsdTransfer(
+            id = id,
+            kind = when (paymentType) {
+                SparkPaymentType.RECEIVE -> SparkUsdTransfer.Kind.RECEIVED
+                SparkPaymentType.SEND -> SparkUsdTransfer.Kind.SENT
+            },
+            status = status,
+            amount = usd(amount),
+            fee = usd(fees),
+            timestamp = timestamp,
+            txHash = token.txHash,
+            counterparty = token.invoiceDetails?.invoice,
         )
     }
 
@@ -554,6 +607,19 @@ class SparkRepo @Inject constructor(
         refresh()
         recordActivity(payment)
         payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
+        val received = _state.value.usd?.transfers?.firstOrNull { it.id == payment.id }
+        if (received?.kind == SparkUsdTransfer.Kind.RECEIVED && received.status == PaymentStatus.COMPLETED) {
+            _usdReceived.emit(received)
+        }
+    }
+
+    /** Syncs with Spark now, so a payment that arrived while the app was away shows without waiting for its sync. */
+    suspend fun syncNow(): Result<Unit> = withContext(bgDispatcher) {
+        if (!sparkService.isConnected) return@withContext Result.success(Unit)
+        runSuspendCatching {
+            sparkService.syncWallet()
+            refresh()
+        }
     }
 
     private suspend fun recordActivity(payment: Payment) {
@@ -639,15 +705,26 @@ data class SparkUsdState(
     val transfers: ImmutableList<SparkUsdTransfer> = persistentListOf(),
 )
 
+/**
+ * Dollar activity on Spark. [amount] and [fee] are in dollar units; [sats] is the bitcoin side of a conversion, and
+ * [counterparty] the Spark invoice a transfer paid or was paid through, when known.
+ */
 data class SparkUsdTransfer(
     val id: String,
-    val isIncoming: Boolean,
+    val kind: Kind,
     val status: PaymentStatus,
     val amount: ULong,
     val fee: ULong,
     val timestamp: ULong,
-    val txHash: String,
-)
+    val txHash: String? = null,
+    val counterparty: String? = null,
+    val sats: ULong? = null,
+) {
+    enum class Kind { SENT, RECEIVED, TO_USD, TO_BTC, TO_ARBITRUM }
+
+    /** Whether dollars came in: a receive or a conversion to dollars. */
+    val isIncoming: Boolean get() = kind == Kind.RECEIVED || kind == Kind.TO_USD
+}
 
 /** Where a dollar payment goes: a Spark address or invoice, with the amount an invoice fixes. */
 data class SparkUsdRecipient(val request: String, val amount: ULong?)

@@ -49,6 +49,8 @@ class SparkUsdViewModel @Inject constructor(
 
     fun refresh() = viewModelScope.launch { sparkRepo.refreshState() }
 
+    fun syncNow() = viewModelScope.launch { sparkRepo.syncNow() }
+
     fun loadReceiveRequest() = viewModelScope.launch {
         _state.update { it.copy(receiveRequest = null, error = null) }
         sparkRepo.createUsdRequest(amount = null)
@@ -209,7 +211,7 @@ class SparkUsdViewModel @Inject constructor(
         val amount = state.amount ?: return
         _state.update { it.copy(busy = true, error = null) }
         sparkRepo.sendUsd(recipient, amount, state.isAmountFixed)
-            .onSuccess { _state.update { it.copy(busy = false, completed = true) } }
+            .onSuccess { id -> _state.update { it.copy(busy = false, completed = true, sentTransferId = id) } }
             .onFailure { _state.update { it.copy(busy = false, error = R.string.usdt__send_failed_description) } }
     }
 }
@@ -227,6 +229,7 @@ data class SparkUsdSendState(
     val isAmountFixed: Boolean = false,
     val convertToUsd: Boolean = true,
     val quote: SparkUsdQuote? = null,
+    val sentTransferId: String? = null,
     val busy: Boolean = false,
     val completed: Boolean = false,
     val authenticationRequired: Boolean = false,

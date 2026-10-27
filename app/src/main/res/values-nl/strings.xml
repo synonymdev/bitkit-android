@@ -758,6 +758,9 @@
     <string name="subscriptions__payments">Betalingen</string>
     <string name="subscriptions__pending">In behandeling</string>
     <string name="subscriptions__proposal_queued_title">In de wacht</string>
+    <string name="usdt__activity_bridge_spark">Verplaatst naar USDT</string>
+    <string name="usdt__activity_to_btc_spark">Omgezet naar bitcoin</string>
+    <string name="usdt__activity_to_usd_spark">Omgezet naar dollars</string>
     <string name="usdt__address">Adres ontvanger</string>
     <string name="usdt__amount">Bedrag</string>
     <string name="usdt__bridge_attention">Bridge vereist aandacht</string>
@@ -863,6 +866,7 @@
     <string name="usdt__receive_network_title">USDT-netwerk</string>
     <string name="usdt__receive_title">Dollars ontvangen</string>
     <string name="usdt__received">Ontvangen</string>
+    <string name="usdt__received_title_spark">Dollars ontvangen</string>
     <string name="usdt__receiving_network">Ontvangstnetwerk</string>
     <string name="usdt__receiving_title">USDT wordt ontvangen</string>
     <string name="usdt__recipient_gets">Ontvanger krijgt</string>
