@@ -1498,9 +1498,9 @@
     <string name="subscriptions__allowance_no_contacts">Primer afegeix un contacte. Les assignacions cobreixen les sol·licituds de pagament dels teus contactes.</string>
     <string name="subscriptions__allowance_offer_accepted_description">{name} t\'ha configurat una assignació</string>
     <string name="subscriptions__allowance_offer_accepted_title">Assignació afegida</string>
-    <string name="subscriptions__allowance_offers_accepted_description">{names} t\'han configurat assignacions</string>
     <string name="subscriptions__allowance_offer_explanation">La cartera de {name} pagarà les teves sol·licituds dins d\'aquests límits sense preguntar cada vegada. Qualsevol de vosaltres hi pot posar fi.</string>
     <string name="subscriptions__allowance_offer_headline">{name} t\'ofereix\n&lt;accent&gt;una assignació&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} t\'han configurat assignacions</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pagat automàticament</string>
     <string name="subscriptions__allowance_paid_so_far">Pagat automàticament</string>
     <string name="subscriptions__allowance_payment_in_progress">Aquesta sol·licitud ja s\'està pagant automàticament.</string>

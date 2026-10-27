@@ -1498,9 +1498,9 @@
     <string name="subscriptions__allowance_no_contacts">Voeg eerst een contact toe. Toelagen gelden voor betaalverzoeken van uw contacten.</string>
     <string name="subscriptions__allowance_offer_accepted_description">{name} heeft een toelage voor u ingesteld</string>
     <string name="subscriptions__allowance_offer_accepted_title">Toelage toegevoegd</string>
-    <string name="subscriptions__allowance_offers_accepted_description">{names} hebben een toelage voor u ingesteld</string>
     <string name="subscriptions__allowance_offer_explanation">De wallet van {name} betaalt uw verzoeken binnen deze limieten zonder elke keer te vragen. Beide partijen kunnen de toelage beëindigen.</string>
     <string name="subscriptions__allowance_offer_headline">{name} biedt\n&lt;accent&gt;een toelage&lt;/accent&gt; aan</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} hebben een toelage voor u ingesteld</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} automatisch betaald</string>
     <string name="subscriptions__allowance_paid_so_far">Automatisch betaald</string>
     <string name="subscriptions__allowance_payment_in_progress">Dit verzoek wordt al automatisch betaald.</string>

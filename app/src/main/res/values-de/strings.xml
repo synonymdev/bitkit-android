@@ -1499,9 +1499,9 @@
     <string name="subscriptions__allowance_no_contacts">Füge zuerst einen Kontakt hinzu. Budgets gelten für Zahlungsanforderungen deiner Kontakte.</string>
     <string name="subscriptions__allowance_offer_accepted_description">{name} hat dir ein Budget eingerichtet</string>
     <string name="subscriptions__allowance_offer_accepted_title">Budget hinzugefügt</string>
-    <string name="subscriptions__allowance_offers_accepted_description">{names} haben dir Budgets eingerichtet</string>
     <string name="subscriptions__allowance_offer_explanation">Die Wallet von {name} bezahlt deine Anforderungen innerhalb dieser Limits, ohne jedes Mal nachzufragen. Ihr könnt es beide beenden.</string>
     <string name="subscriptions__allowance_offer_headline">{name} bietet dir\n&lt;accent&gt;ein Budget&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} haben dir Budgets eingerichtet</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} automatisch bezahlt</string>
     <string name="subscriptions__allowance_paid_so_far">Automatisch bezahlt</string>
     <string name="subscriptions__allowance_payment_in_progress">Diese Anforderung wird bereits automatisch bezahlt.</string>

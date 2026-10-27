@@ -1500,9 +1500,9 @@
     <string name="subscriptions__allowance_no_contacts">Nejprve přidejte kontakt. Rozpočty se vztahují na žádosti o platbu od vašich kontaktů.</string>
     <string name="subscriptions__allowance_offer_accepted_description">{name} vám nastavil rozpočet</string>
     <string name="subscriptions__allowance_offer_accepted_title">Rozpočet přidán</string>
-    <string name="subscriptions__allowance_offers_accepted_description">{names} vám nastavili rozpočty</string>
     <string name="subscriptions__allowance_offer_explanation">Peněženka uživatele {name} bude platit vaše žádosti v rámci těchto limitů, aniž by se pokaždé ptala. Kterákoli strana jej může ukončit.</string>
     <string name="subscriptions__allowance_offer_headline">{name} nabízí\n&lt;accent&gt;rozpočet&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} vám nastavili rozpočty</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} zaplaceno automaticky</string>
     <string name="subscriptions__allowance_paid_so_far">Zaplaceno automaticky</string>
     <string name="subscriptions__allowance_payment_in_progress">Tato žádost se již platí automaticky.</string>

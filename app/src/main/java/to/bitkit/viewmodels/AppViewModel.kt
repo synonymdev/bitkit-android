@@ -4,6 +4,7 @@ package to.bitkit.viewmodels
 
 import android.content.Context
 import android.content.Intent
+import android.icu.text.ListFormatter
 import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.annotation.StringRes
@@ -1277,12 +1278,13 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    /** Several offers accepted in one refresh are announced together, so no toast replaces another. */
     private fun announceAcceptedAllowanceOffers(offers: List<PaykitAllowanceEntry>) {
+        // Several offers accepted in one refresh are announced together, so no toast replaces another.
         val description = allowanceOffersAcceptedDescription(
-            names = offers.map { allowanceContactName(it.counterparty) },
+            names = offers.map { it.counterparty }.distinct().map(::allowanceContactName),
             single = context.getString(R.string.subscriptions__allowance_offer_accepted_description),
             several = context.getString(R.string.subscriptions__allowance_offers_accepted_description),
+            formatNames = { ListFormatter.getInstance().format(it) },
         ) ?: return
         notifyAllowanceEvent(
             type = Toast.ToastType.SUCCESS,
@@ -8621,12 +8623,19 @@ internal fun resolvePastedPubkyRoute(
     return Routes.AddContact(normalizedKey)
 }
 
-/** One "Allowance Added" description for every offer accepted at once, or null when there is none. */
-internal fun allowanceOffersAcceptedDescription(names: List<String>, single: String, several: String): String? {
-    val distinct = names.distinct()
-    return when (distinct.size) {
+/**
+ * One "Allowance Added" description for every offer accepted at once, or null when there is none; [formatNames] joins
+ * several names as the locale lists them.
+ */
+internal fun allowanceOffersAcceptedDescription(
+    names: List<String>,
+    single: String,
+    several: String,
+    formatNames: (List<String>) -> String,
+): String? {
+    return when (names.size) {
         0 -> null
-        1 -> single.replace("{name}", distinct.single())
-        else -> several.replace("{names}", distinct.joinToString(", "))
+        1 -> single.replace("{name}", names.single())
+        else -> several.replace("{names}", formatNames(names))
     }
 }

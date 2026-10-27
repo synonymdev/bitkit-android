@@ -1486,9 +1486,9 @@
     <string name="subscriptions__allowance_no_contacts">أضف جهة اتصال أولًا. تغطي الميزانيات طلبات الدفع من جهات اتصالك.</string>
     <string name="subscriptions__allowance_offer_accepted_description">{name} أعدّ لك ميزانية</string>
     <string name="subscriptions__allowance_offer_accepted_title">تمت إضافة الميزانية</string>
-    <string name="subscriptions__allowance_offers_accepted_description">أعدّ لك {names} ميزانيات</string>
     <string name="subscriptions__allowance_offer_explanation">ستدفع محفظة {name} طلباتك ضمن هذه الحدود دون السؤال في كل مرة. يمكن لأي منكما إنهاؤها.</string>
     <string name="subscriptions__allowance_offer_headline">{name} يعرض عليك\n&lt;accent&gt;ميزانية&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">أعدّ لك {names} ميزانيات</string>
     <string name="subscriptions__allowance_paid_automatically">تم دفع {amount} تلقائيًا</string>
     <string name="subscriptions__allowance_paid_so_far">مدفوع تلقائيًا</string>
     <string name="subscriptions__allowance_payment_in_progress">يتم دفع هذا الطلب تلقائيًا بالفعل.</string>
