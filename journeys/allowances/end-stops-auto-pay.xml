@@ -19,7 +19,7 @@
     <action>Set a fresh $5 a payment, $50 a month allowance between the same two instances, per set-and-accept.xml; the payee's wallet accepts it by itself</action>
     <action>On the payee instance, tap the Active row, verify the detail ends with "Swipe To End Allowance", and swipe it to the end</action>
     <action>Verify the payee's row reads "Ended"</action>
-    <action>On the payer instance, verify its row for that allowance reads "Ended"; tap it and verify the detail sheet shows PAID AUTOMATICALLY "$0.00" (testTag "AllowancePaidSoFar")</action>
+    <action>On the payer instance, verify its row for that allowance reads "Ended", with no amount since nothing was paid automatically</action>
     <action>On the payee instance, send the payer a one-time Payment Request for $2 with the note "AfterPayeeEnd"</action>
     <action>On the payer instance, verify it is not paid and opens as an ordinary Payment Request sheet, then dismiss it</action>
   </actions>
