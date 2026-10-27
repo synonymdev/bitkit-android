@@ -295,9 +295,10 @@ class PaykitAllowanceRepo @Inject constructor(
     /**
      * Accepts the offers that make this wallet the allowee and returns the ones now active so the caller can tell the
      * user. A failed accept stays unanswered and is tried again on the next refresh. Stops accepting once
-     * [canContinue] turns false and still returns what it accepted. An offer is marked before its accept, so one
-     * whose accept committed in a call that was cancelled, or a process that died, is returned by the next call.
-     * Returns nothing to announce once the identity it started with is gone or [canAnnounce] turns false.
+     * [canContinue] turns false and still returns what it accepted. An offer is marked before its accept and stays
+     * marked until [markOffersAnnounced], so one whose accept committed in a call that was cancelled, or a process
+     * that died, is returned by the next call. Returns nothing to announce once the identity it started with is gone
+     * or [canAnnounce] turns false.
      */
     suspend fun acceptOffersFromAllowers(
         canAnnounce: () -> Boolean = { true },
@@ -323,19 +324,22 @@ class PaykitAllowanceRepo @Inject constructor(
                     .onSuccess { accepted += offer }
                     .onFailure { Logger.warn("Failed to accept an allowance offer", it, context = TAG) }
             }
-            if (!isCurrent()) return@withContext emptyList()
-            val announced = accepted.flatMap { offer -> offer.allowances.map { it.key } }.toSet()
-            executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - announced) }
-            accepted
+            if (isCurrent()) accepted else emptyList()
         } finally {
             isAcceptingOffers.set(false)
         }
     }
 
-    /**
-     * Offers marked for acceptance whose allowance is now accepted, left unannounced by an accept whose call was
-     * cancelled after it committed. Drops the marks of offers that ended any other way.
-     */
+    /** Clears the marks of offers the user was told about, so they are never announced again. */
+    suspend fun markOffersAnnounced(offers: List<PaykitAllowanceEntry>) {
+        val identity = activeIdentity ?: return
+        val announced = offers.flatMap { offer -> offer.allowances.map { it.key } }.toSet()
+        if (announced.isEmpty()) return
+        withContext(ioDispatcher) {
+            executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - announced) }
+        }
+    }
+
     private suspend fun unannouncedOffers(identity: String): List<PaykitAllowanceEntry> {
         val marked = executor.localState(identity).acceptingOfferIds
         if (marked.isEmpty()) return emptyList()

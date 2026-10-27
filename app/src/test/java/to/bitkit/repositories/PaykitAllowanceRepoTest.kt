@@ -364,6 +364,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertTrue(entry.canEnd, "The allowee can still end it")
         assertNull(sut.proposalForPresentation())
 
+        sut.markOffersAnnounced(accepted)
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An accepted offer is not accepted or announced twice")
         verify(sdk, times(1)).acceptAllowance(any(), any(), any())
     }
@@ -379,7 +380,9 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertNull(sut.proposalForPresentation(), "A failed offer still never opens the review sheet")
 
         acceptFlipsRecordToActive()
-        assertEquals(listOf(fixtures.counterpartyKey), sut.acceptOffersFromAllowers().map { it.counterparty })
+        val accepted = sut.acceptOffersFromAllowers()
+        assertEquals(listOf(fixtures.counterpartyKey), accepted.map { it.counterparty })
+        sut.markOffersAnnounced(accepted)
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
         verify(sdk, times(2)).acceptAllowance(any(), any(), any())
     }
@@ -428,7 +431,10 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertFailsWith<CancellationException> { sut.acceptOffersFromAllowers() }
         sut.refresh()
 
-        assertEquals(listOf(fixtures.counterpartyKey), sut.acceptOffersFromAllowers().map { it.counterparty })
+        val unannounced = sut.acceptOffersFromAllowers()
+        assertEquals(listOf(fixtures.counterpartyKey), unannounced.map { it.counterparty })
+        assertEquals(unannounced, sut.acceptOffersFromAllowers(), "It stays due until the app has announced it")
+        sut.markOffersAnnounced(unannounced)
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "It is announced once")
         assertTrue(localState.acceptingOfferIds.isEmpty())
         verify(sdk, times(1)).acceptAllowance(any(), any(), any())

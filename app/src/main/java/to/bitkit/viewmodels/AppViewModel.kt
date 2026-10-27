@@ -1208,13 +1208,14 @@ class AppViewModel @Inject constructor(
                 canContinue = { !(onlyWhileActive && isPaymentRequestPollingStopped.value) },
             )
             announceAcceptedAllowanceOffers(acceptedOffers)
+            paykitAllowanceRepo.markOffersAnnounced(acceptedOffers)
             if (processAllowanceRequests()) refreshRequestsUnderCoverageHold()
             presentNextIncomingPaykitPaymentRequest()
         }
     }
 
-    /** An intake after automatic payments can bring an allowance change too, so it runs under the coverage hold. */
     private suspend fun refreshRequestsUnderCoverageHold() {
+        // An intake after automatic payments can bring an allowance change too, so it runs under the coverage hold.
         val releaseCoverage = paykitAllowanceRepo.beginCoverageUpdate()
         try {
             paykitPaymentRequestRepo.refresh().onSuccess { paykitAllowanceRepo.refresh() }
