@@ -7360,6 +7360,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertFalse(settingsData.value.publicPaykitCleanupPending)
         assertTrue(pubkyContacts.value.isEmpty())
         assertTrue(ledger.value.contactAssignments.isEmpty())
+        walletState.update { it.copy(onchainAddress = "") }
+        cache.update { it.copy(onchainAddress = "") }
+        whenever(lightningRepo.canReceive()).thenReturn(false)
+        advanceUntilIdle()
         publications.clear()
         clearInvocations(coreService)
         val afterActivitySync = mutableListOf<suspend () -> Unit>()
@@ -7383,7 +7387,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         afterActivitySync.removeAt(0).invoke()
         advanceUntilIdle()
         assertEquals(listOf(addresses[2]), publications)
-        assertEquals(ordinaryAddress, walletState.value.onchainAddress)
+        assertEquals("", walletState.value.onchainAddress)
         assertFalse(settingsData.value.publicPaykitCleanupPending)
 
         clearInvocations(coreService)
@@ -7396,8 +7400,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         afterActivitySync.removeAt(0).invoke()
         advanceUntilIdle()
         assertEquals(listOf(addresses[2], addresses[3]), publications)
-        assertEquals(ordinaryAddress, walletState.value.onchainAddress)
-        assertEquals(ordinaryAddress, cache.value.onchainAddress)
+        assertEquals("", walletState.value.onchainAddress)
+        assertEquals("", cache.value.onchainAddress)
         assertEquals(setOf(1, 2, 3), ledger.value.reservedReceiveIndexesByAddressType["nativeSegwit"])
         assertTrue(reservations.isUnavailableForReusableReceive(addresses[1]))
         assertTrue(reservations.isUnavailableForReusableReceive(addresses[2]))
@@ -13449,7 +13453,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `forced public refresh records the restored identity before skipped or failed publication`() = test {
+    fun `forced public refresh records the restored identity before failed publication`() = test {
         val nodeState = lightningRepo.lightningState as MutableStateFlow<LightningState>
         for (hasAddress in listOf(false, true)) {
             nodeState.update { it.copy(channels = persistentListOf()) }
@@ -13475,11 +13479,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             verify(publicPaykitRepo, never()).requestLightningRefresh(any(), anyOrNull())
             verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
-            if (hasAddress) {
-                verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
-            } else {
-                verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
-            }
+            verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
         }
     }
 
@@ -14353,12 +14353,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         isPaykitEnabled.value = true
         whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).thenReturn(Result.success(Unit))
         for (paidInvoicePending in listOf(true, false)) {
-            clearInvocations(publicPaykitRepo, privatePaykitRepo)
             settingsData.value = SettingsData(
                 sharesPublicPaykitEndpoints = true,
                 publicPaykitCleanupPending = paidInvoicePending,
             )
             whenever(publicPaykitRepo.hasPendingLightningRefresh).thenReturn(!paidInvoicePending)
+            advanceUntilIdle()
+            clearInvocations(publicPaykitRepo, privatePaykitRepo)
             sut.refreshPrivatePaykitEndpoints()
             advanceUntilIdle()
 

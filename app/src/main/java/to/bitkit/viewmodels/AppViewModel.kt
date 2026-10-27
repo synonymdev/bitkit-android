@@ -893,8 +893,6 @@ class AppViewModel @Inject constructor(
         pubkyRepo.isRestoringSession.first { !it }
         val restoredSignIn = signIn ?: pubkyRepo.currentSignIn()
         val admission = canPublish ?: publicPaykitPublicationAdmission(restoredSignIn)
-        val onchainAddress = walletRepo.walletState.value.onchainAddress
-        if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
 
         publicPaykitRepo.syncCurrentPublishedEndpoints(
             canPublish = admission,
