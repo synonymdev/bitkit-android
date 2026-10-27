@@ -6682,18 +6682,22 @@ class AppViewModel @Inject constructor(
             paymentDeadlineAt = paymentDeadlineAt,
             onBeforeSend = onBeforeSend,
         ).onSuccess { hash ->
-            // Wait until matching payment event is received (with timeout for hold invoices)
-            val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
-                when (it) {
-                    is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
-                    is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
-                        Result.failure(
-                            LightningPaymentFailedError(reason = it.reason, paymentRequest = bolt11)
-                        )
-                    )
+            fun outcome(event: Event): Result<PaymentId>? = when (event) {
+                is Event.PaymentSuccessful if event.paymentHash == hash -> Result.success(hash)
+                is Event.PaymentFailed if event.paymentHash == hash -> Result.failure(
+                    LightningPaymentFailedError(reason = event.reason, paymentRequest = bolt11)
+                )
 
-                    else -> WatchResult.Continue()
+                else -> null
+            }
+            // Wait until matching payment event is received (with timeout for hold invoices)
+            val result = coroutineScope {
+                val watch = async(start = CoroutineStart.UNDISPATCHED) {
+                    lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
+                        outcome(it)?.let { result -> WatchResult.Complete(result) } ?: WatchResult.Continue()
+                    }
                 }
+                lightningRepo.settledSparkSendEvent(hash)?.let(::outcome)?.also { watch.cancel() } ?: watch.await()
             }
             return result ?: Result.failure(PaymentPendingException(hash))
         }

@@ -2309,6 +2309,9 @@ class LightningRepo @Inject constructor(
     fun getChannels(): List<ChannelDetails>? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
 
+    /** The completion event of a Spark send that settled before its caller started watching for it. */
+    suspend fun settledSparkSendEvent(paymentHash: String): Event? = sparkRepo.settledSendEvent(paymentHash)
+
     /**
      * Whether Lightning can be received, through a usable channel or Spark; Paykit publishes a Lightning endpoint
      * only then.

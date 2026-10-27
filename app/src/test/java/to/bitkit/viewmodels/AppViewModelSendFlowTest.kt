@@ -13095,6 +13095,36 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `spark send that settled before the watch started completes without pending`() = test {
+        val bolt11 = "lnbcrt1sparktospark"
+        val paymentHash = "spark_hash"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = paymentHash,
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            ),
+        )
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceTimeBy(LightningRepo.SEND_LN_TIMEOUT.inWholeMilliseconds + 1_000)
+        runCurrent()
+
+        verify(pendingPaymentRepo, never()).track(paymentHash)
+    }
+
+    @Test
     fun `private lightning pending payment consumes private list`() = test {
         val bolt11 = "lnbcrt1pending"
         val paymentHash = "pending_hash"

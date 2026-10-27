@@ -290,6 +290,22 @@ class SparkRepo @Inject constructor(
             }
     }
 
+    /**
+     * The completion event of a Spark Lightning send that has already settled. A Spark-to-Spark payment settles inside
+     * the send call, so its event can fire before the caller starts watching for it.
+     */
+    suspend fun settledSendEvent(paymentHash: String): Event? = withContext(bgDispatcher) {
+        if (!sparkService.isConnected) return@withContext null
+        runSuspendCatching { sparkService.listPayments() }
+            .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+            .getOrNull()
+            ?.firstOrNull {
+                val hash = (it.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash
+                it.paymentType == SparkPaymentType.SEND && hash.equals(paymentHash, ignoreCase = true)
+            }
+            ?.toNodeEvent()
+    }
+
     /** Payment hashes of the Lightning payments Spark received. */
     suspend fun receivedLightningPaymentHashes(): Set<String> =
         lightningPaymentHashes { it.paymentType == SparkPaymentType.RECEIVE && it.status == PaymentStatus.COMPLETED }
