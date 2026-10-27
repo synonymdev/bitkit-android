@@ -7,7 +7,8 @@
     the configured regtest backend's block-mining helper.
   </description>
   <actions>
-    <action>Hand the app the address as a URI with adb shell am start -a android.intent.action.VIEW -d "bitcoin:ADDRESS?amount=0.0001" to.bitkit.dev, so the send opens at 10,000 sats</action>
+    <action>Hand the app the address as a URI with adb shell am start -a android.intent.action.VIEW -d "bitcoin:ADDRESS?amount=0.0001" to.bitkit.dev, which opens the amount screen at 10,000 sats</action>
+    <action>Verify the amount screen shows 10,000 sats, tap Continue (testTag "ContinueAmount") and verify the review screen (testTag "SendConfirm") is visible</action>
     <action>Swipe the send handle (testTag "GRAB") fully to the right and wait for the success screen (testTag "SendSuccess"), then tap Close</action>
     <action>Tap the newest outgoing activity entry (testTag "ActivityShort-0") and verify it shows 10,000 sats; record the fee from testTag "ActivityFee"</action>
     <action>Tap Transaction details (testTag "ActivityTxDetails"), record the TXID, then go back</action>
