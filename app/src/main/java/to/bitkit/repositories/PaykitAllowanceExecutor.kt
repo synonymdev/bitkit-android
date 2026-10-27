@@ -10,6 +10,7 @@ import com.synonym.paykit.AllowanceSelectionInput
 import com.synonym.paykit.PaymentAttemptDecision
 import com.synonym.paykit.PaymentAttemptRecord
 import com.synonym.paykit.PaymentExecutionChecks
+import com.synonym.paykit.PaymentExecutionMode
 import com.synonym.paykit.PaymentExecutionStatus
 import com.synonym.paykit.PaymentOccurrence
 import com.synonym.paykit.PaymentOutcome
@@ -273,6 +274,8 @@ class PaykitAllowanceExecutor @Inject constructor(
             // No ledger means nothing was ever admitted, so there is nothing to recover.
             paykitSdkService.allowanceAccountingState() ?: return@runSuspendCatching
             val state = ensureReconciled(identity)
+            // The ledger keeps every attempt, while the journal is trimmed and an iOS backup carries no totals.
+            updateLocalState(identity) { it.withLedgerAutoPaid(state.history) }
             // One read of the journal per pass: each attempt below is settled from this snapshot.
             val journal = localState(identity).journal.associateBy { it.attemptId }
             for (attempt in state.history.occurrences.flatMap { it.attempts }) {
@@ -395,7 +398,11 @@ class PaykitAllowanceExecutor @Inject constructor(
             val updated = state.copy(
                 journal = state.journal.map { if (it.attemptId == attemptId) it.copy(stage = stage) else it },
             )
-            if (current?.isPaidAutomaticallyBy(stage) == true) updated.withAutoPaid(current) else updated
+            if (current?.isPaidAutomaticallyBy(stage) == true) {
+                updated.withAutoPaid(current.requestId, current.allowanceId, current.amountSats)
+            } else {
+                updated
+            }
         }
         val entry = before ?: return null
         if (entry.isPaidAutomaticallyBy(stage)) {
@@ -953,15 +960,40 @@ private fun PaykitPaymentRequest.scope() = PaymentRequestScope(counterparty, pay
 private fun JournalEntry.isPaidAutomaticallyBy(stage: Stage): Boolean =
     isAutomatic && this.stage != Stage.SUCCEEDED && stage == Stage.SUCCEEDED
 
-private fun PaykitAllowanceLocalState.withAutoPaid(entry: JournalEntry): PaykitAllowanceLocalState {
+private fun PaykitAllowanceLocalState.withAutoPaid(
+    requestId: PaykitPaymentRequestId,
+    allowanceId: String?,
+    amountSats: ULong,
+): PaykitAllowanceLocalState {
     // Allowance ids are unique per contact only, so payments count toward the contact's own allowance.
-    val key = PaykitAllowance.key(entry.requestId.counterparty, entry.allowanceId)
-    val total = (autoPaidSatsByAllowance[key] ?: 0uL).safe() + entry.amountSats.safe()
+    val key = PaykitAllowance.key(requestId.counterparty, allowanceId)
+    val total = (autoPaidSatsByAllowance[key] ?: 0uL).safe() + amountSats.safe()
     return copy(
         autoPaidSatsByAllowance = autoPaidSatsByAllowance + (key to total),
-        autoPaidRequestIds = autoPaidRequestIds + entry.requestId,
+        autoPaidRequestIds = autoPaidRequestIds + requestId,
     )
 }
+
+private fun PaykitAllowanceLocalState.withLedgerAutoPaid(
+    history: AllowanceAccountingHistory,
+): PaykitAllowanceLocalState =
+    history.occurrences.filter { it.key.billingPeriod == null }.fold(this) { state, occurrence ->
+        val scope = occurrence.key.request
+        val requestId = PaykitPaymentRequestId(scope.paymentRequestId, scope.counterparty)
+        val isCounted = state.autoPaidRequestIds.any {
+            it.paymentRequestId == requestId.paymentRequestId &&
+                PubkyPublicKeyFormat.matches(it.counterparty, requestId.counterparty)
+        }
+        val paid = occurrence.attempts.firstOrNull {
+            it.mode == PaymentExecutionMode.AUTOMATIC && it.status == PaymentExecutionStatus.SUCCEEDED
+        }
+        val amountSats = paid?.amount?.value()?.let(PaykitAllowance::satsFromBitcoinAmount)
+        if (isCounted || paid == null || amountSats == null) {
+            state
+        } else {
+            state.withAutoPaid(requestId, paid.allowanceId, amountSats)
+        }
+    }
 
 /**
  * Allowances pay only bitcoin-denominated requests; null for any other request. A conversion offered for other rails,

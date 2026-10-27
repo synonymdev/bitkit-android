@@ -827,6 +827,34 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovery counts automatic payments the ledger keeps beyond the journal`() = test {
+        val counted = fixtures.paymentRequest(id = "req-counted")
+        sut.updateLocalState(identity) {
+            it.copy(
+                autoPaidSatsByAllowance = mapOf(PaykitAllowance.key(counted.counterparty, ALLOWANCE_ID) to 1_000uL),
+                autoPaidRequestIds = setOf(counted.id),
+            )
+        }
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(
+                occurrence("counted", PaymentExecutionStatus.SUCCEEDED),
+                occurrence("restored", PaymentExecutionStatus.SUCCEEDED),
+                occurrence("failed", PaymentExecutionStatus.FAILED),
+            ),
+        )
+
+        sut.recover(identity)
+
+        val state = sut.localState(identity)
+        val key = PaykitAllowance.key(counted.counterparty, ALLOWANCE_ID)
+        assertEquals(mapOf(key to 2_000uL), state.autoPaidSatsByAllowance, "Only the uncounted success is added")
+        assertEquals(
+            setOf("req-counted", "req-restored"),
+            state.autoPaidRequestIds.mapTo(mutableSetOf()) { it.paymentRequestId },
+        )
+    }
+
+    @Test
     fun `recovery gives the payment list back when it fails an automatic attempt`() = test {
         val request = fixtures.paymentRequest()
         accountingState = fixtures.accountingState(
