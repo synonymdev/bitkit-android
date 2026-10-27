@@ -87,6 +87,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.Txid
+import to.bitkit.App
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.data.CacheStore
@@ -1246,14 +1247,18 @@ class AppViewModel @Inject constructor(
                 testTag = "AllowancePaidToast",
             )
 
-            is PaykitAllowanceEvent.LimitReached -> notifyAllowanceEvent(
-                type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.subscriptions__allowance_limit_title),
-                description = context.getString(R.string.subscriptions__allowance_limit_description)
-                    .replace("{amount}", allowanceFiatAmount(event.amountSats))
-                    .replace("{name}", allowanceContactName(event.counterparty)),
-                testTag = "AllowanceLimitToast",
-            )
+            is PaykitAllowanceEvent.LimitReached -> {
+                // In the foreground the request sheet already shows the request.
+                if (App.currentActivity?.value != null) return
+                notifyAllowanceEvent(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.subscriptions__allowance_limit_title),
+                    description = context.getString(R.string.subscriptions__allowance_limit_description)
+                        .replace("{amount}", allowanceFiatAmount(event.amountSats))
+                        .replace("{name}", allowanceContactName(event.counterparty)),
+                    testTag = "AllowanceLimitToast",
+                )
+            }
 
             PaykitAllowanceEvent.LedgerChanged -> Unit
         }
