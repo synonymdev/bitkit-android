@@ -1248,8 +1248,8 @@ class AppViewModel @Inject constructor(
             )
 
             is PaykitAllowanceEvent.LimitReached -> {
-                // In the foreground the request sheet already shows the request.
-                if (App.currentActivity?.value != null) return
+                // Unlocked in the foreground, the request sheet already shows the request.
+                if (App.currentActivity?.value != null && _isAuthenticated.value) return
                 notifyAllowanceEvent(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.subscriptions__allowance_limit_title),
