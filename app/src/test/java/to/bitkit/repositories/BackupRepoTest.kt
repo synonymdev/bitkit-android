@@ -27,6 +27,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -196,7 +197,7 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `spark exit backup uploads the exported state and restores it`() = test {
+    fun `spark exit backup uploads the exported state and restores it before the wallet`() = test {
         val backup = SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "{\"pedigrees\":[]}")
         whenever(sparkRepo.exitBackup()).thenReturn(Result.success(backup))
 
@@ -210,7 +211,10 @@ class BackupRepoTest : BaseUnitTest() {
 
         sut.performFullRestoreFromLatestBackup().getOrThrow()
 
-        verify(sparkRepo).restoreExitBackup(backup, 0)
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(sparkRepo).restoreExitBackup(backup, 0)
+            verify(vssBackupClient).getObject(BackupCategory.WALLET.name)
+        }
     }
 
     @Test

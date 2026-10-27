@@ -230,7 +230,7 @@ class SparkRepo @Inject constructor(
                 file.delete()
                 Logger.info(
                     "Imported Spark exit data: '${it.importedLeaves}' leaves, '${it.skippedForeignLeaves}' foreign, " +
-                        "'${it.skippedConflictingLeaves}' conflicting",
+                        "'${it.skippedConflictingLeaves}' conflicting, '${it.skippedChains}' already held",
                     context = TAG,
                 )
             }

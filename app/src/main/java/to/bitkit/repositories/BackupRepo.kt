@@ -850,6 +850,12 @@ class BackupRepo @Inject constructor(
                     widgetsStore.restoreFromBackup(parsed)
                     parsed.createdAt
                 }
+                // Before the slower categories, so the exit data is staged before Spark connects and syncs.
+                performRestore(BackupCategory.SPARK_EXIT) { dataBytes ->
+                    val parsed = json.decodeFromString<SparkExitBackupV1>(String(dataBytes))
+                    sparkRepo.restoreExitBackup(parsed, backupWalletIndex()).getOrThrow()
+                    parsed.createdAt
+                }
                 val retainedWalletBackup = keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
                 if (retainedWalletBackup.isNullOrEmpty()) {
                     var didRestoreWalletBackup = false
@@ -876,11 +882,6 @@ class BackupRepo @Inject constructor(
                     val restored = restoreActivityBackup(dataBytes)
                     if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.ACTIVITY
                     restored.createdAt
-                }
-                performRestore(BackupCategory.SPARK_EXIT) { dataBytes ->
-                    val parsed = json.decodeFromString<SparkExitBackupV1>(String(dataBytes))
-                    sparkRepo.restoreExitBackup(parsed, backupWalletIndex()).getOrThrow()
-                    parsed.createdAt
                 }
 
                 Logger.info("Full restore success", context = TAG)
