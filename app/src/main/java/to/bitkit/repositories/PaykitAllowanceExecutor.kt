@@ -358,8 +358,14 @@ class PaykitAllowanceExecutor @Inject constructor(
     }
 
     private suspend fun journalOutcome(entry: JournalEntry): PaymentOutcome? = when (entry.stage) {
-        // The journal is written before the node call, so no payment left this wallet.
-        Stage.PREPARED, Stage.SUBMITTED, Stage.FAILED -> PaymentOutcome.FAILED
+        Stage.FAILED -> PaymentOutcome.FAILED
+        // The live journal is written before the node call, but a restored snapshot may predate the send,
+        // so a node that knows the payment decides.
+        Stage.PREPARED, Stage.SUBMITTED -> when (entry.paymentHash?.let { payer.lightningPaymentStatus(it) }) {
+            PaymentStatus.SUCCEEDED -> PaymentOutcome.SUCCEEDED
+            PaymentStatus.PENDING -> null
+            PaymentStatus.FAILED, null -> PaymentOutcome.FAILED
+        }
         Stage.SUCCEEDED -> PaymentOutcome.SUCCEEDED
         Stage.SENDING, Stage.SENT, Stage.UNKNOWN -> {
             val paymentHash = entry.paymentHash

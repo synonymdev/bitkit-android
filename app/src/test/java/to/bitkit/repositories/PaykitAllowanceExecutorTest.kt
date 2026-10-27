@@ -45,6 +45,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
@@ -871,6 +872,24 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             mapOf(PaykitAllowance.key(request.counterparty, ALLOWANCE_ID) to 1_000uL),
             state.autoPaidSatsByAllowance,
         )
+    }
+
+    @Test
+    fun `recovery settles a restored submitted attempt from the node`() = test {
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("restored", PaymentExecutionStatus.SUBMITTED)),
+        )
+        val captured = PaykitAllowanceLocalState(
+            journal = listOf(journalEntry("restored", request, Stage.SUBMITTED, paymentHash = PAYMENT_HASH)),
+        )
+        seedJournal(*PaykitAllowanceStateBackup(captured).restored().journal.toTypedArray())
+        nodeStatuses[PAYMENT_HASH] = PaymentStatus.SUCCEEDED
+
+        sut.recover(identity)
+
+        assertEquals(listOf(PaymentOutcome.SUCCEEDED), recordedOutcomes.map { it.outcome })
+        assertEquals(Stage.SUCCEEDED, sut.localState(identity).journal.single().stage)
     }
 
     @Test
