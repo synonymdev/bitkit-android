@@ -458,9 +458,13 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.activate(identity)
         val announced = sut.acceptOffersFromAllowers()
         var duringClear: List<PaykitAllowanceEntry>? = null
+        var clearing = false
         whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
             val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
-            if (duringClear == null) duringClear = sut.acceptOffersFromAllowers()
+            if (!clearing) {
+                clearing = true
+                duringClear = sut.acceptOffersFromAllowers()
+            }
             localState = change(localState)
             localState
         }
@@ -469,6 +473,24 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         assertEquals(emptyList(), duringClear)
         assertTrue(sut.offersToAnnounce.value.isEmpty())
+    }
+
+    @Test
+    fun `an announced offer whose cleared mark could not be saved is not announced again`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+        val announced = sut.acceptOffersFromAllowers()
+        assertEquals(listOf(fixtures.counterpartyKey), announced.map { it.counterparty })
+        // updateLocalState logs a failed save and returns the changed state without storing it.
+        whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
+            val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
+            change(localState)
+        }
+
+        sut.markOffersAnnounced(announced)
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An offer already announced is not announced again")
     }
 
     @Test

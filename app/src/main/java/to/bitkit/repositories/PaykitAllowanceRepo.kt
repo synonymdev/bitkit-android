@@ -137,6 +137,7 @@ class PaykitAllowanceRepo @Inject constructor(
     val events: SharedFlow<PaykitAllowanceEvent> = executor.events
 
     private val _offersToAnnounce = MutableStateFlow<List<PaykitAllowanceEntry>>(emptyList())
+    private val announcedOfferKeys = ConcurrentHashMap.newKeySet<String>()
 
     /**
      * Offers accepted automatically that the user has not been told about yet. They stay here until
@@ -185,6 +186,7 @@ class PaykitAllowanceRepo @Inject constructor(
             if (identityChanged) {
                 manualRequestSignatures.clear()
                 _offersToAnnounce.update { emptyList() }
+                announcedOfferKeys.clear()
                 executor.recover(normalizedIdentity)
             }
             refresh()
@@ -196,6 +198,7 @@ class PaykitAllowanceRepo @Inject constructor(
         executor.activate(null)
         manualRequestSignatures.clear()
         _offersToAnnounce.update { emptyList() }
+        announcedOfferKeys.clear()
         publish(emptyList(), PaykitAllowanceLocalState())
     }
 
@@ -357,6 +360,8 @@ class PaykitAllowanceRepo @Inject constructor(
     suspend fun markOffersAnnounced(offers: List<PaykitAllowanceEntry>) {
         val announced = offers.flatMap { offer -> offer.allowances.map { it.key } }.toSet()
         if (announced.isEmpty()) return
+        // Kept in memory too, so a mark whose clear fails to save is not announced again on the next poll.
+        announcedOfferKeys += announced
         // The marks go before the queued offers: a refresh in between still sees one of them and never queues it again.
         activeIdentity?.let { identity ->
             withContext(ioDispatcher) {
@@ -374,18 +379,19 @@ class PaykitAllowanceRepo @Inject constructor(
     private suspend fun unannouncedOffers(identity: String): List<PaykitAllowanceEntry> {
         // Read before the marks, the reverse of the order markOffersAnnounced clears them in.
         val pending = queuedOfferKeys()
-        val marked = executor.localState(identity).acceptingOfferIds
-        if (marked.isEmpty()) return emptyList()
+        val stored = executor.localState(identity).acceptingOfferIds
+        val marked = stored - announcedOfferKeys
         val stale = _entries.value.flatMap { it.allowances }
             .filter {
                 it.key in marked && it.lifecycleState != AllowanceLifecycleState.PROPOSED &&
                     it.lifecycleState != AllowanceLifecycleState.ACCEPTED
             }
             .map { it.key }
-            .toSet()
+            .toSet() + (stored intersect announcedOfferKeys)
         if (stale.isNotEmpty()) {
             executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - stale) }
         }
+        if (marked.isEmpty()) return emptyList()
         return _entries.value.filter { entry ->
             entry.allowances.none { it.key in pending } &&
                 entry.allowances.any { it.key in marked && it.lifecycleState == AllowanceLifecycleState.ACCEPTED }
