@@ -2656,10 +2656,10 @@ class AppViewModel @Inject constructor(
         val signIn = pubkyRepo.currentSignIn() ?: return
         if (!settings.publicPaykitCleanupPending && !publicPaykitRepo.hasPendingLightningRefresh) {
             if (!PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) return
-            val isUsed = privatePaykitAddressReservationRepo.isCurrentPublicAddressUsed(signIn.publicKey)
-                .onFailure { Logger.warn("Failed to check public Paykit address usage", it, context = TAG) }
+            val needsRotation = privatePaykitAddressReservationRepo.needsPublicAddressRotation(signIn.publicKey)
+                .onFailure { Logger.warn("Failed to check public Paykit address rotation", it, context = TAG) }
                 .getOrDefault(false)
-            if (!isUsed) return
+            if (!needsRotation) return
         }
         refreshPublicPaykitEndpointsIfEnabled(canPublish = canPublish)
     }

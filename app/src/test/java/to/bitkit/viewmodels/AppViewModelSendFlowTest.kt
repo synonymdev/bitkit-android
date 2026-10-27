@@ -360,7 +360,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        whenever { privatePaykitAddressReservationRepo.isCurrentPublicAddressUsed(any()) }
+        whenever { privatePaykitAddressReservationRepo.needsPublicAddressRotation(any()) }
             .thenReturn(Result.success(false))
         whenever(privatePaykitRepo.isProfileDeletionInProgress).thenReturn(isProfileDeletionInProgress)
         whenever(paykitPaymentRequestRepo.isPaymentSubmissionActive).thenReturn(paymentSubmissionActive)
@@ -7292,7 +7292,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
         whenever(migrationService.shouldRetryPendingMigrationData(any())).thenReturn(false)
         val ordinaryAddress = "bcrt1qordinary"
-        val addresses = listOf(ordinaryAddress, "bcrt1qpublic", "bcrt1qrotated", "bcrt1qreconciled", "bcrt1qretry")
+        val addresses = listOf(
+            ordinaryAddress,
+            "bcrt1qpublic",
+            "bcrt1qrotated",
+            "bcrt1qreconciled",
+            "bcrt1qretry",
+            "bcrt1qmonitored",
+        )
         val cache = MutableStateFlow(AppCacheData(onchainAddress = ordinaryAddress))
         val ledger = MutableStateFlow(PrivatePaykitReservationData())
         val reservationStore = mock<PrivatePaykitReservationStore>()
@@ -7349,8 +7356,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).doSuspendableAnswer {
             publisher.syncCurrentPublishedEndpoints(it.getArgument(0), it.getArgument(1), it.getArgument(2))
         }
-        whenever(privatePaykitAddressReservationRepo.isCurrentPublicAddressUsed(any())).doSuspendableAnswer {
-            reservations.isCurrentPublicAddressUsed(it.getArgument(0))
+        whenever(privatePaykitAddressReservationRepo.needsPublicAddressRotation(any())).doSuspendableAnswer {
+            reservations.needsPublicAddressRotation(it.getArgument(0))
         }
         pubkyPublicKey.value = testPublicKey
         walletState.value = WalletState(onchainAddress = ordinaryAddress)
@@ -7447,6 +7454,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(listOf(addresses[2], addresses[3], addresses[4]), publications)
         assertFalse(settingsData.value.publicPaykitCleanupPending)
         assertEquals(setOf(1, 2, 3, 4), ledger.value.reservedReceiveIndexesByAddressType["nativeSegwit"])
+
+        val taprootAddress = "bcrt1ppublic"
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2TR))
+            .thenReturn(Result.success(AddressDerivationInfo(taprootAddress, 0)))
+        whenever(lightningRepo.revealReceiveAddresses(any(), eq(AddressType.P2TR)))
+            .thenReturn(Result.success(Unit))
+        settingsData.update {
+            it.copy(selectedAddressType = "taproot", addressTypesToMonitor = listOf("nativeSegwit", "taproot"))
+        }
+        used += addresses[4]
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 103u))
+        advanceUntilIdle()
+        afterActivitySync.removeAt(0).invoke()
+        advanceUntilIdle()
+        assertEquals(taprootAddress, publications.last())
+        assertFalse(settingsData.value.publicPaykitCleanupPending)
+
+        settingsData.update { it.copy(selectedAddressType = "nativeSegwit") }
+        publisher.syncCurrentPublishedEndpoints().getOrThrow()
+        assertEquals(taprootAddress, publications.last())
+        val publicationCount = publications.size
+        settingsData.update { it.copy(addressTypesToMonitor = listOf("nativeSegwit")) }
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 104u))
+        advanceUntilIdle()
+        afterActivitySync.removeAt(0).invoke()
+        advanceUntilIdle()
+        assertEquals(publicationCount + 1, publications.size)
+        assertEquals(addresses[5], publications.last())
+        assertEquals(setOf(1, 2, 3, 4, 5), ledger.value.reservedReceiveIndexesByAddressType["nativeSegwit"])
+        assertEquals(setOf(0), ledger.value.reservedReceiveIndexesByAddressType["taproot"])
+        assertFalse(settingsData.value.publicPaykitCleanupPending)
         assertEquals("", walletState.value.onchainAddress)
         assertEquals("", cache.value.onchainAddress)
         verify(lightningRepo, never()).createInvoice(null, "", 86_400u)
@@ -7455,7 +7493,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `public rotation retains the event sign in through notification and activity persistence`() = test {
-        whenever(privatePaykitAddressReservationRepo.isCurrentPublicAddressUsed(any()))
+        whenever(privatePaykitAddressReservationRepo.needsPublicAddressRotation(any()))
             .thenReturn(Result.success(true))
         for (replaceDuringNotification in listOf(false, true)) {
             var signIn = PubkySignIn(testPublicKey, 0L)

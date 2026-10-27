@@ -141,8 +141,8 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `public address usage reads preserve reservations and propagate failures`() = test {
-        assertFalse(sut.isCurrentPublicAddressUsed(CONTACT_KEY).getOrThrow())
+    fun `public address rotation checks preserve reservations and propagate failures`() = test {
+        assertFalse(sut.needsPublicAddressRotation(CONTACT_KEY).getOrThrow())
         verify(lightningRepo, never()).newAddressInfoForType(any())
         whenever(coreService.isAddressUsed(any())).thenReturn(false)
         whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(
@@ -153,15 +153,15 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
         assertEquals("bcrt1qpublic", sut.currentOrRotatedPublicAddress(CONTACT_KEY).getOrThrow())
         val before = reservationData.value
         val backupVersion = sut.backupStateVersion.value
-        assertFalse(sut.isCurrentPublicAddressUsed(CONTACT_KEY).getOrThrow())
+        assertFalse(sut.needsPublicAddressRotation(CONTACT_KEY).getOrThrow())
         whenever(coreService.isAddressUsed("bcrt1qpublic")).thenReturn(true)
-        assertTrue(sut.isCurrentPublicAddressUsed(CONTACT_KEY).getOrThrow())
+        assertTrue(sut.needsPublicAddressRotation(CONTACT_KEY).getOrThrow())
         whenever(coreService.isAddressUsed("bcrt1qpublic")).thenReturn(false)
         whenever(lightningRepo.getAddressBalance("bcrt1qpublic")).thenReturn(Result.success(1u))
-        assertTrue(sut.isCurrentPublicAddressUsed(CONTACT_KEY).getOrThrow())
+        assertTrue(sut.needsPublicAddressRotation(CONTACT_KEY).getOrThrow())
         whenever(coreService.isAddressUsed("bcrt1qpublic"))
             .doSuspendableAnswer { throw PrivatePaykitAddressReservationError.AddressReservationFailed }
-        assertTrue(sut.isCurrentPublicAddressUsed(CONTACT_KEY).isFailure)
+        assertTrue(sut.needsPublicAddressRotation(CONTACT_KEY).isFailure)
         assertEquals(before, reservationData.value)
         assertEquals(backupVersion, sut.backupStateVersion.value)
         verify(lightningRepo, times(1)).newAddressInfoForType(any())

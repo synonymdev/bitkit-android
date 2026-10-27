@@ -225,12 +225,12 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         }
     }
 
-    suspend fun isCurrentPublicAddressUsed(publicKey: String): Result<Boolean> = withContext(ioDispatcher) {
+    suspend fun needsPublicAddressRotation(publicKey: String): Result<Boolean> = withContext(ioDispatcher) {
         runSuspendCatching {
             ensurePublicAddressRestoreComplete()
             val current = locked { it.publicAssignments[normalizedPublicKey(publicKey)] }
                 ?: return@runSuspendCatching false
-            isReservedAddressUsed(resolvedAddress(current).getOrThrow())
+            !isAddressTypeMonitored(current.addressType) || isReservedAddressUsed(resolvedAddress(current).getOrThrow())
         }
     }
 
