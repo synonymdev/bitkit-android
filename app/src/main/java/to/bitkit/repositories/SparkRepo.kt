@@ -201,18 +201,22 @@ class SparkRepo @Inject constructor(
         }
     }
 
-    /** Pays [amount] dollar units of the dollar token to [request], a Spark address or invoice. */
-    suspend fun sendUsd(request: String, amount: ULong): Result<Unit> = withContext(bgDispatcher) {
-        runSuspendCatching {
-            val tokenId = requireNotNull(Env.sparkUsdTokenId) { "No Spark dollar token on this network" }
-            val units = fromUsdUnits(amount, usdDecimals(tokenId))
-            val payment = sparkService.send(sparkService.prepareTokenSend(request, units, tokenId))
-            Logger.info("Sent Spark dollar payment '${payment.id}' with status '${payment.status}'", context = TAG)
-            refresh()
-        }.onFailure {
-            Logger.error("Failed to send Spark dollar payment", it, context = TAG)
+    /**
+     * Pays [amount] dollar units of the dollar token to [request], a Spark address or invoice. An invoice that fixes
+     * its amount is paid as it stands, so no rescaled amount can mismatch it.
+     */
+    suspend fun sendUsd(request: String, amount: ULong, isAmountFixed: Boolean = false): Result<Unit> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val tokenId = requireNotNull(Env.sparkUsdTokenId) { "No Spark dollar token on this network" }
+                val units = if (isAmountFixed) null else fromUsdUnits(amount, usdDecimals(tokenId))
+                val payment = sparkService.send(sparkService.prepareTokenSend(request, units, tokenId))
+                Logger.info("Sent Spark dollar payment '${payment.id}' with status '${payment.status}'", context = TAG)
+                refresh()
+            }.onFailure {
+                Logger.error("Failed to send Spark dollar payment", it, context = TAG)
+            }
         }
-    }
 
     private suspend fun usdDecimals(tokenId: String): Int = usdMetadata(tokenId).decimals.toInt()
 

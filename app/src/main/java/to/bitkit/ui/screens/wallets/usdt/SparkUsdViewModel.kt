@@ -135,7 +135,7 @@ class SparkUsdViewModel @Inject constructor(
         val recipient = state.recipient ?: return
         val amount = state.amount ?: return
         _state.update { it.copy(busy = true, error = null) }
-        sparkRepo.sendUsd(recipient, amount)
+        sparkRepo.sendUsd(recipient, amount, state.isAmountFixed)
             .onSuccess { _state.update { it.copy(busy = false, completed = true) } }
             .onFailure { _state.update { it.copy(busy = false, error = R.string.usdt__send_failed_description) } }
     }
