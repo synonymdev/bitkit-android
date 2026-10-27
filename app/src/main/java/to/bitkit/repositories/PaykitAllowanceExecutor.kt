@@ -125,6 +125,10 @@ class PaykitAllowancePayer @Inject constructor(
         return PaymentOutcome.SUCCEEDED.takeIf { hasProof }
     }
 
+    /** True once the node can list its payments, so a payment missing from the list is one it never sent. */
+    suspend fun canListLightningPayments(): Boolean =
+        runSuspendCatching { lightningRepo.listPaymentsOrNull() }.getOrNull() != null
+
     /** The node's status for an outbound payment, or null when the node does not know it (or is not running). */
     suspend fun lightningPaymentStatus(paymentHash: String): PaymentStatus? =
         runSuspendCatching { lightningRepo.listPaymentsOrNull() }
@@ -287,8 +291,12 @@ class PaykitAllowanceExecutor @Inject constructor(
                     }
                     PaymentExecutionStatus.SUBMITTED, PaymentExecutionStatus.UNKNOWN -> {
                         val entry = journal[attempt.attemptId]
-                        val outcome = entry?.let { journalOutcome(it) }
-                            ?: PaymentOutcome.UNKNOWN.takeIf { attempt.status == PaymentExecutionStatus.SUBMITTED }
+                        val outcome = if (entry != null && awaitsNode(entry)) {
+                            null
+                        } else {
+                            entry?.let { journalOutcome(it) }
+                                ?: PaymentOutcome.UNKNOWN.takeIf { attempt.status == PaymentExecutionStatus.SUBMITTED }
+                        }
                         outcome?.let { record(attempt.attemptId, it, identity) }
                         // One that paid nothing gives the payee's list back, as a live failure does.
                         if (outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) {
@@ -369,10 +377,14 @@ class PaykitAllowanceExecutor @Inject constructor(
         Stage.FAILED -> PaymentOutcome.FAILED
         // The live journal is written before the node call, but a restored snapshot may predate the send,
         // so a node that knows the payment decides.
-        Stage.PREPARED, Stage.SUBMITTED -> when (entry.paymentHash?.let { payer.lightningPaymentStatus(it) }) {
-            PaymentStatus.SUCCEEDED -> PaymentOutcome.SUCCEEDED
-            PaymentStatus.PENDING -> null
-            PaymentStatus.FAILED, null -> PaymentOutcome.FAILED
+        Stage.PREPARED, Stage.SUBMITTED -> if (awaitsNode(entry)) {
+            null
+        } else {
+            when (entry.paymentHash?.let { payer.lightningPaymentStatus(it) }) {
+                PaymentStatus.SUCCEEDED -> PaymentOutcome.SUCCEEDED
+                PaymentStatus.PENDING -> null
+                PaymentStatus.FAILED, null -> PaymentOutcome.FAILED
+            }
         }
         Stage.SUCCEEDED -> PaymentOutcome.SUCCEEDED
         Stage.SENDING, Stage.SENT, Stage.UNKNOWN -> {
@@ -388,6 +400,12 @@ class PaykitAllowanceExecutor @Inject constructor(
             }
         }
     }
+
+    // Before the node runs (a restore starts Pubky first) its empty list would read as never sent.
+    private suspend fun awaitsNode(entry: JournalEntry): Boolean =
+        (entry.stage == Stage.PREPARED || entry.stage == Stage.SUBMITTED) &&
+            entry.paymentHash != null &&
+            !payer.canListLightningPayments()
 
     private suspend fun record(attemptId: String, outcome: PaymentOutcome, identity: String) {
         paykitSdkService.recordPaymentOutcome(PaymentOutcomeReport(attemptId, outcome))

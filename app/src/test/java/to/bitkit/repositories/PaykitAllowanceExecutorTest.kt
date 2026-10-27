@@ -101,6 +101,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     private val recordedOutcomes = mutableListOf<PaymentOutcomeReport>()
     private val reconciliations = mutableListOf<AllowanceAccountingReconciliation>()
     private val nodeStatuses = mutableMapOf<String, PaymentStatus>()
+    private var nodeListsPayments = true
     private val events = mutableListOf<PaykitAllowanceEvent>()
     private lateinit var sut: PaykitAllowanceExecutor
 
@@ -227,6 +228,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(payer.payLightning(any(), anyOrNull(), anyOrNull(), any())).thenReturn(Result.success(PAYMENT_HASH))
         whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
         whenever(payer.lightningPaymentStatus(any())).thenAnswer { nodeStatuses[it.getArgument<String>(0)] }
+        whenever(payer.canListLightningPayments()).thenAnswer { nodeListsPayments }
     }
 
     // region Admission
@@ -915,6 +917,30 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertEquals(listOf(PaymentOutcome.SUCCEEDED), recordedOutcomes.map { it.outcome })
         assertEquals(Stage.SUCCEEDED, sut.localState(identity).journal.single().stage)
+    }
+
+    @Test
+    fun `a restored submitted attempt waits until the node can list payments`() = test {
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("restored", PaymentExecutionStatus.SUBMITTED)),
+        )
+        val captured = PaykitAllowanceLocalState(
+            journal = listOf(journalEntry("restored", request, Stage.SUBMITTED, paymentHash = PAYMENT_HASH)),
+        )
+        seedJournal(*PaykitAllowanceStateBackup(captured).restored().journal.toTypedArray())
+        nodeStatuses[PAYMENT_HASH] = PaymentStatus.SUCCEEDED
+        nodeListsPayments = false
+
+        sut.recover(identity)
+
+        assertTrue(recordedOutcomes.isEmpty(), "Nothing is settled before the node runs")
+        assertEquals(Stage.SUBMITTED, sut.localState(identity).journal.single().stage)
+
+        nodeListsPayments = true
+        sut.recover(identity)
+
+        assertEquals(listOf(PaymentOutcome.SUCCEEDED), recordedOutcomes.map { it.outcome })
     }
 
     @Test

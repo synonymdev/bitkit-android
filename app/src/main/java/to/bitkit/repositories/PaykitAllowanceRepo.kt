@@ -165,7 +165,11 @@ class PaykitAllowanceRepo @Inject constructor(
                 .map { it.nodeLifecycleState.isRunning() }
                 .distinctUntilChanged()
                 .filter { it }
-                .collect { executor.settleOpenLightningAttempts() }
+                .collect {
+                    // Attempts recovery left open while the node could not list payments are settled now.
+                    activeIdentity?.let { identity -> executor.recover(identity) }
+                    executor.settleOpenLightningAttempts()
+                }
         }
     }
 
