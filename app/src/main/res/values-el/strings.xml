@@ -1729,4 +1729,5 @@
     <string name="widgets__widget__settings">Ρυθμίσεις widget</string>
     <string name="widgets__widget__size_small">Μικρό</string>
     <string name="widgets__widget__size_wide">Φαρδύ</string>
+    <string name="wallet__balance_updating">Ενημέρωση υπολοίπου…</string>
 </resources>

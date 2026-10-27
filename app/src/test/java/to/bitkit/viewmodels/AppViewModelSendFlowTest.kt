@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -160,6 +161,7 @@ import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.PaykitAllowanceEvent
 import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
@@ -6754,6 +6756,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
+    }
+
+    @Test
+    fun `limit reached behind the pin screen still notifies`() = test {
+        val notificationManager = mock<NotificationManager> { on { areNotificationsEnabled() } doReturn false }
+        whenever(context.getSystemService(Context.NOTIFICATION_SERVICE)).thenReturn(notificationManager)
+        val allowanceEvents = MutableSharedFlow<PaykitAllowanceEvent>()
+        whenever(paykitAllowanceRepo.events).thenReturn(allowanceEvents)
+        sut = createViewModel()
+        App.currentActivity = CurrentActivity().also { it.onActivityStarted(mock<Activity>()) }
+        sut.setIsAuthenticated(false)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        allowanceEvents.emit(PaykitAllowanceEvent.LimitReached(testPublicKey, 4_000uL))
+        runCurrent()
+
+        verify(toastManager).enqueue(argThat { testTag == "AllowanceLimitToast" })
+    }
+
+    @Test
+    fun `limit reached in the unlocked foreground posts nothing`() = test {
+        val notificationManager = mock<NotificationManager> { on { areNotificationsEnabled() } doReturn false }
+        whenever(context.getSystemService(Context.NOTIFICATION_SERVICE)).thenReturn(notificationManager)
+        val allowanceEvents = MutableSharedFlow<PaykitAllowanceEvent>()
+        whenever(paykitAllowanceRepo.events).thenReturn(allowanceEvents)
+        sut = createViewModel()
+        App.currentActivity = CurrentActivity().also { it.onActivityStarted(mock<Activity>()) }
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        allowanceEvents.emit(PaykitAllowanceEvent.LimitReached(testPublicKey, 4_000uL))
+        runCurrent()
+
+        verify(toastManager, never()).enqueue(argThat { testTag == "AllowanceLimitToast" })
     }
 
     @Test

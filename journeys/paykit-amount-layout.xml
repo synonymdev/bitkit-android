@@ -1,0 +1,12 @@
+<journey name="paykit amount layout">
+  <description>Use an onboarded wallet with USDT enabled, an existing test contact and a current BTC/USD rate. Verify request denomination layout without sending or publishing a request.</description>
+  <actions>
+    <action>Open Payment Requests and create a request for the test contact. Open Amount.</action>
+    <action>Use the denomination toggle to select USD and enter 1.50. Verify the amount is leading-aligned near the header, the denomination toggle is trailing-aligned directly below it, and a divider separates them from the keypad.</action>
+    <action>Use the single denomination toggle to switch between BTC and USD several times. Verify the Bitcoin unit control is shown only in BTC. Verify the amount controls, divider and keypad stay at the same vertical positions, including when the Bitcoin unit button wraps below the denomination toggle at enlarged text sizes.</action>
+    <action>Verify every keypad key remains legible and tappable on a short screen at enlarged text sizes, including zero, decimal/000 and Delete. Scroll as needed to reach all keys and Continue. Continue to details and verify the request denomination and amount remain 1.50 USD. Cancel without sending.</action>
+    <action>Open Subscriptions and start creating a subscription for the same contact. Select USDT before opening Amount. Starting from zero, enter 1.50 without deleting first. Continue and verify the subscription amount is 1.50 USD. Reopen Amount and verify the existing cents are preserved. Repeat the layout check in BTC and USD. Verify the controls do not overlap the keypad or Continue.</action>
+    <action>Return to subscription details and verify accepted payment methods remain either USDT or Bitcoin methods, never both groups together. Cancel without sending.</action>
+    <action>Repeat the amount checks at a compact screen width and enlarged system text. Verify every control remains readable and reachable; controls may stack or wrap and the screen may scroll.</action>
+  </actions>
+</journey>

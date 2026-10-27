@@ -35,6 +35,8 @@ import com.synonym.bitkitcore.UsdtDepositDetail
 import com.synonym.bitkitcore.UsdtDepositNetwork
 import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.PaykitAmount
@@ -64,6 +66,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
     viewModel: UsdtViewModel,
     tabs: ImmutableList<ReceiveTab>,
     onSelectTab: (ReceiveTab) -> Unit,
+    tabLabels: ImmutableMap<ReceiveTab, String> = persistentMapOf(),
     onBack: () -> Unit,
     onBlockingChange: (Boolean) -> Unit,
     onContacts: (() -> Unit)? = null,
@@ -128,6 +131,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
         CustomTabRowWithSpacing(
             tabs = tabs,
             currentTabIndex = tabs.indexOf(ReceiveTab.USDT),
+            labelOverrides = tabLabels,
             onTabChange = onSelectTab
         )
         VerticalSpacer(16.dp)
@@ -146,7 +150,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
                 }
             )
     ) {
-        Content(
+        UsdtDepositReceiveContent(
             page = page,
             onPage = { page = it },
             wallet = wallet,
@@ -188,7 +192,7 @@ internal fun ColumnScope.UsdtDepositReceiveScreen(
 }
 
 @Composable
-private fun ColumnScope.Content(
+internal fun ColumnScope.UsdtDepositReceiveContent(
     page: ReceivePage,
     onPage: (ReceivePage) -> Unit,
     wallet: UsdtWalletState,
@@ -239,7 +243,8 @@ private fun ColumnScope.Content(
                 uri = state.address?.uri ?: uri,
                 error = receiveError,
                 network = state.network?.label ?: "Arbitrum One",
-                amount = state.address?.let { usdtFormatAmount(it.amount) } ?: amount,
+                amount = state.address?.let { usdtFormatAmount(it.amount) }
+                    ?: atomic?.let { usdtFormatAmount(it) }.orEmpty(),
                 onEdit = onRefresh,
                 onNetwork = { onPage(ReceivePage.NETWORKS) },
             )
@@ -247,7 +252,7 @@ private fun ColumnScope.Content(
     }
 }
 
-private enum class ReceivePage { ADDRESS, NETWORKS, AMOUNT, FEES }
+internal enum class ReceivePage { ADDRESS, NETWORKS, AMOUNT, FEES }
 
 @Composable
 private fun ColumnScope.NetworkSelector(
