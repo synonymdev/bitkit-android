@@ -3587,6 +3587,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scanned gift code shows the unsupported code error and opens no sheet`() = test {
+        val giftCode = "bitkit://gift-abc123-3000"
+        whenever(context.getString(R.string.other__qr_error_header)).thenReturn("Unsupported QR")
+        whenever(context.getString(R.string.other__qr_error_text)).thenReturn("Bitkit can't read this QR.")
+        whenever(coreService.decode(giftCode)).thenReturn(Scanner.Gift(code = "abc123", amount = 3_000uL))
+        clearInvocations(toastManager)
+
+        sut.onScanResult(giftCode)
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, atLeastOnce()).enqueue(toastCaptor.capture())
+        assertEquals("Unsupported QR", toastCaptor.lastValue.title)
+        assertEquals("Bitkit can't read this QR.", toastCaptor.lastValue.description)
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
     fun `new scan does not inherit an active payment request context`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()

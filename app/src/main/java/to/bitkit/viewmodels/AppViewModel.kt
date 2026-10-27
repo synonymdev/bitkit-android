@@ -4603,7 +4603,6 @@ class AppViewModel @Inject constructor(
             is Scanner.LnurlAuth -> handleNonPaymentScan { onScanLnurlAuth(scan.data, fromMainScanner) }
             is Scanner.LnurlChannel -> handleNonPaymentScan { onScanLnurlChannel(scan.data) }
             is Scanner.NodeId -> handleNonPaymentScan { onScanNodeId(scan) }
-            is Scanner.Gift -> handleNonPaymentScan { onScanGift() }
             else -> {
                 val hasIncomingPaymentRequest = clearIncomingPaymentRequestTarget()
                 val logMessage = if (hasIncomingPaymentRequest) {
@@ -5452,11 +5451,6 @@ class AppViewModel @Inject constructor(
         hideSheet() // hide scan sheet if opened
         val nextRoute = Routes.ExternalConnection(data.url)
         mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
-    }
-
-    private fun onScanGift() {
-        hideSheet() // hide scan sheet if opened
-        showSheet(Sheet.TransferUnavailable)
     }
 
     private suspend fun handleQuickPayIfApplicable(
