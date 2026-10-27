@@ -1486,6 +1486,7 @@
     <string name="subscriptions__allowance_no_contacts">Adicione primeiro um contacto. As mesadas cobrem pedidos de pagamento dos seus contactos.</string>
     <string name="subscriptions__allowance_offer_accepted_description">{name} configurou uma mesada para si</string>
     <string name="subscriptions__allowance_offer_accepted_title">Mesada adicionada</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} configuraram mesadas para si</string>
     <string name="subscriptions__allowance_offer_explanation">A carteira de {name} pagará os seus pedidos dentro destes limites sem perguntar de cada vez. Qualquer uma das partes pode terminá-la.</string>
     <string name="subscriptions__allowance_offer_headline">{name} oferece\n&lt;accent&gt;uma mesada&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pago automaticamente</string>

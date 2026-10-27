@@ -1277,16 +1277,19 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    /** Several offers accepted in one refresh are announced together, so no toast replaces another. */
     private fun announceAcceptedAllowanceOffers(offers: List<PaykitAllowanceEntry>) {
-        offers.forEach { offer ->
-            notifyAllowanceEvent(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.subscriptions__allowance_offer_accepted_title),
-                description = context.getString(R.string.subscriptions__allowance_offer_accepted_description)
-                    .replace("{name}", allowanceContactName(offer.counterparty)),
-                testTag = "AllowanceOfferAcceptedToast",
-            )
-        }
+        val description = allowanceOffersAcceptedDescription(
+            names = offers.map { allowanceContactName(it.counterparty) },
+            single = context.getString(R.string.subscriptions__allowance_offer_accepted_description),
+            several = context.getString(R.string.subscriptions__allowance_offers_accepted_description),
+        ) ?: return
+        notifyAllowanceEvent(
+            type = Toast.ToastType.SUCCESS,
+            title = context.getString(R.string.subscriptions__allowance_offer_accepted_title),
+            description = description,
+            testTag = "AllowanceOfferAcceptedToast",
+        )
     }
 
     /**
@@ -8616,4 +8619,14 @@ internal fun resolvePastedPubkyRoute(
     }
 
     return Routes.AddContact(normalizedKey)
+}
+
+/** One "Allowance Added" description for every offer accepted at once, or null when there is none. */
+internal fun allowanceOffersAcceptedDescription(names: List<String>, single: String, several: String): String? {
+    val distinct = names.distinct()
+    return when (distinct.size) {
+        0 -> null
+        1 -> single.replace("{name}", distinct.single())
+        else -> several.replace("{names}", distinct.joinToString(", "))
+    }
 }

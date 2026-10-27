@@ -1496,6 +1496,7 @@
     <string name="subscriptions__allowance_no_contacts">Primero añada un contacto. Las asignaciones cubren las solicitudes de pago de sus contactos.</string>
     <string name="subscriptions__allowance_offer_accepted_description">{name} configuró una asignación para usted</string>
     <string name="subscriptions__allowance_offer_accepted_title">Asignación añadida</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} configuraron asignaciones para usted</string>
     <string name="subscriptions__allowance_offer_explanation">El monedero de {name} pagará sus solicitudes dentro de estos límites sin preguntar cada vez. Cualquiera de los dos puede finalizarla.</string>
     <string name="subscriptions__allowance_offer_headline">{name} le ofrece\n&lt;accent&gt;una asignación&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pagado automáticamente</string>

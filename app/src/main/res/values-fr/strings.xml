@@ -1497,6 +1497,7 @@
     <string name="subscriptions__allowance_no_contacts">Ajoutez d\'abord un contact. Les allocations couvrent les demandes de paiement de vos contacts.</string>
     <string name="subscriptions__allowance_offer_accepted_description">{name} vous a configuré une allocation</string>
     <string name="subscriptions__allowance_offer_accepted_title">Allocation ajoutée</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} vous ont configuré des allocations</string>
     <string name="subscriptions__allowance_offer_explanation">Le portefeuille de {name} paiera vos demandes dans ces limites sans demander à chaque fois. Chacun de vous peut y mettre fin.</string>
     <string name="subscriptions__allowance_offer_headline">{name} vous offre\n&lt;accent&gt;une allocation&lt;/accent&gt;</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} payé automatiquement</string>
