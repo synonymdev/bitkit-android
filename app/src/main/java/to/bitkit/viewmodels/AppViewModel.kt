@@ -1854,6 +1854,15 @@ class AppViewModel @Inject constructor(
                     request,
                     IncomingPaykitPaymentRequestFailureReason.EndpointNotPayable,
                 )
+            } else if (
+                result != PublicPaykitPaymentResult.WaitingForUpdatedPaymentList &&
+                requestedPaymentRequestId.value == request.id
+            ) {
+                finishFailedRequestedPaymentRequestPresentation(
+                    request = request,
+                    reason = result?.incomingPaymentRequestFailureReason
+                        ?: IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+                )
             } else {
                 deferPaymentRequestPresentation(
                     request = request,
@@ -1873,6 +1882,24 @@ class AppViewModel @Inject constructor(
             endpoints = result.endpoints,
         )
         return true
+    }
+
+    private fun finishFailedRequestedPaymentRequestPresentation(
+        request: PaykitPaymentRequest,
+        reason: IncomingPaykitPaymentRequestFailureReason,
+    ) {
+        paykitPaymentRequestDiagnostics.logPresentationRejection(request.counterparty, reason)
+        val restorePaymentRequestSheet = shouldRestorePaymentRequestSheet
+        paymentRequestPresentationGeneration++
+        clearRequestedPaymentRequest()
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.slashtags__error_pay_waiting_msg),
+            testTag = "PaymentRequestWaitingForDetailsToast",
+        )
+        if (restorePaymentRequestSheet) showSheet(Sheet.PaymentRequests)
+        completePaymentRequestPresentation(request)
     }
 
     private fun finishPrivateLinkPendingPaymentRequestPresentation(request: PaykitPaymentRequest) {
