@@ -821,8 +821,9 @@ class PaykitAllowanceExecutor @Inject constructor(
     }
 
     /**
-     * Records a released manual on-chain send of [requestId] as failed: the release spent its coins back to the wallet
-     * and removed the evidence recovery reads, so the attempt would otherwise stay unknown and hold capacity.
+     * Records a released manual on-chain send of [requestId] as failed: the release spends its coins back to the wallet
+     * and removes the evidence recovery reads, so the attempt would otherwise stay unknown and hold capacity. Throws
+     * when an outcome could not be recorded, so the release is not finished without it.
      */
     suspend fun onchainSendReleased(payerIdentity: String?, requestId: PaykitPaymentRequestId) {
         val identity = activeIdentity?.takeIf { PubkyPublicKeyFormat.matches(it, payerIdentity) } ?: return
@@ -832,10 +833,7 @@ class PaykitAllowanceExecutor @Inject constructor(
                     it.requestId == requestId && !it.isAutomatic && it.paymentHash == null &&
                         it.stage in SETTLEABLE_STAGES
                 }
-                for (attempt in attempts) {
-                    runSuspendCatching { record(attempt.attemptId, PaymentOutcome.FAILED, identity) }
-                        .onFailure { Logger.warn("Failed to record a released on-chain payment", it, context = TAG) }
-                }
+                for (attempt in attempts) record(attempt.attemptId, PaymentOutcome.FAILED, identity)
             }
         }
     }
