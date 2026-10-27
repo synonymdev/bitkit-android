@@ -34,6 +34,7 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
@@ -579,27 +580,31 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a payment list given back by a failed send is not given back again by the node's failure event`() = test {
+    fun `a payment list given back by a failed send stays given back after the node's failure event`() = test {
         sut.activate(identity)
         whenever(
             payer.payLightning(any(), anyOrNull(), anyOrNull(), any())
         ).thenReturn(Result.failure(TestAllowanceError("send")))
         whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
 
-        // The node's failure event lands between the failed send's release and its record.
+        // The node's failure event lands during the failed send's release; a repeated release is owner-checked.
+        var isSettling = false
         whenever(payer.releasePaymentList(any(), any(), any())).doSuspendableAnswer {
-            sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+            if (!isSettling) {
+                isSettling = true
+                sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+            }
             Result.success(Unit)
         }
 
         sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
-        verify(payer, times(1)).releasePaymentList(any(), any(), any())
+        verify(payer, atLeastOnce()).releasePaymentList(any(), any(), eq(AUTOMATIC_ATTEMPT_ID))
         assertNull(sut.localState(identity).journal.single().paymentListVersion)
     }
 
     @Test
-    fun `a payment list whose cleared claim cannot be saved is not given back`() = test {
+    fun `a payment list whose cleared version cannot be saved stays journaled for recovery`() = test {
         sut.activate(identity)
         seedJournal(
             journalEntry("attempt-1", fixtures.paymentRequest(), Stage.SENT, paymentHash = PAYMENT_HASH)
@@ -609,7 +614,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
 
-        verify(payer, never()).releasePaymentList(any(), any(), any())
+        verify(payer, times(1)).releasePaymentList(any(), any(), any())
         assertEquals(4uL, sut.localState(identity).journal.single().paymentListVersion)
     }
 
@@ -627,7 +632,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
 
         assertEquals(listOf(Stage.FAILED), sut.localState(identity).journal.map { it.stage })
-        verify(payer, never()).releasePaymentList(any(), any(), any())
+        assertEquals(4uL, sut.localState(identity).journal.single().paymentListVersion)
 
         failSave = { false }
         accountingState = fixtures.accountingState(
@@ -635,7 +640,8 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         )
         sut.recover(identity)
 
-        verify(payer, times(1)).releasePaymentList(any(), any(), any())
+        verify(payer, times(2)).releasePaymentList(any(), any(), any())
+        assertNull(sut.localState(identity).journal.single().paymentListVersion)
     }
 
     @Test
