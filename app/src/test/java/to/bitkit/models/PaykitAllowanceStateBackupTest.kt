@@ -60,6 +60,22 @@ class PaykitAllowanceStateBackupTest {
     }
 
     @Test
+    fun `a journal entry that omits its optional fields still restores`() {
+        val wire = """
+            {"journal":[{"attemptId":"manual-1","isAutomatic":false,
+            "requestId":{"paymentRequestId":"request-1","counterparty":"${REQUEST_ID.counterparty}"},
+            "amountSats":1000,"paymentEndpointIdentifier":"btc-regtest-p2wpkh","stage":"sent",
+            "createdAt":"2026-10-27T01:00:00.000Z"}]}
+        """.trimIndent().replace("\n", "")
+
+        val entry = json.decodeFromString<PaykitAllowanceStateBackup>(wire).restored().journal.single()
+
+        assertEquals(null, entry.allowanceId)
+        assertEquals(null, entry.paymentListVersion)
+        assertEquals(Stage.SENT, entry.stage)
+    }
+
+    @Test
     fun `a journal stage this version does not know restores as unknown`() {
         val wire = GOLDEN.replace("\"stage\":\"succeeded\"", "\"stage\":\"settling\"")
 

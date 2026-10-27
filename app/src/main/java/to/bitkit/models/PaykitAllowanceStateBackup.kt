@@ -50,7 +50,7 @@ data class PaykitAllowanceStateBackup(
         val attemptId: String,
         val isAutomatic: Boolean,
         val requestId: PaykitPaymentRequestId,
-        val allowanceId: String?,
+        val allowanceId: String? = null,
         val amountSats: ULong,
         val paymentEndpointIdentifier: String,
         val paymentHash: String? = null,
