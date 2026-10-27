@@ -1004,6 +1004,23 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a released manual on-chain payment is recorded failed`() = test {
+        sut.activate(identity)
+        val request = fixtures.paymentRequest()
+        val attemptId = checkNotNull(sut.beginManualPayment(request, fixtures.onchainIdentifier).getOrThrow())
+        sut.finishManualPayment(attemptId, PaymentOutcome.UNKNOWN, transactionId = "c".repeat(64))
+        recordedOutcomes.clear()
+
+        sut.onchainSendReleased(fixtures.otherCounterpartyKey, request.id)
+        assertEquals(emptyList(), recordedOutcomes, "Another identity's release changes nothing")
+
+        sut.onchainSendReleased(identity, request.id)
+
+        assertEquals(listOf(PaymentOutcomeReport(attemptId, PaymentOutcome.FAILED)), recordedOutcomes)
+        assertEquals(Stage.FAILED, sut.localState(identity).journal.single().stage)
+    }
+
+    @Test
     fun `manual payment fails when the request is already recorded`() = test {
         sut.activate(identity)
         manualReservation = PaymentAttemptDecision.Blocked(AllowanceAccountingBlock.PaymentAlreadyRecorded)

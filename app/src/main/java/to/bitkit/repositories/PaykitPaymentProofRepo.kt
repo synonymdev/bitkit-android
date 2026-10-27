@@ -124,6 +124,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     private val store: PaykitPaymentProofStore,
     private val hwWalletRepo: HwWalletRepo,
     private val privatePaykitRepo: Lazy<PrivatePaykitRepo>,
+    private val allowanceExecutor: Lazy<PaykitAllowanceExecutor>,
 ) {
     companion object {
         private const val TAG = "PaykitPaymentProofRepo"
@@ -589,6 +590,8 @@ class PaykitPaymentProofRepo @Inject constructor(
         if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt) { removeOriginalShopProofs(it) }) {
             throw OnchainSendBlockedError(attempt)
         }
+        // The release removed what allowance recovery reads, so the request's ledger attempt is failed here.
+        attempt.requestId?.let { allowanceExecutor.get().onchainSendReleased(attempt.payerIdentity, it) }
         Logger.info(
             "Released on-chain payment '${attempt.txid}' through '${attempt.releaseTxid}' after its request ended",
             context = TAG,
