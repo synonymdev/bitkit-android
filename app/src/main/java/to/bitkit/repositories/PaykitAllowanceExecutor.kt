@@ -953,7 +953,6 @@ private fun PaykitPaymentRequest.scope() = PaymentRequestScope(counterparty, pay
 private fun JournalEntry.isPaidAutomaticallyBy(stage: Stage): Boolean =
     isAutomatic && this.stage != Stage.SUCCEEDED && stage == Stage.SUCCEEDED
 
-/** Adds a payment to the lasting totals, which outlive the journal's trimming. */
 private fun PaykitAllowanceLocalState.withAutoPaid(entry: JournalEntry): PaykitAllowanceLocalState {
     // Allowance ids are unique per contact only, so payments count toward the contact's own allowance.
     val key = PaykitAllowance.key(entry.requestId.counterparty, entry.allowanceId)
