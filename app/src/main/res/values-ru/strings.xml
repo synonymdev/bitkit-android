@@ -1757,4 +1757,5 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="widgets__widget__settings">Настройки Виджета</string>
     <string name="widgets__widget__size_small">Маленький</string>
     <string name="widgets__widget__size_wide">Широкий</string>
+    <string name="wallet__balance_updating">Обновление баланса…</string>
 </resources>

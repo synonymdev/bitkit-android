@@ -1729,4 +1729,5 @@
     <string name="widgets__widget__settings">Configurações do Widget</string>
     <string name="widgets__widget__size_small">Pequeno</string>
     <string name="widgets__widget__size_wide">Largo</string>
+    <string name="wallet__balance_updating">Atualizando saldo…</string>
 </resources>
