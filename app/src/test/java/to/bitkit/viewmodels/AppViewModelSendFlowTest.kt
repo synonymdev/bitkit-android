@@ -289,6 +289,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val pubkyRepo = mock<PubkyRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
+    private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val paymentSubmissionActive = MutableStateFlow(false)
     private val paykitPaymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val paykitAllowanceRepo = mock<PaykitAllowanceRepo>()
@@ -359,6 +360,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        whenever { privatePaykitAddressReservationRepo.isCurrentPublicAddressUsed(any()) }
+            .thenReturn(Result.success(false))
         whenever(privatePaykitRepo.isProfileDeletionInProgress).thenReturn(isProfileDeletionInProgress)
         whenever(paykitPaymentRequestRepo.isPaymentSubmissionActive).thenReturn(paymentSubmissionActive)
         whenever(paykitPaymentRequestRepo.setPaymentSubmissionActive(any())).thenAnswer {
@@ -925,6 +928,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         nodeServiceFgState = nodeServiceFgState,
         publicPaykitRepo = publicPaykitRepo,
         privatePaykitRepo = privatePaykitRepo,
+        privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
         contactPaymentSettingsRepo = contactPaymentSettingsRepo,
         paykitPaymentRequestRepo = paykitPaymentRequestRepo,
         paykitAllowanceRepo = paykitAllowanceRepo,
@@ -7288,7 +7292,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
         whenever(migrationService.shouldRetryPendingMigrationData(any())).thenReturn(false)
         val ordinaryAddress = "bcrt1qordinary"
-        val addresses = listOf(ordinaryAddress, "bcrt1qpublic", "bcrt1qrotated", "bcrt1qreconciled")
+        val addresses = listOf(ordinaryAddress, "bcrt1qpublic", "bcrt1qrotated", "bcrt1qreconciled", "bcrt1qretry")
         val cache = MutableStateFlow(AppCacheData(onchainAddress = ordinaryAddress))
         val ledger = MutableStateFlow(PrivatePaykitReservationData())
         val reservationStore = mock<PrivatePaykitReservationStore>()
@@ -7322,8 +7326,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         val sdk = mock<PaykitSdkService>()
         val publications = mutableListOf<String>()
+        var failPublication = false
         whenever(sdk.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
             if (!it.getArgument<suspend () -> Boolean>(1)()) return@doSuspendableAnswer null
+            check(!failPublication)
             val address = it.getArgument<List<Endpoint>>(0).single().value
             assertEquals(address, ledger.value.publicAssignments.values.single().address)
             publications += address
@@ -7342,6 +7348,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).doSuspendableAnswer {
             publisher.syncCurrentPublishedEndpoints(it.getArgument(0), it.getArgument(1), it.getArgument(2))
+        }
+        whenever(privatePaykitAddressReservationRepo.isCurrentPublicAddressUsed(any())).doSuspendableAnswer {
+            reservations.isCurrentPublicAddressUsed(it.getArgument(0))
         }
         pubkyPublicKey.value = testPublicKey
         walletState.value = WalletState(onchainAddress = ordinaryAddress)
@@ -7371,6 +7380,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             afterActivitySync += it.getArgument<suspend () -> Unit>(0)
             Unit
         }
+
+        val idleSettings = settingsData.value
+        val idleReservations = ledger.value
+        repeat(3) {
+            emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+            advanceUntilIdle()
+            afterActivitySync.removeAt(0).invoke()
+            advanceUntilIdle()
+        }
+        assertTrue(publications.isEmpty())
+        assertEquals(idleSettings, settingsData.value)
+        assertEquals(idleReservations, ledger.value)
+        clearInvocations(coreService)
 
         val output = TxOutput("", null, addresses[1], 1_000L, 0u)
         emitNodeEvent(
@@ -7407,12 +7429,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(reservations.isUnavailableForReusableReceive(addresses[2]))
         assertTrue(ledger.value.contactAssignments.isEmpty())
         assertFalse(settingsData.value.publicPaykitCleanupPending)
+        used += addresses[3]
+        failPublication = true
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 101u))
+        advanceUntilIdle()
+        afterActivitySync.removeAt(0).invoke()
+        advanceUntilIdle()
+        assertEquals(listOf(addresses[2], addresses[3]), publications)
+        assertEquals(addresses[4], ledger.value.publicAssignments.values.single().address)
+        assertTrue(settingsData.value.publicPaykitCleanupPending)
+
+        failPublication = false
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 102u))
+        advanceUntilIdle()
+        afterActivitySync.removeAt(0).invoke()
+        advanceUntilIdle()
+        assertEquals(listOf(addresses[2], addresses[3], addresses[4]), publications)
+        assertFalse(settingsData.value.publicPaykitCleanupPending)
+        assertEquals(setOf(1, 2, 3, 4), ledger.value.reservedReceiveIndexesByAddressType["nativeSegwit"])
+        assertEquals("", walletState.value.onchainAddress)
+        assertEquals("", cache.value.onchainAddress)
         verify(lightningRepo, never()).createInvoice(null, "", 86_400u)
         verify(walletRepo, never()).refreshReusableReceiveAddress()
     }
 
     @Test
     fun `public rotation retains the event sign in through notification and activity persistence`() = test {
+        whenever(privatePaykitAddressReservationRepo.isCurrentPublicAddressUsed(any()))
+            .thenReturn(Result.success(true))
         for (replaceDuringNotification in listOf(false, true)) {
             var signIn = PubkySignIn(testPublicKey, 0L)
             pubkyPublicKey.value = testPublicKey

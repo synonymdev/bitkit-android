@@ -205,6 +205,7 @@ import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
+import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
@@ -304,6 +305,7 @@ class AppViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
+    private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
     private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
     private val paykitAllowanceRepo: PaykitAllowanceRepo,
@@ -2393,7 +2395,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleSyncCompleted(event: Event.SyncCompleted, canPublish: () -> Boolean) {
         val onActivitiesSynced: suspend () -> Unit = {
-            viewModelScope.launch { refreshPublicPaykitEndpointsIfEnabled(canPublish = canPublish) }
+            viewModelScope.launch { refreshPublicPaykitAddressAfterActivitySync(canPublish) }
         }
         if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen(event.syncedBlockHeight)
 
@@ -2643,8 +2645,23 @@ class AppViewModel @Inject constructor(
     private suspend fun schedulePublicPaykitRefreshAfterActivitySync(canPublish: () -> Boolean) {
         if (!canPublish() || !isPaykitEnabled.value || !settingsStore.data.first().sharesPublicPaykitEndpoints) return
         walletRepo.debounceSyncByEvent {
-            viewModelScope.launch { refreshPublicPaykitEndpointsIfEnabled(canPublish = canPublish) }
+            viewModelScope.launch { refreshPublicPaykitAddressAfterActivitySync(canPublish) }
         }
+    }
+
+    private suspend fun refreshPublicPaykitAddressAfterActivitySync(canPublish: () -> Boolean) {
+        if (!canPublish() || !isPaykitEnabled.value) return
+        val settings = settingsStore.data.first()
+        if (!settings.sharesPublicPaykitEndpoints) return
+        val signIn = pubkyRepo.currentSignIn() ?: return
+        if (!settings.publicPaykitCleanupPending && !publicPaykitRepo.hasPendingLightningRefresh) {
+            if (!PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) return
+            val isUsed = privatePaykitAddressReservationRepo.isCurrentPublicAddressUsed(signIn.publicKey)
+                .onFailure { Logger.warn("Failed to check public Paykit address usage", it, context = TAG) }
+                .getOrDefault(false)
+            if (!isUsed) return
+        }
+        refreshPublicPaykitEndpointsIfEnabled(canPublish = canPublish)
     }
 
     private suspend fun handleOnchainTransactionReorged(event: Event.OnchainTransactionReorged) {
