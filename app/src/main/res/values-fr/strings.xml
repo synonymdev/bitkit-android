@@ -508,6 +508,7 @@
     <string name="security__pin_disable_button">Désactiver le code PIN</string>
     <string name="security__pin_enter">Veuillez saisir votre code PIN</string>
     <string name="security__pin_last_attempt">Dernière tentative. Si vous saisissez à nouveau un code PIN erroné, votre portefeuille sera réinitialisé.</string>
+    <string name="security__pin_allowance">Veuillez saisir votre code PIN pour confirmer cette modification de l\'allocation.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentatives restantes. Vous avez oublié votre code PIN ?</string>
     <string name="security__pin_forgot_title">Vous avez oublié votre code PIN ?</string>
     <string name="security__pin_forgot_text">Vous avez oublié votre code PIN ? Réinitialisez et récupérez votre portefeuille Bitkit avec votre phrase de récupération. Définissez un nouveau code PIN après avoir terminé la récupération.</string>

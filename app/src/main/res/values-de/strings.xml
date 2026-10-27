@@ -507,6 +507,7 @@
     <string name="security__pin_disable_button">PIN deaktivieren</string>
     <string name="security__pin_enter">Bitte gib deinen PIN-Code ein</string>
     <string name="security__pin_last_attempt">Letzter Versuch. Wenn du den falschen PIN erneut eingibst, wird dein Wallet zurückgesetzt.</string>
+    <string name="security__pin_allowance">Bitte gib deinen PIN-Code ein, um diese Änderung des Budgets zu bestätigen.</string>
     <string name="security__pin_attempts">{attemptsRemaining} Versuche verbleiben. Hast du deinen PIN vergessen?</string>
     <string name="security__pin_forgot_title">PIN vergessen?</string>
     <string name="security__pin_forgot_text">PIN vergessen? Setze hier dein Bitkit-Wallet zurück und stelle es mit deiner Wiederherstellungsphrase wieder her. Vergebe eine neue PIN nach deiner Wiederherstellung.</string>

@@ -161,6 +161,7 @@ fun AllowanceSheet(
                     useBiometrics = it.useBiometrics,
                     onCancel = onAuthorizationCancel,
                     onVerified = viewModel::onAuthorized,
+                    pinDescriptionRes = R.string.security__pin_allowance,
                 )
             }
         }

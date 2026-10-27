@@ -507,6 +507,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Wachtwoordzin:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Je hebt een wachtwoordzin toegevoegd aan je herstelzin tijdens het instellen van de wallet.</string>
     <string name="security__pass_your">Je wachtwoordzin</string>
+    <string name="security__pin_allowance">Voer je pincode in om deze wijziging van de toelage te bevestigen.</string>
     <string name="security__pin_attempts">{attemptsRemaining} pogingen over. Pincode vergeten?</string>
     <string name="security__pin_choose_header">Kies 4-cijferige pincode</string>
     <string name="security__pin_choose_text">Gebruik een pincode die je zult onthouden. Als je je pincode vergeet, kun je deze resetten, maar daarvoor moet je je wallet herstellen.</string>

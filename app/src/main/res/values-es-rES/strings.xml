@@ -510,6 +510,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Contraseña:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Añadiste una passphrase a tu frase de recuperación al configurar tu wallet.</string>
     <string name="security__pass_your">Su frase de acceso</string>
+    <string name="security__pin_allowance">Por favor, introduzca su código PIN para confirmar este cambio en la asignación.</string>
     <string name="security__pin_attempts">Quedan {attemptsRemaining} intentos. ¿Olvidó su PIN?</string>
     <string name="security__pin_choose_header">Elija un PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Por favor, utilice un PIN que recuerde. Si olvida su PIN puede restablecerlo, pero para ello tendrá que restaurar su monedero.</string>

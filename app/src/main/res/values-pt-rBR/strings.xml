@@ -514,6 +514,7 @@
     <string name="security__pass_recovery">&lt;gray&gt;Senha:&lt;/gray&gt; {passphrase}</string>
     <string name="security__pass_text">Você adicionou uma frase secreta durante a configuração da carteira.</string>
     <string name="security__pass_your">Sua Frase Secreta</string>
+    <string name="security__pin_allowance">Digite seu código PIN para confirmar essa alteração na mesada.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentativas restantes. Esqueceu seu PIN?</string>
     <string name="security__pin_choose_header">Escolha o PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Use um PIN que você se lembrará. Se você esquecer o PIN, poderá redefini-lo mas isso exigirá a restauração da carteira.</string>

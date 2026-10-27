@@ -13,7 +13,7 @@
   <actions>
     <action>On the payer instance, open Subscriptions, tap the Allowances tab, tap Add (testTag "AllowanceAdd"), pick the payee and keep $5 a payment and $50 a month</action>
     <action>Tap Save Allowance (testTag "AllowanceSave")</action>
-    <action>Verify the PIN pad shows over the sheet, then press back</action>
+    <action>Verify the PIN pad shows over the sheet and reads "Please enter your PIN code to confirm this allowance change.", then press back</action>
     <action>Verify the Set sheet (testTag "SetAllowance") is still showing with the same payee and limits, and the payee instance gets no "Allowance Added" notification</action>
     <action>Tap Save Allowance again and enter the PIN</action>
     <action>Verify the sheet dismisses and the payer's row reads "Waiting for an answer"</action>

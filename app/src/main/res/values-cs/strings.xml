@@ -511,6 +511,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Přístupová fráze:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Během nastavení peněženky jste do fráze pro obnovení přidali přístupovou frázi.</string>
     <string name="security__pass_your">Vaše přístupová fráze</string>
+    <string name="security__pin_allowance">Pro potvrzení této změny rozpočtu prosím zadejte svůj PIN kód.</string>
     <string name="security__pin_attempts">Zbývá {attemptsRemaining} pokus/ů. Zapomněli jste svůj PIN?</string>
     <string name="security__pin_choose_header">Vyberte 4místný PIN</string>
     <string name="security__pin_choose_text">Použijte prosím PIN, který si zapamatujete. Pokud svůj PIN zapomenete, můžete jej resetovat, ale to bude vyžadovat obnovení vaší peněženky.</string>

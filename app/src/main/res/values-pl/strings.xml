@@ -511,6 +511,7 @@
     <string name="security__pin_disable_button">Wyłącz kod PIN</string>
     <string name="security__pin_enter">Podaj proszę kod PIN</string>
     <string name="security__pin_last_attempt">Ostatnia próba. Wpisanie błędnego kodu spowoduje zresetowanie portfela.</string>
+    <string name="security__pin_allowance">Proszę podaj swój kod PIN, aby potwierdzić tę zmianę budżetu.</string>
     <string name="security__pin_attempts">Liczba pozostałych prób:{attemptsRemaining}. Zapomniałeś kodu PIN?</string>
     <string name="security__pin_forgot_title">Zapomniałeś kodu PIN?</string>
     <string name="security__pin_forgot_text">Zapomniałeś kodu PIN? Zresetuj i odzyskaj swój portfel Bitkit używając mnemonika. Ustaw nowy kod PIN po zakończeniu odzyskiwania portfela.</string>

@@ -505,6 +505,7 @@
     <string name="security__pin_disable_button">Desactivar PIN</string>
     <string name="security__pin_enter">Por favor, introduzca su código PIN</string>
     <string name="security__pin_last_attempt">Último intento. Si vuelve a introducir un PIN erróneo, se reiniciará su monedero.</string>
+    <string name="security__pin_allowance">Por favor, introduzca su código PIN para confirmar este cambio en la asignación.</string>
     <string name="security__pin_attempts">Quedan {attemptsRemaining} intentos. ¿Olvidó su PIN?</string>
     <string name="security__pin_forgot_title">¿Ha olvidado el PIN?</string>
     <string name="security__pin_forgot_text">¿Ha olvidado su PIN? Reinicie y recupere su monedero Bitkit con su frase de recuperación. Establezca un nuevo PIN después de completar la recuperación.</string>

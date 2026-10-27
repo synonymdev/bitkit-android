@@ -489,6 +489,7 @@
     <string name="security__pin_disable_button">Desativar PIN</string>
     <string name="security__pin_enter">Por favor, digite seu código PIN</string>
     <string name="security__pin_last_attempt">Última tentativa. Se digitar o PIN errado novamente, sua carteira será redefinida.</string>
+    <string name="security__pin_allowance">Digite seu código PIN para confirmar essa alteração na mesada.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentativas restantes. Esqueceu seu PIN?</string>
     <string name="security__pin_forgot_title">Esqueceu o PIN?</string>
     <string name="security__pin_forgot_text">Esqueceu seu PIN? Redefina e recupere sua carteira Bitkit com a sua frase de recuperação. Defina um novo PIN após concluir a recuperação.</string>

@@ -506,6 +506,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Frase de pas:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Has afegit una frase de pas a la teva frase de recuperació durant la configuració de la cartera.</string>
     <string name="security__pass_your">La teva frase de pas</string>
+    <string name="security__pin_allowance">Si us plau, introdueix el teu codi PIN per confirmar aquest canvi en l\'assignació.</string>
     <string name="security__pin_attempts">{attemptsRemaining} intents restants. Has oblidat el PIN?</string>
     <string name="security__pin_choose_header">Escolliu un PIN de 4 dígits</string>
     <string name="security__pin_choose_text">Si us plau, utilitza un PIN que recordis. Si oblides el teu PIN pots restablir-lo, però caldrà restaurar la cartera.</string>

@@ -804,6 +804,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Passphrase:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">You added a passphrase to your recovery phrase during wallet setup.</string>
     <string name="security__pass_your">Your Passphrase</string>
+    <string name="security__pin_allowance">Please enter your PIN code to confirm this allowance change.</string>
     <string name="security__pin_attempts">{attemptsRemaining} attempts remaining. Forgot your PIN?</string>
     <string name="security__pin_choose_header">Choose 4-Digit PIN</string>
     <string name="security__pin_choose_text">Please use a PIN you will remember. If you forget your PIN you can reset it, but that will require restoring your wallet.</string>

@@ -492,6 +492,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Κωδική φράση:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Πρόσθεσες μια κωδική φράση στη φράση ανάκτησής σου κατά τη ρύθμιση του πορτοφολιού.</string>
     <string name="security__pass_your">Η κωδική φράση σου</string>
+    <string name="security__pin_allowance">Εισάγαγε τον κωδικό PIN για να επιβεβαιώσεις αυτή την αλλαγή στον προϋπολογισμό.</string>
     <string name="security__pin_attempts">{attemptsRemaining} προσπάθειες απομένουν. Ξέχασες το PIN;</string>
     <string name="security__pin_choose_header">Επίλεξε 4ψήφιο PIN</string>
     <string name="security__pin_choose_text">Χρησιμοποίησε ένα PIN που θα θυμάσαι. Αν ξεχάσεις το PIN σου μπορείς να το επαναφέρεις, αλλά αυτό θα απαιτήσει επαναφορά του πορτοφολιού σου.</string>

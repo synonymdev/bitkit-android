@@ -529,6 +529,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Кодовая фраза:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Вы добавили кодовую фразу к фразе восстановления во время создания кошелька.</string>
     <string name="security__pass_your">Ваша Кодовая Фраза</string>
+    <string name="security__pin_allowance">Введите PIN-код, чтобы подтвердить это изменение бюджета.</string>
     <string name="security__pin_attempts">Осталось {attemptsRemaining} попыток. Забыли PIN-код?</string>
     <string name="security__pin_choose_header">Выберите 4-значный PIN-код</string>
     <string name="security__pin_choose_text">Пожалуйста, используйте PIN-код, который вы запомните. Если вы забудете свой PIN-код, вы можете сбросить его, но для этого потребуется восстановить кошелёк.</string>
