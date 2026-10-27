@@ -76,6 +76,10 @@ class SparkRepo @Inject constructor(
 
     /** Deposits this app broadcast that Spark hasn't listed yet, by txid, so they show as pending at once. */
     private val broadcastDeposits = ConcurrentHashMap<String, ULong>()
+
+    /** Sends recorded before Spark knew their fee; its completion event reports 0 until a later sync. */
+    private val sendsRecordedWithoutFee = ConcurrentHashMap.newKeySet<String>()
+
     private var eventsJob: Job? = null
 
     private val _state = MutableStateFlow(SparkState(isSupported = sparkService.isSupported))
@@ -243,7 +247,8 @@ class SparkRepo @Inject constructor(
         val pending = sparkService.listUnclaimedDeposits().map {
             SparkDeposit(txid = it.txid, amountSats = it.amountSats, isClaimed = false)
         }
-        val claimed = sparkService.listPayments()
+        val payments = sparkService.listPayments()
+        val claimed = payments
             .filter { it.method == PaymentMethod.DEPOSIT && it.status == PaymentStatus.COMPLETED }
             .mapNotNull { payment ->
                 val deposit = payment.details as? PaymentDetails.Deposit ?: return@mapNotNull null
@@ -265,6 +270,25 @@ class SparkRepo @Inject constructor(
                 recoverableFundsSats = info.recoverableFundsSats,
             ).withBroadcastDeposits()
         }
+        payments.filter { it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0 }.forEach { recordActivity(it) }
+    }
+
+    /** Payment hashes of the Lightning payments Spark received. */
+    suspend fun receivedLightningPaymentHashes(): Set<String> =
+        lightningPaymentHashes { it.paymentType == SparkPaymentType.RECEIVE && it.status == PaymentStatus.COMPLETED }
+
+    /** Payment hashes of the Lightning payments Spark sent or is sending. */
+    suspend fun attemptedLightningPaymentHashes(): Set<String> =
+        lightningPaymentHashes { it.paymentType == SparkPaymentType.SEND && it.status != PaymentStatus.FAILED }
+
+    private suspend fun lightningPaymentHashes(filter: (Payment) -> Boolean): Set<String> = withContext(bgDispatcher) {
+        if (!sparkService.isConnected) return@withContext emptySet()
+        runSuspendCatching { sparkService.listPayments() }
+            .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+            .getOrDefault(emptyList())
+            .filter(filter)
+            .mapNotNull { (it.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash?.lowercase() }
+            .toSet()
     }
 
     private suspend fun syncActivities() {
@@ -308,8 +332,10 @@ class SparkRepo @Inject constructor(
         if (payment.status == PaymentStatus.PENDING && payment.paymentType == SparkPaymentType.RECEIVE) {
             return
         }
+        val id = lightning.htlcDetails.paymentHash
+        val existing = (activityRepo.get().getActivity(id).getOrNull() as? Activity.Lightning)?.v1
         val activity = LightningActivity.create(
-            id = lightning.htlcDetails.paymentHash,
+            id = id,
             txType = when (payment.paymentType) {
                 SparkPaymentType.SEND -> PaymentType.SENT
                 SparkPaymentType.RECEIVE -> PaymentType.RECEIVED
@@ -325,8 +351,15 @@ class SparkRepo @Inject constructor(
             fee = payment.fees.toLong().toULong(),
             message = lightning.description.orEmpty(),
             preimage = lightning.htlcDetails.preimage,
+            contact = existing?.contact,
+            seenAt = existing?.seenAt,
         )
         activityRepo.get().upsertActivity(Activity.Lightning(activity))
+        if (payment.paymentType == SparkPaymentType.SEND && payment.fees.toLong() == 0L) {
+            sendsRecordedWithoutFee.add(payment.id)
+        } else {
+            sendsRecordedWithoutFee.remove(payment.id)
+        }
     }
 
     private fun Payment.toNodeEvent(): Event? {

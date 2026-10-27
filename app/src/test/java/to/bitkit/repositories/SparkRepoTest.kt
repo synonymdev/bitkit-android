@@ -2,14 +2,25 @@ package to.bitkit.repositories
 
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateResponse
+import breez_sdk_spark.Payment
+import breez_sdk_spark.PaymentDetails
+import breez_sdk_spark.PaymentMethod
+import breez_sdk_spark.PaymentStatus
+import breez_sdk_spark.PaymentType
+import breez_sdk_spark.SdkEvent
+import breez_sdk_spark.SparkHtlcDetails
+import breez_sdk_spark.SparkHtlcStatus
+import com.synonym.bitkitcore.Activity
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.env.Env
@@ -17,16 +28,19 @@ import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
 import java.io.File
+import java.math.BigInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 class SparkRepoTest : BaseUnitTest() {
     private val sparkService = mock<SparkService>()
+    private val activityRepo = mock<ActivityRepo>()
+    private val sparkEvents = MutableSharedFlow<SdkEvent>()
 
     private fun createSut() = SparkRepo(
         bgDispatcher = testDispatcher,
         sparkService = sparkService,
-        activityRepo = { mock() },
+        activityRepo = { activityRepo },
         settingsStore = mock(),
     )
 
@@ -39,7 +53,9 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.getInfo() }.thenReturn(GetInfoResponse("pubkey", 0uL, emptyMap(), 0uL))
         whenever { sparkService.listUnclaimedDeposits() }.thenReturn(emptyList())
         whenever { sparkService.listPayments() }.thenReturn(emptyList())
-        whenever(sparkService.events).thenReturn(MutableSharedFlow())
+        whenever(sparkService.events).thenReturn(sparkEvents)
+        whenever { activityRepo.getActivity(any(), any()) }.thenReturn(Result.success(null))
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.success(Unit))
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.networkName).thenReturn("regtest")
     }
@@ -58,6 +74,21 @@ class SparkRepoTest : BaseUnitTest() {
 
         verify(sparkService).importExitState("state")
         assertFalse(File(Env.sparkExitRestorePath(0)).exists())
+    }
+
+    @Test
+    fun `records a send's fee once a sync reports it`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+
+        sparkEvents.emit(SdkEvent.PaymentSucceeded(sentPayment(fees = 0)))
+        whenever { sparkService.listPayments() }.thenReturn(listOf(sentPayment(fees = 2)))
+        sparkEvents.emit(SdkEvent.Synced)
+
+        val activities = argumentCaptor<Activity>()
+        verify(activityRepo, times(2)).upsertActivity(activities.capture())
+        assertEquals(listOf(0uL, 2uL), activities.allValues.map { (it as Activity.Lightning).v1.fee })
     }
 
     @Test
@@ -81,4 +112,25 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals(false, deposit.isClaimed)
         assertEquals(2_500uL, sut.state.value.pendingDepositSats)
     }
+
+    private fun sentPayment(fees: Int) = Payment(
+        id = "send",
+        paymentType = PaymentType.SEND,
+        status = PaymentStatus.COMPLETED,
+        amount = BigInteger.valueOf(128),
+        fees = BigInteger.valueOf(fees.toLong()),
+        timestamp = 1uL,
+        method = PaymentMethod.LIGHTNING,
+        details = PaymentDetails.Lightning(
+            description = null,
+            invoice = "lnbc1280n1send",
+            destinationPubkey = "pubkey",
+            htlcDetails = SparkHtlcDetails("hash", "preimage", 1uL, SparkHtlcStatus.PREIMAGE_SHARED),
+            lnurlPayInfo = null,
+            lnurlWithdrawInfo = null,
+            lnurlReceiveMetadata = null,
+            conversionInfo = null,
+        ),
+        conversionDetails = null,
+    )
 }
