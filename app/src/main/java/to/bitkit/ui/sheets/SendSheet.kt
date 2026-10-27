@@ -171,7 +171,10 @@ fun SendSheet(
     LaunchedEffect(startDestination) {
         // always reset state on new user-initiated send
         if (startDestination == SendRoute.Recipient) {
-            appViewModel.resetSendState(hardwareWalletId = hardwareWalletId)
+            if (!appViewModel.resetSendState(hardwareWalletId = hardwareWalletId)) {
+                appViewModel.hideSheet()
+                return@LaunchedEffect
+            }
             appViewModel.resetQuickPay()
             routingCacheResetAttempted = false
         }

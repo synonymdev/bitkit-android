@@ -3,6 +3,7 @@ package to.bitkit.services
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -39,6 +40,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.SpendableUtxo
+import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
@@ -155,6 +157,48 @@ class LightningServiceTest : BaseUnitTest() {
         }
         assertTrue(result.exceptionOrNull() is WalletBackupRestorePendingError)
         verify(native, never()).broadcast()
+    }
+
+    @Test
+    fun `local transaction details cannot cross a wallet or node replacement`() = test {
+        val txid = "ab".repeat(32)
+        val details = TransactionDetails(5000L, emptyList(), emptyList())
+        whenever(node.getTransactionDetails(txid)).thenReturn(details)
+        assertNull(sut.getTransactionDetails(txid, 7))
+        verify(node, never()).getTransactionDetails(txid)
+        assertEquals(details, sut.getTransactionDetails(txid, 0))
+        whenever(node.getTransactionDetails(txid)).thenAnswer {
+            sut.node = mock()
+            details
+        }
+        assertNull(sut.getTransactionDetails(txid, 0))
+    }
+
+    @Test
+    fun `queued transaction lookup does not query a replaced node`() = test {
+        val queued = LightningService(
+            bgDispatcher = testDispatcher,
+            ioDispatcher = testDispatcher,
+            keychain = keychain,
+            vssStoreIdProvider = vssStoreIdProvider,
+            settingsStore = settingsStore,
+            watchOnlyAccountStore = watchOnlyAccountStore,
+            loggerLdk = loggerLdk,
+            watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
+            ldkQueue = StandardTestDispatcher(testScheduler),
+        )
+        val txid = "ab".repeat(32)
+        val replacement = mock<Node>()
+        queued.node = node
+        val lookup = async(start = CoroutineStart.UNDISPATCHED) {
+            queued.getTransactionDetails(txid, 0)
+        }
+        assertFalse(lookup.isCompleted)
+        verify(node, never()).getTransactionDetails(txid)
+        queued.node = replacement
+        assertNull(lookup.await())
+        verify(node, never()).getTransactionDetails(txid)
+        verify(replacement, never()).getTransactionDetails(txid)
     }
 
     @Test

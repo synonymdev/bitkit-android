@@ -110,14 +110,20 @@ internal object Env {
 
     val vssStoreIdPrefix get() = "bitkit_v1_${network.name.lowercase()}"
 
+    private val backupTestEndpoints get() = BackupTestEndpoints.resolve(
+        enabled = isDebug && isE2eTest,
+        vss = BuildConfig.E2E_VSS_SERVER_URL,
+        auth = BuildConfig.E2E_LNURL_AUTH_SERVER_URL,
+    )
+
     val vssServerUrl
-        get() = when (network) {
+        get() = backupTestEndpoints?.vss ?: when (network) {
             Network.BITCOIN -> "https://bitkit.to/vss_rs_auth"
             else -> "https://bitkit.stag0.blocktank.to/vss_rs_auth"
         }
 
     val lnurlAuthServerUrl
-        get() = when (network) {
+        get() = backupTestEndpoints?.auth ?: when (network) {
             Network.BITCOIN -> "https://bitkit.to/lnurl_auth/auth"
             else -> "https://bitkit.stag0.blocktank.to/lnurl_auth/auth"
         }
@@ -135,10 +141,13 @@ internal object Env {
             Network.BITCOIN -> "https://api1.blocktank.to"
             else -> "https://api.stag0.blocktank.to"
         }
-    val blocktankApiUrl
-        get() = when (network) {
-            Network.BITCOIN -> "$blocktankBaseUrl/api"
-            else -> "$blocktankBaseUrl/blocktank/api/v2"
+    val blocktankApiUrl: String
+        get() {
+            val fixture = BlocktankTestEndpoint.resolve(isDebug && isE2eTest, BuildConfig.E2E_BLOCKTANK_API_URL)
+            return fixture ?: when (network) {
+                Network.BITCOIN -> "$blocktankBaseUrl/api"
+                else -> "$blocktankBaseUrl/blocktank/api/v2"
+            }
         }
     val blocktankNotificationApiUrl
         get() = when (network) {

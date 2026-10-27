@@ -246,6 +246,7 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
+import to.bitkit.viewmodels.ConnectionStartupFailure
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.RestoreState
@@ -253,6 +254,14 @@ import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferEffect
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import to.bitkit.viewmodels.canProceedWithoutRestore
+
+internal fun shouldPresentWalletRecovery(
+    walletIsInitializing: Boolean,
+    restoreState: RestoreState,
+    connectionFailure: ConnectionStartupFailure?,
+): Boolean = walletIsInitializing || restoreState is RestoreState.BackupFailed ||
+    connectionFailure?.requiresRecovery == true
 
 internal fun shouldFinishWalletInitialization(
     nodeLifecycleState: NodeLifecycleState,
@@ -421,8 +430,10 @@ fun ContentView(
 
     val connectionFailure by walletViewModel.connectionStartupError.collectAsStateWithLifecycle()
     val connectionRetryBusy by walletViewModel.connectionRetryBusy.collectAsStateWithLifecycle()
-    val canProceedWithoutRestore = connectionFailure == null &&
-        (restoreState as? RestoreState.BackupFailed)?.hasPendingWalletRestore != true
+    val canProceedWithoutRestore = canProceedWithoutRestore(
+        restoreState,
+        connectionFailure?.canProceedWithoutRestore,
+    )
 
     val connectionEditor by walletViewModel.connectionEditor.collectAsStateWithLifecycle()
     if (connectionEditor != null) {
@@ -439,7 +450,7 @@ fun ContentView(
         return
     }
 
-    if (walletIsInitializing || backupRestoreFailed || connectionFailure != null) {
+    if (shouldPresentWalletRecovery(walletIsInitializing, restoreState, connectionFailure)) {
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting ||
             backupRestoreFailed || connectionFailure != null
         ) {

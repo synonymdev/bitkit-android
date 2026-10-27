@@ -62,6 +62,13 @@ class WalletConnectionRecovery @Inject constructor(
         }
     }
 
+    /** A queued UI intent remains bound to its original wallet, including same-seed replacement. */
+    internal fun currentGeneration(): Long? = synchronized(stateLock) { generation.takeUnless { wiping } }
+
+    internal fun isCurrentGeneration(expected: Long?): Boolean = synchronized(stateLock) {
+        expected != null && !wiping && generation == expected
+    }
+
     private fun admittedGeneration(): Long = synchronized(stateLock) {
         checkAdmission()
         generation
@@ -158,6 +165,18 @@ class WalletConnectionRecovery @Inject constructor(
             checkOwner(owner)
         }
 
+        /** Publish local UI state only while this original owner still holds admission. */
+        internal suspend fun <T> commitCurrentState(block: () -> T): T {
+            checkCurrent()
+            return synchronized(stateLock) {
+                job.ensureActive()
+                check(active) { "Connection recovery operation ended" }
+                checkAdmission()
+                if (owner.generation != generation) throw CancellationException("Wallet recovery owner changed")
+                block()
+            }
+        }
+
         private suspend fun read(): ConnectionChoices? {
             checkCurrent()
             val encoded = keychain.loadString(KEY, owner.walletIndex) ?: return null
@@ -217,6 +236,8 @@ class WalletConnectionRecovery @Inject constructor(
             checkCurrent()
             record.revision
         }
+
+        suspend fun pendingRevision(): String? = settingsMutex.withLock { read()?.revision }
 
         suspend fun complete(startedRevision: String?) = settingsMutex.withLock {
             checkCurrent()

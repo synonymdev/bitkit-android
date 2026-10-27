@@ -363,6 +363,10 @@ androidComponents {
         buildConfigFields.put("E2E_HOMEGATE_URL", e2eHomegateUrlEnv.stringField())
         buildConfigFields.put("E2E_HOMESERVER_PUBKY", e2eHomeserverPubkyEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_OVERRIDE", e2eHomegateOverrideEnv.stringField())
+        for (key in listOf("E2E_VSS_SERVER_URL", "E2E_LNURL_AUTH_SERVER_URL", "E2E_BLOCKTANK_API_URL")) {
+            val value = if (variant.buildType == "debug") localProp(key).orElse("") else provider { "" }
+            buildConfigFields.put(key, value.stringField())
+        }
         buildConfigFields.put("TREZOR_BRIDGE", trezorBridgeEnv.booleanField())
         buildConfigFields.put("TREZOR_BRIDGE_URL", trezorBridgeUrlEnv.stringField())
         buildConfigFields.put("GEO", geoEnv.booleanField())
