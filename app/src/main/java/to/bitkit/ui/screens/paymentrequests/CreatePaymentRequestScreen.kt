@@ -4,16 +4,22 @@
 package to.bitkit.ui.screens.paymentrequests
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -27,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,10 +41,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -68,7 +78,6 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
-import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadAmountText
@@ -135,6 +144,7 @@ fun PaymentRequestAmountScreen(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun PaymentRequestAmountContent(
     modifier: Modifier = Modifier,
@@ -160,6 +170,18 @@ internal fun PaymentRequestAmountContent(
         )
     }
     var conversionError by remember { mutableStateOf(false) }
+    var isNumberPadFocused by remember { mutableStateOf(false) }
+    val defaultBringIntoView = LocalBringIntoViewSpec.current
+    val bringIntoView = remember(defaultBringIntoView) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
+                if (isNumberPadFocused) {
+                    0f
+                } else {
+                    defaultBringIntoView.calculateScrollDistance(offset, size, containerSize)
+                }
+        }
+    }
     val entered = if (asset == PaykitAsset.BTC) {
         PaykitAmount(asset, amountState.sats.toULong())
     } else {
@@ -194,88 +216,131 @@ internal fun PaymentRequestAmountContent(
                 }
             },
         )
-        BoxWithConstraints(modifier = Modifier.weight(1f)) {
-            val availableHeight = this.maxHeight
-
-            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                VerticalSpacer(16.dp)
-                if (asset == PaykitAsset.BTC) {
-                    NumberPadTextField(
-                        viewModel = amountInputViewModel,
-                        modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountField")
-                    )
-                } else {
-                    NumberPadAmountText(
-                        value = dollars.ifEmpty { "0" },
-                        symbol = "$",
-                        modifier = Modifier.testTag("PaymentRequestAmountField")
-                    )
-                }
-                VerticalSpacer(16.dp)
-                PaymentRequestDenominationToggle(
-                    asset = asset,
-                    amount = entered,
-                    allowedAssets = allowedAssets,
-                    conversion = conversion,
-                    onConverted = {
-                        asset = it.asset
-                        if (it.asset == PaykitAsset.BTC) {
-                            amountInputViewModel.setSats(it.atomic.toLong(), currencies)
+        CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoView) {
+            BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                        .heightIn(min = maxHeight).padding(horizontal = 16.dp)
+                ) {
+                    VerticalSpacer(16.dp)
+                    PaymentRequestDenominationLayout(asset, Alignment.Bottom) { displayAsset ->
+                        if (displayAsset == PaykitAsset.BTC) {
+                            NumberPadTextField(
+                                viewModel = amountInputViewModel,
+                                modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountField")
+                            )
                         } else {
-                            dollars = if (it.atomic == 0uL) "" else it.inputValue
+                            NumberPadAmountText(
+                                value = dollars.ifEmpty { "0" },
+                                symbol = "$",
+                                modifier = Modifier.testTag("PaymentRequestAmountField")
+                            )
                         }
-                        conversionError = false
-                    },
-                    onUnavailable = { conversionError = true },
-                )
-                if (conversionError) {
-                    BodyS(
-                        text = stringResource(R.string.wallet__payment_request_rate_unavailable),
-                        color = Colors.White64
-                    )
-                }
-                FillHeight(min = 12.dp)
-                if (asset == PaykitAsset.BTC) {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        FillWidth()
-                        UnitButton(
-                            onClick = { amountInputViewModel.switchUnit(currencies) },
-                            color = Colors.Brand,
-                            modifier = Modifier.testTag("PaymentRequestAmountUnit")
+                    }
+                    VerticalSpacer(16.dp)
+                    PaymentRequestDenominationLayout(asset, Alignment.Top) { displayAsset ->
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("PaymentRequestAmountActions"),
+                        ) {
+                            PaymentRequestDenominationToggle(
+                                asset = asset,
+                                amount = entered,
+                                allowedAssets = allowedAssets,
+                                conversion = conversion,
+                                onConverted = {
+                                    asset = it.asset
+                                    if (it.asset == PaykitAsset.BTC) {
+                                        amountInputViewModel.setSats(it.atomic.toLong(), currencies)
+                                    } else {
+                                        dollars = if (it.atomic == 0uL) "" else it.inputValue
+                                    }
+                                    conversionError = false
+                                },
+                                onUnavailable = { conversionError = true },
+                            )
+                            if (displayAsset == PaykitAsset.BTC) {
+                                UnitButton(
+                                    onClick = { amountInputViewModel.switchUnit(currencies) },
+                                    color = Colors.Brand,
+                                    modifier = Modifier.testTag("PaymentRequestAmountUnit")
+                                )
+                            }
+                        }
+                    }
+                    if (conversionError) {
+                        BodyS(
+                            text = stringResource(R.string.wallet__payment_request_rate_unavailable),
+                            color = Colors.White64
                         )
                     }
-                }
-                VerticalSpacer(16.dp)
-                HorizontalDivider(color = Colors.White10)
-                if (asset == PaykitAsset.BTC) {
-                    NumberPad(
-                        viewModel = amountInputViewModel,
-                        currencies = currencies,
-                        availableHeight = availableHeight,
-                        modifier = Modifier.testTag("PaymentRequestNumberPad")
+                    VerticalSpacer(16.dp)
+                    HorizontalDivider(
+                        color = Colors.White10,
+                        modifier = Modifier.testTag("PaymentRequestAmountDivider"),
                     )
-                } else {
-                    NumberPad(
-                        onPress = {
-                            dollars = NumberPadInputHandler.handleInput(
-                                it, dollars, MAX_USD_INPUT_LENGTH, PaykitAsset.USD.decimals
+                    FillHeight()
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 24.dp),
+                    ) {
+                        val padModifier = Modifier
+                            .onFocusChanged { isNumberPadFocused = it.isFocused }
+                            .testTag("PaymentRequestNumberPad")
+                        if (asset == PaykitAsset.BTC) {
+                            NumberPad(
+                                viewModel = amountInputViewModel,
+                                currencies = currencies,
+                                modifier = padModifier
                             )
+                        } else {
+                            NumberPad(
+                                onPress = {
+                                    dollars = NumberPadInputHandler.handleInput(
+                                        it, dollars, MAX_USD_INPUT_LENGTH, PaykitAsset.USD.decimals
+                                    )
+                                },
+                                type = NumberPadType.DECIMAL,
+                                modifier = padModifier
+                            )
+                        }
+                    }
+                    FillHeight()
+                    PrimaryButton(
+                        text = stringResource(R.string.common__continue),
+                        enabled = (entered?.atomic ?: 0uL) > 0uL,
+                        onClick = {
+                            entered?.let { onContinue(initialDraft.copy(amount = it)) }
                         },
-                        type = NumberPadType.DECIMAL,
-                        availableHeight = availableHeight,
-                        modifier = Modifier.testTag("PaymentRequestNumberPad")
+                        modifier = Modifier.testTag("PaymentRequestAmountContinue"),
                     )
+                    VerticalSpacer(16.dp)
                 }
-                PrimaryButton(
-                    text = stringResource(R.string.common__continue),
-                    enabled = (entered?.atomic ?: 0uL) > 0uL,
-                    onClick = {
-                        entered?.let { onContinue(initialDraft.copy(amount = it)) }
-                    },
-                    modifier = Modifier.testTag("PaymentRequestAmountContinue"),
-                )
-                VerticalSpacer(16.dp)
             }
+        }
+    }
+}
+
+@Composable
+private fun PaymentRequestDenominationLayout(
+    asset: PaykitAsset,
+    verticalAlignment: Alignment.Vertical,
+    content: @Composable (PaykitAsset) -> Unit,
+) {
+    Layout(content = {
+        Box(modifier = if (asset == PaykitAsset.BTC) Modifier else Modifier.clearAndSetSemantics {}) {
+            content(PaykitAsset.BTC)
+        }
+        Box(modifier = if (asset == PaykitAsset.USD) Modifier else Modifier.clearAndSetSemantics {}) {
+            content(PaykitAsset.USD)
+        }
+    }) { measurables, constraints ->
+        val placeables = measurables.map { it.measure(constraints.copy(minHeight = 0)) }
+        val height = placeables.maxOf { it.height }
+        val visible = placeables[if (asset == PaykitAsset.BTC) 0 else 1]
+        layout(placeables.maxOf { it.width }, height) {
+            visible.placeRelative(0, verticalAlignment.align(visible.height, height))
         }
     }
 }

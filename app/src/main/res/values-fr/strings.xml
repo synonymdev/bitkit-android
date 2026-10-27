@@ -338,7 +338,7 @@
     <string name="onboarding__restore_failed_text">Bitkit a restauré vos économies, mais n\'a pas réussi à restaurer votre solde du compte courant actuel (état Lightning) et les données de votre portefeuille.</string>
     <string name="onboarding__restore_no_backup_button">Procéder sans sauvegarde</string>
     <string name="onboarding__restore_no_backup_warn">Si vous disposiez auparavant d\'une sauvegarde Lightning, celle-ci sera écrasée et perdue. Cela pourrait entraîner une perte de fonds.</string>
-    <string name="onboarding__empty_wallet">Pour\ncommencer\n&lt;accent&gt;envoyez\ndu Bitcoin&lt;/accent&gt;\nsur votre\nportefeuille</string>
+    <string name="onboarding__empty_wallet">Pour\ncommencer,\n&lt;accent&gt;envoyez\ndu bitcoin&lt;/accent&gt;.</string>
     <string name="onboarding__multiple_header">&lt;accent&gt;Attention :&lt;/accent&gt;\nplusieurs appareils</string>
     <string name="onboarding__multiple_text">N\'installez pas votre phrase de récupération Bitkit sur plusieurs téléphones simultanément, car cela pourrait corrompre vos données.</string>
     <string name="other__qr_scan">Scannez le QR code </string>
@@ -1730,4 +1730,5 @@
     <string name="widgets__widget__settings">Paramètres du widget</string>
     <string name="widgets__widget__size_small">Petit</string>
     <string name="widgets__widget__size_wide">Large</string>
+    <string name="wallet__balance_updating">Mise à jour du solde…</string>
 </resources>

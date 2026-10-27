@@ -2,10 +2,16 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -17,9 +23,15 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.PaykitAmount
@@ -39,14 +51,30 @@ import to.bitkit.repositories.PaykitSubscriptionRecurrence
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.theme.AppThemeSurface
+import java.util.Locale
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @ComposeUi
 class PaymentRequestsScreenTest {
+    private val originalLocale = Locale.getDefault()
+
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    @Before
+    fun setup() {
+        Locale.setDefault(Locale.US)
+    }
+
+    @After
+    fun teardown() {
+        Locale.setDefault(originalLocale)
+    }
 
     @Test
     fun detailsDisablePayWhilePreparationIsPending() {
@@ -298,6 +326,158 @@ class PaymentRequestsScreenTest {
         }
 
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertDoesNotExist()
+    }
+
+    @Test
+    fun longReceiptStatusKeepsContactAndExactAmountReadable() {
+        val status = "Płatność zweryfikowana · 0.001647 USDT"
+        val asset = mutableStateOf(PaykitAsset.USDT)
+        val fontScale = mutableStateOf(1.3f)
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale.value)) {
+                    Box(Modifier.width(320.dp).padding(horizontal = 16.dp)) {
+                        PaymentRequestCard(
+                            request = request().copy(amount = PaykitAmount(asset.value, 1_647u)),
+                            contact = PubkyProfile.forDisplay(request().counterparty, "Maria", imageUrl = null),
+                            fiatStatus = status,
+                        )
+                    }
+                }
+            }
+        }
+        for (scale in listOf(1.3f, 2f)) {
+            composeTestRule.runOnIdle { fontScale.value = scale }
+            for (denomination in listOf(PaykitAsset.USDT, PaykitAsset.USD, PaykitAsset.BTC)) {
+                composeTestRule.runOnIdle { asset.value = denomination }
+                for (text in listOf("Maria", status)) {
+                    val results = mutableListOf<TextLayoutResult>()
+                    composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                        .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+                    val layout = results.single()
+                    assertFalse(layout.hasVisualOverflow, "$text must fit without truncation")
+                    for (word in text.split(' ')) {
+                        val start = text.indexOf(word)
+                        assertEquals(layout.getLineForOffset(start), layout.getLineForOffset(start + word.length - 1))
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun shortWordContactKeepsFullNameBesideLongReceipt() {
+        val name = "Ann Lee"
+        val status = "Payment verified · 0.001647 USDT"
+        val width = mutableStateOf(407.dp)
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                Box(Modifier.width(width.value).padding(horizontal = 16.dp)) {
+                    PaymentRequestCard(
+                        request = request().copy(amount = PaykitAmount(PaykitAsset.USDT, 1_647u)),
+                        contact = PubkyProfile.forDisplay(request().counterparty, name, imageUrl = null),
+                        compactSubtitle = "09:41",
+                        fiatStatus = status,
+                    )
+                }
+            }
+        }
+        for (size in listOf(407.dp, 412.dp)) {
+            composeTestRule.runOnIdle { width.value = size }
+            for (text in listOf(name, status)) {
+                val results = mutableListOf<TextLayoutResult>()
+                composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                    .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+                assertFalse(results.single().hasVisualOverflow, "$text must fit without truncation at $size")
+            }
+        }
+    }
+
+    @Test
+    fun shortAmountLeavesRoomForContactNameAtLargeText() {
+        val name = "Alexandra Payer"
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
+                    Box(Modifier.width(375.dp).padding(horizontal = 16.dp)) {
+                        PaymentRequestCard(
+                            request = request().copy(amount = PaykitAmount(PaykitAsset.USD, 200u)),
+                            contact = PubkyProfile.forDisplay(request().counterparty, name, imageUrl = null),
+                            fiatStatus = "Pending",
+                        )
+                    }
+                }
+            }
+        }
+        for (text in listOf(name, "$2.00", "Pending")) {
+            val results = mutableListOf<TextLayoutResult>()
+            composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            assertTrue(results.isNotEmpty())
+            assertFalse(results.single().hasVisualOverflow, "$text must fit without truncation")
+        }
+    }
+
+    @Test
+    fun longAmountUsesAvailableCardWidthAtLargeText() {
+        val asset = mutableStateOf(PaykitAsset.BTC)
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
+                    Box(Modifier.width(320.dp).padding(horizontal = 16.dp)) {
+                        PaymentRequestCard(
+                            request = request().copy(amount = PaykitAmount(asset.value, 1_000_000u)),
+                            contact = PubkyProfile.forDisplay(request().counterparty, "Alice", imageUrl = null),
+                        )
+                    }
+                }
+            }
+        }
+        for ((value, text) in listOf(PaykitAsset.BTC to "₿ 1 000 000", PaykitAsset.USD to "$10,000.00")) {
+            composeTestRule.runOnIdle { asset.value = value }
+            val results = mutableListOf<TextLayoutResult>()
+            composeTestRule.onNodeWithText(text).assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            assertTrue(results.isNotEmpty())
+            assertFalse(results.single().hasVisualOverflow, "$text must fit without truncation")
+            assertTrue(results.single().lineCount == 1)
+        }
+    }
+
+    @Test
+    fun bitcoinReceiptStatusUsesCaptionInBothUnitSettings() {
+        val primary = mutableStateOf(PrimaryDisplay.FIAT)
+        val status = "Płatność zweryfikowana · 4,12485 USDT"
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface(CurrencyState(primaryDisplay = primary.value)) {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
+                    Box(Modifier.width(360.dp)) {
+                        PaymentRequestCard(
+                            request = request().copy(amount = PaykitAmount(PaykitAsset.BTC, 5_000u)),
+                            contact = PubkyProfile.forDisplay(request().counterparty, "Alice", imageUrl = null),
+                            fiatStatus = status,
+                        )
+                    }
+                }
+            }
+        }
+        val layouts = PrimaryDisplay.entries.map { value ->
+            composeTestRule.runOnIdle { primary.value = value }
+            val results = mutableListOf<TextLayoutResult>()
+            composeTestRule.onNodeWithText(status).assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            results.single().also { layout ->
+                assertFalse(layout.hasVisualOverflow)
+                val wordStart = status.indexOf("zweryfikowana")
+                val wordEnd = wordStart + "zweryfikowana".lastIndex
+                assertTrue(layout.getLineForOffset(wordStart) == layout.getLineForOffset(wordEnd))
+            }
+        }
+        assertTrue(layouts.first().layoutInput.style.fontSize == layouts.last().layoutInput.style.fontSize)
     }
 
     private fun setOutgoingRequestContent(primaryDisplay: PrimaryDisplay) {

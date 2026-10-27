@@ -87,6 +87,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.Txid
+import to.bitkit.App
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.data.CacheStore
@@ -1135,7 +1136,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             if (resolution.walletId == WalletScope.default) {
                 lightningRepo.sync()
-                activityRepo.syncActivities()
+                activityRepo.syncActivities(requireFresh = true)
             }
             activityRepo.setContact(
                 contactPublicKey = resolution.requestId.counterparty,
@@ -1246,14 +1247,18 @@ class AppViewModel @Inject constructor(
                 testTag = "AllowancePaidToast",
             )
 
-            is PaykitAllowanceEvent.LimitReached -> notifyAllowanceEvent(
-                type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.subscriptions__allowance_limit_title),
-                description = context.getString(R.string.subscriptions__allowance_limit_description)
-                    .replace("{amount}", allowanceFiatAmount(event.amountSats))
-                    .replace("{name}", allowanceContactName(event.counterparty)),
-                testTag = "AllowanceLimitToast",
-            )
+            is PaykitAllowanceEvent.LimitReached -> {
+                // Unlocked in the foreground, the request sheet already shows the request.
+                if (App.currentActivity?.value != null && _isAuthenticated.value) return
+                notifyAllowanceEvent(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.subscriptions__allowance_limit_title),
+                    description = context.getString(R.string.subscriptions__allowance_limit_description)
+                        .replace("{amount}", allowanceFiatAmount(event.amountSats))
+                        .replace("{name}", allowanceContactName(event.counterparty)),
+                    testTag = "AllowanceLimitToast",
+                )
+            }
 
             PaykitAllowanceEvent.LedgerChanged -> Unit
         }
@@ -1565,7 +1570,8 @@ class AppViewModel @Inject constructor(
         }
         if (sheet !is Sheet.Send || sheet !== currentSheet.value || sheet.preparingRequest != null) return
         val request = activeIncomingPaymentRequest() ?: return
-        if (!paykitPaymentRequestRepo.isPending(request)) return
+        val isListed = paykitPaymentRequestRepo.pendingRequest(request.id) != null
+        if (!isListed || paykitPaymentRequestRepo.isExpired(request)) return
         completePaymentRequestPresentation(request)
         paymentRequestPresentationGeneration++
         clearRequestedPaymentRequest(restoreDeferredReminder = false)
@@ -1738,6 +1744,7 @@ class AppViewModel @Inject constructor(
             if (reopenRetainedHardwarePayment(request, generation, preparation)) return true
             val started = timeSource.markNow()
             val presentationResult = privatePaykitRepo.beginPaymentRequest(request)
+            paykitPaymentRequestRepo.syncPaymentProofs()
             val resolvedAfter = started.elapsedNow()
             val result = finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
             Logger.debug(
@@ -6518,6 +6525,7 @@ class AppViewModel @Inject constructor(
             rejectMismatchedPaymentRequest()
             return false
         }
+        if (incomingPaymentRequest != null) paykitPaymentRequestRepo.syncPaymentProofs()
         if (incomingPaymentRequest != null && !paykitPaymentRequestRepo.isPending(incomingPaymentRequest)) {
             toast(PaykitPaymentRequestError.RequestUnavailable)
             hideSheet()

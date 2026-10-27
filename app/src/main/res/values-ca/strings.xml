@@ -1730,4 +1730,5 @@
     <string name="widgets__widget__settings">Configuració del giny</string>
     <string name="widgets__widget__size_small">Petit</string>
     <string name="widgets__widget__size_wide">Ample</string>
+    <string name="wallet__balance_updating">S’està actualitzant el saldo…</string>
 </resources>
