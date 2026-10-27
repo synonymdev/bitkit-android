@@ -35,11 +35,13 @@ internal object Env {
 
     /**
      * The Spark token held as the dollar balance on Spark, matched by identifier since anyone can issue a token
-     * with any ticker. Regtest uses a 6-decimal test token issued on Lightspark's regtest; mainnet has none yet.
+     * with any ticker. No Tether-issued USDT exists on Spark yet, so both networks use a 6-decimal test token issued for
+     * testing: "Test Tether USD" on Lightspark's regtest and "Bitkit Test Dollar" (tUSD) on mainnet.
      */
     val sparkUsdTokenId: String?
         get() = when (network) {
             Network.REGTEST -> "btknrt1e2h2l3jwna0dzwfjsf3dcgck8zjuug3qprnuvl7hs23a68xvz38q7966fl"
+            Network.BITCOIN -> "btkn1nhdmkalm7wwh5pylhwacwwxeghv2q9mf0f3km44rruv0jf7vhm7stwkdzs"
             else -> null
         }
 
