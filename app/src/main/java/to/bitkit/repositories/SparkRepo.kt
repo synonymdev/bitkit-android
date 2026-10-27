@@ -241,12 +241,13 @@ class SparkRepo @Inject constructor(
             val estimate = requireNotNull(prepared.conversionEstimate) { "No conversion estimate" }
             val sats = { value: BigInteger -> value.toLong().toULong() }
             val usd = { value: BigInteger -> toUsdUnits(value, decimals) }
+            // Flashnet reports the swap fee in USDB units both ways (its simulate endpoint, 27 Oct), not in sats.
             if (toUsd) {
                 SparkUsdQuote(
                     SparkUsdQuote.Kind.TO_USD,
                     sats(estimate.amountIn),
                     usd(estimate.amountOut),
-                    sats(estimate.fee),
+                    usd(estimate.fee),
                     prepared
                 )
             } else {
@@ -653,7 +654,7 @@ data class SparkUsdRecipient(val request: String, val amount: ULong?)
 
 /**
  * A priced conversion or bridge, ready to run. [pay] and [receive] are in sats for the bitcoin side and in dollar
- * units otherwise; [fee] is in the unit of what is paid, except for the bridge, where it is in dollar units.
+ * units otherwise; [fee] is always in dollar units.
  */
 @Stable
 data class SparkUsdQuote(

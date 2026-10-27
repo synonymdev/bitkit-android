@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets.usdt
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import breez_sdk_spark.SdkException
 import com.synonym.bitkitcore.usdtFormatAmount
 import com.synonym.bitkitcore.usdtParseAmount
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -98,14 +99,29 @@ class SparkUsdViewModel @Inject constructor(
             _state.update { it.copy(error = R.string.usdt__error_balance_spark) }
             return@launch
         }
+        val spendsSats = state.page == SparkUsdPage.CONVERT && state.convertToUsd
+        if (spendsSats && sparkRepo.state.value.balanceSats == 0uL) {
+            _state.update { it.copy(error = R.string.other__pay_insufficient_spending) }
+            return@launch
+        }
         _state.update { it.copy(busy = true, error = null) }
         val result = when (state.page) {
             SparkUsdPage.BRIDGE -> sparkRepo.quoteArbitrumBridge(bridgeAddress.value.orEmpty(), amount)
             else -> sparkRepo.quoteConversion(state.convertToUsd, amount)
         }
         result
-            .onSuccess { quote -> _state.update { it.copy(busy = false, quote = quote) } }
-            .onFailure { _state.update { it.copy(busy = false, error = R.string.usdt__convert_failed_spark) } }
+            .onSuccess { quote ->
+                val paysSats = quote.kind == SparkUsdQuote.Kind.TO_USD
+                val affordable = !paysSats || quote.pay <= sparkRepo.state.value.balanceSats
+                _state.update {
+                    if (affordable) {
+                        it.copy(busy = false, quote = quote)
+                    } else {
+                        it.copy(busy = false, error = R.string.other__pay_insufficient_spending)
+                    }
+                }
+            }
+            .onFailure { error -> _state.update { it.copy(busy = false, error = conversionError(error)) } }
     }
 
     fun confirmQuote() = viewModelScope.launch {
@@ -114,7 +130,13 @@ class SparkUsdViewModel @Inject constructor(
         _state.update { it.copy(busy = true, error = null) }
         sparkRepo.execute(quote)
             .onSuccess { _state.update { it.copy(busy = false, completed = true) } }
-            .onFailure { _state.update { it.copy(busy = false, error = R.string.usdt__convert_failed_spark) } }
+            .onFailure { error -> _state.update { it.copy(busy = false, error = conversionError(error)) } }
+    }
+
+    private fun conversionError(error: Throwable): Int = when {
+        error is SdkException.InsufficientFunds -> R.string.other__pay_insufficient_spending
+        error.message?.contains("insufficient", ignoreCase = true) == true -> R.string.other__pay_insufficient_spending
+        else -> R.string.usdt__convert_failed_spark
     }
 
     fun setRecipientInput(input: String) = _state.update { it.copy(recipientInput = input, error = null) }

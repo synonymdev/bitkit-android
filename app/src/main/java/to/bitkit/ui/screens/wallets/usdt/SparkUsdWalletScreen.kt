@@ -595,7 +595,7 @@ private fun ColumnScope.SparkUsdConvertContent(
     val bitcoinOut = quote.kind == SparkUsdQuote.Kind.TO_BTC
     SparkUsdQuoteRow(R.string.usdt__convert_pay_spark, quote.pay.display(bitcoinIn))
     SparkUsdQuoteRow(R.string.usdt__convert_receive_spark, quote.receive.display(bitcoinOut))
-    SparkUsdQuoteRow(R.string.usdt__convert_fee_spark, quote.fee.display(bitcoinIn))
+    SparkUsdQuoteRow(R.string.usdt__convert_fee_spark, quote.fee.display(isSats = false))
     FillHeight()
     state.error?.let {
         BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("SparkUsdError"))
