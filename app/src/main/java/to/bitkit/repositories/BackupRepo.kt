@@ -60,6 +60,7 @@ import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.MetadataBackupV1
+import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.Toast
@@ -124,6 +125,7 @@ class BackupRepo @Inject constructor(
     private val paykitPaymentProofStore: PaykitPaymentProofStore,
     private val paykitPaymentRequestRepo: Provider<PaykitPaymentRequestRepo>,
     private val paykitPresentationStore: PaykitPaymentRequestPresentationStore,
+    private val paykitAllowanceStore: PaykitAllowanceStore,
     private val keychain: Keychain,
     private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val transferRepo: Provider<TransferRepo>,
@@ -389,6 +391,7 @@ class BackupRepo @Inject constructor(
             )
         )
         dataListenerJobs.add(observeBackupChanges(paykitPresentationStore.backupStateVersion, BackupCategory.WALLET))
+        dataListenerJobs.add(observeBackupChanges(paykitAllowanceStore.backupStateVersion, BackupCategory.WALLET))
         dataListenerJobs.add(
             observeBackupChanges(
                 privatePaykitAddressReservationRepo.get().backupStateVersion,
@@ -770,6 +773,9 @@ class BackupRepo @Inject constructor(
                 activeOnchainAttempt = active,
                 usdt = paykitUsdtPaymentRepo.get().backupSnapshot(),
                 acceptedOneTimeRequests = paykitPresentationStore.acceptedOneTimeBackupSnapshot(),
+                allowances = paykitAllowanceStore.backupSnapshot()
+                    .mapValues { PaykitAllowanceStateBackup(it.value) }
+                    .ifEmpty { null },
             ),
         )
 
@@ -920,6 +926,7 @@ class BackupRepo @Inject constructor(
         parsed.paykitPaymentState?.let {
             // Validate every proof before writing a guard or replacing existing payment state.
             it.pendingProofs.forEach { proof -> proof.restored() }
+            val allowances = it.allowances.orEmpty().mapValues { (_, state) -> state.restored() }
             val walletIndex = backupWalletIndex()
             it.activeOnchainAttempt?.let { wire ->
                 validateActiveProof(wire, it.pendingProofs)
@@ -943,6 +950,7 @@ class BackupRepo @Inject constructor(
             paykitPaymentProofRepo.get().restoreBackup(it.pendingProofs)
             it.usdt?.let { usdt -> paykitUsdtPaymentRepo.get().restoreBackup(usdt) }
             paykitPresentationStore.restoreAcceptedOneTimeRequests(it.acceptedOneTimeRequests.orEmpty())
+            paykitAllowanceStore.restoreBackup(allowances)
         }
         db.transferDao().upsert(parsed.transfers)
         watchOnlyAccountRepo.restore(

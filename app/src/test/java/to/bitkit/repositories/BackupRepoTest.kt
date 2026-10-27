@@ -59,6 +59,7 @@ import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.MetadataBackupV1
+import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitUsdtStateBackup
 import to.bitkit.models.TransportType
@@ -107,6 +108,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val paykitPaymentProofStore = mock<PaykitPaymentProofStore>()
     private val paykitPaymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val paykitPresentationStore = mock<PaykitPaymentRequestPresentationStore>()
+    private val paykitAllowanceStore = mock<PaykitAllowanceStore>()
     private val keychain = mock<Keychain>()
     private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
     private val transferRepo = mock<TransferRepo>()
@@ -178,6 +180,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(usdtRepo.state).thenReturn(MutableStateFlow(UsdtWalletState()))
         whenever(paykitUsdtPaymentRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitPresentationStore.backupSnapshot()).thenReturn(emptyMap())
+        whenever(paykitAllowanceStore.backupSnapshot()).thenReturn(emptyMap())
         whenever { privatePaykitAddressReservationRepo.restoreBackup(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitAddressReservationRepo.backupSnapshot() }.thenReturn(Result.success(null))
         whenever(privatePaykitAddressReservationRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
@@ -627,6 +630,38 @@ class BackupRepoTest : BaseUnitTest() {
         } finally {
             sut.stopObservingBackups()
         }
+    }
+
+    @Test
+    fun `restore brings back each identity's allowance journal and history`() = test {
+        val identity = "pubky" + "z".repeat(52)
+        val allowances = PaykitAllowanceStateBackup(
+            journal = listOf(
+                PaykitAllowanceStateBackup.JournalEntry(
+                    attemptId = "attempt-1",
+                    isAutomatic = true,
+                    requestId = PaykitPaymentRequestId("request-1", "pubky" + "y".repeat(52)),
+                    allowanceId = "allowance-1",
+                    amountSats = 1_000uL,
+                    paymentEndpointIdentifier = "btc-lightning-bolt11",
+                    paymentHash = "ab".repeat(32),
+                    stage = "sent",
+                    createdAt = "2026-10-27T01:00:00Z",
+                ),
+            ),
+            autoPaidSatsByAllowance = mapOf("pubky${"y".repeat(52)}/allowance-1" to 3_000uL),
+        )
+        stubWalletBackup(
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = emptyMap(),
+                pendingProofs = emptyList(),
+                allowances = mapOf(identity to allowances),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        verify(paykitAllowanceStore).restoreBackup(mapOf(identity to allowances.restored()))
     }
 
     @Test
@@ -2070,6 +2105,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(privatePaykitAddressReservationRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitPaymentProofStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitPresentationStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(paykitAllowanceStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(preActivityMetadataRepo.preActivityMetadataChanged).thenReturn(MutableStateFlow(0L))
         whenever(lightningService.syncStatusChanged).thenReturn(MutableSharedFlow())
     }
@@ -2098,6 +2134,7 @@ class BackupRepoTest : BaseUnitTest() {
         paykitPaymentProofStore = paykitPaymentProofStore,
         paykitPaymentRequestRepo = Provider { paykitPaymentRequestRepo },
         paykitPresentationStore = paykitPresentationStore,
+        paykitAllowanceStore = paykitAllowanceStore,
         keychain = keychain,
         onchainSendAttemptStore = onchainSendAttemptStore,
         transferRepo = Provider { transferRepo },
