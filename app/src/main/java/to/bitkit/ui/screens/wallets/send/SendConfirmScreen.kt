@@ -392,7 +392,9 @@ private fun ContentRunning(
             BalanceHeaderView(
                 sats = (preparingRequest?.amount?.atomic ?: uiState.amount).toLong(),
                 useSwipeToHide = false,
-                onClick = { onEvent(SendEvent.BackToAmount) }.takeIf { !isPreparing && uiState.isAmountEditable },
+                onClick = {
+                    if (!isPreparing && uiState.isAmountEditable) onEvent(SendEvent.BackToAmount)
+                },
                 testTag = "ReviewAmount",
                 modifier = Modifier
                     .fillMaxWidth()
