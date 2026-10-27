@@ -25,12 +25,14 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.paykit.PaymentRequestLifecycleState
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
@@ -59,6 +61,7 @@ import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.OnchainFeeUi
+import to.bitkit.viewmodels.LnurlParams
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendFundingOption
 import to.bitkit.viewmodels.SendFundingSource
@@ -133,6 +136,52 @@ class SendConfirmScreenTest {
         composeTestRule.onNodeWithText("USDT").performClick()
         composeTestRule.runOnIdle { assertEquals(SendEvent.PaymentMethodSelect(SendFundingSource.Usdt), selected) }
         composeTestRule.onNodeWithTag("SendFundingSources").assertDoesNotExist()
+    }
+
+    @Test
+    fun fixedLnurlRequestDetailsAllowSupportedComments() {
+        val lnurl = LnurlPayData(
+            uri = "lnurl1comment",
+            callback = "https://example.com/callback",
+            minSendable = 1_000_000u,
+            maxSendable = 1_000_000u,
+            metadataStr = "[]",
+            commentAllowed = 100u,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        val state = mutableStateOf(
+            SendUiState(
+                amount = 1_000u,
+                isPaymentRequest = true,
+                isAmountInputValid = true,
+                payMethod = SendMethod.LIGHTNING,
+                lnurl = LnurlParams.LnurlPay(lnurl),
+            ),
+        )
+        var commentEvent: SendEvent? = null
+        composeTestRule.setContent {
+            AppThemeSurface {
+                CompositionLocalProvider(LocalInspectionMode provides true) {
+                    SendConfirmContent(
+                        uiState = state.value,
+                        isNodeRunning = true,
+                        isLoading = false,
+                        showBiometrics = false,
+                        onEvent = { commentEvent = it },
+                        modifier = Modifier.sheetHeight()
+                    )
+                }
+            }
+        }
+        composeTestRule.onNodeWithTag("CommentInput").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("SendConfirmToggleDetails").performClick()
+        composeTestRule.onNodeWithTag("CommentInput").performScrollTo().performTextInput("Thanks")
+        composeTestRule.runOnIdle {
+            assertEquals(SendEvent.CommentChange("Thanks"), commentEvent)
+            state.value = state.value.copy(lnurl = LnurlParams.LnurlPay(lnurl.copy(commentAllowed = 0u)))
+        }
+        composeTestRule.onNodeWithTag("CommentInput").assertDoesNotExist()
     }
 
     @Test

@@ -451,6 +451,9 @@ private fun ContentRunning(
                                 onClickTag = onClickTag,
                                 onClickAddTag = onClickAddTag,
                             )
+                            if ((uiState.lnurl as? LnurlParams.LnurlPay)?.data?.commentAllowed() == true) {
+                                LnurlCommentSection(uiState, onEvent)
+                            }
                         }
                     }
                 } else {
