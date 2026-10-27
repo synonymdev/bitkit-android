@@ -3127,6 +3127,23 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `release stays unfinished while its allowance outcome cannot be recorded`() = test {
+        val attempt = unknownShopAttempt("ab".repeat(32))
+        val proof = startedOnchainProof(attempt)
+        storedProofs = listOf(proof)
+        whenever(paykitSdkService.paymentRequests())
+            .thenReturn(listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.CANCELED)))
+        stubAbandon(attempt)
+        whenever(allowanceExecutor.onchainSendReleased(any(), any())).thenThrow(RuntimeException("ledger"))
+
+        val result = paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, FakeReleaseWallet()) {}
+
+        assertTrue(result.isFailure)
+        assertEquals(listOf(proof), storedProofs)
+        verify(lightningRepo, never()).abandonUnbroadcastOnchainSend(any(), any())
+    }
+
+    @Test
     fun `payment that may still confirm or whose request is open keeps its proof`() = test {
         val attempt = unknownShopAttempt("ab".repeat(32))
         val proof = startedOnchainProof(attempt)

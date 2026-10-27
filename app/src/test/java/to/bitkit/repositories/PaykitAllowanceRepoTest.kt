@@ -68,6 +68,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
     private val proposedTerms = mutableListOf<Pair<Instant, List<String>>>()
     private var localState = PaykitAllowanceLocalState()
+    private var failDurableSave = false
     private var records = listOf<AllowanceRecord>()
     private lateinit var sut: PaykitAllowanceRepo
 
@@ -76,6 +77,12 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         whenever(executor.events).thenReturn(executorEvents)
         whenever(executor.localState(any())).thenAnswer { localState }
         whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
+            val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
+            localState = change(localState)
+            localState
+        }
+        whenever(executor.updateLocalStateDurably(any(), any())).doSuspendableAnswer {
+            if (failDurableSave) throw PaykitAllowanceError.Unavailable
             val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
             localState = change(localState)
             localState
@@ -433,11 +440,69 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         val unannounced = sut.acceptOffersFromAllowers()
         assertEquals(listOf(fixtures.counterpartyKey), unannounced.map { it.counterparty })
-        assertEquals(unannounced, sut.acceptOffersFromAllowers(), "It stays due until the app has announced it")
+        assertEquals(unannounced, sut.offersToAnnounce.value, "It waits for the app to announce it")
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An overlapping refresh never adds it twice")
         sut.markOffersAnnounced(unannounced)
+        assertTrue(sut.offersToAnnounce.value.isEmpty())
+        assertTrue(localState.acceptingOfferIds.isEmpty(), "Its mark is cleared with it")
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "It is announced once")
         assertTrue(localState.acceptingOfferIds.isEmpty())
         verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `a refresh while an announced offer's mark is cleared never queues it again`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+        val announced = sut.acceptOffersFromAllowers()
+        var duringClear: List<PaykitAllowanceEntry>? = null
+        var clearing = false
+        whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
+            val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
+            if (!clearing) {
+                clearing = true
+                duringClear = sut.acceptOffersFromAllowers()
+            }
+            localState = change(localState)
+            localState
+        }
+
+        sut.markOffersAnnounced(announced)
+
+        assertEquals(emptyList(), duringClear)
+        assertTrue(sut.offersToAnnounce.value.isEmpty())
+    }
+
+    @Test
+    fun `an announced offer whose cleared mark could not be saved is not announced again`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+        val announced = sut.acceptOffersFromAllowers()
+        assertEquals(listOf(fixtures.counterpartyKey), announced.map { it.counterparty })
+        // updateLocalState logs a failed save and returns the changed state without storing it.
+        whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
+            val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
+            change(localState)
+        }
+
+        sut.markOffersAnnounced(announced)
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An offer already announced is not announced again")
+    }
+
+    @Test
+    fun `offer is not accepted while its mark cannot be saved`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+        failDurableSave = true
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
     }
 
     @Test

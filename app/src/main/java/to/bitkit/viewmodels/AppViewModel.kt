@@ -1203,12 +1203,10 @@ class AppViewModel @Inject constructor(
             releaseCoverage()
         }
         return result.onSuccess {
-            val acceptedOffers = paykitAllowanceRepo.acceptOffersFromAllowers(
+            paykitAllowanceRepo.acceptOffersFromAllowers(
                 canAnnounce = { !privatePaykitRepo.isProfileDeletionInProgress.value },
                 canContinue = { !(onlyWhileActive && isPaymentRequestPollingStopped.value) },
             )
-            announceAcceptedAllowanceOffers(acceptedOffers)
-            paykitAllowanceRepo.markOffersAnnounced(acceptedOffers)
             if (processAllowanceRequests()) refreshRequestsUnderCoverageHold()
             presentNextIncomingPaykitPaymentRequest()
         }
@@ -1244,6 +1242,13 @@ class AppViewModel @Inject constructor(
     private fun observePaykitAllowanceEvents() {
         viewModelScope.launch {
             paykitAllowanceRepo.events.collect(::handlePaykitAllowanceEvent)
+        }
+        viewModelScope.launch {
+            // Announced here rather than by the refresh that accepted them, which polling may cancel.
+            paykitAllowanceRepo.offersToAnnounce.filter { it.isNotEmpty() }.collect { offers ->
+                announceAcceptedAllowanceOffers(offers)
+                paykitAllowanceRepo.markOffersAnnounced(offers)
+            }
         }
         viewModelScope.launch {
             // A request held while allowances updated is presented once they settle, whether or not the refresh

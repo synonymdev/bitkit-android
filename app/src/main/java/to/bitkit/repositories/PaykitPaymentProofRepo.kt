@@ -587,11 +587,12 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     /** Removes the original proof, then the attempt, once its release reached the network. */
     private suspend fun finishRelease(attempt: OnchainSendAttempt) {
+        // The release removes what allowance recovery reads, so the request's ledger attempt is failed first; a
+        // failure leaves the release unfinished, to be finished again later.
+        attempt.requestId?.let { allowanceExecutor.get().onchainSendReleased(attempt.payerIdentity, it) }
         if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt) { removeOriginalShopProofs(it) }) {
             throw OnchainSendBlockedError(attempt)
         }
-        // The release removed what allowance recovery reads, so the request's ledger attempt is failed here.
-        attempt.requestId?.let { allowanceExecutor.get().onchainSendReleased(attempt.payerIdentity, it) }
         Logger.info(
             "Released on-chain payment '${attempt.txid}' through '${attempt.releaseTxid}' after its request ended",
             context = TAG,

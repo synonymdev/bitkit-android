@@ -195,7 +195,8 @@ class PaykitAllowanceExecutor @Inject constructor(
         updated
     }
 
-    private suspend fun updateLocalStateDurably(
+    /** Like [updateLocalState], but a failed save throws instead of being logged. */
+    suspend fun updateLocalStateDurably(
         identity: String,
         change: (PaykitAllowanceLocalState) -> PaykitAllowanceLocalState,
     ): PaykitAllowanceLocalState = stateMutex.withLock {
@@ -304,7 +305,14 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     private suspend fun syncSettledJournal(attemptId: String, stage: Stage, identity: String) {
         val current = localState(identity).journal.firstOrNull { it.attemptId == attemptId } ?: return
-        if (current.stage == Stage.SUCCEEDED || current.stage == Stage.FAILED) return
+        if (current.stage == Stage.SUCCEEDED) return
+        if (current.stage == Stage.FAILED) {
+            // A failed automatic attempt still holding its list could not save the cleared claim; give it back now.
+            if (stage == Stage.FAILED && current.isAutomatic && current.paymentListVersion != null) {
+                releasePaymentList(current, identity)
+            }
+            return
+        }
         val before = applyJournalStage(attemptId, stage, identity) ?: return
         if (stage == Stage.FAILED && before.isAutomatic) releasePaymentList(before, identity)
     }
@@ -834,8 +842,9 @@ class PaykitAllowanceExecutor @Inject constructor(
     }
 
     /**
-     * Records a released manual on-chain send of [requestId] as failed: the release spent its coins back to the wallet
-     * and removed the evidence recovery reads, so the attempt would otherwise stay unknown and hold capacity.
+     * Records a released manual on-chain send of [requestId] as failed: the release spends its coins back to the wallet
+     * and removes the evidence recovery reads, so the attempt would otherwise stay unknown and hold capacity. Throws
+     * when an outcome could not be recorded, so the release is not finished without it.
      */
     suspend fun onchainSendReleased(payerIdentity: String?, requestId: PaykitPaymentRequestId) {
         val identity = activeIdentity?.takeIf { PubkyPublicKeyFormat.matches(it, payerIdentity) } ?: return
@@ -845,10 +854,7 @@ class PaykitAllowanceExecutor @Inject constructor(
                     it.requestId == requestId && !it.isAutomatic && it.paymentHash == null &&
                         it.stage in SETTLEABLE_STAGES
                 }
-                for (attempt in attempts) {
-                    runSuspendCatching { record(attempt.attemptId, PaymentOutcome.FAILED, identity) }
-                        .onFailure { Logger.warn("Failed to record a released on-chain payment", it, context = TAG) }
-                }
+                for (attempt in attempts) record(attempt.attemptId, PaymentOutcome.FAILED, identity)
             }
         }
     }
