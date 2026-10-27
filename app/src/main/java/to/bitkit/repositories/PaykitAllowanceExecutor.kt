@@ -655,7 +655,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
         payer.prepareProof(request, endpointIdentifier, payment.appId, submitted.allowanceId).onFailure {
             payer.cancelProofPreparation(request)
-            failUnsent(request, payment, submitted.attemptId, identity)
+            failUnsent(submitted.attemptId, identity)
             throw it
         }
 
@@ -678,13 +678,13 @@ class PaykitAllowanceExecutor @Inject constructor(
             payment.appId,
         ).onFailure {
             payer.cancelProofPreparation(request)
-            failUnsent(request, payment, attemptId, identity)
+            failUnsent(attemptId, identity)
             throw it
         }
 
         runSuspendCatching { setStage(Stage.SENDING, attemptId, identity) }.onFailure {
             payer.discardLightningProof(paymentHash)
-            failUnsent(request, payment, attemptId, identity)
+            failUnsent(attemptId, identity)
             throw it
         }
         val sats = amountSats.takeUnless { payment.lightningInvoiceHasAmount }
@@ -699,7 +699,7 @@ class PaykitAllowanceExecutor @Inject constructor(
             // Only an error that proves the payment never left releases the reservation; anything else stays open,
             // and the node's payment event records its outcome.
             if (payer.failLightningPayment(paymentHash, it)) {
-                failUnsent(request, payment, attemptId, identity)
+                failUnsent(attemptId, identity)
                 throw it
             }
             Logger.warn("Left an allowance payment with an uncertain send result to the node", it, context = TAG)
@@ -922,41 +922,9 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
     }
 
-    private suspend fun failUnsent(
-        request: PaykitPaymentRequest,
-        payment: PrivatePaykitAllowancePayment,
-        attemptId: String,
-        identity: String,
-    ) {
-        // Released only by whichever of this and the node's failure event takes the journaled version first.
-        takePaymentListVersion(attemptId, identity)?.let { taken ->
-            payer.releasePaymentList(request.counterparty, payment.context, attemptId)
-                .onFailure { restorePaymentListVersion(taken, identity) }
-        }
+    private suspend fun failUnsent(attemptId: String, identity: String) {
+        releasePaymentList(attemptId, identity)
         record(attemptId, PaymentOutcome.FAILED, identity)
-    }
-
-    /**
-     * Clears and returns the payment list version an attempt journaled, so the paths that race to release it release it
-     * once. Returns null when the cleared version could not be saved, since a stored version is released again later.
-     */
-    private suspend fun takePaymentListVersion(attemptId: String, identity: String): JournalEntry? {
-        var taken: JournalEntry? = null
-        runSuspendCatching {
-            updateLocalStateDurably(identity) { state ->
-                state.copy(
-                    journal = state.journal.map {
-                        if (it.attemptId != attemptId) return@map it
-                        taken = it.takeIf { entry -> entry.paymentListVersion != null }
-                        it.copy(paymentListVersion = null, previousPaymentListVersion = null)
-                    },
-                )
-            }
-        }.onFailure {
-            Logger.warn("Kept a payment list unreleased: its claim could not be saved", it, context = TAG)
-            return null
-        }
-        return taken
     }
 
     private suspend fun updateJournalEntry(
@@ -969,27 +937,27 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
     }
 
-    private suspend fun releasePaymentList(entry: JournalEntry, identity: String) {
-        val taken = takePaymentListVersion(entry.attemptId, identity) ?: return
+    private suspend fun releasePaymentList(entry: JournalEntry, identity: String) =
+        releasePaymentList(entry.attemptId, identity)
+
+    /**
+     * Gives back the payment list the attempt journaled, and clears the journaled version only once that succeeded, so
+     * a failed release or a restart leaves it for the next recovery. Releasing is owner-checked, so a repeated release
+     * never undoes another payment's claim.
+     */
+    private suspend fun releasePaymentList(attemptId: String, identity: String) {
+        val entry = localState(identity).journal.firstOrNull { it.attemptId == attemptId } ?: return
+        val version = entry.paymentListVersion ?: return
         val context = PrivatePaykitPaymentContext(
             paymentAppsByEndpoint = emptyMap(),
-            paymentListVersion = requireNotNull(taken.paymentListVersion),
-            previousPaymentListVersion = taken.previousPaymentListVersion,
+            paymentListVersion = version,
+            previousPaymentListVersion = entry.previousPaymentListVersion,
         )
-        payer.releasePaymentList(entry.requestId.counterparty, context, entry.attemptId)
-            .onFailure { restorePaymentListVersion(taken, identity) }
-    }
-
-    // A release that failed leaves the list consumed; journaling it again lets the next recovery retry it.
-    private suspend fun restorePaymentListVersion(taken: JournalEntry, identity: String) {
-        runSuspendCatching {
-            updateJournalEntry(taken.attemptId, identity) {
-                it.copy(
-                    paymentListVersion = taken.paymentListVersion,
-                    previousPaymentListVersion = taken.previousPaymentListVersion,
-                )
+        payer.releasePaymentList(entry.requestId.counterparty, context, attemptId).onSuccess {
+            updateJournalEntry(attemptId, identity) {
+                it.copy(paymentListVersion = null, previousPaymentListVersion = null)
             }
-        }.onFailure { Logger.warn("Failed to keep an unreleased payment list for recovery", it, context = TAG) }
+        }
     }
 
     private suspend fun notifyLimitReached(request: PaykitPaymentRequest, identity: String) {
