@@ -302,7 +302,14 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     private suspend fun syncSettledJournal(attemptId: String, stage: Stage, identity: String) {
         val current = localState(identity).journal.firstOrNull { it.attemptId == attemptId } ?: return
-        if (current.stage == Stage.SUCCEEDED || current.stage == Stage.FAILED) return
+        if (current.stage == Stage.SUCCEEDED) return
+        if (current.stage == Stage.FAILED) {
+            // A failed automatic attempt still holding its list could not save the cleared claim; give it back now.
+            if (stage == Stage.FAILED && current.isAutomatic && current.paymentListVersion != null) {
+                releasePaymentList(current, identity)
+            }
+            return
+        }
         val before = applyJournalStage(attemptId, stage, identity) ?: return
         if (stage == Stage.FAILED && before.isAutomatic) releasePaymentList(before, identity)
     }

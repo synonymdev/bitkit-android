@@ -614,6 +614,31 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment list whose cleared claim could not be saved is given back by the next recovery`() = test {
+        sut.activate(identity)
+        seedJournal(
+            journalEntry("attempt-1", fixtures.paymentRequest(), Stage.SENT, paymentHash = PAYMENT_HASH)
+                .copy(paymentListVersion = 4uL, previousPaymentListVersion = 3uL),
+        )
+        var saves = 0
+        // The stage save succeeds; only the claim clear that follows it fails.
+        failSave = { ++saves == 2 }
+
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+
+        assertEquals(listOf(Stage.FAILED), sut.localState(identity).journal.map { it.stage })
+        verify(payer, never()).releasePaymentList(any(), any())
+
+        failSave = { false }
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("attempt-1", PaymentExecutionStatus.FAILED)),
+        )
+        sut.recover(identity)
+
+        verify(payer, times(1)).releasePaymentList(any(), any())
+    }
+
+    @Test
     fun `recovery failing an attempt while its settlement records it gives the payment list back once`() = test {
         sut.activate(identity)
         accountingState = fixtures.accountingState(
