@@ -107,7 +107,6 @@ class PaykitAllowanceRepo @Inject constructor(
     private val publishLock = Any()
     private val isProcessingRequests = AtomicBoolean(false)
     private val isAcceptingOffers = AtomicBoolean(false)
-    private val claimedOfferIds = ConcurrentHashMap.newKeySet<String>()
     private val updates = MutableStateFlow(0)
 
     /** True while allowances are refreshing or requests are being admitted, when coverage may still change. */
@@ -136,6 +135,14 @@ class PaykitAllowanceRepo @Inject constructor(
     val autoPaidSats: StateFlow<Map<String, ULong>> = _autoPaidSats.asStateFlow()
 
     val events: SharedFlow<PaykitAllowanceEvent> = executor.events
+
+    private val _offersToAnnounce = MutableStateFlow<List<PaykitAllowanceEntry>>(emptyList())
+
+    /**
+     * Offers accepted automatically that the user has not been told about yet. They stay here until
+     * [markOffersAnnounced], independent of the refresh that accepted them, so a cancelled refresh never loses one.
+     */
+    val offersToAnnounce: StateFlow<List<PaykitAllowanceEntry>> = _offersToAnnounce.asStateFlow()
 
     internal constructor(
         ioDispatcher: CoroutineDispatcher,
@@ -177,6 +184,7 @@ class PaykitAllowanceRepo @Inject constructor(
             executor.activate(normalizedIdentity)
             if (identityChanged) {
                 manualRequestSignatures.clear()
+                _offersToAnnounce.update { emptyList() }
                 executor.recover(normalizedIdentity)
             }
             refresh()
@@ -187,6 +195,7 @@ class PaykitAllowanceRepo @Inject constructor(
         activeIdentity = null
         executor.activate(null)
         manualRequestSignatures.clear()
+        _offersToAnnounce.update { emptyList() }
         publish(emptyList(), PaykitAllowanceLocalState())
     }
 
@@ -294,12 +303,12 @@ class PaykitAllowanceRepo @Inject constructor(
     }
 
     /**
-     * Accepts the offers that make this wallet the allowee and returns the ones now active so the caller can tell the
-     * user. A failed accept stays unanswered and is tried again on the next refresh. Stops accepting once
-     * [canContinue] turns false and still returns what it accepted. An offer is marked before its accept and stays
+     * Accepts the offers that make this wallet the allowee, adds the ones now active to [offersToAnnounce] and returns
+     * them. A failed accept stays unanswered and is tried again on the next refresh. Stops accepting once
+     * [canContinue] turns false and still announces what it accepted. An offer is marked before its accept and stays
      * marked until [markOffersAnnounced], so one whose accept committed in a call that was cancelled, or a process
-     * that died, is returned by the next call. Returns nothing to announce once the identity it started with is gone
-     * or [canAnnounce] turns false.
+     * that died, is announced by the next call. Announces nothing once the identity it started with is gone or
+     * [canAnnounce] turns false.
      */
     suspend fun acceptOffersFromAllowers(
         canAnnounce: () -> Boolean = { true },
@@ -334,24 +343,21 @@ class PaykitAllowanceRepo @Inject constructor(
                 }
             }
             if (!isCurrent()) return@withContext emptyList()
-            // Claimed until the caller announces or releases them, so an overlapping refresh never returns them too.
-            claimedOfferIds += accepted.flatMap { offer -> offer.allowances.map { it.key } }
+            if (accepted.isNotEmpty()) _offersToAnnounce.update { it + accepted }
             accepted
         } finally {
             isAcceptingOffers.set(false)
         }
     }
 
-    /** Lets offers returned for announcement be returned again; their marks bring back any that were not announced. */
-    fun releaseOfferClaims(offers: List<PaykitAllowanceEntry>) {
-        claimedOfferIds -= offers.flatMap { offer -> offer.allowances.map { it.key } }.toSet()
-    }
-
-    /** Clears the marks of offers the user was told about, so they are never announced again. */
+    /** Clears offers the user was told about, so they are never announced again. */
     suspend fun markOffersAnnounced(offers: List<PaykitAllowanceEntry>) {
-        val identity = activeIdentity ?: return
         val announced = offers.flatMap { offer -> offer.allowances.map { it.key } }.toSet()
         if (announced.isEmpty()) return
+        _offersToAnnounce.update { pending ->
+            pending.filterNot { entry -> entry.allowances.any { it.key in announced } }
+        }
+        val identity = activeIdentity ?: return
         withContext(ioDispatcher) {
             executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - announced) }
         }
@@ -370,8 +376,9 @@ class PaykitAllowanceRepo @Inject constructor(
         if (stale.isNotEmpty()) {
             executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - stale) }
         }
+        val pending = _offersToAnnounce.value.flatMap { entry -> entry.allowances.map { it.key } }.toSet()
         return _entries.value.filter { entry ->
-            entry.allowances.none { it.key in claimedOfferIds } &&
+            entry.allowances.none { it.key in pending } &&
                 entry.allowances.any { it.key in marked && it.lifecycleState == AllowanceLifecycleState.ACCEPTED }
         }
     }
