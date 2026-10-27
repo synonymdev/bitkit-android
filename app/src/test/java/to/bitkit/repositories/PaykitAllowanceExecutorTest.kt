@@ -219,8 +219,8 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(payer.acceptOnThisInstall<AllowanceAssociationRecord>(any(), any())).doSuspendableAnswer {
             runCatching { it.getArgument<suspend () -> AllowanceAssociationRecord>(1).invoke() }
         }
-        whenever(payer.consumePaymentList(any(), any())).thenReturn(Result.success(Unit))
-        whenever(payer.releasePaymentList(any(), any())).thenReturn(Result.success(Unit))
+        whenever(payer.consumePaymentList(any(), any(), any())).thenReturn(Result.success(Unit))
+        whenever(payer.releasePaymentList(any(), any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.prepareProof(any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(payer.associateLightningPayment(any(), any(), any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.payLightning(any(), anyOrNull(), anyOrNull(), any())).thenReturn(Result.success(PAYMENT_HASH))
@@ -263,7 +263,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         order.verify(sdk).reserveAutomaticPayment(any(), any(), any())
         order.verify(sdk).receivePrivateMessages(request.counterparty)
         order.verify(sdk).beginPaymentExecution(eq(AUTOMATIC_ATTEMPT_ID), any())
-        order.verify(payer).consumePaymentList(request.counterparty, lightningPayment().context)
+        order.verify(payer).consumePaymentList(request.counterparty, lightningPayment().context, AUTOMATIC_ATTEMPT_ID)
         order.verify(payer).prepareProof(request, fixtures.lightningIdentifier, PAYMENT_APP_ID, ALLOWANCE_ID)
         order.verify(payer).associateLightningPayment(
             request,
@@ -499,7 +499,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
-        verify(payer, never()).consumePaymentList(any(), any())
+        verify(payer, never()).consumePaymentList(any(), any(), any())
         verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
     }
 
@@ -512,7 +512,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
         assertEquals(listOf(Stage.FAILED), sut.localState(identity).journal.map { it.stage })
-        verify(payer, never()).consumePaymentList(any(), any())
+        verify(payer, never()).consumePaymentList(any(), any(), any())
         verify(payer, never()).prepareProof(any(), any(), any(), anyOrNull())
         verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
     }
@@ -527,7 +527,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         verify(payer).cancelProofPreparation(request)
-        verify(payer).releasePaymentList(eq(request.counterparty), any())
+        verify(payer).releasePaymentList(eq(request.counterparty), any(), any())
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
         verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
     }
@@ -541,7 +541,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
         verify(sdk, never()).beginPaymentExecution(any(), any())
-        verify(payer, never()).consumePaymentList(any(), any())
+        verify(payer, never()).consumePaymentList(any(), any(), any())
         verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
     }
 
@@ -554,7 +554,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
         verify(payer).discardLightningProof(PAYMENT_HASH)
-        verify(payer).releasePaymentList(any(), any())
+        verify(payer).releasePaymentList(any(), any(), any())
         verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
     }
 
@@ -587,14 +587,14 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
 
         // The node's failure event lands between the failed send's release and its record.
-        whenever(payer.releasePaymentList(any(), any())).doSuspendableAnswer {
+        whenever(payer.releasePaymentList(any(), any(), any())).doSuspendableAnswer {
             sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
             Result.success(Unit)
         }
 
         sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
-        verify(payer, times(1)).releasePaymentList(any(), any())
+        verify(payer, times(1)).releasePaymentList(any(), any(), any())
         assertNull(sut.localState(identity).journal.single().paymentListVersion)
     }
 
@@ -609,7 +609,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
 
-        verify(payer, never()).releasePaymentList(any(), any())
+        verify(payer, never()).releasePaymentList(any(), any(), any())
         assertEquals(4uL, sut.localState(identity).journal.single().paymentListVersion)
     }
 
@@ -627,7 +627,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
 
         assertEquals(listOf(Stage.FAILED), sut.localState(identity).journal.map { it.stage })
-        verify(payer, never()).releasePaymentList(any(), any())
+        verify(payer, never()).releasePaymentList(any(), any(), any())
 
         failSave = { false }
         accountingState = fixtures.accountingState(
@@ -635,40 +635,46 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         )
         sut.recover(identity)
 
-        verify(payer, times(1)).releasePaymentList(any(), any())
+        verify(payer, times(1)).releasePaymentList(any(), any(), any())
     }
 
     @Test
-    fun `recovery does not give back a list a failed attempt never consumed`() = test {
+    fun `recovery gives back a list a failed attempt never consumed only as that attempt`() = test {
         beginDecision = PaymentAttemptDecision.Blocked(AllowanceAccountingBlock.ManualOnly)
         sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
-        verify(payer, never()).consumePaymentList(any(), any())
+        verify(payer, never()).consumePaymentList(any(), any(), any())
 
         accountingState = fixtures.accountingState(
             occurrences = listOf(occurrence(AUTOMATIC_ATTEMPT_ID, PaymentExecutionStatus.FAILED)),
         )
         sut.recover(identity)
 
-        verify(payer, never()).releasePaymentList(any(), any())
+        // The claim belongs to whoever consumed the list since, so this owner's release changes nothing.
+        verify(payer, times(1)).releasePaymentList(any(), any(), eq(AUTOMATIC_ATTEMPT_ID))
     }
 
     @Test
-    fun `a consumed list whose version cannot be journaled is given back at once and never by recovery`() = test {
-        failSave = { Regex("\"paymentListVersion\":\\d").containsMatchIn(it) }
-
-        runCatching { sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity) }
-
-        verify(payer).consumePaymentList(any(), any())
-        verify(payer, times(1)).releasePaymentList(any(), any())
-        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
-
-        failSave = { false }
+    fun `a payment list whose release fails is given back by the next recovery`() = test {
+        val request = fixtures.paymentRequest()
         accountingState = fixtures.accountingState(
-            occurrences = listOf(occurrence(AUTOMATIC_ATTEMPT_ID, PaymentExecutionStatus.FAILED)),
+            occurrences = listOf(occurrence("consumed", PaymentExecutionStatus.SUBMITTED)),
+        )
+        seedJournal(journalEntry("consumed", request, Stage.SUBMITTED).copy(paymentListVersion = 4uL))
+        whenever(payer.releasePaymentList(any(), any(), any()))
+            .thenReturn(Result.failure(TestAllowanceError("release")))
+
+        sut.recover(identity)
+
+        assertEquals(4uL, sut.localState(identity).journal.single().paymentListVersion)
+
+        whenever(payer.releasePaymentList(any(), any(), any())).thenReturn(Result.success(Unit))
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("consumed", PaymentExecutionStatus.FAILED)),
         )
         sut.recover(identity)
 
-        verify(payer, times(1)).releasePaymentList(any(), any())
+        verify(payer, times(2)).releasePaymentList(any(), any(), eq("consumed"))
+        assertNull(sut.localState(identity).journal.single().paymentListVersion)
     }
 
     @Test
@@ -694,7 +700,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
 
-        verify(payer, times(1)).releasePaymentList(any(), any())
+        verify(payer, times(1)).releasePaymentList(any(), any(), any())
     }
 
     @Test
@@ -718,7 +724,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         sut.recover(identity)
 
-        verify(payer, times(1)).releasePaymentList(any(), any())
+        verify(payer, times(1)).releasePaymentList(any(), any(), any())
     }
 
     @Test
@@ -732,7 +738,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
-        verify(payer, times(1)).releasePaymentList(any(), any())
+        verify(payer, times(1)).releasePaymentList(any(), any(), any())
     }
 
     @Test
@@ -744,7 +750,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
         verify(sdk, never()).reserveAutomaticPayment(any(), any(), any())
-        verify(payer, never()).consumePaymentList(any(), any())
+        verify(payer, never()).consumePaymentList(any(), any(), any())
     }
 
     @Test
@@ -823,6 +829,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         verify(payer).releasePaymentList(
             eq(request.counterparty),
             eq(PrivatePaykitPaymentContext(emptyMap(), paymentListVersion = 4uL, previousPaymentListVersion = 3uL)),
+            any(),
         )
         assertTrue(sut.isAutomaticPayment(PAYMENT_HASH.uppercase()))
         assertFalse(sut.isAutomaticPayment("f".repeat(64)))
@@ -898,6 +905,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         verify(payer).releasePaymentList(
             eq(request.counterparty),
             eq(PrivatePaykitPaymentContext(emptyMap(), paymentListVersion = 4uL)),
+            any(),
         )
     }
 
@@ -939,6 +947,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         verify(payer).releasePaymentList(
             eq(request.counterparty),
             eq(PrivatePaykitPaymentContext(emptyMap(), paymentListVersion = 5uL)),
+            any(),
         )
     }
 

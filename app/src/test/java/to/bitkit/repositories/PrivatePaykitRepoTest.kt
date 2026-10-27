@@ -3701,6 +3701,25 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `releasePrivatePaymentList gives a list back only to the owner that consumed it`() = test {
+        val context = PrivatePaykitPaymentContext(emptyMap(), 7uL)
+        fun consumed() = cacheData.value.contacts[CONTACT_KEY]?.consumedPrivatePaymentListVersion
+
+        sut.consumePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-b").getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a").getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, context).getOrThrow()
+        assertEquals(7uL, consumed())
+
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-b").getOrThrow()
+        assertNull(consumed())
+        assertNull(cacheData.value.contacts[CONTACT_KEY]?.consumedPrivatePaymentListOwner)
+
+        sut.consumePrivatePaymentList(CONTACT_KEY, context).getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a").getOrThrow()
+        assertEquals(7uL, consumed())
+    }
+
+    @Test
     fun `releasePrivatePaymentList makes matching version reusable without clearing newer consumption`() = test {
         val releasedContext = PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to "bitkit"), 7uL)
         val newerContext = PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to "bitkit"), 8uL)

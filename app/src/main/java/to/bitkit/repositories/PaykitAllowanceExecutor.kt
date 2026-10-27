@@ -55,12 +55,18 @@ class PaykitAllowancePayer @Inject constructor(
         eligibleIdentifiers: List<String>,
     ): Result<PrivatePaykitAllowancePayment?> = privatePaykitRepo.resolveAllowancePayment(request, eligibleIdentifiers)
 
-    suspend fun consumePaymentList(publicKey: String, context: PrivatePaykitPaymentContext): Result<Unit> =
-        privatePaykitRepo.consumePrivatePaymentList(publicKey, context)
+    suspend fun consumePaymentList(
+        publicKey: String,
+        context: PrivatePaykitPaymentContext,
+        attemptId: String,
+    ): Result<Unit> = privatePaykitRepo.consumePrivatePaymentList(publicKey, context, owner = attemptId)
 
-    /** Gives back a consumed payment list, so the request's manual fallback can still use it. */
-    suspend fun releasePaymentList(publicKey: String, context: PrivatePaykitPaymentContext): Result<Unit> =
-        privatePaykitRepo.releasePrivatePaymentList(publicKey, context)
+    /** Gives back a payment list the attempt consumed, so the request's manual fallback can still use it. */
+    suspend fun releasePaymentList(
+        publicKey: String,
+        context: PrivatePaykitPaymentContext,
+        attemptId: String,
+    ): Result<Unit> = privatePaykitRepo.releasePrivatePaymentList(publicKey, context, owner = attemptId)
 
     /** Accepts through [accept] with this install as the request's owner, so a failed payment stays payable here. */
     suspend fun <T> acceptOnThisInstall(request: PaykitPaymentRequest, accept: suspend () -> T): Result<T> =
@@ -576,6 +582,8 @@ class PaykitAllowanceExecutor @Inject constructor(
                     onchainAddress = payment.endpoint.value.takeIf { payment.endpoint.methodId.isOnchain },
                     stage = Stage.PREPARED,
                     createdAtMillis = clock.now().toEpochMilliseconds(),
+                    paymentListVersion = payment.context.paymentListVersion,
+                    previousPaymentListVersion = payment.context.previousPaymentListVersion,
                 ),
                 identity,
             )
@@ -610,13 +618,7 @@ class PaykitAllowanceExecutor @Inject constructor(
             throw it
         }
 
-        payer.consumePaymentList(request.counterparty, payment.context).onFailure {
-            record(submitted.attemptId, PaymentOutcome.FAILED, identity)
-            throw it
-        }
-        // Journaled only once consumed, so recovery never gives back a list a later request may have consumed instead.
-        runSuspendCatching { journalPaymentList(submitted.attemptId, payment.context, identity) }.onFailure {
-            payer.releasePaymentList(request.counterparty, payment.context)
+        payer.consumePaymentList(request.counterparty, payment.context, submitted.attemptId).onFailure {
             record(submitted.attemptId, PaymentOutcome.FAILED, identity)
             throw it
         }
@@ -889,20 +891,6 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
     }
 
-    private suspend fun journalPaymentList(attemptId: String, context: PrivatePaykitPaymentContext, identity: String) {
-        updateLocalStateDurably(identity) { state ->
-            state.copy(
-                journal = state.journal.map {
-                    if (it.attemptId != attemptId) return@map it
-                    it.copy(
-                        paymentListVersion = context.paymentListVersion,
-                        previousPaymentListVersion = context.previousPaymentListVersion,
-                    )
-                },
-            )
-        }
-    }
-
     private suspend fun failUnsent(
         request: PaykitPaymentRequest,
         payment: PrivatePaykitAllowancePayment,
@@ -910,16 +898,16 @@ class PaykitAllowanceExecutor @Inject constructor(
         identity: String,
     ) {
         // Released only by whichever of this and the node's failure event takes the journaled version first.
-        if (takePaymentListVersion(attemptId, identity) != null) {
-            payer.releasePaymentList(request.counterparty, payment.context)
+        takePaymentListVersion(attemptId, identity)?.let { taken ->
+            payer.releasePaymentList(request.counterparty, payment.context, attemptId)
+                .onFailure { restorePaymentListVersion(taken, identity) }
         }
         record(attemptId, PaymentOutcome.FAILED, identity)
     }
 
     /**
-     * Clears and returns the payment list version an attempt consumed, so the list is released at most once: a second
-     * release could clear another payment's claim on the same version. Returns null when the cleared version could not
-     * be saved, since a stored version could be released again later.
+     * Clears and returns the payment list version an attempt journaled, so the paths that race to release it release it
+     * once. Returns null when the cleared version could not be saved, since a stored version is released again later.
      */
     private suspend fun takePaymentListVersion(attemptId: String, identity: String): JournalEntry? {
         var taken: JournalEntry? = null
@@ -957,7 +945,20 @@ class PaykitAllowanceExecutor @Inject constructor(
             paymentListVersion = requireNotNull(taken.paymentListVersion),
             previousPaymentListVersion = taken.previousPaymentListVersion,
         )
-        payer.releasePaymentList(entry.requestId.counterparty, context)
+        payer.releasePaymentList(entry.requestId.counterparty, context, entry.attemptId)
+            .onFailure { restorePaymentListVersion(taken, identity) }
+    }
+
+    // A release that failed leaves the list consumed; journaling it again lets the next recovery retry it.
+    private suspend fun restorePaymentListVersion(taken: JournalEntry, identity: String) {
+        runSuspendCatching {
+            updateJournalEntry(taken.attemptId, identity) {
+                it.copy(
+                    paymentListVersion = taken.paymentListVersion,
+                    previousPaymentListVersion = taken.previousPaymentListVersion,
+                )
+            }
+        }.onFailure { Logger.warn("Failed to keep an unreleased payment list for recovery", it, context = TAG) }
     }
 
     private suspend fun notifyLimitReached(request: PaykitPaymentRequest, identity: String) {
