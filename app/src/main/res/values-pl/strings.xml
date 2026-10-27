@@ -276,6 +276,7 @@
     <string name="lightning__transfer_in_progress">TRANSFER W TOKU</string>
     <string name="lightning__wallet_balances">Saldo portfela</string>
     <string name="lightning__wait_text_top">Proszę poczekać, aż Bitkit połączy się z siecią płatności (±10 sekund).</string>
+    <string name="lightning__wait_text_top_onchain">Proszę poczekać, aż Bitkit połączy się z siecią bitcoin (±10 sekund).</string>
     <string name="lightning__conn_onboarding_button">Rozpocznij</string>
     <string name="lightning__conn_onboarding_text">Skonfiguruj saldo wydatków, aby cieszyć się natychmiastowymi i tanimi transakcjami ze znajomymi, rodziną i sprzedawcami.</string>
     <string name="lightning__conn_onboarding_title">Włącz\nLightning\n&lt;accent&gt;płatności&lt;/accent&gt;</string>

@@ -272,6 +272,7 @@
     <string name="lightning__transfer_success__title_savings">Fondi spostati\n&lt;accent&gt;ai risparmi&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__title_spending">Fondi spostati\n&lt;accent&gt;alle spese&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Attendi che Bitkit si connetta alla rete di pagamento (±10 secondi).</string>
+    <string name="lightning__wait_text_top_onchain">Attendi che Bitkit si connetta alla rete bitcoin (±10 secondi).</string>
     <string name="lightning__wallet_balances">Saldi Wallet</string>
     <string name="lightning__conn_onboarding_button">Inizia</string>
     <string name="lightning__conn_onboarding_text">Configura il tuo saldo di spesa per goderti transazioni istantanee e economiche con amici, familiari e commercianti.</string>

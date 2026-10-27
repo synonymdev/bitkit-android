@@ -22,10 +22,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -137,6 +139,12 @@ class LightningRepo @Inject constructor(
 ) : OnchainReleasing {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
+
+    /** Whether the wallet has Lightning channels, from the node or, before it runs, from its last run. */
+    val hasChannels: Flow<Boolean>
+        get() = combine(lightningState, cacheStore.data) { state, cache ->
+            state.channels.isNotEmpty() || cache.channelCount > 0
+        }.distinctUntilChanged()
 
     private val _nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>(extraBufferCapacity = 64)
     val nodeEventUpdates = _nodeEventUpdates.asSharedFlow()
@@ -2110,12 +2118,14 @@ class LightningRepo @Inject constructor(
     suspend fun refreshChannelsAndPeers(onRefreshed: () -> Unit = {}): Result<Unit> = withContext(bgDispatcher) {
         if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext Result.success(Unit)
         runCatching {
+            val channels = getChannels()
             _lightningState.update {
                 it.copy(
                     peers = getPeers().orEmpty().toImmutableList(),
-                    channels = getChannels().orEmpty().toImmutableList(),
+                    channels = channels.orEmpty().toImmutableList(),
                 )
             }
+            cacheChannelCount(channels)
             onRefreshed()
         }.onSuccess {
             refreshFailureLogged.set(false)
@@ -2127,15 +2137,17 @@ class LightningRepo @Inject constructor(
     }
 
     fun syncState() {
+        val channels = getChannels()
         _lightningState.update {
             it.copy(
                 nodeId = getNodeId().orEmpty(),
                 nodeStatus = getStatus(),
                 peers = getPeers().orEmpty().toImmutableList(),
-                channels = getChannels().orEmpty().toImmutableList(),
+                channels = channels.orEmpty().toImmutableList(),
                 balances = getBalances(),
             )
         }
+        cacheChannelCount(channels)
         if (_lightningState.value.nodeLifecycleState.isRunning()) scheduleOrdinaryFollowupRetry()
     }
 
@@ -2238,6 +2250,17 @@ class LightningRepo @Inject constructor(
 
     fun getPeers(): List<PeerDetails>? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.peers else null
+
+    private fun cacheChannelCount(channels: List<ChannelDetails>?) {
+        val count = channels?.size ?: return
+        scope.launch {
+            runSuspendCatching {
+                cacheStore.update { if (it.channelCount == count) it else it.copy(channelCount = count) }
+            }.onFailure {
+                Logger.warn("Failed to cache channel count '$count'", it, context = TAG)
+            }
+        }
+    }
 
     fun getChannels(): List<ChannelDetails>? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null

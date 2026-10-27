@@ -188,6 +188,8 @@ data class AppCacheData(
     val blocktankRefundAddress: BlocktankRefundAddress? = null,
     /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
     val pendingLightningMessages: Map<String, String> = mapOf(),
+    /** Channels the node had when it last ran, so views shown before it starts can tell a wallet with channels. */
+    val channelCount: Int = 0,
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts

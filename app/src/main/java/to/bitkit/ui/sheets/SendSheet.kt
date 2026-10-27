@@ -57,6 +57,7 @@ import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.components.ConnectionIssuesView
+import to.bitkit.ui.components.SyncNodeVariant
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.screens.scanner.QrScanningScreen
@@ -108,6 +109,12 @@ private const val HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE = 3uL
 /** A peer reconnecting makes a channel usable again without any node event, so the overlay polls. */
 private val CHANNELS_REFRESH_INTERVAL = 1.seconds
 
+/** The node wait shows the bitcoin view when the send can only pay on-chain: no channels, no Lightning target. */
+internal fun SendUiState.syncNodeVariant(hasChannels: Boolean): SyncNodeVariant {
+    val isLightningSend = payMethod == SendMethod.LIGHTNING || lnurl != null
+    return if (hasChannels || isLightningSend) SyncNodeVariant.LIGHTNING else SyncNodeVariant.BITCOIN
+}
+
 internal fun NavDestination.isPaymentReview(): Boolean =
     hasRoute<SendRoute.Confirm>() || hasRoute<SendRoute.PinCheck>() ||
         hasRoute<SendRoute.RecoveryPinCheck>() || hasRoute<SendRoute.HardwareSign>()
@@ -145,6 +152,8 @@ fun SendSheet(
     val isOffline by remember { derivedStateOf { connectivityState != ConnectivityState.CONNECTED } }
     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
     val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+    val hasChannels by walletViewModel.hasChannels.collectAsStateWithLifecycle()
+    val syncNodeVariant = sendUiState.syncNodeVariant(hasChannels)
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     var routingCacheResetAttempted by rememberSaveable(startDestination) { mutableStateOf(false) }
 
@@ -396,6 +405,7 @@ fun SendSheet(
                             lightningState.nodeLifecycleState
                         },
                         canGoBack = startDestination != SendRoute.Amount || uiState.isPaymentRequest,
+                        syncNodeVariant = syncNodeVariant,
                         onBack = {
                             if (!navController.popBackStack()) {
                                 appViewModel.hideSheet()
@@ -481,6 +491,7 @@ fun SendSheet(
                         isNodeRunning = uiState.hardwareWalletId != null ||
                             lightningState.nodeLifecycleState.isRunning(),
                         canAutoStart = !isOffline && !shouldShowSyncOverlay,
+                        syncNodeVariant = syncNodeVariant,
                         canGoBack = navController.previousBackStackEntry != null,
                         onBack = {
                             val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
@@ -846,6 +857,7 @@ fun SendSheet(
             exit = fadeOut(),
         ) {
             SyncNodeView(
+                variant = syncNodeVariant,
                 modifier = Modifier
                     .fillMaxSize()
                     .gradientBackground()

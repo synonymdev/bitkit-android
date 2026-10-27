@@ -80,6 +80,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(walletRepo.refreshReceiveState()).thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
+        whenever(lightningRepo.hasChannels).thenReturn(flowOf(false))
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
         whenever(migrationService.isChannelRecoveryChecked()).thenReturn(true)
         whenever(migrationService.isRestoringFromRNRemoteBackup).thenReturn(MutableStateFlow(false))
@@ -510,6 +511,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(testWalletRepo.balanceState).thenReturn(balanceState)
         whenever(testWalletRepo.walletExists()).thenReturn(true)
         whenever(testLightningRepo.lightningState).thenReturn(lightningState)
+        whenever(testLightningRepo.hasChannels).thenReturn(flowOf(false))
         whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
         whenever(
             testLightningRepo.start(
@@ -569,6 +571,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(testWalletRepo.balanceState).thenReturn(balanceState)
         whenever(testWalletRepo.walletExists()).thenReturn(true)
         whenever(testLightningRepo.lightningState).thenReturn(lightningState)
+        whenever(testLightningRepo.hasChannels).thenReturn(flowOf(false))
         whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
 
         val startEntered = CompletableDeferred<Unit>()
@@ -631,6 +634,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(testWalletRepo.walletExists()).thenReturn(true)
         whenever(testWalletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(testLightningRepo.lightningState).thenReturn(lightningState)
+        whenever(testLightningRepo.hasChannels).thenReturn(flowOf(false))
         whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
         whenever(
             testLightningRepo.start(
@@ -681,6 +685,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(testWalletRepo.walletExists()).thenReturn(true)
         whenever(testWalletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(testLightningRepo.lightningState).thenReturn(lightningState)
+        whenever(testLightningRepo.hasChannels).thenReturn(flowOf(false))
         whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
         stubSuccessfulNodeStart(testLightningRepo)
 
