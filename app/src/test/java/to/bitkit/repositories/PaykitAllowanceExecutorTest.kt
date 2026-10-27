@@ -653,6 +653,25 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a consumed list whose version cannot be journaled is given back at once and never by recovery`() = test {
+        failSave = { Regex("\"paymentListVersion\":\\d").containsMatchIn(it) }
+
+        runCatching { sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity) }
+
+        verify(payer).consumePaymentList(any(), any())
+        verify(payer, times(1)).releasePaymentList(any(), any())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
+
+        failSave = { false }
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence(AUTOMATIC_ATTEMPT_ID, PaymentExecutionStatus.FAILED)),
+        )
+        sut.recover(identity)
+
+        verify(payer, times(1)).releasePaymentList(any(), any())
+    }
+
+    @Test
     fun `recovery failing an attempt while its settlement records it gives the payment list back once`() = test {
         sut.activate(identity)
         accountingState = fixtures.accountingState(

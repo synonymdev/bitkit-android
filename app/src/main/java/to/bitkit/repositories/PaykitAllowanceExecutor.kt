@@ -576,8 +576,6 @@ class PaykitAllowanceExecutor @Inject constructor(
                     onchainAddress = payment.endpoint.value.takeIf { payment.endpoint.methodId.isOnchain },
                     stage = Stage.PREPARED,
                     createdAtMillis = clock.now().toEpochMilliseconds(),
-                    paymentListVersion = payment.context.paymentListVersion,
-                    previousPaymentListVersion = payment.context.previousPaymentListVersion,
                 ),
                 identity,
             )
@@ -597,23 +595,29 @@ class PaykitAllowanceExecutor @Inject constructor(
             )
         }.getOrElse {
             // Nothing was sent, so the reservation is released instead of blocking the manual payment.
-            failUnconsumed(prepared.attemptId, identity)
+            record(prepared.attemptId, PaymentOutcome.FAILED, identity)
             throw it
         }
         val submitted = (handoff as? PaymentAttemptDecision.Ready)?.attempt
         if (submitted == null) {
             val reason = (handoff as? PaymentAttemptDecision.Blocked)?.reason
             Logger.info("Kept an incoming request manual: the allowance handoff is blocked by '$reason'", context = TAG)
-            failUnconsumed(prepared.attemptId, identity)
+            record(prepared.attemptId, PaymentOutcome.FAILED, identity)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
         runSuspendCatching { setStage(Stage.SUBMITTED, submitted.attemptId, identity) }.onFailure {
-            failUnconsumed(submitted.attemptId, identity)
+            record(submitted.attemptId, PaymentOutcome.FAILED, identity)
             throw it
         }
 
         payer.consumePaymentList(request.counterparty, payment.context).onFailure {
-            failUnconsumed(submitted.attemptId, identity)
+            record(submitted.attemptId, PaymentOutcome.FAILED, identity)
+            throw it
+        }
+        // Journaled only once consumed, so recovery never gives back a list a later request may have consumed instead.
+        runSuspendCatching { journalPaymentList(submitted.attemptId, payment.context, identity) }.onFailure {
+            payer.releasePaymentList(request.counterparty, payment.context)
+            record(submitted.attemptId, PaymentOutcome.FAILED, identity)
             throw it
         }
         payer.prepareProof(request, endpointIdentifier, payment.appId, submitted.allowanceId).onFailure {
@@ -885,10 +889,18 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
     }
 
-    // The list was never consumed, so recovery must not give it back: a later request may have consumed it since.
-    private suspend fun failUnconsumed(attemptId: String, identity: String) {
-        takePaymentListVersion(attemptId, identity)
-        record(attemptId, PaymentOutcome.FAILED, identity)
+    private suspend fun journalPaymentList(attemptId: String, context: PrivatePaykitPaymentContext, identity: String) {
+        updateLocalStateDurably(identity) { state ->
+            state.copy(
+                journal = state.journal.map {
+                    if (it.attemptId != attemptId) return@map it
+                    it.copy(
+                        paymentListVersion = context.paymentListVersion,
+                        previousPaymentListVersion = context.previousPaymentListVersion,
+                    )
+                },
+            )
+        }
     }
 
     private suspend fun failUnsent(
