@@ -84,6 +84,14 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     private val paykitSdkService = mock<PaykitSdkService>()
+    private val noCoverageRelease: () -> Unit = {}
+    private val allowanceRepo = mock<PaykitAllowanceRepo> {
+        on { beginCoverageUpdate() } doReturn noCoverageRelease
+    }
+
+    init {
+        whenever { allowanceRepo.refresh() }.thenReturn(Result.success(Unit))
+    }
     private val settingsStore = mock<SettingsStore>()
     private val presentationStore = mock<PaykitPaymentRequestPresentationStore>()
     private val diagnostics = mock<PaykitPaymentRequestDiagnostics>()
@@ -152,6 +160,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             mock { on { canReceive() }.thenReturn(true) },
             mock { on { currencyState }.thenReturn(MutableStateFlow(CurrencyState())) },
             mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
+            { allowanceRepo },
         )
         sut.activate(LOCAL_IDENTITY)
     }

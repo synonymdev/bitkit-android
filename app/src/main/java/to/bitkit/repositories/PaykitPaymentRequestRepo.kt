@@ -16,6 +16,7 @@ import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import com.synonym.paykit.PubkyIdentityCapability
+import dagger.Lazy
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -329,6 +330,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val currencyRepo: CurrencyRepo,
     private val usdtRepo: UsdtRepo,
+    private val allowanceRepo: Lazy<PaykitAllowanceRepo>,
 ) {
     companion object {
         private const val TAG = "PaykitPaymentRequestRepo"
@@ -1684,14 +1686,21 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 
     private suspend fun synchronizeAfterSubscriptionAction(identity: String) {
-        runSuspendCatching { synchronizeLocked(stateGeneration.get(), identity) }
-            .onFailure {
-                Logger.warn(
-                    "Failed to refresh Paykit subscriptions after a committed action",
-                    it,
-                    context = TAG,
-                )
-            }
+        // This intake can bring an allowance's acceptance with a new request from its contact, so it is held too.
+        val releaseCoverage = allowanceRepo.get().beginCoverageUpdate()
+        try {
+            runSuspendCatching { synchronizeLocked(stateGeneration.get(), identity) }
+                .onSuccess { allowanceRepo.get().refresh() }
+                .onFailure {
+                    Logger.warn(
+                        "Failed to refresh Paykit subscriptions after a committed action",
+                        it,
+                        context = TAG,
+                    )
+                }
+        } finally {
+            releaseCoverage()
+        }
     }
 
     private suspend fun applySubscriptionRecordLocked(record: PaymentRequestRecord, now: Instant) {

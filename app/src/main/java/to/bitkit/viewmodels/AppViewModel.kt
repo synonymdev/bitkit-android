@@ -1207,8 +1207,18 @@ class AppViewModel @Inject constructor(
                 canContinue = { !(onlyWhileActive && isPaymentRequestPollingStopped.value) },
             )
             announceAcceptedAllowanceOffers(acceptedOffers)
-            if (processAllowanceRequests()) paykitPaymentRequestRepo.refresh()
+            if (processAllowanceRequests()) refreshRequestsUnderCoverageHold()
             presentNextIncomingPaykitPaymentRequest()
+        }
+    }
+
+    /** An intake after automatic payments can bring an allowance change too, so it runs under the coverage hold. */
+    private suspend fun refreshRequestsUnderCoverageHold() {
+        val releaseCoverage = paykitAllowanceRepo.beginCoverageUpdate()
+        try {
+            paykitPaymentRequestRepo.refresh().onSuccess { paykitAllowanceRepo.refresh() }
+        } finally {
+            releaseCoverage()
         }
     }
 
@@ -1232,6 +1242,14 @@ class AppViewModel @Inject constructor(
     private fun observePaykitAllowanceEvents() {
         viewModelScope.launch {
             paykitAllowanceRepo.events.collect(::handlePaykitAllowanceEvent)
+        }
+        viewModelScope.launch {
+            // A request held while allowances updated is presented once they settle, whether or not the refresh
+            // succeeded, including one the user tapped.
+            paykitAllowanceRepo.isUpdatingFlow.drop(1).filter { !it }.collect {
+                val isCurrent = PubkyPublicKeyFormat.matches(paymentRequestIdentity, pubkyRepo.publicKey.value)
+                if (isPaykitEnabled.value && isCurrent) presentNextIncomingPaykitPaymentRequest()
+            }
         }
     }
 

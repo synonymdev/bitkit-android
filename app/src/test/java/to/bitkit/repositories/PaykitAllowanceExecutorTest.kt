@@ -586,11 +586,81 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         ).thenReturn(Result.failure(TestAllowanceError("send")))
         whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
 
+        // The node's failure event lands between the failed send's release and its record.
+        whenever(payer.releasePaymentList(any(), any())).doSuspendableAnswer {
+            sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+            Result.success(Unit)
+        }
+
         sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
-        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
 
         verify(payer, times(1)).releasePaymentList(any(), any())
         assertNull(sut.localState(identity).journal.single().paymentListVersion)
+    }
+
+    @Test
+    fun `a payment list whose cleared claim cannot be saved is not given back`() = test {
+        sut.activate(identity)
+        seedJournal(
+            journalEntry("attempt-1", fixtures.paymentRequest(), Stage.SENT, paymentHash = PAYMENT_HASH)
+                .copy(paymentListVersion = 4uL, previousPaymentListVersion = 3uL),
+        )
+        failSave = { true }
+
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+
+        verify(payer, never()).releasePaymentList(any(), any())
+        assertEquals(4uL, sut.localState(identity).journal.single().paymentListVersion)
+    }
+
+    @Test
+    fun `recovery failing an attempt while its settlement records it gives the payment list back once`() = test {
+        sut.activate(identity)
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("attempt-1", PaymentExecutionStatus.SUBMITTED)),
+        )
+        seedJournal(
+            journalEntry("attempt-1", fixtures.paymentRequest(), Stage.SENT, paymentHash = PAYMENT_HASH)
+                .copy(paymentListVersion = 4uL),
+        )
+        nodeStatuses[PAYMENT_HASH] = PaymentStatus.FAILED
+        var isRecovering = false
+        whenever(sdk.recordPaymentOutcome(any())).doSuspendableAnswer {
+            recordedOutcomes += it.getArgument<PaymentOutcomeReport>(0)
+            if (!isRecovering) {
+                isRecovering = true
+                sut.recover(identity)
+            }
+            fixtures.attemptRecord("attempt-1", status = PaymentExecutionStatus.FAILED)
+        }
+
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+
+        verify(payer, times(1)).releasePaymentList(any(), any())
+    }
+
+    @Test
+    fun `a settlement during recovery's node lookup gives the payment list back once`() = test {
+        sut.activate(identity)
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("attempt-1", PaymentExecutionStatus.SUBMITTED)),
+        )
+        seedJournal(
+            journalEntry("attempt-1", fixtures.paymentRequest(), Stage.SENT, paymentHash = PAYMENT_HASH)
+                .copy(paymentListVersion = 4uL),
+        )
+        var isSettling = false
+        whenever(payer.lightningPaymentStatus(PAYMENT_HASH)).doSuspendableAnswer {
+            if (!isSettling) {
+                isSettling = true
+                sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+            }
+            PaymentStatus.FAILED
+        }
+
+        sut.recover(identity)
+
+        verify(payer, times(1)).releasePaymentList(any(), any())
     }
 
     @Test

@@ -643,6 +643,17 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an allowance that can no longer pay never holds a request back`() = test {
+        records = listOf(fixtures.record(state = AllowanceLifecycleState.ENDED))
+        sut.activate(identity)
+        assertFalse(sut.mayCover(fixtures.paymentRequest()))
+
+        records = listOf(fixtures.record())
+        sut.refresh()
+        assertTrue(sut.mayCover(fixtures.paymentRequest()))
+    }
+
+    @Test
     fun `a request above the limits is never held back while channels reconnect`() = test {
         records = listOf(fixtures.record())
         sut.activate(identity)
