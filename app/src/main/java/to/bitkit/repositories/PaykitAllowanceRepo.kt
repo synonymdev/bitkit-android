@@ -226,7 +226,7 @@ class PaykitAllowanceRepo @Inject constructor(
      * such a request may become covered by the refresh in progress, so it is not shown for manual payment meanwhile.
      */
     fun mayCover(request: PaykitPaymentRequest): Boolean {
-        if (!request.requiresAcceptance) return false
+        if (!request.requiresAcceptance || !request.acceptsLightning()) return false
         val now = clock.now()
         return _allowances.value.any {
             it.isAllower && PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty) &&
@@ -437,7 +437,7 @@ class PaykitAllowanceRepo @Inject constructor(
         // Only bitcoin requests are paid automatically; anything else follows the manual flow at once.
         if (request.allowanceSats() == null) return false
         // Allowances pay only over Lightning, so a request that accepts no Lightning invoice never waits for one.
-        if (MethodId.Bolt11.rawValue !in request.acceptedPaymentEndpointIdentifiers) return false
+        if (!request.acceptsLightning()) return false
         val now = clock.now()
         return _allowances.value.any { allowance ->
             allowance.isAllower &&
@@ -617,3 +617,5 @@ class PaykitAllowanceRepo @Inject constructor(
         }
     }
 }
+
+private fun PaykitPaymentRequest.acceptsLightning() = MethodId.Bolt11.rawValue in acceptedPaymentEndpointIdentifiers
