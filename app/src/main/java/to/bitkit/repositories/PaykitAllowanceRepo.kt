@@ -107,6 +107,7 @@ class PaykitAllowanceRepo @Inject constructor(
     private val publishLock = Any()
     private val isProcessingRequests = AtomicBoolean(false)
     private val isAcceptingOffers = AtomicBoolean(false)
+    private val claimedOfferIds = ConcurrentHashMap.newKeySet<String>()
     private val updates = MutableStateFlow(0)
 
     /** True while allowances are refreshing or requests are being admitted, when coverage may still change. */
@@ -324,10 +325,18 @@ class PaykitAllowanceRepo @Inject constructor(
                     .onSuccess { accepted += offer }
                     .onFailure { Logger.warn("Failed to accept an allowance offer", it, context = TAG) }
             }
-            if (isCurrent()) accepted else emptyList()
+            if (!isCurrent()) return@withContext emptyList()
+            // Claimed until the caller announces or releases them, so an overlapping refresh never returns them too.
+            claimedOfferIds += accepted.flatMap { offer -> offer.allowances.map { it.key } }
+            accepted
         } finally {
             isAcceptingOffers.set(false)
         }
+    }
+
+    /** Lets offers returned for announcement be returned again; their marks bring back any that were not announced. */
+    fun releaseOfferClaims(offers: List<PaykitAllowanceEntry>) {
+        claimedOfferIds -= offers.flatMap { offer -> offer.allowances.map { it.key } }.toSet()
     }
 
     /** Clears the marks of offers the user was told about, so they are never announced again. */
@@ -354,7 +363,8 @@ class PaykitAllowanceRepo @Inject constructor(
             executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - stale) }
         }
         return _entries.value.filter { entry ->
-            entry.allowances.any { it.key in marked && it.lifecycleState == AllowanceLifecycleState.ACCEPTED }
+            entry.allowances.none { it.key in claimedOfferIds } &&
+                entry.allowances.any { it.key in marked && it.lifecycleState == AllowanceLifecycleState.ACCEPTED }
         }
     }
 

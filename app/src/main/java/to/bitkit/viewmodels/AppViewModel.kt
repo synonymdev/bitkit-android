@@ -1207,8 +1207,12 @@ class AppViewModel @Inject constructor(
                 canAnnounce = { !privatePaykitRepo.isProfileDeletionInProgress.value },
                 canContinue = { !(onlyWhileActive && isPaymentRequestPollingStopped.value) },
             )
-            announceAcceptedAllowanceOffers(acceptedOffers)
-            paykitAllowanceRepo.markOffersAnnounced(acceptedOffers)
+            try {
+                announceAcceptedAllowanceOffers(acceptedOffers)
+                paykitAllowanceRepo.markOffersAnnounced(acceptedOffers)
+            } finally {
+                paykitAllowanceRepo.releaseOfferClaims(acceptedOffers)
+            }
             if (processAllowanceRequests()) refreshRequestsUnderCoverageHold()
             presentNextIncomingPaykitPaymentRequest()
         }
