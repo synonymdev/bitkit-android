@@ -357,7 +357,9 @@ class TransferViewModel @Inject constructor(
 
     private suspend fun getOrCreateSpendingOrder(): IBtOrder? {
         val state = _spendingUiState.value
-        return state.order ?: blocktankRepo.createOrder(
+        state.order?.let { return it }
+        if (isTransferUnavailable()) return null
+        return blocktankRepo.createOrder(
             spendingBalanceSats = state.clientBalanceSat,
             receivingBalanceSats = state.lspBalanceSat,
         ).getOrElse {
@@ -414,6 +416,7 @@ class TransferViewModel @Inject constructor(
             return false
         }
         if (cacheStore.data.first().paidOrders.containsKey(order.id)) return true
+        if (isTransferUnavailable()) return false
         val plan = resolveSpendingConfirmPlan(order, shown) ?: return false
 
         Logger.debug(
@@ -475,6 +478,13 @@ class TransferViewModel @Inject constructor(
                     false
                 }
             )
+    }
+
+    private suspend fun isTransferUnavailable(): Boolean {
+        if (!lightningRepo.isTransferBlocked()) return false
+        Logger.warn("Skipped paying spending order: transfers are unavailable", context = TAG)
+        transferEffects.emit(TransferEffect.OnTransferUnavailable)
+        return true
     }
 
     private suspend fun showRetainedFundingPending(): Boolean {
@@ -1227,6 +1237,7 @@ class TransferViewModel @Inject constructor(
                 val signedOrder = _spendingUiState.value.order
                 val isBroadcastRetry = signedOrder != null &&
                     pendingHwFundingBroadcast?.matches(signedOrder, walletId, signedOrder.fundingAddress) == true
+                if (isTransferUnavailable()) return@launch
                 if (!isBroadcastRetry && hwWalletRepo.needsPassphrase(walletId)) {
                     _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
                     return@launch
@@ -1862,10 +1873,6 @@ class TransferViewModel @Inject constructor(
     /** Closes the channels selected earlier, pending closure */
     suspend fun closeSelectedChannels() = closeChannels(channelsToClose)
 
-    fun separateTrustedChannels(
-        channels: List<ChannelDetails>,
-    ): Pair<List<ChannelDetails>, List<ChannelDetails>> = lightningRepo.separateTrustedChannels(channels)
-
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
         lightningRepo.awaitPeerConnected()
         val channelsFailedToClose = coroutineScope {
@@ -1897,7 +1904,6 @@ class TransferViewModel @Inject constructor(
     fun startCoopCloseRetries(
         channels: List<ChannelDetails>,
         onGiveUp: () -> Unit,
-        onTransferUnavailable: () -> Unit,
     ) {
         val startTimeMs = clock.now().toEpochMilliseconds()
         channelsToClose = channels
@@ -1921,59 +1927,20 @@ class TransferViewModel @Inject constructor(
                 delay(RETRY_INTERVAL_MS)
             }
 
-            Logger.info("Giving up on coop close. Checking if force close is possible.", context = TAG)
-
-            // Check if any channels can be force closed (filter out trusted peers)
-            val (_, nonTrustedChannels) = lightningRepo.separateTrustedChannels(channelsToClose)
-
-            if (nonTrustedChannels.isNotEmpty()) {
-                onGiveUp()
-            } else {
-                Logger.warn("All channels are with trusted peers. Cannot force close.", context = TAG)
-                channelsToClose = emptyList()
-                onTransferUnavailable()
-            }
+            Logger.info("Giving up on coop close.", context = TAG)
+            onGiveUp()
         }
     }
 
     fun forceTransfer(onComplete: () -> Unit) = viewModelScope.launch {
         _isForceTransferLoading.value = true
         runCatching {
-            // Filter out trusted peer channels (cannot force close LSP channels)
-            val (trustedChannels, nonTrustedChannels) = lightningRepo.separateTrustedChannels(channelsToClose)
-
-            if (trustedChannels.isNotEmpty()) {
-                Logger.warn("Skipping ${trustedChannels.size} trusted peer channel(s)", context = TAG)
-            }
-
-            if (nonTrustedChannels.isEmpty()) {
-                channelsToClose = emptyList()
-                Logger.error("Cannot force close channels with trusted peer", context = TAG)
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.lightning__force_failed_title),
-                    description = context.getString(R.string.lightning__force_failed_msg)
-                )
-                return@runCatching
-            }
-
-            val failedChannels = forceCloseChannels(nonTrustedChannels)
-
-            // Remove successfully closed channels and trusted peer channels from the list
-            val successfulChannelIds = nonTrustedChannels
-                .filterNot { channel -> failedChannels.any { it.channelId == channel.channelId } }
-                .map { it.channelId }
-                .toSet()
-            val trustedChannelIds = trustedChannels.map { it.channelId }.toSet()
-            channelsToClose = channelsToClose.filterNot {
-                it.channelId in successfulChannelIds || it.channelId in trustedChannelIds
-            }
+            val failedChannels = forceCloseChannels(channelsToClose)
+            channelsToClose = failedChannels
 
             if (failedChannels.isEmpty()) {
                 Logger.info("Force close initiated successfully for all channels", context = TAG)
-                val initMsg = context.getString(R.string.lightning__force_init_msg)
-                val skippedMsg = context.getString(R.string.lightning__force_channels_skipped)
-                val description = if (trustedChannels.isNotEmpty()) "$initMsg $skippedMsg" else initMsg
+                val description = context.getString(R.string.lightning__force_init_msg)
                 ToastEventBus.send(
                     type = Toast.ToastType.LIGHTNING,
                     title = context.getString(R.string.lightning__force_init_title),
@@ -2170,6 +2137,7 @@ sealed interface TransferEffect {
     data object OnSpendingFundingPaid : TransferEffect
     data class OnFundingPending(val attempt: to.bitkit.repositories.OnchainSendAttempt) : TransferEffect
     data object OnHwTxSigned : TransferEffect
+    data object OnTransferUnavailable : TransferEffect
     data class ToastException(val e: Throwable) : TransferEffect
     data class ToastError(val title: String, val description: String) : TransferEffect
 }

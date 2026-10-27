@@ -226,6 +226,7 @@ import to.bitkit.ui.sheets.PinSheet
 import to.bitkit.ui.sheets.QrScanningSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
 import to.bitkit.ui.sheets.SendSheet
+import to.bitkit.ui.sheets.TransferUnavailableSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.sheets.UsdtIntroSheet
 import to.bitkit.ui.sheets.WidgetsSheet
@@ -656,6 +657,12 @@ fun ContentView(
                         Sheet.ConnectionClosed -> ConnectionClosedSheet(
                             onDismiss = { appViewModel.hideSheet() },
                         )
+                        Sheet.TransferUnavailable -> TransferUnavailableSheet(
+                            onContinue = {
+                                navController.navigateTo(ExternalConnection())
+                                appViewModel.hideSheet()
+                            },
+                        )
 
                         is Sheet.BTCPayConnection -> BTCPayConnectionSheet(sheet, appViewModel)
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
@@ -884,6 +891,8 @@ private fun RootNavHost(
         transferViewModel.transferEffects.collect { effect ->
             if (effect is TransferEffect.OnFundingPending) {
                 appViewModel.showPendingTransfer(effect.attempt)
+            } else if (effect is TransferEffect.OnTransferUnavailable) {
+                appViewModel.showSheet(Sheet.TransferUnavailable)
             } else {
                 navController.navigateForTransferEffect(effect)
             }
@@ -1298,13 +1307,16 @@ private fun NavGraphBuilder.home(
         val forceCloseRemainingDuration by appViewModel.forceCloseRemainingDuration.collectAsStateWithLifecycle()
 
         SavingsWalletScreen(
-            isGeoBlocked = isGeoBlocked,
             onchainActivities = onchainActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
-                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
+                if (isGeoBlocked) {
+                    appViewModel.showSheet(Sheet.TransferUnavailable)
+                } else {
+                    navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
+                }
             },
             onBackClick = { navController.popBackStack() },
             forceCloseRemainingDuration = forceCloseRemainingDuration,
@@ -1313,6 +1325,7 @@ private fun NavGraphBuilder.home(
     deepLinkableComposable<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
+        val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
@@ -1330,7 +1343,11 @@ private fun NavGraphBuilder.home(
                 }
             },
             onTransferFromSavingsClick = {
-                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
+                if (isGeoBlocked) {
+                    appViewModel.showSheet(Sheet.TransferUnavailable)
+                } else {
+                    navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
+                }
             },
             onBackClick = { navController.popBackStack() },
         )
@@ -1338,11 +1355,16 @@ private fun NavGraphBuilder.home(
     deepLinkableComposable<Routes.HardwareWallet> {
         val walletId = it.toRoute<Routes.HardwareWallet>().walletId
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
+        val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         HardwareWalletScreen(
             walletId = walletId,
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onTransferToSpendingClick = { selectedDeviceId ->
-                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
+                if (isGeoBlocked) {
+                    appViewModel.showSheet(Sheet.TransferUnavailable)
+                } else {
+                    navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
+                }
             },
             onBackClick = { navController.popBackStack() },
         )

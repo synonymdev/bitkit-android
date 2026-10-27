@@ -168,6 +168,7 @@ class TransferViewModelTest : BaseUnitTest() {
         }
             .thenReturn(Result.success("transfer-id"))
         whenever { hwWalletRepo.needsPassphrase(any()) }.thenReturn(false)
+        whenever { lightningRepo.isTransferBlocked() }.thenReturn(false)
         val nodeStatus = mock<NodeStatus>()
         whenever(nodeStatus.isRunning).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
@@ -1198,6 +1199,48 @@ class TransferViewModelTest : BaseUnitTest() {
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
         verify(blocktankRepo, times(1)).createOrder(eq(order.clientBalanceSat), eq(order.lspBalanceSat), any())
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm pays no held order when transfers are unavailable`() = test {
+        val order = spendingOrder(feeSat = 99_000uL)
+        stubSpendableBalances(spendable = 200_000u)
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(listOf(stubUtxo(200_000u))))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(500uL))
+        stubSendOnChain()
+        val effects = mutableListOf<TransferEffect>()
+        backgroundScope.launch { sut.transferEffects.collect { effects += it } }
+        quoteOrder(order)
+        prepareConfirm()
+        whenever(lightningRepo.isTransferBlocked()).thenReturn(true)
+
+        sut.onTransferToSpendingConfirm()
+        advanceUntilIdle()
+
+        assertTrue(TransferEffect.OnTransferUnavailable in effects)
+        assertEquals(false, sut.spendingUiState.value.isConfirmPaying)
+        verify(lightningRepo, never()).sendOnChain(
+            address = any(),
+            sats = any(),
+            speed = any(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
     }
 
     @Test

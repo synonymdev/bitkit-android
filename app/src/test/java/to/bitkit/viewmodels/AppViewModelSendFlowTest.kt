@@ -12980,6 +12980,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 OnchainSendOutcome.Accepted("ef".repeat(32))
             }
         }
+        whenever(lightningRepo.isTransferBlocked()).thenReturn(false)
         val invalidOrders = listOf(
             order.copy(state2 = com.synonym.bitkitcore.BtOrderState2.PAID),
             order.copy(orderExpiresAt = (Clock.System.now() - 1.seconds).toString()),
@@ -12994,6 +12995,40 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
         assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isSuccess)
         assertEquals(1, dispatched)
+    }
+
+    @Test
+    fun `recovery of a Blocktank order broadcasts nothing while transfers are unavailable`() = test {
+        val order = to.bitkit.ext.mockOrder().copy(
+            orderExpiresAt = (Clock.System.now() + 60.seconds).toString(),
+        )
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default,
+            attemptId = "original-order-attempt",
+            transferContext = to.bitkit.repositories.OnchainTransferContext(
+                1_200uL,
+                100_000uL,
+                order.clientBalanceSat,
+                order.feeSat,
+            ),
+            requestId = null,
+            orderId = order.id,
+            address = requireNotNull(order.payment?.onchain?.address),
+            amountSats = order.feeSat,
+            isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL,
+            isTransfer = true,
+            channelId = null,
+            tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown,
+        )
+        whenever(lightningRepo.isTransferBlocked()).thenReturn(true)
+        whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
+
+        assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isFailure)
+
+        verify(lightningRepo, never()).retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        assertEquals(Sheet.TransferUnavailable, sut.currentSheet.value)
     }
 
     @Test

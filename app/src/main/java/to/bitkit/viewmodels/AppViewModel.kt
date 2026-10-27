@@ -6048,6 +6048,14 @@ class AppViewModel @Inject constructor(
         feeRateSatsPerVByte: ULong,
         approvePrepared: suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit = { _, _ -> },
     ): Result<OnchainSendOutcome> {
+        // Blocktank no longer sells channels, so an unpaid order is never paid again.
+        if (original.orderId != null && lightningRepo.isTransferBlocked()) {
+            Logger.warn("Stopped retrying a transfer to spending: transfers are unavailable", context = TAG)
+            showSheet(Sheet.TransferUnavailable)
+            return Result.failure(
+                IllegalStateException(context.getString(R.string.lightning__transfer_unavailable__nav_title))
+            )
+        }
         val request = original.requestId?.let { id ->
             (paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value)
                 .firstOrNull { it.id == id }

@@ -3149,6 +3149,24 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `refused Blocktank funding is released once transfers are unavailable and keeps Shop proofs`() = test {
+        val attempt = unknownShopAttempt("ab".repeat(32))
+            .copy(requestId = null, payerIdentity = null, isTransfer = true, orderId = "order-1")
+        val shopProof = startedOnchainProof(unknownShopAttempt("cd".repeat(32)))
+        storedProofs = listOf(shopProof)
+        stubAbandon(attempt)
+
+        whenever(lightningRepo.isTransferBlocked()).thenReturn(false)
+        assertFalse(paymentProofRepo().onchainRequestHasEnded(attempt))
+
+        whenever(lightningRepo.isTransferBlocked()).thenReturn(true)
+        val wallet = FakeReleaseWallet()
+        assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, wallet) {}.isSuccess)
+        assertEquals(1, wallet.broadcasts)
+        assertEquals(listOf(shopProof), storedProofs)
+    }
+
+    @Test
     fun `recurring period counts as ended only without its own proof`() = test {
         val periodStart = "2027-01-01T00:00:00Z"
         val base = unknownShopAttempt("ab".repeat(32))

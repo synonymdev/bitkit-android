@@ -443,6 +443,11 @@ class PaykitPaymentProofRepo @Inject constructor(
      * deadline passed. A record that is missing, carries a proof or needs recovery never counts as ended.
      */
     suspend fun onchainRequestHasEnded(attempt: OnchainSendAttempt): Boolean = withContext(ioDispatcher) {
+        // Blocktank no longer sells channels, so its order ends once transfers are unavailable.
+        if (attempt.isBlocktankFunding) {
+            return@withContext attempt.canBeAbandoned &&
+                (attempt.releaseApproved || lightningRepo.isTransferBlocked())
+        }
         val identity = currentIdentity()?.takeIf { PubkyPublicKeyFormat.matches(it, attempt.payerIdentity) }
         val record = attempt.takeIf { it.canBeAbandoned && identity != null }?.let { payerRecord(it) }
         val periodStartsAt = attempt.requestId?.billingPeriodStartsAt
@@ -586,7 +591,9 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     /** Removes the original proof, then the attempt, once its release reached the network. */
     private suspend fun finishRelease(attempt: OnchainSendAttempt) {
-        if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt) { removeOriginalShopProofs(it) }) {
+        val removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean =
+            { if (it.isBlocktankFunding) true else removeOriginalShopProofs(it) }
+        if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt, removeOriginalProof)) {
             throw OnchainSendBlockedError(attempt)
         }
         Logger.info(

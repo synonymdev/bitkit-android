@@ -121,6 +121,20 @@ class FundingScreenTest {
     }
 
     @Test
+    fun whenGeoBlocked_onlyManualSetupShouldInvoke() {
+        setContent(isGeoBlocked = true)
+
+        clickableTransferOption().performClick()
+        composeTestRule.onNodeWithTag("FundReceive").performClick()
+        composeTestRule.onNodeWithTag("FundManual").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(0, transferClicks)
+        assertEquals(0, fundClicks)
+        assertEquals(1, manualClicks)
+    }
+
+    @Test
     fun whenFundableBalanceIsZero_transferShouldNotRouteToTheTransferFlow() {
         setContent(fundableBalance = 0uL)
 

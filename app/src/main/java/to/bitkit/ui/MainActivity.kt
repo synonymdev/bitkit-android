@@ -348,6 +348,8 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         appViewModel.onAppResumed()
+        // A permission dialog launched from a sheet that has since closed loses its result callback.
+        settingsViewModel.setNotificationPreference(areNotificationsEnabled())
     }
 
     override fun onStop() {
