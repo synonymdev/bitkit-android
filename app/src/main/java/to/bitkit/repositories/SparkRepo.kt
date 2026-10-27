@@ -1,13 +1,16 @@
 package to.bitkit.repositories
 
+import androidx.compose.runtime.Stable
 import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.InputType
 import breez_sdk_spark.Payment
 import breez_sdk_spark.PaymentDetails
 import breez_sdk_spark.PaymentMethod
 import breez_sdk_spark.PaymentStatus
+import breez_sdk_spark.PrepareSendPaymentResponse
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.SendPaymentMethod
+import breez_sdk_spark.SparkAsset
 import breez_sdk_spark.TokenMetadata
 import breez_sdk_spark.TokenTransactionType
 import com.synonym.bitkitcore.Activity
@@ -69,6 +72,9 @@ class SparkRepo @Inject constructor(
 
         /** Last step of the Spending setup progress, shown once a funding deposit is claimed. */
         private const val SETUP_STEP_DONE = 3
+
+        /** Arbitrum One, where Bitkit's own USDT wallet lives. */
+        private const val ARBITRUM_CHAIN_ID = "42161"
 
         /** Decimals of Bitkit's dollar amounts, shared with Arbitrum USDT so both format alike. */
         private const val USD_DECIMALS = 6
@@ -217,6 +223,80 @@ class SparkRepo @Inject constructor(
                 Logger.error("Failed to send Spark dollar payment", it, context = TAG)
             }
         }
+
+    /**
+     * Quotes converting within the wallet through Flashnet: [amount] dollar units to get when [toUsd], or to give
+     * when converting to bitcoin.
+     */
+    suspend fun quoteConversion(toUsd: Boolean, amount: ULong): Result<SparkUsdQuote> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val tokenId = requireNotNull(Env.sparkUsdTokenId) { "No Spark dollar token on this network" }
+            val decimals = usdDecimals(tokenId)
+            val prepared = sparkService.prepareConversion(toUsd, fromUsdUnits(amount, decimals), tokenId)
+            val estimate = requireNotNull(prepared.conversionEstimate) { "No conversion estimate" }
+            val sats = { value: BigInteger -> value.toLong().toULong() }
+            val usd = { value: BigInteger -> toUsdUnits(value, decimals) }
+            if (toUsd) {
+                SparkUsdQuote(
+                    SparkUsdQuote.Kind.TO_USD,
+                    sats(estimate.amountIn),
+                    usd(estimate.amountOut),
+                    sats(estimate.fee),
+                    prepared
+                )
+            } else {
+                SparkUsdQuote(
+                    SparkUsdQuote.Kind.TO_BTC,
+                    usd(estimate.amountIn),
+                    sats(estimate.amountOut),
+                    usd(estimate.fee),
+                    prepared
+                )
+            }
+        }
+    }
+
+    /** Quotes moving [amount] dollar units to Bitkit's USDT wallet at [arbitrumAddress] through Orchestra. */
+    suspend fun quoteArbitrumBridge(arbitrumAddress: String, amount: ULong): Result<SparkUsdQuote> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val tokenId = requireNotNull(Env.sparkUsdTokenId) { "No Spark dollar token on this network" }
+                val route = sparkService.crossChainRoutes(arbitrumAddress)
+                    .filter { it.chainId?.removePrefix("eip155:") == ARBITRUM_CHAIN_ID }
+                    .filter { route ->
+                        route.acceptedAssets.any { (it.asset as? SparkAsset.Token)?.tokenIdentifier == tokenId }
+                    }
+                    .sortedBy { if (it.asset.uppercase() == "USDT0") 0 else 1 }
+                    .firstOrNull { it.asset.uppercase().startsWith("USDT") }
+                    ?: throw SparkUsdError.NoRoute()
+                val prepared = sparkService.prepareCrossChain(
+                    arbitrumAddress,
+                    route,
+                    fromUsdUnits(amount, usdDecimals(tokenId)),
+                    tokenId,
+                )
+                val method = prepared.paymentMethod as SendPaymentMethod.CrossChainAddress
+                val decimals = route.decimals.toInt()
+                SparkUsdQuote(
+                    kind = SparkUsdQuote.Kind.TO_ARBITRUM,
+                    pay = amount,
+                    receive = toUsdUnits(method.estimatedOut, decimals),
+                    fee = toUsdUnits(method.feeAmount, decimals),
+                    prepared = prepared,
+                )
+            }
+        }
+
+    /** Runs a conversion or bridge [quote] and refreshes the balances. */
+    suspend fun execute(quote: SparkUsdQuote): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val payment = sparkService.send(quote.prepared)
+            Logger.info("Ran Spark dollar '${quote.kind}' with status '${payment.status}'", context = TAG)
+            refresh()
+        }.onFailure {
+            Logger.error("Failed to run Spark dollar '${quote.kind}'", it, context = TAG)
+        }
+    }
 
     private suspend fun usdDecimals(tokenId: String): Int = usdMetadata(tokenId).decimals.toInt()
 
@@ -566,8 +646,24 @@ data class SparkUsdTransfer(
 /** Where a dollar payment goes: a Spark address or invoice, with the amount an invoice fixes. */
 data class SparkUsdRecipient(val request: String, val amount: ULong?)
 
+/**
+ * A priced conversion or bridge, ready to run. [pay] and [receive] are in sats for the bitcoin side and in dollar
+ * units otherwise; [fee] is in the unit of what is paid, except for the bridge, where it is in dollar units.
+ */
+@Stable
+data class SparkUsdQuote(
+    val kind: Kind,
+    val pay: ULong,
+    val receive: ULong,
+    val fee: ULong,
+    val prepared: PrepareSendPaymentResponse,
+) {
+    enum class Kind { TO_USD, TO_BTC, TO_ARBITRUM }
+}
+
 sealed class SparkUsdError(message: String) : AppError(message) {
     class UnsupportedRecipient : SparkUsdError("Not a Spark address or an invoice for the dollar token")
+    class NoRoute : SparkUsdError("No cross-chain route pays Arbitrum USDT from the dollar token")
 }
 
 /** An on-chain deposit into Spark: pending until Spark claims it after 3 confirmations. */

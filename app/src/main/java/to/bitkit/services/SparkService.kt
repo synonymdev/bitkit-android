@@ -3,9 +3,16 @@ package to.bitkit.services
 import breez_sdk_spark.AssetFilter
 import breez_sdk_spark.BreezSdk
 import breez_sdk_spark.ConnectRequest
+import breez_sdk_spark.ConversionOptions
+import breez_sdk_spark.ConversionType
+import breez_sdk_spark.CrossChainConfig
+import breez_sdk_spark.CrossChainRouteFilter
+import breez_sdk_spark.CrossChainRoutePair
 import breez_sdk_spark.DepositInfo
 import breez_sdk_spark.EventListener
 import breez_sdk_spark.FeePolicy
+import breez_sdk_spark.FetchConversionLimitsRequest
+import breez_sdk_spark.FetchConversionLimitsResponse
 import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.GetTokensMetadataRequest
@@ -125,6 +132,7 @@ class SparkService @Inject constructor(
                 onchain = MaxOnchainFee.NetworkRecommended(DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB),
                 proportionalPpm = DEPOSIT_CLAIM_FEE_PPM,
             )
+            if (network == SparkNetwork.MAINNET) crossChainConfig = CrossChainConfig()
         }
         val storageDir = File(Env.sparkStoragePath(walletIndex)).apply { mkdirs() }.path
         val connected = connect(ConnectRequest(config, Seed.Mnemonic(mnemonic, passphrase), storageDir))
@@ -224,6 +232,58 @@ class SparkService @Inject constructor(
     suspend fun tokenMetadata(tokenId: String): TokenMetadata? =
         requireSdk().getTokensMetadata(GetTokensMetadataRequest(listOf(tokenId))).tokensMetadata.firstOrNull()
 
+    /** The minimum amounts Flashnet converts, for [type] and the dollar token [tokenId]. */
+    suspend fun conversionLimits(type: ConversionType, tokenId: String): FetchConversionLimitsResponse =
+        requireSdk().fetchConversionLimits(FetchConversionLimitsRequest(type, tokenId))
+
+    /**
+     * Prepares a conversion within this wallet: a payment to its own Spark address, which the SDK runs as a
+     * self-transfer through Flashnet. [amount] is in token units both ways: what to get when converting to the token,
+     * what to give when converting to bitcoin.
+     */
+    suspend fun prepareConversion(toToken: Boolean, amount: BigInteger, tokenId: String): PrepareSendPaymentResponse {
+        val sdk = requireSdk()
+        val ownAddress = sdk.receivePayment(ReceivePaymentRequest(ReceivePaymentMethod.SparkAddress)).paymentRequest
+        val type = if (toToken) ConversionType.FromBitcoin else ConversionType.ToBitcoin(tokenId)
+        return sdk.prepareSendPayment(
+            PrepareSendPaymentRequest(
+                paymentRequest = PaymentRequest.Input(input = ownAddress),
+                amount = amount,
+                tokenIdentifier = tokenId,
+                conversionOptions = ConversionOptions(conversionType = type),
+                feePolicy = FeePolicy.FEES_INCLUDED.takeIf { !toToken },
+            ),
+        )
+    }
+
+    /** Routes that pay [address], an address on another chain, through a cross-chain provider. */
+    suspend fun crossChainRoutes(address: String): List<CrossChainRoutePair> {
+        val details = (requireSdk().parse(address) as? InputType.CrossChainAddress)?.v1
+            ?: throw SparkError.NotCrossChainAddress()
+        return requireSdk().getCrossChainRoutes(CrossChainRouteFilter.Send(details, null))
+    }
+
+    /** Prepares paying [amount] token units of [tokenId] to [address] on another chain through [route]. */
+    suspend fun prepareCrossChain(
+        address: String,
+        route: CrossChainRoutePair,
+        amount: BigInteger,
+        tokenId: String,
+    ): PrepareSendPaymentResponse = requireSdk().prepareSendPayment(
+        PrepareSendPaymentRequest(
+            paymentRequest = PaymentRequest.CrossChain(
+                address = address,
+                route = route,
+                maxSlippageBps = null,
+                targetOverpayBps = null
+            ),
+            amount = amount,
+            tokenIdentifier = tokenId,
+            conversionOptions = null,
+            feePolicy = null,
+        ),
+    )
+
     suspend fun parse(input: String): InputType = requireSdk().parse(input)
 
     /** Prepares a [tokenId] payment; [amount] in token base units, ignored by the SDK when an invoice sets one. */
@@ -260,4 +320,5 @@ class SparkService @Inject constructor(
 sealed class SparkError(message: String) : AppError(message) {
     class Unsupported : SparkError("Spark is not available on this network or build")
     class NotConnected : SparkError("Spark wallet is not connected")
+    class NotCrossChainAddress : SparkError("Not an address on a chain the cross-chain providers serve")
 }

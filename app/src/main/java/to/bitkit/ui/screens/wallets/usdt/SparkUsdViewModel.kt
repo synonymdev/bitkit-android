@@ -1,6 +1,6 @@
 package to.bitkit.ui.screens.wallets.usdt
 
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.usdtFormatAmount
@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -17,21 +18,30 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkUsdError
+import to.bitkit.repositories.SparkUsdQuote
+import to.bitkit.repositories.UsdtRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class SparkUsdViewModel @Inject constructor(
     private val sparkRepo: SparkRepo,
     private val settingsStore: SettingsStore,
+    private val usdtRepo: UsdtRepo,
 ) : ViewModel() {
     val wallet = sparkRepo.state.map { it.usd }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), sparkRepo.state.value.usd)
 
     val settings = settingsStore.data
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsData(hideBalance = true))
+
+    /** Bitkit's own Arbitrum USDT address, the bridge's destination; Orchestra only runs on mainnet. */
+    val bridgeAddress = combine(usdtRepo.state, sparkRepo.state) { usdt, _ -> usdt.address }
+        .map { address -> address.takeIf { Env.isSparkBridgeAvailable && it.isNotEmpty() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _state = MutableStateFlow(SparkUsdSendState())
     val state = _state.asStateFlow()
@@ -63,10 +73,48 @@ class SparkUsdViewModel @Inject constructor(
         when {
             it.busy -> it
             it.authenticationRequired -> it.copy(authenticationRequired = false)
+            it.quote != null && !it.completed -> it.copy(quote = null, error = null)
             it.page == SparkUsdPage.REVIEW -> it.copy(page = SparkUsdPage.AMOUNT, error = null)
             it.page == SparkUsdPage.AMOUNT -> it.copy(page = SparkUsdPage.RECIPIENT, error = null)
             else -> SparkUsdSendState()
         }
+    }
+
+    fun startConvert() = _state.update { SparkUsdSendState(page = SparkUsdPage.CONVERT) }
+
+    fun startBridge() = _state.update { SparkUsdSendState(page = SparkUsdPage.BRIDGE) }
+
+    fun setConvertToUsd(toUsd: Boolean) = _state.update { it.copy(convertToUsd = toUsd, quote = null, error = null) }
+
+    fun quote() = viewModelScope.launch {
+        val state = _state.value
+        val amount = runCatching { usdtParseAmount(state.amountInput) }.getOrNull()?.takeIf { it > 0uL }
+        if (amount == null) {
+            _state.update { it.copy(error = R.string.usdt__error_amount) }
+            return@launch
+        }
+        val spendsDollars = state.page == SparkUsdPage.BRIDGE || !state.convertToUsd
+        if (spendsDollars && amount > (wallet.value?.balance ?: 0uL)) {
+            _state.update { it.copy(error = R.string.usdt__error_balance_spark) }
+            return@launch
+        }
+        _state.update { it.copy(busy = true, error = null) }
+        val result = when (state.page) {
+            SparkUsdPage.BRIDGE -> sparkRepo.quoteArbitrumBridge(bridgeAddress.value.orEmpty(), amount)
+            else -> sparkRepo.quoteConversion(state.convertToUsd, amount)
+        }
+        result
+            .onSuccess { quote -> _state.update { it.copy(busy = false, quote = quote) } }
+            .onFailure { _state.update { it.copy(busy = false, error = R.string.usdt__convert_failed_spark) } }
+    }
+
+    fun confirmQuote() = viewModelScope.launch {
+        val quote = _state.value.quote ?: return@launch
+        if (_state.value.busy || _state.value.completed) return@launch
+        _state.update { it.copy(busy = true, error = null) }
+        sparkRepo.execute(quote)
+            .onSuccess { _state.update { it.copy(busy = false, completed = true) } }
+            .onFailure { _state.update { it.copy(busy = false, error = R.string.usdt__convert_failed_spark) } }
     }
 
     fun setRecipientInput(input: String) = _state.update { it.copy(recipientInput = input, error = null) }
@@ -89,7 +137,10 @@ class SparkUsdViewModel @Inject constructor(
                 }
             }
             .onFailure { error ->
-                val message = if (error is SparkUsdError) R.string.usdt__error_address else R.string.usdt__error_network
+                val message = when (error) {
+                    is SparkUsdError -> R.string.usdt__error_address_spark
+                    else -> R.string.usdt__error_network
+                }
                 _state.update { it.copy(busy = false, error = message) }
             }
     }
@@ -104,7 +155,7 @@ class SparkUsdViewModel @Inject constructor(
         val amount = runCatching { usdtParseAmount(state.amountInput) }.getOrNull()?.takeIf { it > 0uL }
             ?: return@update state.copy(error = R.string.usdt__error_amount)
         val balance = wallet.value?.balance ?: 0uL
-        if (amount > balance) return@update state.copy(error = R.string.usdt__error_balance)
+        if (amount > balance) return@update state.copy(error = R.string.usdt__error_balance_spark)
         state.copy(amount = amount, page = SparkUsdPage.REVIEW, error = null)
     }
 
@@ -113,7 +164,7 @@ class SparkUsdViewModel @Inject constructor(
         if (state.busy || state.completed || state.authenticationRequired) return@launch
         val amount = state.amount ?: return@launch
         if (amount > (wallet.value?.balance ?: 0uL)) {
-            _state.update { it.copy(error = R.string.usdt__error_balance) }
+            _state.update { it.copy(error = R.string.usdt__error_balance_spark) }
             return@launch
         }
         val settings = runSuspendCatching { settingsStore.data.first() }.getOrNull() ?: return@launch
@@ -141,9 +192,9 @@ class SparkUsdViewModel @Inject constructor(
     }
 }
 
-enum class SparkUsdPage { WALLET, RECEIVE, RECIPIENT, AMOUNT, REVIEW }
+enum class SparkUsdPage { WALLET, RECEIVE, RECIPIENT, AMOUNT, REVIEW, CONVERT, BRIDGE }
 
-@Immutable
+@Stable
 data class SparkUsdSendState(
     val page: SparkUsdPage = SparkUsdPage.WALLET,
     val receiveRequest: String? = null,
@@ -152,6 +203,8 @@ data class SparkUsdSendState(
     val amountInput: String = "",
     val amount: ULong? = null,
     val isAmountFixed: Boolean = false,
+    val convertToUsd: Boolean = true,
+    val quote: SparkUsdQuote? = null,
     val busy: Boolean = false,
     val completed: Boolean = false,
     val authenticationRequired: Boolean = false,

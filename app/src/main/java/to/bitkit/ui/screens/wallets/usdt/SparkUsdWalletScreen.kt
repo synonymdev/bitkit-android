@@ -50,6 +50,8 @@ import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ext.uiDateStyleFor
+import to.bitkit.models.formatToModernDisplay
+import to.bitkit.repositories.SparkUsdQuote
 import to.bitkit.repositories.SparkUsdState
 import to.bitkit.repositories.SparkUsdTransfer
 import to.bitkit.ui.appViewModel
@@ -69,6 +71,7 @@ import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PaymentAddressInput
 import to.bitkit.ui.components.PaymentReviewIllustration
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.UsdtAmountHeader
@@ -135,6 +138,7 @@ fun SparkUsdWalletScreen(
     val wallet by viewModel.wallet.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val bridgeAddress by viewModel.bridgeAddress.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel, initialRecipient) {
         viewModel.refresh()
         if (initialRecipient.isNotEmpty()) {
@@ -149,6 +153,8 @@ fun SparkUsdWalletScreen(
         onReceive = viewModel::showReceive,
         onSend = { viewModel.startSend() },
         onBack = onBack,
+        onConvert = viewModel::startConvert,
+        onBridge = viewModel::startBridge.takeIf { bridgeAddress != null },
     )
     if (state.page == SparkUsdPage.WALLET) return
     val blocked by rememberUpdatedState(state.busy)
@@ -189,6 +195,9 @@ fun SparkUsdWalletScreen(
                     onReview = viewModel::review,
                     onConfirm = viewModel::confirm,
                     onDone = viewModel::dismiss,
+                    onConvertDirection = viewModel::setConvertToUsd,
+                    onQuote = viewModel::quote,
+                    onConfirmQuote = viewModel::confirmQuote,
                 )
             }
         }
@@ -202,6 +211,8 @@ private fun SparkUsdWalletContent(
     onReceive: () -> Unit,
     onSend: () -> Unit,
     onBack: () -> Unit,
+    onConvert: () -> Unit = {},
+    onBridge: (() -> Unit)? = null,
 ) {
     val settings = settingsViewModel
     val app = appViewModel
@@ -232,6 +243,25 @@ private fun SparkUsdWalletContent(
                         onToggleHide = if (allowSwipe) ({ settings?.setHideBalance(!hideBalance) }) else null,
                         modifier = Modifier.testTag("SparkUsdBalance")
                     )
+                    VerticalSpacer(24.dp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SecondaryButton(
+                            text = stringResource(R.string.usdt__convert_spark),
+                            onClick = onConvert,
+                            size = ButtonSize.Small,
+                            fullWidth = false,
+                            testTag = "SparkUsdConvert",
+                        )
+                        onBridge?.let {
+                            SecondaryButton(
+                                text = stringResource(R.string.usdt__bridge_spark),
+                                onClick = it,
+                                size = ButtonSize.Small,
+                                fullWidth = false,
+                                testTag = "SparkUsdBridge",
+                            )
+                        }
+                    }
                     VerticalSpacer(32.dp)
                 }
                 itemsIndexed(transfers, key = { _, transfer -> transfer.id }) { index, transfer ->
@@ -311,13 +341,18 @@ private fun SparkUsdSheetContent(
     onReview: () -> Unit,
     onConfirm: () -> Unit,
     onDone: () -> Unit,
+    onConvertDirection: (Boolean) -> Unit = {},
+    onQuote: () -> Unit = {},
+    onConfirmQuote: () -> Unit = {},
 ) {
     val title = when {
         state.page == SparkUsdPage.RECEIVE -> R.string.usdt__receive_title
-        state.completed -> R.string.usdt__sent_title
+        state.page == SparkUsdPage.CONVERT -> R.string.usdt__convert_spark
+        state.page == SparkUsdPage.BRIDGE -> R.string.usdt__bridge_spark
+        state.completed -> R.string.usdt__sent_title_spark
         state.page == SparkUsdPage.REVIEW -> R.string.wallet__send_review
         state.page == SparkUsdPage.AMOUNT -> R.string.usdt__amount
-        else -> R.string.usdt__send_title
+        else -> R.string.usdt__send_title_spark
     }
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         SheetTopBar(stringResource(title), onBack = onBack.takeUnless { state.busy || state.completed })
@@ -333,6 +368,14 @@ private fun SparkUsdSheetContent(
                 onReview
             )
             SparkUsdPage.REVIEW -> SparkUsdReviewContent(state, onConfirm, onDone)
+            SparkUsdPage.CONVERT, SparkUsdPage.BRIDGE -> SparkUsdConvertContent(
+                state,
+                onAmountChange,
+                onConvertDirection,
+                onQuote,
+                onConfirmQuote,
+                onDone,
+            )
             else -> SparkUsdRecipientContent(state, onRecipientChange, onRecipientContinue)
         }
     }
@@ -349,7 +392,7 @@ private fun ColumnScope.SparkUsdReceiveContent(state: SparkUsdSendState) {
                 qrLogoPainter = painterResource(R.drawable.tether_circle),
                 onClickEditInvoice = null,
                 accentColor = Colors.Usdt,
-                copyMessage = stringResource(R.string.usdt__receive_copied),
+                copyMessage = stringResource(R.string.usdt__receive_copied_spark),
                 modifier = Modifier.fillMaxWidth().height(minOf(maxHeight, maxWidth + ButtonSize.Small.height + 32.dp))
                     .testTag("SparkUsdReceiveQr")
             )
@@ -493,6 +536,102 @@ private fun ColumnScope.SparkUsdReviewContent(state: SparkUsdSendState, onConfir
         )
     }
 }
+
+@Composable
+private fun ColumnScope.SparkUsdConvertContent(
+    state: SparkUsdSendState,
+    onAmountChange: (String) -> Unit,
+    onConvertDirection: (Boolean) -> Unit,
+    onQuote: () -> Unit,
+    onConfirmQuote: () -> Unit,
+    onDone: () -> Unit,
+) {
+    val quote = state.quote
+    if (quote == null) {
+        if (state.page == SparkUsdPage.CONVERT) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(true to R.string.usdt__convert_to_usd_spark, false to R.string.usdt__convert_to_btc_spark)
+                    .forEach { (toUsd, label) ->
+                        NumberPadActionButton(
+                            text = stringResource(label),
+                            color = if (state.convertToUsd == toUsd) Colors.Usdt else Colors.White64,
+                            onClick = { onConvertDirection(toUsd) },
+                            textStyle = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                            modifier = Modifier.testTag(if (toUsd) "SparkUsdConvertToUsd" else "SparkUsdConvertToBtc")
+                        )
+                    }
+            }
+        } else {
+            BodyS(stringResource(R.string.usdt__bridge_note_spark), color = Colors.White64)
+        }
+        VerticalSpacer(16.dp)
+        UsdtAmountHeader(state.amountInput.ifEmpty { "0" }, modifier = Modifier.testTag("SparkUsdConvertAmount"))
+        FillHeight(min = 12.dp)
+        state.error?.let {
+            BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("SparkUsdError"))
+            VerticalSpacer(16.dp)
+        }
+        HorizontalDivider(color = Colors.White10)
+        NumberPad(
+            type = NumberPadType.DECIMAL,
+            availableHeight = 360.dp,
+            onDeleteLongPress = { onAmountChange("") },
+            onPress = { key ->
+                onAmountChange(
+                    NumberPadInputHandler.handleInput(key, state.amountInput, maxLength = 21, maxDecimals = 6)
+                )
+            },
+        )
+        PrimaryButton(
+            text = stringResource(R.string.common__continue),
+            onClick = onQuote,
+            enabled = state.amountInput.isNotEmpty() && !state.busy,
+            isLoading = state.busy,
+            modifier = Modifier.testTag("SparkUsdQuote")
+        )
+        return
+    }
+    val bitcoinIn = quote.kind == SparkUsdQuote.Kind.TO_USD
+    val bitcoinOut = quote.kind == SparkUsdQuote.Kind.TO_BTC
+    SparkUsdQuoteRow(R.string.usdt__convert_pay_spark, quote.pay.display(bitcoinIn))
+    SparkUsdQuoteRow(R.string.usdt__convert_receive_spark, quote.receive.display(bitcoinOut))
+    SparkUsdQuoteRow(R.string.usdt__convert_fee_spark, quote.fee.display(bitcoinIn))
+    FillHeight()
+    state.error?.let {
+        BodyS(stringResource(it), color = Colors.Brand, modifier = Modifier.testTag("SparkUsdError"))
+        VerticalSpacer(16.dp)
+    }
+    if (state.completed) {
+        PrimaryButton(
+            text = stringResource(R.string.common__close),
+            onClick = onDone,
+            modifier = Modifier.testTag("SparkUsdDone")
+        )
+    } else {
+        SwipeToConfirm(
+            text = stringResource(R.string.other__swipe),
+            color = Colors.Usdt,
+            onConfirm = onConfirmQuote,
+            enabled = !state.busy,
+            loading = state.busy,
+            confirmed = state.busy,
+            textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
+            modifier = Modifier.fillMaxWidth().testTag("SparkUsdConfirmQuote")
+        )
+    }
+}
+
+@Composable
+private fun SparkUsdQuoteRow(label: Int, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+        Caption13Up(stringResource(label), color = Colors.White64, modifier = Modifier.weight(1f))
+        BodySSB(value)
+    }
+    HorizontalDivider(color = Colors.White10)
+}
+
+private fun ULong.display(isSats: Boolean): String =
+    if (isSats) "₿ " + formatToModernDisplay() else "$ " + usdtOverviewAmount(this)
 
 @Preview(showSystemUi = true)
 @Composable
