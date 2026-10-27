@@ -965,6 +965,8 @@ private fun PaykitAllowanceLocalState.withAutoPaid(
     allowanceId: String?,
     amountSats: ULong,
 ): PaykitAllowanceLocalState {
+    // Both the journal and the ledger report a payment; whichever comes first counts it.
+    if (isAutoPaid(requestId)) return this
     // Allowance ids are unique per contact only, so payments count toward the contact's own allowance.
     val key = PaykitAllowance.key(requestId.counterparty, allowanceId)
     val total = (autoPaidSatsByAllowance[key] ?: 0uL).safe() + amountSats.safe()
@@ -974,21 +976,22 @@ private fun PaykitAllowanceLocalState.withAutoPaid(
     )
 }
 
+private fun PaykitAllowanceLocalState.isAutoPaid(requestId: PaykitPaymentRequestId) = autoPaidRequestIds.any {
+    it.paymentRequestId == requestId.paymentRequestId &&
+        PubkyPublicKeyFormat.matches(it.counterparty, requestId.counterparty)
+}
+
 private fun PaykitAllowanceLocalState.withLedgerAutoPaid(
     history: AllowanceAccountingHistory,
 ): PaykitAllowanceLocalState =
     history.occurrences.filter { it.key.billingPeriod == null }.fold(this) { state, occurrence ->
         val scope = occurrence.key.request
         val requestId = PaykitPaymentRequestId(scope.paymentRequestId, scope.counterparty)
-        val isCounted = state.autoPaidRequestIds.any {
-            it.paymentRequestId == requestId.paymentRequestId &&
-                PubkyPublicKeyFormat.matches(it.counterparty, requestId.counterparty)
-        }
         val paid = occurrence.attempts.firstOrNull {
             it.mode == PaymentExecutionMode.AUTOMATIC && it.status == PaymentExecutionStatus.SUCCEEDED
         }
         val amountSats = paid?.amount?.value()?.let(PaykitAllowance::satsFromBitcoinAmount)
-        if (isCounted || paid == null || amountSats == null) {
+        if (paid == null || amountSats == null) {
             state
         } else {
             state.withAutoPaid(requestId, paid.allowanceId, amountSats)

@@ -855,6 +855,25 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a ledger success whose journal entry is still open counts once`() = test {
+        sut.activate(identity)
+        val request = fixtures.paymentRequest(id = "req-pending")
+        seedJournal(journalEntry("pending", request, Stage.SENT, paymentHash = PAYMENT_HASH))
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("pending", PaymentExecutionStatus.SUCCEEDED)),
+        )
+
+        sut.recover(identity)
+
+        val state = sut.localState(identity)
+        assertEquals(Stage.SUCCEEDED, state.journal.single().stage)
+        assertEquals(
+            mapOf(PaykitAllowance.key(request.counterparty, ALLOWANCE_ID) to 1_000uL),
+            state.autoPaidSatsByAllowance,
+        )
+    }
+
+    @Test
     fun `recovery gives the payment list back when it fails an automatic attempt`() = test {
         val request = fixtures.paymentRequest()
         accountingState = fixtures.accountingState(
