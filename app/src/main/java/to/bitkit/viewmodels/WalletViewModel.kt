@@ -16,12 +16,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -93,7 +91,6 @@ class WalletViewModel @Inject constructor(
     val lightningState = lightningRepo.lightningState
     val walletState = walletRepo.walletState
     val balanceState = walletRepo.balanceState
-    val hasChannels = lightningRepo.hasChannels.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     @Volatile
     private var isStarting = false

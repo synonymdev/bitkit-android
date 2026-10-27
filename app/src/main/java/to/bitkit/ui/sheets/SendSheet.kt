@@ -110,12 +110,6 @@ private const val HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE = 3uL
 /** A peer reconnecting makes a channel usable again without any node event, so the overlay polls. */
 private val CHANNELS_REFRESH_INTERVAL = 1.seconds
 
-/** The node wait shows the bitcoin view when the send can only pay on-chain: no channels, no Lightning target. */
-internal fun SendUiState.syncNodeVariant(hasChannels: Boolean): SyncNodeVariant {
-    val isLightningSend = payMethod == SendMethod.LIGHTNING || lnurl != null
-    return if (hasChannels || isLightningSend) SyncNodeVariant.LIGHTNING else SyncNodeVariant.BITCOIN
-}
-
 internal fun NavDestination.isPaymentReview(): Boolean =
     hasRoute<SendRoute.Confirm>() || hasRoute<SendRoute.PinCheck>() ||
         hasRoute<SendRoute.RecoveryPinCheck>() || hasRoute<SendRoute.HardwareSign>()
@@ -153,16 +147,15 @@ fun SendSheet(
     val isOffline by remember { derivedStateOf { connectivityState != ConnectivityState.CONNECTED } }
     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
     val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
-    val hasChannels by walletViewModel.hasChannels.collectAsStateWithLifecycle()
-    val syncNodeVariant = sendUiState.syncNodeVariant(hasChannels)
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     var routingCacheResetAttempted by rememberSaveable(startDestination) { mutableStateOf(false) }
 
+    val hasAnyChannels = lightningState.channels.isNotEmpty()
+    val syncNodeVariant = if (hasAnyChannels) SyncNodeVariant.LIGHTNING else SyncNodeVariant.BITCOIN
     val shouldShowSyncOverlay = run {
         if (preparingRequest != null || sendUiState.paykitUsesUsdt) return@run false
         if (sendUiState.hardwareWalletId != null) return@run false
         if (!lightningState.nodeLifecycleState.isRunning()) return@run true
-        val hasAnyChannels = lightningState.channels.isNotEmpty()
         hasAnyChannels && lightningState.channels.none { it.isUsable }
     }
 

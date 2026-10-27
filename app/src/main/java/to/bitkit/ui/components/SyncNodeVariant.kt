@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.Color
 import to.bitkit.R
 import to.bitkit.ui.theme.Colors
 
-/** The wait for the node looks like the wallet the send pays from: Spending (Lightning) or Savings (bitcoin). */
+/** The look of the wait for the node: bitcoin while the wallet has no Lightning channels, Spending otherwise. */
 enum class SyncNodeVariant(
     @DrawableRes val largeCircleRes: Int,
     @DrawableRes val smallCircleRes: Int,
