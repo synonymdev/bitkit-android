@@ -159,7 +159,6 @@
     <string name="lightning__conn_pending">Połączenia oczekujące</string>
     <string name="lightning__conn_open">Połączenia otwarte</string>
     <string name="lightning__conn_closed">Połączenia zamknięte</string>
-    <string name="lightning__conn_failed">Połączenia nieudane</string>
     <string name="lightning__conn_closed_show">Pokaż zamknięte i nieudane</string>
     <string name="lightning__conn_closed_hide">Ukryj zamknięte i nieudane</string>
     <string name="lightning__conn_button_export_logs">Eksport logów</string>

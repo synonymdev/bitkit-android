@@ -6093,8 +6093,6 @@ class AppViewModel @Inject constructor(
                 val winner = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
                 if (request != null) {
                     paykitPaymentProofRepo.completeRecoveredOnchainPayment(request, winner)
-                } else if (winner.isTransfer) {
-                    transferRepo.resumeAcceptedFunding().getOrThrow()
                 } else {
                     lightningRepo.completeAcceptedOrdinaryFollowup(requireNotNull(winner.txid))
                 }

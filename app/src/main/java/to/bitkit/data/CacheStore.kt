@@ -41,19 +41,6 @@ class CacheStore internal constructor(
         store.updateData(transform)
     }
 
-    suspend fun addPaidOrder(orderId: String, txId: String) {
-        store.updateData {
-            val newEntry = mapOf(orderId to txId)
-            val updatedOrders = newEntry + it.paidOrders
-            val limitedOrders = when {
-                updatedOrders.size > MAX_PAID_ORDERS -> updatedOrders.toList().take(MAX_PAID_ORDERS).toMap()
-                else -> updatedOrders
-            }
-            Logger.debug("Cached paid order '$orderId'")
-            it.copy(paidOrders = limitedOrders)
-        }
-    }
-
     suspend fun setOnchainAddress(address: String) {
         store.updateData { it.copy(onchainAddress = address) }
     }
@@ -161,16 +148,11 @@ class CacheStore internal constructor(
         store.updateData { AppCacheData() }
         Logger.info("Deleted all app cached data.")
     }
-
-    companion object {
-        private const val MAX_PAID_ORDERS = 50
-    }
 }
 
 @Serializable
 data class AppCacheData(
     val cachedRates: List<FxRate> = listOf(),
-    val paidOrders: Map<String, String> = mapOf(),
     val onchainAddress: String = "",
     val bolt11: String = "",
     val bolt11PaymentHash: String = "",

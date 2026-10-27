@@ -42,8 +42,4 @@ class BlocktankViewModel @Inject constructor(
             blocktankRepo.refreshOrders()
         }
     }
-
-    suspend fun openChannel(orderId: String): IBtOrder {
-        return blocktankRepo.openChannel(orderId).getOrThrow()
-    }
 }

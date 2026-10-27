@@ -199,7 +199,6 @@
     <string name="lightning__conn_pending">Conexiones pendientes</string>
     <string name="lightning__conn_open">Conexiones abiertas</string>
     <string name="lightning__conn_closed">Conexiones cerradas</string>
-    <string name="lightning__conn_failed">Conexiones fallidas</string>
     <string name="lightning__conn_button_export_logs">Exportar registros</string>
     <string name="lightning__conn_button_add">Añadir conexión</string>
     <string name="lightning__error_logs_description">Bitkit no fue capaz de exportar los logs LDK.</string>

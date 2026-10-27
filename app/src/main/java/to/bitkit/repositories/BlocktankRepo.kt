@@ -1,7 +1,6 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
-import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
@@ -17,8 +16,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
@@ -31,7 +28,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.async.appScope
-import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
@@ -47,7 +43,6 @@ import kotlin.time.Duration.Companion.seconds
 class BlocktankRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
-    private val cacheStore: CacheStore,
     @Named("enablePolling") private val enablePolling: Boolean,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
@@ -60,7 +55,6 @@ class BlocktankRepo @Inject constructor(
 
     init {
         startPolling()
-        observePaidOrders()
 
         repoScope.launch {
             refreshInfo()
@@ -78,22 +72,6 @@ class BlocktankRepo @Inject constructor(
         }.flowOn(bgDispatcher)
             .onEach { refreshOrders() }
             .launchIn(repoScope)
-    }
-
-    private fun observePaidOrders() {
-        repoScope.launch {
-            cacheStore.data
-                .map { it.paidOrders }
-                .distinctUntilChanged()
-                .map { it.keys }
-                .collect { paidOrderIds ->
-                    _blocktankState.update { state ->
-                        state.copy(
-                            paidOrders = state.orders.filter { order -> order.id in paidOrderIds }.toImmutableList(),
-                        )
-                    }
-                }
-        }
     }
 
     suspend fun getCjitEntry(channel: ChannelDetails): IcJitEntry? = withContext(bgDispatcher) {
@@ -164,8 +142,6 @@ class BlocktankRepo @Inject constructor(
         runCatching {
             Logger.verbose("Refreshing blocktank orders…", context = TAG)
 
-            val paidOrderIds = cacheStore.data.first().paidOrders.keys
-
             // Sync instantly from cache
             val cachedOrders = coreService.blocktank.orders(refresh = false)
             val cachedCjitEntries = coreService.blocktank.cjitEntries(refresh = false)
@@ -173,7 +149,6 @@ class BlocktankRepo @Inject constructor(
                 state.copy(
                     orders = cachedOrders.toImmutableList(),
                     cjitEntries = cachedCjitEntries.toImmutableList(),
-                    paidOrders = cachedOrders.filter { order -> order.id in paidOrderIds }.toImmutableList(),
                 )
             }
 
@@ -184,39 +159,15 @@ class BlocktankRepo @Inject constructor(
                 state.copy(
                     orders = orders.toImmutableList(),
                     cjitEntries = cjitEntries.toImmutableList(),
-                    paidOrders = orders.filter { order -> order.id in paidOrderIds }.toImmutableList(),
                 )
             }
 
             Logger.debug(
-                "Orders refreshed: ${orders.size} orders, " +
-                    "${cjitEntries.size} cjit entries, " +
-                    "${_blocktankState.value.paidOrders.size} paid orders",
+                "Orders refreshed: ${orders.size} orders, ${cjitEntries.size} cjit entries",
                 context = TAG
             )
-            openChannelWithPaidOrders()
         }.also {
             isRefreshing = false
-        }
-    }
-
-    suspend fun openChannel(orderId: String): Result<IBtOrder> = withContext(bgDispatcher) {
-        runCatching {
-            Logger.debug("Opening channel for order: '$orderId'", context = TAG)
-            val order = coreService.blocktank.open(orderId)
-
-            // Update the order in state
-            val updatedOrders = _blocktankState.value.orders.toMutableList()
-            val index = updatedOrders.indexOfFirst { it.id == order.id }
-            if (index != -1) {
-                updatedOrders[index] = order
-            }
-
-            _blocktankState.update { state -> state.copy(orders = updatedOrders.toImmutableList()) }
-
-            return@runCatching order
-        }.onFailure {
-            Logger.error("Failed to open channel for order: $orderId", it, context = TAG)
         }
     }
 
@@ -252,12 +203,6 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    private suspend fun openChannelWithPaidOrders() = withContext(bgDispatcher) {
-        _blocktankState.value.paidOrders.filter { it.state2 == BtOrderState2.PAID }.forEach { order ->
-            openChannel(order.id)
-        }
-    }
-
     suspend fun resetState() = withContext(bgDispatcher) {
         _blocktankState.update { BlocktankState() }
         Logger.debug("Blocktank state reset", context = TAG)
@@ -272,7 +217,6 @@ class BlocktankRepo @Inject constructor(
             }
 
             // We don't refresh orders here because we rely on the polling mechanism.
-            // We also don't restore `paidOrders` the refresh interval uses restored paidOrderIds to rebuild the list.
 
             _blocktankState.update {
                 it.copy(
@@ -297,7 +241,6 @@ class BlocktankRepo @Inject constructor(
 @Stable
 data class BlocktankState(
     val orders: ImmutableList<IBtOrder> = persistentListOf(),
-    val paidOrders: ImmutableList<IBtOrder> = persistentListOf(),
     val cjitEntries: ImmutableList<IcJitEntry> = persistentListOf(),
     val info: IBtInfo? = null,
 )

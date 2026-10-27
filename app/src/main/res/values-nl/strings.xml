@@ -122,7 +122,6 @@
     <string name="lightning__conn_closed">Gesloten verbindingen</string>
     <string name="lightning__conn_closed_hide">Verberg gesloten &amp; mislukt</string>
     <string name="lightning__conn_closed_show">Toon gesloten &amp; mislukt</string>
-    <string name="lightning__conn_failed">Mislukte verbindingen</string>
     <string name="lightning__conn_open">Open verbindingen</string>
     <string name="lightning__conn_pending">Wachtende verbindingen</string>
     <string name="lightning__connection">Verbinding</string>

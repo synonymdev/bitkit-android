@@ -118,7 +118,6 @@
     <string name="lightning__conn_closed">Κλειστές συνδέσεις</string>
     <string name="lightning__conn_closed_hide">Απόκρυψη κλειστών &amp; αποτυχημένων</string>
     <string name="lightning__conn_closed_show">Εμφάνιση κλειστών &amp; αποτυχημένων</string>
-    <string name="lightning__conn_failed">Αποτυχημένες συνδέσεις</string>
     <string name="lightning__conn_open">Ανοιχτές συνδέσεις</string>
     <string name="lightning__conn_pending">Εκκρεμείς συνδέσεις</string>
     <string name="lightning__connection">Σύνδεση</string>

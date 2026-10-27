@@ -123,7 +123,6 @@
     <string name="lightning__conn_closed">Uzavřená spojení</string>
     <string name="lightning__conn_closed_hide">Skrýt uzavřená &amp; nepovedená</string>
     <string name="lightning__conn_closed_show">Ukázat uzavřená &amp; nepovedená</string>
-    <string name="lightning__conn_failed">Neprovedená spojení</string>
     <string name="lightning__conn_open">Otevřená spojení</string>
     <string name="lightning__conn_pending">Nevyřízená spojení</string>
     <string name="lightning__connection">Spojení</string>

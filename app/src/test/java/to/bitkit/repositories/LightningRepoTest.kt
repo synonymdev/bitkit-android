@@ -2594,7 +2594,7 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `accepted transfer acknowledgement waits for original durable local activity`() = test {
+    fun `accepted Blocktank funding finishes through the ordinary follow-up once its activity is durable`() = test {
         val txid = "ab".repeat(32)
         val attempt = pendingSendAttempt().copy(
             isTransfer = true,
@@ -2607,10 +2607,10 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
         whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
 
-        assertTrue(runCatching { sut.completeAcceptedTransferFollowup("order-1", txid) }.isFailure)
+        sut.completeAcceptedOrdinaryFollowup(txid)
         verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
         whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
-        sut.completeAcceptedTransferFollowup("order-1", txid)
+        sut.completeAcceptedOrdinaryFollowup(txid)
         verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
         verify(lightningService, never()).prepareOnchainSend(
             any(),

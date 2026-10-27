@@ -550,8 +550,7 @@ class LightningRepo @Inject constructor(
                 )
                 val attempt = observed ?: onchainSendAttemptStore.current()
                 if (attempt != null && attempt.txid.equals(observedTxid, ignoreCase = true) &&
-                    attempt.hasPositiveEvidence && !attempt.localFollowupComplete &&
-                    !attempt.isTransfer && attempt.requestId == null
+                    attempt.hasPositiveEvidence && !attempt.localFollowupComplete && attempt.requestId == null
                 ) {
                     finishOnchainSendLocally(attempt)
                     onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
@@ -1821,9 +1820,7 @@ class LightningRepo @Inject constructor(
                 delay(1.seconds)
                 if (!_lightningState.value.nodeLifecycleState.isRunning()) return@launch
                 val attempt = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull() ?: return@launch
-                if (!attempt.hasPositiveEvidence || attempt.localFollowupComplete ||
-                    attempt.isTransfer || attempt.requestId != null
-                ) {
+                if (!attempt.hasPositiveEvidence || attempt.localFollowupComplete || attempt.requestId != null) {
                     return@launch
                 }
                 completeAcceptedOrdinaryFollowup(requireNotNull(attempt.txid))
@@ -1834,23 +1831,13 @@ class LightningRepo @Inject constructor(
 
     suspend fun completeAcceptedOrdinaryFollowup(txid: String) {
         val attempt = onchainSendAttemptStore.current()
-        if (attempt != null && !attempt.isTransfer && attempt.requestId == null &&
+        if (attempt != null && attempt.requestId == null &&
             attempt.txid.equals(txid, ignoreCase = true) && attempt.hasPositiveEvidence
         ) {
             runSuspendCatching {
                 finishOnchainSendLocally(attempt)
                 onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
             }.onFailure { Logger.warn("Failed to finish accepted ordinary send locally", it, context = TAG) }
-        }
-    }
-
-    suspend fun completeAcceptedTransferFollowup(orderId: String, txid: String) {
-        val attempt = onchainSendAttemptStore.current()
-        if (attempt?.orderId == orderId && attempt.txid.equals(txid, ignoreCase = true) &&
-            attempt.hasPositiveEvidence
-        ) {
-            finishOnchainSendLocally(attempt)
-            onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
         }
     }
 

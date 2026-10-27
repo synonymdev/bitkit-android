@@ -132,7 +132,6 @@
     <string name="lightning__conn_closed">Закрытые Соединения</string>
     <string name="lightning__conn_closed_hide">Скрыть Закрытые и Неудачные</string>
     <string name="lightning__conn_closed_show">Показать Закрытые и Неудачные</string>
-    <string name="lightning__conn_failed">Неудачные Соединения</string>
     <string name="lightning__conn_open">Открытые Соединения</string>
     <string name="lightning__conn_pending">Ожидающие Соединения</string>
     <string name="lightning__connection">Соединение</string>

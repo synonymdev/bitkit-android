@@ -53,7 +53,6 @@ class AppCacheDataTest : BaseUnitTest() {
             bolt11PaymentHash = "paymentHash",
             bip21 = "bitcoin:bc1qtest?lightning=paidInvoice",
             balance = BalanceState(totalOnchainSats = 42uL),
-            paidOrders = mapOf("order" to "txid"),
         )
 
         val invalidated = cache.invalidateReceiveLightningInvoice()
@@ -63,7 +62,6 @@ class AppCacheDataTest : BaseUnitTest() {
         assertEquals("", invalidated.bip21)
         assertEquals(cache.onchainAddress, invalidated.onchainAddress)
         assertEquals(cache.balance, invalidated.balance)
-        assertEquals(cache.paidOrders, invalidated.paidOrders)
     }
 
     @Test

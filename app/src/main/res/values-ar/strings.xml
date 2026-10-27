@@ -118,7 +118,6 @@
     <string name="lightning__conn_closed">الاتصالات المغلقة</string>
     <string name="lightning__conn_closed_hide">إخفاء المغلقة والفاشلة</string>
     <string name="lightning__conn_closed_show">إظهار المغلقة والفاشلة</string>
-    <string name="lightning__conn_failed">الاتصالات الفاشلة</string>
     <string name="lightning__conn_open">الاتصالات المفتوحة</string>
     <string name="lightning__conn_pending">الاتصالات المعلقة</string>
     <string name="lightning__connection">الاتصال</string>

@@ -153,7 +153,6 @@
     <string name="lightning__conn_pending">Conexões pendentes</string>
     <string name="lightning__conn_open">Conexões abertas</string>
     <string name="lightning__conn_closed">Conexões fechadas</string>
-    <string name="lightning__conn_failed">Conexões com falha</string>
     <string name="lightning__conn_closed_show">Mostrar Fechadas e com Falhas</string>
     <string name="lightning__conn_closed_hide">Ocultar Fechadas e com Falhas</string>
     <string name="lightning__conn_button_export_logs">Exportar Logs</string>

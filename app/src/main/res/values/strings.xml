@@ -269,7 +269,6 @@
     <string name="lightning__conn_closed">Closed connections</string>
     <string name="lightning__conn_closed_hide">Hide Closed &amp; Failed</string>
     <string name="lightning__conn_closed_show">Show Closed &amp; Failed</string>
-    <string name="lightning__conn_failed">Failed connections</string>
     <string name="lightning__conn_open">Open connections</string>
     <string name="lightning__conn_pending">Pending connections</string>
     <string name="lightning__connection">Connection</string>

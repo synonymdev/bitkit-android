@@ -12,12 +12,10 @@ import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
@@ -36,14 +34,11 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import to.bitkit.data.AppCacheData
-import to.bitkit.data.CacheStore
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
-import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransferType
 import to.bitkit.models.WalletScope
 import to.bitkit.services.ActivityService
@@ -70,10 +65,7 @@ class TransferRepoTest : BaseUnitTest() {
         on { activity } doReturn activityService
     }
     private val clock = mock<Clock>()
-    private val cacheStore = mock<CacheStore>()
     private val nodeEvents = MutableSharedFlow<Event>()
-    private val online = MutableStateFlow(ConnectivityState.DISCONNECTED)
-    private val connectivityRepo = mock<ConnectivityRepo>()
 
     companion object Fixtures {
         private const val ID_ORDER = "test-order-id"
@@ -84,8 +76,6 @@ class TransferRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        whenever(connectivityRepo.isOnline).thenReturn(online)
-        whenever(cacheStore.data).thenReturn(MutableStateFlow(AppCacheData()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(emptyList()))
@@ -97,394 +87,7 @@ class TransferRepoTest : BaseUnitTest() {
             coreService = coreService,
             transferDao = transferDao,
             clock = clock,
-            cacheStore = cacheStore,
-            connectivityRepo = connectivityRepo,
         )
-    }
-
-    @Test
-    fun `accepted funding rejects changed original client balance and fee without acknowledgement or resend`() = test {
-        val original = previewBtOrder()
-        val txid = "ab".repeat(32)
-        val attempt = OnchainSendAttempt(
-            WalletScope.default, "attempt", null, original.id,
-            requireNotNull(original.payment?.onchain?.address), original.feeSat, false, 1uL, true, null, emptyList(),
-            OnchainSendEvidence.Accepted, txid,
-            transferContext = OnchainTransferContext(99_000uL, 125_000uL, original.clientBalanceSat, original.feeSat),
-        )
-        setupClockNowMock()
-        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
-        for (changed in listOf(
-            original.copy(clientBalanceSat = original.clientBalanceSat + 1uL),
-            original.copy(feeSat = original.feeSat + 1uL),
-        )) {
-            whenever(blocktankRepo.fetchOrders(listOf(original.id))).thenReturn(Result.success(listOf(changed)))
-            assertTrue(sut.resumeAcceptedFunding().isFailure)
-        }
-        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(
-            attempt.copy(transferContext = OnchainTransferContext(99_000uL, 125_000uL))
-        )
-        whenever(blocktankRepo.fetchOrders(listOf(original.id))).thenReturn(Result.success(listOf(original)))
-        assertTrue(sut.resumeAcceptedFunding().isFailure)
-        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
-        assertTrue(sut.resumeAcceptedFunding(attempt.copy(walletIndex = 1)).isFailure)
-        verify(transferDao, never()).insert(any())
-        verify(cacheStore, never()).addPaidOrder(any(), any())
-        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
-        verify(lightningRepo, never()).sendOnChain(
-            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-            paymentDeadlineAt = anyOrNull(),
-            contactPublicKey = anyOrNull(),
-        )
-        assertEquals(attempt, lightningRepo.currentOnchainSendAttempt())
-    }
-
-    @Test
-    fun `connectivity recovery completes accepted funding without another send`() = test {
-        val order = previewBtOrder()
-        val txid = "ab".repeat(32)
-        val attempt = OnchainSendAttempt(
-            WalletScope.default,
-            "attempt",
-            null,
-            order.id,
-            requireNotNull(order.payment?.onchain?.address),
-            order.feeSat,
-            false,
-            1uL,
-            true,
-            null,
-            emptyList(),
-            OnchainSendEvidence.Accepted,
-            txid,
-            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
-        )
-        setupClockNowMock()
-        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
-        whenever(blocktankRepo.fetchOrders(listOf(order.id)))
-            .thenReturn(Result.failure(AppError("offline")))
-        whenever(lightningRepo.lightningState).thenReturn(
-            MutableStateFlow(
-                LightningState(
-                    nodeLifecycleState = NodeLifecycleState.Running,
-                )
-            )
-        )
-        runCurrent()
-        assertTrue(sut.resumeAcceptedFunding().isFailure)
-        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
-        whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
-        online.value = ConnectivityState.CONNECTED
-        runCurrent()
-
-        verify(transferDao).insert(
-            org.mockito.kotlin.check {
-                assertEquals(order.id, it.lspOrderId)
-                assertEquals(txid, it.fundingTxId)
-                assertEquals(99_000L, it.txTotalSats)
-                assertEquals(125_000L, it.preTransferOnchainSats)
-            }
-        )
-        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
-        verify(lightningRepo, never()).sendOnChain(
-            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-            paymentDeadlineAt = anyOrNull(),
-            contactPublicKey = anyOrNull(),
-        )
-        assertNotNull(sut)
-    }
-
-    @Test
-    fun `reconnect during suspended funding recovery starts another attempt`() = test {
-        val order = previewBtOrder()
-        val txid = "ab".repeat(32)
-        val attempt = OnchainSendAttempt(
-            WalletScope.default,
-            "attempt",
-            null,
-            order.id,
-            requireNotNull(order.payment?.onchain?.address),
-            order.feeSat,
-            false,
-            1uL,
-            true,
-            null,
-            emptyList(),
-            OnchainSendEvidence.Accepted,
-            txid,
-            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
-        )
-        setupClockNowMock()
-        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
-        val firstFetch = CompletableDeferred<Unit>()
-        var fetches = 0
-        whenever(blocktankRepo.fetchOrders(listOf(order.id))).doSuspendableAnswer {
-            fetches += 1
-            if (fetches == 1) {
-                firstFetch.await()
-                Result.failure(AppError("offline"))
-            } else {
-                Result.success(listOf(order))
-            }
-        }
-        whenever(lightningRepo.lightningState).thenReturn(
-            MutableStateFlow(
-                LightningState(
-                    nodeLifecycleState = NodeLifecycleState.Running,
-                )
-            )
-        )
-        runCurrent()
-        online.value = ConnectivityState.CONNECTED
-        runCurrent()
-        assertEquals(1, fetches)
-        online.value = ConnectivityState.DISCONNECTED
-        runCurrent()
-        online.value = ConnectivityState.CONNECTED
-        runCurrent()
-        firstFetch.complete(Unit)
-        runCurrent()
-        assertEquals(2, fetches)
-
-        verify(transferDao).insert(
-            org.mockito.kotlin.check {
-                assertEquals(order.id, it.lspOrderId)
-                assertEquals(txid, it.fundingTxId)
-                assertEquals(99_000L, it.txTotalSats)
-                assertEquals(125_000L, it.preTransferOnchainSats)
-            }
-        )
-        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
-        verify(lightningRepo, never()).sendOnChain(
-            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-            paymentDeadlineAt = anyOrNull(),
-            contactPublicKey = anyOrNull(),
-        )
-        assertNotNull(sut)
-    }
-
-    @Test
-    fun `node restart during suspended funding recovery starts another attempt`() = test {
-        val order = previewBtOrder()
-        val txid = "ab".repeat(32)
-        val attempt = OnchainSendAttempt(
-            WalletScope.default,
-            "attempt",
-            null,
-            order.id,
-            requireNotNull(order.payment?.onchain?.address),
-            order.feeSat,
-            false,
-            1uL,
-            true,
-            null,
-            emptyList(),
-            OnchainSendEvidence.Accepted,
-            txid,
-            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
-        )
-        setupClockNowMock()
-        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
-        val firstFetch = CompletableDeferred<Unit>()
-        var fetches = 0
-        whenever(blocktankRepo.fetchOrders(listOf(order.id))).doSuspendableAnswer {
-            fetches += 1
-            if (fetches == 1) {
-                firstFetch.await()
-                Result.failure(AppError("offline"))
-            } else {
-                Result.success(listOf(order))
-            }
-        }
-        val state = MutableStateFlow(LightningState())
-        whenever(lightningRepo.lightningState).thenReturn(state)
-        val restarted = TransferRepo(
-            testDispatcher,
-            lightningRepo,
-            blocktankRepo,
-            coreService,
-            transferDao,
-            clock,
-            cacheStore,
-            connectivityRepo,
-        )
-        runCurrent()
-        state.value = state.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
-        runCurrent()
-        assertEquals(1, fetches)
-        state.value = state.value.copy(nodeLifecycleState = NodeLifecycleState.Stopped)
-        runCurrent()
-        state.value = state.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
-        runCurrent()
-        firstFetch.complete(Unit)
-        runCurrent()
-        assertEquals(2, fetches)
-
-        verify(transferDao).insert(
-            org.mockito.kotlin.check {
-                assertEquals(order.id, it.lspOrderId)
-                assertEquals(txid, it.fundingTxId)
-                assertEquals(99_000L, it.txTotalSats)
-                assertEquals(125_000L, it.preTransferOnchainSats)
-            }
-        )
-        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
-        verify(lightningRepo, never()).sendOnChain(
-            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-            paymentDeadlineAt = anyOrNull(),
-            contactPublicKey = anyOrNull(),
-        )
-        assertNotNull(restarted)
-    }
-
-    @Test
-    fun `startup resumes accepted original funding without a confirmation or native resend`() = test {
-        val order = previewBtOrder()
-        val txid = "ab".repeat(32)
-        val attempt = OnchainSendAttempt(
-            WalletScope.default,
-            "attempt",
-            null,
-            order.id,
-            requireNotNull(order.payment?.onchain?.address),
-            order.feeSat,
-            false,
-            1uL,
-            true,
-            null,
-            emptyList(),
-            OnchainSendEvidence.Accepted,
-            txid,
-            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
-        )
-        setupClockNowMock()
-        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
-        whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
-        whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
-        // Construct after the saved result exists, as on process startup.
-        val restarted =
-            TransferRepo(
-                testDispatcher,
-                lightningRepo,
-                blocktankRepo,
-                coreService,
-                transferDao,
-                clock,
-                cacheStore,
-                connectivityRepo
-            )
-        runCurrent()
-        lightningRepo.lightningState.value.let {
-            (lightningRepo.lightningState as MutableStateFlow).value = it.copy(
-                nodeLifecycleState = NodeLifecycleState.Running,
-            )
-        }
-        runCurrent()
-
-        verify(transferDao).insert(
-            org.mockito.kotlin.check {
-                assertEquals(order.id, it.lspOrderId)
-                assertEquals(txid, it.fundingTxId)
-                assertEquals(99_000L, it.txTotalSats)
-                assertEquals(125_000L, it.preTransferOnchainSats)
-            }
-        )
-        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
-        verify(lightningRepo, never()).sendOnChain(
-            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-            paymentDeadlineAt = anyOrNull(),
-            contactPublicKey = anyOrNull(),
-        )
-        assertNotNull(restarted)
-    }
-
-    @Test
-    fun `exact observed event retries partial original funding without duplicate transfer`() = test {
-        val order = previewBtOrder()
-        val txid = "ab".repeat(32)
-        val attempt = OnchainSendAttempt(
-            WalletScope.default,
-            "attempt",
-            null,
-            order.id,
-            requireNotNull(order.payment?.onchain?.address),
-            order.feeSat,
-            false,
-            1uL,
-            true,
-            null,
-            emptyList(),
-            OnchainSendEvidence.Observed,
-            txid,
-            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
-        )
-        setupClockNowMock()
-        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
-        whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
-        var persisted: TransferEntity? = null
-        whenever(transferDao.getByFundingTxId(txid)).thenAnswer { persisted }
-        whenever(transferDao.insert(any())).doSuspendableAnswer {
-            persisted = it.getArgument(0)
-            Unit
-        }
-        var failCache = true
-        whenever(cacheStore.addPaidOrder(order.id, txid)).doSuspendableAnswer {
-            if (failCache) {
-                failCache = false
-                error("cache storage unavailable")
-            }
-            Unit
-        }
-        assertTrue(sut.resumeAcceptedFunding().isFailure)
-        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
-
-        nodeEvents.emit(Event.OnchainTransactionReceived(txid, mock()))
-        runCurrent()
-        verify(transferDao, times(1)).insert(any())
-        verify(cacheStore, times(2)).addPaidOrder(order.id, txid)
-        verify(lightningRepo).completeAcceptedTransferFollowup(order.id, txid)
-        assertEquals(99_000L, persisted?.txTotalSats)
-        assertEquals(125_000L, persisted?.preTransferOnchainSats)
-        verify(lightningRepo, never()).sendOnChain(
-            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
-            anyOrNull(), any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-            paymentDeadlineAt = anyOrNull(),
-            contactPublicKey = anyOrNull(),
-        )
-    }
-
-    @Test
-    fun `unknown funding cannot resume from local records or another transaction event`() = test {
-        val order = previewBtOrder()
-        val attempt = OnchainSendAttempt(
-            WalletScope.default,
-            "attempt",
-            null,
-            order.id,
-            requireNotNull(order.payment?.onchain?.address),
-            order.feeSat,
-            false,
-            1uL,
-            true,
-            null,
-            emptyList(),
-            OnchainSendEvidence.Unknown,
-            "ab".repeat(32),
-            transferContext = OnchainTransferContext(99_000uL, 125_000uL, order.clientBalanceSat, order.feeSat),
-        )
-        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
-        nodeEvents.emit(Event.OnchainTransactionReceived("cd".repeat(32), mock()))
-        runCurrent()
-        verify(transferDao, never()).insert(any())
-        verify(cacheStore, never()).addPaidOrder(any(), any())
-        verify(lightningRepo, never()).completeAcceptedTransferFollowup(any(), any())
-        org.mockito.kotlin.verifyNoInteractions(blocktankRepo)
     }
 
     // MARK: - createTransfer
@@ -596,31 +199,6 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     // MARK: - markSettled
-
-    @Test
-    fun `createPendingToSpendingActivity uses the funding wallet scope`() = test {
-        val order = previewBtOrder()
-
-        val result = sut.createPendingToSpendingActivity(
-            order = order,
-            txId = "hardware-funding-tx",
-            fee = 1_000uL,
-            feeRate = 2uL,
-            walletId = "hardware-wallet",
-        )
-
-        assertTrue(result.isSuccess)
-        verify(activityService).createSentOnchainActivityFromSendResult(
-            txid = "hardware-funding-tx",
-            address = order.payment?.onchain?.address.orEmpty(),
-            amount = order.feeSat,
-            fee = 1_000uL,
-            feeRate = 2uL,
-            isTransfer = true,
-            channelId = order.channel?.shortChannelId,
-            walletId = "hardware-wallet",
-        )
-    }
 
     @Test
     fun `markSettled successfully marks transfer as settled`() = test {
@@ -1366,6 +944,26 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `syncTransferStates settles TO_SPENDING transfer for a paid order that never got a channel`() = test {
+        val settledAt = setupClockNowMock()
+        val transfer = transferEntity(id = ID_TRANSFER, fundingTxId = null, channelId = null)
+            .copy(lspOrderId = ID_ORDER)
+        val order = btOrder(state2 = BtOrderState2.PAID, channel = null)
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(mock()))
+        whenever(blocktankRepo.getOrder(ID_ORDER, refresh = false)).thenReturn(Result.success(order))
+        whenever(blocktankRepo.fetchOrders(listOf(ID_ORDER))).thenReturn(Result.success(listOf(order)))
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+    }
+
+    @Test
     fun `syncTransferStates does not settle TO_SPENDING transfer when order stays unknown after fetch`() = test {
         setupClockNowMock()
         val transfer = transferEntity(id = ID_TRANSFER, fundingTxId = null, channelId = null)
@@ -1976,8 +1574,6 @@ class TransferRepoTest : BaseUnitTest() {
             coreService = coreService,
             transferDao = transferDao,
             clock = clock,
-            cacheStore = cacheStore,
-            connectivityRepo = connectivityRepo,
         )
 
         testSut.activeTransfers.test {

@@ -166,7 +166,6 @@
     <string name="lightning__conn_pending">Connexions en attente</string>
     <string name="lightning__conn_open">Connexions ouvertes</string>
     <string name="lightning__conn_closed">Connexions fermées</string>
-    <string name="lightning__conn_failed">Échec des connexions</string>
     <string name="lightning__conn_closed_show">Montrer les fermetures et les échecs</string>
     <string name="lightning__conn_closed_hide">Cachez les fermetures et les échecs</string>
     <string name="lightning__conn_button_export_logs">Exporter les logs</string>

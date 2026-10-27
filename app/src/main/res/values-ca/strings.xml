@@ -121,7 +121,6 @@
     <string name="lightning__conn_closed">Connexions tancades</string>
     <string name="lightning__conn_closed_hide">Amaga tancades i fallides</string>
     <string name="lightning__conn_closed_show">Mostra tancades i fallides</string>
-    <string name="lightning__conn_failed">Connexions fallides</string>
     <string name="lightning__conn_open">Connexions obertes</string>
     <string name="lightning__conn_pending">Connexions pendents</string>
     <string name="lightning__connection">Connexió</string>
