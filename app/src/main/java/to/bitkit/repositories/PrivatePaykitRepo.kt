@@ -655,6 +655,13 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun consumePrivatePaymentList(
         publicKey: String,
         context: PrivatePaykitPaymentContext,
+    ): Result<Unit> = consumePrivatePaymentList(publicKey, context, owner = null)
+
+    /** Consumes the payment list for [owner], so only a release by the same owner gives it back. */
+    suspend fun consumePrivatePaymentList(
+        publicKey: String,
+        context: PrivatePaykitPaymentContext,
+        owner: String?,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             val normalizedKey = normalizedPublicKey(publicKey) ?: throw PrivatePaykitError.InvalidPublicKey
@@ -666,12 +673,15 @@ class PrivatePaykitRepo @Inject constructor(
             }
 
             val previousEndpoints = contactState.remoteEndpoints
+            val previousOwner = contactState.consumedPrivatePaymentListOwner
             contactState.consumedPrivatePaymentListVersion = paymentListVersion
+            contactState.consumedPrivatePaymentListOwner = owner
             contactState.remoteEndpoints = emptyList()
             try {
                 persistState(markWalletBackup = true)
             } catch (error: Throwable) {
                 contactState.consumedPrivatePaymentListVersion = consumedVersion
+                contactState.consumedPrivatePaymentListOwner = previousOwner
                 contactState.remoteEndpoints = previousEndpoints
                 throw error
             }
@@ -688,16 +698,25 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun releasePrivatePaymentList(
         publicKey: String,
         context: PrivatePaykitPaymentContext,
+    ): Result<Unit> = releasePrivatePaymentList(publicKey, context, owner = null)
+
+    suspend fun releasePrivatePaymentList(
+        publicKey: String,
+        context: PrivatePaykitPaymentContext,
+        owner: String?,
     ): Result<Unit> = releasePrivatePaymentListVersion(
         publicKey,
         context.paymentListVersion,
         context.previousPaymentListVersion,
+        owner,
     )
 
+    /** Gives back the payment list only when [owner] consumed it, so a release never undoes another payment's claim. */
     suspend fun releasePrivatePaymentListVersion(
         publicKey: String,
         paymentListVersion: ULong?,
         previousPaymentListVersion: ULong? = null,
+        owner: String? = null,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             val normalizedKey = normalizedPublicKey(publicKey) ?: throw PrivatePaykitError.InvalidPublicKey
@@ -705,15 +724,19 @@ class PrivatePaykitRepo @Inject constructor(
             val contactState = ensureState().contacts[normalizedKey] ?: return@runSuspendCatching
             val consumedVersion = contactState.consumedPrivatePaymentListVersion
             if (consumedVersion != paymentListVersion) return@runSuspendCatching
+            val consumedOwner = contactState.consumedPrivatePaymentListOwner
+            if (consumedOwner != owner) return@runSuspendCatching
 
             if (previousPaymentListVersion != null && previousPaymentListVersion >= paymentListVersion) {
                 throw PaykitPaymentRequestError.RequestUnavailable
             }
             contactState.consumedPrivatePaymentListVersion = previousPaymentListVersion
+            contactState.consumedPrivatePaymentListOwner = null
             try {
                 persistState(markWalletBackup = true)
             } catch (error: Throwable) {
                 contactState.consumedPrivatePaymentListVersion = consumedVersion
+                contactState.consumedPrivatePaymentListOwner = consumedOwner
                 throw error
             }
             Logger.info(
