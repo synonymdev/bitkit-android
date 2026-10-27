@@ -1021,8 +1021,6 @@ class MigrationService internal constructor(
                 isBiometricEnabled = settings.biometrics ?: current.isBiometricEnabled,
                 quickPayIntroSeen = settings.quickpayIntroSeen ?: current.quickPayIntroSeen,
                 hasSeenShopIntro = settings.shopIntroSeen ?: current.hasSeenShopIntro,
-                hasSeenTransferIntro = settings.transferIntroSeen ?: current.hasSeenTransferIntro,
-                hasSeenSpendingIntro = settings.spendingIntroSeen ?: current.hasSeenSpendingIntro,
                 hasSeenSavingsIntro = settings.savingsIntroSeen ?: current.hasSeenSavingsIntro,
             )
         }
@@ -2261,8 +2259,6 @@ data class RNSettings(
     val hideBalanceOnOpen: Boolean? = null,
     val quickpayIntroSeen: Boolean? = null,
     val shopIntroSeen: Boolean? = null,
-    val transferIntroSeen: Boolean? = null,
-    val spendingIntroSeen: Boolean? = null,
     val savingsIntroSeen: Boolean? = null,
     val selectedAddressType: String? = null,
     val addressTypesToMonitor: List<String>? = null,

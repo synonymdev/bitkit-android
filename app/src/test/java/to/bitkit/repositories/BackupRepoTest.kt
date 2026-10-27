@@ -36,7 +36,6 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.AppDb
-import to.bitkit.data.BlocktankRefundAddress
 import to.bitkit.data.CacheStore
 import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
@@ -1511,34 +1510,6 @@ class BackupRepoTest : BaseUnitTest() {
         }
         val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
         assertEquals(listOf(preActivityMetadata(), hardwareTagMetadata), payload.tagMetadata)
-    }
-
-    @Test
-    fun `metadata backup carries the Blocktank refund address pointer`() = test {
-        val refundAddress = BlocktankRefundAddress(address = "bcrt1qrefund", index = 7)
-        cacheData.value = AppCacheData(blocktankRefundAddress = refundAddress)
-        stubMetadataBackupReads()
-        val dataCaptor = argumentCaptor<ByteArray>()
-
-        sut.triggerBackup(BackupCategory.METADATA)
-
-        verifyBlocking(vssBackupClient) {
-            putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture())
-        }
-        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
-        assertEquals(refundAddress, payload.cache.blocktankRefundAddress)
-    }
-
-    @Test
-    fun `metadata restore preserves the Blocktank refund address pointer`() = test {
-        val refundAddress = BlocktankRefundAddress(address = "bcrt1qrefund", index = 7)
-        stubMetadataRestore(envelope = metadataEnvelope(cache = AppCacheData(blocktankRefundAddress = refundAddress)))
-        val cacheTransform = argumentCaptor<(AppCacheData) -> AppCacheData>()
-
-        sut.performFullRestoreFromLatestBackup()
-
-        verifyBlocking(cacheStore) { update(cacheTransform.capture()) }
-        assertEquals(refundAddress, cacheTransform.firstValue(AppCacheData()).blocktankRefundAddress)
     }
 
     @Test

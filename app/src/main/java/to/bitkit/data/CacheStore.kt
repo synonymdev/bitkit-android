@@ -185,7 +185,6 @@ data class AppCacheData(
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
     val quickPayLedger: QuickPayLedger? = null,
-    val blocktankRefundAddress: BlocktankRefundAddress? = null,
     /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
     val pendingLightningMessages: Map<String, String> = mapOf(),
 ) {
@@ -202,12 +201,6 @@ data class AppCacheData(
 
     fun invalidateReceiveOnchainAddress() = copy(bip21 = "", onchainAddress = "")
 }
-
-@Serializable
-data class BlocktankRefundAddress(
-    val address: String,
-    val index: Long,
-)
 
 @Serializable
 data class CachedUsdtBalance(
