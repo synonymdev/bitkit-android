@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import kotlinx.serialization.SerializationException
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -9,6 +10,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class PaykitAllowanceStoreTest : BaseUnitTest() {
     private val identity = PaykitAllowanceFixtures.identityKey
@@ -33,6 +35,14 @@ class PaykitAllowanceStoreTest : BaseUnitTest() {
 
         sut.save(identity, PaykitAllowanceLocalState(notifiedRequestIds = setOf("request-1")))
         assertEquals(afterFirstSave + 1, sut.backupStateVersion.value)
+    }
+
+    @Test
+    fun `a backup snapshot of unreadable state fails instead of backing up nothing`() = test {
+        stored = "{not json"
+
+        assertFailsWith<SerializationException> { sut.backupSnapshot() }
+        assertEquals(PaykitAllowanceLocalState(), sut.load(identity), "Ordinary reads still fall back to empty")
     }
 
     @Test

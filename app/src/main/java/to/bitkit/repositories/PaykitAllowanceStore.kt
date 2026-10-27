@@ -103,8 +103,14 @@ class PaykitAllowanceStore @Inject constructor(
         if (previous?.withoutWatermark() != state.withoutWatermark()) _backupStateVersion.update { it + 1 }
     }
 
-    /** Every identity's allowance state, for the wallet backup. */
-    fun backupSnapshot(): Map<String, PaykitAllowanceLocalState> = loadAll().statesByIdentity
+    /**
+     * Every identity's allowance state, for the wallet backup. Throws when the stored state cannot be read, so a backup
+     * never replaces a recoverable one with nothing.
+     */
+    fun backupSnapshot(): Map<String, PaykitAllowanceLocalState> {
+        val value = keychain.loadString(KEY) ?: return emptyMap()
+        return storeJson.decodeFromString<Stored>(value).statesByIdentity
+    }
 
     /** Replaces the allowance state of each identity in [states], before recovery reads it. */
     suspend fun restoreBackup(states: Map<String, PaykitAllowanceLocalState>) {
