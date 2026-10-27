@@ -215,6 +215,7 @@ import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayPaymentFailedError
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
+import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.UsdtRepo
@@ -4459,6 +4460,12 @@ class AppViewModel @Inject constructor(
 
         if (contactPaymentContext == null && isUsdtPaymentInput(input.trim())) {
             handleUsdtPaymentInput(input.trim())
+            return@withContext
+        }
+
+        if (contactPaymentContext == null && Env.sparkUsdTokenId != null && SparkRepo.isSparkInput(input)) {
+            hideSheet()
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.SparkUsdWallet(input.trim())))
             return@withContext
         }
 

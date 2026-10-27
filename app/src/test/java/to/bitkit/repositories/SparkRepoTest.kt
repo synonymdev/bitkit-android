@@ -1,7 +1,9 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.BitcoinNetwork
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateResponse
+import breez_sdk_spark.InputType
 import breez_sdk_spark.Payment
 import breez_sdk_spark.PaymentDetails
 import breez_sdk_spark.PaymentMethod
@@ -10,6 +12,10 @@ import breez_sdk_spark.PaymentType
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
+import breez_sdk_spark.SparkInvoiceDetails
+import breez_sdk_spark.TokenBalance
+import breez_sdk_spark.TokenMetadata
+import breez_sdk_spark.TokenTransactionType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -34,6 +40,8 @@ import java.io.File
 import java.math.BigInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import com.synonym.bitkitcore.PaymentType as ActivityPaymentType
 
@@ -166,5 +174,116 @@ class SparkRepoTest : BaseUnitTest() {
             conversionInfo = null,
         ),
         conversionDetails = null,
+    )
+
+    @Test
+    fun `recognizes spark addresses and invoices before parsing`() {
+        assertTrue(SparkRepo.isSparkInput("sparkrt1pgssyuuuhnrrdjswal5c3s3rafw9w3y5dd4cuy3whr3f0zhs8hu"))
+        assertTrue(SparkRepo.isSparkInput(" SPARK1abc"))
+        assertFalse(SparkRepo.isSparkInput("lnbcrt1abc"))
+        assertFalse(SparkRepo.isSparkInput("0x2d8a9f6c4c37a2f8b7f3a3b1d6c3c8f8d1a2b3c4"))
+    }
+
+    @Test
+    fun `scales token units to dollar units and back`() {
+        assertEquals(1_500_000uL, SparkRepo.toUsdUnits(BigInteger.valueOf(1_500_000), 6))
+        assertEquals(1_500_000uL, SparkRepo.toUsdUnits(BigInteger.valueOf(150_000_000), 8))
+        assertEquals(BigInteger.valueOf(150_000_000), SparkRepo.fromUsdUnits(1_500_000uL, 8))
+        assertEquals(BigInteger.valueOf(1_500_000), SparkRepo.fromUsdUnits(1_500_000uL, 6))
+    }
+
+    @Test
+    fun `loads the dollar token balance and transfers`() = test {
+        val tokenId = requireNotNull(Env.sparkUsdTokenId)
+        val metadata = usdMetadata(tokenId)
+        whenever { sparkService.getInfo() }.thenReturn(
+            GetInfoResponse(
+                "pubkey",
+                0uL,
+                mapOf(tokenId to TokenBalance(BigInteger.valueOf(7_000_000), metadata)),
+                0uL
+            ),
+        )
+        whenever { sparkService.tokenMetadata(tokenId) }.thenReturn(metadata)
+        whenever { sparkService.listTokenPayments(tokenId) }.thenReturn(
+            listOf(
+                tokenPayment("mint", metadata, TokenTransactionType.MINT, 1uL),
+                tokenPayment("in", metadata, TokenTransactionType.TRANSFER, 2uL),
+            ),
+        )
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+
+        val usd = requireNotNull(sut.state.value.usd)
+        assertEquals("USDT", usd.ticker)
+        assertEquals(7_000_000uL, usd.balance)
+        val transfer = usd.transfers.single()
+        assertEquals("in", transfer.id)
+        assertTrue(transfer.isIncoming)
+        assertEquals(2_000_000uL, transfer.amount)
+    }
+
+    @Test
+    fun `rejects a spark invoice for another token`() = test {
+        whenever { sparkService.parse("sparkrt1invoice") }.thenReturn(
+            InputType.SparkInvoice(invoice(tokenId = "btknrt1other", amount = null)),
+        )
+        val sut = createSut()
+
+        val result = sut.parseUsdRecipient("sparkrt1invoice")
+
+        assertIs<SparkUsdError.UnsupportedRecipient>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `reads the amount a dollar invoice fixes`() = test {
+        val tokenId = requireNotNull(Env.sparkUsdTokenId)
+        whenever { sparkService.tokenMetadata(tokenId) }.thenReturn(usdMetadata(tokenId))
+        whenever { sparkService.parse("sparkrt1invoice") }.thenReturn(
+            InputType.SparkInvoice(invoice(tokenId = tokenId, amount = BigInteger.valueOf(2_500_000))),
+        )
+        val sut = createSut()
+
+        val recipient = sut.parseUsdRecipient("sparkrt1invoice").getOrThrow()
+
+        assertEquals("sparkrt1invoice", recipient.request)
+        assertEquals(2_500_000uL, recipient.amount)
+        assertNull(sut.parseUsdRecipient("sparkrt1invoice").exceptionOrNull())
+    }
+
+    private fun usdMetadata(tokenId: String) = TokenMetadata(
+        identifier = tokenId,
+        issuerPublicKey = "issuer",
+        name = "Test Tether USD",
+        ticker = "USDT",
+        decimals = 6u,
+        maxSupply = BigInteger.valueOf(Long.MAX_VALUE),
+        isFreezable = true,
+    )
+
+    private fun tokenPayment(id: String, metadata: TokenMetadata, txType: TokenTransactionType, dollars: ULong) =
+        Payment(
+            id = id,
+            paymentType = PaymentType.RECEIVE,
+            status = PaymentStatus.COMPLETED,
+            amount = BigInteger.valueOf((dollars * 1_000_000uL).toLong()),
+            fees = BigInteger.ZERO,
+            timestamp = dollars,
+            method = PaymentMethod.TOKEN,
+            details = PaymentDetails.Token(metadata, "hash-$id", txType, null, null),
+            conversionDetails = null,
+        )
+
+    private fun invoice(tokenId: String, amount: BigInteger?) = SparkInvoiceDetails(
+        invoice = "sparkrt1invoice",
+        identityPublicKey = "pubkey",
+        network = BitcoinNetwork.REGTEST,
+        amount = amount,
+        tokenIdentifier = tokenId,
+        expiryTime = null,
+        description = null,
+        senderPublicKey = null,
     )
 }

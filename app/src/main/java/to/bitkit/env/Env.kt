@@ -34,6 +34,16 @@ internal object Env {
     val breezApiKey: String? get() = BuildConfig.BREEZ_API_KEY.takeIf { it.isNotBlank() }
 
     /**
+     * The Spark token held as the dollar balance on Spark, matched by identifier since anyone can issue a token
+     * with any ticker. Regtest uses a 6-decimal test token issued on Lightspark's regtest; mainnet has none yet.
+     */
+    val sparkUsdTokenId: String?
+        get() = when (network) {
+            Network.REGTEST -> "btknrt1e2h2l3jwna0dzwfjsf3dcgck8zjuug3qprnuvl7hs23a68xvz38q7966fl"
+            else -> null
+        }
+
+    /**
      * Esplora endpoint for the node's chain source on regtest builds, set to put the wallet on Spark's regtest chain
      * through `scripts/spark-regtest-esplora.py`; Electrum is used when unset.
      */

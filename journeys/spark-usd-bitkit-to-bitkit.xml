@@ -1,0 +1,12 @@
+<journey name="spark usd bitkit to bitkit">
+  <description>Use two onboarded dev builds (regtest), A and B, with Spark connected. Fund A with the Spark test dollar token first (see the PR's manual test: the token's issuer wallet is not part of the journey environment). The dollar balance on Spark is separate from the Arbitrum USDT wallet.</description>
+  <actions>
+    <action>On Home of A, verify a tile (testTag "SparkUsdWallet") shows the token ticker, "Spark" and its dollar balance, next to Savings and Spending, and that the total balance includes it.</action>
+    <action>Open the tile. Verify the title reads "USDT · Spark", the balance header (testTag "SparkUsdBalance") matches the tile, and the funding payment is listed as Received.</action>
+    <action>On B, open the tile and tap Receive. Verify a QR (testTag "SparkUsdReceiveQr") holding a Spark invoice (sparkrt1…) and "Network: Spark" below it.</action>
+    <action>Hand B's invoice to A as a URI (lightning:&lt;invoice&gt;). Verify A opens the dollar send flow on the amount step with its available balance, without a recipient screen.</action>
+    <action>Enter 10, tap Continue (testTag "SparkUsdReview"), and swipe to pay. Verify the sheet shows Sent USDT, then close it (testTag "SparkUsdDone").</action>
+    <action>Verify A's balance dropped by exactly 10.00 with a Sent row, and B's balance rose by 10.00 with a Received row, with no fee on either side.</action>
+    <action>On A, start a send and enter a Lightning invoice or a Spark invoice for sats as the recipient. Verify the recipient is rejected with "Enter a valid address for the selected network." and nothing is sent.</action>
+  </actions>
+</journey>

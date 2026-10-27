@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import breez_sdk_spark.AssetFilter
 import breez_sdk_spark.BreezSdk
 import breez_sdk_spark.ConnectRequest
 import breez_sdk_spark.DepositInfo
@@ -7,8 +8,10 @@ import breez_sdk_spark.EventListener
 import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
+import breez_sdk_spark.GetTokensMetadataRequest
 import breez_sdk_spark.ImportUnilateralExitStateRequest
 import breez_sdk_spark.ImportUnilateralExitStateResponse
+import breez_sdk_spark.InputType
 import breez_sdk_spark.ListPaymentsRequest
 import breez_sdk_spark.ListUnclaimedDepositsRequest
 import breez_sdk_spark.MaxFee
@@ -26,6 +29,7 @@ import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SendPaymentOptions
 import breez_sdk_spark.SendPaymentRequest
 import breez_sdk_spark.SyncWalletRequest
+import breez_sdk_spark.TokenMetadata
 import breez_sdk_spark.connect
 import breez_sdk_spark.defaultConfig
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -198,6 +202,41 @@ class SparkService @Inject constructor(
         requireSdk().listUnclaimedDeposits(ListUnclaimedDepositsRequest).deposits
 
     suspend fun listPayments(): List<Payment> = requireSdk().listPayments(ListPaymentsRequest()).payments
+
+    suspend fun listTokenPayments(tokenId: String): List<Payment> =
+        requireSdk().listPayments(ListPaymentsRequest(assetFilter = AssetFilter.Token(tokenId))).payments
+
+    /**
+     * A Spark invoice for [tokenId], so a payer scanning it knows which token to send; the wallet's plain Spark
+     * address receives tokens too but doesn't name one.
+     */
+    suspend fun receiveTokenInvoice(tokenId: String, amount: BigInteger?): String {
+        val method = ReceivePaymentMethod.SparkInvoice(
+            amount = amount,
+            tokenIdentifier = tokenId,
+            expiryTime = null,
+            description = null,
+            senderPublicKey = null,
+        )
+        return requireSdk().receivePayment(ReceivePaymentRequest(method)).paymentRequest
+    }
+
+    suspend fun tokenMetadata(tokenId: String): TokenMetadata? =
+        requireSdk().getTokensMetadata(GetTokensMetadataRequest(listOf(tokenId))).tokensMetadata.firstOrNull()
+
+    suspend fun parse(input: String): InputType = requireSdk().parse(input)
+
+    /** Prepares a [tokenId] payment; [amount] in token base units, ignored by the SDK when an invoice sets one. */
+    suspend fun prepareTokenSend(paymentRequest: String, amount: BigInteger?, tokenId: String) =
+        requireSdk().prepareSendPayment(
+            PrepareSendPaymentRequest(
+                paymentRequest = PaymentRequest.Input(input = paymentRequest),
+                amount = amount,
+                tokenIdentifier = tokenId,
+                conversionOptions = null,
+                feePolicy = null,
+            ),
+        )
 
     /** Exports what a unilateral exit needs if the Spark operators stop cooperating; it can reach several MB. */
     suspend fun exportExitState(): String = requireSdk().exportUnilateralExitState().exitState

@@ -1,12 +1,15 @@
 package to.bitkit.repositories
 
 import breez_sdk_spark.FeePolicy
+import breez_sdk_spark.InputType
 import breez_sdk_spark.Payment
 import breez_sdk_spark.PaymentDetails
 import breez_sdk_spark.PaymentMethod
 import breez_sdk_spark.PaymentStatus
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.SendPaymentMethod
+import breez_sdk_spark.TokenMetadata
+import breez_sdk_spark.TokenTransactionType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.PaymentState
@@ -37,8 +40,10 @@ import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.services.SparkService
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.File
+import java.math.BigInteger
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
@@ -64,6 +69,30 @@ class SparkRepo @Inject constructor(
 
         /** Last step of the Spending setup progress, shown once a funding deposit is claimed. */
         private const val SETUP_STEP_DONE = 3
+
+        /** Decimals of Bitkit's dollar amounts, shared with Arbitrum USDT so both format alike. */
+        private const val USD_DECIMALS = 6
+
+        private val SPARK_INPUT_PREFIXES = listOf("spark1", "sparkrt1", "spark:")
+
+        /** Whether [input] looks like a Spark address or invoice, before the SDK parses it. */
+        fun isSparkInput(input: String): Boolean = input.trim().lowercase().let { text ->
+            SPARK_INPUT_PREFIXES.any { text.startsWith(it) }
+        }
+
+        /** Converts token base units to Bitkit's 6-decimal dollar units. */
+        fun toUsdUnits(amount: BigInteger, decimals: Int): ULong =
+            amount.scaleDecimals(decimals, USD_DECIMALS).toLong().toULong()
+
+        /** Converts Bitkit's 6-decimal dollar units to token base units. */
+        fun fromUsdUnits(amount: ULong, decimals: Int): BigInteger =
+            BigInteger.valueOf(amount.toLong()).scaleDecimals(USD_DECIMALS, decimals)
+
+        private fun BigInteger.scaleDecimals(from: Int, to: Int): BigInteger = when {
+            to > from -> multiply(BigInteger.TEN.pow(to - from))
+            to < from -> divide(BigInteger.TEN.pow(from - to))
+            else -> this
+        }
     }
 
     private val scope = appScope(bgDispatcher, TAG)
@@ -73,6 +102,7 @@ class SparkRepo @Inject constructor(
 
     /** Sends recorded before Spark knew their fee; its completion event reports 0 until a later sync. */
     private val sendsRecordedWithoutFee = ConcurrentHashMap.newKeySet<String>()
+    private var usdTokenMetadata: TokenMetadata? = null
 
     private var eventsJob: Job? = null
 
@@ -143,6 +173,52 @@ class SparkRepo @Inject constructor(
             Logger.error("Failed to pay invoice with Spark", it, context = TAG)
         }
     }
+
+    /** A Spark invoice for the dollar token, with [amount] in 6-decimal dollar units when set. */
+    suspend fun createUsdRequest(amount: ULong?): Result<String> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val tokenId = requireNotNull(Env.sparkUsdTokenId) { "No Spark dollar token on this network" }
+            val decimals = usdDecimals(tokenId)
+            sparkService.receiveTokenInvoice(tokenId, amount?.let { fromUsdUnits(it, decimals) })
+        }
+    }
+
+    /**
+     * Reads a scanned or pasted Spark address or invoice as a dollar payment. An invoice for another token or for
+     * sats fails, so it never reaches the dollar send flow.
+     */
+    suspend fun parseUsdRecipient(input: String): Result<SparkUsdRecipient> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val tokenId = requireNotNull(Env.sparkUsdTokenId) { "No Spark dollar token on this network" }
+            when (val parsed = sparkService.parse(input.trim())) {
+                is InputType.SparkAddress -> SparkUsdRecipient(parsed.v1.address, amount = null)
+                is InputType.SparkInvoice if parsed.v1.tokenIdentifier == tokenId -> SparkUsdRecipient(
+                    request = parsed.v1.invoice,
+                    amount = parsed.v1.amount?.let { toUsdUnits(it, usdDecimals(tokenId)) },
+                )
+                else -> throw SparkUsdError.UnsupportedRecipient()
+            }
+        }
+    }
+
+    /** Pays [amount] dollar units of the dollar token to [request], a Spark address or invoice. */
+    suspend fun sendUsd(request: String, amount: ULong): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val tokenId = requireNotNull(Env.sparkUsdTokenId) { "No Spark dollar token on this network" }
+            val units = fromUsdUnits(amount, usdDecimals(tokenId))
+            val payment = sparkService.send(sparkService.prepareTokenSend(request, units, tokenId))
+            Logger.info("Sent Spark dollar payment '${payment.id}' with status '${payment.status}'", context = TAG)
+            refresh()
+        }.onFailure {
+            Logger.error("Failed to send Spark dollar payment", it, context = TAG)
+        }
+    }
+
+    private suspend fun usdDecimals(tokenId: String): Int = usdMetadata(tokenId).decimals.toInt()
+
+    private suspend fun usdMetadata(tokenId: String): TokenMetadata = usdTokenMetadata
+        ?: requireNotNull(sparkService.tokenMetadata(tokenId)) { "Unknown Spark token '$tokenId'" }
+            .also { usdTokenMetadata = it }
 
     /** Estimates what Spark keeps from a deposit to claim it, the way the SDK does before the provider quotes it. */
     suspend fun estimateDepositClaimFeeSats(amountSats: ULong): Result<ULong> = withContext(bgDispatcher) {
@@ -255,6 +331,11 @@ class SparkRepo @Inject constructor(
                 )
             }
         (pending + claimed).forEach { broadcastDeposits.remove(it.txid) }
+        val usd = Env.sparkUsdTokenId?.let { tokenId ->
+            runSuspendCatching { usdState(tokenId, info.tokenBalances[tokenId]?.balance) }
+                .onFailure { Logger.warn("Failed to refresh Spark dollar balance", it, context = TAG) }
+                .getOrElse { _state.value.usd }
+        }
         _state.update {
             it.copy(
                 isReady = true,
@@ -263,6 +344,7 @@ class SparkRepo @Inject constructor(
                 deposits = (pending + claimed).toImmutableList(),
                 withdrawals = payments.toWithdrawals(),
                 recoverableFundsSats = info.recoverableFundsSats,
+                usd = usd,
             ).withBroadcastDeposits()
         }
         payments.filter { it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0 }.forEach { recordActivity(it) }
@@ -324,6 +406,29 @@ class SparkRepo @Inject constructor(
             .toSet()
     }
 
+    private suspend fun usdState(tokenId: String, balance: BigInteger?): SparkUsdState {
+        val metadata = usdMetadata(tokenId)
+        val decimals = metadata.decimals.toInt()
+        val transfers = sparkService.listTokenPayments(tokenId).mapNotNull { payment ->
+            val token = payment.details as? PaymentDetails.Token ?: return@mapNotNull null
+            if (token.txType != TokenTransactionType.TRANSFER) return@mapNotNull null
+            SparkUsdTransfer(
+                id = payment.id,
+                isIncoming = payment.paymentType == SparkPaymentType.RECEIVE,
+                status = payment.status,
+                amount = toUsdUnits(payment.amount, decimals),
+                fee = toUsdUnits(payment.fees, decimals),
+                timestamp = payment.timestamp,
+                txHash = token.txHash,
+            )
+        }
+        return SparkUsdState(
+            ticker = metadata.ticker.trim(),
+            balance = toUsdUnits(balance ?: BigInteger.ZERO, decimals),
+            transfers = transfers.sortedByDescending { it.timestamp }.toImmutableList(),
+        )
+    }
+
     private suspend fun syncActivities() {
         sparkService.listPayments().forEach { recordActivity(it) }
     }
@@ -334,6 +439,7 @@ class SparkRepo @Inject constructor(
                 is SdkEvent.Synced -> refresh()
                 is SdkEvent.PaymentSucceeded -> onPayment(event.payment)
                 is SdkEvent.PaymentFailed -> onPayment(event.payment)
+                is SdkEvent.PaymentPending if event.payment.method == PaymentMethod.TOKEN -> refresh()
                 is SdkEvent.PaymentPending -> recordActivity(event.payment)
                 is SdkEvent.UnclaimedDeposits -> Logger.warn(
                     "Found '${event.unclaimedDeposits.size}' unclaimed Spark deposits",
@@ -425,6 +531,8 @@ data class SparkState(
     val deposits: ImmutableList<SparkDeposit> = persistentListOf(),
     val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
     val recoverableFundsSats: ULong = 0uL,
+    /** The dollar token balance, or null where this network has no dollar token or Spark hasn't loaded it. */
+    val usd: SparkUsdState? = null,
 )
 
 /** A Transfer to Savings out of Spark, with what Spark kept for it. */
@@ -433,6 +541,30 @@ data class SparkWithdrawal(
     val amountSats: ULong,
     val feeSats: ULong,
 )
+
+/** The dollar token held on Spark, in 6-decimal dollar units like Arbitrum USDT. */
+data class SparkUsdState(
+    val ticker: String,
+    val balance: ULong,
+    val transfers: ImmutableList<SparkUsdTransfer> = persistentListOf(),
+)
+
+data class SparkUsdTransfer(
+    val id: String,
+    val isIncoming: Boolean,
+    val status: PaymentStatus,
+    val amount: ULong,
+    val fee: ULong,
+    val timestamp: ULong,
+    val txHash: String,
+)
+
+/** Where a dollar payment goes: a Spark address or invoice, with the amount an invoice fixes. */
+data class SparkUsdRecipient(val request: String, val amount: ULong?)
+
+sealed class SparkUsdError(message: String) : AppError(message) {
+    class UnsupportedRecipient : SparkUsdError("Not a Spark address or an invoice for the dollar token")
+}
 
 /** An on-chain deposit into Spark: pending until Spark claims it after 3 confirmations. */
 data class SparkDeposit(

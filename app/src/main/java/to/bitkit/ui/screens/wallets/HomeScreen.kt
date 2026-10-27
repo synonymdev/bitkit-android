@@ -174,6 +174,7 @@ import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.screens.wallets.usdt.SparkUsdWalletBalance
 import to.bitkit.ui.screens.wallets.usdt.UsdtRefreshEffect
 import to.bitkit.ui.screens.wallets.usdt.UsdtViewModel
 import to.bitkit.ui.screens.wallets.usdt.UsdtWalletBalance
@@ -208,6 +209,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Insets
 import to.bitkit.ui.theme.TopBarGradient
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
@@ -409,6 +411,7 @@ fun HomeScreen(
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
         onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },
         onClickUsdt = { walletNavController.navigateTo(Routes.UsdtWallet) },
+        onClickSparkUsd = { walletNavController.navigateTo(Routes.SparkUsdWallet()) },
         onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
     )
 }
@@ -450,6 +453,7 @@ private fun Content(
     onNavigateToSpending: () -> Unit = {},
     onClickHardwareWallet: (String) -> Unit = {},
     onClickUsdt: () -> Unit = {},
+    onClickSparkUsd: () -> Unit = {},
     onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
     hazeState: HazeState = rememberHazeState(),
     balances: BalanceState = LocalBalances.current,
@@ -588,6 +592,7 @@ private fun Content(
                     onNavigateToSpending = onNavigateToSpending,
                     onClickHardwareWallet = onClickHardwareWallet,
                     onClickUsdt = onClickUsdt,
+                    onClickSparkUsd = onClickSparkUsd,
                 )
 
                 1 -> WidgetsPage(
@@ -643,6 +648,7 @@ private fun WalletPage(
     onNavigateToSpending: () -> Unit,
     onClickHardwareWallet: (String) -> Unit,
     onClickUsdt: () -> Unit,
+    onClickSparkUsd: () -> Unit,
 ) {
     val usdt by appViewModel?.usdtWallet?.collectAsStateWithLifecycle()
         ?: remember { mutableStateOf(UsdtWalletState()) }
@@ -650,9 +656,12 @@ private fun WalletPage(
     val showUsdt = appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true
     val rate = LocalCurrencies.current.paykitRate
     val usdtSats = usdtHeadlineSats(usdt.balance, showUsdt, rate)
+    val sparkUsd = walletViewModel?.sparkState?.collectAsStateWithLifecycle()?.value?.usd
+    val sparkUsdSats = usdtHeadlineSats(sparkUsd?.balance, sparkUsd != null, rate)
     val headlineSats = BigInteger(
         balances.totalWithHardwareSats.toString()
-    ).add(BigInteger.valueOf(usdtSats ?: 0L)).min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()
+    ).add(BigInteger.valueOf(usdtSats ?: 0L)).add(BigInteger.valueOf(sparkUsdSats ?: 0L))
+        .min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()
     val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val pullToRefreshState = rememberPullToRefreshState()
     val hasActivity = !latestActivities.isNullOrEmpty() || usdt.transfers.isNotEmpty()
@@ -685,7 +694,7 @@ private fun WalletPage(
 
             BalanceHeaderView(
                 sats = headlineSats,
-                isUnavailable = usdtSats == null,
+                isUnavailable = usdtSats == null || sparkUsdSats == null,
                 showEyeIcon = true,
                 testTag = "TotalBalance",
                 modifier = Modifier
@@ -700,6 +709,8 @@ private fun WalletPage(
                 onNavigateToSpending = onNavigateToSpending,
                 onClickHardwareWallet = onClickHardwareWallet,
                 onClickUsdt = onClickUsdt,
+                showSparkUsd = sparkUsd != null,
+                onClickSparkUsd = onClickSparkUsd,
             )
             VerticalSpacer(32.dp)
 
@@ -768,6 +779,8 @@ private fun BalancesSection(
     onNavigateToSpending: () -> Unit,
     onClickHardwareWallet: (String) -> Unit,
     onClickUsdt: () -> Unit,
+    showSparkUsd: Boolean = false,
+    onClickSparkUsd: () -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -803,6 +816,8 @@ private fun BalancesSection(
                 (appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true),
             onClickHardwareWallet = onClickHardwareWallet,
             onClickUsdt = onClickUsdt,
+            showSparkUsd = showSparkUsd,
+            onClickSparkUsd = onClickSparkUsd,
         )
     }
 }
@@ -813,8 +828,12 @@ private fun AdditionalWallets(
     showUsdt: Boolean,
     onClickHardwareWallet: (String) -> Unit,
     onClickUsdt: () -> Unit,
+    showSparkUsd: Boolean = false,
+    onClickSparkUsd: () -> Unit = {},
 ) {
-    val count = wallets.size + if (showUsdt) 1 else 0
+    val usdtIndex = if (showUsdt) wallets.size else -1
+    val sparkUsdIndex = if (showSparkUsd) wallets.size + if (showUsdt) 1 else 0 else -1
+    val count = wallets.size + (if (showUsdt) 1 else 0) + (if (showSparkUsd) 1 else 0)
     for (rowStart in 0 until count step 2) {
         VerticalSpacer(if (wallets.isEmpty()) 24.dp else 16.dp)
         Row(
@@ -828,7 +847,8 @@ private fun AdditionalWallets(
                 val wallet = wallets.getOrNull(index)
                 when {
                     wallet != null -> HwDeviceCell(wallet = wallet, onClick = onClickHardwareWallet)
-                    showUsdt && index == wallets.size -> UsdtWalletBalance(onClick = onClickUsdt)
+                    index == usdtIndex -> UsdtWalletBalance(onClick = onClickUsdt)
+                    index == sparkUsdIndex -> SparkUsdWalletBalance(onClick = onClickSparkUsd)
                     else -> FillWidth()
                 }
             }
