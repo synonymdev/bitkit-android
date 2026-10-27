@@ -79,6 +79,7 @@ import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendInput
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PreparedOnchainSend
+import to.bitkit.repositories.PreparedOnchainSendRefused
 import to.bitkit.repositories.releaseInputSets
 import to.bitkit.repositories.releaseOutbids
 import to.bitkit.utils.AppError
@@ -1021,8 +1022,11 @@ class LightningService internal constructor(
                 if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
                 keychain.requireWalletRestoreComplete()
                 ensurePaymentDeadline(paymentDeadlineAt)
-                beforeDispatch()
-                keychain.requireWalletRestoreComplete()
+                runSuspendCatching {
+                    beforeDispatch()
+                    keychain.requireWalletRestoreComplete()
+                    if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+                }.getOrElse { throw PreparedOnchainSendRefused(it) }
                 when (val result = prepared.broadcast()) {
                     is OnchainSendResult.Accepted -> OnchainSendOutcome.Accepted(result.txid)
                     is OnchainSendResult.Rejected -> OnchainSendOutcome.Rejected(result.txid, result.reason)

@@ -1656,7 +1656,7 @@ class LightningRepo @Inject constructor(
             if (error is OnchainSendNotDispatchedError) {
                 runSuspendCatching {
                     onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
-                }.onFailure { Logger.warn("Failed to clear expired preparation", it, context = TAG) }
+                }.onFailure { Logger.warn("Failed to clear unsubmitted preparation", it, context = TAG) }
                 return@executeWhenNodeRunning Result.failure(error)
             }
             val winnerResult = runSuspendCatching { onchainSendAttemptStore.current() }
