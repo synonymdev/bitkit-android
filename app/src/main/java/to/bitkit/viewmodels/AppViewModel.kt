@@ -1570,7 +1570,8 @@ class AppViewModel @Inject constructor(
         }
         if (sheet !is Sheet.Send || sheet !== currentSheet.value || sheet.preparingRequest != null) return
         val request = activeIncomingPaymentRequest() ?: return
-        if (!paykitPaymentRequestRepo.isPending(request)) return
+        val isListed = paykitPaymentRequestRepo.pendingRequest(request.id) != null
+        if (!isListed || paykitPaymentRequestRepo.isExpired(request)) return
         completePaymentRequestPresentation(request)
         paymentRequestPresentationGeneration++
         clearRequestedPaymentRequest(restoreDeferredReminder = false)
@@ -1743,6 +1744,7 @@ class AppViewModel @Inject constructor(
             if (reopenRetainedHardwarePayment(request, generation, preparation)) return true
             val started = timeSource.markNow()
             val presentationResult = privatePaykitRepo.beginPaymentRequest(request)
+            paykitPaymentRequestRepo.syncPaymentProofs()
             val resolvedAfter = started.elapsedNow()
             val result = finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
             Logger.debug(
@@ -6470,6 +6472,7 @@ class AppViewModel @Inject constructor(
             rejectMismatchedPaymentRequest()
             return false
         }
+        if (incomingPaymentRequest != null) paykitPaymentRequestRepo.syncPaymentProofs()
         if (incomingPaymentRequest != null && !paykitPaymentRequestRepo.isPending(incomingPaymentRequest)) {
             toast(PaykitPaymentRequestError.RequestUnavailable)
             hideSheet()
