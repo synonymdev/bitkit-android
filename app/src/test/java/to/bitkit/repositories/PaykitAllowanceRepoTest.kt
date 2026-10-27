@@ -8,6 +8,7 @@ import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateSendReport
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -36,6 +37,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.SubscriptionClockOffset
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -415,6 +417,24 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `offer whose accept committed as its refresh was cancelled is announced once on the next refresh`() = test {
+        records = listOf(receivedProposal())
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+            records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false))
+            throw CancellationException("The app left the foreground")
+        }
+        sut.activate(identity)
+
+        assertFailsWith<CancellationException> { sut.acceptOffersFromAllowers() }
+        sut.refresh()
+
+        assertEquals(listOf(fixtures.counterpartyKey), sut.acceptOffersFromAllowers().map { it.counterparty })
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "It is announced once")
+        assertTrue(localState.acceptingOfferIds.isEmpty())
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
     fun `offer accepted while the profile is being deleted is not announced`() = test {
         records = listOf(receivedProposal())
         acceptFlipsRecordToActive()
@@ -428,7 +448,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `offer accept never answers an ask that joined the entry after the check`() = test {
+    fun `offer accept never answers another contact's ask under the same allowance id`() = test {
         val secondAllower = "pubky" + "a".repeat(52)
         val asker = "pubky" + "m".repeat(52)
         val offerX = fixtures.record(

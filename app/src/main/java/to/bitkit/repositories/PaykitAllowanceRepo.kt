@@ -295,8 +295,9 @@ class PaykitAllowanceRepo @Inject constructor(
     /**
      * Accepts the offers that make this wallet the allowee and returns the ones now active so the caller can tell the
      * user. A failed accept stays unanswered and is tried again on the next refresh. Stops accepting once
-     * [canContinue] turns false and still returns what it accepted, since an active allowance is never announced
-     * later; returns nothing to announce once the identity it started with is gone or [canAnnounce] turns false.
+     * [canContinue] turns false and still returns what it accepted. An offer is marked before its accept, so one
+     * whose accept committed in a call that was cancelled, or a process that died, is returned by the next call.
+     * Returns nothing to announce once the identity it started with is gone or [canAnnounce] turns false.
      */
     suspend fun acceptOffersFromAllowers(
         canAnnounce: () -> Boolean = { true },
@@ -308,20 +309,48 @@ class PaykitAllowanceRepo @Inject constructor(
             val answerable = entry.allowances.filter { it.isAnswerable }
             answerable.isNotEmpty() && answerable.all { it.isOfferFromAllower }
         }
-        if (offers.isEmpty() || !isAcceptingOffers.compareAndSet(false, true)) return@withContext emptyList()
+        val unannounced = unannouncedOffers(identity)
+        if (offers.isEmpty() && unannounced.isEmpty()) return@withContext emptyList()
+        if (!isAcceptingOffers.compareAndSet(false, true)) return@withContext emptyList()
 
         try {
-            val accepted = mutableListOf<PaykitAllowanceEntry>()
+            val accepted = unannounced.toMutableList()
             for (offer in offers) {
                 if (!isCurrent() || !canContinue()) break
-                // Answers the entry that was checked, so an ask that joined it since is never accepted here.
+                val keys = offer.allowances.map { it.key }
+                executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds + keys) }
                 respond(offer) { acceptProposal(it) }
                     .onSuccess { accepted += offer }
                     .onFailure { Logger.warn("Failed to accept an allowance offer", it, context = TAG) }
             }
-            if (isCurrent()) accepted else emptyList()
+            if (!isCurrent()) return@withContext emptyList()
+            val announced = accepted.flatMap { offer -> offer.allowances.map { it.key } }.toSet()
+            executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - announced) }
+            accepted
         } finally {
             isAcceptingOffers.set(false)
+        }
+    }
+
+    /**
+     * Offers marked for acceptance whose allowance is now accepted, left unannounced by an accept whose call was
+     * cancelled after it committed. Drops the marks of offers that ended any other way.
+     */
+    private suspend fun unannouncedOffers(identity: String): List<PaykitAllowanceEntry> {
+        val marked = executor.localState(identity).acceptingOfferIds
+        if (marked.isEmpty()) return emptyList()
+        val stale = _entries.value.flatMap { it.allowances }
+            .filter {
+                it.key in marked && it.lifecycleState != AllowanceLifecycleState.PROPOSED &&
+                    it.lifecycleState != AllowanceLifecycleState.ACCEPTED
+            }
+            .map { it.key }
+            .toSet()
+        if (stale.isNotEmpty()) {
+            executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - stale) }
+        }
+        return _entries.value.filter { entry ->
+            entry.allowances.any { it.key in marked && it.lifecycleState == AllowanceLifecycleState.ACCEPTED }
         }
     }
 

@@ -17,7 +17,8 @@
     <action>Verify the Set sheet (testTag "SetAllowance") is still showing with the same payee and limits, and the payee instance gets no "Allowance Added" notification</action>
     <action>Tap Save Allowance again and enter the PIN</action>
     <action>Verify the sheet dismisses and the payer's row reads "Waiting for an answer"</action>
-    <action>On the payee instance, verify "Allowance Added" arrives with no review sheet (testTag "AllowanceReview"), no tap and no PIN, and the payer's row turns Active</action>
+    <action>On the payee instance, verify "Allowance Added" arrives with no review sheet (testTag "AllowanceReview"), no tap and no PIN</action>
+    <action>On the payer instance, verify the payee's row turns Active</action>
     <action>On the payee instance, send the payer a one-time Payment Request for $2 and verify the payer pays it automatically with no PIN pad, per auto-pay-under-limit.xml</action>
     <action>On the payer instance, tap the payee's row and swipe "Swipe To End Allowance" to the end</action>
     <action>Verify the PIN pad shows, press back, and verify the detail sheet (testTag "AllowanceDetail") is back with the swipe control at its start and the allowance still Active</action>
