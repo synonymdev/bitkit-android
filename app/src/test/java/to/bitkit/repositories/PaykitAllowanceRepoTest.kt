@@ -216,6 +216,20 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a bitcoin request payable only over USDT is never held for an allowance`() = test {
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        val usdtOnly = fixtures.paymentRequest().copy(
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.UsdtArbitrum.rawValue),
+        )
+
+        assertFalse(sut.coversRequest(usdtOnly))
+        assertFalse(sut.isAutomaticallyHandling(usdtOnly))
+        assertFalse(sut.processIncomingRequests(listOf(usdtOnly)))
+        verify(executor, never()).classifyAboveLimit(any(), any(), any())
+    }
+
+    @Test
     fun `coverage ignores the subscription clock offset`() = test {
         SubscriptionClockOffset.setOffsetDays(400)
         assumeTrue(

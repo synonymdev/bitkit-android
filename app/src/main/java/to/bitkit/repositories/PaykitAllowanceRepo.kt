@@ -403,6 +403,8 @@ class PaykitAllowanceRepo @Inject constructor(
     fun coversRequest(request: PaykitPaymentRequest): Boolean {
         // Only bitcoin requests are paid automatically; anything else follows the manual flow at once.
         if (request.allowanceSats() == null) return false
+        // Allowances pay only over Lightning, so a request that accepts no Lightning invoice never waits for one.
+        if (MethodId.Bolt11.rawValue !in request.acceptedPaymentEndpointIdentifiers) return false
         val now = clock.now()
         return _allowances.value.any { allowance ->
             allowance.isAllower &&
