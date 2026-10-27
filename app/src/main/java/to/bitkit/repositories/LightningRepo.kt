@@ -349,9 +349,6 @@ class LightningRepo @Inject constructor(
 
         if (shouldCancelPendingStop) cancelPendingStop()
 
-        // The geocheck needs no node, so screens gated on it are right before the node is up.
-        scope.launch { updateGeoBlockState() }
-
         eventHandler?.let { _eventHandlers.add(it) }
 
         // Track retry state outside mutex to avoid deadlock (Mutex is non-reentrant)
@@ -405,7 +402,6 @@ class LightningRepo @Inject constructor(
                 // Initial state sync
                 syncState()
                 logNodeSupportSummary("node started")
-                updateGeoBlockState()
                 refreshChannelCache()
 
                 if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
@@ -655,19 +651,6 @@ class LightningRepo @Inject constructor(
 
     fun setWiping(enabled: Boolean) = run { isWiping = enabled }
 
-    /** Blocks a transfer to spending unless the geocheck confirms the region is allowed. */
-    suspend fun isTransferBlocked(): Boolean = withContext(bgDispatcher) {
-        coreService.isGeoBlocked(blockOnError = true).also { blocked ->
-            _lightningState.update { it.copy(isGeoBlocked = blocked) }
-        }
-    }
-
-    suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
-        _lightningState.update {
-            it.copy(isGeoBlocked = coreService.isGeoBlocked())
-        }
-    }
-
     fun setInitNodeLifecycleState() {
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
     }
@@ -717,7 +700,7 @@ class LightningRepo @Inject constructor(
                 lightningService.stop()
                 clearProbeOutcomes()
                 _lightningState.update {
-                    LightningState(nodeLifecycleState = NodeLifecycleState.Stopped, isGeoBlocked = it.isGeoBlocked)
+                    LightningState(nodeLifecycleState = NodeLifecycleState.Stopped)
                 }
             }
         }.onFailure {
@@ -730,7 +713,7 @@ class LightningRepo @Inject constructor(
             } else {
                 // Node appears stopped, update state
                 _lightningState.update {
-                    LightningState(nodeLifecycleState = NodeLifecycleState.Stopped, isGeoBlocked = it.isGeoBlocked)
+                    LightningState(nodeLifecycleState = NodeLifecycleState.Stopped)
                 }
             }
         }
@@ -1306,7 +1289,6 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
-        updateGeoBlockState()
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
@@ -1315,7 +1297,6 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
-        updateGeoBlockState()
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
     }
 
@@ -2741,7 +2722,6 @@ data class LightningState(
     val channels: ImmutableList<ChannelDetails> = persistentListOf(),
     val balances: BalanceDetails? = null,
     val isSyncingWallet: Boolean = false,
-    val isGeoBlocked: Boolean = false,
     val lastSyncError: Throwable? = null,
     val lastSuccessfulSyncAt: Long? = null,
 ) {

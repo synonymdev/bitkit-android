@@ -49,7 +49,6 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull

@@ -1,15 +1,15 @@
 <journey name="transfer unavailable sheet">
   <description>
     Verifies that Bitkit points users to Manual Setup now that Blocktank no longer sells Lightning channels.
-    Blocktank's geocheck answers 403, so the app is geo-blocked, and the Transfer To Spending buttons on the
-    wallet screens open the "Transfer Unavailable" sheet (testTag "TransferUnavailable") instead of the transfer flow. The
+    Every Transfer To Spending entry opens the "Transfer Unavailable" sheet (testTag "TransferUnavailable") at once,
+    with no network check first, and the transfer purchase flow no longer exists. The
     sheet shows "MANUAL SETUP REQUIRED" (testTag "TransferUnavailableTitle") and the buttons "Learn More"
     (testTag "TransferUnavailableLearnMore"), which opens https://blog.bitkit.to/ in the browser, and "Continue"
     (testTag "TransferUnavailableContinue"), which opens the existing Manual Setup screen. Receive's Lightning
     path shows the same sheet content.
 
-    Precondition: dev build with geoblocking on (the default; `GEO=false` turns it off), onboarded wallet with
-    a positive on-chain Savings balance and no channels. Start on the wallet home screen.
+    Precondition: dev build, onboarded wallet with a positive on-chain Savings balance and no channels. Start on
+    the wallet home screen.
   </description>
   <actions>
     <action>Tap the Savings balance card (testTag "ActivitySavings") and verify "Transfer To Spending" (testTag "TransferToSpending") is shown</action>

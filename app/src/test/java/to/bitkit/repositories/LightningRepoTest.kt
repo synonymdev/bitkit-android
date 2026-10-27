@@ -139,7 +139,6 @@ class LightningRepoTest : BaseUnitTest() {
             .thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever { electrumProbeService.probe(any(), any()) }.thenReturn(Result.success(Unit))
-        whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
@@ -605,7 +604,7 @@ class LightningRepoTest : BaseUnitTest() {
             nodeRunning = true
             Unit
         }
-        whenever(coreService.isGeoBlocked()).doSuspendableAnswer { awaitCancellation() }
+        whenever(lightningService.disconnectIdlePeers()).doSuspendableAnswer { awaitCancellation() }
         var result: Result<Unit>? = null
 
         val job = launch { result = sut.start() }
@@ -615,20 +614,6 @@ class LightningRepoTest : BaseUnitTest() {
         assertNull(result)
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
         verifyBlocking(lightningService, never()) { startEventListener(any()) }
-    }
-
-    @Test
-    fun `start updates geo block state before the node is up`() = test {
-        stubNodeStatus { false }
-        whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.start(anyOrNull(), any())).doSuspendableAnswer { awaitCancellation() }
-        whenever(coreService.isGeoBlocked()).thenReturn(true)
-
-        val job = launch { sut.start(shouldRetry = false) }
-        runCurrent()
-
-        assertTrue(sut.lightningState.value.isGeoBlocked)
-        job.cancelAndJoin()
     }
 
     @Test

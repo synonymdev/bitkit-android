@@ -11,16 +11,16 @@ import to.bitkit.ui.sheets.TransferUnavailableContent
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
-fun LocationBlockScreen(
-    onBackPressed: () -> Unit,
-    navigateAdvancedSetup: () -> Unit,
+fun TransferUnavailableScreen(
+    onBack: () -> Unit,
+    onContinue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     TransferUnavailableContent(
         navTitle = stringResource(R.string.lightning__transfer_unavailable__nav_title),
         description = stringResource(R.string.lightning__transfer_unavailable__text),
-        onContinue = navigateAdvancedSetup,
-        onBack = onBackPressed,
+        onContinue = onContinue,
+        onBack = onBack,
         modifier = modifier,
     )
 }
@@ -30,9 +30,9 @@ fun LocationBlockScreen(
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            LocationBlockScreen(
-                onBackPressed = {},
-                navigateAdvancedSetup = {},
+            TransferUnavailableScreen(
+                onBack = {},
+                onContinue = {},
                 modifier = Modifier.sheetHeight(),
             )
         }

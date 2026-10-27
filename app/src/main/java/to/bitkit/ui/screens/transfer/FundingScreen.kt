@@ -1,181 +1,117 @@
 package to.bitkit.ui.screens.transfer
 
 import android.content.Intent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import to.bitkit.R
-import to.bitkit.env.Defaults
 import to.bitkit.env.Env
-import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun FundingScreen(
-    isGeoBlocked: Boolean,
-    onTransfer: () -> Unit = {},
-    onFund: () -> Unit = {},
     onManual: () -> Unit = {},
     onBackClick: () -> Unit = {},
 ) {
-    val balances = LocalBalances.current
-    val canTransfer = remember(balances.channelFundableBalance) {
-        balances.channelFundableBalance >= Defaults.recommendedBaseFee
-    }
-    var showNoFundsAlert by remember { mutableStateOf(false) }
-
+    val context = LocalContext.current
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__funding__nav_title),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
-        Column(
+        VerticalSpacer(32.dp)
+        Display(
+            text = stringResource(R.string.lightning__funding__title).withAccent(accentColor = Colors.Purple),
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        VerticalSpacer(8.dp)
+        BodyM(
+            text = stringResource(R.string.lightning__transfer_unavailable__text),
+            color = Colors.White64,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        VerticalSpacer(32.dp)
+        RectangleButton(
+            label = stringResource(R.string.lightning__funding_advanced__button2),
+            icon = R.drawable.ic_pencil_full,
+            iconTint = Colors.Purple,
+            iconSize = 13.37.dp,
+            onClick = onManual,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-        ) {
-            Spacer(modifier = Modifier.height(32.dp))
-            Display(text = stringResource(R.string.lightning__funding__title).withAccent(accentColor = Colors.Purple))
-            Spacer(modifier = Modifier.height(8.dp))
-
-            val text = if (isGeoBlocked) {
-                stringResource(R.string.lightning__transfer_unavailable__text)
-            } else {
-                stringResource(R.string.lightning__funding__text)
-            }
-            BodyM(text = text, color = Colors.White64)
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            val manualButton = @Composable {
-                RectangleButton(
-                    label = stringResource(R.string.lightning__funding_advanced__button2),
-                    icon = R.drawable.ic_pencil_full,
-                    iconTint = Colors.Purple,
-                    iconSize = 13.37.dp,
-                    onClick = onManual,
-                    modifier = Modifier.testTag("FundManual")
-                )
-            }
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (isGeoBlocked) manualButton()
-                Box {
-                    RectangleButton(
-                        label = stringResource(R.string.lightning__funding__button1),
-                        icon = R.drawable.ic_transfer,
-                        iconTint = Colors.Purple,
-                        enabled = canTransfer && !isGeoBlocked,
-                        onClick = onTransfer,
-                        modifier = Modifier.testTag("FundTransfer")
-                    )
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .clickableAlpha(
-                                pressedAlpha = 1f,
-                                enabled = balances.channelFundableBalance == 0uL && !isGeoBlocked,
-                                onClick = { showNoFundsAlert = true },
-                            )
-                            .testTag("FundTransfer")
-                    )
-                }
-                if (isGeoBlocked) {
-                    RectangleButton(
-                        label = stringResource(R.string.lightning__funding__button_hw),
-                        icon = R.drawable.ic_device_tablet_speaker,
-                        iconTint = Colors.Purple,
-                        iconSize = 16.25.dp,
-                        enabled = false,
-                        onClick = {},
-                        modifier = Modifier.testTag("FundHardware")
-                    )
-                }
-                RectangleButton(
-                    label = stringResource(R.string.lightning__funding__button2),
-                    icon = R.drawable.ic_qr_purple,
-                    iconTint = Colors.Purple,
-                    iconSize = 13.75.dp,
-                    enabled = !isGeoBlocked,
-                    onClick = onFund,
-                    modifier = Modifier.testTag("FundReceive")
-                )
-                if (!isGeoBlocked) manualButton()
-            }
-        }
-        if (isGeoBlocked) {
-            val context = LocalContext.current
-            FillHeight()
-            SecondaryButton(
-                text = stringResource(R.string.common__learn_more),
-                onClick = {
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Env.BLOCKTANK_SUNSET_URL.toUri())) }
-                },
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .testTag("FundLearnMore")
-            )
-            VerticalSpacer(16.dp)
-        }
-        if (showNoFundsAlert) {
-            AppAlertDialog(
-                title = stringResource(R.string.lightning__no_funds__title),
-                text = stringResource(R.string.lightning__no_funds__description),
-                confirmText = stringResource(R.string.lightning__no_funds__fund_wallet),
-                confirmTextColor = Colors.Purple,
-                onConfirm = {
-                    showNoFundsAlert = false
-                    onFund()
-                },
-                onDismiss = { showNoFundsAlert = false },
-            )
-        }
+                .testTag("FundManual")
+        )
+        UnavailableOption(R.string.lightning__funding__button1, R.drawable.ic_transfer, 20.dp, "FundTransfer")
+        UnavailableOption(
+            R.string.lightning__funding__button_hw,
+            R.drawable.ic_device_tablet_speaker,
+            16.25.dp,
+            "FundHardware"
+        )
+        UnavailableOption(R.string.lightning__funding__button2, R.drawable.ic_qr_purple, 13.75.dp, "FundReceive")
+        FillHeight()
+        SecondaryButton(
+            text = stringResource(R.string.common__learn_more),
+            onClick = {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Env.BLOCKTANK_SUNSET_URL.toUri())) }
+            },
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .testTag("FundLearnMore")
+        )
+        VerticalSpacer(16.dp)
     }
+}
+
+@Composable
+private fun UnavailableOption(
+    @StringRes label: Int,
+    @DrawableRes icon: Int,
+    iconSize: Dp,
+    testTag: String,
+) {
+    VerticalSpacer(8.dp)
+    RectangleButton(
+        label = stringResource(label),
+        icon = icon,
+        iconTint = Colors.Purple,
+        iconSize = iconSize,
+        enabled = false,
+        onClick = {},
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .testTag(testTag)
+    )
 }
 
 @Preview(showSystemUi = true)
 @Composable
-private fun FundingScreenPreview() {
+private fun Preview() {
     AppThemeSurface {
-        FundingScreen(isGeoBlocked = false)
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-private fun FundingScreenGeoBlockedPreview() {
-    AppThemeSurface {
-        FundingScreen(isGeoBlocked = true)
+        FundingScreen()
     }
 }
