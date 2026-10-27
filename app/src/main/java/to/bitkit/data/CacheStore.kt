@@ -176,6 +176,7 @@ data class AppCacheData(
     val bolt11PaymentHash: String = "",
     val bip21: String = "",
     val balance: BalanceState? = null,
+    val usdtDisplayBalance: CachedUsdtBalance? = null,
     val backupStatuses: Map<BackupCategory, BackupItemStatus> = mapOf(),
     val deletedActivities: List<String> = listOf(),
     val detachedActivityContacts: Set<String> = emptySet(),
@@ -207,3 +208,13 @@ data class BlocktankRefundAddress(
     val address: String,
     val index: Long,
 )
+
+@Serializable
+data class CachedUsdtBalance(
+    val address: String,
+    val network: String,
+    val balance: ULong,
+) {
+    fun balanceFor(address: String, network: String): ULong? =
+        balance.takeIf { this.address == address && this.network == network }
+}
