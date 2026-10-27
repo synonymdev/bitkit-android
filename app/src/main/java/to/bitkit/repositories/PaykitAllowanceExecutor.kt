@@ -390,11 +390,15 @@ class PaykitAllowanceExecutor @Inject constructor(
     private suspend fun applyJournalStage(attemptId: String, stage: Stage, identity: String): JournalEntry? {
         var before: JournalEntry? = null
         updateLocalState(identity) { state ->
-            before = state.journal.firstOrNull { it.attemptId == attemptId }
-            state.copy(journal = state.journal.map { if (it.attemptId == attemptId) it.copy(stage = stage) else it })
+            val current = state.journal.firstOrNull { it.attemptId == attemptId }
+            before = current
+            val updated = state.copy(
+                journal = state.journal.map { if (it.attemptId == attemptId) it.copy(stage = stage) else it },
+            )
+            if (current?.isPaidAutomaticallyBy(stage) == true) updated.withAutoPaid(current) else updated
         }
         val entry = before ?: return null
-        if (entry.isAutomatic && entry.stage != Stage.SUCCEEDED && stage == Stage.SUCCEEDED) {
+        if (entry.isPaidAutomaticallyBy(stage)) {
             val paymentId = entry.paymentHash?.lowercase() ?: entry.transactionId
             if (paymentId != null) {
                 _events.tryEmit(
@@ -945,6 +949,20 @@ class PaykitAllowanceExecutor @Inject constructor(
 }
 
 private fun PaykitPaymentRequest.scope() = PaymentRequestScope(counterparty, paymentRequestId)
+
+private fun JournalEntry.isPaidAutomaticallyBy(stage: Stage): Boolean =
+    isAutomatic && this.stage != Stage.SUCCEEDED && stage == Stage.SUCCEEDED
+
+/** Adds a payment to the lasting totals, which outlive the journal's trimming. */
+private fun PaykitAllowanceLocalState.withAutoPaid(entry: JournalEntry): PaykitAllowanceLocalState {
+    // Allowance ids are unique per contact only, so payments count toward the contact's own allowance.
+    val key = PaykitAllowance.key(entry.requestId.counterparty, entry.allowanceId)
+    val total = (autoPaidSatsByAllowance[key] ?: 0uL).safe() + entry.amountSats.safe()
+    return copy(
+        autoPaidSatsByAllowance = autoPaidSatsByAllowance + (key to total),
+        autoPaidRequestIds = autoPaidRequestIds + entry.requestId,
+    )
+}
 
 /**
  * Allowances pay only bitcoin-denominated requests; null for any other request. A conversion offered for other rails,

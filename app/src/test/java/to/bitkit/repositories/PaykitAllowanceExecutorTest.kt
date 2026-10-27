@@ -723,6 +723,34 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an automatic payment keeps its lasting total once the journal trims it`() = test {
+        sut.activate(identity)
+        val request = fixtures.paymentRequest()
+        seedJournal(journalEntry("attempt-1", request, Stage.SENT, paymentHash = PAYMENT_HASH))
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = true)
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = true)
+
+        var manualAttempts = 0
+        whenever(sdk.reserveManualPayment(any(), any())).doSuspendableAnswer {
+            PaymentAttemptDecision.Ready(
+                fixtures.attemptRecord(
+                    "manual-${manualAttempts++}",
+                    mode = PaymentExecutionMode.MANUAL,
+                    allowanceId = null,
+                    status = PaymentExecutionStatus.PREPARED,
+                ),
+            )
+        }
+        repeat(200) { sut.beginManualPayment(fixtures.paymentRequest(id = "manual-$it"), fixtures.onchainIdentifier) }
+
+        val state = sut.localState(identity)
+        assertTrue(state.journal.none { it.attemptId == "attempt-1" }, "The journal keeps only its newest entries")
+        val key = PaykitAllowance.key(request.counterparty, ALLOWANCE_ID)
+        assertEquals(mapOf(key to 1_000uL), state.autoPaidSatsByAllowance)
+        assertEquals(setOf(request.id), state.autoPaidRequestIds)
+    }
+
+    @Test
     fun `a failed automatic lightning payment gives the payee's payment list back`() = test {
         sut.activate(identity)
         val request = fixtures.paymentRequest()

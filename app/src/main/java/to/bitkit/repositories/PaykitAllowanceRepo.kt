@@ -570,15 +570,10 @@ class PaykitAllowanceRepo @Inject constructor(
                     limits = state.groups.firstOrNull { it.id == id }?.limits,
                 )
             }
-        val paid = state.journal.filter { it.isAutomatic && it.stage == PaykitAllowanceLocalState.Stage.SUCCEEDED }
-        // Allowance ids are unique per contact only, so payments count toward the contact's own allowance.
-        val paidByAllowance = paid.groupBy { PaykitAllowance.key(it.requestId.counterparty, it.allowanceId) }
-            .mapValues { (_, payments) ->
-                payments.fold(0uL) { total, payment -> total.safe() + payment.amountSats.safe() }
-            }
+        val paidByAllowance = state.autoPaidSatsByAllowance
         _allowances.update { allowances }
         _localState.update { state }
-        _autoPaidRequestIds.update { paid.mapTo(mutableSetOf()) { it.requestId } }
+        _autoPaidRequestIds.update { state.autoPaidRequestIds }
         _entries.update { entries }
         _autoPaidSats.update {
             entries.associate { entry ->

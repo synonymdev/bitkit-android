@@ -152,27 +152,22 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `auto-paid sats and requests come from succeeded automatic payments`() = test {
+    fun `auto-paid sats and requests come from the lasting totals, not the trimmed journal`() = test {
         records = listOf(fixtures.record(allowanceId = ALLOWANCE_ID))
         val paid = fixtures.paymentRequest(id = "paid")
-        val failed = fixtures.paymentRequest(id = "failed")
-        val secondPaid = fixtures.paymentRequest(id = "second")
+        val trimmedAway = fixtures.paymentRequest(id = "journaled")
         localState = PaykitAllowanceLocalState(
             groups = listOf(group(ALLOWANCE_ID)),
-            journal = listOf(
-                journalEntry("a", paid, ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED),
-                journalEntry("b", secondPaid, ALLOWANCE_ID, 2_000uL, Stage.SUCCEEDED),
-                journalEntry("c", failed, ALLOWANCE_ID, 5_000uL, Stage.FAILED),
-                journalEntry("d", fixtures.paymentRequest(id = "manual"), null, 7_000uL, Stage.SUCCEEDED, false),
-            ),
+            journal = listOf(journalEntry("b", trimmedAway, ALLOWANCE_ID, 2_000uL, Stage.SUCCEEDED)),
+            autoPaidSatsByAllowance = mapOf(entryKey to 3_000uL),
+            autoPaidRequestIds = setOf(paid.id),
         )
 
         sut.activate(identity)
 
         assertEquals(mapOf("group-1" to 3_000uL), sut.autoPaidSats.value)
         assertTrue(sut.isAutoPaid(paid.id))
-        assertFalse(sut.isAutoPaid(failed.id))
-        assertFalse(sut.isAutoPaid(fixtures.paymentRequest(id = "manual").id))
+        assertFalse(sut.isAutoPaid(trimmedAway.id))
     }
 
     @Test
@@ -181,14 +176,11 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             fixtures.record(),
             fixtures.record(counterparty = fixtures.otherCounterpartyKey),
         )
-        val otherPaid = fixtures.paymentRequest(id = "other-paid", counterparty = fixtures.otherCounterpartyKey)
-        localState = PaykitAllowanceLocalState(
-            journal = listOf(journalEntry("a", otherPaid, ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED)),
-        )
+        val otherKey = "${PubkyPublicKeyFormat.normalized(fixtures.otherCounterpartyKey)}/$ALLOWANCE_ID"
+        localState = PaykitAllowanceLocalState(autoPaidSatsByAllowance = mapOf(otherKey to 1_000uL))
 
         sut.activate(identity)
 
-        val otherKey = "${PubkyPublicKeyFormat.normalized(fixtures.otherCounterpartyKey)}/$ALLOWANCE_ID"
         assertEquals(mapOf(entryKey to 0uL, otherKey to 1_000uL), sut.autoPaidSats.value)
     }
 
@@ -780,11 +772,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     fun `automatic payment is attributed to the contact's activity`() = test {
         records = listOf(fixtures.record())
         sut.activate(identity)
-        localState = PaykitAllowanceLocalState(
-            journal = listOf(
-                journalEntry("a", fixtures.paymentRequest(), ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED),
-            ),
-        )
+        localState = PaykitAllowanceLocalState(autoPaidSatsByAllowance = mapOf(entryKey to 1_000uL))
 
         executorEvents.emit(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, TXID))
 

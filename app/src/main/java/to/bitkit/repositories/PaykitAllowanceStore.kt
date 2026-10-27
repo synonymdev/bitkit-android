@@ -22,6 +22,10 @@ data class PaykitAllowanceLocalState(
     val presentedProposalIds: Set<String> = emptySet(),
     val notifiedRequestIds: Set<String> = emptySet(),
     val lastTrustedTimeMillis: Long? = null,
+    /** Sats paid automatically per [PaykitAllowance.key], kept apart from the journal, which is trimmed. */
+    val autoPaidSatsByAllowance: Map<String, ULong> = emptyMap(),
+    /** Requests paid automatically, kept apart from the journal for the "Auto-paid" tag. */
+    val autoPaidRequestIds: Set<PaykitPaymentRequestId> = emptySet(),
 ) {
     @Serializable
     data class Group(
