@@ -213,6 +213,15 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `transfer to savings with only spark doesn't wait for a lightning peer`() = test {
+        sut.onTransferToSavingsConfirm(channels = emptyList(), mode = SavingsTransferMode.CLOSE)
+
+        assertFalse(sut.hasChannelsToClose())
+        assertTrue(sut.closeSelectedChannels().isEmpty())
+        verify(lightningRepo, never()).awaitPeerConnected(any())
+    }
+
+    @Test
     fun `updateLimits caps spending max at LSP max client balance when on-chain balance exceeds it`() = test {
         stubSpendableBalances(ON_CHAIN_BALANCE)
         blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))

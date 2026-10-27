@@ -123,11 +123,12 @@ private suspend fun runChannelClose(
     onInterrupted: () -> Unit,
     onGiveUp: () -> Unit,
 ) {
+    val closesChannels = transfer.hasChannelsToClose()
     val channelsFailedToCoopClose = transfer.closeSelectedChannels()
 
     if (channelsFailedToCoopClose.isEmpty()) {
         wallet.refreshState()
-        delay(5000)
+        if (closesChannels) delay(5000)
         onSuccess()
         return
     }

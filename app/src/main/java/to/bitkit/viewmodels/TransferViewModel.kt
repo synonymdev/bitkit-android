@@ -217,7 +217,7 @@ class TransferViewModel @Inject constructor(
                 return@launch
             }
             onEstimateReady(clientBalanceSat = amountSats, lspBalanceSat = 0uL, feeSat = amountSats, isSpark = true)
-            sparkRepo.estimateDepositClaimFeeSats()
+            sparkRepo.estimateDepositClaimFeeSats(amountSats)
                 .onSuccess { fee -> _spendingUiState.update { it.copy(sparkClaimFeeSats = fee) } }
                 .onFailure { Logger.warn("Failed to estimate Spark claim fee", it, context = TAG) }
         }
@@ -1950,6 +1950,9 @@ class TransferViewModel @Inject constructor(
     private fun resolveSavingsTransferMode(): SavingsTransferMode =
         if (_savingsSwapState.value.quote != null) SavingsTransferMode.SWAP else SavingsTransferMode.CLOSE
 
+    /** Whether Transfer to Savings closes channels, rather than only withdrawing Spark's balance. */
+    fun hasChannelsToClose(): Boolean = channelsToClose.isNotEmpty()
+
     /** Closes the channels selected earlier, pending closure */
     suspend fun closeSelectedChannels(): List<ChannelDetails> {
         withdrawSparkToSavings()
@@ -1967,6 +1970,7 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
+        if (channels.isEmpty()) return emptyList()
         lightningRepo.awaitPeerConnected()
         val channelsFailedToClose = coroutineScope {
             channels.map { channel ->
