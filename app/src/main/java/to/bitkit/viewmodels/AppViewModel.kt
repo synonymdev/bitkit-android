@@ -2952,60 +2952,68 @@ class AppViewModel @Inject constructor(
     private fun observeSendEvents() {
         viewModelScope.launch {
             sendEvents.collect {
-                when (it) {
-                    SendEvent.EnterManually -> onEnterManuallyClick()
-                    SendEvent.Paste -> onPasteClick()
-                    SendEvent.Scan -> onScanClick()
+                try {
+                    when (it) {
+                        SendEvent.EnterManually -> onEnterManuallyClick()
+                        SendEvent.Paste -> onPasteClick()
+                        SendEvent.Scan -> onScanClick()
 
-                    is SendEvent.AddressChange -> onAddressChange(it.value)
-                    SendEvent.AddressReset -> resetAddressInput()
-                    is SendEvent.AddressContinue -> onAddressContinue(it.data)
+                        is SendEvent.AddressChange -> onAddressChange(it.value)
+                        SendEvent.AddressReset -> resetAddressInput()
+                        is SendEvent.AddressContinue -> onAddressContinue(it.data)
 
-                    is SendEvent.AmountChange -> onAmountChange(it.amount)
-                    SendEvent.AmountReset -> resetAmountInput()
-                    SendEvent.AmountContinue -> try {
-                        onAmountContinue()
-                    } finally {
-                        amountContinuePending = false
-                    }
-                    SendEvent.PaymentMethodSwitch, is SendEvent.PaymentMethodSelect -> try {
-                        onPaymentMethodSwitch((it as? SendEvent.PaymentMethodSelect)?.source)
-                    } finally {
-                        fundingSourceSwitchPending = false
-                        _sendUiState.update { state -> state.copy(isFundingSourceLoading = false) }
-                    }
+                        is SendEvent.AmountChange -> onAmountChange(it.amount)
+                        SendEvent.AmountReset -> resetAmountInput()
+                        SendEvent.AmountContinue -> try {
+                            onAmountContinue()
+                        } finally {
+                            amountContinuePending = false
+                        }
+                        SendEvent.PaymentMethodSwitch, is SendEvent.PaymentMethodSelect -> try {
+                            onPaymentMethodSwitch((it as? SendEvent.PaymentMethodSelect)?.source)
+                        } finally {
+                            fundingSourceSwitchPending = false
+                            _sendUiState.update { state -> state.copy(isFundingSourceLoading = false) }
+                        }
 
-                    is SendEvent.CoinSelectionContinue -> onCoinSelectionContinue(it.utxos)
+                        is SendEvent.CoinSelectionContinue -> onCoinSelectionContinue(it.utxos)
 
-                    is SendEvent.CommentChange -> onCommentChange(it.value)
+                        is SendEvent.CommentChange -> onCommentChange(it.value)
 
-                    SendEvent.SpeedAndFee -> {
-                        if (_sendUiState.value.isRetainedHardwarePayment) return@collect
-                        if (_sendUiState.value.onchainFeeUi.estimates.isEmpty()) {
-                            viewModelScope.launch {
-                                refreshOnchainFeeUi()
+                        SendEvent.SpeedAndFee -> {
+                            if (_sendUiState.value.isRetainedHardwarePayment) return@collect
+                            if (_sendUiState.value.onchainFeeUi.estimates.isEmpty()) {
+                                viewModelScope.launch {
+                                    refreshOnchainFeeUi()
+                                    setSendEffect(SendEffect.NavigateToFee)
+                                }
+                            } else {
                                 setSendEffect(SendEffect.NavigateToFee)
                             }
-                        } else {
-                            setSendEffect(SendEffect.NavigateToFee)
                         }
-                    }
-                    SendEvent.SwipeToPay -> onSwipeToPay()
-                    SendEvent.StartInitialSubscriptionPayment -> onStartInitialSubscriptionPayment()
-                    SendEvent.CancelInitialSubscriptionPayment -> onCancelInitialSubscriptionPayment()
-                    is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
-                    SendEvent.DismissAmountWarning -> onDismissAmountWarning()
-                    SendEvent.EstimateMaxRoutingFee -> viewModelScope.launch {
-                        estimateMaxAmountRoutingFee()
-                    }
+                        SendEvent.SwipeToPay -> onSwipeToPay()
+                        SendEvent.StartInitialSubscriptionPayment -> onStartInitialSubscriptionPayment()
+                        SendEvent.CancelInitialSubscriptionPayment -> onCancelInitialSubscriptionPayment()
+                        is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
+                        SendEvent.DismissAmountWarning -> onDismissAmountWarning()
+                        SendEvent.EstimateMaxRoutingFee -> viewModelScope.launch {
+                            estimateMaxAmountRoutingFee()
+                        }
 
-                    SendEvent.PayConfirmed -> onConfirmPay()
-                    SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
-                    SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
-                    SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
-                    SendEvent.Contacts -> setSendEffect(
-                        if (isPaykitEnabled.value) SendEffect.NavigateToContacts else SendEffect.NavigateToComingSoon
-                    )
+                        SendEvent.PayConfirmed -> onConfirmPay()
+                        SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
+                        SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
+                        SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
+                        SendEvent.Contacts -> setSendEffect(
+                            if (isPaykitEnabled.value) {
+                                SendEffect.NavigateToContacts
+                            } else {
+                                SendEffect.NavigateToComingSoon
+                            }
+                        )
+                    }
+                } catch (_: CancellationException) {
+                    currentCoroutineContext().ensureActive()
                 }
             }
         }

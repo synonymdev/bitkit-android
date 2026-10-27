@@ -6778,6 +6778,254 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `send collector accepts fresh amount continue after wallet recovery refusal`() = test {
+        assertSendCollectorSurvivesRecovery(
+            marker = Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE,
+            event = SendEvent.AmountContinue,
+            unreadable = false,
+        )
+    }
+
+    @Test
+    fun `send collector accepts fresh amount continue after USDT recovery refusal`() = test {
+        assertSendCollectorSurvivesRecovery(
+            marker = Keychain.Key.USDT_PENDING_BACKUP_RESTORE,
+            event = SendEvent.AmountContinue,
+            unreadable = false,
+        )
+    }
+
+    @Test
+    fun `send collector accepts fresh amount continue after unreadable wallet recovery refusal`() = test {
+        assertSendCollectorSurvivesRecovery(
+            marker = Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE,
+            event = SendEvent.AmountContinue,
+            unreadable = true,
+        )
+    }
+
+    @Test
+    fun `send collector accepts fresh amount continue after unreadable USDT recovery refusal`() = test {
+        assertSendCollectorSurvivesRecovery(
+            marker = Keychain.Key.USDT_PENDING_BACKUP_RESTORE,
+            event = SendEvent.AmountContinue,
+            unreadable = true,
+        )
+    }
+
+    @Test
+    fun `send collector accepts fresh coin selection continue after wallet recovery refusal`() = test {
+        assertSendCollectorSurvivesRecovery(
+            marker = Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE,
+            event = SendEvent.CoinSelectionContinue(listOf(mock())),
+            unreadable = false,
+        )
+    }
+
+    @Test
+    fun `send collector accepts fresh coin selection continue after USDT recovery refusal`() = test {
+        assertSendCollectorSurvivesRecovery(
+            marker = Keychain.Key.USDT_PENDING_BACKUP_RESTORE,
+            event = SendEvent.CoinSelectionContinue(listOf(mock())),
+            unreadable = false,
+        )
+    }
+
+    @Test
+    fun `send collector accepts fresh coin selection continue after unreadable wallet recovery refusal`() = test {
+        assertSendCollectorSurvivesRecovery(
+            marker = Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE,
+            event = SendEvent.CoinSelectionContinue(listOf(mock())),
+            unreadable = true,
+        )
+    }
+
+    @Test
+    fun `send collector accepts fresh coin selection continue after unreadable USDT recovery refusal`() = test {
+        assertSendCollectorSurvivesRecovery(
+            marker = Keychain.Key.USDT_PENDING_BACKUP_RESTORE,
+            event = SendEvent.CoinSelectionContinue(listOf(mock())),
+            unreadable = true,
+        )
+    }
+
+    @Test
+    fun `send collector handles amount fee wallet replacement without late confirmation`() = test {
+        assertSendCollectorHandlesSuspendedFee(
+            coinSelection = false,
+            cancelScope = false,
+        )
+    }
+
+    @Test
+    fun `send collector handles amount fee scope cancellation without late confirmation`() = test {
+        assertSendCollectorHandlesSuspendedFee(
+            coinSelection = false,
+            cancelScope = true,
+        )
+    }
+
+    @Test
+    fun `send collector handles coin selection fee wallet replacement without late confirmation`() = test {
+        assertSendCollectorHandlesSuspendedFee(
+            coinSelection = true,
+            cancelScope = false,
+        )
+    }
+
+    @Test
+    fun `send collector handles coin selection fee scope cancellation without late confirmation`() = test {
+        assertSendCollectorHandlesSuspendedFee(
+            coinSelection = true,
+            cancelScope = true,
+        )
+    }
+
+    private suspend fun TestScope.assertSendCollectorSurvivesRecovery(
+        marker: Keychain.Key,
+        event: SendEvent,
+        unreadable: Boolean,
+    ) {
+        val coinSelection = event is SendEvent.CoinSelectionContinue
+        settingsData.value = SettingsData(coinSelectAuto = !coinSelection)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        val sheet = Sheet.Send(if (coinSelection) SendRoute.CoinSelection else SendRoute.Amount)
+        sut.showSheet(sheet)
+        runCurrent()
+        setSendState(
+            SendUiState(address = REGTEST_ADDRESS, amount = 1_000u, isAmountInputValid = true),
+        )
+        var blocked = true
+        whenever(keychain.exists(marker.name)).thenAnswer {
+            if (blocked && unreadable) throw AppError("Keychain unavailable")
+            blocked
+        }
+        clearInvocations(lightningRepo, toastManager)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(event)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            assertEquals(sheet, sut.currentSheet.value)
+            assertFalse(sut.sendUiState.value.isLoading)
+            assertFalse(sut.sendUiState.value.shouldConfirmPay)
+            verify(lightningRepo, never()).calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+            assertNoNativeSend()
+
+            blocked = false
+            advanceUntilIdle()
+            expectNoEvents()
+            verify(lightningRepo, never()).calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+
+            sut.setSendEvent(SendEvent.AmountChange(2_000u))
+            advanceUntilIdle()
+            assertEquals(2_000uL, sut.sendUiState.value.amount)
+            sut.setSendEvent(event)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            assertFalse(sut.sendUiState.value.isLoading)
+            assertFalse(sut.sendUiState.value.shouldConfirmPay)
+            expectNoEvents()
+        }
+        assertNoNativeSend()
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    private suspend fun TestScope.assertSendCollectorHandlesSuspendedFee(
+        coinSelection: Boolean,
+        cancelScope: Boolean,
+    ) {
+        settingsData.value = SettingsData(coinSelectAuto = !coinSelection)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        val sheet = Sheet.Send(if (coinSelection) SendRoute.CoinSelection else SendRoute.Amount)
+        sut.showSheet(sheet)
+        runCurrent()
+        val bolt11 = "lnbcrt1pendingcontinue"
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                isAmountInputValid = true,
+                payMethod = if (coinSelection) SendMethod.ONCHAIN else SendMethod.LIGHTNING,
+                decodedInvoice = if (coinSelection) null else lightningInvoice(bolt11, 0u),
+            ),
+        )
+        val estimateStarted = CompletableDeferred<Unit>()
+        val feeEstimate = CompletableDeferred<Result<ULong>>()
+        var estimateCancelled = false
+        val estimate: suspend () -> Result<ULong> = {
+            estimateStarted.complete(Unit)
+            try {
+                feeEstimate.await()
+            } catch (cancelled: CancellationException) {
+                estimateCancelled = true
+                throw cancelled
+            }
+        }
+        if (coinSelection) {
+            whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()))
+                .doSuspendableAnswer { estimate() }
+        } else {
+            whenever(lightningRepo.estimateRoutingFeesForAmount(any(), any())).doSuspendableAnswer { estimate() }
+        }
+        val event = if (coinSelection) SendEvent.CoinSelectionContinue(listOf(mock())) else SendEvent.AmountContinue
+
+        sut.sendEffect.test {
+            sut.setSendEvent(event)
+            runCurrent()
+            assertTrue(estimateStarted.isCompleted)
+            if (!coinSelection) assertTrue(sut.sendUiState.value.isLoading)
+            expectNoEvents()
+            if (cancelScope) {
+                sut.viewModelScope.cancel()
+            } else {
+                walletGeneration++
+            }
+            feeEstimate.complete(Result.success(999u))
+            advanceUntilIdle()
+
+            expectNoEvents()
+            assertEquals(sheet, sut.currentSheet.value)
+            assertNull(sut.sendUiState.value.lightningFeeSats)
+            assertNull(sut.sendUiState.value.onchainFeeUi.sats)
+            assertFalse(sut.sendUiState.value.isLoading)
+            if (cancelScope) assertTrue(estimateCancelled)
+            assertNoNativeSend()
+
+            whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(Result.success(100u))
+            whenever(lightningRepo.estimateRoutingFeesForAmount(any(), any())).thenReturn(Result.success(7u))
+            sut.setSendEvent(SendEvent.AmountChange(2_000u))
+            advanceUntilIdle()
+            sut.setSendEvent(event)
+            advanceUntilIdle()
+            if (cancelScope) {
+                assertEquals(1_000uL, sut.sendUiState.value.amount)
+            } else {
+                assertEquals(2_000uL, sut.sendUiState.value.amount)
+                assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+                if (coinSelection) {
+                    assertEquals(100L, sut.sendUiState.value.onchainFeeUi.sats)
+                } else {
+                    assertEquals(7L, sut.sendUiState.value.lightningFeeSats)
+                }
+            }
+            expectNoEvents()
+        }
+        assertNoNativeSend()
+    }
+
+    private suspend fun assertNoNativeSend() {
+        verify(lightningRepo, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
+            anyOrNull(), any(), any(), any(), any(), anyOrNull(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        )
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
     fun `amount continue shows loading and ignores duplicate request`() = test {
         val estimateStarted = CompletableDeferred<Unit>()
         val finishEstimate = CompletableDeferred<Unit>()
