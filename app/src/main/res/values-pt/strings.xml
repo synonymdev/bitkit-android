@@ -700,6 +700,7 @@
     <string name="wallet__send">Enviar</string>
     <string name="wallet__receive">Receber</string>
     <string name="wallet__send_bitcoin">Enviar Bitcoin</string>
+    <string name="wallet__send_pending__abandon_transfer_note">As transferências para o saldo de gastos já não estão disponíveis. A Bitkit verifica primeiro a rede e depois devolve as moedas desta transferência à sua carteira, para que a transferência original nunca seja confirmada. Isto tem uma taxa de rede.</string>
     <string name="wallet__send_to">Para</string>
     <string name="wallet__recipient_contact">Contato</string>
     <string name="wallet__recipient_invoice">Colar Invoice</string>

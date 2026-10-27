@@ -990,6 +990,7 @@
     <string name="wallet__send_invoice_expiration">Factuutvervaldatum</string>
     <string name="wallet__send_max_spending__description">Het maximaal te besteden bedrag is iets lager vanwege een vereist reservesaldo.</string>
     <string name="wallet__send_max_spending__title">Reservesaldo</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Overboekingen naar je bestedingssaldo zijn niet meer beschikbaar. Bitkit controleert eerst het netwerk en stuurt de munten van deze overboeking dan terug naar je wallet, zodat de oorspronkelijke overboeking nooit bevestigd wordt. Dit kost netwerkkosten.</string>
     <string name="wallet__send_pending__description">Deze betaling duurt iets langer dan verwacht. U kunt Bitkit blijven gebruiken.</string>
     <string name="wallet__send_pending__nav_title">Betaling Onderweg</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>

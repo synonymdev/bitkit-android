@@ -832,6 +832,7 @@
     <string name="wallet__send">Senden</string>
     <string name="wallet__receive">Empfangen</string>
     <string name="wallet__send_bitcoin">Bitcoin senden</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Überweisungen auf dein Ausgabenguthaben sind nicht mehr verfügbar. Bitkit prüft zuerst das Netzwerk und schickt die Coins dieser Überweisung dann zurück in deine Wallet, damit die ursprüngliche Überweisung nie bestätigt wird. Dafür fällt eine Netzwerkgebühr an.</string>
     <string name="wallet__send_to">An</string>
     <string name="wallet__recipient_contact">Kontakt</string>
     <string name="wallet__recipient_invoice">Rechnung einfügen</string>

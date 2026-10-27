@@ -999,6 +999,7 @@
     <string name="wallet__send_invoice_expiration">Expiración de la factura</string>
     <string name="wallet__send_max_spending__description">La cantidad máxima que se puede gastar es un poco más baja debido al saldo de reserva exigido.</string>
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Las transferencias al saldo de gasto ya no están disponibles. Bitkit primero revisa la red y luego devuelve las monedas de esta transferencia a tu billetera para que la transferencia original nunca se confirme. Esto tiene una comisión de red.</string>
     <string name="wallet__send_pending__description">Este pago está tardando un poco más de lo esperado. Puede seguir utilizando Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pago pendiente</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>

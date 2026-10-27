@@ -833,6 +833,7 @@
     <string name="wallet__send">Envoyer</string>
     <string name="wallet__receive">Recevoir</string>
     <string name="wallet__send_bitcoin">Envoyer des bitcoins</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Les transferts vers le solde de dépenses ne sont plus disponibles. Bitkit vérifie d\'abord le réseau, puis renvoie les pièces de ce transfert vers votre portefeuille afin que le transfert d\'origine ne soit jamais confirmé. Cela coûte des frais de réseau.</string>
     <string name="wallet__send_to">Pour</string>
     <string name="wallet__recipient_contact">Contact</string>
     <string name="wallet__recipient_invoice">Coller la facture</string>

@@ -993,6 +993,7 @@
     <string name="wallet__send_invoice_expiration">Caducitat de la factura</string>
     <string name="wallet__send_max_spending__description">L\'import màxim gastable és una mica inferior a causa d\'un saldo de reserva requerit.</string>
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Les transferències al saldo de despesa ja no estan disponibles. Bitkit primer comprova la xarxa i després retorna les monedes d\'aquesta transferència a la teva cartera perquè la transferència original no es pugui confirmar mai. Això té una comissió de xarxa.</string>
     <string name="wallet__send_pending__nav_title">Pagament pendent</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagant\n&lt;accent&gt;factura...&lt;/accent&gt;</string>

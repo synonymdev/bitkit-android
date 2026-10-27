@@ -830,6 +830,7 @@
     <string name="wallet__receive">Recibir</string>
     <string name="wallet__details_transfer_subtitle">Transferencia Entrante: </string>
     <string name="wallet__send_bitcoin">Enviar Bitcoin</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Las transferencias al saldo de gasto ya no están disponibles. Bitkit primero comprueba la red y después devuelve las monedas de esta transferencia a tu billetera para que la transferencia original nunca se confirme. Esto tiene una comisión de red.</string>
     <string name="wallet__send_to">Para</string>
     <string name="wallet__recipient_contact">Contactar</string>
     <string name="wallet__recipient_invoice">Pegar factura</string>

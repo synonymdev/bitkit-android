@@ -997,6 +997,7 @@
     <string name="wallet__send_invoice_expiration">Expirace faktury</string>
     <string name="wallet__send_max_spending__description">Maximální částka, kterou lze utratit, je o něco nižší kvůli požadovanému zůstatku rezervy.</string>
     <string name="wallet__send_max_spending__title">Zůstatek rezervy</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Převody na útratový zůstatek už nejsou dostupné. Bitkit nejprve zkontroluje síť a pak vrátí mince tohoto převodu do vaší peněženky, aby se původní převod nikdy nepotvrdil. Stojí to síťový poplatek.</string>
     <string name="wallet__send_pending__description">Tato platba trvá o něco déle, než se očekávalo. Bitkit můžete používat i nadále.</string>
     <string name="wallet__send_pending__nav_title">Platba čeká na vyřízení</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>

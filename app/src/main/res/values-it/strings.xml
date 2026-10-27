@@ -995,6 +995,7 @@
     <string name="wallet__send_invoice_expiration">Scadenza invoice</string>
     <string name="wallet__send_max_spending__description">L\'importo massimo spendibile e\' leggermente inferiore a causa di un saldo di riserva richiesto.</string>
     <string name="wallet__send_max_spending__title">Saldo di Riserva</string>
+    <string name="wallet__send_pending__abandon_transfer_note">I trasferimenti al saldo di spesa non sono più disponibili. Bitkit controlla prima la rete, poi rimanda le monete di questo trasferimento al tuo wallet, così il trasferimento originale non potrà mai essere confermato. Questo costa una commissione di rete.</string>
     <string name="wallet__send_pending__description">Questo pagamento sta richiedendo un po\' più tempo del previsto. Puoi continuare a utilizzare Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pagamento in sospeso</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>

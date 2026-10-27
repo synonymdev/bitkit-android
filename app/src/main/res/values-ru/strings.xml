@@ -1014,6 +1014,7 @@
     <string name="wallet__send_invoice_expiration">Срок действия инвойса</string>
     <string name="wallet__send_max_spending__description">Максимальная сумма для траты немного меньше из-за необходимого резервного баланса.</string>
     <string name="wallet__send_max_spending__title">Резервный баланс</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Переводы на баланс расходов больше недоступны. Bitkit сначала проверяет сеть, а затем возвращает монеты этого перевода в ваш кошелёк, чтобы исходный перевод никогда не подтвердился. За это взимается сетевая комиссия.</string>
     <string name="wallet__send_pending__description">Этот платеж занимает больше времени, чем ожидалось. Вы можете продолжать использовать Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Платеж в ожидании</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>

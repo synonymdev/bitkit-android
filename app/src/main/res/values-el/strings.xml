@@ -973,6 +973,7 @@
     <string name="wallet__send_invoice_expiration">Λήξη τιμολογίου</string>
     <string name="wallet__send_max_spending__description">Το μέγιστο δαπανήσιμο ποσό είναι λίγο χαμηλότερο λόγω απαιτούμενου αποθεματικού υπολοίπου.</string>
     <string name="wallet__send_max_spending__title">Αποθεματικό υπόλοιπο</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Οι μεταφορές στο υπόλοιπο δαπανών δεν είναι πλέον διαθέσιμες. Το Bitkit ελέγχει πρώτα το δίκτυο και μετά επιστρέφει τα νομίσματα αυτής της μεταφοράς στο πορτοφόλι σας, ώστε η αρχική μεταφορά να μην επιβεβαιωθεί ποτέ. Αυτό έχει χρέωση δικτύου.</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Πληρωμή\n&lt;accent&gt;τιμολογίου...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Επιβεβαίωση</string>

@@ -835,6 +835,7 @@
     <string name="wallet__send">Wyślij</string>
     <string name="wallet__receive">Otrzymaj</string>
     <string name="wallet__send_bitcoin">Wyślij Bitcoin</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Przelewy na saldo wydatków nie są już dostępne. Bitkit najpierw sprawdza sieć, a potem odsyła monety z tego przelewu do Twojego portfela, aby pierwotny przelew nigdy nie został potwierdzony. Wiąże się to z opłatą sieciową.</string>
     <string name="wallet__send_to">Do</string>
     <string name="wallet__recipient_contact">Kontakt</string>
     <string name="wallet__recipient_invoice">Wklej fakturę</string>

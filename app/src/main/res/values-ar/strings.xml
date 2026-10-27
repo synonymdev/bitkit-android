@@ -968,6 +968,7 @@
     <string name="wallet__send_invoice_expiration">انتهاء صلاحية الفاتورة</string>
     <string name="wallet__send_max_spending__description">الحد الأقصى القابل للإنفاق أقل قليلاً بسبب الرصيد الاحتياطي المطلوب.</string>
     <string name="wallet__send_max_spending__title">الرصيد الاحتياطي</string>
+    <string name="wallet__send_pending__abandon_transfer_note">لم تعد التحويلات إلى رصيد الإنفاق متاحة. يتحقق Bitkit أولًا من الشبكة، ثم يعيد عملات هذا التحويل إلى محفظتك حتى لا يتأكد التحويل الأصلي أبدًا. يكلّف ذلك رسوم شبكة.</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">جارٍ دفع\n&lt;accent&gt;الفاتورة...&lt;/accent&gt;</string>
     <string name="wallet__send_review">تأكيد</string>
