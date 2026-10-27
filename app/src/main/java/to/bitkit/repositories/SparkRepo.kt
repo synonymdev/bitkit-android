@@ -62,12 +62,6 @@ class SparkRepo @Inject constructor(
         private const val TAG = "SparkRepo"
         private const val MSATS_PER_SAT = 1_000uL
 
-        /**
-         * Size of Spark's deposit claim transaction; the SDK prices a standard claim as the fastest recommended fee
-         * rate times this size before the provider quotes it (breez/spark-sdk `CLAIM_TX_SIZE_VBYTES`).
-         */
-        private const val CLAIM_TX_SIZE_VBYTES = 99uL
-
         /** Last step of the Spending setup progress, shown once a funding deposit is claimed. */
         private const val SETUP_STEP_DONE = 3
     }
@@ -151,8 +145,8 @@ class SparkRepo @Inject constructor(
     }
 
     /** Estimates what Spark keeps from a deposit to claim it, the way the SDK does before the provider quotes it. */
-    suspend fun estimateDepositClaimFeeSats(): Result<ULong> = withContext(bgDispatcher) {
-        runSuspendCatching { sparkService.fastestFeeRate() * CLAIM_TX_SIZE_VBYTES }
+    suspend fun estimateDepositClaimFeeSats(amountSats: ULong): Result<ULong> = withContext(bgDispatcher) {
+        runSuspendCatching { SparkService.maxDepositClaimFeeSats(sparkService.fastestFeeRate(), amountSats) }
     }
 
     suspend fun depositAddress(): Result<String> = withContext(bgDispatcher) {

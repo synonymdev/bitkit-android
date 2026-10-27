@@ -36,6 +36,7 @@ import kotlinx.coroutines.sync.withLock
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.models.safe
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -61,6 +62,22 @@ class SparkService @Inject constructor(
 
         /** Share of a deposit, in parts per million, that an automatic deposit claim may pay on top. */
         private const val DEPOSIT_CLAIM_FEE_PPM = 2_000u
+
+        private const val PPM_DIVISOR = 1_000_000uL
+
+        /** Size of the transaction that claims a deposit, which prices the on-chain part of its fee. */
+        private const val CLAIM_TX_SIZE_VBYTES = 99uL
+
+        /**
+         * The most Spark may keep to claim a deposit of [amountSats] under this wallet's fee cap, at the fastest
+         * recommended fee rate [fastestFeeRate]. The provider quotes the real fee only once the deposit exists.
+         */
+        fun maxDepositClaimFeeSats(fastestFeeRate: ULong, amountSats: ULong): ULong {
+            val rate = fastestFeeRate.safe() + DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB.safe()
+            val onchain = rate.safe() * CLAIM_TX_SIZE_VBYTES.safe()
+            val proportional = amountSats.safe() * DEPOSIT_CLAIM_FEE_PPM.toULong().safe() / PPM_DIVISOR
+            return onchain.safe() + proportional.safe()
+        }
 
         /**
          * Returns as soon as the payment starts, like ldk-node, so its completion reaches callers as an event they
