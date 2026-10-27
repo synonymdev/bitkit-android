@@ -5,13 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -127,7 +127,7 @@ internal fun UsdtPaymentContent(
     contact: PubkyProfile? = null,
     onDestinationChange: ((UsdtDestination) -> Unit)? = null,
     destinations: ImmutableList<UsdtDestination> = Env.usdtDestinations.toImmutableList(),
-    onSwitchAsset: (() -> Unit)? = null,
+    fundingSource: (@Composable () -> Unit)? = null,
 ) {
     if (page == UsdtPage.WALLET) return
 
@@ -163,8 +163,7 @@ internal fun UsdtPaymentContent(
     }
     val showSubmitted = pending || (completed && hasShownSubmitted)
     // A payment request's amount is fixed, so its review waits for the quote on a confirm screen, not on Amount.
-    val preparingConfirmation = quote == null && page == UsdtPage.AMOUNT && isPaymentRequest && !amountEditable &&
-        state.error == null
+    val preparingConfirmation = quote == null && page == UsdtPage.AMOUNT && isPaymentRequest && !amountEditable
     if (showSuccess && completed && quote != null) {
         NewTransactionSheetView(
             details = NewTransactionSheetDetails(
@@ -219,9 +218,16 @@ internal fun UsdtPaymentContent(
                 onConfirm,
                 completed,
                 onEditAmount = { if (amountEditable) onPageChange(UsdtPage.AMOUNT) },
-                onSwitchAsset = onSwitchAsset,
+                fundingSource = fundingSource,
             )
-            preparingConfirmation -> UsdtConfirmationLoading(amount, contact, paymentRequestNote)
+            preparingConfirmation -> UsdtConfirmationLoading(
+                amount,
+                contact,
+                paymentRequestNote,
+                state,
+                fundingSource,
+                onReview,
+            )
             page == UsdtPage.AMOUNT -> UsdtAmountContent(
                 amount,
                 destination,
@@ -548,7 +554,7 @@ private fun UsdtConfirmation(
     onConfirm: () -> Unit,
     completed: Boolean,
     onEditAmount: () -> Unit,
-    onSwitchAsset: (() -> Unit)?,
+    fundingSource: (@Composable () -> Unit)?,
 ) {
     var showDetails by rememberSaveable(quote.id) { mutableStateOf(false) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
@@ -568,7 +574,7 @@ private fun UsdtConfirmation(
                     isPaymentRequest,
                     isMerchantRequest,
                     showDetails,
-                    onSwitchAsset = onSwitchAsset?.takeUnless { state.busy || completed },
+                    fundingSource = fundingSource,
                 ) {
                     if (!state.busy && !completed) onEditAmount()
                 }
@@ -577,6 +583,7 @@ private fun UsdtConfirmation(
                         PaymentReviewIllustration(
                             swipeProgress = { swipeProgress.floatValue },
                             isUsdt = true,
+                            isPaymentRequest = isPaymentRequest,
                             modifier = Modifier.height(256.dp)
                         )
                     }
@@ -610,22 +617,43 @@ private fun UsdtConfirmation(
 }
 
 @Composable
-private fun UsdtConfirmationLoading(amount: String, contact: PubkyProfile?, note: String?) {
+private fun UsdtConfirmationLoading(
+    amount: String,
+    contact: PubkyProfile?,
+    note: String?,
+    state: UsdtSendState,
+    fundingSource: (@Composable () -> Unit)?,
+    onRetry: () -> Unit,
+) {
     Column(modifier = Modifier.fillMaxSize().testTag("UsdtConfirmLoading")) {
         UsdtAmountHeader(amount.ifEmpty { "0" })
+        if (fundingSource != null) {
+            VerticalSpacer(16.dp)
+            Box(modifier = Modifier.align(Alignment.End)) { fundingSource() }
+        }
         VerticalSpacer(24.dp)
         PaymentRequestSummary(
             profile = contact,
             note = note?.trim()?.takeIf { it.isNotEmpty() },
             accentColor = Colors.Usdt,
         )
-        Spacer(modifier = Modifier.weight(1f))
+        PaymentReviewIllustration(swipeProgress = { 0f }, isPaymentRequest = true, modifier = Modifier.weight(1f))
+        state.error?.let {
+            BodyM(stringResource(it), color = Colors.Brand)
+            PrimaryButton(
+                text = stringResource(R.string.common__try_again),
+                onClick = onRetry,
+                enabled = !state.busy,
+                modifier = Modifier.testTag("UsdtRetryQuote")
+            )
+            VerticalSpacer(16.dp)
+        }
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = Colors.Usdt,
             onConfirm = {},
             enabled = false,
-            loading = true,
+            loading = state.busy,
             confirmed = false,
             progress = remember { mutableFloatStateOf(0f) },
             textStyle = AppTextStyles.BodySSB.copy(letterSpacing = 0.sp),
@@ -649,7 +677,7 @@ private fun ColumnScope.UsdtReviewDetailsButton(showDetails: Boolean, onClick: (
         icon = {
             Icon(
                 painterResource(
-                    if (showDetails) R.drawable.ic_eye_slash else R.drawable.ic_speed_normal
+                    if (showDetails) R.drawable.ic_eye_slash else R.drawable.ic_currency_dollar
                 ),
                 null,
                 tint = Colors.Usdt,
@@ -682,7 +710,7 @@ private fun UsdtReviewHeader(
     isMerchantRequest: Boolean,
     showDetails: Boolean,
     modifier: Modifier = Modifier,
-    onSwitchAsset: (() -> Unit)? = null,
+    fundingSource: (@Composable () -> Unit)? = null,
     onEditAmount: () -> Unit,
 ) {
     Column(modifier = modifier) {
@@ -691,9 +719,13 @@ private fun UsdtReviewHeader(
             displayAmount = usdtOverviewAmount(quote.amount),
             onClick = onEditAmount
         )
+        if (!showDetails && fundingSource != null) {
+            VerticalSpacer(16.dp)
+            Box(modifier = Modifier.align(Alignment.End)) { fundingSource() }
+        }
         VerticalSpacer(24.dp)
         if (showDetails) {
-            UsdtQuoteDetails(quote, contact, isMerchantRequest, onSwitchAsset)
+            UsdtQuoteDetails(quote, contact, isMerchantRequest, fundingSource)
             note?.let {
                 VerticalSpacer(16.dp)
                 PaymentRequestInvoiceNote(it)
@@ -710,20 +742,16 @@ private fun UsdtQuoteDetails(
     quote: UsdtQuote,
     contact: PubkyProfile?,
     isMerchantRequest: Boolean,
-    onSwitchAsset: (() -> Unit)?,
+    fundingSource: (@Composable () -> Unit)?,
 ) {
     var showFullAddress by rememberSaveable(quote.recipient) { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         UsdtDetailField(caption = stringResource(R.string.usdt__pay_from), modifier = Modifier.weight(1f)) {
-            NumberPadActionButton(
-                text = "USDT",
-                color = Colors.Usdt,
-                enabled = onSwitchAsset != null,
-                icon = R.drawable.ic_transfer.takeIf { onSwitchAsset != null },
-                textStyle = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
-                onClick = { onSwitchAsset?.invoke() },
-                modifier = Modifier.testTag("UsdtPayFrom"),
-            )
+            if (fundingSource != null) {
+                fundingSource()
+            } else {
+                NumberPadActionButton(text = "USDT", color = Colors.Usdt, enabled = false, onClick = {})
+            }
         }
         UsdtDetailCell(
             stringResource(R.string.usdt__network),

@@ -8,7 +8,7 @@
     <action>Reopen the same request, then close while Preparing is visible. Verify late completion does not reopen the sheet or start a payment. Reopen once more and verify confirmation is usable.</action>
     <action>Open a request whose BTC amount exceeds the payer balance. Verify payment cannot be authorized. Close without paying.</action>
     <action>Open a request with a short payment deadline. Let it expire before swiping and verify no payment is sent. Verify fresh payment terms must be reviewed before a retry can proceed.</action>
-    <action>Enable USDT and open a request accepting both Bitcoin and USDT. Verify the existing asset-selection screen remains available. Close without paying.</action>
+    <action>Enable USDT and open a request accepting both Bitcoin and USDT. Verify confirmation opens without an amount keypad. Open the funding-source dropdown, choose USDT, and verify confirmation shows the exact quoted USDT amount. Switch back to Bitcoin and verify its amount and fee update without opening the keypad. No selection should submit a payment. Repeat with a due subscription request and with LNURL Spending plus Savings, then close without paying.</action>
     <action>With USDT enabled, open a request accepting Bitcoin only. Verify it still opens directly to Confirm. If both Bitcoin rails are available, switch between Spending and Savings. Verify valid quoted terms stay on Confirm with the new exact BTC amount and refreshed fees, and still require a swipe. Verify unavailable or expired terms, or a Lightning amount below its minimum, return to Amount for review.</action>
   </actions>
 </journey>

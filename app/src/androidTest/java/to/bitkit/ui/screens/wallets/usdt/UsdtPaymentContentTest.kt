@@ -79,6 +79,23 @@ class UsdtPaymentContentTest {
     }
 
     @Test
+    fun failedRequestQuoteKeepsConfirmationAndOffersRetryWithoutTheKeypad() {
+        var retries = 0
+        composeTestRule.setContent {
+            Content(
+                UsdtSendState(error = to.bitkit.R.string.usdt__error_expired), UsdtPage.AMOUNT,
+                amountEditable = false,
+                isPaymentRequest = true,
+                onReview = { retries++ },
+            )
+        }
+        composeTestRule.onNodeWithTag("UsdtConfirmLoading").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("NDecimal").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtRetryQuote").performClick()
+        composeTestRule.runOnIdle { assertEquals(1, retries) }
+    }
+
+    @Test
     fun lockedReviewAmountKeepsReviewOpenWhileBackAndEditableAmountsStillNavigate() {
         val editable = mutableStateOf(false)
         var pageChanges = 0
@@ -348,6 +365,8 @@ class UsdtPaymentContentTest {
         page: UsdtPage,
         wallet: UsdtWalletState = UsdtWalletState(),
         amountEditable: Boolean = true,
+        isPaymentRequest: Boolean = false,
+        onReview: () -> Unit = {},
         onPageChange: (UsdtPage) -> Unit = {},
         onBack: () -> Unit = {},
         onDetails: () -> Unit = {},
@@ -367,11 +386,12 @@ class UsdtPaymentContentTest {
                         onRecipientContinue = {},
                         onPageChange = onPageChange,
                         onBack = onBack,
-                        onReview = {},
+                        onReview = onReview,
                         onConfirm = {},
                         onDone = {},
                         onDetails = onDetails,
                         amountEditable = amountEditable,
+                        isPaymentRequest = isPaymentRequest,
                     )
                 }
             }

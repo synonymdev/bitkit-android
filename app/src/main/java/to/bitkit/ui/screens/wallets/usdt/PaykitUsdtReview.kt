@@ -29,6 +29,7 @@ import to.bitkit.R
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.subscriptions.SubscriptionSuccess
 import to.bitkit.ui.screens.wallets.send.AutoPayOverlay
+import to.bitkit.ui.screens.wallets.send.SendFundingSourceButton
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AppViewModel
@@ -156,8 +157,18 @@ fun PaykitUsdtReview(
                         paymentRequestNote = uiState.paymentRequestNote,
                         isMerchantRequest = uiState.isMerchantPaymentRequest,
                         contact = uiState.contactPaymentProfile,
-                        onSwitchAsset = { app.setSendEvent(SendEvent.PaymentMethodSwitch) }
-                            .takeIf { uiState.canSwitchConfirmFundingSource },
+                        fundingSource = if (uiState.canSwitchConfirmFundingSource) {
+                            {
+                                SendFundingSourceButton(
+                                    uiState = uiState,
+                                    onClick = { app.setSendEvent(SendEvent.PaymentMethodSelect(it)) },
+                                    interactionsEnabled = !paymentActive && !state.submitted,
+                                    confirmation = true,
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     )
                 }
             }

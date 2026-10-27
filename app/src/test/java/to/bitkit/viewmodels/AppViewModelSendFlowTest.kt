@@ -11331,7 +11331,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `mixed accepted methods still require selection when only usdt resolves`() = test {
+    fun `mixed accepted methods require a swipe when only usdt resolves`() = test {
         val now = Clock.System.now()
         val endpoint = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", null, null, "")
         val request = paymentRequest().copy(
@@ -11348,7 +11348,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             isInitialSubscriptionPayment = true,
         )
         advanceUntilIdle()
-        assertEquals(SendRoute.Amount, (sut.currentSheet.value as? Sheet.Send)?.route)
+        assertEquals(SendRoute.UsdtReview, (sut.currentSheet.value as? Sheet.Send)?.route)
         assertFalse(sut.takeInitialUsdtSubscriptionAuthorization())
         verify(paykitUsdtPayments, never()).send(any(), any(), any())
     }
@@ -14627,6 +14627,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `quoted Bitcoin wallet switches stay on confirmation and bind the new amount`() = test {
         usdtEnabled.value = false
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any())).thenReturn(Result.success(48_000uL))
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(250uL))
         val lnurl = LnurlPayData(
             uri = "lnurl1request",
             callback = "https://example.com/pay",
@@ -14662,8 +14665,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
         assertEquals(5_000uL, sut.sendUiState.value.amount)
         sut.sendEffect.test {
-            for ((method, amount) in listOf(SendMethod.ONCHAIN to 2_500uL, SendMethod.LIGHTNING to 5_000uL)) {
-                sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            for ((source, method, amount) in listOf(
+                Triple(SendFundingSource.Hardware(HARDWARE_WALLET_ID), SendMethod.ONCHAIN, 2_500uL),
+                Triple(SendFundingSource.Spending, SendMethod.LIGHTNING, 5_000uL),
+                Triple(SendFundingSource.Savings, SendMethod.ONCHAIN, 2_500uL),
+                Triple(SendFundingSource.Spending, SendMethod.LIGHTNING, 5_000uL),
+            )) {
+                sut.setSendEvent(SendEvent.PaymentMethodSelect(source))
                 advanceUntilIdle()
                 expectNoEvents()
                 assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
@@ -14938,6 +14946,57 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(10_000uL, sut.sendUiState.value.amount)
 
             sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            assertEquals(SendEffect.ShowPaykitConfirmation(SendRoute.UsdtReview), awaitItem())
+            advanceUntilIdle()
+            assertTrue(sut.sendUiState.value.paykitUsesUsdt)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `subscription request opens confirmation and selects each asset directly`() = test {
+        val bitcoin = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
+        val usdt = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = "")
+        val endpoints = listOf(bitcoin, usdt)
+        val request = paymentRequest().copy(
+            billingPeriod = PaykitBillingPeriod(Clock.System.now(), Clock.System.now() + 3600.seconds),
+            amount = PaykitAmount(PaykitAsset.USD, 1_000u),
+            pricing = PaykitRequestPricing(
+                PaymentConversion.Fixed(
+                    listOf(ConversionRate("btc", "0.00001"), ConversionRate("usdt", "1")),
+                )
+            ),
+            acceptedPaymentEndpointIdentifiers = endpoints.map { it.methodId.rawValue },
+        )
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        usdtState.value = UsdtWalletState(balance = 50_000_000u)
+        usdtEnabled.value = true
+        runCurrent()
+
+        sut.openContactPayment(
+            REGTEST_ADDRESS,
+            testPublicKey,
+            incomingPaymentRequest = request,
+            endpoints = endpoints,
+        )
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.UsdtReview), sut.currentSheet.value)
+        assertTrue(sut.sendUiState.value.paykitUsesUsdt)
+        assertFalse(sut.sendUiState.value.isAmountEditable)
+        assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
+        assertTrue(sut.sendUiState.value.canSwitchConfirmFundingSource)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+            assertEquals(SendEffect.ShowPaykitConfirmation(SendRoute.Confirm), awaitItem())
+            advanceUntilIdle()
+            assertFalse(sut.sendUiState.value.paykitUsesUsdt)
+            assertEquals(10_000uL, sut.sendUiState.value.amount)
+
+            sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Usdt))
             assertEquals(SendEffect.ShowPaykitConfirmation(SendRoute.UsdtReview), awaitItem())
             advanceUntilIdle()
             assertTrue(sut.sendUiState.value.paykitUsesUsdt)

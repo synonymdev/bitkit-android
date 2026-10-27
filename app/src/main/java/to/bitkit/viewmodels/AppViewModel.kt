@@ -3801,9 +3801,7 @@ class AppViewModel @Inject constructor(
      * Amount is the fallback when those terms cannot be bound.
      */
     private suspend fun openPaykitRequestConfirmation(fromMainScanner: Boolean): Boolean {
-        val request = activeIncomingPaymentRequest() ?: return false
-        // Subscription periods keep reviewing the asset choice on Amount.
-        if (request.billingPeriod != null && _sendUiState.value.usdtRecipient != null) return false
+        if (activeIncomingPaymentRequest() == null) return false
         if (_sendUiState.value.paykitUsesUsdt) {
             if (!bindUsdtRequestTerms()) return false
             navigateToSendRoute(fromMainScanner, SendRoute.UsdtReview, SendEffect.NavigateToUsdtReview)
@@ -4058,8 +4056,7 @@ class AppViewModel @Inject constructor(
 
     private fun canRebindBitcoinRequestTerms(state: SendUiState, source: SendFundingSource): Boolean =
         paykitPaymentTerms != null && paykitReviewedAmount != null && !state.paykitUsesUsdt &&
-            state.hardwareWalletId == null &&
-            (source == SendFundingSource.Savings || source == SendFundingSource.Spending)
+            source != SendFundingSource.Usdt
 
     private fun nextFundingSource(current: SendUiState, requested: SendFundingSource?): SendFundingSource? {
         val includesUsdt = requested != null || activeIncomingPaymentRequest() != null
