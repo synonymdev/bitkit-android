@@ -55,12 +55,18 @@ class PaykitAllowancePayer @Inject constructor(
         eligibleIdentifiers: List<String>,
     ): Result<PrivatePaykitAllowancePayment?> = privatePaykitRepo.resolveAllowancePayment(request, eligibleIdentifiers)
 
-    suspend fun consumePaymentList(publicKey: String, context: PrivatePaykitPaymentContext): Result<Unit> =
-        privatePaykitRepo.consumePrivatePaymentList(publicKey, context)
+    suspend fun consumePaymentList(
+        publicKey: String,
+        context: PrivatePaykitPaymentContext,
+        attemptId: String,
+    ): Result<Unit> = privatePaykitRepo.consumePrivatePaymentList(publicKey, context, owner = attemptId)
 
-    /** Gives back a consumed payment list, so the request's manual fallback can still use it. */
-    suspend fun releasePaymentList(publicKey: String, context: PrivatePaykitPaymentContext): Result<Unit> =
-        privatePaykitRepo.releasePrivatePaymentList(publicKey, context)
+    /** Gives back a payment list the attempt consumed, so the request's manual fallback can still use it. */
+    suspend fun releasePaymentList(
+        publicKey: String,
+        context: PrivatePaykitPaymentContext,
+        attemptId: String,
+    ): Result<Unit> = privatePaykitRepo.releasePrivatePaymentList(publicKey, context, owner = attemptId)
 
     /** Accepts through [accept] with this install as the request's owner, so a failed payment stays payable here. */
     suspend fun <T> acceptOnThisInstall(request: PaykitPaymentRequest, accept: suspend () -> T): Result<T> =
@@ -194,10 +200,13 @@ class PaykitAllowanceExecutor @Inject constructor(
         updated
     }
 
-    private suspend fun updateLocalStateDurably(
+    /** Like [updateLocalState], but a failed save throws instead of being logged. */
+    suspend fun updateLocalStateDurably(
         identity: String,
         change: (PaykitAllowanceLocalState) -> PaykitAllowanceLocalState,
-    ): Unit = stateMutex.withLock { store.save(identity, change(localState(identity))) }
+    ): PaykitAllowanceLocalState = stateMutex.withLock {
+        change(localState(identity)).also { store.save(identity, it) }
+    }
 
     fun isHandling(requestId: PaykitPaymentRequestId): Boolean = requestId in inFlightRequestIds
 
@@ -241,8 +250,9 @@ class PaykitAllowanceExecutor @Inject constructor(
         if (current != null && !current.requiresReconciliation) return@withContext current
 
         val history = current?.history ?: AllowanceAccountingHistory(emptyList(), emptyList(), emptyList())
+        val journal = localState(identity).journal.associateBy { it.attemptId }
         val outcomes = history.occurrences.flatMap { it.attempts }.mapNotNull { attempt ->
-            verifiedOutcome(attempt, identity)?.let { PaymentOutcomeReport(attempt.attemptId, it) }
+            verifiedOutcome(attempt, journal)?.let { PaymentOutcomeReport(attempt.attemptId, it) }
         }
         val reconciled = paykitSdkService.reconcileAllowanceAccounting(
             AllowanceAccountingReconciliation(
@@ -270,6 +280,8 @@ class PaykitAllowanceExecutor @Inject constructor(
             // No ledger means nothing was ever admitted, so there is nothing to recover.
             paykitSdkService.allowanceAccountingState() ?: return@runSuspendCatching
             val state = ensureReconciled(identity)
+            // One read of the journal per pass: each attempt below is settled from this snapshot.
+            val journal = localState(identity).journal.associateBy { it.attemptId }
             for (attempt in state.history.occurrences.flatMap { it.attempts }) {
                 if (attempt.attemptId in liveAttemptIds) continue
                 when (attempt.status) {
@@ -277,9 +289,9 @@ class PaykitAllowanceExecutor @Inject constructor(
                         if (attempt.epoch == state.epoch) record(attempt.attemptId, PaymentOutcome.FAILED, identity)
                     }
                     PaymentExecutionStatus.SUBMITTED, PaymentExecutionStatus.UNKNOWN -> {
-                        val outcome = verifiedOutcome(attempt, identity)
+                        val entry = journal[attempt.attemptId]
+                        val outcome = entry?.let { journalOutcome(it) }
                             ?: PaymentOutcome.UNKNOWN.takeIf { attempt.status == PaymentExecutionStatus.SUBMITTED }
-                        val entry = localState(identity).journal.firstOrNull { it.attemptId == attempt.attemptId }
                         outcome?.let { record(attempt.attemptId, it, identity) }
                         // One that paid nothing gives the payee's list back, as a live failure does.
                         if (outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) {
@@ -296,7 +308,14 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     private suspend fun syncSettledJournal(attemptId: String, stage: Stage, identity: String) {
         val current = localState(identity).journal.firstOrNull { it.attemptId == attemptId } ?: return
-        if (current.stage == Stage.SUCCEEDED || current.stage == Stage.FAILED) return
+        if (current.stage == Stage.SUCCEEDED) return
+        if (current.stage == Stage.FAILED) {
+            // A failed automatic attempt still holding its list could not save the cleared claim; give it back now.
+            if (stage == Stage.FAILED && current.isAutomatic && current.paymentListVersion != null) {
+                releasePaymentList(current, identity)
+            }
+            return
+        }
         val before = applyJournalStage(attemptId, stage, identity) ?: return
         if (stage == Stage.FAILED && before.isAutomatic) releasePaymentList(before, identity)
     }
@@ -339,14 +358,15 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
     }
 
-    private suspend fun verifiedOutcome(attempt: PaymentAttemptRecord, identity: String): PaymentOutcome? =
-        when (attempt.status) {
-            PaymentExecutionStatus.PREPARED -> PaymentOutcome.FAILED
-            PaymentExecutionStatus.SUCCEEDED, PaymentExecutionStatus.FAILED -> null
-            PaymentExecutionStatus.SUBMITTED, PaymentExecutionStatus.UNKNOWN -> localState(identity).journal
-                .firstOrNull { it.attemptId == attempt.attemptId }
-                ?.let { journalOutcome(it) }
-        }
+    private suspend fun verifiedOutcome(
+        attempt: PaymentAttemptRecord,
+        journal: Map<String, JournalEntry>,
+    ): PaymentOutcome? = when (attempt.status) {
+        PaymentExecutionStatus.PREPARED -> PaymentOutcome.FAILED
+        PaymentExecutionStatus.SUCCEEDED, PaymentExecutionStatus.FAILED -> null
+        PaymentExecutionStatus.SUBMITTED, PaymentExecutionStatus.UNKNOWN -> journal[attempt.attemptId]
+            ?.let { journalOutcome(it) }
+    }
 
     private suspend fun journalOutcome(entry: JournalEntry): PaymentOutcome? = when (entry.stage) {
         // The journal is written before the node call, so no payment left this wallet.
@@ -384,11 +404,15 @@ class PaykitAllowanceExecutor @Inject constructor(
     private suspend fun applyJournalStage(attemptId: String, stage: Stage, identity: String): JournalEntry? {
         var before: JournalEntry? = null
         updateLocalState(identity) { state ->
-            before = state.journal.firstOrNull { it.attemptId == attemptId }
-            state.copy(journal = state.journal.map { if (it.attemptId == attemptId) it.copy(stage = stage) else it })
+            val current = state.journal.firstOrNull { it.attemptId == attemptId }
+            before = current
+            val updated = state.copy(
+                journal = state.journal.map { if (it.attemptId == attemptId) it.copy(stage = stage) else it },
+            )
+            if (current?.isPaidAutomaticallyBy(stage) == true) updated.withAutoPaid(current) else updated
         }
         val entry = before ?: return null
-        if (entry.isAutomatic && entry.stage != Stage.SUCCEEDED && stage == Stage.SUCCEEDED) {
+        if (entry.isPaidAutomaticallyBy(stage)) {
             val paymentId = entry.paymentHash?.lowercase() ?: entry.transactionId
             if (paymentId != null) {
                 _events.tryEmit(
@@ -594,13 +618,13 @@ class PaykitAllowanceExecutor @Inject constructor(
             throw it
         }
 
-        payer.consumePaymentList(request.counterparty, payment.context).onFailure {
+        payer.consumePaymentList(request.counterparty, payment.context, submitted.attemptId).onFailure {
             record(submitted.attemptId, PaymentOutcome.FAILED, identity)
             throw it
         }
         payer.prepareProof(request, endpointIdentifier, payment.appId, submitted.allowanceId).onFailure {
             payer.cancelProofPreparation(request)
-            failUnsent(request, payment, submitted.attemptId, identity)
+            failUnsent(submitted.attemptId, identity)
             throw it
         }
 
@@ -623,13 +647,13 @@ class PaykitAllowanceExecutor @Inject constructor(
             payment.appId,
         ).onFailure {
             payer.cancelProofPreparation(request)
-            failUnsent(request, payment, attemptId, identity)
+            failUnsent(attemptId, identity)
             throw it
         }
 
         runSuspendCatching { setStage(Stage.SENDING, attemptId, identity) }.onFailure {
             payer.discardLightningProof(paymentHash)
-            failUnsent(request, payment, attemptId, identity)
+            failUnsent(attemptId, identity)
             throw it
         }
         val sats = amountSats.takeUnless { payment.lightningInvoiceHasAmount }
@@ -644,7 +668,7 @@ class PaykitAllowanceExecutor @Inject constructor(
             // Only an error that proves the payment never left releases the reservation; anything else stays open,
             // and the node's payment event records its outcome.
             if (payer.failLightningPayment(paymentHash, it)) {
-                failUnsent(request, payment, attemptId, identity)
+                failUnsent(attemptId, identity)
                 throw it
             }
             Logger.warn("Left an allowance payment with an uncertain send result to the node", it, context = TAG)
@@ -810,6 +834,24 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
     }
 
+    /**
+     * Records a released manual on-chain send of [requestId] as failed: the release spends its coins back to the wallet
+     * and removes the evidence recovery reads, so the attempt would otherwise stay unknown and hold capacity. Throws
+     * when an outcome could not be recorded, so the release is not finished without it.
+     */
+    suspend fun onchainSendReleased(payerIdentity: String?, requestId: PaykitPaymentRequestId) {
+        val identity = activeIdentity?.takeIf { PubkyPublicKeyFormat.matches(it, payerIdentity) } ?: return
+        withContext(ioDispatcher) {
+            settleMutex.withLock {
+                val attempts = localState(identity).journal.filter {
+                    it.requestId == requestId && !it.isAutomatic && it.paymentHash == null &&
+                        it.stage in SETTLEABLE_STAGES
+                }
+                for (attempt in attempts) record(attempt.attemptId, PaymentOutcome.FAILED, identity)
+            }
+        }
+    }
+
     // endregion
 
     // region Helpers
@@ -849,35 +891,9 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
     }
 
-    private suspend fun failUnsent(
-        request: PaykitPaymentRequest,
-        payment: PrivatePaykitAllowancePayment,
-        attemptId: String,
-        identity: String,
-    ) {
-        // Released only by whichever of this and the node's failure event takes the journaled version first.
-        if (takePaymentListVersion(attemptId, identity) != null) {
-            payer.releasePaymentList(request.counterparty, payment.context)
-        }
+    private suspend fun failUnsent(attemptId: String, identity: String) {
+        releasePaymentList(attemptId, identity)
         record(attemptId, PaymentOutcome.FAILED, identity)
-    }
-
-    /**
-     * Clears and returns the payment list version an attempt consumed, so the list is released at most once: a second
-     * release could clear another payment's claim on the same version.
-     */
-    private suspend fun takePaymentListVersion(attemptId: String, identity: String): JournalEntry? {
-        var taken: JournalEntry? = null
-        updateLocalState(identity) { state ->
-            state.copy(
-                journal = state.journal.map {
-                    if (it.attemptId != attemptId) return@map it
-                    taken = it.takeIf { entry -> entry.paymentListVersion != null }
-                    it.copy(paymentListVersion = null, previousPaymentListVersion = null)
-                },
-            )
-        }
-        return taken
     }
 
     private suspend fun updateJournalEntry(
@@ -890,14 +906,27 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
     }
 
-    private suspend fun releasePaymentList(entry: JournalEntry, identity: String) {
-        val taken = takePaymentListVersion(entry.attemptId, identity) ?: return
+    private suspend fun releasePaymentList(entry: JournalEntry, identity: String) =
+        releasePaymentList(entry.attemptId, identity)
+
+    /**
+     * Gives back the payment list the attempt journaled, and clears the journaled version only once that succeeded, so
+     * a failed release or a restart leaves it for the next recovery. Releasing is owner-checked, so a repeated release
+     * never undoes another payment's claim.
+     */
+    private suspend fun releasePaymentList(attemptId: String, identity: String) {
+        val entry = localState(identity).journal.firstOrNull { it.attemptId == attemptId } ?: return
+        val version = entry.paymentListVersion ?: return
         val context = PrivatePaykitPaymentContext(
             paymentAppsByEndpoint = emptyMap(),
-            paymentListVersion = requireNotNull(taken.paymentListVersion),
-            previousPaymentListVersion = taken.previousPaymentListVersion,
+            paymentListVersion = version,
+            previousPaymentListVersion = entry.previousPaymentListVersion,
         )
-        payer.releasePaymentList(entry.requestId.counterparty, context)
+        payer.releasePaymentList(entry.requestId.counterparty, context, attemptId).onSuccess {
+            updateJournalEntry(attemptId, identity) {
+                it.copy(paymentListVersion = null, previousPaymentListVersion = null)
+            }
+        }
     }
 
     private suspend fun notifyLimitReached(request: PaykitPaymentRequest, identity: String) {
@@ -913,6 +942,19 @@ class PaykitAllowanceExecutor @Inject constructor(
 }
 
 private fun PaykitPaymentRequest.scope() = PaymentRequestScope(counterparty, paymentRequestId)
+
+private fun JournalEntry.isPaidAutomaticallyBy(stage: Stage): Boolean =
+    isAutomatic && this.stage != Stage.SUCCEEDED && stage == Stage.SUCCEEDED
+
+private fun PaykitAllowanceLocalState.withAutoPaid(entry: JournalEntry): PaykitAllowanceLocalState {
+    // Allowance ids are unique per contact only, so payments count toward the contact's own allowance.
+    val key = PaykitAllowance.key(entry.requestId.counterparty, entry.allowanceId)
+    val total = (autoPaidSatsByAllowance[key] ?: 0uL).safe() + entry.amountSats.safe()
+    return copy(
+        autoPaidSatsByAllowance = autoPaidSatsByAllowance + (key to total),
+        autoPaidRequestIds = autoPaidRequestIds + entry.requestId,
+    )
+}
 
 /**
  * Allowances pay only bitcoin-denominated requests; null for any other request. A conversion offered for other rails,

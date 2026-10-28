@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -77,6 +78,7 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -103,7 +105,7 @@ fun RowScope.UsdtWalletBalance(onClick: () -> Unit, viewModel: UsdtViewModel = h
             if (settings.hideBalance) {
                 UiConstants.HIDE_BALANCE_SHORT
             } else {
-                wallet.balance?.let { "$ " + usdtOverviewAmount(it) } ?: "—"
+                (wallet.balance ?: wallet.cachedBalance)?.let { "$ " + usdtOverviewAmount(it) } ?: "—"
             },
             style = UsdtDetailStyles.HistoryTitle
         )
@@ -326,7 +328,7 @@ internal fun UsdtWalletContent(
     val allowSwipe by settings?.enableSwipeToHideBalance?.collectAsStateWithLifecycle() ?: remember {
         mutableStateOf(false)
     }
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(Colors.Black).blockPointerInputPassthrough()) {
         UsdtCoinIllustration(
             modifier = Modifier.align(Alignment.TopEnd)
                 .offset(x = 81.dp, y = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 4.dp)
@@ -446,13 +448,18 @@ internal fun UsdtRefreshEffect(
 }
 
 @Composable
-internal fun UsdtAuthentication(useBiometrics: Boolean, onCancel: () -> Unit, onVerified: () -> Unit) {
+internal fun UsdtAuthentication(
+    useBiometrics: Boolean,
+    onCancel: () -> Unit,
+    onVerified: () -> Unit,
+    @StringRes pinDescriptionRes: Int = R.string.security__pin_send,
+) {
     val supported = rememberBiometricAuthSupported()
     var fallbackToPin by remember { mutableStateOf(false) }
     if (useBiometrics && supported && !fallbackToPin) {
         BiometricsView(onSuccess = onVerified, onFailure = { fallbackToPin = true })
     } else {
-        SendPinCheckScreen(onBack = onCancel, onSuccess = onVerified)
+        SendPinCheckScreen(onBack = onCancel, onSuccess = onVerified, descriptionRes = pinDescriptionRes)
     }
 }
 

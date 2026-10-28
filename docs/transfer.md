@@ -4,7 +4,7 @@
 
 **Transfer Directions:**
 - **Transfers to Spending** = Moving from savings (onchain) → spending (lightning)
-  - Channel orders: Pay for channel to LSP
+  - Channel orders: legacy Blocktank orders paid before Blocktank stopped selling channels
   - Manual channels: Fund channel to non-LSP node
 - **Transfers to Savings** = Moving from spending (lightning) → savings (onchain)
   - Channel closes: Funds swept from spending to savings
@@ -36,7 +36,7 @@ When a transfer is settled:
 ## Transfer Types
 
 ### TransferType Enum
-- `TO_SPENDING`: LSP channel purchase
+- `TO_SPENDING`: legacy Blocktank channel order (no longer created)
 - `MANUAL_SETUP`: Manual channel open
 - `TO_SAVINGS`: Generic channel close
 - `COOP_CLOSE`: Cooperative channel close
@@ -71,44 +71,12 @@ See: `TransferEntity.kt`
 
 ## Lifecycle Flows
 
-### LSP Channel Purchase (TO_SPENDING)
+### Legacy Blocktank Order (TO_SPENDING)
 
-**Phase 1: Payment**
-```
-User confirms amount
-    ↓
-Create Blocktank order
-    ↓
-Send onchain payment to LSP
-    ↓
-CREATE TRANSFER:
-  id = UUID
-  type = TO_SPENDING
-  amountSats = order.clientBalanceSat
-  channelId = null (not available yet)
-  fundingTxId = null
-  lspOrderId = order.id
-  isSettled = false
-```
-
-**Phase 2: Channel Appears**
-```
-Poll order status OR receive ChannelPending event
-    ↓
-Channel appears in LDK with fundingTxo
-    ↓
-Just-in-time resolution via lspOrderId:
-  order.channel.fundingTx.id → match LDK channel.fundingTxo.txid
-```
-
-**Phase 3: Channel Ready**
-```
-ChannelReady event OR isChannelReady becomes true
-    ↓
-SETTLE TRANSFER:
-  isSettled = true
-  settledAt = now
-```
+Blocktank no longer sells channels, so the app creates no new `TO_SPENDING` record. A record from before the sunset
+settles in `syncTransferStates()`:
+- its channel becomes ready, or is closed (in LDK's closed channels or the order's channel state);
+- its order is known and has no channel, since Blocktank will not open one any more.
 
 ### Manual Channel Open (MANUAL_SETUP)
 
@@ -209,7 +177,6 @@ For manual transfers:
 See: `TransferRepo.resolveChannelIdForTransfer()`
 
 ### Creation Points
-- TO_SPENDING: When payment sent (`TransferViewModel.onTransferToSpendingConfirm`)
 - MANUAL_SETUP: When ChannelPending event received (`ExternalNodeViewModel.onConfirm`)
 - COOP_CLOSE: When close initiated (`TransferViewModel.closeSelectedChannels`)
 - FORCE_CLOSE: When force close initiated (`TransferViewModel.forceTransfer`)
@@ -219,7 +186,7 @@ See: `TransferRepo.resolveChannelIdForTransfer()`
 - Just-in-time channelId resolution via `resolveChannelIdForTransfer()`
 
 ### Settlement Conditions
-- toSpending (TO_SPENDING/MANUAL_SETUP): When channel.isChannelReady == true
+- toSpending (TO_SPENDING/MANUAL_SETUP): When channel.isChannelReady == true; a legacy order without a channel also settles
 - toSavings (TO_SAVINGS/COOP_CLOSE/FORCE_CLOSE): When balance.channelId not in lightning_balances
 
 ### Event-Driven Updates
@@ -248,10 +215,6 @@ See: `ActivityRepo.kt` for metadata application logic
 Transfer states are used to adjust displayed balances to match UX requirements.
 
 **toSpending transfers (savings → spending):**
-- **Channel orders** (`lspOrderId` exists):
-  - Payment SENT to LSP from onchain wallet
-  - LDK's `totalOnchainBalanceSats` already reflects sent payment
-  - No adjustment needed - balance already correct
 - **Manual channels** (`channelId` exists):
   - Funding tx SENT (UTXO spent from wallet)
   - LDK's `totalOnchainBalanceSats` already reflects spent UTXO
@@ -274,11 +237,10 @@ See: `DeriveBalanceStateUseCase.kt`
 
 ## Edge Cases & Failure Handling
 
-### LSP Order Expires
+### Legacy Order Never Opens a Channel
 ```
-Detection: Order state == EXPIRED
-Action: Mark transfer as settled (it failed, no longer affects balance)
-Consider: Add failureReason field to track this
+Detection: the order is known and has no channel (expired, or paid but never opened)
+Action: Mark transfer as settled (no channel will come, so it no longer affects balance)
 ```
 
 ### App Restarts During Transfer
@@ -326,13 +288,6 @@ Transfers are serialized to JSON and included in backup. Restore deserializes an
 - Automatic cleanup via periodic job
 
 ## Testing Scenarios
-
-### TO_SPENDING Happy Path
-1. Create order, send payment
-2. Verify transfer created with lspOrderId
-3. Wait for channel to appear
-4. Wait for ChannelReady
-5. Verify transfer settled
 
 ### MANUAL_SETUP Happy Path
 1. Open channel

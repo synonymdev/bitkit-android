@@ -1,0 +1,25 @@
+<journey name="connection recovery during required wallet restore">
+  <description>
+    Use a disposable dev wallet and a controlled recovery fixture with an acknowledged complete wallet
+    backup. Prepare a failing Electrum endpoint and a reachable replacement, plus a backup SETTINGS
+    record containing the old endpoint. Required WALLET and USDT recovery must remain pending until
+    their imports succeed. Never reset an existing wallet or use live funds. The installed Compose
+    cases cover the editor and admission UI; repository tests cover persistence, cancellation and
+    concurrent restore. They do not execute this complete authenticated journey. iOS restores required backup state
+    before starting a rebuilt node; Android can need a running node during restoration. Record each
+    platform’s app evidence with its tested revision and fixture limits; a pass on one platform does
+    not establish this journey on the other.
+  </description>
+  <actions>
+    <action>Restore the fixture wallet and verify failed node startup offers Connection Settings without access to ordinary wallet actions</action>
+    <action>Open Connection Settings and verify the screen tagged WalletConnectionRecovery is visible without Proceed Without Backup</action>
+    <action>Enter the reachable Electrum endpoint in RecoveryElectrumInput and tap RecoveryElectrumSave; verify RecoverySaved appears without automatically retrying restoration</action>
+    <action>Change and save RGS independently; verify a failed probe shows RecoveryError and retains the last acknowledged correction</action>
+    <action>Return to the restore error and tap Try Again; verify the node is rebuilt using the saved correction before required wallet restoration resumes</action>
+    <action>While required recovery remains unavailable, background and foreground three times and tap Try Again; verify the correction and gates remain and no already-running node is rebuilt solely because the unchanged correction is retained</action>
+    <action>Keep required recovery unavailable and restart the app; verify the correction is retained and spending remains gated</action>
+    <action>Allow restoration of the old SETTINGS backup; verify only the explicitly corrected endpoints override that backup and unrelated preferences restore normally</action>
+    <action>Complete required WALLET and USDT recovery; verify ordinary wallet actions become available only after both acknowledgements</action>
+    <action>Repeat with only optional profile enrichment unavailable after required recovery; verify ordinary wallet actions remain available and no failed-node-startup or restore-retry screen appears</action>
+  </actions>
+</journey>

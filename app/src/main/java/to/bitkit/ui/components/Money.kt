@@ -12,6 +12,8 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.BITCOIN_SYMBOL
@@ -59,6 +61,8 @@ fun MoneyCell(
     prefix: String = "",
     showBitcoinSymbol: Boolean = true,
     fiatReplacement: String? = null,
+    maxAmountLines: Int = Int.MAX_VALUE,
+    statusModifier: Modifier = Modifier,
 ) {
     val currencies = LocalCurrencies.current
     val primaryUnit = currencies.primaryDisplay
@@ -76,7 +80,9 @@ fun MoneyCell(
     )
     val primaryIsReplaced = fiatReplacement != null && primaryUnit == PrimaryDisplay.FIAT
     val primary = if (primaryIsReplaced) fiatReplacement else primaryMoney
-    val secondary = if (fiatReplacement != null && secondaryUnit == PrimaryDisplay.FIAT) {
+    val secondaryIsReplaced = fiatReplacement != null && secondaryUnit == PrimaryDisplay.FIAT
+    val amountOverflow = if (maxAmountLines == Int.MAX_VALUE) TextOverflow.Clip else TextOverflow.Ellipsis
+    val secondary = if (secondaryIsReplaced) {
         fiatReplacement
     } else {
         secondaryMoney
@@ -88,16 +94,31 @@ fun MoneyCell(
         modifier = modifier,
     ) {
         primary?.let { text ->
-            BodyMSB(
-                text = (if (primaryIsReplaced) text else "$prefix$text").withAccent(accentColor = Colors.White64),
-                modifier = Modifier.testTag("MoneyPrimary"),
-            )
+            if (primaryIsReplaced) {
+                CaptionB(
+                    text = text,
+                    color = Colors.White64,
+                    textAlign = TextAlign.End,
+                    modifier = statusModifier.testTag("MoneyPrimary")
+                )
+            } else {
+                BodyMSB(
+                    text = "$prefix$text".withAccent(accentColor = Colors.White64),
+                    textAlign = TextAlign.End,
+                    maxLines = maxAmountLines,
+                    overflow = amountOverflow,
+                    modifier = Modifier.testTag("MoneyPrimary")
+                )
+            }
         }
         secondary?.let { text ->
             CaptionB(
                 text = text.withAccent(accentColor = Colors.White64),
                 color = Colors.White64,
-                modifier = Modifier.testTag("MoneySecondary"),
+                textAlign = TextAlign.End,
+                maxLines = if (secondaryIsReplaced) Int.MAX_VALUE else maxAmountLines,
+                overflow = amountOverflow,
+                modifier = (if (secondaryIsReplaced) statusModifier else Modifier).testTag("MoneySecondary")
             )
         }
     }

@@ -9,6 +9,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
@@ -509,33 +512,42 @@ internal fun paymentRequestStatus(
             ?: stringResource(R.string.wallet__payment_request_pending)
     }
 
-    return paymentRequestLifecycleStatus(request, isPending)
+    return stringResource(paymentRequestLifecycleStatusRes(request, isPending))
 }
 
-@Composable
-private fun paymentRequestLifecycleStatus(request: PaykitPaymentRequest, isPending: Boolean): String {
-    if (request.lifecycleState == PaymentRequestLifecycleState.PROPOSED && request.isExpired(Clock.System.now())) {
-        return stringResource(R.string.wallet__payment_request_status_expired)
+@StringRes
+internal fun paymentRequestLifecycleStatusRes(request: PaykitPaymentRequest, isPending: Boolean): Int {
+    val canExpire = request.lifecycleState == PaymentRequestLifecycleState.PROPOSED ||
+        request.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING
+    if (canExpire && request.isExpired(Clock.System.now())) {
+        return R.string.wallet__payment_request_status_expired
     }
 
     return when (request.lifecycleState) {
-        PaymentRequestLifecycleState.PROPOSED -> stringResource(proposedPaymentRequestStatusRes(request, isPending))
+        PaymentRequestLifecycleState.PROPOSED -> proposedPaymentRequestStatusRes(request, isPending)
         PaymentRequestLifecycleState.PROPOSAL_EXPIRED ->
-            stringResource(R.string.wallet__payment_request_status_expired)
+            R.string.wallet__payment_request_status_expired
         PaymentRequestLifecycleState.ACCEPTED ->
-            stringResource(R.string.wallet__payment_request_pending)
+            R.string.wallet__payment_request_pending
         PaymentRequestLifecycleState.REJECTED ->
-            stringResource(R.string.wallet__payment_request_status_rejected)
+            R.string.wallet__payment_request_status_rejected
         PaymentRequestLifecycleState.CANCELED ->
-            stringResource(R.string.wallet__payment_request_status_canceled)
+            R.string.wallet__payment_request_status_canceled
         PaymentRequestLifecycleState.PROOF_SUBMITTED ->
-            stringResource(R.string.wallet__payment_request_status_proof_submitted)
+            R.string.wallet__payment_request_status_proof_submitted
         PaymentRequestLifecycleState.RECOVERY_REQUIRED ->
-            stringResource(R.string.wallet__payment_request_status_action_required)
+            R.string.wallet__payment_request_status_action_required
+        PaymentRequestLifecycleState.ACTIVE_RECURRING ->
+            if (request.billingPeriod != null &&
+                request.direction == PaykitPaymentRequestDirection.Incoming && isPending
+            ) {
+                R.string.wallet__payment_request_waiting
+            } else {
+                R.string.wallet__payment_request_status_unavailable
+            }
         PaymentRequestLifecycleState.INVALID_CONFLICT,
-        PaymentRequestLifecycleState.ACTIVE_RECURRING,
         PaymentRequestLifecycleState.UNKNOWN,
-        -> stringResource(R.string.wallet__payment_request_status_unavailable)
+        -> R.string.wallet__payment_request_status_unavailable
     }
 }
 
@@ -609,34 +621,42 @@ internal fun PaymentRequestCard(
             .clickableAlpha(enabled = onClick != null) { onClick?.invoke() }
             .testTag("PaymentRequestRow-${request.paymentRequestId}")
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(16.dp),
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(16.dp)
         ) {
-            if (request.showsPaymentRailIcon(isOutgoingPayment)) {
-                PaymentRailIcon(request = request, paymentWasSent = request.paymentWasSent(isOutgoingPayment))
-            } else {
-                PubkyContactAvatar(profile = displayContact, size = 40.dp)
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                BodyMSB(
-                    text = title ?: displayContact.name,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                BodyS(
-                    text = subtitle,
-                    color = Colors.White64,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f).width(IntrinsicSize.Max).align(Alignment.CenterVertically)
+            ) {
+                if (request.showsPaymentRailIcon(isOutgoingPayment)) {
+                    PaymentRailIcon(request = request, paymentWasSent = request.paymentWasSent(isOutgoingPayment))
+                } else {
+                    PubkyContactAvatar(profile = displayContact, size = 40.dp)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    BodyMSB(
+                        text = title ?: displayContact.name,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    BodyS(
+                        text = subtitle,
+                        color = Colors.White64,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             PaykitAmountCell(
                 amount = request.amount,
                 prefix = amountPrefix,
                 showBitcoinSymbol = showBitcoinSymbol,
                 status = paymentRequestAmountStatus(request, receipt, fiatStatus),
+                maxAmountLines = 1,
+                statusModifier = Modifier.width(IntrinsicSize.Max),
             )
         }
         if (onPay != null || onDismiss != null) {
