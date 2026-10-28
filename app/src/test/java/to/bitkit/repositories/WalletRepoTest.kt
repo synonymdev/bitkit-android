@@ -121,7 +121,6 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() = runBlocking {
-        whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(coreService.decode(INVOICE)).thenReturn(Scanner.Lightning(lightningInvoice(INVOICE)))
         whenever(coreService.decode(INVOICE_REPLACEMENT))
             .thenReturn(Scanner.Lightning(lightningInvoice(INVOICE_REPLACEMENT)))
@@ -958,17 +957,24 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `opening refresh delayed by geo cannot replace a newer invoice edit`() = test {
+    fun `opening refresh delayed by its invoice cannot replace a newer invoice edit`() = test {
         sut.loadFromCache()
         whenever(coreService.isAddressUsed(any())).thenReturn(false)
         whenever(lightningRepo.getChannels()).thenReturn(channels)
-        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
-            .thenReturn(Result.success(INVOICE), Result.success(INVOICE_REPLACEMENT))
-        val releaseGeo = CompletableDeferred<Unit>()
-        whenever(lightningRepo.updateGeoBlockState()).doSuspendableAnswer { releaseGeo.await() }
+        val releaseFirstInvoice = CompletableDeferred<Unit>()
+        var invoiceCalls = 0
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            invoiceCalls += 1
+            if (invoiceCalls == 1) {
+                releaseFirstInvoice.await()
+                Result.success(INVOICE)
+            } else {
+                Result.success(INVOICE_REPLACEMENT)
+            }
+        }
         val earlier = launch { sut.refreshReceiveState() }
         val newer = launch { sut.updateBip21Invoice(SATS, "latest edit") }
-        releaseGeo.complete(Unit)
+        releaseFirstInvoice.complete(Unit)
         earlier.join()
         newer.join()
 
@@ -1059,15 +1065,22 @@ class WalletRepoTest : BaseUnitTest() {
         sut.loadFromCache()
         whenever(coreService.isAddressUsed(any())).thenReturn(false)
         whenever(lightningRepo.getChannels()).thenReturn(channels)
-        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
-            .thenReturn(Result.success(INVOICE), Result.success(INVOICE_REPLACEMENT))
-        val releaseGeo = CompletableDeferred<Unit>()
-        whenever(lightningRepo.updateGeoBlockState()).doSuspendableAnswer { releaseGeo.await() }
+        val releaseFirstInvoice = CompletableDeferred<Unit>()
+        var invoiceCalls = 0
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+            invoiceCalls += 1
+            if (invoiceCalls == 1) {
+                releaseFirstInvoice.await()
+                Result.success(INVOICE)
+            } else {
+                Result.success(INVOICE_REPLACEMENT)
+            }
+        }
         val opening = launch { sut.refreshReceiveState() }
         val queued = launch { sut.updateBip21Invoice(SATS, "requested") }
         sut.setBip21Description("typed later")
         assertTrue(sut.walletState.value.isReceiveInvoiceUpdating)
-        releaseGeo.complete(Unit)
+        releaseFirstInvoice.complete(Unit)
         opening.join()
         queued.join()
 

@@ -142,8 +142,8 @@ private fun Content(
 
             NotificationPreview(
                 enabled = hasPermission,
-                title = stringResource(R.string.notification__received__title),
-                description = "₿ 21 000 ($21.00)",
+                title = stringResource(R.string.subscriptions__payment_due_title),
+                description = stringResource(R.string.subscriptions__payment_due_description),
                 modifier = Modifier.fillMaxWidth()
             )
         }

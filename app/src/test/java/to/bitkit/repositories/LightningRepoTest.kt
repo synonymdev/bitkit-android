@@ -1,13 +1,11 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
-import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.BlocktankException
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtInfoOnchain
-import com.synonym.bitkitcore.ILspNode
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlException
 import com.synonym.bitkitcore.LnurlPayData
@@ -87,7 +85,6 @@ import to.bitkit.services.ElectrumProbeError
 import to.bitkit.services.ElectrumProbeService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
-import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
@@ -128,8 +125,6 @@ class LightningRepoTest : BaseUnitTest() {
     private val lightningService = mock<LightningService>()
     private val settingsStore = mock<SettingsStore>()
     private val coreService = mock<CoreService>()
-    private val lspNotificationsService = mock<LspNotificationsService>()
-    private val firebaseMessaging = mock<FirebaseMessaging>()
     private val keychain = mock<Keychain>()
     private val cacheStore = mock<CacheStore>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
@@ -147,11 +142,10 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() = runBlocking {
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever { electrumProbeService.probe(any(), any()) }.thenReturn(Result.success(Unit))
-        whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
@@ -161,8 +155,6 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService = lightningService,
             settingsStore = settingsStore,
             coreService = coreService,
-            lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging,
             keychain = keychain,
             lnurlService = lnurlService,
             cacheStore = cacheStore,
@@ -620,7 +612,7 @@ class LightningRepoTest : BaseUnitTest() {
             nodeRunning = true
             Unit
         }
-        whenever(coreService.isGeoBlocked()).doSuspendableAnswer { awaitCancellation() }
+        whenever(lightningService.disconnectIdlePeers()).doSuspendableAnswer { awaitCancellation() }
         var result: Result<Unit>? = null
 
         val job = launch { result = sut.start() }
@@ -635,7 +627,7 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `start restores the initial state when cancelled during node setup`() = test {
         stubNodeStatus { false }
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()))
             .doSuspendableAnswer { awaitCancellation() }
         var result: Result<Unit>? = null
 
@@ -649,28 +641,6 @@ class LightningRepoTest : BaseUnitTest() {
         verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
     }
 
-    @Test
-    fun `start restores the initial state when cancelled while trusted peers are fetched`() = test {
-        stubNodeStatus { false }
-        val blocktank = coreService.blocktank
-        whenever(blocktank.info(any())).doSuspendableAnswer { awaitCancellation() }
-        var result: Result<Unit>? = null
-
-        val job = launch { result = sut.start(shouldRetry = false) }
-        runCurrent()
-        job.cancelAndJoin()
-        testScheduler.advanceUntilIdle()
-
-        assertNull(result)
-        assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
-        // The cancellation must unwind out of the trusted peers fetch instead of starting a node
-        verifyBlocking(lightningService, never()) {
-            setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
-        }
-        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
-    }
-
-    // Regression #845: a node started by another path between the status check and start must not latch an error
     @Test
     fun `start adopts the running node when start throws AlreadyRunning`() = test {
         var nodeRunning = false
@@ -986,7 +956,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verifyBlocking(lightningService, times(2)) {
-            setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), eq(migration))
+            setup(any(), anyOrNull(), anyOrNull(), eq(migration))
         }
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
@@ -1049,7 +1019,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
     }
 
@@ -1479,7 +1449,7 @@ class LightningRepoTest : BaseUnitTest() {
         sut.stop()
         whenever(lightningService.nodeId).thenReturn(null)
         whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenThrow(IllegalStateException("electrum server unreachable"))
 
         assertTrue(sut.start(shouldRetry = false).isFailure)
@@ -1744,18 +1714,17 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `connectToTrustedPeers should fail when node is not running`() = test {
-        val result = sut.connectToTrustedPeers()
+    fun `disconnectIdlePeers should fail when node is not running`() = test {
+        val result = sut.disconnectIdlePeers()
         assertTrue(result.isFailure)
     }
 
     @Test
-    fun `connectToTrustedPeers should succeed when node is running`() = test {
+    fun `start disconnects idle peers instead of connecting to fixed peers`() = test {
         startNodeForTesting()
-        whenever(lightningService.connectToTrustedPeers()).thenReturn(Unit)
 
-        val result = sut.connectToTrustedPeers()
-        assertTrue(result.isSuccess)
+        verifyBlocking(lightningService) { disconnectIdlePeers() }
+        verifyBlocking(lightningService, never()) { connectPeer(any()) }
     }
 
     @Test
@@ -2066,8 +2035,6 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService = lightningService,
             settingsStore = settingsStore,
             coreService = coreService,
-            lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging,
             keychain = keychain,
             lnurlService = lnurlService,
             cacheStore = cacheStore,
@@ -2496,8 +2463,8 @@ class LightningRepoTest : BaseUnitTest() {
         val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
         sut = LightningRepo(
             bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
-            coreService = coreService, lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging, keychain = keychain, lnurlService = lnurlService,
+            coreService = coreService,
+            keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
@@ -2566,8 +2533,8 @@ class LightningRepoTest : BaseUnitTest() {
         val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
         sut = LightningRepo(
             bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
-            coreService = coreService, lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging, keychain = keychain, lnurlService = lnurlService,
+            coreService = coreService,
+            keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
@@ -2647,8 +2614,8 @@ class LightningRepoTest : BaseUnitTest() {
         }.whenever(store).broadcastPreparedCandidate(any(), any(), any(), any())
         sut = LightningRepo(
             bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
-            coreService = coreService, lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging, keychain = keychain, lnurlService = lnurlService,
+            coreService = coreService,
+            keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
@@ -2738,7 +2705,7 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `accepted transfer acknowledgement waits for original durable local activity`() = test {
+    fun `accepted Blocktank funding finishes through the ordinary follow-up once its activity is durable`() = test {
         val txid = "ab".repeat(32)
         val attempt = pendingSendAttempt().copy(
             isTransfer = true,
@@ -2751,10 +2718,10 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
         whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
 
-        assertTrue(runCatching { sut.completeAcceptedTransferFollowup("order-1", txid) }.isFailure)
+        sut.completeAcceptedOrdinaryFollowup(txid)
         verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
         whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
-        sut.completeAcceptedTransferFollowup("order-1", txid)
+        sut.completeAcceptedOrdinaryFollowup(txid)
         verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
         verify(lightningService, never()).prepareOnchainSend(
             any(),
@@ -2857,12 +2824,6 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `registerForNotifications should fail when node is not running`() = test {
-        val result = sut.registerForNotifications()
-        assertTrue(result.isFailure)
-    }
-
-    @Test
     fun `restartWithElectrumServer should setup with new server`() = test {
         startNodeForTesting()
         val customServerUrl = "ssl://test.example.com:50002"
@@ -2875,7 +2836,7 @@ class LightningRepoTest : BaseUnitTest() {
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
         inOrder.verify(lightningService)
-            .setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull(), anyOrNull())
+            .setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
@@ -2916,12 +2877,12 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
         // The switch to the new server fails.
-        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()))
             .thenThrow(RuntimeException("start failed"))
         // The background recovery (previous config) blocks until released.
         val recoveryStarted = CompletableDeferred<Unit>()
         val releaseRecovery = CompletableDeferred<Unit>()
-        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull()) }
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
             .doSuspendableAnswer {
                 recoveryStarted.complete(Unit)
                 releaseRecovery.await()
@@ -2952,7 +2913,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(probeError, result.exceptionOrNull())
         verify(lightningService, never()).stop()
         verify(lightningService, never())
-            .setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull())
+            .setup(any(), eq(badUrl), anyOrNull(), anyOrNull())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
@@ -2969,7 +2930,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull() is NodeConfigNotAppliedError)
         verify(lightningService, never())
-            .setup(any(), eq(newServerUrl), anyOrNull(), anyOrNull(), anyOrNull())
+            .setup(any(), eq(newServerUrl), anyOrNull(), anyOrNull())
     }
 
     // Two-request barrier: a change issued while the background recovery of a previous failed
@@ -2984,12 +2945,12 @@ class LightningRepoTest : BaseUnitTest() {
         val nextUrl = "ssl://next.example.com:50002"
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
-        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()))
             .thenThrow(RuntimeException("start failed"))
         // Hold the background recovery mid-flight so the second change is issued while it runs.
         val recoveryStarted = CompletableDeferred<Unit>()
         val releaseRecovery = CompletableDeferred<Unit>()
-        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull()) }
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
             .doSuspendableAnswer {
                 recoveryStarted.complete(Unit)
                 releaseRecovery.await()
@@ -3007,7 +2968,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         // Success must mean the node was actually rebuilt with the requested server.
         assertTrue(result.isSuccess)
-        verify(lightningService).setup(any(), eq(nextUrl), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(lightningService).setup(any(), eq(nextUrl), anyOrNull(), anyOrNull())
     }
 
     // Regression: the caller is a route-scoped ViewModel, so leaving the screen mid-change cancels
@@ -3021,7 +2982,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.stop()).thenReturn(Unit)
         // Hold the rebuild open so the caller can be cancelled while it is in flight.
         val rebuildStarted = CompletableDeferred<Unit>()
-        whenever { lightningService.setup(any(), eq(newUrl), anyOrNull(), anyOrNull(), anyOrNull()) }
+        whenever { lightningService.setup(any(), eq(newUrl), anyOrNull(), anyOrNull()) }
             .doSuspendableAnswer {
                 rebuildStarted.complete(Unit)
                 awaitCancellation()
@@ -3042,7 +3003,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(rethrown) // structured concurrency preserved
         // The detached recovery rebuilt with the previous config and the node is back up.
-        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull())
+        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
         // A cancelled change must never persist the server it failed to apply.
         verifyBlocking(settingsStore, never()) { update(any()) }
@@ -3055,7 +3016,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
         val rebuildStarted = CompletableDeferred<Unit>()
-        whenever { lightningService.setup(any(), anyOrNull(), eq(newRgsUrl), anyOrNull(), anyOrNull()) }
+        whenever { lightningService.setup(any(), anyOrNull(), eq(newRgsUrl), anyOrNull()) }
             .doSuspendableAnswer {
                 rebuildStarted.complete(Unit)
                 awaitCancellation()
@@ -3075,7 +3036,7 @@ class LightningRepoTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
 
         assertTrue(rethrown)
-        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull())
+        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
         verifyBlocking(settingsStore, never()) { update(any()) }
     }
@@ -3092,7 +3053,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), isNull(), eq(customRgsUrl), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService).setup(any(), isNull(), eq(customRgsUrl), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
@@ -3113,7 +3074,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
         whenever(
-            lightningService.setup(any(), isNull(), eq("https://bad.rgs/snapshot"), anyOrNull(), anyOrNull()),
+            lightningService.setup(any(), isNull(), eq("https://bad.rgs/snapshot"), anyOrNull()),
         ).thenThrow(RuntimeException("Failed to start node"))
 
         val result = sut.restartWithRgsServer("https://bad.rgs/snapshot")
@@ -3129,8 +3090,6 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService = lightningService,
             settingsStore = settingsStore,
             coreService = coreService,
-            lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging,
             keychain = keychain,
             lnurlService = lnurlService,
             cacheStore = cacheStore,
@@ -3373,63 +3332,6 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertEquals(serviceError, result.exceptionOrNull())
-    }
-
-    @Test
-    fun `start should load trusted peers from blocktank info`() = test {
-        sut.setInitNodeLifecycleState()
-        whenever(lightningService.node).thenReturn(null)
-
-        val blocktank = mock<BlocktankService>()
-        whenever(coreService.blocktank).thenReturn(blocktank)
-
-        val mockNodes = listOf(
-            ILspNode(
-                alias = "LSP1",
-                pubkey = "node1pubkey",
-                connectionStrings = listOf("node1pubkey@node1.example.com:9735"),
-                readonly = null,
-            ),
-            ILspNode(
-                alias = "LSP2",
-                pubkey = "node2pubkey",
-                connectionStrings = listOf("node2pubkey@node2.example.com:9735"),
-                readonly = null,
-            ),
-        )
-        val mockInfo = mock<IBtInfo> { on { nodes } doReturn mockNodes }
-        whenever(blocktank.info(refresh = false)).thenReturn(mockInfo)
-
-        val result = sut.start()
-
-        assertTrue(result.isSuccess)
-        verify(lightningService).setup(
-            any(),
-            anyOrNull(),
-            anyOrNull(),
-            argThat { peers ->
-                peers?.size == 2 &&
-                    peers.any { it.nodeId == "node1pubkey" && it.address == "node1.example.com:9735" } &&
-                    peers.any { it.nodeId == "node2pubkey" && it.address == "node2.example.com:9735" }
-            },
-            anyOrNull(),
-        )
-    }
-
-    @Test
-    fun `start should pass null trusted peers when blocktank returns null`() = test {
-        sut.setInitNodeLifecycleState()
-        whenever(lightningService.node).thenReturn(null)
-
-        val blocktank = mock<BlocktankService>()
-        whenever(coreService.blocktank).thenReturn(blocktank)
-        whenever(blocktank.info(refresh = false)).thenReturn(null)
-        whenever(blocktank.info(refresh = true)).thenReturn(null)
-
-        val result = sut.start()
-
-        assertTrue(result.isSuccess)
-        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull())
     }
 
     @Test

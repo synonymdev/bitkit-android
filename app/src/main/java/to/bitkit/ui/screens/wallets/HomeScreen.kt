@@ -167,8 +167,6 @@ import to.bitkit.ui.navToActivityDetail
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToProfile
-import to.bitkit.ui.navigateToTransferFunding
-import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
@@ -240,7 +238,6 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
     val profileNavigationScope = rememberCoroutineScope()
@@ -316,13 +313,7 @@ fun HomeScreen(
                     appViewModel.showSheet(Sheet.Hardware())
                 }
 
-                Suggestion.LIGHTNING -> {
-                    if (!hasSeenTransferIntro) {
-                        rootNavController.navigateToTransferIntro()
-                    } else {
-                        rootNavController.navigateToTransferFunding()
-                    }
-                }
+                Suggestion.LIGHTNING -> appViewModel.showSheet(Sheet.TransferUnavailable)
 
                 Suggestion.BACK_UP -> {
                     appViewModel.showSheet(Sheet.Backup(BackupRoute.Intro))
@@ -400,7 +391,6 @@ fun HomeScreen(
         onPageChanged = homeViewModel::onPageChanged,
         onDismissWidgetsOnboardingHint = homeViewModel::dismissWidgetsOnboardingHint,
         onNavigateToAppStatus = { rootNavController.navigate(Routes.AppStatus) },
-        onNavigateToSettingUp = { rootNavController.navigate(Routes.SettingUp) },
         onNavigateToAllActivity = { rootNavController.navigateToAllActivity(activityListViewModel::clearFilters) },
         onNavigateToActivityItem = { rootNavController.navToActivityDetail(it) },
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
@@ -441,7 +431,6 @@ private fun Content(
     onPageChanged: (Int) -> Unit = {},
     onDismissWidgetsOnboardingHint: () -> Unit = {},
     onNavigateToAppStatus: () -> Unit = {},
-    onNavigateToSettingUp: () -> Unit = {},
     onNavigateToAllActivity: () -> Unit = {},
     onNavigateToActivityItem: (Activity) -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
@@ -579,7 +568,6 @@ private fun Content(
                     balances = balances,
                     isSmallScreen = isSmallScreen,
                     onRefresh = onRefresh,
-                    onNavigateToSettingUp = onNavigateToSettingUp,
                     onNavigateToAllActivity = onNavigateToAllActivity,
                     onNavigateToActivityItem = onNavigateToActivityItem,
                     onNavigateToSavings = onNavigateToSavings,
@@ -631,7 +619,6 @@ private fun WalletPage(
     balances: BalanceState,
     isSmallScreen: Boolean,
     onRefresh: () -> Unit,
-    onNavigateToSettingUp: () -> Unit,
     onNavigateToAllActivity: () -> Unit,
     onNavigateToActivityItem: (Activity) -> Unit,
     onNavigateToSavings: () -> Unit,
@@ -720,12 +707,6 @@ private fun WalletPage(
                                     gradientColor = banner.type.color,
                                     title = banner.title,
                                     icon = banner.type.icon,
-                                    onClick = {
-                                        when (banner.type) {
-                                            ActivityBannerType.SPENDING -> onNavigateToSettingUp()
-                                            ActivityBannerType.SAVINGS -> Unit
-                                        }
-                                    },
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
