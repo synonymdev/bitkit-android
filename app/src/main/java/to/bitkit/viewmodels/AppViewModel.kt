@@ -6912,11 +6912,11 @@ class AppViewModel @Inject constructor(
             return null
         }
 
+        updateOnchainFeeUi { it.copy(isLoading = true) }
         onchainSendRefreshJob?.cancel()
         val job = viewModelScope.launch(bgDispatcher, start = CoroutineStart.LAZY) {
             requireCurrentPaymentPreparation(walletGeneration)
             if (generation != sendStateGeneration) return@launch
-            updateOnchainFeeUi { it.copy(isLoading = true) }
             val settings = settingsStore.data.first()
             requireCurrentPaymentPreparation(walletGeneration)
             if (generation != sendStateGeneration) return@launch

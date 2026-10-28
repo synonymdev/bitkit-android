@@ -6822,6 +6822,55 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hardware confirmation keeps fees loading while recovery is checked`() = test {
+        val readStarted = CompletableDeferred<Unit>()
+        val finishRead = CompletableDeferred<Unit>()
+        var initialFeeEstimated = false
+        var holdRead = true
+        whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }.doSuspendableAnswer {
+            initialFeeEstimated = true
+            Result.success(250uL)
+        }
+        whenever { backupRepo.hasPendingWalletRestore() }.doSuspendableAnswer {
+            if (initialFeeEstimated && !sut.sendUiState.value.isLoading && holdRead) {
+                holdRead = false
+                readStarted.complete(Unit)
+                finishRead.await()
+            }
+            false
+        }
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000uL,
+                isAmountInputValid = true,
+                hardwareWalletId = HARDWARE_WALLET_ID,
+                hardwareAvailableSats = 50_000uL,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+            )
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            readStarted.await()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            assertFalse(sut.sendUiState.value.isLoading)
+            assertTrue(
+                sut.sendUiState.value.onchainFeeUi.isLoading,
+                "Confirmation fee must stay loading during recovery"
+            )
+
+            finishRead.complete(Unit)
+            advanceUntilIdle()
+
+            assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
+            assertEquals(250L, sut.sendUiState.value.onchainFeeUi.sats)
+        }
+    }
+
+    @Test
     fun `missing hardware fee does not block confirmation`() = test {
         settingsData.value = SettingsData(coinSelectAuto = false)
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
