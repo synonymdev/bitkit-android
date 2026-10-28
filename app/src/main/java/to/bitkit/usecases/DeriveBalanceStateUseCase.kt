@@ -64,7 +64,8 @@ class DeriveBalanceStateUseCase @Inject constructor(
                 maxSendLightningSats = maxOf(lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(), sparkSats),
                 maxSendOnchainSats = getMaxSendAmount(balanceDetails),
                 balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
-                balanceInTransferToSpending = pendingChannelsSats.safe() + sparkRepo.state.value.pendingDepositSats.safe(),
+                balanceInTransferToSpending = pendingChannelsSats.safe() +
+                    sparkRepo.state.value.pendingDepositSats.safe(),
                 hardwareWallets = hwWalletRepo.wallets.value.map { it.toBalance() },
             )
 

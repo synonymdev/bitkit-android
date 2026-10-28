@@ -52,7 +52,11 @@ fun FundingScreen(
         VerticalSpacer(8.dp)
         BodyM(
             text = stringResource(
-                if (canFundWithSpark) R.string.lightning__funding__text else R.string.lightning__transfer_unavailable__text
+                if (canFundWithSpark) {
+                    R.string.lightning__funding__text
+                } else {
+                    R.string.lightning__transfer_unavailable__text
+                }
             ),
             color = Colors.White64,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -60,8 +64,20 @@ fun FundingScreen(
         VerticalSpacer(24.dp)
         // Spark keeps Spending fundable from savings or another wallet without a channel.
         if (canFundWithSpark) {
-            FundingOption(R.string.lightning__funding__button1, R.drawable.ic_transfer, 20.dp, "FundTransfer", onTransfer)
-            FundingOption(R.string.lightning__funding__button2, R.drawable.ic_qr_purple, 13.75.dp, "FundReceive", onFund)
+            FundingOption(
+                R.string.lightning__funding__button1,
+                R.drawable.ic_transfer,
+                20.dp,
+                "FundTransfer",
+                onTransfer
+            )
+            FundingOption(
+                R.string.lightning__funding__button2,
+                R.drawable.ic_qr_purple,
+                13.75.dp,
+                "FundReceive",
+                onFund
+            )
         }
         VerticalSpacer(8.dp)
         RectangleButton(

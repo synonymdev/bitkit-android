@@ -6,9 +6,9 @@ import breez_sdk_spark.ClaimDepositRequest
 import breez_sdk_spark.ConnectRequest
 import breez_sdk_spark.DepositInfo
 import breez_sdk_spark.EventListener
+import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.FetchClaimDepositQuoteRequest
 import breez_sdk_spark.FetchClaimDepositQuoteResponse
-import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateRequest

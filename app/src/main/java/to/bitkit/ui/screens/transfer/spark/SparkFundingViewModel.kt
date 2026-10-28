@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -21,6 +22,7 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.models.safe
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.SparkClaimOffer
@@ -69,11 +71,19 @@ class SparkFundingViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            walletRepo.balanceState.collect { balance ->
+            walletRepo.balanceState.collectLatest { balance ->
                 _uiState.update { it.copy(maxSats = balance.maxSendOnchainSats.toLong()) }
+                fastMaxSats().onSuccess { max -> _uiState.update { it.copy(maxSats = max) } }
             }
         }
     }
+
+    private suspend fun fastMaxSats(): Result<Long> = runSuspendCatching {
+        val address = sparkRepo.depositAddress().getOrThrow()
+        val spendable = lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+        val fee = lightningRepo.estimateSendAllFee(address = address, speed = speed).getOrThrow()
+        (spendable.safe() - fee.safe()).toLong()
+    }.onFailure { Logger.warn("Failed to estimate the most Spark funding can send", it, context = TAG) }
 
     fun onAmountChange(sats: Long) {
         _uiState.update { it.copy(amountSats = sats) }
@@ -91,7 +101,7 @@ class SparkFundingViewModel @Inject constructor(
         }
     }
 
-    /** Prices the transfer for the confirm screen: the network fee and what Spark keeps to claim it at 3 confirmations. */
+    /** Prices the confirm screen: the network fee, and what Spark keeps to claim the deposit at 3 confirmations. */
     fun onAmountContinue() {
         val amountSats = _uiState.value.amountSats.toULong()
         _uiState.update { it.copy(isLoading = true, networkFeeSats = 0, claimFeeSats = 0) }
@@ -132,8 +142,9 @@ class SparkFundingViewModel @Inject constructor(
                 ).getOrThrow()
                 check(outcome is OnchainSendOutcome.Accepted) { "Spark funding was not accepted: '$outcome'" }
                 withContext(NonCancellable) {
-                    runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(orderId = null, txid = outcome.txid) }
-                        .onFailure { Logger.warn("Failed to finish Spark funding locally", it, context = TAG) }
+                    runSuspendCatching {
+                        lightningRepo.completeAcceptedTransferFollowup(orderId = null, txid = outcome.txid)
+                    }.onFailure { Logger.warn("Failed to finish Spark funding locally", it, context = TAG) }
                     sparkRepo.onDepositBroadcast(outcome.txid, outcome.amountSats ?: state.amountSats.toULong())
                 }
                 Logger.info("Funded Spark with '${state.amountSats}' sats in '${outcome.txid}'", context = TAG)
@@ -152,9 +163,10 @@ class SparkFundingViewModel @Inject constructor(
         depositJob?.cancel()
         depositJob = viewModelScope.launch {
             repeat(DEPOSIT_POLL_ATTEMPTS) {
-                val offer = sparkRepo.depositClaimOffer(txid)
-                    .onFailure { Logger.warn("Failed to quote Spark deposit '$txid'", it, context = TAG) }
-                    .getOrNull()
+                val offer = sparkRepo.depositClaimOffer(txid).getOrElse {
+                    Logger.warn("Failed to quote Spark deposit '$txid'", it, context = TAG)
+                    return@launch
+                }
                 if (offer != null) {
                     _uiState.update { it.copy(deposit = Deposit.Offered(offer)) }
                     return@launch

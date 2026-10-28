@@ -113,7 +113,11 @@ private fun Offered(offer: SparkClaimOffer, isLoading: Boolean, onClaimEarlyClic
         }
 
         is SparkClaimOffer.Automatic -> {
-            Text(stringResource(R.string.lightning__spark_deposit__waiting).replace("{when}", whenText(offer.confirmations)))
+            Text(
+                stringResource(
+                    R.string.lightning__spark_deposit__waiting
+                ).replace("{when}", whenText(offer.confirmations))
+            )
             Fees(stringResource(R.string.lightning__spark_claim_fee) to offer.feeSats)
         }
 
