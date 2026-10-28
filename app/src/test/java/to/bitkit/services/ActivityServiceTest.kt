@@ -21,6 +21,7 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mockStatic
 import org.mockito.Mockito.never
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.AppCacheData
@@ -29,8 +30,12 @@ import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.WalletScope
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.receiptResolverFixture
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.synonym.bitkitcore.TransactionDetails as CoreTransactionDetails
+import org.lightningdevkit.ldknode.TransactionDetails as LdkTransactionDetails
 
 class ActivityServiceTest : BaseUnitTest() {
     companion object {
@@ -45,15 +50,41 @@ class ActivityServiceTest : BaseUnitTest() {
     private val markActivityAsSeen = binding.methods.single { it.name.startsWith("markActivityAsSeen") }
 
     private val cacheStore = mock<CacheStore>()
+    private val lightningService = mock<LightningService>()
+    private val coreService = mock<CoreService>()
 
     private val sut by lazy {
         ActivityService(
-            coreService = mock(),
+            coreService = coreService,
             cacheStore = cacheStore,
-            lightningService = mock(),
+            lightningService = lightningService,
             settingsStore = mock(),
-            privatePaykitContactResolver = mock(),
+            privatePaykitContactResolver = javax.inject.Provider { receiptResolverFixture(testDispatcher) },
         )
+    }
+
+    @Test
+    fun `transaction detail cache misses use only the default wallets local node`() = test {
+        val txid = "ab".repeat(32)
+        val walletId = WalletScope.default
+        val stored = CoreTransactionDetails(walletId, txid, 5000L, emptyList(), emptyList())
+        val details = LdkTransactionDetails(5000L, emptyList(), emptyList())
+        val getDetails = binding.getMethod("getTransactionDetails", String::class.java, String::class.java)
+        whenever(coreService.walletIndex).thenReturn(7)
+        whenever(lightningService.getTransactionDetails(txid, 7)).thenReturn(details)
+        ServiceQueue.CORE.background {
+            mockStatic(binding).use { native ->
+                native.`when`<CoreTransactionDetails?> { getDetails.invoke(null, walletId, txid) }
+                    .thenReturn(stored, null)
+                assertEquals(stored, sut.getTransactionDetails(txid))
+                verify(lightningService, never()).getTransactionDetails(txid, 7)
+                assertEquals(stored, sut.getTransactionDetails(txid))
+                verify(lightningService).getTransactionDetails(txid, 7)
+                assertNull(sut.getTransactionDetails(txid, "hardware-wallet"))
+                assertNull(sut.getTransactionDetails("invalid"))
+                verify(lightningService, never()).getTransactionDetails("invalid", 7)
+            }
+        }
     }
 
     @Test
@@ -219,7 +250,7 @@ class ActivityServiceTest : BaseUnitTest() {
             latestUpdateTimestamp = 100uL,
         )
         withOnchainActivities(transactionId) { saved ->
-            val syncing = async { sut.syncLdkNodePaymentsToActivities(listOf(payment)) }
+            val syncing = async { sut.syncLdkNodePaymentsToActivities({ listOf(payment) }) }
             syncPaused.await()
             sut.createSentOnchainActivityFromSendResult(
                 txid = transactionId,
@@ -238,12 +269,14 @@ class ActivityServiceTest : BaseUnitTest() {
             assertEquals(listOf(transactionId), saved.keys.toList())
             val confirmed = mock<ConfirmationStatus.Confirmed> { on { timestamp }.thenReturn(200uL) }
             sut.syncLdkNodePaymentsToActivities(
-                listOf(
-                    payment.copy(
-                        kind = PaymentKind.Onchain(transactionId, confirmed),
-                        latestUpdateTimestamp = 200uL,
-                    ),
-                ),
+                {
+                    listOf(
+                        payment.copy(
+                            kind = PaymentKind.Onchain(transactionId, confirmed),
+                            latestUpdateTimestamp = 200uL,
+                        ),
+                    )
+                },
             )
             val activity = saved.values.single().v1
             assertEquals(transactionId, activity.id)

@@ -10,8 +10,10 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -31,6 +33,7 @@ fun TransferAnimationView(
     modifier: Modifier = Modifier,
     @DrawableRes contentRes: Int = R.drawable.transfer,
     rotateContent: Boolean = true,
+    contentWidthFraction: Float = 1f,
 ) {
     val animationSpec: InfiniteRepeatableSpec<Float> = infiniteRepeatable(
         animation = tween(durationMillis = 3000, easing = EaseInOut),
@@ -76,7 +79,16 @@ fun TransferAnimationView(
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .fillMaxWidth()
+                .then(
+                    if (contentWidthFraction < 1f) {
+                        Modifier
+                            .matchParentSize()
+                            .wrapContentSize()
+                            .fillMaxSize(contentWidthFraction)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
+                )
                 .then(
                     if (rotateContent) {
                         Modifier.rotate(rotationArrows)

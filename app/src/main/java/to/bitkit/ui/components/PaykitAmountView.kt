@@ -6,6 +6,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.formatCurrency
@@ -42,16 +44,22 @@ fun PaykitAmountDisplay(amount: PaykitAmount, modifier: Modifier = Modifier, pre
 @Composable
 fun PaykitAmountCell(
     amount: PaykitAmount,
+    modifier: Modifier = Modifier,
     prefix: String = "",
     status: String? = null,
-    showBitcoinSymbol: Boolean = true
+    showBitcoinSymbol: Boolean = true,
+    maxAmountLines: Int = Int.MAX_VALUE,
+    statusModifier: Modifier = Modifier,
 ) {
     if (amount.asset == PaykitAsset.BTC) {
         MoneyCell(
             sats = amount.atomic.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
             prefix = prefix,
             showBitcoinSymbol = showBitcoinSymbol,
-            fiatReplacement = status
+            fiatReplacement = status,
+            maxAmountLines = maxAmountLines,
+            statusModifier = statusModifier,
+            modifier = modifier
         )
     } else {
         val locale = LocalConfiguration.current.locales[0]
@@ -62,9 +70,20 @@ fun PaykitAmountCell(
                 usdDisplayAmount(amount.atomic, locale)
             }
         }
-        Column(horizontalAlignment = Alignment.End) {
-            BodyMSB(text = prefix + "$" + displayAmount)
-            status?.let { BodyS(text = it, color = Colors.White64) }
+        Column(horizontalAlignment = Alignment.End, modifier = modifier) {
+            BodyMSB(
+                text = prefix + "$" + displayAmount,
+                maxLines = maxAmountLines,
+                overflow = if (maxAmountLines == Int.MAX_VALUE) TextOverflow.Clip else TextOverflow.Ellipsis,
+            )
+            status?.let {
+                BodyS(
+                    text = it,
+                    color = Colors.White64,
+                    textAlign = TextAlign.End,
+                    modifier = statusModifier
+                )
+            }
         }
     }
 }

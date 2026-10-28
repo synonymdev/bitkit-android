@@ -50,6 +50,8 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.clearInvocations
@@ -1003,7 +1005,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `createIdentity should keep session when canceled during contact load`() = test {
+    fun `createIdentity completes while contacts are still loading`() = test {
         val contactsLoadStarted = CompletableDeferred<Unit>()
         val finishContactsLoad = CompletableDeferred<Unit>()
         val httpClient = identityHttpClient()
@@ -1032,49 +1034,47 @@ class PubkyRepoTest : BaseUnitTest() {
         }
         contactsLoadStarted.await()
 
-        assertTrue(sut.isAuthenticated.value)
-        result.cancel()
-        finishContactsLoad.complete(Unit)
-        result.join()
-        httpClient.close()
-
-        assertTrue(sut.isAuthenticated.value)
-        verifyBlocking(pubkyService, never()) { signOut() }
+        try {
+            assertTrue(result.isCompleted)
+            assertTrue(result.await().isSuccess)
+            assertTrue(sut.isAuthenticated.value)
+            assertEquals("Test", sut.profile.value?.name)
+            verifyBlocking(pubkyService, never()) { signOut() }
+        } finally {
+            finishContactsLoad.complete(Unit)
+            result.join()
+            httpClient.close()
+        }
     }
 
     @Test
-    fun `createIdentity returns cache failure after profile loading`() = test {
+    fun `createIdentity returns cache failure after profile publication`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         profileSetupPending.value = true
         whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
-        var cacheUpdateCount = 0
         whenever { pubkyStore.update(any()) }.thenAnswer {
-            cacheUpdateCount += 1
-            if (cacheUpdateCount == 2) throw TestAppError("cache failed")
-            Unit
+            throw TestAppError("cache failed")
         }
 
         val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
 
         assertEquals("cache failed", result.exceptionOrNull()?.message)
-        assertEquals(2, cacheUpdateCount)
     }
 
     @Test
-    fun `createIdentity retries a profile that is not yet readable after publishing`() = test {
+    fun `createIdentity keeps the published profile without waiting for readback`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         profileSetupPending.value = true
         whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
         whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
             .thenReturn(null)
-            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Published")))
         clearInvocations(pubkyService)
 
         val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
 
         assertTrue(result.isSuccess)
-        assertEquals("Published", sut.profile.value?.name)
-        verify(pubkyService, times(2)).resolveContactProfile(VALID_SELF_KEY, true)
+        assertEquals("Test", sut.profile.value?.name)
+        verify(pubkyService, never()).resolveContactProfile(any(), any(), any(), anyOrNull())
     }
 
     @Test
@@ -1102,11 +1102,11 @@ class PubkyRepoTest : BaseUnitTest() {
             sut.createIdentity("Test", "", emptyList(), emptyList(), null)
         }
         profilePublished.await()
+        assertTrue(creation.await().isSuccess)
 
         try {
             sut.wipeLocalState()
 
-            assertFalse(creation.isCompleted)
             assertNull(sut.publicKey.value)
         } finally {
             finishContactLoad.complete(Unit)
@@ -2926,6 +2926,34 @@ class PubkyRepoTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
         verify(pubkyService).importSession("restored_session")
+    }
+
+    @Test
+    fun `scheduled metadata refresh preserves an identity already activated by restore`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        assertTrue(sut.restoreSessionIfNeeded())
+        val originalSignIn = assertNotNull(sut.currentSignIn())
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        clearInvocations(pubkyService)
+        whenever(pubkyService.importSession("restored_session")).doSuspendableAnswer {
+            throw PaykitException.Transport("transport_error", "controlled unavailable re-import")
+        }
+        val refreshed = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            refreshed.complete(Unit)
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Refreshed"))
+        }
+        sut.scheduleInitializationAfterRestore()
+        yield()
+        advanceUntilIdle()
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(sut.isCurrent(originalSignIn))
+        assertFalse(sut.sessionRestorationFailed.value)
+        verify(pubkyService, never()).importSession(any())
+        withTimeout(1.seconds) { refreshed.await() }
+        verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
     }
 
     @Test

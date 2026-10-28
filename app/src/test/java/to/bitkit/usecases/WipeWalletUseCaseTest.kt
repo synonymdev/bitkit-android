@@ -23,6 +23,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.async.ServiceQueue
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.ProfileRemovalStore
@@ -53,6 +54,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import java.util.UUID
 import javax.inject.Provider
 import kotlin.test.assertEquals
@@ -75,6 +77,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val paykitUsdtPaymentRepo = mock<PaykitUsdtPaymentRepo>()
     private val db = mock<AppDb>()
     private val settingsStore = mock<SettingsStore>()
+    private val connectionRecovery = connectionRecoveryFixture(settingsStore)
     private val cacheStore = mock<CacheStore>()
     private val watchOnlyAccountRepo = mock<WatchOnlyAccountRepo>()
     private val widgetsStore = mock<WidgetsStore>()
@@ -160,6 +163,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         paykitSdkService = paykitSdkService,
         profileRemovalStore = profileRemovalStore,
         contactPaymentSettingsRepo = Provider { sharingRepo },
+        connectionRecovery = connectionRecovery,
     )
 
     private fun realPubkyRepo(service: PubkyService, shared: SharedPubkyClient = mock()): PubkyRepo {
@@ -182,6 +186,47 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             clock = Clock.System,
             profileRemovalStore = profileRemovalStore,
         )
+    }
+
+    @Test
+    fun `wallet wipe drains the queued receipt before SDK cleanup and credential deletion`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val rejected = CompletableDeferred<Boolean>()
+        var receiptWritten = false
+        val receipt = launch {
+            connectionRecovery.withReceiptOperation { owner ->
+                ServiceQueue.CORE.background {
+                    entered.complete(Unit)
+                    release.await()
+                    rejected.complete(
+                        runCatching { owner.commitReceiptState { receiptWritten = true } }
+                            .exceptionOrNull() is CancellationException
+                    )
+                }
+            }
+        }
+        entered.await()
+        val wipe = async {
+            sut.invoke(
+                resetWalletState = { onWipeCalled = true },
+                onSuccess = { onSetWalletExistsStateCalled = true },
+            )
+        }
+        runCurrent()
+        verify(keychain, never()).wipe()
+        verify(privatePaykitRepo, never()).finishProfileRemoval(any())
+        verify(lightningRepo, never()).stop()
+        assertFalse(wipe.isCompleted)
+        release.complete(Unit)
+        assertTrue(rejected.await())
+        receipt.join()
+        assertTrue(wipe.await().isSuccess)
+        assertFalse(receiptWritten)
+        verify(keychain).wipe()
+        assertTrue(onWipeCalled)
+        assertTrue(onSetWalletExistsStateCalled)
+        assertNull(profileRemovalStore.pendingAttempt())
     }
 
     @Test

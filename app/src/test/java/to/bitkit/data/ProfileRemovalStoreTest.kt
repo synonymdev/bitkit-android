@@ -3,6 +3,7 @@ package to.bitkit.data
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -27,6 +28,7 @@ import java.io.IOException
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -37,9 +39,108 @@ class ProfileRemovalStoreTest {
     val folder = TemporaryFolder()
 
     @Test
+    fun `pending profile permits a complete local receipt snapshot but pending wipe does not`() = runTest {
+        val store = ProfileRemovalStore.inMemoryForTesting()
+        val id = UUID.randomUUID().toString()
+        store.withAccess(id) {
+            store.begin(id)
+            assertEquals("historical receipt", store.withReceiptSnapshot { "historical receipt" })
+        }
+        store.withAccess(id, ProfileRemovalScope.WALLET_WIPE) { store.begin(id) }
+        assertFailsWith<ProfileRemovalPending> { store.withReceiptSnapshot { error("must not copy") } }
+        assertFailsWith<IllegalStateException> { store.withAccess(id) { store.complete(id) } }
+        assertEquals(id, store.pendingAttempt())
+    }
+
+    @Test
+    fun `local cleanup waits for the whole snapshot and never exposes its partial clear`() = runTest {
+        val store = ProfileRemovalStore.inMemoryForTesting()
+        val id = UUID.randomUUID().toString()
+        store.withAccess(id) { store.begin(id) }
+        val copying = CompletableDeferred<Unit>()
+        val releaseCopy = CompletableDeferred<Unit>()
+        val source = mutableListOf("first", "second")
+        val snapshot = async {
+            store.withReceiptSnapshot {
+                val first = source.first()
+                copying.complete(Unit)
+                releaseCopy.await()
+                listOf(first, source.last())
+            }
+        }
+        copying.await()
+        var cleared = false
+        val cleanup = launch {
+            store.withAccess(id) {
+                store.withReceiptCleanup {
+                    source.clear()
+                    cleared = true
+                }
+            }
+        }
+        runCurrent()
+        assertFalse(cleared)
+        releaseCopy.complete(Unit)
+        assertEquals(listOf("first", "second"), snapshot.await())
+        cleanup.join()
+        assertTrue(cleared)
+        assertFailsWith<ReceiptAssociationsUnavailable> { store.withReceiptSnapshot { source.toList() } }
+        store.withAccess(id) { store.complete(id) }
+        assertEquals(emptyList(), store.withReceiptSnapshot { source.toList() })
+    }
+
+    @Test
+    fun `partial local cleanup remains blocked after a real DataStore restart`() = runTest {
+        val file = folder.newFile("partial-removal").also { it.delete() }
+        val firstScope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val first = ProfileRemovalStore(DataStoreFactory.create(ProfileRemovalSerializer, scope = firstScope) { file })
+        val id = UUID.randomUUID().toString()
+        try {
+            first.withAccess(id) {
+                first.begin(id)
+                assertFailsWith<IOException> {
+                    first.withReceiptCleanup { throw IOException("private state unavailable") }
+                }
+            }
+        } finally {
+            requireNotNull(firstScope.coroutineContext[Job]).cancelAndJoin()
+        }
+        val second =
+            ProfileRemovalStore(DataStoreFactory.create(ProfileRemovalSerializer, scope = backgroundScope) { file })
+        assertEquals(id, second.pendingAttempt())
+        assertFailsWith<ReceiptAssociationsUnavailable> { second.withReceiptSnapshot { error("partial state") } }
+        second.withAccess(id) {
+            second.withReceiptCleanup { }
+            second.complete(id)
+        }
+        assertEquals("complete", second.withReceiptSnapshot { "complete" })
+    }
+
+    @Test
+    fun `legacy marker and unavailable storage never become absent receipt associations`() = runTest {
+        val state = MutableStateFlow(ProfileRemovalState(attemptId = UUID.randomUUID().toString()))
+        var unavailable = false
+        val store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = flow {
+                if (unavailable) throw IOException("unavailable")
+                emit(state.value)
+            }
+            override suspend fun updateData(transform: suspend (ProfileRemovalState) -> ProfileRemovalState) =
+                transform(state.value).also { state.value = it }
+        })
+        assertFailsWith<ProfileRemovalPending> { store.withReceiptSnapshot { error("legacy state") } }
+        unavailable = true
+        assertTrue(
+            assertFailsWith<ProfileRemovalPending> {
+                store.withReceiptSnapshot { error("unavailable state") }
+            }.cause is IOException
+        )
+    }
+
+    @Test
     fun `observation fails closed with backoff and restarts after explicit durable completion`() = runTest {
         val id = UUID.randomUUID().toString()
-        val state = MutableStateFlow(ProfileRemovalState(attemptId = id))
+        val state = MutableStateFlow(ProfileRemovalState(attemptId = id, scope = ProfileRemovalScope.PROFILE))
         var unavailable = true
         var reads = 0
         val store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
@@ -174,7 +275,11 @@ class ProfileRemovalStoreTest {
             ) { file }
         )
         assertEquals(recovered, second.pendingAttempt())
-        second.withAccess(recovered) { second.complete(recovered) }
+        assertFailsWith<IllegalStateException> { second.withAccess(recovered) { second.complete(recovered) } }
+        second.withAccess(recovered, ProfileRemovalScope.WALLET_WIPE) {
+            second.begin(recovered)
+            second.complete(recovered)
+        }
         assertNull(second.pendingAttempt())
     }
 
@@ -217,7 +322,9 @@ class ProfileRemovalStoreTest {
     fun `corrupt recovery state is never interpreted as no pending work`() = runTest {
         for (bytes in listOf(
             "not json".toByteArray(),
-            "{\"attemptId\":\"bad\"}".toByteArray()
+            "{\"attemptId\":\"bad\"}".toByteArray(),
+            "{\"scope\":\"WALLET_WIPE\"}".toByteArray(),
+            "{\"attemptId\":null,\"localCleanupStarted\":true}".toByteArray(),
         )) {
             assertFailsWith<CorruptionException> { ProfileRemovalSerializer.readFrom(ByteArrayInputStream(bytes)) }
         }

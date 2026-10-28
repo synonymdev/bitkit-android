@@ -11,8 +11,14 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -47,7 +53,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class ActivityRepoTest : BaseUnitTest() {
 
     private val coreService = mock<CoreService>()
@@ -138,6 +144,7 @@ class ActivityRepoTest : BaseUnitTest() {
     fun setUp() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(coreService.activity).thenReturn(mock())
+        mockPaymentImport()
         whenever(clock.now()).thenReturn(Clock.System.now())
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
@@ -211,18 +218,27 @@ class ActivityRepoTest : BaseUnitTest() {
         )
     }
 
+    private val importedPaymentLists = mutableListOf<List<PaymentDetails>>()
+
+    private fun mockPaymentImport() {
+        whenever {
+            coreService.activity.syncLdkNodePaymentsToActivities(any(), eq(false), any())
+        }.doSuspendableAnswer { invocation ->
+            val fetch = invocation.getArgument<suspend () -> List<PaymentDetails>>(0)
+            val payments = fetch()
+            val channels = invocation.getArgument<suspend (List<PaymentDetails>) -> Map<String, String>>(2)
+            channels(payments)
+            importedPaymentLists.add(payments)
+            Unit
+        }
+    }
+
     private fun setupSyncActivitiesMocks(
         cacheData: AppCacheData,
     ) {
         whenever(cacheStore.data).thenReturn(flowOf(cacheData))
         whenever { lightningRepo.getPayments() }.thenReturn(Result.success(emptyList()))
-        whenever {
-            coreService.activity.syncLdkNodePaymentsToActivities(
-                any(),
-                eq(false),
-                any()
-            )
-        }.thenReturn(Unit)
+        mockPaymentImport()
         whenever { transferRepo.syncTransferStates() }.thenReturn(Result.success(Unit))
         whenever { coreService.activity.allPossibleTags() }.thenReturn(emptyList())
     }
@@ -245,19 +261,134 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `simultaneous activity syncs share one operation and its failure`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        val failure = IllegalStateException("Node unavailable")
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val calls = List(256) { async { sut.syncActivities() } }
+        runCurrent()
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        verify(lightningRepo, times(1)).getPayments()
+        response.complete(Result.failure(failure))
+        assertTrue(calls.awaitAll().all { it.exceptionOrNull() === failure })
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        sut.syncActivities()
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `cancelled and timed out waiters cannot reset the active sync`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val cancelled = async { sut.syncActivities() }
+        val waiting = async { sut.syncActivities() }
+        runCurrent()
+        cancelled.cancel()
+        advanceTimeBy(40_001)
+        runCurrent()
+        assertTrue(waiting.await().isFailure)
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        val later = async { sut.syncActivities() }
+        runCurrent()
+        verify(lightningRepo, times(1)).getPayments()
+        owner.cancel()
+        runCurrent()
+        assertTrue(owner.isCancelled)
+        assertFalse(later.isCancelled)
+        val interrupted = later.await().exceptionOrNull()
+        assertTrue(interrupted is AppError)
+        assertTrue(interrupted.cause is CancellationException)
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        response.complete(Result.failure(IllegalStateException("Unavailable")))
+        sut.syncActivities()
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `successful overlap stays reserved through transfer updates`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val transfers = CompletableDeferred<Result<Unit>>()
+        whenever(transferRepo.syncTransferStates()).doSuspendableAnswer { transfers.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val waiting = List(16) { async { sut.syncActivities() } }
+        runCurrent()
+        assertFalse(owner.isCompleted)
+        assertTrue(waiting.none { it.isCompleted })
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        verify(lightningRepo, times(1)).getPayments()
+        transfers.complete(Result.success(Unit))
+        assertTrue(owner.await().isSuccess)
+        assertTrue(waiting.awaitAll().all { it.isSuccess })
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        assertTrue(sut.syncActivities().isSuccess)
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `fresh callers import payments added after the active snapshot`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val transfers = CompletableDeferred<Result<Unit>>()
+        whenever(transferRepo.syncTransferStates()).doSuspendableAnswer { transfers.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val newPayments = listOf(testPaymentDetails)
+        val paymentResponse = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { paymentResponse.await() }
+        val fresh = List(16) { async { sut.syncActivities(requireFresh = true) } }
+        runCurrent()
+        assertTrue(fresh.none { it.isCompleted })
+        verify(lightningRepo, times(1)).getPayments()
+        transfers.complete(Result.success(Unit))
+        assertTrue(owner.await().isSuccess)
+        runCurrent()
+        assertTrue(fresh.none { it.isCompleted })
+        paymentResponse.complete(Result.success(newPayments))
+        assertTrue(fresh.awaitAll().all { it.isSuccess })
+        assertEquals(newPayments, importedPaymentLists.last())
+        verify(lightningRepo, times(2)).getPayments()
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+    }
+
+    @Test
+    fun `fresh callers retry after cancelled or failed refreshes`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val responses = ArrayDeque<CompletableDeferred<Result<List<PaymentDetails>>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { responses.removeFirst().await() }
+        listOf(true, false).forEachIndexed { index, cancelOwner ->
+            val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+            val nextResponse = CompletableDeferred<Result<List<PaymentDetails>>>()
+            responses.addLast(response)
+            responses.addLast(nextResponse)
+            val owner = async { sut.syncActivities() }
+            runCurrent()
+            val fresh = async { sut.syncActivities(requireFresh = true) }
+            runCurrent()
+            assertFalse(fresh.isCompleted)
+
+            if (cancelOwner) owner.cancel() else response.complete(Result.failure(AppError("Unavailable")))
+            runCurrent()
+            assertFalse(fresh.isCompleted)
+            val payments = listOf(testPaymentDetails)
+            nextResponse.complete(Result.success(payments))
+            assertTrue(fresh.await().isSuccess)
+            if (cancelOwner) assertTrue(owner.isCancelled) else assertTrue(owner.await().isFailure)
+            verify(lightningRepo, times(2 * (index + 1))).getPayments()
+            assertEquals(index + 1, importedPaymentLists.count { it == payments })
+            assertFalse(sut.isSyncingLdkNodePayments.value)
+        }
+    }
+
+    @Test
     fun `syncActivities success flow`() = test {
         val payments = listOf(testPaymentDetails)
         whenever { lightningRepo.getPayments() }.thenReturn(Result.success(payments))
         whenever {
             coreService.activity.getActivity(any<String>(), eq(WalletScope.default))
         }.thenReturn(null)
-        whenever {
-            coreService.activity.syncLdkNodePaymentsToActivities(
-                any<List<PaymentDetails>>(),
-                any<Boolean>(),
-                any<Map<String, String>>()
-            )
-        }.thenReturn(Unit)
+        mockPaymentImport()
         whenever { transferRepo.syncTransferStates() }.thenReturn(Result.success(Unit))
         whenever { coreService.activity.allPossibleTags() }.thenReturn(emptyList())
 

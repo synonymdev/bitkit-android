@@ -28,6 +28,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.intOrNull
 import to.bitkit.di.json
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
 import java.io.IOException
 import java.io.InputStream
@@ -65,6 +66,7 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
     constructor(@ApplicationContext context: Context) : this(context.profileRemovalDataStore)
 
     private val observationRevision = MutableStateFlow(0L)
+    private val receiptSnapshotMutex = Mutex()
     internal val generation: Long get() = observationRevision.value
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -84,9 +86,12 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
     }
 
     internal suspend fun requireAccess() {
-        val pending = pendingAttempt() ?: return
+        val state = store.data.first()
+        val pending = state.attemptId ?: return
         val access = currentCoroutineContext()[Access]
-        if (access?.store !== this || access.attemptId != pending || !access.active.get()) {
+        if (access?.store !== this || access.attemptId != pending || !access.active.get() ||
+            state.scope != access.scope
+        ) {
             throw ProfileRemovalPending()
         }
         access.job.ensureActive()
@@ -94,18 +99,29 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
 
     /** Only for local completion after acknowledged credential teardown, while outer removal ownership is retained. */
     internal suspend fun requireCompletionAccess() {
-        val pending = pendingAttempt() ?: return
+        val state = store.data.first()
+        val pending = state.attemptId ?: return
         val access = currentCoroutineContext()[Access]
-        if (access?.store !== this || access.attemptId != pending || !access.active.get()) {
+        if (access?.store !== this || access.attemptId != pending || !access.active.get() ||
+            state.scope != access.scope
+        ) {
             throw ProfileRemovalPending()
         }
     }
 
-    internal suspend fun <T> withAccess(attemptId: String, operation: suspend () -> T): T {
+    internal suspend fun <T> withAccess(
+        attemptId: String,
+        scope: ProfileRemovalScope = ProfileRemovalScope.PROFILE,
+        operation: suspend () -> T,
+    ): T {
         require(UUID.fromString(attemptId).toString() == attemptId) { "Invalid profile removal attempt" }
-        val pending = pendingAttempt()
+        val state = store.data.first()
+        val pending = state.attemptId
         check(pending == null || pending == attemptId) { "Another profile removal needs local recovery" }
-        val access = Access(this, attemptId, requireNotNull(currentCoroutineContext()[Job]))
+        check(pending == null || state.scope == scope || scope == ProfileRemovalScope.WALLET_WIPE) {
+            "Wallet cleanup must complete before profile recovery"
+        }
+        val access = Access(this, attemptId, scope, requireNotNull(currentCoroutineContext()[Job]))
         try {
             return withContext(access) { operation() }
         } finally {
@@ -121,7 +137,11 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
         access.job.ensureActive()
         store.updateData {
             check(it.attemptId == null || it.attemptId == attemptId) { "Profile removal attempt changed" }
-            it.copy(attemptId = attemptId)
+            check(
+                it.attemptId == null || it.scope == access.scope ||
+                    access.scope == ProfileRemovalScope.WALLET_WIPE
+            ) { "Wallet cleanup cannot become profile cleanup" }
+            it.copy(attemptId = attemptId, scope = access.scope)
         }
         observationRevision.update { it + 1 }
     }
@@ -133,8 +153,42 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
             "Profile removal admission is required"
         }
         store.updateData {
-            check(it.attemptId == attemptId) { "Profile removal attempt changed" }
+            check(it.attemptId == attemptId && it.scope == access.scope) { "Profile removal attempt changed" }
             ProfileRemovalState()
+        }
+        observationRevision.update { it + 1 }
+    }
+
+    /** Copy local associations only; never hold this gate over SDK, Core or address derivation. */
+    internal suspend fun <T> withReceiptSnapshot(read: suspend () -> T): T = receiptSnapshotMutex.withLock {
+        val state = readReceiptState()
+        if (state.localCleanupStarted) throw ReceiptAssociationsUnavailable()
+        val snapshot = read()
+        check(readReceiptState() == state) { "Receipt source changed while being copied" }
+        snapshot
+    }
+
+    private suspend fun readReceiptState(): ProfileRemovalState {
+        val state = runSuspendCatching { store.data.first() }.getOrElse { throw ProfileRemovalPending(it) }
+        if (state.attemptId != null && state.scope != ProfileRemovalScope.PROFILE) throw ProfileRemovalPending()
+        return state
+    }
+
+    internal suspend fun requireReceiptAccountingAccess() { readReceiptState() }
+
+    /** A failed local clear remains unavailable after restart; admitted snapshots keep their own lifetime. */
+    internal suspend fun <T> withReceiptCleanup(clear: suspend () -> T): T = receiptSnapshotMutex.withLock {
+        armReceiptCleanup()
+        clear()
+    }
+
+    internal suspend fun beginLocalCleanup() = receiptSnapshotMutex.withLock { armReceiptCleanup() }
+
+    private suspend fun armReceiptCleanup() {
+        requireCompletionAccess()
+        store.updateData { state ->
+            check(state.attemptId != null) { "Durable cleanup admission is required" }
+            state.copy(localCleanupStarted = true)
         }
         observationRevision.update { it + 1 }
     }
@@ -142,6 +196,7 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
     private class Access(
         val store: ProfileRemovalStore,
         val attemptId: String,
+        val scope: ProfileRemovalScope,
         val job: Job,
     ) : AbstractCoroutineContextElement(Key) {
         companion object Key : CoroutineContext.Key<Access>
@@ -150,7 +205,15 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
 }
 
 @Serializable
-internal data class ProfileRemovalState(val version: Int = 1, val attemptId: String? = null)
+internal data class ProfileRemovalState(
+    val version: Int = 1,
+    val attemptId: String? = null,
+    val scope: ProfileRemovalScope? = null,
+    val localCleanupStarted: Boolean = false,
+)
+
+@Serializable
+internal enum class ProfileRemovalScope { PROFILE, WALLET_WIPE }
 
 /** Malformed local admission data is replaced only with a new, still-blocking recovery obligation. */
 internal fun profileRemovalCorruptionHandler() = ReplaceFileCorruptionHandler {
@@ -172,9 +235,19 @@ internal object ProfileRemovalSerializer : Serializer<ProfileRemovalState> {
                     throw UnsupportedProfileRemovalFormat()
                 }
             }
+            envelope["scope"]?.let { scope ->
+                if (scope is JsonPrimitive && scope.content != "null" &&
+                    ProfileRemovalScope.entries.none { it.name == scope.content }
+                ) {
+                    throw UnsupportedProfileRemovalFormat()
+                }
+            }
             json.decodeFromJsonElement<ProfileRemovalState>(envelope).also {
                 require(it.attemptId == null || UUID.fromString(it.attemptId).toString() == it.attemptId) {
                     "Invalid profile removal attempt"
+                }
+                require(it.attemptId != null || (it.scope == null && !it.localCleanupStarted)) {
+                    "Cleanup state requires a pending attempt"
                 }
             }
         } catch (error: CharacterCodingException) {
@@ -193,3 +266,5 @@ internal class ProfileRemovalPending(cause: Throwable? = null) : AppError(
     "Profile cleanup is pending. Disconnect the profile to finish local recovery.",
     cause,
 )
+
+internal class ReceiptAssociationsUnavailable : AppError("Receipt associations are being cleared")

@@ -14,6 +14,9 @@ import com.synonym.bitkitcore.getActivityByTxId
 import com.synonym.bitkitcore.getTransactionDetails
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.upsertActivity
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -37,19 +40,27 @@ import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.PrivatePaykitCacheData
 import to.bitkit.data.PrivatePaykitCacheStore
+import to.bitkit.data.PrivatePaykitContactCacheData
+import to.bitkit.data.PrivatePaykitReservationData
+import to.bitkit.data.PrivatePaykitReservationStore
+import to.bitkit.data.PrivatePaykitStoredAssignmentData
 import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitReceivedPaymentContacts
 import to.bitkit.repositories.PaykitReceivedPaymentContactsTest.Companion.BUYER
 import to.bitkit.repositories.PaykitReceivedPaymentContactsTest.Companion.OTHER_BUYER
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
+import to.bitkit.repositories.PrivatePaykitAddressReservationRepo.ReceiptAssignments
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
+import java.io.IOException
 import java.util.UUID
 import javax.inject.Provider
 import kotlin.test.assertEquals
@@ -65,8 +76,11 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     private val contacts = mock<PaykitReceivedPaymentContacts>()
     private val requestRepo = mock<PaykitPaymentRequestRepo>()
     private val reservations = mock<PrivatePaykitAddressReservationRepo>()
+    private var receiptReservations = reservations
     private val privateCacheStore = mock<PrivatePaykitCacheStore>()
     private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
+    private var walletBinding = "original-wallet"
+    private val connectionRecovery = connectionRecoveryFixture(mock(), currentBinding = { walletBinding })
     private val cacheStore = mock<CacheStore>()
     private val cacheData = MutableStateFlow(AppCacheData(onchainAddress = "wallet-address"))
     private val settingsStore = mock<SettingsStore>()
@@ -76,9 +90,10 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         PrivatePaykitContactResolver(
             ioDispatcher = testDispatcher,
             cacheStore = privateCacheStore,
-            addressReservationRepo = Provider { reservations },
+            addressReservationRepo = Provider { receiptReservations },
             paymentRequestRepo = Provider { requestRepo },
             profileRemovalStore = profileRemovalStore,
+            connectionRecovery = Provider { connectionRecovery },
         )
     }
     private val sut by lazy {
@@ -92,7 +107,7 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     private var detailReads = 0
 
     @Test
-    fun `backfill drops a completed recovery generation and retries the current snapshot`() = coreTest {
+    fun `backfill retains its captured contact across completed profile cleanup`() = coreTest {
         rows = listOf(Activity.Onchain(onchain("request-address")))
         val outputs = listOf(output("request-address"))
         details = mock { on { this.outputs }.thenReturn(outputs) }
@@ -106,11 +121,12 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
             null
         }
 
-        assertFalse(sut.backfillPaykitContacts())
-        assertTrue(updates.isEmpty())
-        whenever(reservations.contactPublicKeyForReservedAddress(any())).thenReturn(null)
         assertTrue(sut.backfillPaykitContacts())
-        assertEquals(2, activityReads)
+        assertEquals(BUYER, (updates.single() as Activity.Onchain).v1.contact)
+        rows = listOf(updates.single())
+        whenever(reservations.contactPublicKeyForReservedAddress(any())).thenReturn(null)
+        assertFalse(sut.backfillPaykitContacts())
+        assertEquals(1, activityReads)
     }
 
     @Test
@@ -131,11 +147,11 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     fun `backfill matches lightning hash when invoice text is missing and preserves metadata`() = coreTest {
         val original = lightning()
         rows = listOf(Activity.Lightning(original))
-        whenever(contacts.contactsForPaymentHash(original.id)).thenReturn(setOf("buyer"))
+        whenever(contacts.contactsForPaymentHash(original.id)).thenReturn(setOf(BUYER))
 
         assertTrue(sut.backfillPaykitContacts())
 
-        assertEquals(listOf<Activity>(Activity.Lightning(original.copy(contact = "buyer"))), updates)
+        assertEquals(listOf<Activity>(Activity.Lightning(original.copy(contact = BUYER))), updates)
     }
 
     @Test
@@ -147,8 +163,8 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
             Activity.Lightning(lightning().copy(txType = PaymentType.SENT)),
             Activity.Lightning(lightning().copy(status = PaymentState.FAILED)),
         )
-        whenever(contacts.contactsForPaymentHash(any())).thenReturn(setOf("buyer"))
-        whenever(contacts.contactsForAddresses(any())).thenReturn(setOf("buyer"))
+        whenever(contacts.contactsForPaymentHash(any())).thenReturn(setOf(BUYER))
+        whenever(contacts.contactsForAddresses(any())).thenReturn(setOf(BUYER))
 
         assertFalse(sut.backfillPaykitContacts())
         assertTrue(updates.isEmpty())
@@ -176,7 +192,7 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         var cacheReads = 0
         whenever(cacheStore.data).thenReturn(
             flow {
-                if (++cacheReads == 2) {
+                if (++cacheReads == 1) {
                     sut.update(original.id, edited)
                     rows = listOf(edited)
                 }
@@ -217,21 +233,33 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     }
 
     @Test
-    fun `backfill refuses stale identity snapshot before write`() = coreTest {
+    fun `backfill keeps its immutable received contact after the live profile cache is cleared`() = coreTest {
         rows = listOf(Activity.Lightning(lightning()))
         whenever(contacts.contactsForPaymentHash(any())).thenAnswer {
             whenever(requestRepo.receivedPaymentContacts).thenReturn(PaykitReceivedPaymentContacts.Empty)
-            setOf("buyer")
+            setOf(BUYER)
         }
 
-        assertFalse(sut.backfillPaykitContacts())
+        assertTrue(sut.backfillPaykitContacts())
+        assertEquals(BUYER, (updates.single() as Activity.Lightning).v1.contact)
+    }
+
+    @Test
+    fun `backfill refuses a replaced wallet before its final write`() = coreTest {
+        rows = listOf(Activity.Lightning(lightning()))
+        whenever(contacts.contactsForPaymentHash(any())).thenAnswer {
+            walletBinding = "replacement-wallet"
+            setOf(BUYER)
+        }
+
+        assertFailsWith<AppError> { sut.backfillPaykitContacts() }
         assertTrue(updates.isEmpty())
     }
 
     @Test
     fun `backfill remains idempotent after persisted activity is reopened`() = coreTest {
         rows = listOf(Activity.Lightning(lightning()))
-        whenever(contacts.contactsForPaymentHash(any())).thenReturn(setOf("buyer"))
+        whenever(contacts.contactsForPaymentHash(any())).thenReturn(setOf(BUYER))
         assertTrue(sut.backfillPaykitContacts())
         rows = updates.toList()
         updates.clear()
@@ -315,7 +343,7 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         details = mock { on { this.outputs }.thenReturn(outputs) }
         whenever(reservations.contactPublicKeyForReservedAddress(any()))
             .thenThrow(IllegalStateException("unavailable")).thenReturn(null)
-        assertFailsWith<AppError> { sut.backfillPaykitContacts() }
+        assertFalse(sut.backfillPaykitContacts())
 
         assertTrue(sut.backfillPaykitContacts())
         assertFalse(sut.backfillPaykitContacts())
@@ -351,21 +379,24 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     }
 
     @Test
-    fun `reservation mutation during backfill cannot cache or write stale attribution`() = coreTest {
+    fun `reservation mutation during snapshot capture cannot cache or write partial attribution`() = coreTest {
         rows = listOf(Activity.Onchain(onchain("request-address")))
         val outputs = listOf(output("request-address"))
         details = mock { on { this.outputs }.thenReturn(outputs) }
         sharedAddresses("request-address" to BUYER)
-        whenever(reservations.contactPublicKeyForReservedAddress(any())).thenAnswer {
+        whenever(reservations.receiptAssignments()).doSuspendableAnswer {
+            val captured = reservationVersion.value
             reservationVersion.value++
-            null
+            ReceiptAssignments(emptyList(), captured)
         }
 
         assertFalse(sut.backfillPaykitContacts())
         assertTrue(updates.isEmpty())
-        whenever(reservations.contactPublicKeyForReservedAddress(any())).thenReturn(null)
+        whenever(
+            reservations.receiptAssignments()
+        ).thenAnswer { ReceiptAssignments(emptyList(), reservationVersion.value) }
         assertTrue(sut.backfillPaykitContacts())
-        assertEquals(2, activityReads)
+        assertEquals(1, activityReads)
     }
 
     @Test
@@ -417,6 +448,89 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         val row = (updates.single() as Activity.Onchain).v1
         assertEquals("reserved-address", row.address)
         assertEquals(BUYER, row.contact)
+    }
+
+    @Test
+    fun `reservation derivation failure preserves receipt accounting and retries contact backfill`() = coreTest {
+        val address = "bcrt1qterdweva9vextackckt6pjy0mmuc54g87g6lsq"
+        cacheData.value = cacheData.value.copy(onchainAddress = address)
+        val ledger = flowOf(
+            PrivatePaykitReservationData(
+                contactAssignments = mapOf(BUYER to PrivatePaykitStoredAssignmentData("nativeSegwit", 9000, "")),
+            )
+        )
+        val store = mock<PrivatePaykitReservationStore>()
+        whenever(store.data).thenReturn(ledger)
+        val lightning = mock<LightningRepo>()
+        receiptReservations = PrivatePaykitAddressReservationRepo(
+            testDispatcher, store, settingsStore, coreService, lightning,
+        )
+        whenever(
+            lightning.addressInfoForType(any(), any())
+        ).thenReturn(Result.failure(IOException("derivation unavailable")))
+        val outputs = listOf(output(address))
+        details = mock { on { this.outputs }.thenReturn(outputs) }
+
+        sut.syncLdkNodePaymentsToActivities({ listOf(payment()) })
+
+        val stored = (updates.single() as Activity.Onchain).v1
+        assertEquals(15_000uL, stored.value)
+        assertFalse(stored.confirmed)
+        assertEquals(address, stored.address)
+        assertNull(stored.contact)
+        verify(lightning).addressInfoForType(AddressType.P2WPKH, 9000)
+        rows = updates.toList()
+        updates.clear()
+        assertFalse(sut.backfillPaykitContacts())
+        assertTrue(updates.isEmpty())
+        whenever(lightning.addressInfoForType(any(), any()))
+            .thenReturn(Result.success(AddressDerivationInfo(address, 9000)))
+        assertTrue(sut.backfillPaykitContacts())
+        assertEquals(BUYER, (updates.single() as Activity.Onchain).v1.contact)
+        assertEquals(2, activityReads)
+    }
+
+    @Test
+    fun `held incoming search uses its captured high index reservation after profile cleanup`() = coreTest {
+        val address = "bcrt1qterdweva9vextackckt6pjy0mmuc54g87g6lsq"
+        val ledger = MutableStateFlow(
+            PrivatePaykitReservationData(
+                contactAssignments = mapOf(BUYER to PrivatePaykitStoredAssignmentData("nativeSegwit", 9000, address)),
+            )
+        )
+        val store = mock<PrivatePaykitReservationStore>()
+        whenever(store.data).thenReturn(ledger)
+        whenever(store.update(any())).thenAnswer {
+            val transform: (PrivatePaykitReservationData) -> PrivatePaykitReservationData = it.getArgument(0)
+            ledger.value = transform(ledger.value)
+        }
+        receiptReservations = PrivatePaykitAddressReservationRepo(
+            testDispatcher, store, settingsStore, coreService, mock(),
+        )
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(lightningService.addressInfosForType(any(), any(), any(), any(), any())).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            emptyList()
+        }
+        coroutineScope {
+            val incoming = async { receive(address) }
+            entered.await()
+            val id = UUID.randomUUID().toString()
+            profileRemovalStore.withAccess(id) {
+                profileRemovalStore.begin(id)
+                profileRemovalStore.withReceiptCleanup { receiptReservations.clearContactAssignments(emptySet()) }
+                profileRemovalStore.complete(id)
+            }
+            assertTrue(ledger.value.contactAssignments.isEmpty())
+            release.complete(Unit)
+            incoming.await()
+        }
+        val row = (updates.single() as Activity.Onchain).v1
+        assertEquals(address, row.address)
+        assertEquals(BUYER, row.contact)
+        assertEquals(15_000uL, row.value)
     }
 
     @Test
@@ -482,12 +596,108 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     }
 
     @Test
+    fun `received private invoice keeps its historical contact during pending profile cleanup`() = coreTest {
+        val cached = MutableStateFlow(
+            PrivatePaykitCacheData(
+                contacts = mapOf(
+                    BUYER to PrivatePaykitContactCacheData(receivedInvoicePaymentHashes = listOf("received"))
+                )
+            )
+        )
+        whenever(privateCacheStore.data).thenReturn(cached)
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        val received = payment().copy(
+            kind = PaymentKind.Bolt11(
+                hash = "received",
+                preimage = "preimage",
+                secret = null,
+                bolt11 = null,
+                description = "receipt",
+            )
+        )
+
+        sut.syncLdkNodePaymentsToActivities({ listOf(received) })
+
+        val first = updates.single() as Activity.Lightning
+        assertEquals(15_000uL, first.v1.value)
+        assertEquals(BUYER, first.v1.contact)
+        rows = listOf(first)
+        cached.value = PrivatePaykitCacheData()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.complete(id) }
+        sut.syncLdkNodePaymentsToActivities({ listOf(received) })
+        assertEquals(BUYER, (updates.last() as Activity.Lightning).v1.contact)
+    }
+
+    @Test
+    fun `profile cleanup preserves accounting without claiming complete contacts`() = coreTest {
+        verifyAccountingWithUnavailableAssociations(cleanupPending = true)
+    }
+
+    @Test
+    fun `unreadable invoice cache preserves accounting and a later valid source can backfill`() = coreTest {
+        verifyAccountingWithUnavailableAssociations(cleanupPending = false)
+    }
+
+    private suspend fun verifyAccountingWithUnavailableAssociations(cleanupPending: Boolean) {
+        whenever(contacts.contactsForPaymentHash(any())).thenReturn(setOf(BUYER))
+        val id = UUID.randomUUID().toString()
+        if (cleanupPending) {
+            profileRemovalStore.withAccess(id) {
+                profileRemovalStore.begin(id)
+                profileRemovalStore.beginLocalCleanup()
+            }
+        } else {
+            whenever(privateCacheStore.data).thenReturn(flowOf(PrivatePaykitCacheData(receiptSourceReadable = false)))
+        }
+        val inbound = payment().copy(kind = PaymentKind.Bolt11("received", "preimage", null, null, "receipt"))
+        val outbound = inbound.copy(id = "sent", direction = PaymentDirection.OUTBOUND)
+        sut.syncLdkNodePaymentsToActivities({ listOf(inbound, outbound) })
+        assertEquals(2, updates.size)
+        val stored = updates.filterIsInstance<Activity.Lightning>()
+        assertTrue(
+            stored.all { it.v1.value == 15_000uL && it.v1.status == PaymentState.SUCCEEDED && it.v1.contact == null }
+        )
+        assertEquals(setOf(PaymentType.RECEIVED, PaymentType.SENT), stored.map { it.v1.txType }.toSet())
+        rows = updates.toList()
+        updates.clear()
+        assertFalse(sut.backfillPaykitContacts())
+        assertTrue(updates.isEmpty())
+        assertEquals(0, activityReads)
+        if (cleanupPending) profileRemovalStore.withAccess(id) { profileRemovalStore.complete(id) }
+        whenever(privateCacheStore.data).thenReturn(flowOf(PrivatePaykitCacheData()))
+        assertTrue(sut.backfillPaykitContacts())
+        assertEquals(BUYER, (updates.single() as Activity.Lightning).v1.contact)
+        assertEquals(1, activityReads)
+    }
+
+    @Test
+    fun `received reserved address keeps its historical contact during pending profile cleanup`() = coreTest {
+        val outputs = listOf(output("wallet-address"))
+        details = mock { on { this.outputs }.thenReturn(outputs) }
+        whenever(reservations.contactPublicKeyForReservedAddress("wallet-address")).thenReturn(BUYER)
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+
+        sut.syncLdkNodePaymentsToActivities({ listOf(payment()) })
+
+        val first = updates.single() as Activity.Onchain
+        assertEquals(15_000uL, first.v1.value)
+        assertEquals(BUYER, first.v1.contact)
+        rows = listOf(first)
+        whenever(reservations.contactPublicKeyForReservedAddress("wallet-address")).thenReturn(null)
+        profileRemovalStore.withAccess(id) { profileRemovalStore.complete(id) }
+        sut.syncLdkNodePaymentsToActivities({ listOf(payment()) })
+        assertEquals(BUYER, (updates.last() as Activity.Onchain).v1.contact)
+    }
+
+    @Test
     fun `payment sync uses stored outputs for receiving address attribution`() = coreTest {
         val outputs = listOf(output("wallet-address"), output("unrelated-address"))
         details = mock { on { this.outputs }.thenReturn(outputs) }
         sharedAddresses("wallet-address" to BUYER)
 
-        sut.syncLdkNodePaymentsToActivities(listOf(payment()))
+        sut.syncLdkNodePaymentsToActivities({ listOf(payment()) })
 
         assertEquals(BUYER, (updates.single() as Activity.Onchain).v1.contact)
     }
@@ -499,7 +709,7 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         val outputs = listOf(output("wallet-address"))
         details = mock { on { this.outputs }.thenReturn(outputs) }
 
-        repeat(2) { sut.syncLdkNodePaymentsToActivities(listOf(payment())) }
+        repeat(2) { sut.syncLdkNodePaymentsToActivities({ listOf(payment()) }) }
 
         assertEquals(2, updates.size)
         assertTrue(updates.all { (it as Activity.Onchain).v1.contact == BUYER })
@@ -518,12 +728,30 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         details = mock { on { this.outputs }.thenReturn(outputs) }
         sharedAddresses("wallet-address" to BUYER)
 
-        repeat(2) { sut.syncLdkNodePaymentsToActivities(listOf(payment())) }
+        repeat(2) { sut.syncLdkNodePaymentsToActivities({ listOf(payment()) }) }
 
         assertEquals(2, updates.size)
         assertTrue(updates.all { (it as Activity.Onchain).v1.contact == null })
         verify(reservations, never()).contactPublicKeyForReservedAddress(any())
         verify(contacts, never()).contactsForAddresses(any())
+    }
+
+    @Test
+    fun `repeated incoming payment sync does not fetch missing node transaction details`() = coreTest {
+        val txid = "ab".repeat(32)
+        val incoming = payment().copy(kind = PaymentKind.Onchain(txid, ConfirmationStatus.Unconfirmed))
+        whenever(lightningService.getTransactionDetails(txid, 0)).thenReturn(
+            LdkTransactionDetails(15_000, emptyList(), listOf(LdkTxOutput("", "", "request-address", 15_000, 0u))),
+        )
+
+        repeat(2) {
+            sut.syncLdkNodePaymentsToActivities({ listOf(incoming) })
+            rows = listOf(updates.last())
+        }
+
+        assertEquals(txid, (rows.single() as Activity.Onchain).v1.txId)
+        verify(lightningService, never()).getTransactionDetails(any(), any())
+        verify(lightningService, never()).addressInfosForType(any(), any(), any(), any(), any())
     }
 
     private suspend fun receive(vararg addresses: String) {
@@ -553,6 +781,12 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     private fun coreTest(block: suspend () -> Unit) = test {
         whenever(requestRepo.receivedPaymentContacts).thenReturn(contacts)
         whenever(reservations.attributionVersion).thenAnswer { reservationVersion.value }
+        whenever(
+            reservations.receiptAssignments()
+        ).thenAnswer { ReceiptAssignments(emptyList(), reservationVersion.value) }
+        whenever(reservations.contactsForReceipt(any(), any())).doSuspendableAnswer {
+            listOfNotNull(reservations.contactPublicKeyForReservedAddress(it.getArgument(0)))
+        }
         whenever(privateCacheStore.data).thenReturn(flowOf(PrivatePaykitCacheData()))
         whenever(cacheStore.data).thenReturn(cacheData)
         whenever(cacheStore.update(any())).thenAnswer {
@@ -574,8 +808,13 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
                     rows
                 }
                 native.`when`<Activity?> { getActivityById(any(), any()) }.thenAnswer { invocation ->
-                    rows.filterIsInstance<Activity.Onchain>().firstOrNull {
-                        it.v1.walletId == invocation.arguments[0] && it.v1.id == invocation.arguments[1]
+                    rows.firstOrNull {
+                        when (it) {
+                            is Activity.Onchain -> it.v1.walletId == invocation.arguments[0] &&
+                                it.v1.id == invocation.arguments[1]
+                            is Activity.Lightning -> it.v1.walletId == invocation.arguments[0] &&
+                                it.v1.id == invocation.arguments[1]
+                        }
                     }
                 }
                 native.`when`<OnchainActivity?> { getActivityByTxId(any(), any()) }.thenAnswer { invocation ->

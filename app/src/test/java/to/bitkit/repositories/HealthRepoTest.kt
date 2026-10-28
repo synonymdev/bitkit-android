@@ -1,7 +1,6 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
-import com.synonym.bitkitcore.IBtOrder
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +27,6 @@ import kotlin.time.Instant
 class HealthRepoTest : BaseUnitTest() {
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val lightningRepo = mock<LightningRepo>()
-    private val blocktankRepo = mock<BlocktankRepo>()
     private val cacheStore = mock<CacheStore>()
     private val clock: Clock = mock()
 
@@ -40,7 +38,6 @@ class HealthRepoTest : BaseUnitTest() {
     fun setUp() {
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
-        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever(cacheStore.backupStatuses).thenReturn(flowOf(emptyMap()))
         whenever(clock.now()).thenReturn(fixedTime)
     }
@@ -50,7 +47,6 @@ class HealthRepoTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             connectivityRepo = connectivityRepo,
             lightningRepo = lightningRepo,
-            blocktankRepo = blocktankRepo,
             cacheStore = cacheStore,
             clock = clock,
         )
@@ -202,27 +198,6 @@ class HealthRepoTest : BaseUnitTest() {
         sut.healthState.test {
             val state = awaitItem()
             assertEquals(HealthState.ERROR, state.channels)
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `paid orders override channels error to pending`() = test {
-        val lightningState = LightningState(
-            nodeLifecycleState = NodeLifecycleState.Running,
-            channels = persistentListOf(),
-        )
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
-
-        val paidOrder = mock<IBtOrder>()
-        val blocktankState = BlocktankState(paidOrders = listOf(paidOrder).toImmutableList())
-        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(blocktankState))
-
-        sut = createSut()
-
-        sut.healthState.test {
-            val state = awaitItem()
-            assertEquals(HealthState.PENDING, state.channels)
             cancelAndIgnoreRemainingEvents()
         }
     }

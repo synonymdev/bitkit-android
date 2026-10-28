@@ -361,7 +361,12 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `profile removal finalization is local and rejects an ended pause`() = test {
         val pause = sut.beginProfileDeletion()
-        assertTrue(sut.finishProfileRemoval(pause).isSuccess)
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) {
+            profileRemovalStore.begin(id)
+            assertTrue(sut.finishProfileRemoval(pause).isSuccess)
+            profileRemovalStore.complete(id)
+        }
         val beforeCompletion = sut.backupStateVersion.value
         sut.notifyProfileRemovalCompleted(pause)
         assertEquals(beforeCompletion + 1, sut.backupStateVersion.value)
@@ -3871,6 +3876,51 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.consumePrivatePaymentList(CONTACT_KEY, PrivatePaykitPaymentContext(emptyMap(), 7uL)).getOrThrow()
         sut.releasePrivatePaymentListVersion(CONTACT_KEY, 7uL, 6uL).getOrThrow()
         assertEquals(6uL, cacheData.value.contacts.getValue(CONTACT_KEY).consumedPrivatePaymentListVersion)
+    }
+
+    @Test
+    fun `releasePrivatePaymentList gives a list back only to the owner that consumed it`() = test {
+        val context = PrivatePaykitPaymentContext(emptyMap(), 7uL)
+        fun consumed() = cacheData.value.contacts[CONTACT_KEY]?.consumedPrivatePaymentListVersion
+
+        sut.consumePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-b").getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a").getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, context).getOrThrow()
+        assertEquals(7uL, consumed())
+
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-b").getOrThrow()
+        assertNull(consumed())
+        assertNull(cacheData.value.contacts[CONTACT_KEY]?.consumedPrivatePaymentListOwner)
+
+        sut.consumePrivatePaymentList(CONTACT_KEY, context).getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a").getOrThrow()
+        assertEquals(7uL, consumed())
+    }
+
+    @Test
+    fun `a release overlapping another release's failed write still gives the list back`() = test {
+        val context = PrivatePaykitPaymentContext(emptyMap(), 7uL)
+        sut.consumePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a").getOrThrow()
+        val firstWrite = CompletableDeferred<Unit>()
+        var writes = 0
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            if (++writes == 1) {
+                firstWrite.await()
+                throw AppError("write")
+            }
+            val transform = it.getArgument<(PrivatePaykitCacheData) -> PrivatePaykitCacheData>(0)
+            cacheData.value = transform(cacheData.value)
+        }
+
+        val first = async { sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a") }
+        runCurrent()
+        val second = async { sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a") }
+        runCurrent()
+        firstWrite.complete(Unit)
+
+        assertTrue(first.await().isFailure)
+        assertTrue(second.await().isSuccess)
+        assertNull(cacheData.value.contacts[CONTACT_KEY]?.consumedPrivatePaymentListVersion)
     }
 
     @Test

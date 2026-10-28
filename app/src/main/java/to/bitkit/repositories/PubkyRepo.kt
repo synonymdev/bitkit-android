@@ -467,7 +467,12 @@ class PubkyRepo @Inject constructor(
             if (expectedRevision != null && expectedRevision != storedIdentityRevision.get()) {
                 return@withContext Result.success(Unit)
             }
-            initializeSession() to storedIdentityRevision.get()
+            val restored = if (expectedRevision != null && _publicKey.value != null) {
+                true
+            } else {
+                initializeSession()
+            }
+            restored to storedIdentityRevision.get()
         }
         if (revision != storedIdentityRevision.get()) return@withContext Result.success(Unit)
         if (restored) loadIdentityData()
@@ -1076,11 +1081,13 @@ class PubkyRepo @Inject constructor(
         }
 
         val publicKey = result.getOrElse { return Result.failure(it) }
-        return runSuspendCatching {
-            if (_publicKey.value != publicKey) return@runSuspendCatching
-            loadProfile()
-            loadContacts()
+        val signIn = currentSignIn()?.takeIf { it.publicKey == publicKey }
+        if (signIn != null) {
+            scope.launch {
+                if (isCurrent(signIn)) loadContacts()
+            }
         }
+        return Result.success(Unit)
     }
 
     private suspend fun createLocalIdentitySession(markSessionCreated: () -> Unit): String {

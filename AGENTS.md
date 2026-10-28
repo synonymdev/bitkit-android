@@ -199,9 +199,6 @@ just test android
 # Build for E2E tests (UI hooks enabled, local Electrum by default)
 just e2e
 
-# Build for E2E tests with geoblocking disabled
-just e2e no geo
-
 # Build for E2E tests using network Electrum (not local; staging/mainnet based on flavor)
 just e2e network assembleTnetRelease
 
@@ -290,7 +287,7 @@ writing one; it has the format, the runner commands and the per-suite preconditi
 - KEEP the file name, `<journey name>` and `<action>` prose identical across the two repos so the
   specs stay diffable. Change only what the platform forces.
 - MATCH the iOS identifier string when adding a `testTag` a journey asserts on — the vocabulary is
-  deliberately shared (`N9`, `NRemove`, `SpendingAmountContinue`, `HardwareTransferSign`). Record any
+  deliberately shared (`N9`, `NRemove`, `TransferUnavailableContinue`, `HardwareTransferToSpending`). Record any
   name that cannot match in the identifier table in `journeys/README.md`.
 - ADAPT rather than transcribe when a platform genuinely behaves differently, and say so in the
   journey's `<description>` and the suite README — never assert behaviour the platform does not have.

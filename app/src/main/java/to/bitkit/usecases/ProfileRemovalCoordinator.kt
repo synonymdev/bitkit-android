@@ -134,6 +134,7 @@ class ProfileRemovalCoordinator @Inject constructor(
                             pubkyRepo.signOutForProfileRemoval()
                         }
                         localCompletionStarted = true
+                        removalStore.beginLocalCleanup()
                         pubkyRepo.finishProfileRemovalLocally()
                         withContext(NonCancellable) {
                             privatePaykitRepo.finishProfileRemoval(pause).getOrThrow()

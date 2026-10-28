@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -225,7 +226,7 @@ internal fun UsdtDepositsContent(
     val scrollState = rememberScrollState()
     val focusManager = LocalFocusManager.current
     LaunchedEffect(detail?.deposit?.id, showDetails) { scrollState.scrollTo(0) }
-    Column(modifier = Modifier.fillMaxSize().imePadding()) {
+    Column(modifier = Modifier.fillMaxSize().background(Colors.Black).imePadding()) {
         AppTopBar(
             titleText = stringResource(
                 if (detail == null) R.string.usdt__deposit_history else R.string.usdt__receiving_title

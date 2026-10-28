@@ -1,28 +1,46 @@
 package to.bitkit.repositories
 
+import androidx.datastore.core.DataStoreFactory
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.data.PrivatePaykitCacheData
+import to.bitkit.data.PrivatePaykitCacheSerializer
 import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.PrivatePaykitContactCacheData
+import to.bitkit.data.PrivatePaykitReservationData
+import to.bitkit.data.PrivatePaykitReservationSerializer
+import to.bitkit.data.PrivatePaykitReservationStore
+import to.bitkit.data.PrivatePaykitStoredAssignmentData
 import to.bitkit.data.PrivatePaykitStoredInvoiceData
 import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import java.util.UUID
 import javax.inject.Provider
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PrivatePaykitContactResolverTest : BaseUnitTest() {
+    @get:Rule
+    val folder = TemporaryFolder()
     companion object {
         private const val CONTACT_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private const val PAYMENT_HASH = "010203"
@@ -30,6 +48,7 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
     }
 
     private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
+    private val connectionRecovery = connectionRecoveryFixture(mock())
     private val cacheStore = mock<PrivatePaykitCacheStore>()
     private val addressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val paymentRequestRepo = mock<PaykitPaymentRequestRepo>()
@@ -47,7 +66,88 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
             addressReservationRepo = Provider { addressReservationRepo },
             paymentRequestRepo = Provider { paymentRequestRepo },
             profileRemovalStore = profileRemovalStore,
+            connectionRecovery = Provider { connectionRecovery },
         )
+    }
+
+    @Test
+    fun `first receipt captures a cold real reservation ledger without a false concurrent change`() = test {
+        for (ledger in listOf(
+            PrivatePaykitReservationData(),
+            PrivatePaykitReservationData(
+                contactAssignments = mapOf(
+                    CONTACT_KEY to PrivatePaykitStoredAssignmentData("p2wpkh", 3, PRIVATE_ADDRESS)
+                )
+            ),
+        )) {
+            val store = mock<PrivatePaykitReservationStore>()
+            whenever(store.data).thenReturn(MutableStateFlow(ledger))
+            val reservations = PrivatePaykitAddressReservationRepo(testDispatcher, store, mock(), mock(), mock())
+            val resolver = PrivatePaykitContactResolver(
+                testDispatcher,
+                cacheStore,
+                Provider { reservations },
+                Provider { paymentRequestRepo },
+                profileRemovalStore,
+                Provider { connectionRecovery },
+            )
+            resolver.withReceiptOperation { receipt ->
+                assertEquals(
+                    ledger.contactAssignments.map { it.key to it.value },
+                    requireNotNull(receipt.snapshot).assignments
+                )
+                receipt.requireCurrent()
+            }
+        }
+    }
+
+    @Test
+    fun `malformed real reservation storage cannot turn a partial request into a positive receipt`() = test {
+        val bytes = "{broken reservation evidence".toByteArray()
+        val file = folder.newFile("reservations").also { it.writeBytes(bytes) }
+        val storageScope = CoroutineScope(SupervisorJob() + testDispatcher)
+        val storage = DataStoreFactory.create(PrivatePaykitReservationSerializer, scope = storageScope) { file }
+        val store = mock<PrivatePaykitReservationStore>()
+        whenever(store.data).thenReturn(storage.data)
+        val reservations = PrivatePaykitAddressReservationRepo(testDispatcher, store, mock(), mock(), mock())
+        val resolver = PrivatePaykitContactResolver(
+            testDispatcher,
+            cacheStore,
+            Provider { reservations },
+            Provider { paymentRequestRepo },
+            profileRemovalStore,
+            Provider { connectionRecovery },
+        )
+        val request = mock<PaykitReceivedPaymentContacts>()
+        whenever(request.contactsForPaymentHash(PAYMENT_HASH)).thenReturn(setOf(CONTACT_KEY))
+        whenever(paymentRequestRepo.receivedPaymentContacts).thenReturn(request)
+        resolver.withReceiptOperation {
+            assertNull(it.snapshot)
+            assertNull(it.contactForInvoice(PAYMENT_HASH))
+        }
+        assertFailsWith<IllegalStateException> { storage.updateData { it.copy(version = it.version + 1) } }
+        requireNotNull(storageScope.coroutineContext[Job]).cancelAndJoin()
+        assertTrue(file.readBytes().contentEquals(bytes))
+        val reopened = DataStoreFactory.create(PrivatePaykitReservationSerializer, scope = backgroundScope) { file }
+        assertFalse(reopened.data.first().receiptSourceReadable)
+    }
+
+    @Test
+    fun `malformed real invoice storage remains unavailable to complete receipt capture`() = test {
+        val bytes = "{broken invoice evidence".toByteArray()
+        val file = folder.newFile("invoices").also { it.writeBytes(bytes) }
+        val storageScope = CoroutineScope(SupervisorJob() + testDispatcher)
+        val storage = DataStoreFactory.create(PrivatePaykitCacheSerializer, scope = storageScope) { file }
+        whenever(cacheStore.data).thenReturn(storage.data)
+        sut.withReceiptOperation {
+            assertNull(it.snapshot)
+            assertNull(it.contactForInvoice(PAYMENT_HASH))
+        }
+        assertFailsWith<IllegalStateException> { storage.updateData { it.copy(cleanupPending = true) } }
+        requireNotNull(storageScope.coroutineContext[Job]).cancelAndJoin()
+        assertTrue(file.readBytes().contentEquals(bytes))
+        val reopened = DataStoreFactory.create(PrivatePaykitCacheSerializer, scope = backgroundScope) { file }
+        assertFalse(reopened.data.first().receiptSourceReadable)
     }
 
     @Test

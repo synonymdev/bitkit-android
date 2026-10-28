@@ -28,6 +28,7 @@ import org.lightningdevkit.ldknode.WordCount
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -73,6 +74,7 @@ class WalletRepo @Inject constructor(
     private val transferRepo: TransferRepo,
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
+    private val connectionRecovery: WalletConnectionRecovery,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
@@ -283,7 +285,6 @@ class WalletRepo @Inject constructor(
     ) {
         runSuspendCatching {
             lightningRepo.syncState()
-            lightningRepo.updateGeoBlockState()
             refreshBip21Locked().getOrThrow()
         }.onFailure {
             _walletState.update { state -> state.copy(hasReceiveInvoiceError = true) }
@@ -303,7 +304,6 @@ class WalletRepo @Inject constructor(
         return updateReceiveState {
             runSuspendCatching {
                 lightningRepo.syncState()
-                lightningRepo.updateGeoBlockState()
                 refreshAddressForInvoice().getOrThrow()
                 updateBip21InvoiceLocked(state.bip21AmountSats, state.bip21Description).getOrThrow()
             }.onFailure {
@@ -603,17 +603,19 @@ class WalletRepo @Inject constructor(
 
     suspend fun createWallet(bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         lightningRepo.setRecoveryMode(enabled = false)
-        runCatching {
-            val mnemonic = generateEntropyMnemonic()
-            keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
-            if (bip39Passphrase != null) {
-                keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
-            }
-            settingsStore.update {
-                it.copy(
-                    selectedAddressType = DEFAULT_ADDRESS_TYPE_STRING,
-                    addressTypesToMonitor = listOf(DEFAULT_ADDRESS_TYPE_STRING),
-                )
+        runSuspendCatching {
+            connectionRecovery.withIdentityChange {
+                val mnemonic = generateEntropyMnemonic()
+                keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+                if (bip39Passphrase != null) {
+                    keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
+                }
+                settingsStore.update {
+                    it.copy(
+                        selectedAddressType = DEFAULT_ADDRESS_TYPE_STRING,
+                        addressTypesToMonitor = listOf(DEFAULT_ADDRESS_TYPE_STRING),
+                    )
+                }
             }
             setWalletExistsState()
         }.onFailure {
@@ -623,16 +625,18 @@ class WalletRepo @Inject constructor(
 
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         lightningRepo.setRecoveryMode(enabled = false)
-        runCatching {
-            keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
-            if (bip39Passphrase != null) {
-                keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
-            }
-            settingsStore.update {
-                it.copy(
-                    selectedAddressType = DEFAULT_ADDRESS_TYPE_STRING,
-                    addressTypesToMonitor = ALL_ADDRESS_TYPE_STRINGS,
-                )
+        runSuspendCatching {
+            connectionRecovery.withIdentityChange {
+                keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+                if (bip39Passphrase != null) {
+                    keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
+                }
+                settingsStore.update {
+                    it.copy(
+                        selectedAddressType = DEFAULT_ADDRESS_TYPE_STRING,
+                        addressTypesToMonitor = ALL_ADDRESS_TYPE_STRINGS,
+                    )
+                }
             }
             setWalletExistsState()
         }.onFailure {

@@ -65,3 +65,7 @@ removed; Profile still offers an explicit local Disconnect. Malformed/unavailabl
 fails closed. Local success never asserts remote endpoint or profile removal after an uncertain
 response. Native key-only contact batches do not establish cross-device edit/re-add/unblock/ABA
 protection; that native conditional-mutation work remains separate.
+
+`create-profile.xml` records the name-only saving interval and checks the saved name after reopening and relaunching. Use a fresh unfunded identity per run and record the exact app/SDK revisions and network. With controlled network fault injection, block direct UDP while keeping the configured HTTP relays and homeserver reachable; saving should still complete. Reject the required profile write separately and verify saving reports failure instead of navigating to Pay Contacts. Fault injection is a manual check beyond journey-runner capabilities.
+
+On Android, the restart check waits for the full profile (`ProfileViewName`). A matching `ProfileCachedName` during loading does not complete that check. Record an unfinished load separately from a loaded profile with a missing or incorrect name.

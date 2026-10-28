@@ -20,6 +20,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.ProfileRemovalState
 import to.bitkit.data.ProfileRemovalStore
+import to.bitkit.data.ReceiptAssociationsUnavailable
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -29,6 +30,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
 import to.bitkit.services.PaykitProfileDeletionSnapshot
 import to.bitkit.test.BaseUnitTest
+import java.io.IOException
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -52,6 +54,22 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
     private val deletion =
         PubkyProfileDeletion(original, 1, PaykitProfileDeletionSnapshot("identity", "revision", emptyList()))
     private val sut get() = ProfileRemovalCoordinator(pubky, privateRepo, sharing, store)
+
+    @Test
+    fun `failed local metadata teardown closes receipt admission before any observer can clear requests`() = test {
+        var receiptBlocked = false
+        doSuspendableAnswer {
+            current = ended
+            receiptBlocked = runCatching { store.withReceiptSnapshot { "partial maps" } }
+                .exceptionOrNull() is ReceiptAssociationsUnavailable
+            throw IOException("metadata unavailable after identity ended")
+        }.whenever(pubky).finishProfileRemovalLocally()
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertTrue(receiptBlocked)
+        assertNotNull(store.pendingAttempt())
+        verify(privateRepo, never()).finishProfileRemoval(any())
+    }
 
     @Before
     fun setup() = test {

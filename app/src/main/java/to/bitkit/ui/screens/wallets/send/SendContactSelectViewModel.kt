@@ -9,11 +9,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -37,8 +37,8 @@ class SendContactSelectViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SendContactSelectUiState())
     val uiState: StateFlow<SendContactSelectUiState> = _uiState.asStateFlow()
 
-    private val _effects = MutableSharedFlow<SendContactSelectEffect>(extraBufferCapacity = 1)
-    val effects = _effects.asSharedFlow()
+    private val pendingPayment = MutableStateFlow<SendContactSelectEffect?>(null)
+    val effects = pendingPayment.filterNotNull()
 
     init {
         viewModelScope.launch {
@@ -64,36 +64,53 @@ class SendContactSelectViewModel @Inject constructor(
     }
 
     fun payContact(publicKey: String) {
-        if (_uiState.value.isResolvingPayment) return
+        if (_uiState.value.resolvingPublicKey != null) return
+        _uiState.update { it.copy(resolvingPublicKey = publicKey) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isResolvingPayment = true) }
-            privatePaykitRepo.beginSavedContactPayment(publicKey)
-                .onSuccess { result ->
-                    when (result) {
-                        is PublicPaykitPaymentResult.Opened ->
-                            _effects.emit(
-                                SendContactSelectEffect.OpenPayment(
-                                    result.paymentRequest,
-                                    publicKey,
-                                    result.privatePaymentContext,
-                                    result.endpoints,
-                                )
-                            )
-                        PublicPaykitPaymentResult.NoEndpoint ->
-                            showPayError(R.string.slashtags__error_pay_empty_msg)
-                        PublicPaykitPaymentResult.NotOpened ->
-                            showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                        PublicPaykitPaymentResult.PrivateLinkPending,
-                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList,
-                        ->
-                            showPayError(R.string.slashtags__error_pay_waiting_msg)
+            var openingPayment = false
+            try {
+                privatePaykitRepo.beginSavedContactPayment(publicKey)
+                    .onSuccess { result ->
+                        when (result) {
+                            is PublicPaykitPaymentResult.Opened -> {
+                                openingPayment = true
+                                pendingPayment.update {
+                                    SendContactSelectEffect.OpenPayment(
+                                        result.paymentRequest,
+                                        publicKey,
+                                        result.privatePaymentContext,
+                                        result.endpoints,
+                                    )
+                                }
+                            }
+                            PublicPaykitPaymentResult.NoEndpoint ->
+                                showPayError(R.string.slashtags__error_pay_empty_msg)
+                            PublicPaykitPaymentResult.NotOpened ->
+                                showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                            PublicPaykitPaymentResult.PrivateLinkPending,
+                            PublicPaykitPaymentResult.WaitingForUpdatedPaymentList,
+                            ->
+                                showPayError(R.string.slashtags__error_pay_waiting_msg)
+                        }
                     }
-                }
-                .onFailure {
-                    Logger.warn("Failed to begin contact payment", it, context = TAG)
-                    showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                }
-            _uiState.update { it.copy(isResolvingPayment = false) }
+                    .onFailure {
+                        Logger.warn("Failed to begin contact payment", it, context = TAG)
+                        showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                    }
+            } finally {
+                if (!openingPayment) _uiState.update { it.copy(resolvingPublicKey = null) }
+            }
+        }
+    }
+
+    fun onPaymentOpening(scanJob: Job?) {
+        pendingPayment.update { null }
+        viewModelScope.launch {
+            try {
+                scanJob?.join()
+            } finally {
+                _uiState.update { it.copy(resolvingPublicKey = null) }
+            }
         }
     }
 
@@ -114,7 +131,7 @@ class SendContactSelectViewModel @Inject constructor(
 data class SendContactSelectUiState(
     val contacts: ImmutableList<PubkyProfile> = persistentListOf(),
     val isLoading: Boolean = false,
-    val isResolvingPayment: Boolean = false,
+    val resolvingPublicKey: String? = null,
 )
 
 sealed interface SendContactSelectEffect {

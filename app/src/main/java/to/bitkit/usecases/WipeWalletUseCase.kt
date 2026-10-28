@@ -4,8 +4,10 @@ import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.sync.Mutex
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
+import to.bitkit.data.ProfileRemovalScope
 import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.runSuspendCatching
@@ -55,6 +57,7 @@ class WipeWalletUseCase @Inject constructor(
     private val paykitUsdtPaymentRepo: PaykitUsdtPaymentRepo,
     private val profileRemovalStore: ProfileRemovalStore,
     private val contactPaymentSettingsRepo: Provider<ContactPaymentSettingsRepo>,
+    private val connectionRecovery: WalletConnectionRecovery,
 ) {
     private val wipeMutex = Mutex()
 
@@ -69,19 +72,21 @@ class WipeWalletUseCase @Inject constructor(
         var credentialsMayBeErased = false
         val result = try {
             runSuspendCatching {
-                contactPaymentSettingsRepo.get().withWalletWipe(pubkyRepo::withWalletWipeAdmission) {
-                    paykitSdkService.withWalletWipe {
-                        val pending = profileRemovalStore.pendingAttempt()
-                        val attemptId = pending ?: UUID.randomUUID().toString()
-                        profileRemovalStore.withAccess(attemptId) {
-                            privatePaykitRepo.get().withProfileDeletionPaused { pause ->
-                                stopNode().getOrThrow()
+                connectionRecovery.withIdentityChange {
+                    contactPaymentSettingsRepo.get().withWalletWipe(pubkyRepo::withWalletWipeAdmission) {
+                        paykitSdkService.withWalletWipe {
+                            val pending = profileRemovalStore.pendingAttempt()
+                            val attemptId = pending ?: UUID.randomUUID().toString()
+                            profileRemovalStore.withAccess(attemptId, ProfileRemovalScope.WALLET_WIPE) {
                                 profileRemovalStore.begin(attemptId)
-                                if (pending == null) cleanupRemote()
-                                wipeLocal(walletIndex, pause) { credentialsMayBeErased = true }.getOrThrow()
-                                profileRemovalStore.complete(attemptId)
-                                resetWalletState()
-                                onSuccess()
+                                privatePaykitRepo.get().withProfileDeletionPaused { pause ->
+                                    stopNode().getOrThrow()
+                                    if (pending == null) cleanupRemote()
+                                    wipeLocal(walletIndex, pause) { credentialsMayBeErased = true }.getOrThrow()
+                                    profileRemovalStore.complete(attemptId)
+                                    resetWalletState()
+                                    onSuccess()
+                                }
                             }
                         }
                     }
