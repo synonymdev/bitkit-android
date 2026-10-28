@@ -461,6 +461,7 @@
     <string name="security__pass_recovery">&lt;gray&gt;Senha:&lt;/gray&gt; {passphrase}</string>
     <string name="security__pass_text">Você adicionou uma frase secreta durante a configuração da carteira.</string>
     <string name="security__pass_your">Sua Frase Secreta</string>
+    <string name="security__pin_allowance">Digite seu código PIN para confirmar essa alteração na mesada.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentativas restantes. Esqueceu seu PIN?</string>
     <string name="security__pin_choose_header">Escolha o PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Use um PIN que você se lembrará. Se você esquecer o PIN, poderá redefini-lo mas isso exigirá a restauração da carteira.</string>
@@ -775,6 +776,7 @@
     <string name="usdt__error_fee_collection">Não foi possível pagar a taxa da transação em USDT. Tente um valor menor.</string>
     <string name="usdt__error_network">Não foi possível atualizar o USDT. Verifique sua conexão e tente novamente.</string>
     <string name="usdt__error_pending">Ainda há um pagamento pendente. Aguarde a confirmação antes de enviar novamente.</string>
+    <string name="usdt__error_quote_refreshed">A cotação da taxa expirou e foi atualizada. Confira a taxa e deslize novamente.</string>
     <string name="usdt__error_rate_limit">Muitas solicitações. Tente novamente em instantes.</string>
     <string name="usdt__error_rejected">A rede USDT rejeitou a solicitação. Tente novamente.</string>
     <string name="usdt__error_response">O serviço USDT retornou uma resposta inválida. Tente novamente mais tarde.</string>
@@ -1428,6 +1430,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Mesada Adicionada</string>
     <string name="subscriptions__allowance_offer_explanation">A carteira de {name} pagará suas solicitações dentro destes limites sem perguntar a cada vez. Qualquer um de vocês pode encerrá-la.</string>
     <string name="subscriptions__allowance_offer_headline">{name} oferece\n&lt;accent&gt;uma mesada&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} configuraram mesadas para você</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pago automaticamente</string>
     <string name="subscriptions__allowance_paid_so_far">Pago automaticamente</string>
     <string name="subscriptions__allowance_payment_in_progress">Esta solicitação já está sendo paga automaticamente.</string>

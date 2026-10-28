@@ -248,7 +248,9 @@ internal fun shouldPresentWalletRecovery(
     walletIsInitializing: Boolean,
     restoreState: RestoreState,
     connectionFailure: ConnectionStartupFailure?,
-): Boolean = walletIsInitializing || restoreState is RestoreState.BackupFailed ||
+): Boolean = walletIsInitializing ||
+    restoreState is RestoreState.InProgress ||
+    restoreState is RestoreState.BackupFailed ||
     connectionFailure?.requiresRecovery == true
 
 internal fun shouldFinishWalletInitialization(

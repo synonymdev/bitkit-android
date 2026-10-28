@@ -458,6 +458,7 @@
     <string name="security__pin_disable_button">Wyłącz kod PIN</string>
     <string name="security__pin_enter">Podaj proszę kod PIN</string>
     <string name="security__pin_last_attempt">Ostatnia próba. Wpisanie błędnego kodu spowoduje zresetowanie portfela.</string>
+    <string name="security__pin_allowance">Proszę podaj swój kod PIN, aby potwierdzić tę zmianę budżetu.</string>
     <string name="security__pin_attempts">Liczba pozostałych prób:{attemptsRemaining}. Zapomniałeś kodu PIN?</string>
     <string name="security__pin_forgot_title">Zapomniałeś kodu PIN?</string>
     <string name="security__pin_forgot_text">Zapomniałeś kodu PIN? Zresetuj i odzyskaj swój portfel Bitkit używając mnemonika. Ustaw nowy kod PIN po zakończeniu odzyskiwania portfela.</string>
@@ -774,6 +775,7 @@
     <string name="usdt__error_fee_collection">Nie można zapłacić opłaty transakcyjnej w USDT. Spróbuj mniejszej kwoty.</string>
     <string name="usdt__error_network">Nie udało się zaktualizować USDT. Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="usdt__error_pending">Płatność wciąż oczekuje. Poczekaj na potwierdzenie, zanim wyślesz ponownie.</string>
+    <string name="usdt__error_quote_refreshed">Wycena opłaty wygasła i została zaktualizowana. Sprawdź opłatę i przesuń ponownie.</string>
     <string name="usdt__error_rate_limit">Zbyt wiele żądań. Spróbuj ponownie za chwilę.</string>
     <string name="usdt__error_rejected">Sieć USDT odrzuciła żądanie. Spróbuj ponownie.</string>
     <string name="usdt__error_response">Usługa USDT zwróciła nieprawidłową odpowiedź. Spróbuj ponownie później.</string>
@@ -1427,6 +1429,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Budżet dodany</string>
     <string name="subscriptions__allowance_offer_explanation">Portfel {name} będzie opłacać Twoje żądania w ramach tych limitów bez pytania za każdym razem. Każda ze stron może go zakończyć.</string>
     <string name="subscriptions__allowance_offer_headline">{name} oferuje\n&lt;accent&gt;budżet&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} ustawili dla Ciebie budżety</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} opłacono automatycznie</string>
     <string name="subscriptions__allowance_paid_so_far">Opłacono automatycznie</string>
     <string name="subscriptions__allowance_payment_in_progress">To żądanie jest już opłacane automatycznie.</string>

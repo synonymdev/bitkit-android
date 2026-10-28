@@ -456,6 +456,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Passphrase:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Hai aggiunto una passphrase alla tua recovery phrase durante la configurazione del wallet.</string>
     <string name="security__pass_your">La Tua Passphrase</string>
+    <string name="security__pin_allowance">Inserisci il codice PIN per confermare questa modifica al budget.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentativi rimanenti. Ha dimenticato il PIN?</string>
     <string name="security__pin_choose_header">Scegli il PIN a 4 cifre</string>
     <string name="security__pin_choose_text">Utilizza un PIN che ricorderai. Se dimentichi il PIN, puoi reimpostarlo, ma ciò richiede il ripristino del wallet.</string>
@@ -771,6 +772,7 @@
     <string name="usdt__error_fee_collection">Impossibile pagare la commissione di transazione in USDT. Prova con un importo minore.</string>
     <string name="usdt__error_network">Impossibile aggiornare USDT. Controlla la connessione e riprova.</string>
     <string name="usdt__error_pending">Un pagamento è ancora in sospeso. Attendi la conferma prima di inviare di nuovo.</string>
+    <string name="usdt__error_quote_refreshed">Il preventivo della commissione è scaduto ed è stato aggiornato. Controlla la commissione e scorri di nuovo.</string>
     <string name="usdt__error_rate_limit">Troppe richieste. Riprova tra poco.</string>
     <string name="usdt__error_rejected">La rete USDT ha rifiutato la richiesta. Riprova.</string>
     <string name="usdt__error_response">Il servizio USDT ha restituito una risposta non valida. Riprova più tardi.</string>
@@ -1428,6 +1430,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Budget Aggiunto</string>
     <string name="subscriptions__allowance_offer_explanation">Il wallet di {name} pagherà le tue richieste entro questi limiti senza chiedere ogni volta. Ognuno di voi può terminarlo.</string>
     <string name="subscriptions__allowance_offer_headline">{name} ti offre\n&lt;accent&gt;un budget&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} hanno impostato dei budget per te</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pagati automaticamente</string>
     <string name="subscriptions__allowance_paid_so_far">Pagato automaticamente</string>
     <string name="subscriptions__allowance_payment_in_progress">Questa richiesta è già in fase di pagamento automatico.</string>

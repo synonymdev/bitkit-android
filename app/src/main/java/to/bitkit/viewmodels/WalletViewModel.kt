@@ -565,9 +565,6 @@ class WalletViewModel @Inject constructor(
 
     private suspend fun retryRecovery(owner: WalletConnectionRecovery.Owner, backupOnly: Boolean, attempt: Long) {
         connectionRecovery.withOperation(owner) { session ->
-            session.commitCurrentState {
-                if (startupAttempt.get() == attempt) _connectionStartupError.update { null }
-            }
             val revision = session.replay()
             connectionRecovery.withStartup(owner) { startupSession ->
                 val connection = appliedConnection(owner, revision)

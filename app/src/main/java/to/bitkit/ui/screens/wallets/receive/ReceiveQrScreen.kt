@@ -322,7 +322,7 @@ fun ReceiveQrScreen(
         Column(
             modifier = modifier.fillMaxSize().background(
                 Colors.Gray7
-            ).navigationBarsPadding().padding(horizontal = 16.dp)
+            ).navigationBarsPadding()
         ) {
             UsdtDepositReceiveScreen(
                 viewModel = hiltViewModel(),

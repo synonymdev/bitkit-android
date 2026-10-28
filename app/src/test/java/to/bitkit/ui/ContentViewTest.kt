@@ -157,6 +157,7 @@ class ContentViewTest {
             RestoreState.BackupFailed(1),
         )
         for (restore in pendingRestores) {
+            assertTrue(shouldPresentWalletRecovery(false, restore, null))
             assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, restore, false))
         }
         assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, RestoreState.Completed, true))
