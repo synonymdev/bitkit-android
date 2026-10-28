@@ -8,12 +8,9 @@ import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.ClosedChannelDetails
-import com.synonym.bitkitcore.CreateCjitOptions
-import com.synonym.bitkitcore.CreateOrderOptions
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.GetAddressesResponse
-import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
@@ -30,13 +27,10 @@ import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.ValidationResult
 import com.synonym.bitkitcore.WordCount
 import com.synonym.bitkitcore.addTags
-import com.synonym.bitkitcore.createCjitEntry
-import com.synonym.bitkitcore.createOrder
 import com.synonym.bitkitcore.deleteActivitiesByWalletId
 import com.synonym.bitkitcore.deleteActivityById
 import com.synonym.bitkitcore.deleteTransactionDetails
 import com.synonym.bitkitcore.deriveOnchainDescriptor
-import com.synonym.bitkitcore.estimateOrderFeeFull
 import com.synonym.bitkitcore.getActivities
 import com.synonym.bitkitcore.getActivityById
 import com.synonym.bitkitcore.getActivityByTxId
@@ -65,9 +59,7 @@ import com.synonym.bitkitcore.upsertInfo
 import com.synonym.bitkitcore.upsertOrders
 import com.synonym.bitkitcore.upsertTransactionDetails
 import com.synonym.bitkitcore.wipeAllDatabases
-import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
@@ -121,7 +113,6 @@ import com.synonym.bitkitcore.markActivityAsSeen as coreMarkActivityAsSeen
 @Singleton
 class CoreService @Inject constructor(
     private val lightningService: LightningService,
-    private val httpClient: HttpClient,
     private val cacheStore: CacheStore,
     private val settingsStore: SettingsStore,
     private val privatePaykitContactResolver: Provider<PrivatePaykitContactResolver>,
@@ -169,44 +160,6 @@ class CoreService @Inject constructor(
             }.onFailure {
                 Logger.error("Failed to update Blocktank URL", it, context = TAG)
             }
-        }
-    }
-
-    @Suppress("KotlinConstantConditions")
-    suspend fun isGeoBlocked(): Boolean {
-        val tag = "GeoCheck"
-        if (!Env.isGeoblockingEnabled) {
-            Logger.verbose("Geoblocking disabled via build config", context = tag)
-            return false
-        }
-
-        return ServiceQueue.CORE.background {
-            runCatching {
-                Logger.verbose("Checking geo status…", context = tag)
-                val response = httpClient.get(Env.geoCheckUrl)
-
-                when (response.status.value) {
-                    HttpStatusCode.OK.value -> {
-                        Logger.verbose("Region allowed", context = tag)
-                        false
-                    }
-
-                    HttpStatusCode.Forbidden.value -> {
-                        Logger.warn("Region blocked", context = tag)
-                        true
-                    }
-
-                    else -> {
-                        Logger.warn(
-                            "Unexpected status code: ${response.status.value}, defaulting to false",
-                            context = tag
-                        )
-                        false
-                    }
-                }
-            }.onFailure {
-                Logger.warn("Error. defaulting isGeoBlocked to false", context = tag)
-            }.getOrDefault(false)
         }
     }
 
@@ -2182,26 +2135,6 @@ class BlocktankService(
         return Result.success(fees)
     }
 
-    suspend fun createCjit(
-        channelSizeSat: ULong,
-        invoiceSat: ULong,
-        invoiceDescription: String,
-        nodeId: String,
-        channelExpiryWeeks: UInt,
-        options: CreateCjitOptions,
-    ): IcJitEntry {
-        return ServiceQueue.CORE.background {
-            createCjitEntry(
-                channelSizeSat = channelSizeSat,
-                invoiceSat = invoiceSat,
-                invoiceDescription = invoiceDescription,
-                nodeId = nodeId,
-                channelExpiryWeeks = channelExpiryWeeks,
-                options = options
-            )
-        }
-    }
-
     suspend fun cjitEntries(
         entryIds: List<String>? = null,
         filter: CJitStateEnum? = null,
@@ -2212,30 +2145,6 @@ class BlocktankService(
                 refreshActiveCjitEntries()
             }
             getCjitEntries(entryIds = entryIds, filter = filter, refresh = refresh)
-        }
-    }
-
-    suspend fun newOrder(
-        lspBalanceSat: ULong,
-        channelExpiryWeeks: UInt,
-        options: CreateOrderOptions,
-    ): IBtOrder {
-        return ServiceQueue.CORE.background {
-            createOrder(lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options)
-        }
-    }
-
-    suspend fun estimateFee(
-        lspBalanceSat: ULong,
-        channelExpiryWeeks: UInt,
-        options: CreateOrderOptions? = null,
-    ): IBtEstimateFeeResponse2 {
-        return ServiceQueue.CORE.background {
-            estimateOrderFeeFull(
-                lspBalanceSat = lspBalanceSat,
-                channelExpiryWeeks = channelExpiryWeeks,
-                options = options,
-            )
         }
     }
 

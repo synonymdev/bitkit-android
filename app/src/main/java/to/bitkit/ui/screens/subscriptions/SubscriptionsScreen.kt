@@ -118,6 +118,7 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.sheets.TransactionConfetti
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.rememberSubscriptionNotificationsRequest
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.utils.SubscriptionClockOffset
@@ -697,6 +698,7 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
     val subscription = subscriptions.firstOrNull { it.id == route.id }
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val now = rememberSubscriptionNow(listOfNotNull(subscription).toImmutableList())
+    val requestNotifications = rememberSubscriptionNotificationsRequest()
 
     LaunchedEffect(route, subscription, isProcessing) {
         val proposalIsUnavailable = route is SubscriptionRoute.Review &&
@@ -734,6 +736,7 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
                         }
                     },
                     onSubscribe = {
+                        requestNotifications()
                         isProcessing = true
                         appViewModel.acceptSubscriptionAndStartPayment(subscription).fold(
                             onSuccess = { startedPayment ->

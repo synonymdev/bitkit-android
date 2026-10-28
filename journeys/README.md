@@ -127,10 +127,8 @@ journey PR, which is what made this file conflict on every merge.
 | Controlled USDT quotes, provider history, funded submission and recovery | an explicitly configured local USDT gateway/RPC/bundler fixture with owned test accounts and funds; absent from the standard journey environment. Report these steps as blocked unless that setup and transfer authorization are supplied — [USDT QA](../docs/usdt-qa.md) |
 | On-chain funds and blocks on regtest | `./lsp` deposit and mine against the staging LSP — [Backend preconditions](#backend-preconditions) |
 | Several separate on-chain UTXOs to choose between | three or more `./lsp` deposits, each mined, so manual coin selection has inputs to list — [Backend preconditions](#backend-preconditions) |
-| Lightning channels, CJIT orders and quoted maxima | the same staging LSP the dev flavor targets, plus its node as an external LN peer — [Backend preconditions](#backend-preconditions), [amount-limits](amount-limits/README.md) |
+| Lightning channels | Manual Setup to the staging LSP node, which the dev flavor targets — [Backend preconditions](#backend-preconditions) |
 | A hardware wallet to pair, watch and sign with | the deterministic Trezor emulator from `bitkit-docker` over the Bridge transport, with the USB attach intent injected by `adb`; USB enumeration, permission grants, the OS picker and BLE are not simulated — [hardware-wallet](hardware-wallet/README.md) |
-| Push notifications to a backgrounded or killed app | an FCM push from a CJIT order paid through `./lsp`, read back with `adb shell dumpsys notification` — [cjit-notifications](cjit-notifications/README.md) |
-| The OS notification-permission dialog | an API 33+ target, reset with `adb shell pm revoke to.bitkit.dev android.permission.POST_NOTIFICATIONS` — [notification-permission](notification-permission/README.md) |
 | An incoming Payment Request from a linked issuer | the fixture issuer, saved as a contact and linked as identities — [payment-requests](payment-requests/README.md) |
 | Two linked Bitkit wallets for a subscription lifecycle | a second Bitkit instance linked to the first, so a proposal can be reviewed and accepted — [subscriptions](subscriptions) |
 | A Pubky identity and a two-wallet marketplace purchase | the integration fixture runtime: Pubky testnet, Paykit Server, regtest bitcoind and Fulcrum — [pubky-marketplace](pubky-marketplace/README.md) |
@@ -150,9 +148,8 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 
 | Here | On iOS |
 | --- | --- |
-| `cjit-notifications/cjit-foreground-service-notification.xml` | `cjit-background-notification.xml`, with the thousands-separator assertions dropped — the notification extension never formats an amount |
-| `notification-permission/toggle-off-opens-system-settings.xml` | `toggle-off-and-system-settings-route.xml` — iOS does not deep link into system settings, so it asserts the real route in through Settings ▸ Notifications |
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
+| `cjit-notifications/non-cjit-channel-no-payment-notification.xml` | not ported — iOS dropped its CJIT notification suite with the Blocktank sunset; this one checks Android's channel-ready notification on a Manual Setup channel |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `coin-selection/manual-coin-selection.xml` | not ported — iOS has the screen (`SendUtxoSelectionView`) but no accessibility identifiers on it yet |
@@ -170,7 +167,6 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `send/retry-original-dialog-style.xml` | not ported — iOS shows the two Retry original payment steps as native alerts |
 | `send/prepared-fee-recovery.md` | Same four manual fault cases and file on both platforms; the recipe records original-send versus replacement fee retention and iOS Max/identity-flow adaptations. These faults are not journey capabilities. |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
-| `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `onchain-receive/*` | port pending in synonymdev/bitkit-ios#588, which wires `onchainTransactionConfirmed` into the same received-sheet flow but carries no `journeys/` files. Two adaptations when it lands: iOS suppresses replayed historical receives with a `pendingRestoreActivitySeen` flag cleared by the first post-restore on-chain sync, not the one-hour block-timestamp guard used here, so a stale-confirmation step has to drive a restore instead of a clock; and iOS has no foreground-service path, so `confirmed-only-background-notification.xml` has no counterpart |
 | `backup/show-mnemonic-long-words.xml` | not ported — the long-word fit is an Android-only change (synonymdev/bitkit-android#633); whether iOS wraps long words at larger text sizes is unchecked |
 | `security/forgot-pin-nav-bar-inset.xml` | not ported — Android-only fix (synonymdev/bitkit-android#1572): the Android sheet host adds no navigation-bar inset, so each sheet screen pads itself. iOS sheets keep their content inside the bottom safe area |
@@ -185,7 +181,6 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `deeplinks/screen-deeplink.xml`, `deeplinks/sheet-deeplink.xml` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `shop/gift-card-category-titles.xml` | not ported — iOS still hardcodes the category names, and its route in has no screen deeplink |
-| `amount-limits/transfer-spending-preset-delete.xml` | not ported yet — the same fix shipped in synonymdev/bitkit-ios#289, so this one should port |
 | `app-update/critical-update-onboarding.xml` | not ported yet — iOS already blocks at the top level in `AppScene`, so the journey applies there once written |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `home/timed-reminders-do-not-interrupt.xml` | paired draft in synonymdev/bitkit-ios#1013; the journey name and actions match, but iOS device verification is incomplete. Android resumes Home after permission prompts and background/foreground; iOS uses primary-screen lifecycle callbacks and explicit rechecks. |
@@ -198,7 +193,6 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `lnurl/lnurl-pay-comment-note.xml` | not ported — bitkit-ios has not been checked for keeping the LNURL-pay comment on the activity |
 | `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
-| `transfer/spending-confirm-amount-change.xml` | same file — both platforms show the same "Fees changed" info toast; iOS has no app-log step, and closing the received sheet re-sizes its Spending Confirm, so the lower amounts can show before the swipe |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
@@ -261,6 +255,7 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
 | Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<period>` *(`-one-time` for a one-off)* |
 | Payment Request detail screen | `PaymentRequestDetailsScreen` | `PaymentRequestDetailScreen` |
+| Payment Request preparing confirmation | `PaymentRequestPreparing` *(the disabled swipe)* | `PaymentRequestConfirm` *(the sheet)*, with `GRAB` disabled and loading |
 | Hardware wallet receive tab | `Tab-hardware` | `Tab-trezor` for a Trezor wallet, `Tab-jade` for a Jade |
 | Pubky Ring choice row | `PubkyChoiceIdentity` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRing_<pubky>` |
 | Pubky Ring choice row lookup spinner | `PubkyChoiceIdentityLookup` *(shared by every row; tell rows apart by their key caption)* | `PubkyChoiceRingLookup_<pubky>` |

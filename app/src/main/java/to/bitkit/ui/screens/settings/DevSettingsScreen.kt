@@ -241,21 +241,6 @@ fun DevSettingsScreen(
                     viewModel.openChannel()
                 }
             )
-
-            SectionHeader("NOTIFICATIONS")
-
-            SettingsTextButtonRow(
-                title = "Register For LSP Notifications",
-                onClick = {
-                    viewModel.registerForNotifications()
-                }
-            )
-            SettingsTextButtonRow(
-                title = "Test LSP Notification",
-                onClick = {
-                    viewModel.testLspNotification()
-                }
-            )
         }
     }
 

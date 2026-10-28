@@ -9,8 +9,8 @@
     <string name="cards__invite__title">Пригласить</string>
     <string name="cards__lightning__description">Мгновенные платежи</string>
     <string name="cards__lightning__title">Тратить</string>
-    <string name="cards__notifications__description">Когда Bitkit закрыт</string>
-    <string name="cards__notifications__title">Получать платежи</string>
+    <string name="cards__notifications__description">Напоминания об оплате</string>
+    <string name="cards__notifications__title">Уведомления</string>
     <string name="cards__pin__description">Установите PIN-код</string>
     <string name="cards__pin__title">Безопасность</string>
     <string name="cards__quickpay__description">Сканируйте и платите</string>
@@ -37,7 +37,6 @@
     <string name="common__continue">Продолжить</string>
     <string name="common__copied">Скопировано в буфер обмена</string>
     <string name="common__copy">Копировать</string>
-    <string name="common__default">По умолчанию</string>
     <string name="common__delete">Удалить</string>
     <string name="common__delete_yes">Да, Удалить</string>
     <string name="common__dialog_cancel">Нет,\nОтменить</string>
@@ -48,7 +47,6 @@
     <string name="common__later">Позже</string>
     <string name="common__learn_more">Узнать больше</string>
     <string name="common__max">Макс</string>
-    <string name="common__min">Мин</string>
     <string name="common__never">Никогда</string>
     <string name="common__no">Нет</string>
     <string name="common__ok">ОК</string>
@@ -134,7 +132,6 @@
     <string name="lightning__conn_closed">Закрытые Соединения</string>
     <string name="lightning__conn_closed_hide">Скрыть Закрытые и Неудачные</string>
     <string name="lightning__conn_closed_show">Показать Закрытые и Неудачные</string>
-    <string name="lightning__conn_failed">Неудачные Соединения</string>
     <string name="lightning__conn_open">Открытые Соединения</string>
     <string name="lightning__conn_pending">Ожидающие Соединения</string>
     <string name="lightning__connection">Соединение</string>
@@ -166,7 +163,6 @@
     <string name="lightning__fee_rate_update_time">Время обновления кэша комиссии</string>
     <string name="lightning__fees">Комиссии</string>
     <string name="lightning__force_button">Принудительный Перевод</string>
-    <string name="lightning__force_channels_skipped">Некоторые соединения не удалось закрыть.</string>
     <string name="lightning__force_failed_msg">Не удалось перевести ваши средства обратно в сбережения. Пожалуйста, попробуйте снова.</string>
     <string name="lightning__force_failed_title">Неудачный Принудительный Перевод</string>
     <string name="lightning__force_init_msg">Ваши средства будут доступны через ±14 дней.</string>
@@ -176,34 +172,18 @@
     <string name="lightning__force_title">Принудительный\n&lt;accent&gt;Перевод&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Перевести из Сбережений</string>
     <string name="lightning__funding__button2">Использовать Другой Кошелёк</string>
+    <string name="lightning__funding__button_hw">Перевести с аппаратного кошелька</string>
     <string name="lightning__funding__nav_title">Баланс Расходов</string>
-    <string name="lightning__funding__text">Самый простой вариант — использовать ваши сбережения Bitkit или отправить биткоин с другого кошелька.</string>
-    <string name="lightning__funding__text_blocked">Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам напрямую.</string>
-    <string name="lightning__funding__text_blocked_cjit">Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам напрямую.</string>
     <string name="lightning__funding__title">Пополните свой &lt;accent&gt;Баланс Расходов&lt;/accent&gt;</string>
-    <string name="lightning__funding_advanced__button1">QR LNURL Канала</string>
     <string name="lightning__funding_advanced__button2">Ручная Настройка</string>
-    <string name="lightning__funding_advanced__nav_title">Баланс Расходов</string>
-    <string name="lightning__funding_advanced__text">Сканируйте QR-код, чтобы получить свой LNURL Канал от другого LSP, или выберите ручную настройку.</string>
-    <string name="lightning__funding_advanced__title">Расширенная &lt;accent&gt;Настройка&lt;/accent&gt;</string>
     <string name="lightning__inbound_capacity">Входящая ёмкость</string>
     <string name="lightning__inbound_htlc_max">Макс. входящий HTLC</string>
     <string name="lightning__inbound_htlc_min">Мин. входящий HTLC</string>
     <string name="lightning__is_usable">Можно Использовать</string>
     <string name="lightning__lightning_balances">Балансы Lightning</string>
-    <string name="lightning__liquidity__label">Ликвидность Баланса Расходов</string>
-    <string name="lightning__liquidity__text">Ваш баланс расходов использует Lightning Network, чтобы сделать ваши платежи дешевле, быстрее и более приватными.
-
-Это работает как доступ в интернет, но вы платите за ликвидность и маршрутизацию вместо трафика.
-
-Эта настройка включает некоторые разовые затраты.</string>
-    <string name="lightning__liquidity__title">Ликвидность\n&lt;accent&gt;&amp; Маршрутизация&lt;/accent&gt;</string>
     <string name="lightning__monitor_height">Архивная высота мониторинга канала</string>
     <string name="lightning__next_outbound_htlc_limit">Лимит след. исходящего HTLC</string>
     <string name="lightning__next_outbound_htlc_min">Мин. след. исходящего HTLC</string>
-    <string name="lightning__no_funds__description">Прежде чем вы сможете перевести средства со своего баланса сбережений, вам нужно отправить биткойны в ваш кошелёк Bitkit.</string>
-    <string name="lightning__no_funds__fund_wallet">Пополнить кошелёк</string>
-    <string name="lightning__no_funds__title">Недостаточно Средств</string>
     <string name="lightning__node_id">ID Узла LDK</string>
     <string name="lightning__node_info">Lightning Узел</string>
     <string name="lightning__node_sync_time">Время синхронизации Lightning кошелька</string>
@@ -242,30 +222,15 @@
     <string name="lightning__savings_progress__text">Пожалуйста, подождите, ваш перевод средств выполняется. Это займёт &lt;accent&gt;±10 секунд.&lt;/accent&gt;</string>
     <string name="lightning__savings_progress__title">Средства\n&lt;accent&gt;в Процессе Перевода&lt;/accent&gt;</string>
     <string name="lightning__scores_sync_time">Время синхронизации оценок маршрутизации</string>
-    <string name="lightning__setting_up_button">Продолжить Использование Bitkit</string>
-    <string name="lightning__setting_up_step1">Обработка Платежа</string>
-    <string name="lightning__setting_up_step2">Платеж Успешен</string>
-    <string name="lightning__setting_up_step3">В Очереди на Открытие</string>
-    <string name="lightning__setting_up_step4">Открытие Соединения</string>
-    <string name="lightning__setting_up_text">Пожалуйста, подождите, ваш перевод средств выполняется. Это займёт &lt;accent&gt;±10 минут.&lt;/accent&gt;</string>
     <string name="lightning__spendable_onchain">Доступно Onchain</string>
     <string name="lightning__spending">Расходы</string>
-    <string name="lightning__spending_advanced__fee">Комиссия за Ликвидность</string>
-    <string name="lightning__spending_advanced__title">Входящая\n&lt;accent&gt;Ёмкость&lt;/accent&gt;</string>
-    <string name="lightning__spending_amount__error_balance__title">Недостаточно Сбережений</string>
     <string name="lightning__spending_amount__error_max__description">Сумма, которую вы можете перевести на баланс расходов, в настоящее время ограничена ₿ {amount}.</string>
-    <string name="lightning__spending_amount__error_max__description_zero">Ваш перевод на баланс расходов ограничен из-за политики ликвидности. Подробности см. в Центре помощи.</string>
     <string name="lightning__spending_amount__error_max__title">Максимум Баланса Расходов</string>
     <string name="lightning__spending_amount__quarter">25%</string>
-    <string name="lightning__spending_amount__title">Перевод\n&lt;accent&gt;на Расходы&lt;/accent&gt;</string>
     <string name="lightning__spending_confirm__amount">На Баланс Расходов</string>
-    <string name="lightning__spending_confirm__default">Использовать По Умолчанию</string>
     <string name="lightning__spending_confirm__lsp_fee">Сервисные Комиссии</string>
     <string name="lightning__spending_confirm__network_fee">Сетевые Комиссии</string>
     <string name="lightning__spending_confirm__total">Итого</string>
-    <string name="lightning__spending_intro__button">Начать</string>
-    <string name="lightning__spending_intro__text">Переведите средства на свой баланс расходов, чтобы наслаждаться мгновенными и недорогими транзакциями с друзьями, семьёй и продавцами.</string>
-    <string name="lightning__spending_intro__title">Перевод\n&lt;accent&gt;на Расходы&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Баланс Расходов</string>
     <string name="lightning__status">Статус</string>
     <string name="lightning__support">Поддержка</string>
@@ -278,14 +243,9 @@
     <string name="lightning__transfer__nav_title">Перевод Средств</string>
     <string name="lightning__transfer__swipe">Проведите для Перевода</string>
     <string name="lightning__transfer_in_progress">ПЕРЕВОД В ПРОЦЕССЕ</string>
-    <string name="lightning__transfer_intro__button">Начать</string>
-    <string name="lightning__transfer_intro__text">Пополните свой баланс расходов, чтобы наслаждаться мгновенными и недорогими транзакциями с друзьями, семьёй и продавцами.</string>
-    <string name="lightning__transfer_intro__title">Расходы\n&lt;accent&gt;Баланс&lt;/accent&gt;</string>
     <string name="lightning__transfer_success__nav_title">Перевод Выполнен Успешно</string>
     <string name="lightning__transfer_success__text_savings">Ваши средства переведены. Вы можете использовать эти средства немедленно.</string>
-    <string name="lightning__transfer_success__text_spending">Ваши средства переведены, и ваш баланс расходов готов к использованию.</string>
     <string name="lightning__transfer_success__title_savings">Средства Переведены\n&lt;accent&gt;в Сбережения&lt;/accent&gt;</string>
-    <string name="lightning__transfer_success__title_spending">Средства Переведены\n&lt;accent&gt;на Расходы&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Пожалуйста, подождите, пока Bitkit подключается к платёжной сети (±10 секунд).</string>
     <string name="lightning__wallet_balances">Балансы кошелька</string>
     <string name="lightning__conn_onboarding_button">Начать</string>
@@ -295,22 +255,11 @@
     <string name="migration__nav_title">Миграция кошелька</string>
     <string name="migration__title">МИГРАЦИЯ
 &lt;accent&gt;КОШЕЛЬКА&lt;/accent&gt;</string>
-    <string name="notification__channel_closed__mutual_body">Баланс перемещён с расходов на сбережения</string>
-    <string name="notification__channel_closed__reason_body">Причина: %s</string>
-    <string name="notification__channel_closed__title">Канал закрыт</string>
     <string name="notification__channel_node__body">Канал уведомлений для фоновой службы Lightning ноды</string>
     <string name="notification__channel_node__name">Уведомление Lightning ноды</string>
-    <string name="notification__channel_open_bg_failed_title">Не удалось открыть канал в фоновом режиме</string>
-    <string name="notification__channel_open_failed_title">Не удалось открыть канал</string>
-    <string name="notification__channel_opened_title">Канал открыт</string>
-    <string name="notification__channel_pending_body">В ожидании</string>
-    <string name="notification__channel_ready_body">Готов к отправке</string>
-    <string name="notification__lightning_error_title">Ошибка Lightning</string>
-    <string name="notification__payment_failed_title">Платёж не удался</string>
-    <string name="notification__please_try_again_body">Пожалуйста, попробуйте снова</string>
     <string name="notification__received__body_amount">Получено %s</string>
     <string name="notification__received__title">Платёж получен</string>
-    <string name="notification__service__body">Bitkit работает в фоновом режиме, чтобы вы могли получать Lightning платежи</string>
+    <string name="notification__service__body">Bitkit работает в фоновом режиме, чтобы вы могли получать платежи и запросы</string>
     <string name="notification__service__stop">Остановить приложение</string>
     <string name="onboarding__advanced">Дополнительно</string>
     <string name="onboarding__advanced_setup">Дополнительно</string>
@@ -345,7 +294,6 @@
     <string name="onboarding__slide0_header">Свобода в\n&lt;accent&gt;вашем кармане&lt;/accent&gt;</string>
     <string name="onboarding__slide0_text">Bitkit даёт вам ключи для управления вашими деньгами, профилем и контактами. Возьмите контроль и станьте безграничными.</string>
     <string name="onboarding__slide1_header">Мгновенные\n&lt;accent&gt;платежи&lt;/accent&gt;</string>
-    <string name="onboarding__slide1_note">*Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам.</string>
     <string name="onboarding__slide1_text">Тратьте биткойны быстрее, чем когда-либо. Наслаждайтесь мгновенными и недорогими платежами с друзьями, семьёй и продавцами.</string>
     <string name="onboarding__slide3_header">Конфиденциальность — это\n&lt;accent&gt;не преступление&lt;/accent&gt;</string>
     <string name="onboarding__slide3_text">Ваши деньги, ваша конфиденциальность. Проведите пальцем, чтобы скрыть баланс и тратить более конфиденциально, без отслеживания данных и KYC.</string>
@@ -371,14 +319,6 @@
     <string name="other__connection_back_title">Интернет-Соединение Восстановлено</string>
     <string name="other__connection_issue">Проблемы с Подключением к Интернету</string>
     <string name="other__connection_issue_explain">Похоже, вы отключены, пытаемся переподключиться...</string>
-    <string name="other__gift__claiming__text">Получение вашего подарочного кода Bitkit...</string>
-    <string name="other__gift__claiming__title">Получение подарка</string>
-    <string name="other__gift__error__text">Bitkit не смог получить средства. Пожалуйста, попробуйте позже или свяжитесь с нами.</string>
-    <string name="other__gift__error__title">Ошибка подарочного кода</string>
-    <string name="other__gift__used__text">Этот подарочный код Bitkit уже был использован, и средства были выплачены.</string>
-    <string name="other__gift__used__title">Использованный код</string>
-    <string name="other__gift__used_up__text">К сожалению, вы опоздали! Все подарки по этому коду уже получены.</string>
-    <string name="other__gift__used_up__title">Подарки закончились</string>
     <string name="other__high_balance__cancel">Узнать Больше</string>
     <string name="other__high_balance__continue">Понятно</string>
     <string name="other__high_balance__nav_title">Высокий Баланс</string>
@@ -630,17 +570,15 @@
     <string name="settings__backup__wallet">Создать Резервную Копию Кошелька</string>
     <string name="settings__backup__data">Резервные копии данных</string>
     <string name="settings__bg__customize">Настроить в настройках Android Bitkit</string>
-    <string name="settings__bg__disabled">Фоновые платежи отключены, потому что вы отклонили уведомления.</string>
-    <string name="settings__bg__enabled">Фоновые платежи включены. Вы можете получать средства, даже когда приложение закрыто (если ваше устройство подключено к интернету).</string>
-    <string name="settings__bg__intro_desc">Включите уведомления, чтобы получать платежи, даже когда приложение Bitkit закрыто.</string>
-    <string name="settings__bg__intro_title">ПОЛУЧАЙТЕ
-&lt;accent&gt;ПАССИВНО&lt;/accent&gt;</string>
+    <string name="settings__bg__disabled">Уведомления отключены, потому что вы их запретили.</string>
+    <string name="settings__bg__enabled">Уведомления включены. Bitkit может напоминать о подписках и запросах на оплату.</string>
+    <string name="settings__bg__intro_desc">Включите уведомления, чтобы получать напоминания о подписках и запросах на оплату.</string>
+    <string name="settings__bg__intro_title">Будьте\n&lt;accent&gt;в курсе&lt;/accent&gt;</string>
     <string name="settings__bg__notifications_header">Уведомления</string>
     <string name="settings__bg__off">Выкл</string>
     <string name="settings__bg__on">Вкл</string>
-    <string name="settings__bg__setup">Настроить в фоне</string>
-    <string name="settings__bg__switch_title">Получать платежи при закрытом Bitkit</string>
-    <string name="settings__bg__title">Фоновые платежи</string>
+    <string name="settings__bg__switch_title">Разрешить уведомления</string>
+    <string name="settings__bg__title">Уведомления</string>
     <string name="settings__cs__bnb_desc">Находит точные совпадения сумм для минимизации сдачи</string>
     <string name="settings__cs__bnb_title">Branch and Bound</string>
     <string name="settings__cs__srd_desc">Случайный выбор для приватности</string>
@@ -1015,7 +953,6 @@
     <string name="wallet__max_possible_fee_rate_msg">Уменьшите заданную комиссию и попробуйте снова.</string>
     <string name="wallet__min_possible_fee_rate">Комиссия ниже минимального лимита</string>
     <string name="wallet__min_possible_fee_rate_msg">Увеличьте заданную комиссию и попробуйте снова.</string>
-    <string name="wallet__minimum">МИНИМУМ</string>
     <string name="wallet__note">Заметка</string>
     <string name="wallet__payment_received">Получен Биткоин</string>
     <string name="wallet__peer_disconnected">Пир отключён.</string>
@@ -1023,26 +960,8 @@
     <string name="wallet__receive__cjit">Получить Lightning средства</string>
     <string name="wallet__receive_bitcoin">Получить Биткоин</string>
     <string name="wallet__receive_bitcoin_invoice">Биткоин инвойс</string>
-    <string name="wallet__receive_connect_additional">Чтобы получить больше мгновенных биткоинов, Bitkit должен увеличить вашу ликвидность. Сетевая комиссия &lt;accent&gt;{networkFee}&lt;/accent&gt; и комиссия провайдера услуг &lt;accent&gt;{serviceFee}&lt;/accent&gt; будут вычтены из указанной суммы.</string>
-    <string name="wallet__receive_connect_initial">Для настройки вашего баланса расходов будет вычтена сетевая комиссия &lt;accent&gt;{networkFee}&lt;/accent&gt; и комиссия провайдера услуг &lt;accent&gt;{serviceFee}&lt;/accent&gt;.</string>
     <string name="wallet__receive_copied">Инвойс скопирован в буфер обмена</string>
     <string name="wallet__receive_lightning_invoice">Лайтнинг инвойс</string>
-    <string name="wallet__receive_liquidity__bg_setup_desc">Включите фоновую настройку, чтобы безопасно выйти из Bitkit, пока настраивается ваш баланс.</string>
-    <string name="wallet__receive_liquidity__bg_setup_switch">Настроить в фоне</string>
-    <string name="wallet__receive_liquidity__label">Ликвидность Баланса Расходов</string>
-    <string name="wallet__receive_liquidity__label_additional">Дополнительная Ликвидность Баланса Расходов</string>
-    <string name="wallet__receive_liquidity__nav_title">Настройка Баланса Расходов</string>
-    <string name="wallet__receive_liquidity__nav_title_additional">Увеличить Приёмную Мощность</string>
-    <string name="wallet__receive_liquidity__text">Ваш баланс расходов использует Lightning Network, чтобы сделать ваши платежи дешевле, быстрее и более приватными.
-
-Это работает как доступ в интернет, но вы платите за ликвидность и маршрутизацию вместо трафика.
-
-Эта настройка включает некоторые разовые затраты.</string>
-    <string name="wallet__receive_liquidity__text_additional">Ваш баланс расходов использует Lightning Network, чтобы сделать ваши платежи дешевле, быстрее и более приватными.
-
-Это работает как доступ в интернет, но вы платите за ликвидность и маршрутизацию вместо трафика.
-
-Bitkit должен увеличить приёмную ёмкость вашего баланса расходов для обработки этого платежа.</string>
     <string name="wallet__receive_note_placeholder">Опциональная заметка для плательщика</string>
     <string name="wallet__receive_onboarding_description">Наслаждайтесь мгновенными и недорогими
 транзакциями с друзьями, семьёй
@@ -1054,7 +973,6 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__receive_tab_auto">Авто</string>
     <string name="wallet__receive_tab_savings">Сбережения</string>
     <string name="wallet__receive_tab_spending">Расходы</string>
-    <string name="wallet__receive_will">Вы получите</string>
     <string name="wallet__recipient_contact">Контакт</string>
     <string name="wallet__recipient_invoice">Вставить Инвойс</string>
     <string name="wallet__recipient_manual">Ввести Вручную</string>
@@ -1096,6 +1014,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__send_invoice_expiration">Срок действия инвойса</string>
     <string name="wallet__send_max_spending__description">Максимальная сумма для траты немного меньше из-за необходимого резервного баланса.</string>
     <string name="wallet__send_max_spending__title">Резервный баланс</string>
+    <string name="wallet__send_pending__abandon_transfer_note">Переводы на баланс расходов больше недоступны. Bitkit сначала проверяет сеть, а затем возвращает монеты этого перевода в ваш кошелёк, чтобы исходный перевод никогда не подтвердился. За это взимается сетевая комиссия.</string>
     <string name="wallet__send_pending__description">Этот платеж занимает больше времени, чем ожидалось. Вы можете продолжать использовать Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Платеж в ожидании</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
@@ -1332,21 +1251,13 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="lightning__savings_confirm__service_fee">Сервисная комиссия</string>
     <string name="lightning__savings_settling__text">Ваш перевод инициирован и &lt;accent&gt;проводится в блокчейне&lt;/accent&gt;. Баланс сбережений обновится автоматически после завершения.</string>
     <string name="lightning__savings_settling__title">Перевод\n&lt;accent&gt;в пути&lt;/accent&gt;</string>
-    <string name="lightning__spending_advanced__error_balance__description">Ваших сбережений не хватает на комиссию за ликвидность для этой входящей ёмкости. Выберите меньшую сумму.</string>
-    <string name="lightning__spending_advanced__error_balance__title">Недостаточно Средств</string>
-    <string name="lightning__spending_advanced__error_max__description">Входящая ёмкость сейчас ограничена ₿ {amount}.</string>
-    <string name="lightning__spending_advanced__error_max__title">Максимум Входящей Ёмкости</string>
-    <string name="lightning__spending_amount__error_balance__description">Ваших сбережений не хватает на этот перевод и его комиссии. Попробуйте меньшую сумму.</string>
-    <string name="lightning__spending_confirm__fees_changed_network">Комиссии выросли на {amount}, потому что ставки комиссий или баланс сбережений изменились, пока вы были на этом экране. Проведите ещё раз для подтверждения.</string>
-    <string name="lightning__spending_confirm__fees_changed_service">После создания заказа комиссии выросли на {amount}. Проведите ещё раз для подтверждения.</string>
-    <string name="lightning__spending_confirm__fees_changed_title">Комиссии изменились</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Подключение&lt;/accent&gt;\nк сети</string>
-    <string name="lightning__transfer_hw__open_connect">Открыть Trezor Connect</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Переподключите аппаратное устройство: похоже, оно отключилось от телефона.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Переподключите Аппаратное Устройство</string>
-    <string name="lightning__transfer_hw__sign_title">Подпишите на\n&lt;accent&gt;устройстве&lt;/accent&gt;</string>
-    <string name="lightning__transfer_hw__signed_title">Транзакция\n&lt;accent&gt;подписана&lt;/accent&gt;</string>
     <string name="lightning__transfer_ready_in">ПЕРЕВОД БУДЕТ ГОТОВ ЧЕРЕЗ %s</string>
+    <string name="lightning__transfer_unavailable__nav_title">Перевод недоступен</string>
+    <string name="lightning__transfer_unavailable__text">Автоматические переводы на баланс расходов больше недоступны. Используйте собственный узел или настройте подключение к другому провайдеру.</string>
+    <string name="lightning__transfer_unavailable__title">&lt;accent&gt;Требуется ручная&lt;/accent&gt;\nнастройка</string>
     <string name="migration__network_required_msg">Убедитесь, что у вас стабильное подключение к интернету. Во время подключения данные могут отображаться некорректно.</string>
     <string name="migration__network_required_title">Обнаружены Проблемы с Сетью</string>
     <string name="onboarding__restore_seedqr_error">Этот QR-код не содержит действительный SeedQR из 12 слов.</string>
@@ -1595,7 +1506,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="subscriptions__name_placeholder">Название подписки</string>
     <string name="subscriptions__ongoing">Бессрочно</string>
     <string name="subscriptions__overview">Обзор</string>
-    <string name="subscriptions__payment_due_description">Откройте Bitkit, чтобы проверить платёж по подписке.</string>
+    <string name="subscriptions__payment_due_description">Откройте Bitkit, чтобы проверить платёж</string>
     <string name="subscriptions__payment_due_title">Пора Оплатить Подписку</string>
     <string name="subscriptions__payment_methods">Способы оплаты</string>
     <string name="subscriptions__per_day">В День</string>
@@ -1701,12 +1612,6 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__payment_requests_this_week">На Этой Неделе</string>
     <string name="wallet__payment_requests_this_year">В Этом Году</string>
     <string name="wallet__payment_requests_today">Сегодня</string>
-    <string name="wallet__receive_cjit_error_invalid__description">Предложение по ликвидности больше не действительно. Попробуйте снова, чтобы получить новое.</string>
-    <string name="wallet__receive_cjit_error_invalid__title">Предложение Недоступно</string>
-    <string name="wallet__receive_cjit_error_max__description">Максимум, который вы сейчас можете получить на баланс расходов, — ₿ {amount}.</string>
-    <string name="wallet__receive_cjit_error_max__title">Максимум Входящей Ёмкости</string>
-    <string name="wallet__receive_cjit_error_node_capacity__description">Дополнительная ёмкость для расходов сейчас недоступна. Попробуйте позже или обратитесь в поддержку, если это повторяется.</string>
-    <string name="wallet__receive_cjit_error_node_capacity__title">Ёмкость для Расходов Недоступна</string>
     <string name="wallet__selection_load_error">Bitkit не смог загрузить ваши монеты. Пожалуйста, попробуйте снова.</string>
     <string name="wallet__send_amount_exceeded__description">Сумма превышает ваш доступный баланс.</string>
     <string name="wallet__send_amount_exceeded__title">Недостаточно средств</string>
@@ -1759,4 +1664,5 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="widgets__widget__settings">Настройки Виджета</string>
     <string name="widgets__widget__size_small">Маленький</string>
     <string name="widgets__widget__size_wide">Широкий</string>
+    <string name="wallet__balance_updating">Обновление баланса…</string>
 </resources>

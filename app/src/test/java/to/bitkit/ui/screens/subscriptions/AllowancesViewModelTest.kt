@@ -36,7 +36,7 @@ import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.utils.ServiceError
+import to.bitkit.utils.AppError
 import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -193,7 +193,7 @@ class AllowancesViewModelTest : BaseUnitTest() {
     @Test
     fun `saving without a dollar rate proposes nothing`() = test {
         whenever(currencyRepo.convertFiatToSats(any<BigDecimal>(), anyOrNull()))
-            .thenReturn(Result.failure(ServiceError.CurrencyRateUnavailable()))
+            .thenReturn(Result.failure(AppError("Currency rate unavailable")))
 
         sut.propose(profile(LEO_KEY, "Leo"), perPaymentUsd = 5, monthlyUsd = 100) {}
 
