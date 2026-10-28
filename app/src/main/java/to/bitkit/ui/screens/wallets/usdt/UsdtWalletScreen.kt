@@ -104,7 +104,7 @@ fun RowScope.UsdtWalletBalance(onClick: () -> Unit, viewModel: UsdtViewModel = h
             if (settings.hideBalance) {
                 UiConstants.HIDE_BALANCE_SHORT
             } else {
-                wallet.balance?.let { "$ " + usdtOverviewAmount(it) } ?: "—"
+                (wallet.balance ?: wallet.cachedBalance)?.let { "$ " + usdtOverviewAmount(it) } ?: "—"
             },
             style = UsdtDetailStyles.HistoryTitle
         )
@@ -286,7 +286,8 @@ fun UsdtWalletScreen(
                                 maximumAmount = it
                             }
                         },
-                        onConfirm = { viewModel.confirm() }, onDone = dismiss,
+                        onConfirm = { viewModel.confirm() }, onRetryRecovery = { viewModel.retryRecovery() },
+                        onDone = dismiss,
                         hideBalance = settings.hideBalance,
                         onDetails = {
                             selectedTransferId = state.quote?.id

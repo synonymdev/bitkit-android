@@ -13,14 +13,14 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.models.BalanceState
-import to.bitkit.repositories.WalletRepo
+import to.bitkit.repositories.PaykitPaymentRequestRepo
+import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.components.TimedSheetType
 
 class NotificationsTimedSheetTest : BaseUnitTest() {
     private lateinit var settingsStore: SettingsStore
-    private lateinit var walletRepo: WalletRepo
+    private lateinit var paykitPaymentRequestRepo: PaykitPaymentRequestRepo
     private lateinit var sut: NotificationsTimedSheet
 
     private val defaultSettings = SettingsData()
@@ -29,7 +29,7 @@ class NotificationsTimedSheetTest : BaseUnitTest() {
     @Before
     fun setUp() = runBlocking {
         settingsStore = mock()
-        walletRepo = mock()
+        paykitPaymentRequestRepo = mock()
 
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(settingsStore.update(any())).then {
@@ -38,11 +38,11 @@ class NotificationsTimedSheetTest : BaseUnitTest() {
             flowOf(settingsFlow.value)
         }
 
-        whenever(walletRepo.balanceState).thenReturn(
-            MutableStateFlow(BalanceState(totalLightningSats = 1000UL))
+        whenever(paykitPaymentRequestRepo.subscriptions).thenReturn(
+            MutableStateFlow(listOf(mock<PaykitSubscription>()))
         )
 
-        sut = NotificationsTimedSheet(settingsStore, walletRepo)
+        sut = NotificationsTimedSheet(settingsStore, paykitPaymentRequestRepo)
     }
 
     @Test
@@ -65,9 +65,9 @@ class NotificationsTimedSheetTest : BaseUnitTest() {
     }
 
     @Test
-    fun `should not show when no lightning balance`() = test {
-        whenever(walletRepo.balanceState).thenReturn(
-            MutableStateFlow(BalanceState(totalLightningSats = 0UL))
+    fun `should not show without subscriptions`() = test {
+        whenever(paykitPaymentRequestRepo.subscriptions).thenReturn(
+            MutableStateFlow(emptyList())
         )
 
         val result = sut.shouldShow()
@@ -89,7 +89,7 @@ class NotificationsTimedSheetTest : BaseUnitTest() {
     }
 
     @Test
-    fun `should show after one week timeout with lightning balance`() = test {
+    fun `should show after one week timeout with subscriptions`() = test {
         val eightDaysAgo = System.currentTimeMillis() - (8L * 24 * 60 * 60 * 1000)
         settingsFlow.value = defaultSettings.copy(
             notificationsGranted = false,

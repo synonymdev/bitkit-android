@@ -922,11 +922,13 @@ class PubkyRepo @Inject constructor(
         }
 
         val publicKey = result.getOrElse { return Result.failure(it) }
-        return runSuspendCatching {
-            if (_publicKey.value != publicKey) return@runSuspendCatching
-            loadProfile()
-            loadContacts()
+        val signIn = currentSignIn()?.takeIf { it.publicKey == publicKey }
+        if (signIn != null) {
+            scope.launch {
+                if (isCurrent(signIn)) loadContacts()
+            }
         }
+        return Result.success(Unit)
     }
 
     private suspend fun createLocalIdentitySession(markSessionCreated: () -> Unit): String {

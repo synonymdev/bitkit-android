@@ -1,7 +1,6 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
-import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.FeeRates
@@ -37,7 +36,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
@@ -72,7 +70,6 @@ import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
-import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
@@ -96,7 +93,6 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlChannelResponse
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LnurlWithdrawResponse
-import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
@@ -123,8 +119,6 @@ class LightningRepo @Inject constructor(
     private val lightningService: LightningService,
     private val settingsStore: SettingsStore,
     private val coreService: CoreService,
-    private val lspNotificationsService: LspNotificationsService,
-    private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
     private val lnurlService: LnurlService,
     private val cacheStore: CacheStore,
@@ -194,7 +188,6 @@ class LightningRepo @Inject constructor(
                     }
 
                     if (_lightningState.value.nodeLifecycleState.isRunning()) {
-                        connectToTrustedPeers()
                         scheduleOrdinaryFollowupRetry()
                     }
 
@@ -306,28 +299,16 @@ class LightningRepo @Inject constructor(
         channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
         runSuspendCatching {
-            val trustedPeers = fetchTrustedPeers()
             lightningService.setup(
                 walletIndex,
                 customServerUrl,
                 customRgsServerUrl,
-                trustedPeers,
                 channelMigration,
             )
         }.onFailure {
             Logger.error("Node setup error", it, context = TAG)
         }
     }
-
-    private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runSuspendCatching {
-        val info = coreService.blocktank.info(refresh = false)
-            ?: coreService.blocktank.info(refresh = true)
-        info?.nodes?.toPeerDetailsList()?.also {
-            Logger.info("Fetched ${it.size} trusted peers from remote", context = TAG)
-        }
-    }.onFailure {
-        Logger.warn("fetchTrustedPeers error", it, context = TAG)
-    }.getOrNull()
 
     suspend fun start(
         walletIndex: Int = 0,
@@ -421,7 +402,6 @@ class LightningRepo @Inject constructor(
                 // Initial state sync
                 syncState()
                 logNodeSupportSummary("node started")
-                updateGeoBlockState()
                 refreshChannelCache()
 
                 if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
@@ -436,15 +416,14 @@ class LightningRepo @Inject constructor(
                 }
 
                 // Post-startup tasks (non-blocking)
-                connectToTrustedPeers().onFailure {
-                    Logger.error("Failed to connect to trusted peers", it, context = TAG)
+                disconnectIdlePeers().onFailure {
+                    Logger.error("Failed to disconnect idle peers", it, context = TAG)
                 }
-                logNodeSupportSummary("trusted peers connected")
+                logNodeSupportSummary("idle peers disconnected")
 
                 sync().onFailure { e ->
                     Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
                 }
-                scope.launch { registerForNotifications() }
                 Result.success(Unit)
             }.getOrElse { e ->
                 if (e is CancellationException) {
@@ -571,8 +550,7 @@ class LightningRepo @Inject constructor(
                 )
                 val attempt = observed ?: onchainSendAttemptStore.current()
                 if (attempt != null && attempt.txid.equals(observedTxid, ignoreCase = true) &&
-                    attempt.hasPositiveEvidence && !attempt.localFollowupComplete &&
-                    !attempt.isTransfer && attempt.requestId == null
+                    attempt.hasPositiveEvidence && !attempt.localFollowupComplete && attempt.requestId == null
                 ) {
                     finishOnchainSendLocally(attempt)
                     onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
@@ -672,12 +650,6 @@ class LightningRepo @Inject constructor(
 
     fun setWiping(enabled: Boolean) = run { isWiping = enabled }
 
-    suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
-        _lightningState.update {
-            it.copy(isGeoBlocked = coreService.isGeoBlocked())
-        }
-    }
-
     fun setInitNodeLifecycleState() {
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
     }
@@ -726,7 +698,9 @@ class LightningRepo @Inject constructor(
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
                 lightningService.stop()
                 clearProbeOutcomes()
-                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                _lightningState.update {
+                    LightningState(nodeLifecycleState = NodeLifecycleState.Stopped)
+                }
             }
         }.onFailure {
             Logger.error("Node stop error", it, context = TAG)
@@ -737,7 +711,9 @@ class LightningRepo @Inject constructor(
                 _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
             } else {
                 // Node appears stopped, update state
-                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                _lightningState.update {
+                    LightningState(nodeLifecycleState = NodeLifecycleState.Stopped)
+                }
             }
         }
     }
@@ -1255,8 +1231,8 @@ class LightningRepo @Inject constructor(
         return@withContext Result.success(Unit)
     }
 
-    suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
-        runCatching { lightningService.connectToTrustedPeers() }.also {
+    suspend fun disconnectIdlePeers(): Result<Unit> = executeWhenNodeRunning("disconnectIdlePeers") {
+        runSuspendCatching { lightningService.disconnectIdlePeers() }.also {
             syncState()
         }
     }
@@ -1312,7 +1288,6 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
-        updateGeoBlockState()
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
@@ -1321,7 +1296,6 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
-        updateGeoBlockState()
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
     }
 
@@ -1846,9 +1820,7 @@ class LightningRepo @Inject constructor(
                 delay(1.seconds)
                 if (!_lightningState.value.nodeLifecycleState.isRunning()) return@launch
                 val attempt = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull() ?: return@launch
-                if (!attempt.hasPositiveEvidence || attempt.localFollowupComplete ||
-                    attempt.isTransfer || attempt.requestId != null
-                ) {
+                if (!attempt.hasPositiveEvidence || attempt.localFollowupComplete || attempt.requestId != null) {
                     return@launch
                 }
                 completeAcceptedOrdinaryFollowup(requireNotNull(attempt.txid))
@@ -1859,23 +1831,13 @@ class LightningRepo @Inject constructor(
 
     suspend fun completeAcceptedOrdinaryFollowup(txid: String) {
         val attempt = onchainSendAttemptStore.current()
-        if (attempt != null && !attempt.isTransfer && attempt.requestId == null &&
+        if (attempt != null && attempt.requestId == null &&
             attempt.txid.equals(txid, ignoreCase = true) && attempt.hasPositiveEvidence
         ) {
             runSuspendCatching {
                 finishOnchainSendLocally(attempt)
                 onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
             }.onFailure { Logger.warn("Failed to finish accepted ordinary send locally", it, context = TAG) }
-        }
-    }
-
-    suspend fun completeAcceptedTransferFollowup(orderId: String, txid: String) {
-        val attempt = onchainSendAttemptStore.current()
-        if (attempt?.orderId == orderId && attempt.txid.equals(txid, ignoreCase = true) &&
-            attempt.hasPositiveEvidence
-        ) {
-            finishOnchainSendLocally(attempt)
-            onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
         }
     }
 
@@ -2246,34 +2208,6 @@ class LightningRepo @Inject constructor(
         val isRunning = _lightningState.value.nodeLifecycleState.isRunning()
         return isRunning && lightningService.canReceive()
     }
-
-    fun separateTrustedChannels(channels: List<ChannelDetails>) = lightningService.separateTrustedChannels(channels)
-
-    @Suppress("KotlinConstantConditions")
-    suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
-        if (Env.isE2eTest) {
-            Logger.info("Skipped push registration in E2E build", context = TAG)
-            return@executeWhenNodeRunning Result.success(Unit)
-        }
-
-        runCatching {
-            val token = token ?: firebaseMessaging.token.await()
-            val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
-
-            require(token.isNotEmpty()) { "FCM token is empty or null" }
-
-            if (cachedToken == token) {
-                Logger.debug("registerForNotifications skipped, device token already registered")
-                return@executeWhenNodeRunning Result.success(Unit)
-            }
-
-            lspNotificationsService.registerDevice(token)
-        }.onFailure {
-            Logger.error("registerForNotifications error", it, context = TAG)
-        }
-    }
-
-    fun registerForNotificationsAsync(token: String) = scope.launch { registerForNotifications(token) }
 
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,
@@ -2775,7 +2709,6 @@ data class LightningState(
     val channels: ImmutableList<ChannelDetails> = persistentListOf(),
     val balances: BalanceDetails? = null,
     val isSyncingWallet: Boolean = false,
-    val isGeoBlocked: Boolean = false,
     val lastSyncError: Throwable? = null,
     val lastSuccessfulSyncAt: Long? = null,
 ) {

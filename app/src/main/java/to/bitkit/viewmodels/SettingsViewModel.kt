@@ -106,9 +106,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val hasSeenSpendingIntro = settingsStore.data.map { it.hasSeenSpendingIntro }
-        .asStateFlow(initialValue = false)
-
     val notificationsGranted = settingsStore.data.map { it.notificationsGranted }
         .asStateFlow(initialValue = false)
 
@@ -127,27 +124,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setHasSeenSpendingIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(hasSeenSpendingIntro = value) }
-        }
-    }
-
     val hasSeenWidgetsIntro = settingsStore.data.map { it.hasSeenWidgetsIntro }
         .asStateFlow(initialValue = false)
 
     fun setHasSeenWidgetsIntro(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(hasSeenWidgetsIntro = value) }
-        }
-    }
-
-    val hasSeenTransferIntro = settingsStore.data.map { it.hasSeenTransferIntro }
-        .asStateFlow(initialValue = false)
-
-    fun setHasSeenTransferIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(hasSeenTransferIntro = value) }
         }
     }
 
