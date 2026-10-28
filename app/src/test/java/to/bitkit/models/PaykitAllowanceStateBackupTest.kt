@@ -9,6 +9,7 @@ import to.bitkit.repositories.PaykitAllowanceLimits
 import to.bitkit.repositories.PaykitAllowanceLocalState
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
 import to.bitkit.repositories.PaykitPaymentRequestId
+import java.util.Locale
 import kotlin.test.assertEquals
 
 class PaykitAllowanceStateBackupTest {
@@ -82,6 +83,21 @@ class PaykitAllowanceStateBackupTest {
         val restored = json.decodeFromString<PaykitAllowanceStateBackup>(wire).restored()
 
         assertEquals(Stage.UNKNOWN, restored.journal.single().stage)
+    }
+
+    @Test
+    fun `journal stages are written in ASCII under any device locale`() {
+        val default = Locale.getDefault()
+        Locale.setDefault(Locale.forLanguageTag("tr-TR"))
+        try {
+            val state = localState().let { it.copy(journal = it.journal.map { e -> e.copy(stage = Stage.SUBMITTED) }) }
+
+            val backup = PaykitAllowanceStateBackup(state)
+
+            assertEquals("submitted", backup.journal.single().stage)
+        } finally {
+            Locale.setDefault(default)
+        }
     }
 
     private fun localState() = PaykitAllowanceLocalState(

@@ -8,6 +8,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import java.math.BigDecimal
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.time.Instant
 import java.time.Instant as JavaInstant
 
@@ -83,7 +84,7 @@ data class PaykitAllowanceStateBackup(
                 paymentHash = it.paymentHash,
                 onchainAddress = it.onchainAddress,
                 transactionId = it.transactionId,
-                stage = it.stage.name.lowercase(),
+                stage = it.stage.name.lowercase(Locale.ROOT),
                 createdAt = isoTime(it.createdAtMillis),
                 paymentListVersion = it.paymentListVersion,
                 previousPaymentListVersion = it.previousPaymentListVersion,
