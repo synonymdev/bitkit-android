@@ -560,7 +560,7 @@ dependencies {
     val localBitkitCoreAar = providers.gradleProperty("bitkitCoreAar").orNull
     if (localBitkitCoreAar != null) {
         debugImplementation(files(localBitkitCoreAar))
-        debugImplementation("org.jetbrains.kotlinx:atomicfu:0.23.1")
+        debugImplementation("org.jetbrains.kotlinx:atomicfu:0.33.0")
         releaseImplementation(libs.bitkit.core)
     } else {
         implementation(libs.bitkit.core)
