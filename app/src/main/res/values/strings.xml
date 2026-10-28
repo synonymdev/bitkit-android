@@ -311,6 +311,7 @@
     <string name="lightning__funding__button2">Use Other Wallet</string>
     <string name="lightning__funding__button_hw">Transfer from HW wallet</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
+    <string name="lightning__funding__text">The easiest option is to use your Bitkit savings or send bitcoin from a different wallet.</string>
     <string name="lightning__funding__title">Fund your &lt;accent&gt;spending balance&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button2">Manual Setup</string>
     <string name="lightning__inbound_capacity">Inbound Capacity</string>
@@ -367,11 +368,35 @@
     <string name="lightning__savings_settling__text">Your transfer has been initiated and is &lt;accent&gt;settling on-chain&lt;/accent&gt;. Your savings balance will update automatically once it completes.</string>
     <string name="lightning__savings_settling__title">Transfer\n&lt;accent&gt;on the way&lt;/accent&gt;</string>
     <string name="lightning__scores_sync_time">Pathfinding Scores Sync Time</string>
+    <string name="lightning__spark">Spark</string>
+    <string name="lightning__spark_claim_fee">Claim fee</string>
+    <string name="lightning__spark_confirmations">%1$d/3 confirmations</string>
+    <string name="lightning__spark_deposit">Deposit</string>
+    <string name="lightning__spark_deposit__choice">Spark can add it {when} for a higher fee, or after {standard} confirmations, about {minutes} minutes.</string>
+    <string name="lightning__spark_deposit__claim_early">Use {when}</string>
+    <string name="lightning__spark_deposit__claimed">Spark is adding it to your spending balance.</string>
+    <string name="lightning__spark_deposit__early_fee">Fee to use {when}</string>
+    <string name="lightning__spark_deposit__later">after {count} confirmations</string>
+    <string name="lightning__spark_deposit__later_one">after 1 confirmation</string>
+    <string name="lightning__spark_deposit__looking">Waiting for Spark to see your transfer.</string>
+    <string name="lightning__spark_deposit__now">now</string>
+    <string name="lightning__spark_deposit__standard">Spark adds it to your spending balance after {standard} confirmations, about {minutes} minutes.</string>
+    <string name="lightning__spark_deposit__standard_fee">Fee to wait</string>
+    <string name="lightning__spark_deposit__wait_button">Wait</string>
+    <string name="lightning__spark_deposit__waiting">Spark adds it to your spending balance {when}.</string>
+    <string name="lightning__spark_deposit__waiting_next">Spark adds it to your spending balance after the next confirmation.</string>
+    <string name="lightning__spark_deposits_claimed">Claimed deposits</string>
+    <string name="lightning__spark_deposits_pending">Deposits in progress</string>
+    <string name="lightning__spark_provider">Provider</string>
+    <string name="lightning__spark_provider_value">Spark via Breez</string>
+    <string name="lightning__spark_receiving_unlimited">No limit</string>
+    <string name="lightning__spark_trust">This balance is held on Spark, run by Lightspark, Breez and Flashnet. It is safe while at least one of them acts honestly. They can pause access, and leaving without them takes an on-chain exit.</string>
     <string name="lightning__spendable_onchain">Spendable Onchain</string>
     <string name="lightning__spending">Spending</string>
     <string name="lightning__spending_amount__error_max__description">The amount you can transfer to your spending balance is currently limited to ₿ {amount}.</string>
     <string name="lightning__spending_amount__error_max__title">Spending Balance Maximum</string>
     <string name="lightning__spending_amount__quarter">25%</string>
+    <string name="lightning__spending_amount__title">Transfer\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
     <string name="lightning__spending_confirm__amount">To spending</string>
     <string name="lightning__spending_confirm__lsp_fee">Service fees</string>
     <string name="lightning__spending_confirm__network_fee">Network fees</string>
@@ -851,6 +876,7 @@
     <string name="settings__backup__category_contacts" tools:ignore="UnusedResources">Contacts</string>
     <string name="settings__backup__category_profile" tools:ignore="UnusedResources">Profile</string>
     <string name="settings__backup__category_settings">Settings</string>
+    <string name="settings__backup__category_spark_exit">Spark exit data</string>
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_transaction_log">Transaction Log</string>
     <string name="settings__backup__category_wallet">Boosts &amp; Transfers</string>

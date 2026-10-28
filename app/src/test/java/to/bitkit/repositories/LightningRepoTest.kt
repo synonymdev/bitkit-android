@@ -89,6 +89,7 @@ import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
@@ -123,6 +124,7 @@ class LightningRepoTest : BaseUnitTest() {
     private lateinit var sut: LightningRepo
 
     private val lightningService = mock<LightningService>()
+    private val sparkRepo = idleSparkRepo()
     private val settingsStore = mock<SettingsStore>()
     private val coreService = mock<CoreService>()
     private val keychain = mock<Keychain>()
@@ -164,6 +166,7 @@ class LightningRepoTest : BaseUnitTest() {
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
     }
 
@@ -229,6 +232,7 @@ class LightningRepoTest : BaseUnitTest() {
             activityRepo = mock(),
             hwWalletRepo = hardware,
             connectionRecovery = connectionRecoveryFixture(settingsStore),
+            sparkRepo = sparkRepo,
         )
     }
 
@@ -2044,6 +2048,7 @@ class LightningRepoTest : BaseUnitTest() {
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         whenever(coreService.activity).thenReturn(mock())
@@ -2469,6 +2474,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         val activityService = mock<ActivityService>()
@@ -2539,6 +2545,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         val activityService = mock<ActivityService>()
@@ -2620,6 +2627,7 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         val activityService = mock<ActivityService>()
@@ -3099,6 +3107,7 @@ class LightningRepoTest : BaseUnitTest() {
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = failingValidator,
             electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
         )
         sutWithFailingValidator.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())

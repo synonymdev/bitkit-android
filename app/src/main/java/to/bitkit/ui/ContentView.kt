@@ -4,6 +4,7 @@ package to.bitkit.ui
 import android.Manifest
 import android.content.Intent
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -145,6 +146,10 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
+import to.bitkit.ui.screens.transfer.spark.SparkAmountScreen
+import to.bitkit.ui.screens.transfer.spark.SparkConfirmScreen
+import to.bitkit.ui.screens.transfer.spark.SparkDepositScreen
+import to.bitkit.ui.screens.transfer.spark.SparkFundingViewModel
 import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HardwareWalletScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
@@ -193,6 +198,7 @@ import to.bitkit.ui.settings.lightning.ChannelDetailScreen
 import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
+import to.bitkit.ui.settings.lightning.SparkDetailScreen
 import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
@@ -1051,10 +1057,48 @@ private fun RootNavHost(
                 )
             }
             deepLinkableComposable<Routes.Funding> {
+                val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
                 FundingScreen(
+                    canFundWithSpark = sparkState.isReady,
+                    onTransfer = { navController.navigateTo(Routes.SparkFundingNav) },
+                    onFund = {
+                        scope.launch {
+                            navController.navigateToHome()
+                            delay(500) // Wait for nav to actually finish
+                            appViewModel.showSheet(Sheet.Receive())
+                        }
+                    },
                     onManual = { navController.navigateTo(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                 )
+            }
+            navigationWithDefaultTransitions<Routes.SparkFundingNav>(
+                startDestination = Routes.SparkAmount,
+            ) {
+                composableWithDefaultTransitions<Routes.SparkAmount> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SparkFundingNav) }
+                    SparkAmountScreen(
+                        viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
+                        onContinue = { navController.navigateTo(Routes.SparkConfirm) },
+                        onBackClick = { navController.popBackStack() },
+                    )
+                }
+                composableWithDefaultTransitions<Routes.SparkConfirm> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SparkFundingNav) }
+                    SparkConfirmScreen(
+                        viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
+                        onSent = { navController.navigateTo(Routes.SparkDeposit) },
+                        onBackClick = { navController.popBackStack() },
+                    )
+                }
+                composableWithDefaultTransitions<Routes.SparkDeposit> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.SparkFundingNav) }
+                    BackHandler { navController.navigateToHome() }
+                    SparkDepositScreen(
+                        viewModel = hiltViewModel<SparkFundingViewModel>(parentEntry),
+                        onContinueClick = { navController.navigateToHome() },
+                    )
+                }
             }
             navigationWithDefaultTransitions<Routes.ExternalNav>(
                 startDestination = ExternalConnection(),
@@ -1186,6 +1230,7 @@ private fun NavGraphBuilder.home(
         )
     }
     deepLinkableComposable<Routes.Savings> {
+        val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
         val forceCloseRemainingDuration by appViewModel.forceCloseRemainingDuration.collectAsStateWithLifecycle()
 
@@ -1194,18 +1239,26 @@ private fun NavGraphBuilder.home(
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
-            onTransferToSpendingClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
+            onTransferToSpendingClick = {
+                if (sparkState.isReady) {
+                    navController.navigateTo(Routes.SparkFundingNav)
+                } else {
+                    appViewModel.showSheet(Sheet.TransferUnavailable)
+                }
+            },
             onBackClick = { navController.popBackStack() },
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
     }
     deepLinkableComposable<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
+        val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
         SpendingWalletScreen(
             channels = lightningState.channels,
+            hasSparkBalance = sparkState.balanceSats > 0uL,
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
@@ -1217,7 +1270,13 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSavingsAvailability()
                 }
             },
-            onTransferFromSavingsClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
+            onTransferFromSavingsClick = {
+                if (sparkState.isReady) {
+                    navController.navigateTo(Routes.SparkFundingNav)
+                } else {
+                    appViewModel.showSheet(Sheet.TransferUnavailable)
+                }
+            },
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -1815,6 +1874,20 @@ private fun NavGraphBuilder.lightningConnections(
                 navController = navController,
             )
         }
+        deepLinkableComposable<Routes.SparkDetail> {
+            val hasSeenSavingsIntro = settingsViewModel?.hasSeenSavingsIntro
+                ?.collectAsStateWithLifecycle()?.value == true
+            SparkDetailScreen(
+                onBack = { navController.popBackStack() },
+                onTransferToSavings = {
+                    if (hasSeenSavingsIntro) {
+                        navController.navigateToTransferSavingsAvailability()
+                    } else {
+                        navController.navigateToTransferSavingsIntro()
+                    }
+                },
+            )
+        }
         deepLinkableComposable<Routes.CloseConnection> {
             val route = it.toRoute<Routes.CloseConnection>()
             CloseConnectionScreen(
@@ -2258,6 +2331,9 @@ sealed interface Routes {
     data class ChannelDetail(val channelId: String) : Routes.DeepLinkable
 
     @Serializable
+    data object SparkDetail : Routes.DeepLinkable
+
+    @Serializable
     data class CloseConnection(val channelId: String) : Routes.DeepLinkable
 
     @Serializable
@@ -2304,6 +2380,18 @@ sealed interface Routes {
 
     @Serializable
     data object ExternalNav : Routes.DeepLinkable
+
+    @Serializable
+    data object SparkFundingNav : Routes.InternalOnly
+
+    @Serializable
+    data object SparkAmount : Routes.InternalOnly
+
+    @Serializable
+    data object SparkConfirm : Routes.InternalOnly
+
+    @Serializable
+    data object SparkDeposit : Routes.InternalOnly
 
     @Serializable
     data class ExternalConnection(val scannedNodeUri: String? = null) : Routes.DeepLinkable

@@ -32,6 +32,7 @@ import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Config
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
+import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.KeychainKind
@@ -398,6 +399,20 @@ class LightningService internal constructor(
     }
 
     private suspend fun Builder.configureChainSource(customServerUrl: String? = null) {
+        Env.regtestEsploraUrl?.let { esploraUrl ->
+            Logger.info("Using onchain source Esplora url: '$esploraUrl'", context = TAG)
+            setChainSourceEsplora(
+                serverUrl = esploraUrl,
+                config = EsploraSyncConfig(
+                    BackgroundSyncConfig(
+                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
+                    ),
+                ),
+            )
+            return
+        }
         val serverUrl = customServerUrl ?: settingsStore.data.first().electrumServer
         Logger.info("Using onchain source Electrum Sever url: $serverUrl", context = TAG)
         setChainSourceElectrum(
