@@ -760,7 +760,7 @@
     <string name="usdt__enable_title">Zapnout USDT?</string>
     <string name="usdt__error_address">Zadejte platnou adresu pro vybranou síť.</string>
     <string name="usdt__error_amount">Zadejte platnou částku s nejvýše 6 desetinnými místy.</string>
-    <string name="usdt__error_backup">Tuto platbu nelze zálohovat. Záloha se zopakuje, jakmile bude zálohování dostupné.</string>
+    <string name="usdt__error_backup">Tuto platbu nelze zálohovat. Stejná podepsaná platba se automaticky zopakuje, jakmile bude zálohování dostupné. Zavřením této obrazovky ji nezrušíte.</string>
     <string name="usdt__error_balance">Nemáte dostatek USDT na pokrytí částky a poplatků.</string>
     <string name="usdt__error_bridge_amount">Částka je příliš malá na pokrytí nákladů mostu. Zkuste vyšší částku.</string>
     <string name="usdt__error_clock">Nastavte automatické datum a čas zařízení a zkuste to znovu.</string>

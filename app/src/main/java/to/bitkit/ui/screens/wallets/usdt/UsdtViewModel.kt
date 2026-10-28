@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtException
 import com.synonym.bitkitcore.UsdtPaymentRequest
 import com.synonym.bitkitcore.UsdtQuote
+import com.synonym.bitkitcore.UsdtTransferStatus
 import com.synonym.bitkitcore.usdtFormatAmount
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.ImmutableList
@@ -77,6 +78,7 @@ class UsdtViewModel @Inject constructor(
     private val _state = MutableStateFlow(UsdtSendState())
     private var maximumQuote: UsdtQuote? = null
     private var preparedQuote: PreparedQuote? = null
+    private var submissionFailureGeneration: Long? = null
     val state = _state.asStateFlow()
 
     var isSendPresented: Boolean
@@ -90,7 +92,17 @@ class UsdtViewModel @Inject constructor(
 
     suspend fun refresh(history: Boolean = false) {
         repo.refresh(history)
-            .onSuccess { _state.update { it.copy(refreshError = null) } }
+            .onSuccess {
+                _state.update { current ->
+                    val recovered = current.submitted && current.canRetryRecovery &&
+                        repo.recoveryGeneration != submissionFailureGeneration
+                    current.copy(
+                        refreshError = null,
+                        error = current.error.takeUnless { recovered },
+                        canRetryRecovery = current.canRetryRecovery && !recovered,
+                    )
+                }
+            }
             .onFailure { error ->
                 Logger.warn("Failed to refresh USDT with '${error.javaClass.simpleName}'", context = TAG)
                 _state.update { it.copy(refreshError = error.messageResource()) }
@@ -246,6 +258,31 @@ class UsdtViewModel @Inject constructor(
     fun cancelAuthentication() = _state.update { it.copy(authenticationRequired = false) }
     fun edit() = _state.update { UsdtSendState(refreshError = it.refreshError) }
 
+    fun retryRecovery() = viewModelScope.launch {
+        val current = state.value
+        val quote = current.quote ?: return@launch
+        if (!current.submitted || !current.canRetryRecovery || current.retryingRecovery) return@launch
+        _state.update { it.copy(retryingRecovery = true) }
+        try {
+            val result = repo.retryTransfer(quote.id)
+            if (!_state.value.submitted || _state.value.quote?.id != quote.id) return@launch
+            result
+                .onSuccess {
+                    if (repo.recoveryGeneration != submissionFailureGeneration) {
+                        _state.update { it.copy(error = null, canRetryRecovery = false) }
+                    }
+                }
+                .onFailure { error ->
+                    submissionFailureGeneration = repo.recoveryGeneration
+                    _state.update { it.copy(error = error.messageResource()) }
+                }
+        } finally {
+            _state.update {
+                if (it.submitted && it.quote?.id == quote.id) it.copy(retryingRecovery = false) else it
+            }
+        }
+    }
+
     private data class PreparedQuote(val quote: UsdtQuote, val amount: String, val sender: String)
 
     private fun send(quote: UsdtQuote) = viewModelScope.launch {
@@ -264,15 +301,18 @@ class UsdtViewModel @Inject constructor(
             }
             .onFailure { error ->
                 Logger.warn("Failed to send USDT with '${error.javaClass.simpleName}'", context = TAG)
-                val recorded = wallet.value.transfers.any { it.id == quote.id }
+                val transfer = wallet.value.transfers.firstOrNull { it.id == quote.id }
+                val recorded = transfer != null
+                submissionFailureGeneration = repo.recoveryGeneration
                 _state.update {
                     it.copy(
                         submitted = recorded,
-                        busy = recorded,
+                        busy = false,
                         quote = quote.takeIf { recorded },
-                        error = error.messageResource().takeIf {
-                            !recorded || error is UsdtException.SubmissionDeadlineExpired
-                        }
+                        error = error.messageResource(),
+                        submissionErrorStatus = transfer?.status,
+                        submissionDeadlineExpired = error is UsdtException.SubmissionDeadlineExpired,
+                        canRetryRecovery = recorded && error is UsdtException.BackupUnavailable,
                     )
                 }
             }
@@ -285,6 +325,10 @@ data class UsdtSendState(
     val quote: UsdtQuote? = null,
     val busy: Boolean = false,
     val submitted: Boolean = false,
+    val retryingRecovery: Boolean = false,
+    val canRetryRecovery: Boolean = false,
+    val submissionErrorStatus: UsdtTransferStatus? = null,
+    val submissionDeadlineExpired: Boolean = false,
     val authenticationRequired: Boolean = false,
     val warning: SanityWarning? = null,
     val confirmedWarnings: ImmutableList<SanityWarning> = persistentListOf(),
@@ -294,6 +338,13 @@ data class UsdtSendState(
 ) {
     val canQuote: Boolean
         get() = !busy && !submitted && !authenticationRequired && warning == null
+
+    fun submissionError(status: UsdtTransferStatus?): Int? {
+        if (status == null || status == UsdtTransferStatus.CONFIRMED) return null
+        val expiredFailure = submissionDeadlineExpired && submissionErrorStatus == UsdtTransferStatus.PENDING &&
+            status == UsdtTransferStatus.FAILED
+        return error.takeIf { status == submissionErrorStatus || expiredFailure }
+    }
 }
 
 private fun UsdtQuote.warnings(balance: ULong?, warnOver100: Boolean): List<SanityWarning> = buildList {

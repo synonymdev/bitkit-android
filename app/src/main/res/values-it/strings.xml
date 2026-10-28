@@ -758,7 +758,7 @@
     <string name="usdt__enable_title">Attivare USDT?</string>
     <string name="usdt__error_address">Inserisci un indirizzo valido per la rete selezionata.</string>
     <string name="usdt__error_amount">Inserisci un importo valido con al massimo 6 decimali.</string>
-    <string name="usdt__error_backup">Impossibile eseguire il backup di questo pagamento. Verrà ritentato quando il backup sarà disponibile.</string>
+    <string name="usdt__error_backup">Impossibile eseguire il backup di questo pagamento. Lo stesso pagamento firmato verrà ritentato automaticamente quando il backup sarà disponibile. Chiudere questa schermata non lo annulla.</string>
     <string name="usdt__error_balance">USDT insufficienti per coprire importo e commissioni.</string>
     <string name="usdt__error_bridge_amount">Importo troppo basso per coprire i costi del bridge. Prova con un importo maggiore.</string>
     <string name="usdt__error_clock">Imposta data e ora del dispositivo in automatico, poi riprova.</string>

@@ -755,7 +755,7 @@
     <string name="usdt__enable_title">¿Activar USDT?</string>
     <string name="usdt__error_address">Introduzca una dirección válida para la red seleccionada.</string>
     <string name="usdt__error_amount">Introduzca una cantidad válida con hasta 6 decimales.</string>
-    <string name="usdt__error_backup">No se pudo hacer una copia de seguridad de este pago. Se reintentará cuando la copia de seguridad esté disponible.</string>
+    <string name="usdt__error_backup">No se pudo hacer una copia de seguridad de este pago. Se reintentará automáticamente el mismo pago firmado cuando la copia de seguridad esté disponible. Cerrar esta pantalla no lo cancela.</string>
     <string name="usdt__error_balance">No tiene suficientes USDT para cubrir la cantidad y las comisiones.</string>
     <string name="usdt__error_bridge_amount">Cantidad demasiado pequeña para cubrir los costes del puente. Pruebe con una cantidad mayor.</string>
     <string name="usdt__error_clock">Configure la fecha y la hora de su dispositivo en automático e inténtelo de nuevo.</string>

@@ -756,7 +756,7 @@
     <string name="usdt__enable_title">Activar USDT?</string>
     <string name="usdt__error_address">Introdueix una adreça vàlida per a la xarxa seleccionada.</string>
     <string name="usdt__error_amount">Introdueix un import vàlid amb un màxim de 6 decimals.</string>
-    <string name="usdt__error_backup">No es pot fer la còpia de seguretat d\'aquest pagament. Es tornarà a intentar quan la còpia de seguretat estigui disponible.</string>
+    <string name="usdt__error_backup">No es pot fer la còpia de seguretat d’aquest pagament. Es tornarà a intentar automàticament el mateix pagament signat quan la còpia de seguretat estigui disponible. Tancar aquesta pantalla no el cancel·la.</string>
     <string name="usdt__error_balance">No tens prou USDT per cobrir l\'import i les tarifes.</string>
     <string name="usdt__error_bridge_amount">L\'import és massa petit per cobrir els costos del pont. Prova amb un import més gran.</string>
     <string name="usdt__error_clock">Configura la data i l\'hora del dispositiu en mode automàtic i torna-ho a provar.</string>

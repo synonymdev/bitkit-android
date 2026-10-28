@@ -739,7 +739,7 @@
     <string name="usdt__enable_title">تفعيل USDT؟</string>
     <string name="usdt__error_address">أدخل عنوانًا صالحًا للشبكة المحددة.</string>
     <string name="usdt__error_amount">أدخل مبلغًا صالحًا لا يتجاوز 6 منازل عشرية.</string>
-    <string name="usdt__error_backup">تعذر نسخ هذا الدفع احتياطيًا. ستُعاد المحاولة عند توفر النسخ الاحتياطي.</string>
+    <string name="usdt__error_backup">تعذر نسخ هذه الدفعة احتياطيًا. ستتم إعادة محاولة الدفعة الموقّعة نفسها تلقائيًا عند توفر النسخ الاحتياطي. إغلاق هذه الشاشة لا يلغيها.</string>
     <string name="usdt__error_balance">رصيد USDT غير كافٍ لتغطية المبلغ والرسوم.</string>
     <string name="usdt__error_bridge_amount">المبلغ صغير جدًا لتغطية تكاليف الجسر. جرّب مبلغًا أكبر.</string>
     <string name="usdt__error_clock">اضبط تاريخ جهازك ووقته تلقائيًا، ثم حاول مرة أخرى.</string>

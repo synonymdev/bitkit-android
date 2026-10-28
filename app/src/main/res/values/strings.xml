@@ -1204,7 +1204,7 @@
     <string name="usdt__enable_title">Enable USDT?</string>
     <string name="usdt__error_address">Enter a valid address for the selected network.</string>
     <string name="usdt__error_amount">Enter a valid amount with up to 6 decimal places.</string>
-    <string name="usdt__error_backup">Unable to back up this payment. It will be retried when backup is available.</string>
+    <string name="usdt__error_backup">Unable to back up this payment. The same signed payment will retry automatically when backup is available. Closing this screen does not cancel it.</string>
     <string name="usdt__error_balance">Not enough USDT to cover the amount and fees.</string>
     <string name="usdt__error_bridge_amount">Amount too small to cover bridge costs. Try a larger amount.</string>
     <string name="usdt__error_bridge_liquidity">This route cannot complete the transfer right now. Try another network or try again later.</string>

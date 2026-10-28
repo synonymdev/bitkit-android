@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.UsdtException
 import com.synonym.bitkitcore.UsdtPaymentRequest
 import com.synonym.bitkitcore.UsdtQuote
 import com.synonym.bitkitcore.UsdtTransfer
+import com.synonym.bitkitcore.UsdtTransferStatus
 import com.synonym.bitkitcore.usdtFormatAmount
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
@@ -263,6 +264,7 @@ class UsdtViewModelTest : BaseUnitTest() {
     private val repo: UsdtRepo = mock()
     private val settingsStore: SettingsStore = mock()
     private val walletState = MutableStateFlow(UsdtWalletState())
+    private var recoveryGeneration = 0L
     private val settings = MutableStateFlow(SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true))
     private val quote = UsdtQuote(
         id = "payment",
@@ -481,8 +483,11 @@ class UsdtViewModelTest : BaseUnitTest() {
 
     @Test
     fun `durably recorded send failure retains the payment and prevents resubmission`() = test {
+        // A previously acknowledged payment must not clear this payment's failed backup.
+        recoveryGeneration = 4L
         val retained: UsdtTransfer = mock()
         whenever(retained.id).thenReturn(quote.id)
+        whenever(retained.status).thenReturn(UsdtTransferStatus.PENDING)
         val viewModel = createViewModel(walletState = UsdtWalletState(transfers = persistentListOf(retained)))
         settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
         whenever(repo.send(eq(quote), anyOrNull(), any()))
@@ -492,13 +497,105 @@ class UsdtViewModelTest : BaseUnitTest() {
         viewModel.confirm().join()
 
         assertTrue(viewModel.state.value.submitted)
-        assertTrue(viewModel.state.value.busy)
+        assertFalse(viewModel.state.value.busy)
         assertEquals(quote, viewModel.state.value.quote)
-        assertNull(viewModel.state.value.error)
+        assertEquals(R.string.usdt__error_backup, viewModel.state.value.error)
         viewModel.waitForTransfer()
         assertFalse(viewModel.state.value.busy)
+        viewModel.refresh()
+        assertEquals(R.string.usdt__error_backup, viewModel.state.value.error)
+        whenever(repo.retryTransfer(quote.id)).thenReturn(Result.failure(UsdtException.BackupUnavailable()))
+        viewModel.retryRecovery().join()
+        assertEquals(R.string.usdt__error_backup, viewModel.state.value.error)
+        assertTrue(viewModel.state.value.canRetryRecovery)
+        whenever(repo.retryTransfer(quote.id)).thenReturn(Result.failure(UsdtException.RateLimited()))
+        viewModel.retryRecovery().join()
+        assertEquals(R.string.usdt__error_rate_limit, viewModel.state.value.error)
+        assertTrue(viewModel.state.value.canRetryRecovery)
+        whenever(repo.retryTransfer(quote.id)).thenReturn(Result.success(Unit))
+        viewModel.retryRecovery().join()
+        assertEquals(R.string.usdt__error_rate_limit, viewModel.state.value.error)
+        assertTrue(viewModel.state.value.canRetryRecovery)
+        viewModel.refresh()
+        assertTrue(viewModel.state.value.canRetryRecovery)
+        recoveryGeneration++
+        viewModel.retryRecovery().join()
+        assertNull(viewModel.state.value.error)
+        assertFalse(viewModel.state.value.canRetryRecovery)
+        assertEquals(quote, viewModel.state.value.quote)
+        viewModel.confirm().join()
+        verify(repo, times(1)).quote(any(), any(), any(), any())
+        verify(repo, times(4)).retryTransfer(quote.id)
+        verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `closing during recovery retry keeps its failure out of a new send form`() = test {
+        val retained: UsdtTransfer = mock()
+        whenever(retained.id).thenReturn(quote.id)
+        whenever(retained.status).thenReturn(UsdtTransferStatus.PENDING)
+        val viewModel = createViewModel(walletState = UsdtWalletState(transfers = persistentListOf(retained)))
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.BackupUnavailable()))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        val completion = CompletableDeferred<Result<Unit>>()
+        whenever(repo.retryTransfer(quote.id)).doSuspendableAnswer { completion.await() }
+
+        val retry = viewModel.retryRecovery()
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.retryingRecovery)
+        viewModel.edit()
+        val newForm = viewModel.state.value
+        completion.complete(Result.failure(UsdtException.BackupUnavailable()))
+        retry.join()
+
+        assertEquals(newForm, viewModel.state.value)
+        verify(repo, times(1)).retryTransfer(quote.id)
+        verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
+    }
+
+    @Test
+    fun `recovery by another observer clears the latest retry failure without a new payment`() = test {
+        val retained: UsdtTransfer = mock()
+        whenever(retained.id).thenReturn(quote.id)
+        whenever(retained.status).thenReturn(UsdtTransferStatus.PENDING)
+        val viewModel = createViewModel(walletState = UsdtWalletState(transfers = persistentListOf(retained)))
+        settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
+        whenever(repo.send(eq(quote), anyOrNull(), any()))
+            .thenReturn(Result.failure(UsdtException.BackupUnavailable()))
+        viewModel.quote(quote.recipient, "1", quote.destination).join()
+        viewModel.confirm().join()
+        assertEquals(R.string.usdt__error_backup, viewModel.state.value.error)
+        whenever(repo.retryTransfer(quote.id)).thenReturn(Result.failure(UsdtException.RateLimited()))
+        viewModel.retryRecovery().join()
+        assertEquals(R.string.usdt__error_rate_limit, viewModel.state.value.error)
+        assertTrue(viewModel.state.value.canRetryRecovery)
+
+        recoveryGeneration++
+        viewModel.refresh()
+
+        assertNull(viewModel.state.value.error)
+        assertFalse(viewModel.state.value.canRetryRecovery)
+        assertEquals(quote, viewModel.state.value.quote)
         viewModel.confirm().join()
         verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
+        verify(repo, times(1)).retryTransfer(quote.id)
+    }
+
+    @Test
+    fun `submission feedback follows the retained status and disappears on confirmation`() {
+        val state = UsdtSendState(
+            error = R.string.usdt__error_backup,
+            submitted = true,
+            submissionErrorStatus = UsdtTransferStatus.PENDING,
+        )
+        assertEquals(R.string.usdt__error_backup, state.submissionError(UsdtTransferStatus.PENDING))
+        assertNull(state.submissionError(UsdtTransferStatus.CONFIRMED))
+        assertNull(state.submissionError(UsdtTransferStatus.FAILED))
+        assertNull(state.submissionError(null))
     }
 
     @Test
@@ -523,7 +620,10 @@ class UsdtViewModelTest : BaseUnitTest() {
 
     @Test
     fun `recorded payment that exceeds its deadline retains recovery with an expiry error`() = test {
-        val retained: UsdtTransfer = mock { on { id }.thenReturn(quote.id) }
+        val retained: UsdtTransfer = mock {
+            on { id }.thenReturn(quote.id)
+            on { status }.thenReturn(UsdtTransferStatus.PENDING)
+        }
         val model = createViewModel(walletState = UsdtWalletState(transfers = persistentListOf(retained)))
         settings.value = settings.value.copy(isPinForPaymentsEnabled = false)
         whenever(repo.send(eq(quote), anyOrNull(), any()))
@@ -533,6 +633,20 @@ class UsdtViewModelTest : BaseUnitTest() {
         assertTrue(model.state.value.submitted)
         assertEquals(quote, model.state.value.quote)
         assertEquals(R.string.wallet__payment_request_expired, model.state.value.error)
+        assertEquals(
+            R.string.wallet__payment_request_expired,
+            model.state.value.submissionError(UsdtTransferStatus.PENDING)
+        )
+        assertEquals(
+            R.string.wallet__payment_request_expired,
+            model.state.value.submissionError(UsdtTransferStatus.FAILED)
+        )
+        for (status in UsdtTransferStatus.entries.filterNot {
+            it == UsdtTransferStatus.PENDING || it == UsdtTransferStatus.FAILED
+        }) {
+            assertNull(model.state.value.submissionError(status))
+        }
+        assertNull(model.state.value.submissionError(null))
         model.confirm().join()
         verify(repo, times(1)).send(eq(quote), anyOrNull(), any())
     }
@@ -637,6 +751,7 @@ class UsdtViewModelTest : BaseUnitTest() {
     ): UsdtViewModel {
         this.walletState.value = walletState
         whenever(repo.state).thenReturn(this.walletState)
+        whenever(repo.recoveryGeneration).thenAnswer { recoveryGeneration }
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(repo.quote(any(), any(), any(), any())).thenReturn(Result.success(quote))
         whenever(repo.send(eq(quote), anyOrNull(), any())).thenReturn(Result.success(mock<UsdtTransfer>()))

@@ -32,6 +32,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
@@ -47,8 +48,10 @@ import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.ContactPaymentContext
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -137,6 +140,37 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
             incomingPaymentRequest = request,
             endpoints = listOf(PaykitUsdt.endpoint(address))
         )
+
+    @Test
+    fun `reconciliation waits for recovery restore without accessing payment state`() = test {
+        whenever(usdt.isRecoveryRestorePending).thenReturn(true)
+
+        assertTrue(repo().reconcile().isSuccess)
+
+        verifyNoInteractions(sdk, proofs, service, wallet)
+        assertNull(stored)
+    }
+
+    @Test
+    fun `restore retains proof only payment guard across restart and rejects conflicting binding`() = test {
+        val source = repo()
+        source.prepare(context(), quote, amount, request.payment(MethodId.UsdtArbitrum, clock.now())).getOrThrow()
+        val original = source.backupSnapshot().attempts.single()
+        val proof = PaykitUsdtProof(UsdtPaymentProof("42161", "transaction", "0", "signature"))
+        source.restoreBackup(
+            PaykitUsdtStateBackup(listOf(original.copy(proof = proof, proofQueued = true)), emptyList()),
+        )
+        val restarted = repo()
+        val restored = restarted.backupSnapshot().attempts.single()
+        assertTrue(restored.paymentStarted)
+        assertNull(restored.proof)
+        assertFalse(restored.proofQueued)
+        assertTrue(restarted.hasBinding(request.id))
+        assertFailsWith<UsdtException.InvalidBackup> {
+            restarted.restoreBackup(PaykitUsdtStateBackup(listOf(original.copy(contact = identity)), emptyList()))
+        }
+        assertEquals(restored, restarted.backupSnapshot().attempts.single())
+    }
 
     @Test
     fun `request protection survives restart and releases only after definite failure`() = test {
@@ -361,7 +395,7 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
     }
 
     @Test
-    fun `preparing the same quote preserves proof and restored progress`() = test {
+    fun `preparing the same quote preserves restored progress without trusting imported proof`() = test {
         val repo = repo()
         val terms = request.payment(MethodId.UsdtArbitrum, clock.now())
         repo.prepare(context(), quote, amount, terms).getOrThrow()
@@ -371,12 +405,13 @@ class PaykitUsdtPaymentRepoRecoveryTest : BaseUnitTest() {
         )
         repo.restoreBackup(PaykitUsdtStateBackup(listOf(funded), emptyList()))
         repo.prepare(context(), quote, amount, terms).getOrThrow()
-        assertEquals(listOf(funded), repo.backupSnapshot().attempts)
+        val restored = funded.copy(proof = null)
+        assertEquals(listOf(restored), repo.backupSnapshot().attempts)
         assertEquals(
             PaykitPaymentRequestError.OperationInProgress,
             repo.prepare(context(), quote.copy(id = "replacement"), amount, terms).exceptionOrNull(),
         )
-        assertEquals(listOf(funded), repo.backupSnapshot().attempts)
+        assertEquals(listOf(restored), repo.backupSnapshot().attempts)
     }
 
     @Test

@@ -4,6 +4,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.NetworkType
+import com.synonym.bitkitcore.UsdtPaymentProof
 import com.synonym.bitkitcore.ValidationResult
 import com.synonym.bitkitcore.validateBitcoinAddress
 import com.synonym.paykit.ConversionRate
@@ -66,9 +67,11 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.FxRate
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
+import to.bitkit.models.PaykitUsdtStateBackup
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.safe
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
@@ -1721,6 +1724,52 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         runCurrent()
 
         assertEquals(requestId, sut.pendingRequests.value.single().id)
+        assertFalse(sut.isPending(request))
+        assertTrue(sut.automaticPendingRequests().isEmpty())
+    }
+
+    @Test
+    fun `restored usdt proof protects a pending request before proof reconciliation`() = test {
+        val keychain: Keychain = mock()
+        var stored: String? = null
+        whenever(keychain.loadString(any())).thenAnswer { stored }
+        whenever(keychain.upsertString(any(), any())).doSuspendableAnswer { stored = it.getArgument(1) }
+        val restoredPayments = PaykitUsdtPaymentRepo(
+            testDispatcher,
+            keychain,
+            paykitSdkService,
+            paymentProofRepo,
+            mock(),
+            clock
+        )
+        whenever(usdtPayments.paymentRequestStateVersion).thenReturn(restoredPayments.paymentRequestStateVersion)
+        whenever(usdtPayments.protectedPaymentAttempts(LOCAL_IDENTITY)).doSuspendableAnswer {
+            restoredPayments.protectedPaymentAttempts(LOCAL_IDENTITY)
+        }
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        runCurrent()
+        val request = sut.pendingRequests.value.single()
+        assertTrue(sut.isPending(request))
+
+        val attempt = PaykitUsdtAttempt(
+            "quote",
+            "wallet",
+            LOCAL_IDENTITY,
+            COUNTERPARTY,
+            requestId = request.id,
+            proof = PaykitUsdtProof(UsdtPaymentProof("42161", "transaction", "0", "signature")),
+            proofQueued = true,
+        )
+        restoredPayments.restoreBackup(PaykitUsdtStateBackup(listOf(attempt), emptyList()))
+        sut.syncPaymentProofs()
+
+        val restored = restoredPayments.backupSnapshot().attempts.single()
+        assertTrue(restored.paymentStarted)
+        assertNull(restored.proof)
+        assertFalse(restored.proofQueued)
+        assertEquals(request.id, sut.pendingRequests.value.single().id)
         assertFalse(sut.isPending(request))
         assertTrue(sut.automaticPendingRequests().isEmpty())
     }
