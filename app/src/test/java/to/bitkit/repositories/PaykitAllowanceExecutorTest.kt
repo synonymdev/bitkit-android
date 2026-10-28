@@ -1197,6 +1197,34 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovery settles a manual lightning payment restored from a backup taken before the send`() = test {
+        sut.activate(identity)
+        val attemptId = checkNotNull(
+            sut.beginManualPayment(fixtures.paymentRequest(), fixtures.lightningIdentifier, PAYMENT_HASH.uppercase())
+                .getOrThrow(),
+        )
+        val captured = sut.localState(identity)
+        assertEquals(Stage.SUBMITTED, captured.journal.single().stage)
+        seedJournal(*PaykitAllowanceStateBackup(captured).restored().journal.toTypedArray())
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence(attemptId, PaymentExecutionStatus.SUBMITTED)),
+        )
+        nodeStatuses[PAYMENT_HASH] = PaymentStatus.SUCCEEDED
+        val restarted = PaykitAllowanceExecutor(
+            ioDispatcher = testDispatcher,
+            paykitSdkService = sdk,
+            store = PaykitAllowanceStore(keychain),
+            payer = payer,
+            clock = clock,
+            accountingAmount = { _, _ -> fixtures.accountingAmount("0.00001") },
+        )
+
+        restarted.recover(identity)
+
+        assertEquals(listOf(PaymentOutcomeReport(attemptId, PaymentOutcome.SUCCEEDED)), recordedOutcomes)
+    }
+
+    @Test
     fun `a released manual on-chain payment is recorded failed`() = test {
         sut.activate(identity)
         val request = fixtures.paymentRequest()

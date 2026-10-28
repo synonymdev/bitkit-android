@@ -738,10 +738,12 @@ class PaykitAllowanceExecutor @Inject constructor(
      * Reports a user-approved payment of an incoming request to the shared ledger before it leaves the wallet.
      * Fails with [PaykitAllowanceError.PaymentAlreadyRecorded] when another live attempt exists for the request, so
      * the same request is never paid twice. Any other problem leaves the payment unreported and returns null.
+     * A Lightning payment passes its [paymentHash], so a backup taken before the send still lets the node settle it.
      */
     suspend fun beginManualPayment(
         request: PaykitPaymentRequest,
         paymentEndpointIdentifier: String,
+        paymentHash: String? = null,
     ): Result<String?> = withContext(ioDispatcher) {
         val identity = activeIdentity
         val amountSats = request.allowanceSats()
@@ -758,7 +760,8 @@ class PaykitAllowanceExecutor @Inject constructor(
                 request,
                 amountSats,
                 paymentEndpointIdentifier,
-                identity
+                paymentHash,
+                identity,
             )
         }
         val error = result.exceptionOrNull() ?: return@withContext result
@@ -771,6 +774,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         request: PaykitPaymentRequest,
         amountSats: ULong,
         paymentEndpointIdentifier: String,
+        paymentHash: String?,
         identity: String,
     ): String? {
         ensureReconciled(identity)
@@ -790,7 +794,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         // Recovery leaves the attempt alone until finishManualPayment reports its outcome.
         liveAttemptIds.add(prepared.attemptId)
         val attemptId = runSuspendCatching {
-            beginManualAttempt(request, amountSats, paymentEndpointIdentifier, prepared, identity)
+            beginManualAttempt(request, amountSats, paymentEndpointIdentifier, paymentHash, prepared, identity)
         }
         if (attemptId.getOrNull() == null) liveAttemptIds.remove(prepared.attemptId)
         // Nothing was sent yet, so a failed journal write releases the attempt instead of blocking a retry.
@@ -805,6 +809,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         request: PaykitPaymentRequest,
         amountSats: ULong,
         paymentEndpointIdentifier: String,
+        paymentHash: String?,
         prepared: PaymentAttemptRecord,
         identity: String,
     ): String? {
@@ -816,6 +821,7 @@ class PaykitAllowanceExecutor @Inject constructor(
                 allowanceId = null,
                 amountSats = amountSats,
                 paymentEndpointIdentifier = paymentEndpointIdentifier,
+                paymentHash = paymentHash?.lowercase(),
                 stage = Stage.PREPARED,
                 createdAtMillis = clock.now().toEpochMilliseconds(),
             ),

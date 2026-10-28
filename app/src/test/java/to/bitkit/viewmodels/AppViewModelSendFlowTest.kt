@@ -792,7 +792,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitAllowanceRepo.isUpdatingFlow).thenReturn(allowanceUpdating)
         whenever(paykitAllowanceRepo.offersToAnnounce).thenReturn(MutableStateFlow(emptyList()))
         whenever { paykitAllowanceRepo.refresh() }.thenReturn(Result.success(Unit))
-        whenever { paykitAllowanceRepo.beginManualPayment(any(), any()) }.thenReturn(Result.success(null))
+        whenever { paykitAllowanceRepo.beginManualPayment(any(), any(), anyOrNull()) }.thenReturn(Result.success(null))
         whenever { paykitAllowanceRepo.acceptOffersFromAllowers(any(), any()) }.thenReturn(emptyList())
         whenever { paykitAllowanceRepo.processIncomingRequests(any()) }.thenReturn(false)
         whenever { paykitAllowanceRepo.isAutomaticallyHandling(any()) }.thenReturn(false)
@@ -12670,7 +12670,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             val privateContext =
                 PrivatePaykitPaymentContext(mapOf(MethodId.P2wpkh.rawValue to "bitkit"), 7uL + index.toULong())
             val attemptId = "manual-$index"
-            whenever(paykitAllowanceRepo.beginManualPayment(eq(request), any())).thenReturn(Result.success(attemptId))
+            whenever(paykitAllowanceRepo.beginManualPayment(eq(request), any(), anyOrNull()))
+                .thenReturn(Result.success(attemptId))
             balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
             whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
             whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
@@ -12825,7 +12826,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
         whenever(paykitPaymentRequestRepo.accept(incoming)).thenReturn(Result.success(Unit))
-        whenever(paykitAllowanceRepo.beginManualPayment(eq(incoming), any())).thenReturn(Result.success("attempt-b"))
+        whenever(paykitAllowanceRepo.beginManualPayment(eq(incoming), any(), anyOrNull()))
+            .thenReturn(Result.success("attempt-b"))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         setActiveContactPaymentContext(testPublicKey, privateContext, incoming, isInitialSubscriptionPayment = true)
