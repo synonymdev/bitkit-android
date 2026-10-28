@@ -4,9 +4,11 @@ import android.os.Build
 import com.synonym.bitkitcore.UsdtDestination
 import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
+import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.BuildConfig
 import to.bitkit.BuildConfig.VERSION_NAME
 import to.bitkit.ext.ensureDir
+import to.bitkit.ext.of
 import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
@@ -39,6 +41,12 @@ internal object Env {
     const val e2eHomegateUrl = BuildConfig.E2E_HOMEGATE_URL
     val e2eHomeserverPubky = BuildConfig.E2E_HOMESERVER_PUBKY.takeIf { isLocalE2eBackend && it.isNotBlank() }
     val network = Network.valueOf(BuildConfig.NETWORK)
+
+    /** The Lightning-first primary node: it funds channels just in time and grows them by splicing. */
+    val primaryNode: PeerDetails? get() = when (network) {
+        Network.BITCOIN -> PeerDetails.of(PRIMARY_NODE_URI_MAINNET)
+        else -> null
+    }
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL
     const val walletSyncTimeoutSecs = 10_uL
@@ -164,6 +172,11 @@ internal object Env {
     const val BITKIT_TELEGRAM = "https://t.me/bitkitchat"
     const val BITKIT_GITHUB = "https://github.com/synonymdev"
     const val BITKIT_HELP_CENTER = "https://help.bitkit.to"
+
+    /** Beignet primary run for the Lightning-first mainnet test, reached through a public TCP relay. */
+    const val PRIMARY_NODE_URI_MAINNET =
+        "024a6cc632544189896cca8e06e375bdb1d1f34a71a4c25d09a39cf0ed920a299c@bore.pub:39101"
+
     const val BLOCKTANK_SUNSET_URL = "https://blog.bitkit.to/"
     const val TERMS_OF_USE_URL = "https://bitkit.to/terms-of-use"
     const val PRIVACY_POLICY_URL = "https://bitkit.to/privacy-policy"

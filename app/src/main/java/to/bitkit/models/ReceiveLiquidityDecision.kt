@@ -17,6 +17,7 @@ data class ReceiveAdditionalLiquidityParams(
     val source: ReceiveLiquiditySource,
     val invoiceAmountSats: ULong,
     val inboundCapacitySats: ULong?,
+    val hasPrimaryNode: Boolean = false,
 )
 
 object ReceiveLiquidityDecision {
@@ -24,7 +25,9 @@ object ReceiveLiquidityDecision {
         hasReadyChannels: Boolean,
         inboundCapacitySats: ULong?,
         invoiceAmountSats: ULong?,
+        hasPrimaryNode: Boolean = false,
     ): Boolean {
+        if (hasPrimaryNode && (invoiceAmountSats ?: 0uL) > 0uL) return true
         if (!hasReadyChannels || inboundCapacitySats == null) return false
 
         if (invoiceAmountSats == null || invoiceAmountSats == 0uL) {
@@ -37,6 +40,7 @@ object ReceiveLiquidityDecision {
     fun additionalLiquidityAction(params: ReceiveAdditionalLiquidityParams): ReceiveAdditionalLiquidityAction {
         return when {
             params.source != ReceiveLiquiditySource.SPENDING -> ReceiveAdditionalLiquidityAction.None
+            params.hasPrimaryNode -> ReceiveAdditionalLiquidityAction.None
             !needsInboundLiquidity(params.invoiceAmountSats, params.inboundCapacitySats) ->
                 ReceiveAdditionalLiquidityAction.None
             (params.inboundCapacitySats ?: 0uL) == 0uL -> ReceiveAdditionalLiquidityAction.None

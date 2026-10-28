@@ -27,6 +27,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -123,6 +124,13 @@ fun ReceiveSheet(
         }
     }
 
+    fun editSoftwareInvoice(tab: ReceiveTab) {
+        editInvoiceSourceTab = tab
+        invoiceEditState.beginSoftwareEdit(tab)
+        resetEditInvoiceAmount()
+        navController.navigateTo(ReceiveRoute.EditInvoice)
+    }
+
     LaunchedEffect(Unit) {
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
         wallet.refreshReceiveState()
@@ -148,13 +156,14 @@ fun ReceiveSheet(
                         onUsdtSelected = onUsdtSelected,
                         walletState = walletState,
                         lightningState = lightningState,
-                        onClickReceiveCjit = { navController.navigateTo(ReceiveRoute.TransferUnavailable) },
-                        onClickEditInvoice = {
-                            editInvoiceSourceTab = it
-                            invoiceEditState.beginSoftwareEdit(it)
-                            resetEditInvoiceAmount()
-                            navController.navigateTo(ReceiveRoute.EditInvoice)
+                        onClickReceiveCjit = {
+                            if (Env.primaryNode != null) {
+                                editSoftwareInvoice(ReceiveTab.SPENDING)
+                            } else {
+                                navController.navigateTo(ReceiveRoute.TransferUnavailable)
+                            }
                         },
+                        onClickEditInvoice = ::editSoftwareInvoice,
                         onClickHardwareEditInvoice = {
                             editInvoiceSourceTab = ReceiveTab.HARDWARE
                             invoiceEditState.beginHardwareEdit()

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.env.Env
 import to.bitkit.models.ReceiveAdditionalLiquidityAction
 import to.bitkit.models.ReceiveAdditionalLiquidityParams
 import to.bitkit.models.ReceiveLiquidityDecision
@@ -45,6 +46,7 @@ class EditInvoiceVM @Inject constructor(
                     source = source,
                     invoiceAmountSats = amountSats,
                     inboundCapacitySats = inboundCapacitySats,
+                    hasPrimaryNode = Env.primaryNode != null,
                 )
             )
             editInvoiceEffect(EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(action))

@@ -966,6 +966,7 @@ class LightningServiceTest : BaseUnitTest() {
             addressType = AddressType.NATIVE_SEGWIT,
             addressTypesToMonitor = emptyList(),
             onchainWalletAccounts = emptyList(),
+            primaryNodeId = null,
         )
 
         val config = nodeConfig(base = base, storageDirPath = "ldk", onchainWalletAccounts = emptyList())

@@ -556,7 +556,8 @@ dependencies {
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
     testImplementation(libs.bouncycastle.pkix.jdk) // test certificates
-    implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
+    implementation(libs.ldk.node.android) { artifact { type = "aar" } }
+    implementation(libs.atomicfu) // ldk-node-android runtime dependency; the release asset carries no POM
     val localBitkitCoreAar = providers.gradleProperty("bitkitCoreAar").orNull
     if (localBitkitCoreAar != null) {
         debugImplementation(files(localBitkitCoreAar))
@@ -568,7 +569,6 @@ dependencies {
     implementation(libs.paykit)
     implementation(libs.vss.client)
     if (localBitkitCoreAar == null) nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
-    nativeDebugSymbols(libs.ldk.node.android.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.paykit.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.vss.client.nativeDebugSymbolsArtifact())
     // Firebase

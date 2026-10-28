@@ -206,6 +206,9 @@ class LightningService internal constructor(
         private const val RELEASE_AMOUNT_SATS = 1_000uL
         private const val NODE_ID_PREVIEW_LEN = 20
 
+        /** Primary nodes authorize a just-in-time receive for ten minutes at most. */
+        private const val PRIMARY_INVOICE_EXPIRY_SECS = 600u
+
         /** LDK's defaults for route parameters, kept when only the routing fee is capped. */
         private const val DEFAULT_MAX_TOTAL_CLTV_EXPIRY_DELTA = 1008u
         private const val DEFAULT_MAX_PATH_COUNT: UByte = 10u
@@ -342,6 +345,7 @@ class LightningService internal constructor(
             setScoringFeeParams(scorerFeeParameters())
             setAddressType(selectedType)
             setAddressTypesToMonitor(monitoredTypes)
+            Env.primaryNode?.let { setPrimaryNode(it.nodeId) }
 
             if (channelMigration != null) {
                 setChannelDataMigration(channelMigration)
@@ -429,6 +433,7 @@ class LightningService internal constructor(
         }
 
         reconcileWatchOnlyAccountsBestEffort()
+        Env.primaryNode?.let { connectPeer(it) }
 
         // start event listener after node started
         onEvent?.let { eventHandler ->
@@ -749,7 +754,7 @@ class LightningService internal constructor(
         ServiceQueue.LDK.background(ldkQueue) {
             val balances = node.listBalances()
             val idlePeerIds = idlePeerIds(
-                peers = node.listPeers(),
+                peers = node.listPeers().filter { it.nodeId != Env.primaryNode?.nodeId },
                 channels = node.listChannels(),
                 lightningBalances = balances.lightningBalances,
                 pendingSweeps = balances.pendingBalancesFromChannelClosures,
@@ -800,6 +805,20 @@ class LightningService internal constructor(
     // endregion
 
     // region channels
+    suspend fun spliceIn(channel: ChannelDetails, amountSats: ULong): Result<Unit> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background(ldkQueue) {
+            try {
+                Logger.debug("Splicing in '$amountSats' sats to channel '${channel.channelId}'", context = TAG)
+                node.spliceIn(channel.userChannelId, channel.counterpartyNodeId, amountSats)
+                Result.success(Unit)
+            } catch (e: NodeException) {
+                Result.failure(LdkError(e))
+            }
+        }
+    }
+
     suspend fun openChannel(
         peer: PeerDetails,
         channelAmountSats: ULong,
@@ -939,6 +958,36 @@ class LightningService internal constructor(
             }
 
             return@background bolt11Invoice.toString()
+        }
+    }
+
+    /**
+     * Creates an invoice the primary node delivers through a channel it opens or grows just in time,
+     * accepting at most the fee it quotes now.
+     */
+    suspend fun receiveViaPrimary(sat: ULong, description: String): String {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        val primary = requireNotNull(Env.primaryNode) { "No primary node for '${Env.network}'" }
+        val amountMsat = sat * 1000u
+
+        return ServiceQueue.LDK.background(ldkQueue) {
+            try {
+                if (node.listPeers().none { it.nodeId == primary.nodeId && it.isConnected }) {
+                    node.connect(primary.nodeId, primary.address, persist = true)
+                }
+                val quote = node.quotePrimaryReceive(primary.nodeId, amountMsat, targetInboundSats = 0u)
+                Logger.info("Received primary quote '$quote'", context = TAG)
+                node.receiveViaPrimary(
+                    nodeId = primary.nodeId,
+                    amountMsat = amountMsat,
+                    description = Bolt11InvoiceDescription.Direct(description = description),
+                    expirySecs = PRIMARY_INVOICE_EXPIRY_SECS,
+                    maxFeeMsat = quote.feeMsat,
+                    targetInboundSats = 0u,
+                ).toString()
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
         }
     }
 

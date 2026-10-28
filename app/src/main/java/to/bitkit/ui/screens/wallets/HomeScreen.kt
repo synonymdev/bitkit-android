@@ -167,6 +167,7 @@ import to.bitkit.ui.navToActivityDetail
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToProfile
+import to.bitkit.ui.navigateToTransferToSpending
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
@@ -313,7 +314,7 @@ fun HomeScreen(
                     appViewModel.showSheet(Sheet.Hardware())
                 }
 
-                Suggestion.LIGHTNING -> appViewModel.showSheet(Sheet.TransferUnavailable)
+                Suggestion.LIGHTNING -> rootNavController.navigateToTransferToSpending(appViewModel)
 
                 Suggestion.BACK_UP -> {
                     appViewModel.showSheet(Sheet.Backup(BackupRoute.Intro))

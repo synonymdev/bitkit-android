@@ -945,10 +945,15 @@ class WalletRepo @Inject constructor(
                 emptyList()
             }
 
-            val bolt11 = if (canCreateLightningInvoice(amountSats)) {
-                lightningRepo.createInvoice(amountSats, description).getOrThrow()
-            } else {
-                ""
+            val bolt11 = when {
+                canCreateLightningInvoice(amountSats) ->
+                    lightningRepo.createInvoice(amountSats, description).getOrThrow()
+                amountSats != null && Env.primaryNode != null ->
+                    lightningRepo.createPrimaryInvoice(amountSats, description).getOrElse {
+                        Logger.warn("Failed to create primary invoice for '$amountSats' sats", it, context = TAG)
+                        ""
+                    }
+                else -> ""
             }
             setBolt11Locked(bolt11, amountSats, description)
             val newBip21Url = _walletState.value.bip21

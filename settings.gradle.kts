@@ -63,6 +63,12 @@ dependencyResolutionManagement {
         }
         google()
         mavenCentral()
+        ivy {
+            url = uri("https://github.com/ovitrif/ldk-node/releases/download")
+            patternLayout { artifact("v[revision]/[artifact]-[revision].[ext]") }
+            metadataSources { artifact() }
+            content { includeGroup("lfbw") }
+        }
         maven {
             url = uri("https://maven.pkg.github.com/synonymdev/bitkit-core")
             credentials {

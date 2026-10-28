@@ -55,6 +55,7 @@ hilt-android-testing = { module = "com.google.dagger:hilt-android-testing", vers
 hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltAndroidx" }
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltAndroidx" }
 hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hiltAndroidx" }
+atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version = "0.27.0" }
 jna = { module = "net.java.dev.jna:jna", version = "5.18.1" }
 kotlin-bom = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
 kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version = "0.3.8" }
@@ -66,7 +67,8 @@ ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "k
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
-ldk-node-android = { module = "com.synonym:ldk-node-android", version = "0.7.0-rc.78" }
+# Lightning-first test build of coreyphillips/ldk-node feat/lfbw-wallet-client, hosted as a release asset
+ldk-node-android = { module = "lfbw:ldk-node-android", version = "0.7.0-rc.77-lfbw.1" }
 lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }

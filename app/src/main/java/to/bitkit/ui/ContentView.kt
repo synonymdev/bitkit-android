@@ -63,6 +63,7 @@ import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.appWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.ext.rawId
+import to.bitkit.ext.uri
 import to.bitkit.ext.walletId
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
@@ -1194,7 +1195,7 @@ private fun NavGraphBuilder.home(
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
-            onTransferToSpendingClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
+            onTransferToSpendingClick = { navController.navigateToTransferToSpending(appViewModel) },
             onBackClick = { navController.popBackStack() },
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
@@ -1217,7 +1218,7 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSavingsAvailability()
                 }
             },
-            onTransferFromSavingsClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
+            onTransferFromSavingsClick = { navController.navigateToTransferToSpending(appViewModel) },
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -2075,6 +2076,12 @@ fun NavController.navigateToCjitDetail(id: String) = navigateTo(Routes.CjitDetai
 fun NavController.navigateToDevSettings() = navigateTo(Routes.DevSettings)
 
 fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIntro)
+
+/** Opens a channel with the primary node, or explains that transfers need manual setup without one. */
+fun NavController.navigateToTransferToSpending(appViewModel: AppViewModel) {
+    val primary = Env.primaryNode ?: return appViewModel.showSheet(Sheet.TransferUnavailable)
+    navigateTo(ExternalConnection(scannedNodeUri = primary.uri))
+}
 
 fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
 

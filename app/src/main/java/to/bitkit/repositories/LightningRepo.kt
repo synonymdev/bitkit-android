@@ -1300,6 +1300,13 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
+    suspend fun createPrimaryInvoice(
+        amountSats: ULong,
+        description: String,
+    ): Result<String> = executeWhenNodeRunning("createPrimaryInvoice") {
+        runSuspendCatching { lightningService.receiveViaPrimary(amountSats, description) }
+    }
+
     suspend fun createInvoiceMsats(
         amountMsats: ULong,
         description: String,
@@ -2086,6 +2093,15 @@ class LightningRepo @Inject constructor(
     ): Result<OpenChannelResult> = executeWhenNodeRunning("openChannel") {
         requireWalletRestoreComplete()
         lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats, channelConfig).also {
+            syncState()
+        }
+    }
+
+    suspend fun spliceIn(
+        channel: ChannelDetails,
+        amountSats: ULong,
+    ): Result<Unit> = executeWhenNodeRunning("spliceIn") {
+        lightningService.spliceIn(channel, amountSats).also {
             syncState()
         }
     }

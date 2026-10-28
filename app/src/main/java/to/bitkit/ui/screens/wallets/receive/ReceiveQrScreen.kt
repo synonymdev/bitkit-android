@@ -64,6 +64,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NodeLifecycleState
@@ -139,6 +140,7 @@ fun ReceiveQrScreen(
             hasReadyChannels = hasReadyChannels,
             inboundCapacitySats = readyInboundLiquiditySats,
             invoiceAmountSats = walletState.bip21AmountSats,
+            hasPrimaryNode = Env.primaryNode != null,
         )
     }
 
