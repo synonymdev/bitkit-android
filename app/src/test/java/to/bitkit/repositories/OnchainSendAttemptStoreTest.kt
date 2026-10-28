@@ -879,6 +879,41 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertEquals(unknown, store.current())
     }
 
+    @Test
+    fun `refused Blocktank funding can be released once its order can no longer be retried`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer { saved = null }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), kotlin.time.Clock.System)
+        val attempt = store.admit(
+            walletId = WalletScope.default, requestId = null, orderId = "order-1", address = "bcrt1qfunding",
+            amountSats = 50_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = true,
+            channelId = null, tags = emptyList(),
+            transferContext = OnchainTransferContext(txTotalSats = 50_200uL, preTransferOnchainSats = 100_000uL),
+            beforeSendAttempt = {},
+        )
+        val receipt = OnchainPreparedReceipt(
+            "ab".repeat(32),
+            listOf(OnchainSendInput("11".repeat(32), 0u)),
+            attempt.address,
+            attempt.amountSats,
+            miningFeeSats = 200uL,
+        )
+        store.retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
+        val outcome = store.broadcastPreparedCandidate(attempt.attemptId, 0, receipt.txid) { beforeDispatch ->
+            beforeDispatch()
+            OnchainSendOutcome.Rejected(receipt.txid, "min relay fee not met")
+        }
+        store.recordOutcome(attempt.attemptId, outcome, 0)
+        val refused = requireNotNull(store.current())
+
+        // Retry original is refused while transfers are unavailable, so release is the only exit.
+        assertTrue(refused.blocksNextSend)
+        assertTrue(refused.canBeAbandoned, "A refused Blocktank funding attempt must be releasable")
+    }
+
     private suspend fun OnchainSendAttemptStore.admitForTest(
         walletId: String = "wallet-1",
         contactPublicKey: String? = null,

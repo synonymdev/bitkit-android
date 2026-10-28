@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.transfer
+package to.bitkit.repositories
 
 import com.synonym.bitkitcore.BtBolt11InvoiceState
 import com.synonym.bitkitcore.BtOrderState
@@ -10,7 +10,6 @@ import com.synonym.bitkitcore.IBtOnchainTransactions
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IBtPayment
 import com.synonym.bitkitcore.ILspNode
-import to.bitkit.viewmodels.TransferToSpendingUiState
 
 internal fun previewBtOrder(
     networkFeeSat: ULong = 2_483UL,
@@ -64,14 +63,4 @@ internal fun previewBtOrder(
     discount = null,
     updatedAt = "2025-07-28T08:29:03Z",
     createdAt = "2025-07-28T08:29:03Z",
-)
-
-internal fun previewSpendingState(
-    clientBalanceSat: ULong = 967_724UL,
-    feeSat: ULong = 971_727UL,
-    lspBalanceSat: ULong = 2_000_000UL,
-): TransferToSpendingUiState = TransferToSpendingUiState(
-    clientBalanceSat = clientBalanceSat,
-    lspBalanceSat = lspBalanceSat,
-    feeSat = feeSat,
 )

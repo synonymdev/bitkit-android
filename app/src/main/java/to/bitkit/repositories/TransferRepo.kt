@@ -9,22 +9,13 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PendingSweepBalance
-import to.bitkit.async.appScope
-import to.bitkit.data.CacheStore
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
@@ -35,7 +26,6 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.TransferType
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
-import to.bitkit.utils.AppError
 import to.bitkit.utils.BlockTimeHelpers
 import to.bitkit.utils.Logger
 import java.util.UUID
@@ -54,94 +44,8 @@ class TransferRepo @Inject constructor(
     private val coreService: CoreService,
     private val transferDao: TransferDao,
     private val clock: Clock,
-    private val cacheStore: CacheStore,
-    private val connectivityRepo: ConnectivityRepo,
 ) {
     private val lastOrdersFetchMs = AtomicLong(0L)
-
-    private val fundingMutex = Mutex()
-    private val repoScope = appScope(bgDispatcher, TAG)
-
-    init {
-        repoScope.launch {
-            lightningRepo.lightningState.map { it.nodeLifecycleState.isRunning() }.distinctUntilChanged()
-                .collectLatest { running -> if (running) resumeAcceptedFunding() }
-        }
-        repoScope.launch {
-            lightningRepo.nodeEvents.collect { event ->
-                if (event is Event.OnchainTransactionReceived || event is Event.OnchainTransactionConfirmed) {
-                    resumeAcceptedFunding()
-                }
-            }
-        }
-        repoScope.launch {
-            connectivityRepo.isOnline.map { it == ConnectivityState.CONNECTED }.distinctUntilChanged().drop(1)
-                .collectLatest { connected ->
-                    if (connected && lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
-                        resumeAcceptedFunding()
-                    }
-                }
-        }
-    }
-
-    /** Uses only the bounded attempt's positive evidence and original order/balance context. */
-    suspend fun resumeAcceptedFunding(expectedAttempt: OnchainSendAttempt? = null): Result<Unit> = runSuspendCatching {
-        val attempt = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
-        if (expectedAttempt != null) {
-            check(
-                attempt.attemptId == expectedAttempt.attemptId &&
-                    attempt.walletIndex == expectedAttempt.walletIndex && attempt.walletId == expectedAttempt.walletId
-            ) { "Restored funding operation is no longer current" }
-        }
-        if (!attempt.isTransfer || !attempt.hasPositiveEvidence || attempt.localFollowupComplete) {
-            return@runSuspendCatching
-        }
-        val txid = requireNotNull(attempt.txid)
-        val orderId = requireNotNull(attempt.orderId)
-        val order = blocktankRepo.fetchOrders(listOf(orderId)).getOrThrow().firstOrNull { it.id == orderId }
-            ?: throw AppError("Original funding order is unavailable")
-        check(order.payment?.onchain?.address == attempt.address) { "Original funding order address changed" }
-        val context = requireNotNull(attempt.transferContext) { "Original funding context is unavailable" }
-        check(
-            order.clientBalanceSat == context.originalOrderClientBalanceSats &&
-                order.feeSat == context.originalOrderFeeSats
-        ) { "Original funding order terms changed or are unavailable" }
-        check(lightningRepo.currentOnchainSendAttempt() == attempt) { "Original funding operation changed" }
-        persistAcceptedFunding(order, txid, context).getOrThrow()
-        lightningRepo.completeAcceptedTransferFollowup(orderId, txid)
-    }.onFailure { Logger.warn("Failed to resume accepted funding", it, context = TAG) }
-
-    /** Serialized across startup/events and the confirmation screen; never broadcasts. */
-    suspend fun persistAcceptedFunding(
-        order: IBtOrder,
-        txid: String,
-        originalContext: OnchainTransferContext?,
-    ): Result<Unit> = withContext(bgDispatcher) {
-        runSuspendCatching {
-            fundingMutex.withLock {
-                val context = requireNotNull(
-                    originalContext
-                ) { "Accepted transfer is missing its original balance context" }
-                val existing = transferDao.getByFundingTxId(txid)
-                check(existing == null || existing.lspOrderId == order.id) {
-                    "Funding transaction is already assigned to another order"
-                }
-                val paid = cacheStore.data.first().paidOrders[order.id]
-                check(paid == null || paid == txid) { "Order is already assigned to another funding transaction" }
-                if (existing == null) {
-                    createTransfer(
-                        type = TransferType.TO_SPENDING,
-                        amountSats = order.clientBalanceSat.toLong(),
-                        fundingTxId = txid,
-                        lspOrderId = order.id,
-                        txTotalSats = context.txTotalSats.toLong(),
-                        preTransferOnchainSats = context.preTransferOnchainSats.toLong(),
-                    ).getOrThrow()
-                }
-                cacheStore.addPaidOrder(orderId = order.id, txId = txid)
-            }
-        }
-    }
 
     val activeTransfers: Flow<List<TransferEntity>> = transferDao.getActiveTransfers()
 
@@ -203,32 +107,6 @@ class TransferRepo @Inject constructor(
             Logger.info("Settled transfer: $id", context = TAG)
         }.onFailure { e ->
             Logger.error("Failed to settle transfer", e, context = TAG)
-        }
-    }
-
-    suspend fun createPendingToSpendingActivity(
-        order: IBtOrder,
-        txId: String,
-        fee: ULong,
-        feeRate: ULong,
-        walletId: String = WalletScope.default,
-    ): Result<Unit> = withContext(bgDispatcher) {
-        runSuspendCatching {
-            val address = requireNotNull(order.payment?.onchain?.address?.takeIf { it.isNotEmpty() }) {
-                "Order '${order.id}' has no on-chain payment address"
-            }
-            coreService.activity.createSentOnchainActivityFromSendResult(
-                txid = txId,
-                address = address,
-                amount = order.feeSat,
-                fee = fee,
-                feeRate = feeRate,
-                isTransfer = true,
-                channelId = order.channel?.shortChannelId,
-                walletId = walletId,
-            )
-        }.onFailure {
-            Logger.error("Failed to create pending transfer activity for '$txId'", it, context = TAG)
         }
     }
 
@@ -311,7 +189,7 @@ class TransferRepo @Inject constructor(
 
                 channelId != null -> settleIfChannelClosed(transfer, channelId, closedChannelIds)
 
-                transfer.lspOrderId != null -> settleIfOrderEnded(transfer, transfer.lspOrderId)
+                transfer.lspOrderId != null -> settleIfOrderWithoutChannel(transfer, transfer.lspOrderId)
             }
         }
     }
@@ -371,22 +249,13 @@ class TransferRepo @Inject constructor(
         )
     }
 
-    private suspend fun settleIfOrderEnded(transfer: TransferEntity, orderId: String) {
+    /** Blocktank no longer opens channels, so an order without a channel by now never gets one. */
+    private suspend fun settleIfOrderWithoutChannel(transfer: TransferEntity, orderId: String) {
         val order = blocktankRepo.getOrder(orderId, refresh = false).getOrNull() ?: return
+        if (order.channel != null && !order.hasClosedChannel()) return
 
-        if (order.state2 == BtOrderState2.EXPIRED) {
-            markSettled(transfer.id)
-            Logger.info("Settled transfer '${transfer.id}' for expired order '$orderId'", context = TAG)
-            return
-        }
-
-        if (order.hasClosedChannel()) {
-            markSettled(transfer.id)
-            Logger.info(
-                "Settled transfer '${transfer.id}' for order '$orderId' with channel state '${order.channel?.state}'",
-                context = TAG,
-            )
-        }
+        markSettled(transfer.id)
+        Logger.info("Settled transfer '${transfer.id}' for order '$orderId' with no open channel", context = TAG)
     }
 
     private suspend fun loadClosedChannelIds(): Set<String> = runSuspendCatching {
