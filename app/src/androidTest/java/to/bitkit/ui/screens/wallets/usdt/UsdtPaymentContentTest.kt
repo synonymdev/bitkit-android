@@ -14,8 +14,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -342,6 +345,73 @@ class UsdtPaymentContentTest {
         composeTestRule.onNodeWithTag("UsdtSendSuccess").assertIsDisplayed()
     }
 
+    @Test
+    fun deadlineExpiryRetainsItsTitleAndBodyWhenRecoveryFailsTheSamePayment() {
+        val payment = transfer(quote, UsdtTransferStatus.PENDING)
+        val wallet = mutableStateOf(UsdtWalletState(transfers = persistentListOf(payment)))
+        val state = UsdtSendState(
+            quote = quote,
+            submitted = true,
+            error = R.string.wallet__payment_request_expired,
+            submissionErrorStatus = UsdtTransferStatus.PENDING,
+            submissionDeadlineExpired = true,
+        )
+        composeTestRule.setContent { Content(state, UsdtPage.AMOUNT, wallet.value) }
+        composeTestRule.onAllNodesWithText("The payment request has expired.").assertCountEquals(2)
+        composeTestRule.runOnIdle {
+            wallet.value = wallet.value.copy(transfers = persistentListOf(payment.copy(status = UsdtTransferStatus.FAILED)))
+        }
+        composeTestRule.onAllNodesWithText("The payment request has expired.").assertCountEquals(2)
+        composeTestRule.onNodeWithText("Transaction Failed").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.runOnIdle {
+            wallet.value = wallet.value.copy(transfers = persistentListOf(payment.copy(status = UsdtTransferStatus.REPLACED)))
+        }
+        composeTestRule.onAllNodesWithText("The payment request has expired.").assertCountEquals(0)
+        composeTestRule.onNodeWithText("Transaction Failed").assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            wallet.value = wallet.value.copy(transfers = persistentListOf(payment.copy(status = UsdtTransferStatus.CONFIRMED)))
+        }
+        composeTestRule.onAllNodesWithText("The payment request has expired.").assertCountEquals(0)
+    }
+
+    @Test
+    fun backupRetryKeepsTheSubmittedPaymentAndNeverReopensConfirmation() {
+        val payment = transfer(quote, UsdtTransferStatus.PENDING)
+        val state = mutableStateOf(
+            UsdtSendState(
+                quote = quote,
+                submitted = true,
+                canRetryRecovery = true,
+                error = R.string.common__error_body,
+                submissionErrorStatus = UsdtTransferStatus.PENDING,
+            )
+        )
+        var retries = 0
+        var confirmations = 0
+        composeTestRule.setContent {
+            Content(
+                state.value,
+                UsdtPage.AMOUNT,
+                UsdtWalletState(transfers = persistentListOf(payment)),
+                amountEditable = false,
+                onRetryRecovery = {
+                    retries += 1
+                    state.value = state.value.copy(retryingRecovery = true)
+                },
+                onConfirm = { confirmations += 1 },
+            )
+        }
+        composeTestRule.onNodeWithTag("UsdtRetryRecovery").performClick()
+        composeTestRule.onNodeWithText("Retry").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("UsdtConfirm").assertDoesNotExist()
+        composeTestRule.runOnIdle {
+            assertEquals(1, retries)
+            assertEquals(0, confirmations)
+            assertEquals(quote.id, state.value.quote?.id)
+        }
+    }
+
     private fun assertCompletionTransition(destination: UsdtDestination, pendingStatus: UsdtTransferStatus) {
         val payment = quote.copy(destination = destination)
         val transfer = transfer(payment, pendingStatus)
@@ -385,6 +455,8 @@ class UsdtPaymentContentTest {
         onReview: () -> Unit = {},
         onPageChange: (UsdtPage) -> Unit = {},
         onBack: () -> Unit = {},
+        onRetryRecovery: (() -> Unit)? = null,
+        onConfirm: () -> Unit = {},
         onDetails: () -> Unit = {},
     ) {
         AppThemeSurface {
@@ -403,9 +475,10 @@ class UsdtPaymentContentTest {
                         onPageChange = onPageChange,
                         onBack = onBack,
                         onReview = onReview,
-                        onConfirm = {},
+                        onConfirm = onConfirm,
                         onDone = {},
                         onDetails = onDetails,
+                        onRetryRecovery = onRetryRecovery,
                         amountEditable = amountEditable,
                         isPaymentRequest = isPaymentRequest,
                     )

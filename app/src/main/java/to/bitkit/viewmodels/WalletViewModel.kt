@@ -272,13 +272,22 @@ class WalletViewModel @Inject constructor(
         pubkyRepo.initialize()
     }
 
-    private suspend fun restoreFromRNRemoteBackup() = runSuspendCatching {
-        migrationService.restoreFromRNRemoteBackup()
-        walletRepo.loadFromCache()
-    }.onFailure {
-        Logger.warn("RN remote backup restore failed, falling back to VSS", it, context = TAG)
-        backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
-            .getOrThrow()
+    private suspend fun restoreFromRNRemoteBackup() {
+        val legacyRestore = runSuspendCatching {
+            migrationService.restoreFromRNRemoteBackup()
+            walletRepo.loadFromCache()
+        }
+        if (legacyRestore.isSuccess) {
+            backupRepo.restoreUsdtRecoveryAfterLegacyMigration().getOrThrow()
+        } else {
+            Logger.warn(
+                "RN remote backup restore failed, falling back to VSS",
+                legacyRestore.exceptionOrNull(),
+                context = TAG,
+            )
+            backupRepo.performFullRestoreFromLatestBackup(onCacheRestored = walletRepo::loadFromCache)
+                .getOrThrow()
+        }
     }
 
     fun onRestoreContinue() {

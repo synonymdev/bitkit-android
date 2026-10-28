@@ -118,6 +118,7 @@ internal fun UsdtPaymentContent(
     onConfirm: () -> Unit,
     onDone: () -> Unit,
     onDetails: () -> Unit = {},
+    onRetryRecovery: (() -> Unit)? = null,
     onMaximum: (() -> Unit)? = null,
     hideBalance: Boolean = false,
     amountEditable: Boolean = true,
@@ -182,11 +183,14 @@ internal fun UsdtPaymentContent(
     val bridgeNeedsAttention = status == UsdtTransferStatus.BRIDGE_NEEDS_ATTENTION ||
         status == UsdtTransferStatus.BRIDGE_FAILED
     val failed = status == UsdtTransferStatus.FAILED || status == UsdtTransferStatus.REPLACED
+    val submissionError = state.submissionError(status)
     val title = when {
         showSubmitted && status == UsdtTransferStatus.BRIDGE_REFUNDED -> R.string.usdt__deposit_refunded
         showSubmitted && bridgeNeedsAttention -> R.string.usdt__bridge_attention
+        showSubmitted && submissionError == R.string.wallet__payment_request_expired ->
+            R.string.wallet__payment_request_expired
         showSubmitted && failed -> R.string.wallet__send_error_tx_failed
-        showSubmitted && state.error != null -> R.string.wallet__payment_request_expired
+        showSubmitted && submissionError != null -> R.string.common__error
         showSubmitted -> R.string.usdt__submitted
         (quote != null || preparingConfirmation) && isPaymentRequest -> R.string.wallet__payment_request
         quote != null -> R.string.wallet__send_review
@@ -204,9 +208,13 @@ internal fun UsdtPaymentContent(
                 failed,
                 bridgeNeedsAttention,
                 status == UsdtTransferStatus.BRIDGE_REFUNDED,
-                state.error,
+                submissionError,
                 onDetails,
-                onDone
+                onDone,
+                onRetryRecovery = onRetryRecovery.takeIf {
+                    state.canRetryRecovery && submissionError != null && status == UsdtTransferStatus.PENDING
+                },
+                retryingRecovery = state.retryingRecovery,
             )
             quote != null -> UsdtConfirmation(
                 quote,
@@ -271,6 +279,8 @@ private fun ColumnScope.UsdtSubmittedContent(
     error: Int?,
     onDetails: () -> Unit,
     onDone: () -> Unit,
+    onRetryRecovery: (() -> Unit)? = null,
+    retryingRecovery: Boolean = false,
 ) {
     quote?.let { UsdtAmountHeader(usdtFormatAmount(it.amount), displayAmount = usdtOverviewAmount(it.amount)) }
     VerticalSpacer(32.dp)
@@ -293,6 +303,15 @@ private fun ColumnScope.UsdtSubmittedContent(
         )
     }
     FillHeight()
+    if (onRetryRecovery != null) {
+        SecondaryButton(
+            text = stringResource(R.string.common__retry),
+            onClick = onRetryRecovery,
+            enabled = !retryingRecovery,
+            modifier = Modifier.fillMaxWidth().testTag("UsdtRetryRecovery")
+        )
+        VerticalSpacer(16.dp)
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         SecondaryButton(
             text = stringResource(R.string.wallet__send_details),

@@ -35,6 +35,7 @@ import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.KeychainKind
+import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -45,6 +46,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.PendingSweepBalance
 import org.lightningdevkit.ldknode.PublicKey
 import org.lightningdevkit.ldknode.RouteParametersConfig
 import org.lightningdevkit.ldknode.ScoringFeeParameters
@@ -63,6 +65,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
+import to.bitkit.ext.counterpartyNodeId
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
@@ -105,6 +108,40 @@ typealias NodeEventHandler = suspend (Event) -> Unit
 /** Tags the event-listener coroutine so a handler-triggered stop can skip joining its own job. */
 private class EventListenerContext : AbstractCoroutineContextElement(Key) {
     companion object Key : CoroutineContext.Key<EventListenerContext>
+}
+
+/**
+ * Builds the node config. LSP peers are not trusted for zero-conf channels or to broadcast our force
+ * closes: Blocktank no longer serves channels, so our node must broadcast and fee-bump its own closes.
+ */
+internal fun nodeConfig(
+    base: Config,
+    storageDirPath: String,
+    onchainWalletAccounts: List<OnchainWalletAccountConfig>,
+): Config = base.copy(
+    storageDirPath = storageDirPath,
+    network = Env.network,
+    trustedPeers0conf = emptyList(),
+    anchorChannelsConfig = AnchorChannelsConfig(
+        trustedPeersNoReserve = emptyList(),
+        perChannelReserveSats = 1u,
+    ),
+    probingLiquidityLimitMultiplier = 1uL,
+    includeUntrustedPendingInSpendable = true,
+    onchainWalletAccounts = onchainWalletAccounts,
+)
+
+/** Returns the stored peers with no channel and no claimable balance, or none while any sweep is pending. */
+internal fun idlePeerIds(
+    peers: List<PeerDetails>,
+    channels: List<ChannelDetails>,
+    lightningBalances: List<LightningBalance>,
+    pendingSweeps: List<PendingSweepBalance>,
+): List<String> {
+    if (pendingSweeps.isNotEmpty()) return emptyList()
+    val busyPeerIds = channels.map { it.counterpartyNodeId }.toSet() +
+        lightningBalances.map { it.counterpartyNodeId() }
+    return peers.filter { it.isPersisted && it.nodeId !in busyPeerIds }.map { it.nodeId }
 }
 
 internal fun enabledOnchainWalletAccountConfigs(
@@ -235,8 +272,6 @@ class LightningService internal constructor(
     private val _syncStatusChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val syncStatusChanged: SharedFlow<Unit> = _syncStatusChanged.asSharedFlow()
 
-    private var trustedPeers: List<PeerDetails> = emptyList()
-
     private var listenerJob: Job? = null
 
     // Release of the previous node's rust handle (free_node). Rebuild and destructive storage work
@@ -248,13 +283,12 @@ class LightningService internal constructor(
         walletIndex: Int,
         customServerUrl: String? = null,
         customRgsServerUrl: String? = null,
-        trustedPeers: List<PeerDetails>? = null,
         channelMigration: ChannelDataMigration? = null,
     ) {
         awaitNodeRelease()
         Logger.debug("Building node…", context = TAG)
 
-        val config = config(walletIndex, trustedPeers)
+        val config = config(walletIndex)
         val builtNode = build(
             walletIndex,
             customServerUrl,
@@ -268,28 +302,12 @@ class LightningService internal constructor(
         Logger.info("LDK node setup", context = TAG)
     }
 
-    private suspend fun config(
-        walletIndex: Int,
-        trustedPeers: List<PeerDetails>?,
-    ): Config {
+    private suspend fun config(walletIndex: Int): Config {
         val dirPath = Env.ldkStoragePath(walletIndex)
 
-        this.trustedPeers = trustedPeers?.takeIf { it.isNotEmpty() } ?: Env.trustedLnPeers.also {
-            Logger.warn("Missing trusted peers from LSP, falling back to preconfigured env peers", context = TAG)
-        }
-
-        val trustedPeerNodeIds = this.trustedPeers.map { it.nodeId }
-
-        return defaultConfig().copy(
+        return nodeConfig(
+            base = defaultConfig(),
             storageDirPath = dirPath,
-            network = Env.network,
-            trustedPeers0conf = trustedPeerNodeIds,
-            anchorChannelsConfig = AnchorChannelsConfig(
-                trustedPeersNoReserve = trustedPeerNodeIds,
-                perChannelReserveSats = 1u,
-            ),
-            probingLiquidityLimitMultiplier = 1uL,
-            includeUntrustedPendingInSpendable = true,
             onchainWalletAccounts = enabledOnchainWalletAccountConfigs(watchOnlyAccountStore.load(), walletIndex),
         )
     }
@@ -604,20 +622,6 @@ class LightningService internal constructor(
             return true
         }
 
-        // reset graph if missing trusted peers
-        val missing = trustedPeers.filter { it.nodeId !in nodes }
-        if (missing.size == trustedPeers.size) {
-            val rgsTimestamp = node.status().latestRgsSnapshotTimestamp
-            val missingIds = missing.joinToString { it.nodeId.take(NODE_ID_PREVIEW_LEN) }
-            Logger.warn(
-                "Network graph missing all ${trustedPeers.size} trusted peers: [$missingIds] " +
-                    "(graphNodes=${nodes.size}, channels=${graph.listChannels().size}, " +
-                    "rgsTimestamp=$rgsTimestamp)",
-                context = TAG,
-            )
-            return false
-        }
-
         // reset graph if missing channel counterparty
         val channels = node.listChannels().filter { it.isUsable }
         val missingCounterparties = channels.filter { it.counterpartyNodeId !in nodes }
@@ -631,20 +635,7 @@ class LightningService internal constructor(
             return false
         }
 
-        if (missing.isNotEmpty()) {
-            val ids = missing.joinToString { it.nodeId }
-            Logger.debug(
-                "Network graph missing ${missing.size}/${trustedPeers.size} trusted peers: [$ids]",
-                context = TAG,
-            )
-        }
-
-        val total = trustedPeers.size
-        val count = total - missing.size
-        Logger.debug(
-            "Network graph validated: $count/$total trusted peers present",
-            context = TAG,
-        )
+        Logger.debug("Network graph validated: '${channels.size}' channel counterparties present", context = TAG)
         return true
     }
 
@@ -744,39 +735,26 @@ class LightningService internal constructor(
     }
 
     // region peers
-    suspend fun connectToTrustedPeers() {
+    /**
+     * Disconnects stored peers we have nothing pending with, which also drops them from the peer store.
+     * Skips the run while any closed channel still awaits its sweep, as a sweep does not name its peer.
+     */
+    suspend fun disconnectIdlePeers() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         ServiceQueue.LDK.background(ldkQueue) {
-            for (peer in trustedPeers) {
-                try {
-                    node.connect(peer.nodeId, peer.address, persist = true)
-                    Logger.info("Connected to trusted peer: $peer", context = TAG)
-                } catch (e: NodeException) {
-                    Logger.error("Peer connect error: $peer", LdkError(e), context = TAG)
-                }
+            val balances = node.listBalances()
+            val idlePeerIds = idlePeerIds(
+                peers = node.listPeers(),
+                channels = node.listChannels(),
+                lightningBalances = balances.lightningBalances,
+                pendingSweeps = balances.pendingBalancesFromChannelClosures,
+            )
+            for (nodeId in idlePeerIds) {
+                runCatching { node.disconnect(nodeId) }
+                    .onSuccess { Logger.info("Disconnected idle peer '$nodeId'", context = TAG) }
+                    .onFailure { Logger.warn("Failed to disconnect idle peer '$nodeId'", it, context = TAG) }
             }
-
-            verifyTrustedPeersOrFallback(node)
-        }
-    }
-
-    private fun verifyTrustedPeersOrFallback(node: Node) {
-        val connectedPeerIds = node.listPeers().map { it.nodeId }.toSet()
-        val trustedConnected = trustedPeers.count { it.nodeId in connectedPeerIds }
-
-        if (trustedConnected == 0 && trustedPeers.isNotEmpty()) {
-            Logger.warn("No trusted peers connected, falling back to preconfigured env peers", context = TAG)
-            for (peer in Env.trustedLnPeers) {
-                try {
-                    node.connect(peer.nodeId, peer.address, persist = true)
-                    Logger.info("Connected to fallback peer: $peer", context = TAG)
-                } catch (e: NodeException) {
-                    Logger.error("Fallback peer connect error: $peer", LdkError(e), context = TAG)
-                }
-            }
-        } else {
-            Logger.info("Connected to $trustedConnected/${trustedPeers.size} trusted peers", context = TAG)
         }
     }
 
@@ -814,17 +792,6 @@ class LightningService internal constructor(
             }
         }
     }
-
-    fun getLspPeerNodeIds(): Set<String> = trustedPeers.map { it.nodeId }.toSet()
-
-    fun separateTrustedChannels(channels: List<ChannelDetails>): Pair<List<ChannelDetails>, List<ChannelDetails>> {
-        val trustedPeerIds = getLspPeerNodeIds()
-        val trusted = channels.filter { it.counterpartyNodeId in trustedPeerIds }
-        val nonTrusted = channels.filter { it.counterpartyNodeId !in trustedPeerIds }
-        return trusted to nonTrusted
-    }
-
-    fun isTrustedPeer(nodeId: String): Boolean = nodeId in getLspPeerNodeIds()
 
     // endregion
 
@@ -878,11 +845,6 @@ class LightningService internal constructor(
         val channelId = channel.channelId
         val userChannelId = channel.userChannelId
         val counterpartyNodeId = channel.counterpartyNodeId
-
-        // Prevent force closing channels with trusted peers (LSP nodes)
-        if (force && isTrustedPeer(counterpartyNodeId)) {
-            throw TrustedPeerForceCloseException()
-        }
 
         try {
             ServiceQueue.LDK.background(ldkQueue) {
@@ -1151,7 +1113,7 @@ class LightningService internal constructor(
                 }
             }
         }.onFailure {
-            loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
+            loggerLdk.dumpNetworkGraphInfo(node, bolt11)
         }.getOrThrow()
     }
 
@@ -1556,7 +1518,7 @@ class LightningService internal constructor(
 
     private fun dumpNetworkGraphInfo(bolt11: String) {
         val node = this.node ?: return
-        loggerLdk.dumpNetworkGraphInfo(node, trustedPeers, bolt11)
+        loggerLdk.dumpNetworkGraphInfo(node, bolt11)
     }
 
     suspend fun exportNetworkGraphToFile(
@@ -1575,10 +1537,6 @@ data class NetworkGraphInfo(
     val nodeCount: Int,
     val channelCount: Int,
     val latestRgsSyncTimestamp: ULong?,
-)
-
-class TrustedPeerForceCloseException : AppError(
-    "Cannot force close channel with trusted peer. Force close is disabled for Blocktank LSP channels."
 )
 
 class NetworkGraphCacheDeleteError : AppError("Failed to delete network graph cache")

@@ -476,7 +476,6 @@ class QuickPayRepoTest : BaseUnitTest() {
         cacheStore.update {
             AppCacheData(
                 onchainAddress = "keep-me",
-                paidOrders = mapOf("order" to "tx"),
                 quickPayLedger = QuickPayLedger(
                     version = 99,
                     dayKey = "2026-08-15",
@@ -490,7 +489,6 @@ class QuickPayRepoTest : BaseUnitTest() {
         assertFalse(sut.canApply(500u).getOrThrow())
         val data = cacheStore.data.first()
         assertEquals("keep-me", data.onchainAddress)
-        assertEquals(mapOf("order" to "tx"), data.paidOrders)
         assertEquals(99, data.quickPayLedger?.version)
         assertEquals(999L, data.quickPayLedger?.spentCents)
     }

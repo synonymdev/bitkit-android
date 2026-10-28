@@ -185,12 +185,6 @@ See: `ChannelDetails.valueToSelfSats` extension in `ChannelDetails.kt`
 
 ### Balance Adjustments
 
-**toSpending transfers - Channel Orders (TO_SPENDING with lspOrderId):**
-- Payment has been SENT to LSP (UTXO spent from wallet)
-- LDK's `totalOnchainBalanceSats` already reflects the sent payment
-- No adjustment needed - balance already correct
-- **Result:** User sees correct balance reflecting sent payment
-
 **toSpending transfers - Manual Channels (MANUAL_SETUP with channelId):**
 - Funding tx has been SENT (UTXO spent from wallet)
 - LDK's `totalOnchainBalanceSats` already reflects the spent UTXO
@@ -220,14 +214,10 @@ See: `DeriveBalanceStateUseCase.kt`
 
 ## Edge Cases
 
-**LSP Channel (TO_SPENDING):**
-- Payment sent, waiting for LSP to open channel
-- Channel appears in pending state
+**Manual Channel (MANUAL_SETUP):**
+- Channel appears in pending state with its channelId
 - Balance shows in total_lightning_balance_sats
 - We subtract it until isChannelReady
-
-**Manual Channel (MANUAL_SETUP):**
-- Same as LSP but we have channelId immediately
 
 **Coop Close:**
 - Balance stays in lightning_balances as ClaimableAwaitingConfirmations

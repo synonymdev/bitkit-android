@@ -49,6 +49,41 @@ class UsdtRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovery retries the recorded operation and respects provider cooldown`() = test {
+        var now = Instant.fromEpochSeconds(1_800_000_000)
+        val clock = object : Clock { override fun now() = now }
+        whenever(service.wallet()).thenReturn(wallet)
+        whenever(transfer.id).thenReturn("original")
+        whenever(transfer.status).thenReturn(UsdtTransferStatus.PENDING)
+        whenever(wallet.history()).thenReturn(listOf(transfer))
+        whenever(wallet.refreshTransfers()).thenThrow(UsdtException.RateLimited()).thenReturn(listOf(transfer))
+        val cache = CacheStore(InMemoryDataStore(AppCacheData()))
+        val repo = UsdtRepo(service, cache, testDispatcher, clock)
+        assertTrue(repo.retryTransfer("original").exceptionOrNull() is UsdtException.RateLimited)
+        now += 59.seconds
+        assertTrue(repo.retryTransfer("original").exceptionOrNull() is UsdtException.RateLimited)
+        verify(wallet, times(1)).refreshTransfers()
+        now += 1.seconds
+        repo.retryTransfer("original").getOrThrow()
+        assertEquals(listOf(transfer), repo.state.value.transfers)
+        assertEquals(0L, repo.recoveryGeneration)
+        assertTrue(repo.retryTransfer("unknown").exceptionOrNull() is UsdtException.InvalidBackup)
+        whenever(transfer.status).thenReturn(UsdtTransferStatus.CONFIRMED)
+        repo.retryTransfer("original").getOrThrow()
+        assertEquals(0L, repo.recoveryGeneration)
+        verify(wallet, times(2)).refreshTransfers()
+    }
+
+    @Test
+    fun `acknowledgement generation reads the current service value before any refresh`() {
+        val cache = CacheStore(InMemoryDataStore(AppCacheData()))
+        val repo = UsdtRepo(service, cache, testDispatcher)
+        whenever(service.recoveryGeneration).thenReturn(4L, 5L)
+        assertEquals(4L, repo.recoveryGeneration)
+        assertEquals(5L, repo.recoveryGeneration)
+    }
+
+    @Test
     fun `display cache survives restart and offline refresh but never becomes a spendable balance`() = test {
         val cache = CacheStore(InMemoryDataStore(AppCacheData()))
         whenever(service.wallet()).thenReturn(wallet)

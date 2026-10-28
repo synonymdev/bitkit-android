@@ -151,6 +151,7 @@ fun PaykitUsdtReview(
                         },
                         onDone = onDone,
                         onDetails = { details = true },
+                        onRetryRecovery = { viewModel.retryRecovery() },
                         hideBalance = settings.hideBalance,
                         amountEditable = false,
                         isPaymentRequest = uiState.isPaymentRequest,

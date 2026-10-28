@@ -11,9 +11,6 @@ class ReceiveLiquidityDecisionTest {
         source = ReceiveLiquiditySource.SPENDING,
         invoiceAmountSats = 10_000u,
         inboundCapacitySats = 1_000u,
-        minCjitSats = 5_000u,
-        maxCjitAmountSats = 100_000u,
-        isGeoBlocked = false,
     )
 
     @Test
@@ -66,7 +63,7 @@ class ReceiveLiquidityDecisionTest {
     }
 
     @Test
-    fun `zero inbound does not route to additional CJIT`() {
+    fun `zero inbound needs no additional liquidity`() {
         assertEquals(
             ReceiveAdditionalLiquidityAction.None,
             additionalLiquidityAction(
@@ -76,7 +73,7 @@ class ReceiveLiquidityDecisionTest {
     }
 
     @Test
-    fun `savings and auto edits do not route to CJIT`() {
+    fun `savings and auto edits need no additional liquidity`() {
         listOf(ReceiveLiquiditySource.SAVINGS, ReceiveLiquiditySource.AUTO).forEach {
             assertEquals(
                 ReceiveAdditionalLiquidityAction.None,
@@ -88,91 +85,10 @@ class ReceiveLiquidityDecisionTest {
     }
 
     @Test
-    fun `below CJIT minimum routes to amount picker`() {
+    fun `spending above inbound routes to transfer unavailable`() {
         assertEquals(
-            ReceiveAdditionalLiquidityAction.ChooseAmount,
-            additionalLiquidityAction(
-                defaultAdditionalLiquidityParams.copy(invoiceAmountSats = 4_000u)
-            )
-        )
-    }
-
-    @Test
-    fun `at CJIT minimum creates CJIT`() {
-        assertEquals(
-            ReceiveAdditionalLiquidityAction.CreateCjit(5_000u),
-            additionalLiquidityAction(
-                defaultAdditionalLiquidityParams.copy(invoiceAmountSats = 5_000u)
-            )
-        )
-    }
-
-    @Test
-    fun `over max CJIT amount routes to amount picker`() {
-        assertEquals(
-            ReceiveAdditionalLiquidityAction.ChooseAmount,
-            additionalLiquidityAction(
-                defaultAdditionalLiquidityParams.copy(invoiceAmountSats = 100_001u)
-            )
-        )
-    }
-
-    @Test
-    fun `unknown max CJIT amount routes to amount picker`() {
-        assertEquals(
-            ReceiveAdditionalLiquidityAction.ChooseAmount,
-            additionalLiquidityAction(
-                defaultAdditionalLiquidityParams.copy(maxCjitAmountSats = null)
-            )
-        )
-    }
-
-    @Test
-    fun `geo-blocked routes to geo-block screen`() {
-        assertEquals(
-            ReceiveAdditionalLiquidityAction.GeoBlocked,
-            additionalLiquidityAction(
-                defaultAdditionalLiquidityParams.copy(isGeoBlocked = true)
-            )
-        )
-    }
-
-    @Test
-    fun `CJIT limits are fetched only when additional liquidity can use them`() {
-        assertFalse(
-            ReceiveLiquidityDecision.needsCjitLimitsForAdditionalLiquidity(
-                source = ReceiveLiquiditySource.AUTO,
-                invoiceAmountSats = 10_000u,
-                inboundCapacitySats = 1_000u,
-                isGeoBlocked = false,
-            )
-        )
-
-        assertFalse(
-            ReceiveLiquidityDecision.needsCjitLimitsForAdditionalLiquidity(
-                source = ReceiveLiquiditySource.SPENDING,
-                invoiceAmountSats = 10_000u,
-                inboundCapacitySats = 0u,
-                isGeoBlocked = false,
-            )
-        )
-
-        assertFalse(
-            ReceiveLiquidityDecision.needsCjitLimitsForAdditionalLiquidity(
-                source = ReceiveLiquiditySource.SPENDING,
-                invoiceAmountSats = 10_000u,
-                inboundCapacitySats = 1_000u,
-                isGeoBlocked = true,
-            )
-        )
-
-        assertTrue(
-            ReceiveLiquidityDecision.needsCjitLimitsForAdditionalLiquidity(
-                source = ReceiveLiquiditySource.SPENDING,
-                invoiceAmountSats = 10_000u,
-                inboundCapacitySats = 1_000u,
-                isGeoBlocked = false,
-            )
+            ReceiveAdditionalLiquidityAction.TransferUnavailable,
+            additionalLiquidityAction(defaultAdditionalLiquidityParams)
         )
     }
 
