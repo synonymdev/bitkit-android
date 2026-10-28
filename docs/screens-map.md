@@ -129,20 +129,12 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| FundingAdvancedScreen.kt | Manual Setup › Lightning Manual Setup |
-| FundingScreen.kt | Lightning Onboarding From Suggestion Card › Lightning onboarding Fund |
-| LiquidityScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Receiving Capacity |
+| FundingScreen.kt | `todo` |
 | SavingsAdvancedScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings select funds |
 | SavingsAvailabilityScreen.kt | Transfer to Savings (Channel Closure) › Transfer warning |
 | SavingsConfirmScreen.kt | Transfer to Savings (Channel Closure) › Transfer all funds to savings review |
 | SavingsIntroScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings |
 | SavingsProgressScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings progress 2 |
-| SettingUpScreen.kt | Funds In Transfer › Transfer to Spending Progress 1 |
-| SpendingAdvancedScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Confirm Advanced |
-| SpendingAmountScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Input |
-| SpendingConfirmScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Confirm |
-| SpendingIntroScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Intro |
-| TransferIntroScreen.kt | Lightning Onboarding From Suggestion Card › Lightning onboarding Intro |
 
 ## ui/screens/transfer/external
 
@@ -158,9 +150,6 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| SpendingAmountHwScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Input HW |
-| SpendingHwSignScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Confirm HW |
-| SpendingHwSignedScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Confirmed HW |
 
 ## ui/screens/trezor
 
@@ -191,11 +180,8 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | Android | Figma |
 | - | - |
 | EditInvoiceScreen.kt | Send (Contact) (Lightning) › Edit invoice populated |
-| LocationBlockScreen.kt | Send (Enter Manually) › CJIT Location Block |
-| ReceiveAmountScreen.kt | Receive CJIT Onboarding › CJIT Enter amount |
-| ReceiveConfirmScreen.kt | Send (Enter Manually) › CJIT Fee to connect |
-| ReceiveLiquidityScreen.kt | Send (Hardware Device) (On-chain) › Liquidity fee |
 | ReceiveQrScreen.kt | Receive Lightning Active › Receive Auto (Unified QR) |
+| TransferUnavailableScreen.kt | `todo` |
 
 ## ui/screens/wallets/send
 

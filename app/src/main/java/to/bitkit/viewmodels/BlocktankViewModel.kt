@@ -37,30 +37,9 @@ class BlocktankViewModel @Inject constructor(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val minCjitSats: StateFlow<Int?> = blocktankRepo.blocktankState
-        .map { it.minCjitSats }
-        .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
     fun refreshOrders() {
         viewModelScope.launch {
             blocktankRepo.refreshOrders()
         }
-    }
-
-    suspend fun createCjit(amountSats: ULong): IcJitEntry {
-        return blocktankRepo.createCjit(amountSats).getOrThrow()
-    }
-
-    suspend fun openChannel(orderId: String): IBtOrder {
-        return blocktankRepo.openChannel(orderId).getOrThrow()
-    }
-
-    suspend fun refreshMinCjitSats() {
-        blocktankRepo.refreshMinCjitSats()
-    }
-
-    suspend fun maxCjitAmountSats(): ULong? {
-        return blocktankRepo.maxCjitAmountSats().getOrThrow()
     }
 }

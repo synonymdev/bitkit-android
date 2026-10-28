@@ -18,7 +18,9 @@ and the payee needs receiving capacity; fund both through the staging LSP.
 Grant both instances notification permission first (`adb shell pm grant to.bitkit.dev
 android.permission.POST_NOTIFICATIONS`): the payer's "Payment Executed" and "Limit Reached" events and
 the payee's "Allowance Added" event post a system notification when they can, and fall back to a toast
-that `android layout` cannot see.
+that `android layout` cannot see. "Limit Reached" posts nothing while Bitkit is in the foreground and
+unlocked, because the Payment Request sheet for the same request opens at the same time; behind the PIN
+screen the sheet waits, so the notification is posted.
 
 The journeys set $5 a payment and $50 a month, the second stop on each slider, and the cap journey
 sets $5 a payment and $10 a month, the first monthly stop. Requests are one-time Payment Requests

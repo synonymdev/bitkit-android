@@ -128,7 +128,6 @@ class BackupRepo @Inject constructor(
     private val paykitAllowanceStore: PaykitAllowanceStore,
     private val keychain: Keychain,
     private val onchainSendAttemptStore: OnchainSendAttemptStore,
-    private val transferRepo: Provider<TransferRepo>,
     private val lightningRepo: Provider<LightningRepo>,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
@@ -976,11 +975,7 @@ class BackupRepo @Inject constructor(
                 it.attemptId == restored.attemptId && it.walletIndex == restored.walletIndex
             }
         }?.takeIf { it.hasPositiveEvidence }?.let { attempt ->
-            if (attempt.isTransfer) {
-                transferRepo.get().resumeAcceptedFunding(attempt).onFailure {
-                    Logger.warn("Restored accepted funding remains pending local follow-up", it, context = TAG)
-                }
-            } else if (attempt.requestId != null && !attempt.localFollowupComplete) {
+            if (attempt.requestId != null && !attempt.localFollowupComplete) {
                 runSuspendCatching { paykitPaymentProofRepo.get().reconcile() }.onFailure {
                     Logger.warn("Restored accepted Shop payment remains pending local follow-up", it, context = TAG)
                 }
