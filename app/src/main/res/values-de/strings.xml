@@ -238,6 +238,7 @@
     <string name="lightning__total_onchain">Gesamt Onchain</string>
     <string name="lightning__transfer_in_progress">ÜBERTRAGUNG LÄUFT</string>
     <string name="lightning__wait_text_top">Bitte warte bis sich Bitkit mit dem Zahlungsnetzwerk verbunden hat (±10 Sekunden).</string>
+    <string name="lightning__wait_text_top_onchain">Bitte warte bis sich Bitkit mit dem Bitcoin-Netzwerk verbunden hat (±10 Sekunden).</string>
     <string name="lightning__wallet_balances">Wallet-Guthaben</string>
     <string name="lightning__conn_onboarding_button">Loslegen</string>
     <string name="lightning__conn_onboarding_text">Richte dein Ausgabenguthaben ein, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu genießen.</string>

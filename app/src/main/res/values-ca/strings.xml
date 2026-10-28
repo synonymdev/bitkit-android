@@ -235,6 +235,7 @@
     <string name="lightning__transfer_success__text_savings">Els teus fons han estat transferits. Pots utilitzar aquests fons immediatament.</string>
     <string name="lightning__transfer_success__title_savings">Fons moguts\n&lt;accent&gt;a estalvis&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Si us plau, espereu que Bitkit es connecti a la xarxa de pagament (±10 segons).</string>
+    <string name="lightning__wait_text_top_onchain">Si us plau, espereu que Bitkit es connecti a la xarxa bitcoin (±10 segons).</string>
     <string name="lightning__wallet_balances">Saldos de la cartera</string>
     <string name="lightning__conn_onboarding_button">Comença</string>
     <string name="lightning__conn_onboarding_text">Configura el teu saldo de despeses per gaudir de transaccions instantànies i econòmiques amb amics, familiars i comerciants.</string>

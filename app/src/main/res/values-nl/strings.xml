@@ -235,6 +235,7 @@
     <string name="lightning__transfer_success__text_savings">Je geld is overgeboekt. Je kunt dit geld direct gebruiken.</string>
     <string name="lightning__transfer_success__title_savings">Geld verplaatst\n&lt;accent&gt;naar spaargeld&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Wacht tot Bitkit verbinding maakt met het betaalnetwerk (±10 seconden).</string>
+    <string name="lightning__wait_text_top_onchain">Wacht tot Bitkit verbinding maakt met het bitcoinnetwerk (±10 seconden).</string>
     <string name="lightning__wallet_balances">Wallet-saldi</string>
     <string name="lightning__conn_onboarding_button">Aan de slag</string>
     <string name="lightning__conn_onboarding_text">Stel je uitgavenbalans in om te genieten van directe en goedkope transacties met vrienden, familie en winkels.</string>

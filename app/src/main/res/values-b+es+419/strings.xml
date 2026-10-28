@@ -238,6 +238,7 @@
     <string name="lightning__transfer_success__text_savings">Sus fondos han sido transferidos. Podrá utilizar estos fondos inmediatamente.</string>
     <string name="lightning__transfer_success__title_savings">Fondos movidos\n&lt;accent&gt;a gastos&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Por favor, espere a que Bitkit se conecte a la red de pagos (±10 seg.).</string>
+    <string name="lightning__wait_text_top_onchain">Por favor, espere a que Bitkit se conecte a la red bitcoin (±10 seg.).</string>
     <string name="lightning__wallet_balances">Saldos de billetera</string>
     <string name="lightning__conn_onboarding_button">Comenzar</string>
     <string name="lightning__conn_onboarding_text">Configure su saldo de gastos para disfrutar de transacciones instantáneas y económicas con amigos, familiares y comerciantes.</string>

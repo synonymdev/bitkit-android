@@ -399,6 +399,7 @@
     <string name="lightning__transfer_unavailable__text">Automatic transfers to your spending balance are no longer available. Use your own node, or set up a connection with another provider.</string>
     <string name="lightning__transfer_unavailable__title">&lt;accent&gt;Manual setup&lt;/accent&gt;\nrequired</string>
     <string name="lightning__wait_text_top">Please wait for Bitkit to connect to the payment network (±10 seconds).</string>
+    <string name="lightning__wait_text_top_onchain">Please wait for Bitkit to connect to the bitcoin network (±10 seconds).</string>
     <string name="lightning__wallet_balances">Wallet Balances</string>
     <string name="migration__description">Please wait while your old wallet data migrates to this new Bitkit version. This usually takes less than a minute.</string>
     <string name="migration__nav_title">Wallet Migration</string>

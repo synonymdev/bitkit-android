@@ -238,6 +238,7 @@
     <string name="lightning__order_state__open">Connexion ouverte</string>
     <string name="lightning__order_state__inactive">Connexion inactive</string>
     <string name="lightning__wait_text_top">Veuillez attendre que Bitkit se connecte au réseau de paiement (±10 secondes).</string>
+    <string name="lightning__wait_text_top_onchain">Veuillez attendre que Bitkit se connecte au réseau bitcoin (±10 secondes).</string>
     <string name="lightning__conn_onboarding_button">Commencer</string>
     <string name="lightning__conn_onboarding_text">Configurez votre solde de dépenses pour profiter de transactions instantanées et peu coûteuses avec vos amis, votre famille et les commerçants.</string>
     <string name="lightning__conn_onboarding_title">Activer les\n&lt;accent&gt;paiements&lt;/accent&gt;\nLightning</string>

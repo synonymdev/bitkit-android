@@ -247,6 +247,7 @@
     <string name="lightning__transfer_success__text_savings">Ваши средства переведены. Вы можете использовать эти средства немедленно.</string>
     <string name="lightning__transfer_success__title_savings">Средства Переведены\n&lt;accent&gt;в Сбережения&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Пожалуйста, подождите, пока Bitkit подключается к платёжной сети (±10 секунд).</string>
+    <string name="lightning__wait_text_top_onchain">Пожалуйста, подождите, пока Bitkit подключается к сети биткоин (±10 секунд).</string>
     <string name="lightning__wallet_balances">Балансы кошелька</string>
     <string name="lightning__conn_onboarding_button">Начать</string>
     <string name="lightning__conn_onboarding_text">Настройте баланс расходов, чтобы наслаждаться мгновенными и дешёвыми транзакциями с друзьями, семьёй и продавцами.</string>

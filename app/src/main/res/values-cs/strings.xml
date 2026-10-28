@@ -238,6 +238,7 @@
     <string name="lightning__transfer_success__text_savings">Vaše prostředky byly převedeny. Tyto prostředky můžete okamžitě použít.</string>
     <string name="lightning__transfer_success__title_savings">Prostředky převedeny\n&lt;accent&gt;do úspor&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Prosím vyčkejte, až se Bitkit připojí k platební síti (±10 sekund).</string>
+    <string name="lightning__wait_text_top_onchain">Prosím vyčkejte, až se Bitkit připojí k síti bitcoin (±10 sekund).</string>
     <string name="lightning__wallet_balances">Zůstatky peněženky</string>
     <string name="lightning__conn_onboarding_button">Začít</string>
     <string name="lightning__conn_onboarding_text">Nastavte si zůstatek pro výdaje a užívejte si okamžité a levné transakce s přáteli, rodinou a obchodníky.</string>
