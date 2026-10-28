@@ -58,6 +58,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.junit.After
@@ -6877,8 +6878,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             val readStarted = CompletableDeferred<Unit>()
             val finishRead = CompletableDeferred<Unit>()
             var recoveryClear = false
+            var refuseAfterEstimate = false
+            var feeEstimated = false
             whenever { backupRepo.hasPendingWalletRestore() }.doSuspendableAnswer {
-                if (!recoveryClear && sut.sendUiState.value.hardwareAvailableSats == 48_000uL) {
+                if (!recoveryClear && sut.sendUiState.value.hardwareAvailableSats == 48_000uL &&
+                    (!refuseAfterEstimate || feeEstimated)
+                ) {
                     readStarted.complete(Unit)
                     finishRead.await()
                     refusal.getOrThrow()
@@ -6889,7 +6894,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
                 .thenReturn(Result.success(48_000uL))
             whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }
-                .thenReturn(Result.success(250uL))
+                .doSuspendableAnswer {
+                    feeEstimated = true
+                    Result.success(250uL)
+                }
             setSendState(
                 SendUiState(
                     address = REGTEST_ADDRESS,
@@ -6919,91 +6927,63 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 advanceUntilIdle()
                 assertFalse(sut.sendUiState.value.shouldConfirmPay)
                 expectNoEvents()
+
+                sut.setSendEvent(SendEvent.SpeedAndFee)
+                advanceUntilIdle()
+                assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
+                assertFalse(sut.sendUiState.value.isHardwareFeeReady)
+                expectNoEvents()
+
+                refuseAfterEstimate = true
+                sut.setSendEvent(SendEvent.SpeedAndFee)
+                advanceUntilIdle()
+                assertTrue(feeEstimated)
+                assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
+                assertNull(sut.sendUiState.value.onchainFeeUi.sats)
+                assertFalse(sut.sendUiState.value.isHardwareFeeReady)
+                expectNoEvents()
+
+                recoveryClear = true
+                sut.setSendEvent(SendEvent.SpeedAndFee)
+                advanceUntilIdle()
+
+                assertEquals(SendEffect.NavigateToFee, awaitItem())
+                assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
+                assertEquals(250L, sut.sendUiState.value.onchainFeeUi.sats)
+                assertTrue(sut.sendUiState.value.isHardwareFeeReady)
             }
-
-            recoveryClear = true
-            sut.setTransactionSpeed(TransactionSpeed.Medium)
-            advanceUntilIdle()
-
-            assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
-            assertEquals(250L, sut.sendUiState.value.onchainFeeUi.sats)
-            assertTrue(sut.sendUiState.value.isHardwareFeeReady)
         }
     }
 
     @Test
     fun `superseded hardware fee refresh cannot clear newer loading`() = test {
-        val firstRead = CompletableDeferred<Unit>()
-        val finishFirst = CompletableDeferred<Unit>()
-        val secondRead = CompletableDeferred<Unit>()
-        val finishSecond = CompletableDeferred<Unit>()
-        var reads = 0
-        var availableSats = 48_000uL
-        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
-            .doSuspendableAnswer { Result.success(availableSats) }
-        whenever { backupRepo.hasPendingWalletRestore() }.doSuspendableAnswer {
-            if (sut.sendUiState.value.hardwareAvailableSats != availableSats) return@doSuspendableAnswer false
-            when (reads++) {
-                0 -> withContext(NonCancellable) {
-                    firstRead.complete(Unit)
-                    finishFirst.await()
-                    true
-                }
-                1 -> {
-                    secondRead.complete(Unit)
-                    finishSecond.await()
-                    false
-                }
-                else -> false
-            }
-        }
-        whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }
-            .thenReturn(Result.success(250uL))
-        setSendState(
-            SendUiState(
-                address = REGTEST_ADDRESS,
-                amount = 1_000uL,
-                hardwareWalletId = HARDWARE_WALLET_ID,
-                hardwareAvailableSats = 50_000uL,
-                payMethod = SendMethod.ONCHAIN,
-                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
-            )
-        )
-
-        sut.setTransactionSpeed(TransactionSpeed.Fast)
-        firstRead.await()
-        availableSats = 46_000uL
-        sut.setTransactionSpeed(TransactionSpeed.Medium)
-        secondRead.await()
-        finishFirst.complete(Unit)
-        advanceUntilIdle()
-
-        assertTrue(sut.sendUiState.value.onchainFeeUi.isLoading)
-        finishSecond.complete(Unit)
-        advanceUntilIdle()
-
-        assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
-        assertEquals(250L, sut.sendUiState.value.onchainFeeUi.sats)
-    }
-
-    @Test
-    fun `obsolete hardware fee refresh preserves replacement send state`() = test {
-        for (replaceWallet in listOf(false, true)) {
-            val readStarted = CompletableDeferred<Unit>()
-            val finishRead = CompletableDeferred<Unit>()
-            var holdRead = true
+        for (feeRow in listOf(false, true)) {
+            val firstRead = CompletableDeferred<Unit>()
+            val finishFirst = CompletableDeferred<Unit>()
+            val secondRead = CompletableDeferred<Unit>()
+            val finishSecond = CompletableDeferred<Unit>()
+            var reads = 0
+            var availableSats = if (feeRow) 50_000uL else 48_000uL
             whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
-                .thenReturn(Result.success(48_000uL))
+                .doSuspendableAnswer { Result.success(availableSats) }
             whenever { backupRepo.hasPendingWalletRestore() }.doSuspendableAnswer {
-                if (holdRead && sut.sendUiState.value.hardwareAvailableSats == 48_000uL) {
-                    holdRead = false
-                    readStarted.complete(Unit)
-                    finishRead.await()
-                    true
-                } else {
-                    false
+                if (sut.sendUiState.value.hardwareAvailableSats != availableSats) return@doSuspendableAnswer false
+                when (reads++) {
+                    0 -> withContext(NonCancellable) {
+                        firstRead.complete(Unit)
+                        finishFirst.await()
+                        true
+                    }
+                    1 -> {
+                        secondRead.complete(Unit)
+                        finishSecond.await()
+                        false
+                    }
+                    else -> false
                 }
             }
+            whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }
+                .thenReturn(Result.success(250uL))
             setSendState(
                 SendUiState(
                     address = REGTEST_ADDRESS,
@@ -7011,18 +6991,139 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                     hardwareWalletId = HARDWARE_WALLET_ID,
                     hardwareAvailableSats = 50_000uL,
                     payMethod = SendMethod.ONCHAIN,
+                    feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
                 )
             )
 
-            sut.setTransactionSpeed(TransactionSpeed.Fast)
-            readStarted.await()
-            if (replaceWallet) walletGeneration++ else assertTrue(sut.resetSendState())
-            val replacement = SendUiState(onchainFeeUi = OnchainFeeUi(sats = 99L, isLoading = true))
-            setSendState(replacement)
-            finishRead.complete(Unit)
-            advanceUntilIdle()
+            if (feeRow) sut.setSendEvent(SendEvent.SpeedAndFee) else sut.setTransactionSpeed(TransactionSpeed.Fast)
+            firstRead.await()
+            availableSats = 46_000uL
+            sut.setTransactionSpeed(TransactionSpeed.Medium)
+            secondRead.await()
+            sut.sendEffect.test {
+                finishFirst.complete(Unit)
+                advanceUntilIdle()
 
-            assertEquals(replacement, sut.sendUiState.value)
+                assertTrue(sut.sendUiState.value.onchainFeeUi.isLoading)
+                finishSecond.complete(Unit)
+                advanceUntilIdle()
+
+                assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
+                assertEquals(250L, sut.sendUiState.value.onchainFeeUi.sats)
+                expectNoEvents()
+            }
+        }
+    }
+
+    @Test
+    fun `obsolete hardware fee refresh preserves replacement send state`() = test {
+        for (feeRow in listOf(false, true)) {
+            for (replaceWallet in listOf(false, true)) {
+                val readStarted = CompletableDeferred<Unit>()
+                val finishRead = CompletableDeferred<Unit>()
+                var holdRead = true
+                whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
+                    .thenReturn(Result.success(48_000uL))
+                whenever { backupRepo.hasPendingWalletRestore() }.doSuspendableAnswer {
+                    if (holdRead && sut.sendUiState.value.hardwareAvailableSats == if (feeRow) 50_000uL else 48_000uL) {
+                        holdRead = false
+                        readStarted.complete(Unit)
+                        finishRead.await()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                setSendState(
+                    SendUiState(
+                        address = REGTEST_ADDRESS,
+                        amount = 1_000uL,
+                        hardwareWalletId = HARDWARE_WALLET_ID,
+                        hardwareAvailableSats = 50_000uL,
+                        payMethod = SendMethod.ONCHAIN,
+                    )
+                )
+
+                if (feeRow) sut.setSendEvent(SendEvent.SpeedAndFee) else sut.setTransactionSpeed(TransactionSpeed.Fast)
+                readStarted.await()
+                if (replaceWallet) walletGeneration++ else assertTrue(sut.resetSendState())
+                val replacement = SendUiState(onchainFeeUi = OnchainFeeUi(sats = 99L, isLoading = true))
+                setSendState(replacement)
+                sut.sendEffect.test {
+                    finishRead.complete(Unit)
+                    advanceUntilIdle()
+
+                    assertEquals(replacement, sut.sendUiState.value)
+                    expectNoEvents()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `successful fee refresh navigation respects replacement ownership`() = test {
+        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
+            .thenReturn(Result.success(48_000uL))
+        for (feeRow in listOf(true, false)) {
+            for (replacement in listOf("send", "wallet", "refresh", "none")) {
+                var estimates = 0
+                var replacementQueued = false
+                whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }
+                    .doSuspendableAnswer {
+                        estimates++
+                        Result.success(250uL)
+                    }
+                whenever { backupRepo.hasPendingWalletRestore() }.doSuspendableAnswer {
+                    if (estimates == 3 && !replacementQueued) {
+                        replacementQueued = true
+                        launch(Dispatchers.Main) {
+                            assertEquals(250L, sut.sendUiState.value.onchainFeeUi.sats)
+                            when (replacement) {
+                                "send" -> assertTrue(sut.resetSendState())
+                                "wallet" -> walletGeneration++
+                                "refresh" -> sut.setTransactionSpeed(TransactionSpeed.Fast)
+                            }
+                        }
+                    }
+                    false
+                }
+                setSendState(
+                    SendUiState(
+                        address = REGTEST_ADDRESS,
+                        amount = 1_000uL,
+                        hardwareWalletId = HARDWARE_WALLET_ID,
+                        hardwareAvailableSats = 50_000uL,
+                        payMethod = SendMethod.ONCHAIN,
+                        feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+                    )
+                )
+
+                Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+                try {
+                    sut.sendEffect.test {
+                        val event = if (feeRow) {
+                            SendEvent.SpeedAndFee
+                        } else {
+                            SendEvent.CoinSelectionContinue(listOf(mock()))
+                        }
+                        sut.setSendEvent(event)
+                        advanceUntilIdle()
+
+                        assertTrue(replacementQueued)
+                        if (replacement == "none") {
+                            assertEquals(
+                                if (feeRow) SendEffect.NavigateToFee else SendEffect.NavigateToConfirm,
+                                awaitItem()
+                            )
+                        } else if (replacement == "refresh") {
+                            assertEquals(SendEffect.PopBack(SendRoute.Confirm), awaitItem())
+                        }
+                        expectNoEvents()
+                    }
+                } finally {
+                    Dispatchers.setMain(testDispatcher)
+                }
+            }
         }
     }
 

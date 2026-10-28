@@ -73,6 +73,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -2990,9 +2991,15 @@ class AppViewModel @Inject constructor(
                         SendEvent.SpeedAndFee -> {
                             if (_sendUiState.value.isRetainedHardwarePayment) return@collect
                             if (_sendUiState.value.onchainFeeUi.estimates.isEmpty()) {
-                                viewModelScope.launch {
-                                    refreshOnchainFeeUi()
-                                    setSendEffect(SendEffect.NavigateToFee)
+                                val generation = sendStateGeneration
+                                val walletGeneration = connectionRecovery.currentGeneration()
+                                launchOnchainFeeRefresh(generation, walletGeneration) {
+                                    refreshOnchainFeeUi(walletGeneration)
+                                    val refreshJob = currentCoroutineContext().job
+                                    setSendEffect(SendEffect.NavigateToFee) {
+                                        refreshJob.isActive && generation == sendStateGeneration &&
+                                            connectionRecovery.isCurrentGeneration(walletGeneration)
+                                    }.join()
                                 }
                             } else {
                                 setSendEffect(SendEffect.NavigateToFee)
@@ -4444,11 +4451,19 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
+        val generation = sendStateGeneration
+        val walletGeneration = connectionRecovery.currentGeneration()
         _sendUiState.update {
             it.copy(selectedUtxos = utxos.toImmutableList())
         }
-        refreshOnchainFeeUi()
-        setSendEffect(SendEffect.NavigateToConfirm)
+        launchOnchainFeeRefresh(generation, walletGeneration) {
+            refreshOnchainFeeUi(walletGeneration)
+            val refreshJob = currentCoroutineContext().job
+            setSendEffect(SendEffect.NavigateToConfirm) {
+                refreshJob.isActive && generation == sendStateGeneration &&
+                    connectionRecovery.isCurrentGeneration(walletGeneration)
+            }.join()
+        }?.join()
     }
 
     private suspend fun validateAmount(
@@ -6908,10 +6923,8 @@ class AppViewModel @Inject constructor(
     private fun refreshOnchainSendIfNeeded(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ): Job? {
-        if (!connectionRecovery.isCurrentGeneration(walletGeneration)) return null
         val generation = sendStateGeneration
         val currentState = _sendUiState.value
-        if (currentState.isRetainedHardwarePayment) return null
         if (currentState.payMethod != SendMethod.ONCHAIN ||
             currentState.amount == 0uL ||
             currentState.address.isEmpty()
@@ -6919,14 +6932,12 @@ class AppViewModel @Inject constructor(
             return null
         }
 
-        updateOnchainFeeUi { it.copy(isLoading = true) }
-        cancelOnchainSendRefresh()
-        val job = viewModelScope.launch(bgDispatcher, start = CoroutineStart.LAZY) {
+        return launchOnchainFeeRefresh(generation, walletGeneration) {
             requireCurrentPaymentPreparation(walletGeneration)
-            if (generation != sendStateGeneration) return@launch
+            if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
             val settings = settingsStore.data.first()
             requireCurrentPaymentPreparation(walletGeneration)
-            if (generation != sendStateGeneration) return@launch
+            if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
             // preselect utxos for deterministic fee estimation
             if (
                 currentState.hardwareWalletId == null &&
@@ -6949,9 +6960,24 @@ class AppViewModel @Inject constructor(
                     }
             }
             requireCurrentPaymentPreparation(walletGeneration)
-            if (generation != sendStateGeneration) return@launch
+            if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
             refreshOnchainFeeUi(walletGeneration)
         }
+    }
+
+    private fun launchOnchainFeeRefresh(
+        generation: Long,
+        walletGeneration: Long?,
+        refresh: suspend () -> Unit,
+    ): Job? {
+        if (generation != sendStateGeneration || !connectionRecovery.isCurrentGeneration(walletGeneration) ||
+            _sendUiState.value.isRetainedHardwarePayment
+        ) {
+            return null
+        }
+        updateOnchainFeeUi { it.copy(isLoading = true) }
+        cancelOnchainSendRefresh()
+        val job = viewModelScope.launch(bgDispatcher, start = CoroutineStart.LAZY) { refresh() }
         onchainSendRefreshJob = job
         job.invokeOnCompletion { cause ->
             if (cause != null) {
