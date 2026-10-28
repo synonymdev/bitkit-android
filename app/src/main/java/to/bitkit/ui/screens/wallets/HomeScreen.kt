@@ -100,7 +100,6 @@ import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.UsdtTransferStatus
-import com.synonym.bitkitcore.usdtFormatAmount
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
@@ -126,7 +125,6 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.BannerItem
 import to.bitkit.models.HwWallet
 import to.bitkit.models.MoneyType
-import to.bitkit.models.PaykitExchangeRate
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransportType
 import to.bitkit.models.WidgetSize
@@ -145,6 +143,7 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.FillHeight
@@ -164,13 +163,10 @@ import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
-import to.bitkit.ui.components.usdtDisplaySats
 import to.bitkit.ui.navToActivityDetail
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToProfile
-import to.bitkit.ui.navigateToTransferFunding
-import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
@@ -242,7 +238,6 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
     val profileNavigationScope = rememberCoroutineScope()
@@ -318,13 +313,7 @@ fun HomeScreen(
                     appViewModel.showSheet(Sheet.Hardware())
                 }
 
-                Suggestion.LIGHTNING -> {
-                    if (!hasSeenTransferIntro) {
-                        rootNavController.navigateToTransferIntro()
-                    } else {
-                        rootNavController.navigateToTransferFunding()
-                    }
-                }
+                Suggestion.LIGHTNING -> appViewModel.showSheet(Sheet.TransferUnavailable)
 
                 Suggestion.BACK_UP -> {
                     appViewModel.showSheet(Sheet.Backup(BackupRoute.Intro))
@@ -402,7 +391,6 @@ fun HomeScreen(
         onPageChanged = homeViewModel::onPageChanged,
         onDismissWidgetsOnboardingHint = homeViewModel::dismissWidgetsOnboardingHint,
         onNavigateToAppStatus = { rootNavController.navigate(Routes.AppStatus) },
-        onNavigateToSettingUp = { rootNavController.navigate(Routes.SettingUp) },
         onNavigateToAllActivity = { rootNavController.navigateToAllActivity(activityListViewModel::clearFilters) },
         onNavigateToActivityItem = { rootNavController.navToActivityDetail(it) },
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
@@ -443,7 +431,6 @@ private fun Content(
     onPageChanged: (Int) -> Unit = {},
     onDismissWidgetsOnboardingHint: () -> Unit = {},
     onNavigateToAppStatus: () -> Unit = {},
-    onNavigateToSettingUp: () -> Unit = {},
     onNavigateToAllActivity: () -> Unit = {},
     onNavigateToActivityItem: (Activity) -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
@@ -581,7 +568,6 @@ private fun Content(
                     balances = balances,
                     isSmallScreen = isSmallScreen,
                     onRefresh = onRefresh,
-                    onNavigateToSettingUp = onNavigateToSettingUp,
                     onNavigateToAllActivity = onNavigateToAllActivity,
                     onNavigateToActivityItem = onNavigateToActivityItem,
                     onNavigateToSavings = onNavigateToSavings,
@@ -623,9 +609,6 @@ private fun UsdtHomeRefreshEffect() {
     UsdtRefreshEffect(viewModel, pending = wallet.transfers.any { it.status == UsdtTransferStatus.PENDING })
 }
 
-private fun usdtHeadlineSats(balance: ULong?, visible: Boolean, rate: PaykitExchangeRate?): Long? =
-    if (visible && balance != 0uL) balance?.let { usdtDisplaySats(usdtFormatAmount(it), rate) } else 0L
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WalletPage(
@@ -636,7 +619,6 @@ private fun WalletPage(
     balances: BalanceState,
     isSmallScreen: Boolean,
     onRefresh: () -> Unit,
-    onNavigateToSettingUp: () -> Unit,
     onNavigateToAllActivity: () -> Unit,
     onNavigateToActivityItem: (Activity) -> Unit,
     onNavigateToSavings: () -> Unit,
@@ -649,7 +631,8 @@ private fun WalletPage(
     val slotCapacity = if (isSmallScreen) SMALL_SCREEN_SLOT_CAPACITY else LARGE_SCREEN_SLOT_CAPACITY
     val showUsdt = appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true
     val rate = LocalCurrencies.current.paykitRate
-    val usdtSats = usdtHeadlineSats(usdt.balance, showUsdt, rate)
+    val usdtSats = usdtHeadlineSats(usdt.balance ?: usdt.cachedBalance, showUsdt, rate)
+    val balanceUpdating = showUsdt && usdtBalanceUpdating(usdt, LocalCurrencies.current)
     val headlineSats = BigInteger(
         balances.totalWithHardwareSats.toString()
     ).add(BigInteger.valueOf(usdtSats ?: 0L)).min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()
@@ -692,6 +675,13 @@ private fun WalletPage(
                     .fillMaxWidth()
                     .testTag("TotalBalance")
             )
+            if (balanceUpdating) {
+                Caption13Up(
+                    text = stringResource(R.string.wallet__balance_updating),
+                    color = Colors.White64,
+                    modifier = Modifier.padding(top = 8.dp).testTag("TotalBalanceUpdating")
+                )
+            }
             VerticalSpacer(32.dp)
             BalancesSection(
                 balances = balances,
@@ -717,12 +707,6 @@ private fun WalletPage(
                                     gradientColor = banner.type.color,
                                     title = banner.title,
                                     icon = banner.type.icon,
-                                    onClick = {
-                                        when (banner.type) {
-                                            ActivityBannerType.SPENDING -> onNavigateToSettingUp()
-                                            ActivityBannerType.SAVINGS -> Unit
-                                        }
-                                    },
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }

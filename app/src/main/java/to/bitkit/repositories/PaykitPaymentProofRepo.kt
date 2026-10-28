@@ -124,6 +124,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     private val store: PaykitPaymentProofStore,
     private val hwWalletRepo: HwWalletRepo,
     private val privatePaykitRepo: Lazy<PrivatePaykitRepo>,
+    private val allowanceExecutor: Lazy<PaykitAllowanceExecutor>,
 ) {
     companion object {
         private const val TAG = "PaykitPaymentProofRepo"
@@ -443,6 +444,8 @@ class PaykitPaymentProofRepo @Inject constructor(
      * deadline passed. A record that is missing, carries a proof or needs recovery never counts as ended.
      */
     suspend fun onchainRequestHasEnded(attempt: OnchainSendAttempt): Boolean = withContext(ioDispatcher) {
+        // Blocktank no longer sells channels, so its order has always ended.
+        if (attempt.isBlocktankFunding) return@withContext attempt.canBeAbandoned
         val identity = currentIdentity()?.takeIf { PubkyPublicKeyFormat.matches(it, attempt.payerIdentity) }
         val record = attempt.takeIf { it.canBeAbandoned && identity != null }?.let { payerRecord(it) }
         val periodStartsAt = attempt.requestId?.billingPeriodStartsAt
@@ -586,7 +589,12 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     /** Removes the original proof, then the attempt, once its release reached the network. */
     private suspend fun finishRelease(attempt: OnchainSendAttempt) {
-        if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt) { removeOriginalShopProofs(it) }) {
+        // The release removes what allowance recovery reads, so the request's ledger attempt is failed first; a
+        // failure leaves the release unfinished, to be finished again later.
+        attempt.requestId?.let { allowanceExecutor.get().onchainSendReleased(attempt.payerIdentity, it) }
+        val removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean =
+            { if (it.isBlocktankFunding) true else removeOriginalShopProofs(it) }
+        if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt, removeOriginalProof)) {
             throw OnchainSendBlockedError(attempt)
         }
         Logger.info(

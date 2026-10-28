@@ -477,6 +477,29 @@ class SendPendingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refused Blocktank funding offers cancel after one check while transfers are unavailable`() = test {
+        val original = pendingOriginal().copy(isTransfer = true, orderId = "order")
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(true)
+        sut.initOnchain(original.txid, amount)
+        runCurrent()
+        assertEquals(original, sut.uiState.value.abandonableAttempt)
+    }
+
+    @Test
+    fun `retryable Blocktank funding is checked once and not polled`() = test {
+        val original = pendingOriginal().copy(isTransfer = true, orderId = "order")
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(false)
+        sut.initOnchain(original.txid, amount)
+        runCurrent()
+        advanceTimeBy(61.seconds)
+        runCurrent()
+        assertNull(sut.uiState.value.abandonableAttempt)
+        org.mockito.kotlin.verify(paykitPaymentProofRepo, org.mockito.kotlin.times(1)).onchainRequestHasEnded(original)
+    }
+
+    @Test
     fun `a second cancel uses the attempt the first one saved`() = test {
         val original = pendingOriginal().copy(
             requestId = PaykitPaymentRequestId("request", "payee"),

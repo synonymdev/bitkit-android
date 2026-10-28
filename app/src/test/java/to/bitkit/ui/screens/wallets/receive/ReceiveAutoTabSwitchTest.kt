@@ -27,16 +27,6 @@ class ReceiveAutoTabSwitchTest {
     }
 
     @Test
-    fun `does not switch when cjit invoice exists`() {
-        assertFalse(decide(cjitInvoice = "lnbcrt1cjit"))
-    }
-
-    @Test
-    fun `switches when cjit invoice is empty`() {
-        assertTrue(decide(cjitInvoice = ""))
-    }
-
-    @Test
     fun `does not switch when an initial tab was requested`() {
         assertFalse(decide(initialTab = ReceiveTab.SPENDING))
     }
@@ -45,13 +35,11 @@ class ReceiveAutoTabSwitchTest {
         selectedTab: ReceiveTab = ReceiveTab.SAVINGS,
         hasUserSelectedTab: Boolean = false,
         canCreateLightningInvoice: Boolean = true,
-        cjitInvoice: String? = null,
         initialTab: ReceiveTab? = null,
     ) = shouldAutoSwitchToAuto(
         selectedTab = selectedTab,
         hasUserSelectedTab = hasUserSelectedTab,
         canCreateLightningInvoice = canCreateLightningInvoice,
-        cjitInvoice = cjitInvoice,
         initialTab = initialTab,
     )
 }

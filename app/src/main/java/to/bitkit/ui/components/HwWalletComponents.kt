@@ -37,8 +37,8 @@ internal const val SIGNED_VISUAL_TOP_RATIO = (481f - 92f) / (812f - 92f - 34f)
 /** Figma top ratio for the Trezor visual within the content area below navigation. */
 internal const val SIGN_VISUAL_TOP_RATIO = (488f - 92f) / (812f - 92f - 34f)
 
-/** Trezor illustration left bleed past the frame, as a fraction of the sheet width (Figma device frames). */
-private const val HW_DEVICE_TREZOR_BLEED_RATIO = 84f / 375f
+/** Trezor illustration left bleed past the frame, as a fraction of the sheet width; keeps its screen text in view. */
+private const val HW_DEVICE_TREZOR_BLEED_RATIO = 71f / 375f
 
 /** Ledger illustration right bleed past the frame, as a fraction of the sheet width (Figma device frames). */
 private const val HW_DEVICE_LEDGER_BLEED_RATIO = 53f / 375f
