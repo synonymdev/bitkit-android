@@ -238,6 +238,7 @@
     <string name="lightning__order_state__open">Connexion ouverte</string>
     <string name="lightning__order_state__inactive">Connexion inactive</string>
     <string name="lightning__wait_text_top">Veuillez attendre que Bitkit se connecte au réseau de paiement (±10 secondes).</string>
+    <string name="lightning__wait_text_top_onchain">Veuillez attendre que Bitkit se connecte au réseau bitcoin (±10 secondes).</string>
     <string name="lightning__conn_onboarding_button">Commencer</string>
     <string name="lightning__conn_onboarding_text">Configurez votre solde de dépenses pour profiter de transactions instantanées et peu coûteuses avec vos amis, votre famille et les commerçants.</string>
     <string name="lightning__conn_onboarding_title">Activer les\n&lt;accent&gt;paiements&lt;/accent&gt;\nLightning</string>
@@ -452,6 +453,7 @@
     <string name="security__pin_disable_button">Désactiver le code PIN</string>
     <string name="security__pin_enter">Veuillez saisir votre code PIN</string>
     <string name="security__pin_last_attempt">Dernière tentative. Si vous saisissez à nouveau un code PIN erroné, votre portefeuille sera réinitialisé.</string>
+    <string name="security__pin_allowance">Veuillez saisir votre code PIN pour confirmer cette modification de l\'allocation.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentatives restantes. Vous avez oublié votre code PIN ?</string>
     <string name="security__pin_forgot_title">Vous avez oublié votre code PIN ?</string>
     <string name="security__pin_forgot_text">Vous avez oublié votre code PIN ? Réinitialisez et récupérez votre portefeuille Bitkit avec votre phrase de récupération. Définissez un nouveau code PIN après avoir terminé la récupération.</string>
@@ -1423,6 +1425,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Allocation ajoutée</string>
     <string name="subscriptions__allowance_offer_explanation">Le portefeuille de {name} paiera vos demandes dans ces limites sans demander à chaque fois. Chacun de vous peut y mettre fin.</string>
     <string name="subscriptions__allowance_offer_headline">{name} vous offre\n&lt;accent&gt;une allocation&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} vous ont configuré des allocations</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} payé automatiquement</string>
     <string name="subscriptions__allowance_paid_so_far">Payé automatiquement</string>
     <string name="subscriptions__allowance_payment_in_progress">Cette demande est déjà en cours de paiement automatique.</string>

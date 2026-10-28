@@ -238,6 +238,7 @@
     <string name="lightning__total_onchain">Gesamt Onchain</string>
     <string name="lightning__transfer_in_progress">ÜBERTRAGUNG LÄUFT</string>
     <string name="lightning__wait_text_top">Bitte warte bis sich Bitkit mit dem Zahlungsnetzwerk verbunden hat (±10 Sekunden).</string>
+    <string name="lightning__wait_text_top_onchain">Bitte warte bis sich Bitkit mit dem Bitcoin-Netzwerk verbunden hat (±10 Sekunden).</string>
     <string name="lightning__wallet_balances">Wallet-Guthaben</string>
     <string name="lightning__conn_onboarding_button">Loslegen</string>
     <string name="lightning__conn_onboarding_text">Richte dein Ausgabenguthaben ein, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu genießen.</string>
@@ -452,6 +453,7 @@
     <string name="security__pin_disable_button">PIN deaktivieren</string>
     <string name="security__pin_enter">Bitte gib deinen PIN-Code ein</string>
     <string name="security__pin_last_attempt">Letzter Versuch. Wenn du den falschen PIN erneut eingibst, wird dein Wallet zurückgesetzt.</string>
+    <string name="security__pin_allowance">Bitte gib deinen PIN-Code ein, um diese Änderung des Budgets zu bestätigen.</string>
     <string name="security__pin_attempts">{attemptsRemaining} Versuche verbleiben. Hast du deinen PIN vergessen?</string>
     <string name="security__pin_forgot_title">PIN vergessen?</string>
     <string name="security__pin_forgot_text">PIN vergessen? Setze hier dein Bitkit-Wallet zurück und stelle es mit deiner Wiederherstellungsphrase wieder her. Vergebe eine neue PIN nach deiner Wiederherstellung.</string>
@@ -1425,6 +1427,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Budget hinzugefügt</string>
     <string name="subscriptions__allowance_offer_explanation">Die Wallet von {name} bezahlt deine Anforderungen innerhalb dieser Limits, ohne jedes Mal nachzufragen. Ihr könnt es beide beenden.</string>
     <string name="subscriptions__allowance_offer_headline">{name} bietet dir\n&lt;accent&gt;ein Budget&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} haben dir Budgets eingerichtet</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} automatisch bezahlt</string>
     <string name="subscriptions__allowance_paid_so_far">Automatisch bezahlt</string>
     <string name="subscriptions__allowance_payment_in_progress">Diese Anforderung wird bereits automatisch bezahlt.</string>

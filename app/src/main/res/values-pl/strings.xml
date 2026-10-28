@@ -240,6 +240,7 @@
     <string name="lightning__transfer_in_progress">TRANSFER W TOKU</string>
     <string name="lightning__wallet_balances">Saldo portfela</string>
     <string name="lightning__wait_text_top">Proszę poczekać, aż Bitkit połączy się z siecią płatności (±10 sekund).</string>
+    <string name="lightning__wait_text_top_onchain">Proszę poczekać, aż Bitkit połączy się z siecią bitcoin (±10 sekund).</string>
     <string name="lightning__conn_onboarding_button">Rozpocznij</string>
     <string name="lightning__conn_onboarding_text">Skonfiguruj saldo wydatków, aby cieszyć się natychmiastowymi i tanimi transakcjami ze znajomymi, rodziną i sprzedawcami.</string>
     <string name="lightning__conn_onboarding_title">Włącz\nLightning\n&lt;accent&gt;płatności&lt;/accent&gt;</string>
@@ -455,6 +456,7 @@
     <string name="security__pin_disable_button">Wyłącz kod PIN</string>
     <string name="security__pin_enter">Podaj proszę kod PIN</string>
     <string name="security__pin_last_attempt">Ostatnia próba. Wpisanie błędnego kodu spowoduje zresetowanie portfela.</string>
+    <string name="security__pin_allowance">Proszę podaj swój kod PIN, aby potwierdzić tę zmianę budżetu.</string>
     <string name="security__pin_attempts">Liczba pozostałych prób:{attemptsRemaining}. Zapomniałeś kodu PIN?</string>
     <string name="security__pin_forgot_title">Zapomniałeś kodu PIN?</string>
     <string name="security__pin_forgot_text">Zapomniałeś kodu PIN? Zresetuj i odzyskaj swój portfel Bitkit używając mnemonika. Ustaw nowy kod PIN po zakończeniu odzyskiwania portfela.</string>
@@ -1425,6 +1427,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Budżet dodany</string>
     <string name="subscriptions__allowance_offer_explanation">Portfel {name} będzie opłacać Twoje żądania w ramach tych limitów bez pytania za każdym razem. Każda ze stron może go zakończyć.</string>
     <string name="subscriptions__allowance_offer_headline">{name} oferuje\n&lt;accent&gt;budżet&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} ustawili dla Ciebie budżety</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} opłacono automatycznie</string>
     <string name="subscriptions__allowance_paid_so_far">Opłacono automatycznie</string>
     <string name="subscriptions__allowance_payment_in_progress">To żądanie jest już opłacane automatycznie.</string>

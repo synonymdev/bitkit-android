@@ -231,6 +231,7 @@
     <string name="lightning__transfer_success__text_savings">تم تحويل أموالك. يمكنك استخدام هذه الأموال فورًا.</string>
     <string name="lightning__transfer_success__title_savings">تم نقل الأموال\n&lt;accent&gt;إلى المدخرات&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">يرجى الانتظار حتى يتصل Bitkit بشبكة الدفع (±10 ثوانٍ).</string>
+    <string name="lightning__wait_text_top_onchain">يرجى الانتظار حتى يتصل Bitkit بشبكة البيتكوين (±10 ثوانٍ).</string>
     <string name="lightning__wallet_balances">أرصدة المحفظة</string>
     <string name="lightning__conn_onboarding_button">ابدأ الآن</string>
     <string name="lightning__conn_onboarding_text">قم بإعداد رصيد الإنفاق الخاص بك للاستمتاع بمعاملات فورية ورخيصة مع الأصدقاء والعائلة والتجار.</string>
@@ -436,6 +437,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;عبارة المرور:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">أضفت عبارة مرور إلى عبارة الاسترداد أثناء إعداد المحفظة.</string>
     <string name="security__pass_your">عبارة المرور الخاصة بك</string>
+    <string name="security__pin_allowance">يرجى إدخال رمز PIN لتأكيد هذا التغيير في الميزانية.</string>
     <string name="security__pin_attempts">{attemptsRemaining} محاولات متبقية. نسيت رمز PIN؟</string>
     <string name="security__pin_choose_header">اختر رمز PIN من 4 أرقام</string>
     <string name="security__pin_choose_text">يرجى استخدام رمز PIN ستتذكره. إذا نسيت رمز PIN، يمكنك إعادة تعيينه، لكن ذلك سيتطلب استعادة محفظتك.</string>
@@ -1412,6 +1414,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">تمت إضافة الميزانية</string>
     <string name="subscriptions__allowance_offer_explanation">ستدفع محفظة {name} طلباتك ضمن هذه الحدود دون السؤال في كل مرة. يمكن لأي منكما إنهاؤها.</string>
     <string name="subscriptions__allowance_offer_headline">{name} يعرض عليك\n&lt;accent&gt;ميزانية&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">أعدّ لك {names} ميزانيات</string>
     <string name="subscriptions__allowance_paid_automatically">تم دفع {amount} تلقائيًا</string>
     <string name="subscriptions__allowance_paid_so_far">مدفوع تلقائيًا</string>
     <string name="subscriptions__allowance_payment_in_progress">يتم دفع هذا الطلب تلقائيًا بالفعل.</string>

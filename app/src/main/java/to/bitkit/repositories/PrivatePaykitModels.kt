@@ -36,6 +36,7 @@ internal data class PrivatePaykitState(
 internal data class ContactState(
     var remoteEndpoints: List<StoredPaymentEntry> = emptyList(),
     var consumedPrivatePaymentListVersion: ULong? = null,
+    var consumedPrivatePaymentListOwner: String? = null,
     var localInvoice: StoredInvoice? = null,
     var receivedInvoicePaymentHashes: List<String> = emptyList(),
     var hasPublishedPrivatePaymentList: Boolean = false,
@@ -43,6 +44,7 @@ internal data class ContactState(
     constructor(cache: PrivatePaykitContactCacheData) : this(
         remoteEndpoints = cache.remoteEndpoints.map { StoredPaymentEntry(it.methodId, it.endpointData) },
         consumedPrivatePaymentListVersion = cache.consumedPrivatePaymentListVersion,
+        consumedPrivatePaymentListOwner = cache.consumedPrivatePaymentListOwner,
         localInvoice = cache.localInvoice?.let { invoice ->
             StoredInvoice(invoice.bolt11, invoice.paymentHash, invoice.expiresAt)
         },
@@ -60,6 +62,7 @@ internal data class ContactState(
     fun cacheState() = PrivatePaykitContactCacheData(
         remoteEndpoints = remoteEndpoints.map { PrivatePaykitStoredPaymentEntryData(it.methodId, it.endpointData) },
         consumedPrivatePaymentListVersion = consumedPrivatePaymentListVersion,
+        consumedPrivatePaymentListOwner = consumedPrivatePaymentListOwner,
         localInvoice = localInvoice?.let { invoice ->
             PrivatePaykitStoredInvoiceData(invoice.bolt11, invoice.paymentHash, invoice.expiresAt)
         },

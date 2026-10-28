@@ -399,6 +399,7 @@
     <string name="lightning__transfer_unavailable__text">Automatic transfers to your spending balance are no longer available. Use your own node, or set up a connection with another provider.</string>
     <string name="lightning__transfer_unavailable__title">&lt;accent&gt;Manual setup&lt;/accent&gt;\nrequired</string>
     <string name="lightning__wait_text_top">Please wait for Bitkit to connect to the payment network (±10 seconds).</string>
+    <string name="lightning__wait_text_top_onchain">Please wait for Bitkit to connect to the bitcoin network (±10 seconds).</string>
     <string name="lightning__wallet_balances">Wallet Balances</string>
     <string name="migration__description">Please wait while your old wallet data migrates to this new Bitkit version. This usually takes less than a minute.</string>
     <string name="migration__nav_title">Wallet Migration</string>
@@ -740,6 +741,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Passphrase:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">You added a passphrase to your recovery phrase during wallet setup.</string>
     <string name="security__pass_your">Your Passphrase</string>
+    <string name="security__pin_allowance">Please enter your PIN code to confirm this allowance change.</string>
     <string name="security__pin_attempts">{attemptsRemaining} attempts remaining. Forgot your PIN?</string>
     <string name="security__pin_choose_header">Choose 4-Digit PIN</string>
     <string name="security__pin_choose_text">Please use a PIN you will remember. If you forget your PIN you can reset it, but that will require restoring your wallet.</string>
@@ -1050,6 +1052,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Allowance Added</string>
     <string name="subscriptions__allowance_offer_explanation">{name}\'s wallet will pay your requests within these limits without asking each time. Either of you can end it.</string>
     <string name="subscriptions__allowance_offer_headline"><![CDATA[{name} offers\n<accent>an allowance</accent>]]></string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} set up allowances for you</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} paid automatically</string>
     <string name="subscriptions__allowance_paid_so_far">Paid automatically</string>
     <string name="subscriptions__allowance_payment_in_progress">This request is already being paid automatically.</string>

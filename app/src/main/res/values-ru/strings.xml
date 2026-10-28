@@ -247,6 +247,7 @@
     <string name="lightning__transfer_success__text_savings">Ваши средства переведены. Вы можете использовать эти средства немедленно.</string>
     <string name="lightning__transfer_success__title_savings">Средства Переведены\n&lt;accent&gt;в Сбережения&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Пожалуйста, подождите, пока Bitkit подключается к платёжной сети (±10 секунд).</string>
+    <string name="lightning__wait_text_top_onchain">Пожалуйста, подождите, пока Bitkit подключается к сети биткоин (±10 секунд).</string>
     <string name="lightning__wallet_balances">Балансы кошелька</string>
     <string name="lightning__conn_onboarding_button">Начать</string>
     <string name="lightning__conn_onboarding_text">Настройте баланс расходов, чтобы наслаждаться мгновенными и дешёвыми транзакциями с друзьями, семьёй и продавцами.</string>
@@ -469,6 +470,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Кодовая фраза:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Вы добавили кодовую фразу к фразе восстановления во время создания кошелька.</string>
     <string name="security__pass_your">Ваша Кодовая Фраза</string>
+    <string name="security__pin_allowance">Введите PIN-код, чтобы подтвердить это изменение бюджета.</string>
     <string name="security__pin_attempts">Осталось {attemptsRemaining} попыток. Забыли PIN-код?</string>
     <string name="security__pin_choose_header">Выберите 4-значный PIN-код</string>
     <string name="security__pin_choose_text">Пожалуйста, используйте PIN-код, который вы запомните. Если вы забудете свой PIN-код, вы можете сбросить его, но для этого потребуется восстановить кошелёк.</string>
@@ -1441,6 +1443,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Бюджет Добавлен</string>
     <string name="subscriptions__allowance_offer_explanation">Кошелёк {name} будет оплачивать ваши запросы в пределах этих лимитов, не спрашивая каждый раз. Любая из сторон может его завершить.</string>
     <string name="subscriptions__allowance_offer_headline">{name} предлагает\n&lt;accent&gt;бюджет&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} настроили для вас бюджеты</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} оплачено автоматически</string>
     <string name="subscriptions__allowance_paid_so_far">Оплачено автоматически</string>
     <string name="subscriptions__allowance_payment_in_progress">Этот запрос уже оплачивается автоматически.</string>

@@ -20,8 +20,14 @@ data class PaykitAllowanceLocalState(
     val journal: List<JournalEntry> = emptyList(),
     /** [PaykitAllowance.key]s of received proposals already shown. */
     val presentedProposalIds: Set<String> = emptySet(),
+    /** [PaykitAllowance.key]s of offers being accepted, announced once their allowance is accepted. */
+    val acceptingOfferIds: Set<String> = emptySet(),
     val notifiedRequestIds: Set<String> = emptySet(),
     val lastTrustedTimeMillis: Long? = null,
+    /** Sats paid automatically per [PaykitAllowance.key], kept apart from the journal, which is trimmed. */
+    val autoPaidSatsByAllowance: Map<String, ULong> = emptyMap(),
+    /** Requests paid automatically, kept apart from the journal for the "Auto-paid" tag. */
+    val autoPaidRequestIds: Set<PaykitPaymentRequestId> = emptySet(),
 ) {
     @Serializable
     data class Group(
