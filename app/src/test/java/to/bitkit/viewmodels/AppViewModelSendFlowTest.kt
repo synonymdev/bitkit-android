@@ -6897,14 +6897,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `refused hardware fee refresh ends loading and can be retried`() = test {
         val refusals = listOf(Result.success(true), Result.failure(IllegalStateException("marker unreadable")))
-        for (refusal in refusals) {
+        for ((refusal, availableAtRefusal) in refusals.flatMap { listOf(it to 50_000uL, it to 48_000uL) }) {
             val readStarted = CompletableDeferred<Unit>()
             val finishRead = CompletableDeferred<Unit>()
             var recoveryClear = false
             var refuseAfterEstimate = false
             var feeEstimated = false
             whenever { backupRepo.hasPendingWalletRestore() }.doSuspendableAnswer {
-                if (!recoveryClear && sut.sendUiState.value.hardwareAvailableSats == 48_000uL &&
+                if (!recoveryClear &&
+                    (sut.sendUiState.value.hardwareAvailableSats == availableAtRefusal || refuseAfterEstimate) &&
                     (!refuseAfterEstimate || feeEstimated)
                 ) {
                     readStarted.complete(Unit)
@@ -6980,7 +6981,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `superseded hardware fee refresh cannot clear newer loading`() = test {
-        for (feeRow in listOf(false, true)) {
+        for ((feeRow, preliminary) in listOf(false to false, true to false, false to true)) {
             val firstRead = CompletableDeferred<Unit>()
             val finishFirst = CompletableDeferred<Unit>()
             val secondRead = CompletableDeferred<Unit>()
@@ -6990,7 +6991,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
                 .doSuspendableAnswer { Result.success(availableSats) }
             whenever { backupRepo.hasPendingWalletRestore() }.doSuspendableAnswer {
-                if (sut.sendUiState.value.hardwareAvailableSats != availableSats) return@doSuspendableAnswer false
+                if (!preliminary && sut.sendUiState.value.hardwareAvailableSats != availableSats) {
+                    return@doSuspendableAnswer false
+                }
                 when (reads++) {
                     0 -> withContext(NonCancellable) {
                         firstRead.complete(Unit)
@@ -7040,7 +7043,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `obsolete hardware fee refresh preserves replacement send state`() = test {
-        for (feeRow in listOf(false, true)) {
+        for ((feeRow, preliminary) in listOf(false to false, true to false, false to true)) {
             for (replaceWallet in listOf(false, true)) {
                 val readStarted = CompletableDeferred<Unit>()
                 val finishRead = CompletableDeferred<Unit>()
@@ -7048,7 +7051,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
                     .thenReturn(Result.success(48_000uL))
                 whenever { backupRepo.hasPendingWalletRestore() }.doSuspendableAnswer {
-                    if (holdRead && sut.sendUiState.value.hardwareAvailableSats == if (feeRow) 50_000uL else 48_000uL) {
+                    val availableAtRead = if (feeRow || preliminary) 50_000uL else 48_000uL
+                    if (holdRead && sut.sendUiState.value.hardwareAvailableSats == availableAtRead) {
                         holdRead = false
                         readStarted.complete(Unit)
                         finishRead.await()

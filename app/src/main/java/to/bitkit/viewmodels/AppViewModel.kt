@@ -4123,7 +4123,9 @@ class AppViewModel @Inject constructor(
         if (!reviewPaykitMethodChange(previous)) {
             setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
         }
-        viewModelScope.launch {
+        val generation = sendStateGeneration
+        val walletGeneration = connectionRecovery.currentGeneration()
+        refreshOnchainSendIfNeeded(walletGeneration) {
             val shouldResetUtxos = when (settingsStore.data.first().coinSelectAuto) {
                 true -> {
                     val currentSatsPerVByte = previous.feeRates?.getSatsPerVByteFor(previous.speed)
@@ -4137,8 +4139,10 @@ class AppViewModel @Inject constructor(
                 previous.amount > 0uL &&
                 previous.amount == previous.hardwareAvailableSats
             val hardwareAvailableSats = previous.hardwareWalletId?.let { walletId ->
-                hardwareMaxSpendable(walletId, previous.address, speed)
+                hardwareMaxSpendable(walletId, previous.address, speed, walletGeneration)
             } ?: previous.hardwareAvailableSats
+            requireCurrentPaymentPreparation(walletGeneration)
+            if (generation != sendStateGeneration) return@refreshOnchainSendIfNeeded
             _sendUiState.update {
                 it.copy(
                     amount = if (wasHardwareMax) hardwareAvailableSats else it.amount,
@@ -4147,7 +4151,6 @@ class AppViewModel @Inject constructor(
                 )
             }
             updateCanSwitchWallet()
-            refreshOnchainSendIfNeeded() ?: updateOnchainFeeUi { it.copy(isLoading = false) }
         }
     }
 
@@ -7015,19 +7018,29 @@ class AppViewModel @Inject constructor(
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
+        prepare: (suspend () -> Unit)? = null,
     ): Job? {
         val generation = sendStateGeneration
         val currentState = _sendUiState.value
-        if (currentState.payMethod != SendMethod.ONCHAIN ||
-            currentState.amount == 0uL ||
-            currentState.address.isEmpty()
+        if (prepare == null && (
+                currentState.payMethod != SendMethod.ONCHAIN ||
+                    currentState.amount == 0uL || currentState.address.isEmpty()
+                )
         ) {
             return null
         }
 
         return launchOnchainFeeRefresh(generation, walletGeneration) {
+            prepare?.invoke()
             requireCurrentPaymentPreparation(walletGeneration)
             if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
+            val currentState = _sendUiState.value
+            if (currentState.payMethod != SendMethod.ONCHAIN ||
+                currentState.amount == 0uL || currentState.address.isEmpty()
+            ) {
+                updateOnchainFeeUi { it.copy(isLoading = false) }
+                return@launchOnchainFeeRefresh
+            }
             val settings = settingsStore.data.first()
             requireCurrentPaymentPreparation(walletGeneration)
             if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
