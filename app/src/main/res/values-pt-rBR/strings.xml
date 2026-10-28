@@ -459,6 +459,7 @@
     <string name="security__pass_recovery">&lt;gray&gt;Senha:&lt;/gray&gt; {passphrase}</string>
     <string name="security__pass_text">Você adicionou uma frase secreta durante a configuração da carteira.</string>
     <string name="security__pass_your">Sua Frase Secreta</string>
+    <string name="security__pin_allowance">Digite seu código PIN para confirmar essa alteração na mesada.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentativas restantes. Esqueceu seu PIN?</string>
     <string name="security__pin_choose_header">Escolha o PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Use um PIN que você se lembrará. Se você esquecer o PIN, poderá redefini-lo mas isso exigirá a restauração da carteira.</string>
@@ -1426,6 +1427,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Mesada Adicionada</string>
     <string name="subscriptions__allowance_offer_explanation">A carteira de {name} pagará suas solicitações dentro destes limites sem perguntar a cada vez. Qualquer um de vocês pode encerrá-la.</string>
     <string name="subscriptions__allowance_offer_headline">{name} oferece\n&lt;accent&gt;uma mesada&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} configuraram mesadas para você</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pago automaticamente</string>
     <string name="subscriptions__allowance_paid_so_far">Pago automaticamente</string>
     <string name="subscriptions__allowance_payment_in_progress">Esta solicitação já está sendo paga automaticamente.</string>

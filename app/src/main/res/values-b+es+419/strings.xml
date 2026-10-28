@@ -458,6 +458,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Frase de acceso:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Ha añadido una frase de acceso a su frase de recuperación durante la configuración.</string>
     <string name="security__pass_your">Su frase de acceso</string>
+    <string name="security__pin_allowance">Por favor, introduzca su código PIN para confirmar este cambio en la asignación.</string>
     <string name="security__pin_attempts">{attemptsRemaining} intentos restantes. ¿Ha olvidado su PIN?</string>
     <string name="security__pin_choose_header">Elija el PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Por favor, utilice un PIN que recuerde. Si olvida su PIN puede restablecerlo, pero para ello tendrá que restaurar su billetera.</string>
@@ -1427,6 +1428,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Asignación agregada</string>
     <string name="subscriptions__allowance_offer_explanation">La billetera de {name} pagará sus solicitudes dentro de estos límites sin preguntar cada vez. Cualquiera de los dos puede finalizarla.</string>
     <string name="subscriptions__allowance_offer_headline">{name} le ofrece\n&lt;accent&gt;una asignación&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} configuraron asignaciones para usted</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pagado automáticamente</string>
     <string name="subscriptions__allowance_paid_so_far">Pagado automáticamente</string>
     <string name="subscriptions__allowance_payment_in_progress">Esta solicitud ya se está pagando automáticamente.</string>

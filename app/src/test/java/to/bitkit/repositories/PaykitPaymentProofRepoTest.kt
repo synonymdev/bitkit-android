@@ -116,6 +116,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val store = mock<PaykitPaymentProofStore>()
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
+    private val allowanceExecutor = mock<PaykitAllowanceExecutor>()
     private var storedProofs = emptyList<PendingPaykitPaymentProof>()
     private var shouldFailNextLoad = false
     private var shouldFailNextSave = false
@@ -3121,6 +3122,25 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertEquals(1, wallet.broadcasts)
             assertTrue(storedProofs.isEmpty())
         }
+        val requestId = requireNotNull(unknownShopAttempt("ab".repeat(32)).requestId)
+        verify(allowanceExecutor, times(3)).onchainSendReleased(LOCAL_IDENTITY, requestId)
+    }
+
+    @Test
+    fun `release stays unfinished while its allowance outcome cannot be recorded`() = test {
+        val attempt = unknownShopAttempt("ab".repeat(32))
+        val proof = startedOnchainProof(attempt)
+        storedProofs = listOf(proof)
+        whenever(paykitSdkService.paymentRequests())
+            .thenReturn(listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.CANCELED)))
+        stubAbandon(attempt)
+        whenever(allowanceExecutor.onchainSendReleased(any(), any())).thenThrow(RuntimeException("ledger"))
+
+        val result = paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, FakeReleaseWallet()) {}
+
+        assertTrue(result.isFailure)
+        assertEquals(listOf(proof), storedProofs)
+        verify(lightningRepo, never()).abandonUnbroadcastOnchainSend(any(), any())
     }
 
     @Test
@@ -3254,7 +3274,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             { OnchainSendOutcome.Unknown(it) },
         )
         for (outcome in outcomes) {
-            reset(lightningRepo)
+            reset(lightningRepo, allowanceExecutor)
             val attempt = unknownShopAttempt("ab".repeat(32))
             val proof = startedOnchainProof(attempt)
             storedProofs = listOf(proof)
@@ -3266,6 +3286,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertTrue(paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, wallet) {}.isFailure)
             assertEquals(listOf(proof), storedProofs)
             verify(lightningRepo, never()).abandonUnbroadcastOnchainSend(any(), any())
+            verify(allowanceExecutor, never()).onchainSendReleased(any(), any())
 
             // Once a sync puts the release in the wallet, a later cancel finishes without another release.
             val pending = attempt.copy(releaseApproved = true, releaseTxid = wallet.releaseTxid)
@@ -3523,6 +3544,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         store = store,
         hwWalletRepo = hwWalletRepo,
         privatePaykitRepo = dagger.Lazy { privatePaykitRepo },
+        allowanceExecutor = dagger.Lazy { allowanceExecutor },
     )
 
     private fun unknownShopAttempt(txid: String) = acceptedAttempt(

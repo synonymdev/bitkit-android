@@ -741,6 +741,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Passphrase:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">You added a passphrase to your recovery phrase during wallet setup.</string>
     <string name="security__pass_your">Your Passphrase</string>
+    <string name="security__pin_allowance">Please enter your PIN code to confirm this allowance change.</string>
     <string name="security__pin_attempts">{attemptsRemaining} attempts remaining. Forgot your PIN?</string>
     <string name="security__pin_choose_header">Choose 4-Digit PIN</string>
     <string name="security__pin_choose_text">Please use a PIN you will remember. If you forget your PIN you can reset it, but that will require restoring your wallet.</string>
@@ -1051,6 +1052,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Allowance Added</string>
     <string name="subscriptions__allowance_offer_explanation">{name}\'s wallet will pay your requests within these limits without asking each time. Either of you can end it.</string>
     <string name="subscriptions__allowance_offer_headline"><![CDATA[{name} offers\n<accent>an allowance</accent>]]></string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} set up allowances for you</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} paid automatically</string>
     <string name="subscriptions__allowance_paid_so_far">Paid automatically</string>
     <string name="subscriptions__allowance_payment_in_progress">This request is already being paid automatically.</string>
