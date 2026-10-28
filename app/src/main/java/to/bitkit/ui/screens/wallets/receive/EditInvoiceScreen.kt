@@ -29,7 +29,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -41,18 +40,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
-import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ReceiveAdditionalLiquidityAction
 import to.bitkit.models.ReceiveLiquiditySource
 import to.bitkit.models.ReceiveLiquiditySource.AUTO
 import to.bitkit.models.ReceiveLiquiditySource.SAVINGS
 import to.bitkit.models.ReceiveLiquiditySource.SPENDING
 import to.bitkit.repositories.CurrencyState
-import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.appViewModel
-import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.AddTagButton
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
@@ -72,8 +67,6 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.utils.Logger
-import to.bitkit.utils.ServiceError
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
 
@@ -82,7 +75,6 @@ import to.bitkit.viewmodels.previewAmountInputViewModel
 fun EditInvoiceScreen(
     amountInputViewModel: AmountInputViewModel,
     walletUiState: WalletState,
-    lightningState: LightningState,
     sourceTab: ReceiveTab,
     updateInvoice: (ULong?) -> Unit,
     onClickAddTag: () -> Unit,
@@ -91,19 +83,13 @@ fun EditInvoiceScreen(
     showPaymentRequestButton: Boolean,
     onClickPaymentRequest: (amountSats: ULong, note: String) -> Unit,
     onBack: () -> Unit,
-    navigateReceiveConfirm: (CjitEntryDetails) -> Unit,
     onchainOnly: Boolean = false,
     updateOnchainInvoice: (ULong?) -> Unit = {},
-    navigateCjitAmount: () -> Unit,
-    navigateGeoBlock: () -> Unit,
+    navigateTransferUnavailable: () -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
     editInvoiceVM: EditInvoiceVM = hiltViewModel(),
 ) {
-    val app = appViewModel ?: return
-    val context = LocalContext.current
-    val blocktankVM = blocktankViewModel ?: return
     var keyboardVisible by remember { mutableStateOf(false) }
-    var isCreatingCjit by remember { mutableStateOf(false) }
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentReceiveSats by rememberUpdatedState(amountInputUiState.sats.toULong())
     val isLoading by editInvoiceVM.isLoading.collectAsStateWithLifecycle()
@@ -119,29 +105,7 @@ fun EditInvoiceScreen(
                             updateInvoice(receiveSats)
                             onBack()
                         }
-                        ReceiveAdditionalLiquidityAction.ChooseAmount -> {
-                            updateInvoice(receiveSats)
-                            navigateCjitAmount()
-                        }
-                        is ReceiveAdditionalLiquidityAction.CreateCjit -> {
-                            isCreatingCjit = true
-                            runSuspendCatching {
-                                val entry = blocktankVM.createCjit(action.amountSats)
-                                CjitEntryDetails.from(entry, action.amountSats).getOrThrow()
-                            }.onSuccess {
-                                navigateReceiveConfirm(it)
-                            }.onFailure {
-                                Logger.error("Failed to create CJIT invoice", it, context = "EditInvoiceScreen")
-                                if (!app.toastReceiveCjitError(context, it) &&
-                                    it !is ServiceError.ChannelSizeExceedsMaximum
-                                ) {
-                                    app.toast(it)
-                                }
-                                navigateCjitAmount()
-                            }
-                            isCreatingCjit = false
-                        }
-                        ReceiveAdditionalLiquidityAction.GeoBlocked -> navigateGeoBlock()
+                        ReceiveAdditionalLiquidityAction.TransferUnavailable -> navigateTransferUnavailable()
                     }
                 }
             }
@@ -168,14 +132,13 @@ fun EditInvoiceScreen(
             editInvoiceVM.onClickContinue(
                 source = sourceTab.toReceiveLiquiditySource(),
                 amountSats = amountInputUiState.sats.toULong(),
-                isGeoBlocked = lightningState.isGeoBlocked,
             )
         },
         onContinueOnchain = { amountSats ->
             updateOnchainInvoice(amountSats)
             onBack()
         },
-        isLoading = isLoading || isCreatingCjit,
+        isLoading = isLoading,
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
         showPaymentRequestButton = showPaymentRequestButton,

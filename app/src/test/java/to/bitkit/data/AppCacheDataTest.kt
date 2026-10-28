@@ -1,7 +1,5 @@
 package to.bitkit.data
 
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Test
 import to.bitkit.data.serializers.AppCacheSerializer
 import to.bitkit.di.json
@@ -45,26 +43,6 @@ class AppCacheDataTest : BaseUnitTest() {
 
         assertEquals(LEGACY_BOLT11, cachedReceive.bolt11)
         assertEquals("", cachedReceive.bolt11PaymentHash)
-        assertNull(cachedReceive.blocktankRefundAddress)
-    }
-
-    @Test
-    fun `Blocktank refund address uses the shared cross-platform cache shape`() {
-        val cache = AppCacheData(
-            blocktankRefundAddress = BlocktankRefundAddress(
-                address = "bcrt1qrefund",
-                index = 7,
-            ),
-        )
-
-        val encoded = json.encodeToString(cache)
-        val refund = json.parseToJsonElement(encoded).jsonObject
-            .getValue("blocktankRefundAddress").jsonObject
-        val decoded = json.decodeFromString<AppCacheData>(encoded)
-
-        assertEquals("bcrt1qrefund", refund.getValue("address").jsonPrimitive.content)
-        assertEquals("7", refund.getValue("index").jsonPrimitive.content)
-        assertEquals(cache.blocktankRefundAddress, decoded.blocktankRefundAddress)
     }
 
     @Test
@@ -75,7 +53,6 @@ class AppCacheDataTest : BaseUnitTest() {
             bolt11PaymentHash = "paymentHash",
             bip21 = "bitcoin:bc1qtest?lightning=paidInvoice",
             balance = BalanceState(totalOnchainSats = 42uL),
-            paidOrders = mapOf("order" to "txid"),
         )
 
         val invalidated = cache.invalidateReceiveLightningInvoice()
@@ -85,7 +62,6 @@ class AppCacheDataTest : BaseUnitTest() {
         assertEquals("", invalidated.bip21)
         assertEquals(cache.onchainAddress, invalidated.onchainAddress)
         assertEquals(cache.balance, invalidated.balance)
-        assertEquals(cache.paidOrders, invalidated.paidOrders)
     }
 
     @Test

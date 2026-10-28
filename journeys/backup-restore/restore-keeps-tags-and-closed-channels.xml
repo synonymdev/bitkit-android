@@ -24,11 +24,9 @@
     <action>Tap the received activity row (testTag "ActivityShort-0") and verify its detail screen opens</action>
     <action>Tap "Tag" (testTag "ActivityTag"), enter the tag restoretag in the tag input (testTag "AddTagInput") and save it (testTag "AddTagSave")</action>
     <action>Verify the tag restoretag is listed on the activity detail screen (testTag "ActivityTags"), then go back to Home</action>
-    <action>Tap the SAVINGS balance tile (testTag "ActivitySavings"), then "Transfer To Spending" (testTag "TransferToSpending")</action>
-    <action>Pass any first-run intros on the way: transfer intro (testTag "TransferIntro-button"), the transfer funding option (testTag "FundTransfer") and the spending intro (testTag "SpendingIntro-button")</action>
-    <action>On the spending amount screen (testTag "SpendingAmount") enter 100 000 on the number pad ("N1" then "N0" five times) and tap Continue (testTag "SpendingAmountContinue")</action>
-    <action>Wait for the Blocktank order to be quoted, then confirm the transfer by swiping the confirm handle (testTag "GRAB")</action>
-    <action>Wait for the channel to open and leave the flow through its final button (testTag "TransferSuccess-button")</action>
+    <action>Open Settings, then the "Advanced" tab (testTag "Tab-advanced"), then "Lightning Connections" (testTag "Channels"), tap add connection (testTag "add_connection_button") and then "Manual Setup" (testTag "FundManual")</action>
+    <action>Enter the staging LSP node from `./lsp GET /info` into the node id (testTag "NodeIdInput"), host (testTag "HostInput") and port (testTag "PortInput") fields, continue, fund the connection with 100 000 sats and confirm it</action>
+    <action>Mine confirmations with `./lsp POST /regtest/chain/mine '{"count":3}'` and wait for the connection to open</action>
     <action>Open Settings, then the "Advanced" tab (testTag "Tab-advanced"), then "Lightning Connections" (testTag "Channels")</action>
     <action>Tap the open connection (testTag "Channel"), tap "Close Connection" (testTag "CloseConnection") and confirm (testTag "CloseConnectionButton")</action>
     <action>Verify the connection has left the open list, and that it is listed under "Show Closed &amp; Failed" (testTag "ChannelsClosed")</action>
