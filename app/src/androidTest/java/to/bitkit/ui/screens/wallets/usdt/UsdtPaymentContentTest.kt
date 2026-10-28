@@ -27,6 +27,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.test.platform.app.InstrumentationRegistry
 import com.synonym.bitkitcore.UsdtBridgeProvider
 import com.synonym.bitkitcore.UsdtDestination
 import com.synonym.bitkitcore.UsdtQuote
@@ -80,6 +81,37 @@ class UsdtPaymentContentTest {
     @After
     fun teardown() {
         Locale.setDefault(originalLocale)
+    }
+
+    @Test
+    fun failedRequestQuoteKeepsConfirmationAndOffersRetryWithoutTheKeypad() {
+        var retries = 0
+        val state = mutableStateOf(UsdtSendState(error = R.string.usdt__error_expired))
+        composeTestRule.setContent {
+            Content(
+                state.value, UsdtPage.AMOUNT,
+                amountEditable = false,
+                isPaymentRequest = true,
+                onReview = { retries++ },
+            )
+        }
+        composeTestRule.onNodeWithTag("UsdtConfirmLoading").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("NDecimal").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("UsdtRetryQuote").performClick()
+        composeTestRule.runOnIdle { assertEquals(1, retries) }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        listOf(
+            R.string.usdt__deposit_minimum to "$5.00",
+            R.string.usdt__deposit_maximum to "$500.00",
+        ).forEachIndexed { index, (resource, limit) ->
+            composeTestRule.runOnIdle { state.value = UsdtSendState(error = resource, errorAmount = limit) }
+            composeTestRule.onNodeWithText(context.getString(resource, limit)).assertIsDisplayed()
+            composeTestRule.onNodeWithTag("UsdtConfirmLoading").assertIsDisplayed()
+            composeTestRule.onNodeWithTag("NDecimal").assertDoesNotExist()
+            SystemClock.sleep(600)
+            composeTestRule.onNodeWithTag("UsdtRetryQuote").performClick()
+            composeTestRule.runOnIdle { assertEquals(index + 2, retries) }
+        }
     }
 
     @Test
@@ -419,6 +451,8 @@ class UsdtPaymentContentTest {
         page: UsdtPage,
         wallet: UsdtWalletState = UsdtWalletState(),
         amountEditable: Boolean = true,
+        isPaymentRequest: Boolean = false,
+        onReview: () -> Unit = {},
         onPageChange: (UsdtPage) -> Unit = {},
         onBack: () -> Unit = {},
         onRetryRecovery: (() -> Unit)? = null,
@@ -440,12 +474,13 @@ class UsdtPaymentContentTest {
                         onRecipientContinue = {},
                         onPageChange = onPageChange,
                         onBack = onBack,
-                        onReview = {},
+                        onReview = onReview,
                         onConfirm = onConfirm,
                         onDone = {},
                         onDetails = onDetails,
                         onRetryRecovery = onRetryRecovery,
                         amountEditable = amountEditable,
+                        isPaymentRequest = isPaymentRequest,
                     )
                 }
             }

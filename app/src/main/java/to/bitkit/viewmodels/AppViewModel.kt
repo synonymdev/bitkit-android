@@ -3930,9 +3930,7 @@ class AppViewModel @Inject constructor(
         fromMainScanner: Boolean,
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ): Boolean {
-        val request = activeIncomingPaymentRequest() ?: return false
-        // Subscription periods keep reviewing the asset choice on Amount.
-        if (request.billingPeriod != null && _sendUiState.value.usdtRecipient != null) return false
+        if (activeIncomingPaymentRequest() == null) return false
         if (_sendUiState.value.paykitUsesUsdt) {
             if (!bindUsdtRequestTerms()) return false
             requireCurrentPaymentPreparation(walletGeneration)
@@ -4207,8 +4205,7 @@ class AppViewModel @Inject constructor(
 
     private fun canRebindBitcoinRequestTerms(state: SendUiState, source: SendFundingSource): Boolean =
         paykitPaymentTerms != null && paykitReviewedAmount != null && !state.paykitUsesUsdt &&
-            state.hardwareWalletId == null &&
-            (source == SendFundingSource.Savings || source == SendFundingSource.Spending)
+            source != SendFundingSource.Usdt
 
     private fun nextFundingSource(current: SendUiState, requested: SendFundingSource?): SendFundingSource? {
         val includesUsdt = requested != null || activeIncomingPaymentRequest() != null
