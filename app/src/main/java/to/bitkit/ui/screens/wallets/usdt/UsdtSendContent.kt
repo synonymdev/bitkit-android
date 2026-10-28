@@ -639,7 +639,7 @@ private fun UsdtConfirmationLoading(
         )
         PaymentReviewIllustration(swipeProgress = { 0f }, isPaymentRequest = true, modifier = Modifier.weight(1f))
         state.error?.let {
-            BodyM(stringResource(it), color = Colors.Brand)
+            BodyM(state.errorMessage(it), color = Colors.Brand)
             PrimaryButton(
                 text = stringResource(R.string.common__try_again),
                 onClick = onRetry,
