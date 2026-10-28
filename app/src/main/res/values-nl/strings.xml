@@ -251,6 +251,8 @@
     <string name="notification__service__stop">App stoppen</string>
     <string name="onboarding__advanced">Geavanceerd</string>
     <string name="onboarding__advanced_setup">Geavanceerde configuratie</string>
+    <string name="onboarding__connection_saved">Opgeslagen. Probeer opnieuw om het herstel voort te zetten.</string>
+    <string name="onboarding__connection_settings">Verbindingsinstellingen</string>
     <string name="onboarding__create_new_wallet">Nieuwe wallet aanmaken</string>
     <string name="onboarding__empty_wallet">Om te beginnen\n&lt;accent&gt;stuur\nBitcoin&lt;/accent&gt;\nnaar je\nwallet</string>
     <string name="onboarding__get_started">Aan de slag</string>

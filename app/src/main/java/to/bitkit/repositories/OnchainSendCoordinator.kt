@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.utils.AppError
 import kotlin.time.Instant
 
 /** Rust converts sat/vB to sat/kwu by multiplying by 250; validate before the unchecked FFI factory. */
@@ -18,6 +19,9 @@ object OnchainRecoveryFeeRate {
 
     fun parse(input: String): ULong? = input.toULongOrNull()?.takeIf(::isValid)
 }
+
+/** The prepared native handle refused this invocation before calling native broadcast. */
+internal class PreparedOnchainSendRefused(cause: Throwable) : AppError(cause)
 
 /** One native prepared transaction; its direct submission is cached even if it fails. */
 class PreparedOnchainSend(

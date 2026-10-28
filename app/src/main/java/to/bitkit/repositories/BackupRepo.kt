@@ -39,6 +39,7 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.UsdtRecoveryBackupStore
@@ -48,6 +49,7 @@ import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.hwWalletNames
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.hasPendingWalletRestore
 import to.bitkit.data.resetPin
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
@@ -134,6 +136,7 @@ class BackupRepo @Inject constructor(
     private val lightningService: LightningService,
     private val clock: Clock,
     private val db: AppDb,
+    private val connectionRecovery: WalletConnectionRecovery,
 ) {
     private val walletBackupMutex = Mutex()
     private val usdtBackupMutex = Mutex()
@@ -185,7 +188,7 @@ class BackupRepo @Inject constructor(
     }
 
     suspend fun hasPendingWalletRestore(): Boolean = withContext(ioDispatcher) {
-        keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name) || isUsdtRestorePending()
+        keychain.hasPendingWalletRestore()
     }
 
     private fun currentTimeMillis(): Long = nowMillis(clock)
@@ -551,7 +554,6 @@ class BackupRepo @Inject constructor(
 
     suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withContext(ioDispatcher) {
         Logger.debug("Backup starting for: '$category'", context = TAG)
-
         var backupRequired = currentTimeMillis()
         runningBackups += category
         failedBackupRequired -= category
@@ -773,7 +775,7 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun captureWalletBackupDataBytes(sdkGeneration: Long): ByteArray {
-        check(!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name) && !isUsdtRestorePending()) {
+        check(!keychain.hasPendingWalletRestore()) {
             "Wallet backup restore is incomplete"
         }
         lateinit var transfers: List<TransferEntity>
@@ -840,9 +842,17 @@ class BackupRepo @Inject constructor(
 
     suspend fun performFullRestoreFromLatestBackup(
         onCacheRestored: suspend () -> Unit = {},
+        connectionSession: WalletConnectionRecovery.Session? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
+        if (connectionSession == null) {
+            return@withContext runSuspendCatching {
+                connectionRecovery.withCurrentWallet {
+                    performFullRestoreFromLatestBackup(onCacheRestored, it).getOrThrow()
+                }
+            }
+        }
         if (isUsdtRestorePending() && !keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
-            return@withContext restoreUsdtRecoveryAfterLegacyMigration()
+            return@withContext restoreUsdtRecoveryAfterLegacyMigration(connectionSession)
         }
         Logger.debug("Full restore starting", context = TAG)
 
@@ -857,6 +867,7 @@ class BackupRepo @Inject constructor(
                 if (!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
                     keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, "")
                 }
+                connectionSession.replay()
                 restoreUsdtRecovery()
                 performRestore(BackupCategory.METADATA) { dataBytes ->
                     val restored = restoreMetadataBackup(dataBytes, onCacheRestored)
@@ -865,7 +876,7 @@ class BackupRepo @Inject constructor(
                 }
                 performRestore(BackupCategory.SETTINGS) { dataBytes ->
                     val parsed = json.decodeFromString<SettingsBackupV1>(String(dataBytes))
-                    settingsStore.restoreFromBackup(parsed)
+                    connectionSession.restoreSettings(parsed)
                     parsed.createdAt
                 }
                 performRestore(BackupCategory.WIDGETS) { dataBytes ->
@@ -873,6 +884,8 @@ class BackupRepo @Inject constructor(
                     widgetsStore.restoreFromBackup(parsed)
                     parsed.createdAt
                 }
+                // SETTINGS is optional; preserving explicit local corrections is required.
+                connectionSession.replay()
                 val retainedWalletBackup = keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
                 if (retainedWalletBackup.isNullOrEmpty()) {
                     var didRestoreWalletBackup = false
@@ -918,8 +931,22 @@ class BackupRepo @Inject constructor(
         return@withContext result
     }
 
-    suspend fun restoreUsdtRecoveryAfterLegacyMigration(): Result<Unit> = withContext(ioDispatcher) {
-        runSuspendCatching { restoreUsdtRecovery(retainWallet = false) }
+    suspend fun restoreUsdtRecoveryAfterLegacyMigration(
+        connectionSession: WalletConnectionRecovery.Session? = null,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            if (connectionSession == null) {
+                connectionRecovery.withCurrentWallet {
+                    restoreUsdtRecoveryAfterLegacyMigration(it).getOrThrow()
+                }
+            } else {
+                if (!isUsdtRestorePending()) {
+                    keychain.upsertString(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name, "")
+                }
+                connectionSession.replay()
+                restoreUsdtRecovery(retainWallet = false)
+            }
+        }
     }
 
     private suspend fun restoreUsdtRecovery(retainWallet: Boolean = true) {

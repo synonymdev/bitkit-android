@@ -254,6 +254,8 @@
     <string name="notification__service__stop">Detener app</string>
     <string name="onboarding__advanced">Avanzado</string>
     <string name="onboarding__advanced_setup">Configuración avanzada</string>
+    <string name="onboarding__connection_saved">Guardado. Reintenta para continuar la restauración.</string>
+    <string name="onboarding__connection_settings">Configuración de conexión</string>
     <string name="onboarding__create_new_wallet">Crear nueva cartera</string>
     <string name="onboarding__empty_wallet">Para\nempezar\n&lt;accent&gt;envíe\nBitcoin&lt;/accent&gt;\na su\nbilletera</string>
     <string name="onboarding__get_started">Empezar</string>

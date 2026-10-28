@@ -22,6 +22,7 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.navigateIfNotCurrent
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.utils.AppError
+import to.bitkit.viewmodels.ConnectionStartupFailure
 import to.bitkit.viewmodels.RestoreState
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -138,6 +139,17 @@ class ContentViewTest {
     }
 
     @Test
+    fun `ordinary foreground errors preserve navigation while initialization and required recovery stay restricted`() {
+        val ordinary = ConnectionStartupFailure("offline", requiresRecovery = false)
+        val required = ConnectionStartupFailure("restore incomplete")
+        assertFalse(shouldPresentWalletRecovery(false, RestoreState.Initial, ordinary))
+        assertFalse(shouldPresentWalletRecovery(false, RestoreState.Settled, ordinary))
+        assertTrue(shouldPresentWalletRecovery(true, RestoreState.Initial, ordinary))
+        assertTrue(shouldPresentWalletRecovery(false, RestoreState.BackupFailed(1), ordinary))
+        assertTrue(shouldPresentWalletRecovery(false, RestoreState.Initial, required))
+    }
+
+    @Test
     fun `running wallet waits for backup and metadata restoration`() {
         val pendingRestores = listOf(
             RestoreState.InProgress.Wallet,
@@ -145,6 +157,7 @@ class ContentViewTest {
             RestoreState.BackupFailed(1),
         )
         for (restore in pendingRestores) {
+            assertTrue(shouldPresentWalletRecovery(false, restore, null))
             assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, restore, false))
         }
         assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, RestoreState.Completed, true))

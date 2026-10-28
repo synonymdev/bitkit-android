@@ -1,9 +1,11 @@
 package to.bitkit.services
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -12,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
@@ -62,8 +65,10 @@ import to.bitkit.data.WatchOnlyAccountReconciliationState
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.WalletBackupRestorePendingError
 import to.bitkit.env.Env
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WalletScope
@@ -74,12 +79,17 @@ import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptStore
 import to.bitkit.repositories.OnchainSendCoordinator
 import to.bitkit.repositories.OnchainSendInput
+import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainTransferContext
+import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreparedOnchainSend
+import to.bitkit.repositories.PreparedOnchainSendRefused
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
+import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
@@ -87,9 +97,11 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 import com.synonym.bitkitcore.AddressType as BitkitAddressType
+import org.lightningdevkit.ldknode.PreparedOnchainSend as NativePreparedOnchainSend
 
 private const val VERIFY_TIMEOUT_MS = 2_000L
 private const val RELEASE_GATE_PROBE_MS = 200L
@@ -114,7 +126,11 @@ class LightningServiceTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        sut = LightningService(
+        sut = createService()
+    }
+
+    private fun createService(ldkDispatcher: CoroutineDispatcher = testDispatcher): LightningService =
+        LightningService(
             bgDispatcher = testDispatcher,
             ioDispatcher = testDispatcher,
             keychain = keychain,
@@ -123,10 +139,258 @@ class LightningServiceTest : BaseUnitTest() {
             watchOnlyAccountStore = watchOnlyAccountStore,
             loggerLdk = loggerLdk,
             watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
-            ldkQueue = testDispatcher,
+            ldkQueue = ldkDispatcher,
             onchainFeeRateFactory = { sendFeeRate },
+        ).also { it.node = node }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `queued address allocation rechecks recovery before native mutation`() = test {
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.newAddress()).thenReturn("bcrt1qnew")
+        val queued = createService(StandardTestDispatcher(testScheduler))
+        val result = async { runCatching { queued.newAddress() } }
+        assertFalse(result.isCompleted)
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        runCurrent()
+        assertTrue(result.await().exceptionOrNull()?.cause is WalletBackupRestorePendingError)
+        verify(onchainPayment, never()).newAddress()
+    }
+
+    @Test
+    fun `prepared native broadcast rechecks recovery after caller suspension`() = test {
+        val txid = "ab".repeat(32)
+        val native = preparedNative(txid)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.prepareSendToAddress("address", 1_000uL, sendFeeRate, null)).thenReturn(native)
+        whenever(native.broadcast()).thenReturn(OnchainSendResult.Accepted(txid))
+        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1uL)
+        val result = runCatching {
+            prepared.broadcast {
+                whenever(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+            }
+        }
+        assertTrue(result.exceptionOrNull() is PreparedOnchainSendRefused)
+        verify(native, never()).broadcast()
+    }
+
+    @Test
+    fun `restore refusal after durable dispatch marker releases only local unsubmitted send`() = test {
+        for (marker in listOf(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE, Keychain.Key.USDT_PENDING_BACKUP_RESTORE)) {
+            val fixture = preparedJournal()
+            fixture.onSave = { saved ->
+                if (saved.initialDispatchAttempted) whenever(keychain.exists(marker.name)).thenReturn(true)
+            }
+            assertFailsWith<OnchainSendNotDispatchedError> { fixture.broadcast() }
+            verify(fixture.native, never()).broadcast()
+            fixture.store.releaseBeforeDispatch(fixture.attempt.attemptId, 0)
+            assertNull(fixture.store.current())
+            whenever(keychain.exists(marker.name)).thenReturn(false)
+            fixture.onSave = {}
+            val next = preparedJournal(existing = fixture)
+            assertEquals(OnchainSendOutcome.Accepted(next.prepared.receipt.txid), next.broadcast())
+        }
+    }
+
+    @Test
+    fun `unreadable recovery after dispatch marker refuses without uncertain send`() = test {
+        val fixture = preparedJournal()
+        fixture.onSave = { saved ->
+            if (saved.initialDispatchAttempted) {
+                whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name))
+                    .thenThrow(IllegalStateException("unreadable"))
+            }
+        }
+        assertFailsWith<OnchainSendNotDispatchedError> { fixture.broadcast() }
+        verify(fixture.native, never()).broadcast()
+        fixture.store.releaseBeforeDispatch(fixture.attempt.attemptId, 0)
+        assertNull(fixture.store.current())
+    }
+
+    @Test
+    fun `refused Shop send retains guard until original proof cleanup succeeds`() = test {
+        val fixture = preparedJournal(shop = true)
+        fixture.onSave = { saved ->
+            if (saved.initialDispatchAttempted) {
+                whenever(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+            }
+        }
+        assertFailsWith<OnchainSendNotDispatchedError> { fixture.broadcast() }
+        fixture.store.releaseBeforeDispatch(fixture.attempt.attemptId, 0)
+        val pending = requireNotNull(fixture.store.current())
+        assertTrue(pending.preparationPending)
+        assertFalse(pending.initialDispatchAttempted)
+        assertTrue(pending.candidateTxids.isEmpty())
+        assertFalse(fixture.store.releaseInterruptedShopPreparation { false })
+        assertEquals(pending, fixture.store.current())
+        assertTrue(
+            fixture.store.releaseInterruptedShopPreparation {
+                assertEquals(pending, fixture.read())
+                true
+            }
         )
-        sut.node = node
+        assertNull(fixture.store.current())
+        verify(fixture.native, never()).broadcast()
+    }
+
+    @Test
+    fun `failed refusal rollback keeps durable uncertain candidate`() = test {
+        val fixture = preparedJournal()
+        fixture.onSave = { saved ->
+            if (saved.initialDispatchAttempted) {
+                whenever(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+            } else if (saved.candidateTxids.isEmpty()) {
+                error("rollback unavailable")
+            }
+        }
+        assertTrue(runSuspendCatching { fixture.broadcast() }.isFailure)
+        val retained = requireNotNull(fixture.read())
+        assertTrue(retained.initialDispatchAttempted)
+        assertEquals(listOf(fixture.prepared.receipt.txid), retained.candidateTxids)
+        assertEquals(retained, fixture.store.current())
+        verify(fixture.native, never()).broadcast()
+    }
+
+    @Test
+    fun `wallet or journal replacement during dispatch marker never releases another guard`() = test {
+        for (replaceWallet in listOf(false, true)) {
+            setWalletIndex(0)
+            whenever(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)).thenReturn(false)
+            val fixture = preparedJournal()
+            var replacement: OnchainSendAttempt? = null
+            fixture.onSave = { saved ->
+                if (saved.initialDispatchAttempted) {
+                    if (replaceWallet) {
+                        setWalletIndex(1)
+                    } else {
+                        replacement = saved.copy(attemptId = "another-attempt")
+                        fixture.file.writeText(Json.encodeToString(replacement))
+                        whenever(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+                    }
+                }
+            }
+            assertTrue(runSuspendCatching { fixture.broadcast() }.isFailure)
+            verify(fixture.native, never()).broadcast()
+            val retained = requireNotNull(fixture.read())
+            assertTrue(retained.initialDispatchAttempted)
+            if (replaceWallet) {
+                assertEquals(fixture.attempt.attemptId, retained.attemptId)
+            } else {
+                assertEquals(replacement, retained)
+            }
+        }
+    }
+
+    @Test
+    fun `prior or imported candidate survives a locally refused native invocation`() = test {
+        for (imported in listOf(false, true)) {
+            whenever(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)).thenReturn(false)
+            val fixture = preparedJournal()
+            val retained = requireNotNull(fixture.read()).copy(
+                initialDispatchAttempted = !imported,
+                restoredFromBackup = imported,
+            )
+            fixture.file.writeText(Json.encodeToString(retained))
+            fixture.onSave = { saved ->
+                if (saved.initialDispatchAttempted) {
+                    whenever(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+                }
+            }
+            assertTrue(runSuspendCatching { fixture.broadcast() }.isFailure)
+            verify(fixture.native, never()).broadcast()
+            assertEquals(retained.copy(initialDispatchAttempted = true), fixture.read())
+            val reopened = OnchainSendAttemptStore(testDispatcher, keychain, sut, Clock.System)
+            assertEquals(fixture.read(), reopened.current())
+        }
+    }
+
+    @Test
+    fun `positive journal winner is retained without invoking native broadcast`() = test {
+        val fixture = preparedJournal()
+        val outcome = OnchainSendOutcome.Accepted(fixture.prepared.receipt.txid)
+        val winner = fixture.store.recordOutcome(fixture.attempt.attemptId, outcome, 0)
+        assertEquals(outcome, fixture.broadcast())
+        assertEquals(winner, fixture.read())
+        verify(fixture.native, never()).broadcast()
+    }
+
+    @Test
+    fun `native error or unknown outcome retains dispatched journal`() = test {
+        for (throws in listOf(false, true)) {
+            val fixture = preparedJournal()
+            whenever(fixture.native.broadcast()).thenAnswer {
+                if (throws) throw WalletBackupRestorePendingError()
+                OnchainSendResult.Unknown(fixture.prepared.receipt.txid)
+            }
+            val result = runSuspendCatching { fixture.broadcast() }
+            if (throws) {
+                assertTrue(result.exceptionOrNull() is WalletBackupRestorePendingError)
+            } else {
+                assertEquals(OnchainSendOutcome.Unknown(fixture.prepared.receipt.txid), result.getOrThrow())
+            }
+            verify(fixture.native).broadcast()
+            val retained = requireNotNull(fixture.read())
+            assertTrue(retained.initialDispatchAttempted)
+            assertEquals(listOf(fixture.prepared.receipt.txid), retained.candidateTxids)
+            assertEquals(retained, fixture.store.current())
+        }
+    }
+
+    private fun setWalletIndex(index: Int) {
+        LightningService::class.java.getDeclaredField("currentWalletIndex").apply {
+            isAccessible = true
+            set(sut, index)
+        }
+    }
+
+    private class PreparedJournal(
+        val store: OnchainSendAttemptStore,
+        val attempt: OnchainSendAttempt,
+        val prepared: PreparedOnchainSend,
+        val native: NativePreparedOnchainSend,
+        val file: File,
+    ) {
+        var onSave: (OnchainSendAttempt) -> Unit = {}
+        fun read(): OnchainSendAttempt? = file.readText().takeIf(String::isNotEmpty)?.let {
+            Json.decodeFromString<OnchainSendAttempt>(it)
+        }
+        suspend fun broadcast() = store.broadcastPreparedCandidate(attempt.attemptId, 0, prepared.receipt.txid) {
+            prepared.broadcast(it)
+        }
+    }
+
+    private suspend fun preparedJournal(shop: Boolean = false, existing: PreparedJournal? = null): PreparedJournal {
+        val file = existing?.file ?: tempFolder.newFile()
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        var fixture: PreparedJournal? = null
+        whenever(keychain.loadString(key, 0)).thenAnswer { file.readText().takeIf(String::isNotEmpty) }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
+            val value = it.getArgument<String>(1)
+            val saved = Json.decodeFromString<OnchainSendAttempt>(value)
+            if (!saved.initialDispatchAttempted) fixture?.onSave?.invoke(saved)
+            FileOutputStream(file).use { output ->
+                output.write(value.toByteArray())
+                output.fd.sync()
+            }
+            if (saved.initialDispatchAttempted) fixture?.onSave?.invoke(saved)
+        }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer { file.writeText("") }
+        val store = existing?.store ?: OnchainSendAttemptStore(testDispatcher, keychain, sut, Clock.System)
+        val attempt = store.admit(
+            walletId = WalletScope.default,
+            requestId = if (shop) PaykitPaymentRequestId("request", "payer") else null,
+            orderId = null, address = "address", amountSats = 1_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            beforeSendAttempt = {}, payerIdentity = if (shop) "payer" else null,
+        )
+        val txid = "ab".repeat(32)
+        val native = preparedNative(txid)
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.prepareSendToAddress("address", 1_000uL, sendFeeRate, null)).thenReturn(native)
+        whenever(native.broadcast()).thenReturn(OnchainSendResult.Accepted(txid))
+        val prepared = sut.prepareOnchainSend("address", 1_000uL, 1uL)
+        store.retainPreparedReceipt(attempt.attemptId, 0, prepared.receipt, false)
+        return PreparedJournal(store, attempt, prepared, native, file).also { fixture = it }
     }
 
     @Test

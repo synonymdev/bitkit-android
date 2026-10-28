@@ -414,6 +414,8 @@
     <string name="notification__service__stop">Stop App</string>
     <string name="onboarding__advanced">Advanced</string>
     <string name="onboarding__advanced_setup">Advanced Setup</string>
+    <string name="onboarding__connection_saved">Saved. Retry to continue restoring.</string>
+    <string name="onboarding__connection_settings">Connection settings</string>
     <string name="onboarding__create_new_wallet">Create New Wallet</string>
     <string name="onboarding__empty_wallet">To get\nstarted\n&lt;accent&gt;send\nBitcoin&lt;/accent&gt;\nto your\nwallet</string>
     <string name="onboarding__get_started">Get Started</string>

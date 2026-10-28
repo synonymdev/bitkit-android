@@ -247,6 +247,8 @@
     <string name="notification__service__stop">Διακοπή εφαρμογής</string>
     <string name="onboarding__advanced">Για προχωρημένους</string>
     <string name="onboarding__advanced_setup">Ρύθμιση για προχωρημένους</string>
+    <string name="onboarding__connection_saved">Αποθηκεύτηκε. Δοκιμάστε ξανά για να συνεχίσετε την επαναφορά.</string>
+    <string name="onboarding__connection_settings">Ρυθμίσεις σύνδεσης</string>
     <string name="onboarding__create_new_wallet">Δημιουργία νέου πορτοφολιού</string>
     <string name="onboarding__empty_wallet">Για να\nξεκινήσεις\n&lt;accent&gt;στείλε\nBitcoin&lt;/accent&gt;\nστο\nπορτοφόλι σου</string>
     <string name="onboarding__get_started">Ξεκίνα</string>
