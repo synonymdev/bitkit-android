@@ -1,6 +1,7 @@
 package to.bitkit.ui.settings.lightning
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,7 +36,24 @@ class CloseConnectionViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CloseConnectionUiState())
     val uiState = _uiState.asStateFlow()
 
-    fun closeChannel(channelId: String) {
+    fun requestForceClose() {
+        if (!_uiState.value.isLoading) _uiState.update { it.copy(showForceCloseConfirmation = true) }
+    }
+
+    fun cancelForceClose() {
+        _uiState.update { it.copy(showForceCloseConfirmation = false) }
+    }
+
+    fun confirmForceClose(channelId: String) {
+        if (!_uiState.value.showForceCloseConfirmation) return
+        _uiState.update { it.copy(showForceCloseConfirmation = false) }
+        closeChannel(channelId, force = true)
+    }
+
+    fun closeChannel(channelId: String) = closeChannel(channelId, force = false)
+
+    private fun closeChannel(channelId: String, force: Boolean) {
+        if (_uiState.value.isLoading) return
         val channel = lightningRepo.lightningState.value.channels
             .find { it.channelId == channelId }
             ?: run {
@@ -43,13 +61,12 @@ class CloseConnectionViewModel @Inject constructor(
                 return
             }
 
+        _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-
-            lightningRepo.closeChannel(channel).fold(
+            lightningRepo.closeChannel(channel, force = force).fold(
                 onSuccess = {
                     transferRepo.createTransfer(
-                        type = TransferType.COOP_CLOSE,
+                        type = if (force) TransferType.FORCE_CLOSE else TransferType.COOP_CLOSE,
                         amountSats = channel.amountOnClose.toLong(),
                         channelId = channel.channelId,
                         fundingTxId = channel.fundingTxo?.txid,
@@ -59,7 +76,13 @@ class CloseConnectionViewModel @Inject constructor(
                     ToastEventBus.send(
                         type = Toast.ToastType.SUCCESS,
                         title = context.getString(R.string.lightning__close_success_title),
-                        description = context.getString(R.string.lightning__close_success_msg),
+                        description = context.getString(
+                            if (force) {
+                                R.string.wallet_primary__force_close_started
+                            } else {
+                                R.string.lightning__close_success_msg
+                            }
+                        ),
                     )
 
                     _uiState.update {
@@ -85,7 +108,9 @@ class CloseConnectionViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class CloseConnectionUiState(
     val isLoading: Boolean = false,
     val closeSuccess: Boolean = false,
+    val showForceCloseConfirmation: Boolean = false,
 )

@@ -131,29 +131,13 @@ import to.bitkit.ui.screens.subscriptions.CreateSubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionDetailScreen
 import to.bitkit.ui.screens.subscriptions.SubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionsScreen
-import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
-import to.bitkit.ui.screens.transfer.FundingScreen
-import to.bitkit.ui.screens.transfer.LiquidityScreen
 import to.bitkit.ui.screens.transfer.SavingsAdvancedScreen
 import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen
 import to.bitkit.ui.screens.transfer.SavingsConfirmScreen
 import to.bitkit.ui.screens.transfer.SavingsIntroScreen
 import to.bitkit.ui.screens.transfer.SavingsProgressScreen
 import to.bitkit.ui.screens.transfer.SettingUpScreen
-import to.bitkit.ui.screens.transfer.SpendingAdvancedScreen
-import to.bitkit.ui.screens.transfer.SpendingAmountScreen
-import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
-import to.bitkit.ui.screens.transfer.SpendingIntroScreen
-import to.bitkit.ui.screens.transfer.TransferIntroScreen
-import to.bitkit.ui.screens.transfer.external.ExternalAmountScreen
-import to.bitkit.ui.screens.transfer.external.ExternalConfirmScreen
-import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
-import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
-import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
-import to.bitkit.ui.screens.transfer.hardware.SpendingAmountHwScreen
-import to.bitkit.ui.screens.transfer.hardware.SpendingHwSignScreen
-import to.bitkit.ui.screens.transfer.hardware.SpendingHwSignedScreen
 import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HardwareWalletScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
@@ -203,6 +187,7 @@ import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
 import to.bitkit.ui.settings.pin.PinManagementScreen
+import to.bitkit.ui.settings.primaryNode.PrimaryNodeScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
@@ -600,8 +585,8 @@ fun ContentView(
                                     hardwareWalletId = sheet.hardwareWalletId,
                                     walletState = walletState,
                                     isOffline = connectivityState != ConnectivityState.CONNECTED,
-                                    navigateToExternalConnection = {
-                                        navController.navigateTo(ExternalConnection())
+                                    navigateToPrimaryNode = {
+                                        navController.navigateTo(Routes.PrimaryNode())
                                         appViewModel.hideSheet()
                                     },
                                 )
@@ -876,7 +861,6 @@ private fun RootNavHost(
     onNavigateHomeWidgets: () -> Unit,
     onHomeCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         transferViewModel.transferEffects.collect { effect ->
             if (effect is TransferEffect.OnFundingPending) {
@@ -987,13 +971,7 @@ private fun RootNavHost(
             startDestination = Routes.TransferIntro,
         ) {
             deepLinkableComposable<Routes.TransferIntro> {
-                TransferIntroScreen(
-                    onContinueClick = {
-                        navController.navigateToTransferFunding()
-                        settingsViewModel.setHasSeenTransferIntro(true)
-                    },
-                    onBackClick = { navController.popBackStack() },
-                )
+                PrimaryNodeScreen(navController = navController)
             }
             deepLinkableComposable<Routes.SavingsIntro> {
                 SavingsIntroScreen(
@@ -1036,93 +1014,31 @@ private fun RootNavHost(
                 )
             }
             deepLinkableComposable<Routes.SpendingIntro> {
-                SpendingIntroScreen(
-                    onContinueClick = {
-                        navController.navigateTo(Routes.SpendingAmount)
-                        settingsViewModel.setHasSeenSpendingIntro(true)
-                    },
-                    onBackClick = { navController.popBackStack() },
-                )
+                PrimaryNodeScreen(navController = navController)
             }
-            deepLinkableComposable<Routes.SpendingIntroHw> { entry ->
-                val walletId = entry.toRoute<Routes.SpendingIntroHw>().walletId
-                SpendingIntroScreen(
-                    onContinueClick = {
-                        navController.navigateTo(Routes.SpendingAmountHw(walletId))
-                        settingsViewModel.setHasSeenSpendingIntro(true)
-                    },
-                    onBackClick = { navController.popBackStack() },
-                )
+            deepLinkableComposable<Routes.SpendingIntroHw> {
+                PrimaryNodeScreen(navController = navController)
             }
             deepLinkableComposable<Routes.SpendingAmount> {
-                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
-                SpendingAmountScreen(
-                    viewModel = transferViewModel,
-                    isOffline = connectivityState != ConnectivityState.CONNECTED,
-                    onBackClick = { navController.popBackStack() },
-                    onQuoteReady = { navController.navigateTo(Routes.SpendingConfirm) },
-                    toastException = { appViewModel.toast(it) },
-                    toast = { title, description ->
-                        appViewModel.toast(
-                            type = Toast.ToastType.ERROR,
-                            title = title,
-                            description = description,
-                        )
-                    },
-                )
+                PrimaryNodeScreen(navController = navController)
             }
-            deepLinkableComposable<Routes.SpendingAmountHw> { entry ->
-                val walletId = entry.toRoute<Routes.SpendingAmountHw>().walletId
-                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
-                SpendingAmountHwScreen(
-                    walletId = walletId,
-                    viewModel = transferViewModel,
-                    isOffline = connectivityState != ConnectivityState.CONNECTED,
-                    onBackClick = { navController.popBackStack() },
-                    onQuoteReady = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
-                )
+            deepLinkableComposable<Routes.SpendingAmountHw> {
+                PrimaryNodeScreen(navController = navController)
             }
-            composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
-                val walletId = entry.toRoute<Routes.SpendingHwSign>().walletId
-                SpendingHwSignScreen(
-                    walletId = walletId,
-                    viewModel = transferViewModel,
-                    onBackClick = { navController.popBackStack() },
-                    onCloseClick = { navController.navigateToHome() },
-                    onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
-                    onAdvancedClick = { navController.navigateTo(Routes.SpendingAdvanced) },
-                )
+            composableWithDefaultTransitions<Routes.SpendingHwSign> {
+                PrimaryNodeScreen(navController = navController)
             }
             composableWithDefaultTransitions<Routes.SpendingHwSigned> {
-                SpendingHwSignedScreen(
-                    viewModel = transferViewModel,
-                    onContinue = { navController.navigateTo(Routes.SettingUp) },
-                    onCloseClick = { navController.navigateToHome() },
-                )
+                PrimaryNodeScreen(navController = navController)
             }
             composableWithDefaultTransitions<Routes.SpendingConfirm> {
-                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
-                SpendingConfirmScreen(
-                    viewModel = transferViewModel,
-                    isOffline = connectivityState != ConnectivityState.CONNECTED,
-                    onBackClick = { navController.popBackStack() },
-                    onCloseClick = { navController.navigateToHome() },
-                    onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
-                    onAdvancedClick = { navController.navigateTo(Routes.SpendingAdvanced) },
-                )
+                PrimaryNodeScreen(navController = navController)
             }
             composableWithDefaultTransitions<Routes.SpendingAdvanced> {
-                SpendingAdvancedScreen(
-                    viewModel = transferViewModel,
-                    onBackClick = { navController.popBackStack() },
-                    onQuoteReady = { navController.popBackStack() },
-                )
+                PrimaryNodeScreen(navController = navController)
             }
             deepLinkableComposable<Routes.TransferLiquidity> {
-                LiquidityScreen(
-                    onBackClick = { navController.popBackStack() },
-                    onContinueClick = { navController.popBackStack() }
-                )
+                PrimaryNodeScreen(navController = navController)
             }
             composableWithDefaultTransitions<Routes.SettingUp> {
                 SettingUpScreen(
@@ -1133,74 +1049,23 @@ private fun RootNavHost(
                 )
             }
             deepLinkableComposable<Routes.Funding> {
-                val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
-                val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
-
-                FundingScreen(
-                    onTransfer = {
-                        navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
-                    },
-                    onFund = {
-                        scope.launch {
-                            navController.navigateToHome()
-                            delay(500) // Wait for nav to actually finish
-                            appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.Amount))
-                        }
-                    },
-                    onManual = { navController.navigateTo(Routes.ExternalNav) },
-                    onBackClick = { navController.popBackStack() },
-                    isGeoBlocked = isGeoBlocked,
-                )
+                PrimaryNodeScreen(navController = navController)
             }
             deepLinkableComposable<Routes.FundingAdvanced> {
-                FundingAdvancedScreen(
-                    onLnurl = { appViewModel.showScannerSheet() },
-                    onManual = { navController.navigateTo(Routes.ExternalNav) },
-                    onBackClick = { navController.popBackStack() },
-                )
+                PrimaryNodeScreen(navController = navController)
             }
             navigationWithDefaultTransitions<Routes.ExternalNav>(
                 startDestination = ExternalConnection(),
             ) {
                 deepLinkableComposable<ExternalConnection> {
-                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
                     val route = it.toRoute<ExternalConnection>()
-                    val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
-
-                    ExternalConnectionScreen(
-                        route = route,
-                        viewModel = viewModel,
-                        onNodeConnected = { navController.navigateTo(Routes.ExternalAmount) },
-                        onScanClick = {
-                            appViewModel.showScannerSheet {
-                                viewModel.parseNodeUri(it)
-                            }
-                        },
-                        onBackClick = { navController.popBackStack() },
-                    )
+                    PrimaryNodeScreen(navController = navController, initialUri = route.scannedNodeUri.orEmpty())
                 }
                 composableWithDefaultTransitions<Routes.ExternalAmount> {
-                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
-                    val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
-
-                    ExternalAmountScreen(
-                        viewModel = viewModel,
-                        onContinue = { navController.navigateTo(Routes.ExternalConfirm) },
-                        onBackClick = { navController.popBackStack() },
-                    )
+                    PrimaryNodeScreen(navController = navController)
                 }
                 composableWithDefaultTransitions<Routes.ExternalConfirm> {
-                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
-                    val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
-
-                    ExternalConfirmScreen(
-                        viewModel = viewModel,
-                        onConfirm = {
-                            walletViewModel.refreshState()
-                            navController.navigateTo(Routes.ExternalSuccess)
-                        },
-                        onBackClick = { navController.popBackStack() },
-                    )
+                    PrimaryNodeScreen(navController = navController)
                 }
                 composableWithDefaultTransitions<Routes.LnurlChannel> {
                     LnurlChannelScreen(
@@ -1211,9 +1076,7 @@ private fun RootNavHost(
                     )
                 }
                 composableWithDefaultTransitions<Routes.ExternalSuccess> {
-                    ExternalSuccessScreen(
-                        onContinue = { navController.navigateToHome() },
-                    )
+                    PrimaryNodeScreen(navController = navController)
                 }
             }
         }
@@ -1334,13 +1197,9 @@ private fun NavGraphBuilder.home(
     }
     deepLinkableComposable<Routes.HardwareWallet> {
         val walletId = it.toRoute<Routes.HardwareWallet>().walletId
-        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         HardwareWalletScreen(
             walletId = walletId,
             onActivityItemClick = { navController.navToActivityDetail(it) },
-            onTransferToSpendingClick = { selectedDeviceId ->
-                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
-            },
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -1365,6 +1224,9 @@ private fun NavGraphBuilder.settings(
 ) {
     deepLinkableComposable<Routes.Settings> {
         SettingsScreen(navController)
+    }
+    deepLinkableComposable<Routes.PrimaryNode> {
+        PrimaryNodeScreen(navController, initialUri = it.toRoute<Routes.PrimaryNode>().uri)
     }
     @Suppress("ForbiddenComment")
     // TODO: display as sheet
@@ -2319,6 +2181,9 @@ sealed interface Routes {
 
     @Serializable
     data object Settings : Routes.DeepLinkable
+
+    @Serializable
+    data class PrimaryNode(val uri: String = "") : Routes.DeepLinkable
 
     @Serializable
     data object NodeInfo : Routes.DeepLinkable

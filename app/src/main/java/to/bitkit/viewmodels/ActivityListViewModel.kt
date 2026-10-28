@@ -270,6 +270,9 @@ class ActivityListViewModel @Inject constructor(
         return activityRepo.isCpfpChildTransaction(txId, walletId)
     }
 
+    suspend fun isPrimaryFundingTransaction(txId: String, walletId: String): Boolean =
+        activityRepo.isPrimaryFundingTransaction(txId, walletId)
+
     private fun <T> Flow<T>.stateInScope(
         initialValue: T,
         started: SharingStarted = SharingStarted.WhileSubscribed(MS_TIMEOUT_SUB),

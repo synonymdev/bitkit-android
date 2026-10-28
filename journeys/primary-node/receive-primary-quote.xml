@@ -1,0 +1,38 @@
+<journey name="receive through primary quote">
+  <description>
+    Requires a compatible Beignet or LDK Node primary on the same regtest chain, connected through
+    the Primary node screen, with sufficient provider funds and no inbound channel in Bitkit.
+    Repeat for each provider. The provider must support receive quotes and skim authorization.
+    Use a disposable provider whose available funds and receive limits can be changed for refusal checks.
+    Use regtest funds only. This Android flow is not implemented on iOS yet.
+  </description>
+  <actions>
+    <action>Open Receive and verify the Bitcoin tab (testTag "Tab-auto") shows an onchain QR</action>
+    <action>Request a Lightning amount too small to cover the provider receive fee and verify the error asks for a larger amount, with no fee approval or Lightning invoice available</action>
+    <action>Request more than the disposable primary can fund and verify the error explains that the primary lacks funds for this amount, suggests a smaller request or funding the primary, and keeps Bitcoin address receiving available</action>
+    <action>Reduce the request to an amount the provider can fund and retry; verify the error clears and a fresh receive fee is offered without automatically creating a Lightning invoice</action>
+    <action>Go back to amount entry before continuing the approved receive flow</action>
+    <action>Tap Create Lightning request (testTag "PrimaryReceiveRequest"), enter an amount and tap Review receive fee (testTag "ContinueAmount")</action>
+    <action>Repeat amount entry in a compact 360 by 640 dp viewport and verify the full Review receive fee button remains above the navigation bar, below the keypad; tapping its center must open the fee review without changing the entered amount</action>
+    <action>Verify the fee review (testTag "PrimaryReceiveConfirm") shows the requested amount, maximum fee (testTag "PrimaryReceiveFee") and minimum received (testTag "PrimaryReceiveMinimum")</action>
+    <action>On the compact viewport, scroll the fee details and verify Approve remains fully visible; after a failed request, verify the error can scroll while Retry and Approve remain visible and Approve is disabled</action>
+    <action>Before approving, verify no Lightning invoice is displayed or available to copy</action>
+    <action>Go back, change the amount and request a new quote; verify the fee review uses the new amount</action>
+    <action>Approve (testTag "PrimaryReceiveApprove") and verify the Bitcoin QR contains the onchain address, exact approved amount and a Lightning invoice</action>
+    <action>Copy the request and pay its Lightning invoice from a separate funded regtest wallet; mine the provider-required blocks if a channel opens</action>
+    <action>Verify the payment appears once in activity and the one Bitcoin balance increases by the received amount after the quoted fee</action>
+    <action>Open the received activity and verify its header shows the net amount credited and its fee shows the actual amount withheld; refresh and restart the app and verify the same receipt remains once without changing either amount</action>
+    <action>Verify the settled Lightning invoice disappears from QR, details, copy and share without generating a paid replacement</action>
+    <action>Request and approve another regtest invoice, keep Receive open until the invoice expires and verify its Lightning request disappears without automatic approval or an extra provider charge</action>
+    <action>Request and approve another invoice, pay the onchain fallback address and verify the merged request clears after wallet synchronization</action>
+    <action>Request and approve another invoice, disconnect the primary and wait for the next native wallet sync without manually refreshing; verify its Lightning request is unavailable in QR, details, copy and share while the onchain address remains available</action>
+    <action>Open Receive again, edit the amount and note and verify the new QR never reuses the previously approved invoice</action>
+    <action>At 360 by 640 dp, tap the invoice editor amount, enter a value, and verify its Continue button (testTag "ReceiveNumberPadSubmit") is fully visible below the keypad; tapping its center returns to note editing without changing the value</action>
+    <action>Stop the provider, request another quote and verify an inline error with a retry path appears while Bitcoin onchain receiving remains available</action>
+    <action>Restart the same provider and retry the quote; verify the error clears and the new fee requires explicit approval before a usable Lightning invoice appears, without manual refresh or reopening Receive</action>
+    <action>On a new receive, reduce the disposable provider funds after reviewing the fee but before approving; verify approval shows the insufficient primary funds message and cannot expose an invoice or submit another approval until a fresh quote succeeds</action>
+    <action>Fund the disposable provider, retry the quote and verify its current fee is displayed; explicitly approve it and verify a usable invoice appears</action>
+    <action>In a fresh wallet with the same provider, deposit 50,000 regtest sats and confirm automatic primary channel opening; then request and approve a 100,000 sat receive, pay it from a separate wallet and verify channel growth settles a payment larger than the original channel capacity, with one net credit and the approved fee</action>
+    <action>For an older channel created before splice-compatible limit negotiation, request more than its original negotiated limit and verify no primary invoice is issued; explicitly close and reopen it before repeating the larger receive</action>
+  </actions>
+</journey>

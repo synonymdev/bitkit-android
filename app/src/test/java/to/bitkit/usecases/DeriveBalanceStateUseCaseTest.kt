@@ -24,6 +24,7 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.TransferRepo
+import to.bitkit.services.PrimaryWalletService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -34,6 +35,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     private val transferRepo: TransferRepo = mock()
     private val settingsStore: SettingsStore = mock()
     private val hwWalletRepo: HwWalletRepo = mock()
+    private val primaryWalletService: PrimaryWalletService = mock()
 
     private lateinit var sut: DeriveBalanceStateUseCase
 
@@ -46,6 +48,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
             whenever { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
             whenever { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
+            whenever { primaryWalletService.maxSpliceOutSats() }.thenReturn(0uL)
             whenever(transferRepo.resolveChannelIdForTransfer(any(), any())).thenAnswer { invocation ->
                 val transfer = invocation.getArgument<TransferEntity>(0)
                 transfer.channelId
@@ -60,7 +63,20 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             transferRepo = transferRepo,
             settingsStore = settingsStore,
             hwWalletRepo = hwWalletRepo,
+            primaryWalletService = primaryWalletService,
         )
+    }
+
+    @Test
+    fun `onchain spending includes primary channel capacity without double counting funds`() = test {
+        newBalanceDetails()
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(primaryWalletService.maxSpliceOutSats()).thenReturn(150_000uL)
+
+        val balance = sut().getOrThrow()
+
+        assertEquals(150_000uL, balance.maxSendOnchainSats)
+        assertEquals(150_000uL, balance.totalSats)
     }
 
     @Test

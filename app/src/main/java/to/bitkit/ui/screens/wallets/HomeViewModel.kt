@@ -1,10 +1,8 @@
 package to.bitkit.ui.screens.wallets
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -17,12 +15,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.isUsdtEnabled
 import to.bitkit.env.Env
-import to.bitkit.models.ActivityBannerType
-import to.bitkit.models.BannerItem
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.ArticleModel
@@ -44,7 +39,6 @@ import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val walletRepo: WalletRepo,
     private val widgetsRepo: WidgetsRepo,
     private val currencyRepo: CurrencyRepo,
@@ -108,6 +102,7 @@ class HomeViewModel @Inject constructor(
                         currentPrice = widgetsData.price,
                         showWidgetsOnboardingHint = settings.showWidgets &&
                             !settings.widgetsOnboardingHintDismissed,
+                        showPrimaryNodeSetup = settings.primaryNodeUri.isBlank(),
                     )
                 }
             }.collect()
@@ -126,7 +121,6 @@ class HomeViewModel @Inject constructor(
         }
 
         observeEmptyState()
-        viewModelScope.launch { createBannersFlow() }
     }
 
     private fun observeEmptyState() {
@@ -300,30 +294,5 @@ class HomeViewModel @Inject constructor(
 
     fun disableEditMode() {
         _uiState.update { it.copy(isEditingWidgets = false) }
-    }
-
-    private suspend fun createBannersFlow() {
-        combine(
-            walletRepo.balanceState,
-            transferRepo.forceCloseRemainingDuration,
-        ) { balanceState, remainingDuration ->
-            val defaultTitle = context.getString(R.string.lightning__transfer_in_progress)
-            val savingsTitle = remainingDuration?.let {
-                context.getString(R.string.lightning__transfer_ready_in, it)
-            } ?: defaultTitle
-
-            listOfNotNull(
-                BannerItem(
-                    type = ActivityBannerType.SPENDING,
-                    title = defaultTitle,
-                ).takeIf { balanceState.balanceInTransferToSpending > 0uL },
-                BannerItem(
-                    type = ActivityBannerType.SAVINGS,
-                    title = savingsTitle,
-                ).takeIf { balanceState.balanceInTransferToSavings > 0uL },
-            )
-        }.collect { banners ->
-            _uiState.update { it.copy(banners = banners.toImmutableList()) }
-        }
     }
 }

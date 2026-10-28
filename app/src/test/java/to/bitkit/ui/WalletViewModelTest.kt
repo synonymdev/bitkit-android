@@ -30,7 +30,6 @@ import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.BackupRepo
-import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
@@ -62,7 +61,6 @@ class WalletViewModelTest : BaseUnitTest() {
     private val lightningRepo = mock<LightningRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val backupRepo = mock<BackupRepo>()
-    private val blocktankRepo = mock<BlocktankRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val migrationService = mock<MigrationService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
@@ -99,7 +97,6 @@ class WalletViewModelTest : BaseUnitTest() {
             lightningRepo = lightningRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
-            blocktankRepo = blocktankRepo,
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
@@ -156,7 +153,6 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `refreshReceiveState should refresh receive state`() = test {
         sut.refreshReceiveState()
 
-        verify(blocktankRepo).refreshInfo()
         verify(walletRepo).refreshReceiveState()
     }
 
@@ -531,7 +527,6 @@ class WalletViewModelTest : BaseUnitTest() {
             lightningRepo = testLightningRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
-            blocktankRepo = blocktankRepo,
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
@@ -597,7 +592,6 @@ class WalletViewModelTest : BaseUnitTest() {
             lightningRepo = testLightningRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
-            blocktankRepo = blocktankRepo,
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
@@ -652,7 +646,6 @@ class WalletViewModelTest : BaseUnitTest() {
             lightningRepo = testLightningRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
-            blocktankRepo = blocktankRepo,
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
@@ -691,7 +684,6 @@ class WalletViewModelTest : BaseUnitTest() {
             lightningRepo = testLightningRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
-            blocktankRepo = blocktankRepo,
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
@@ -781,7 +773,6 @@ class WalletViewModelTest : BaseUnitTest() {
             lightningRepo = lightningRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
-            blocktankRepo = blocktankRepo,
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,

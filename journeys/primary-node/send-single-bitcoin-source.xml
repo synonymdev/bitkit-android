@@ -1,0 +1,15 @@
+<journey name="send from single bitcoin balance">
+  <description>
+    Requires a funded primary wallet and a separate regtest wallet that can provide a valid unified
+    request without a bgnq direct-funding field. Pair a hardware wallet to exercise source selection; it remains a separate device.
+    This Android primary-node flow is not implemented on iOS yet.
+  </description>
+  <actions>
+    <action>Scan a unified Bitcoin and Lightning request from the separate wallet and open the send amount screen</action>
+    <action>Verify the selected source is labeled Bitcoin and the amount row is labeled Available without Savings or Spending labels</action>
+    <action>Repeat on a compact 360 by 640 dp viewport, verify Continue is fully visible below the keypad and above the navigation bar, and tap its center; verify confirmation uses the unchanged entered amount</action>
+    <action>If a hardware wallet is paired, open the source selector and verify exactly one Bitcoin source (testTag "SendFundingSourceBitcoin") plus the separate hardware wallet entry</action>
+    <action>Select the software Bitcoin source and continue to confirmation; verify the From field says Bitcoin</action>
+    <action>Cancel the send and verify no payment was initiated</action>
+  </actions>
+</journey>

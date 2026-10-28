@@ -121,9 +121,7 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.data.isUsdtEnabled
 import to.bitkit.env.Env
-import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
-import to.bitkit.models.BannerItem
 import to.bitkit.models.HwWallet
 import to.bitkit.models.MoneyType
 import to.bitkit.models.PaykitExchangeRate
@@ -142,11 +140,10 @@ import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CaptionB
-import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.Headline24
@@ -169,8 +166,6 @@ import to.bitkit.ui.navToActivityDetail
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToProfile
-import to.bitkit.ui.navigateToTransferFunding
-import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
@@ -242,7 +237,6 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
     val profileNavigationScope = rememberCoroutineScope()
@@ -318,13 +312,7 @@ fun HomeScreen(
                     appViewModel.showSheet(Sheet.Hardware())
                 }
 
-                Suggestion.LIGHTNING -> {
-                    if (!hasSeenTransferIntro) {
-                        rootNavController.navigateToTransferIntro()
-                    } else {
-                        rootNavController.navigateToTransferFunding()
-                    }
-                }
+                Suggestion.LIGHTNING -> rootNavController.navigateTo(Routes.PrimaryNode())
 
                 Suggestion.BACK_UP -> {
                     appViewModel.showSheet(Sheet.Backup(BackupRoute.Intro))
@@ -402,11 +390,9 @@ fun HomeScreen(
         onPageChanged = homeViewModel::onPageChanged,
         onDismissWidgetsOnboardingHint = homeViewModel::dismissWidgetsOnboardingHint,
         onNavigateToAppStatus = { rootNavController.navigate(Routes.AppStatus) },
-        onNavigateToSettingUp = { rootNavController.navigate(Routes.SettingUp) },
         onNavigateToAllActivity = { rootNavController.navigateToAllActivity(activityListViewModel::clearFilters) },
         onNavigateToActivityItem = { rootNavController.navToActivityDetail(it) },
-        onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
-        onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
+        onNavigateToPrimaryNode = { rootNavController.navigateTo(Routes.PrimaryNode()) },
         onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },
         onClickUsdt = { walletNavController.navigateTo(Routes.UsdtWallet) },
         onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
@@ -443,11 +429,9 @@ private fun Content(
     onPageChanged: (Int) -> Unit = {},
     onDismissWidgetsOnboardingHint: () -> Unit = {},
     onNavigateToAppStatus: () -> Unit = {},
-    onNavigateToSettingUp: () -> Unit = {},
     onNavigateToAllActivity: () -> Unit = {},
     onNavigateToActivityItem: (Activity) -> Unit = {},
-    onNavigateToSavings: () -> Unit = {},
-    onNavigateToSpending: () -> Unit = {},
+    onNavigateToPrimaryNode: () -> Unit = {},
     onClickHardwareWallet: (String) -> Unit = {},
     onClickUsdt: () -> Unit = {},
     onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
@@ -581,11 +565,9 @@ private fun Content(
                     balances = balances,
                     isSmallScreen = isSmallScreen,
                     onRefresh = onRefresh,
-                    onNavigateToSettingUp = onNavigateToSettingUp,
                     onNavigateToAllActivity = onNavigateToAllActivity,
                     onNavigateToActivityItem = onNavigateToActivityItem,
-                    onNavigateToSavings = onNavigateToSavings,
-                    onNavigateToSpending = onNavigateToSpending,
+                    onNavigateToPrimaryNode = onNavigateToPrimaryNode,
                     onClickHardwareWallet = onClickHardwareWallet,
                     onClickUsdt = onClickUsdt,
                 )
@@ -608,9 +590,8 @@ private fun Content(
 }
 
 private fun countNonItemSlots(homeUiState: HomeUiState): Int {
-    val bannerSlot = if (homeUiState.banners.isNotEmpty()) 1 else 0
     val widgetsHintSlot = if (homeUiState.showWidgetsOnboardingHint) 1 else 0
-    return bannerSlot + widgetsHintSlot
+    return widgetsHintSlot
 }
 
 @Composable
@@ -636,11 +617,9 @@ private fun WalletPage(
     balances: BalanceState,
     isSmallScreen: Boolean,
     onRefresh: () -> Unit,
-    onNavigateToSettingUp: () -> Unit,
     onNavigateToAllActivity: () -> Unit,
     onNavigateToActivityItem: (Activity) -> Unit,
-    onNavigateToSavings: () -> Unit,
-    onNavigateToSpending: () -> Unit,
+    onNavigateToPrimaryNode: () -> Unit,
     onClickHardwareWallet: (String) -> Unit,
     onClickUsdt: () -> Unit,
 ) {
@@ -693,11 +672,12 @@ private fun WalletPage(
                     .testTag("TotalBalance")
             )
             VerticalSpacer(32.dp)
-            BalancesSection(
-                balances = balances,
-                hardwareWallets = homeUiState.hardwareWallets,
-                onNavigateToSavings = onNavigateToSavings,
-                onNavigateToSpending = onNavigateToSpending,
+            if (homeUiState.showPrimaryNodeSetup) {
+                PrimaryNodeShortcut(onClick = onNavigateToPrimaryNode)
+            }
+            AdditionalWallets(
+                wallets = homeUiState.hardwareWallets,
+                showUsdt = showUsdt,
                 onClickHardwareWallet = onClickHardwareWallet,
                 onClickUsdt = onClickUsdt,
             )
@@ -705,30 +685,6 @@ private fun WalletPage(
 
             if (!homeUiState.showEmptyState) {
                 if (hasActivity) {
-                    AnimatedVisibility(homeUiState.banners.isNotEmpty()) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp)
-                        ) {
-                            homeUiState.banners.forEach { banner ->
-                                ActivityBanner(
-                                    gradientColor = banner.type.color,
-                                    title = banner.title,
-                                    icon = banner.type.icon,
-                                    onClick = {
-                                        when (banner.type) {
-                                            ActivityBannerType.SPENDING -> onNavigateToSettingUp()
-                                            ActivityBannerType.SAVINGS -> Unit
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
-
                     ActivityListSimple(
                         items = latestActivities,
                         maxItems = (slotCapacity - countNonItemSlots(homeUiState)).coerceAtLeast(0),
@@ -748,61 +704,36 @@ private fun WalletPage(
                 VerticalSpacer(BOTTOM_SPACER_HEIGHT + Insets.Bottom)
             }
         }
-
-        if (homeUiState.showEmptyState) {
-            EmptyStateView(
-                text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
-                isSmallScreen = isSmallScreen,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-            )
-        }
     }
 }
 
 @Composable
-private fun BalancesSection(
-    balances: BalanceState,
-    hardwareWallets: ImmutableList<HwWallet>,
-    onNavigateToSavings: () -> Unit,
-    onNavigateToSpending: () -> Unit,
-    onClickHardwareWallet: (String) -> Unit,
-    onClickUsdt: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+private fun PrimaryNodeShortcut(onClick: () -> Unit) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(Colors.Gray6)
+            .clickableAlpha(onClick = onClick)
+            .padding(16.dp)
+            .testTag("HomePrimaryNode")
+    ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            WalletBalanceView(
-                title = stringResource(R.string.wallet__savings__title),
-                sats = balances.totalOnchainSats.toLong(),
-                icon = painterResource(id = R.drawable.ic_btc_circle),
-                modifier = Modifier
-                    .clickableAlpha(onClick = onNavigateToSavings)
-                    .padding(vertical = 4.dp)
-                    .testTag("ActivitySavings")
+            Icon(
+                painter = painterResource(R.drawable.ic_lightning),
+                contentDescription = null,
+                tint = Colors.Brand,
+                modifier = Modifier.size(20.dp)
             )
-            VerticalDivider(color = Colors.Gray4)
-            WalletBalanceView(
-                title = stringResource(R.string.wallet__spending__title),
-                sats = balances.totalLightningSats.toLong(),
-                icon = painterResource(id = R.drawable.ic_ln_circle),
-                modifier = Modifier
-                    .clickableAlpha(onClick = onNavigateToSpending)
-                    .padding(vertical = 4.dp)
-                    .testTag("ActivitySpending")
-            )
+            Title(text = stringResource(R.string.primary_node__title))
         }
-
-        AdditionalWallets(
-            wallets = hardwareWallets,
-            showUsdt = !LocalInspectionMode.current &&
-                (appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true),
-            onClickHardwareWallet = onClickHardwareWallet,
-            onClickUsdt = onClickUsdt,
+        BodyS(
+            text = stringResource(R.string.primary_node__description),
+            color = Colors.White64,
         )
     }
 }
@@ -1577,8 +1508,7 @@ private val previewWeather = WeatherModel(
 )
 
 private val previewLatestActivities = previewActivityItems.take(3).toImmutableList()
-private val previewBanners = ActivityBannerType.entries.map { BannerItem(type = it, title = "") }.toImmutableList()
-private val previewSuggestions = Suggestion.entries.take(4).toImmutableList()
+private val previewSuggestions = persistentListOf(Suggestion.BACK_UP, Suggestion.SECURE, Suggestion.HARDWARE)
 private val previewHardwareWalletBt = HwWallet(
     id = "trezor-1",
     name = "Trezor Safe 5",
@@ -1711,26 +1641,6 @@ private fun PreviewEmpty() {
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewLatestActivities,
                 balances = BalanceState(),
-            )
-            TabBar()
-        }
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-private fun PreviewWithBanners() {
-    AppThemeSurface {
-        Box {
-            Content(
-                isRefreshing = false,
-                homeUiState = HomeUiState(
-                    showWidgets = true,
-                    banners = previewBanners,
-                ),
-                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                latestActivities = previewLatestActivities,
-                balances = previewBalances,
             )
             TabBar()
         }

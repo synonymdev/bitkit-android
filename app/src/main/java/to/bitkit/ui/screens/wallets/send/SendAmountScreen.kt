@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -67,7 +66,6 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.HwWalletConnectionIcon
@@ -127,6 +125,18 @@ fun SendAmountScreen(
     val resources = LocalResources.current
     val amountInputUiState: AmountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentOnEvent by rememberUpdatedState(onEvent)
+    var onchainMaximum by remember { mutableStateOf<ULong?>(null) }
+    LaunchedEffect(
+        uiState.address,
+        uiState.speed,
+        uiState.feeRates,
+        uiState.hardwareWalletId,
+        uiState.hardwareAvailableSats,
+        balances.maxSendOnchainSats,
+    ) {
+        onchainMaximum = null
+        onchainMaximum = app?.maximumOnchainSendableSats(uiState)
+    }
 
     val maxExceededMessage = run {
         val lnurl = uiState.lnurl
@@ -183,6 +193,7 @@ fun SendAmountScreen(
     }
 
     SendAmountContent(
+        balances = balances.copy(maxSendOnchainSats = onchainMaximum ?: balances.maxSendOnchainSats),
         nodeLifecycleState = nodeLifecycleState,
         uiState = uiState,
         amountInputViewModel = amountInputViewModel,
@@ -278,8 +289,7 @@ private fun SendAmountNodeRunning(
     val app = appViewModel
     val usdtWallet = app?.usdtWallet?.collectAsStateWithLifecycle()?.value
     val hideBalance = settingsViewModel?.hideBalance?.collectAsStateWithLifecycle()?.value == true
-    BoxWithConstraints {
-        val maxHeight = this.maxHeight
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         val isLnurlWithdraw = uiState.lnurl is LnurlParams.LnurlWithdraw
 
         val availableAmount = when {
@@ -304,16 +314,11 @@ private fun SendAmountNodeRunning(
 
         Column(
             modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .then(
-                    if (uiState.paykitUsesUsdt) {
-                        Modifier.verticalScroll(rememberScrollState()).heightIn(min = maxHeight)
-                    } else {
-                        Modifier
-                    }
-                )
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
         ) {
-            VerticalSpacer(16.dp)
+            VerticalSpacer(8.dp)
 
             if (uiState.paykitUsesUsdt) {
                 UsdtAmountHeader(
@@ -329,7 +334,7 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            FillHeight(min = 12.dp)
+            VerticalSpacer(12.dp)
             if (uiState.paykitRateUnavailable) {
                 BodyS(
                     stringResource(R.string.wallet__payment_request_rate_unavailable),
@@ -337,14 +342,10 @@ private fun SendAmountNodeRunning(
                 )
             }
 
-            val textAvailable = when {
-                uiState.lnurl is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_max
-                uiState.paykitUsesUsdt -> R.string.wallet__send_available
-                uiState.hardwareWalletId != null -> R.string.wallet__send_available
-                uiState.isUnified -> R.string.wallet__send_available
-                uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available
-                uiState.payMethod == SendMethod.LIGHTNING -> R.string.wallet__send_available_spending
-                else -> R.string.wallet__send_available
+            val textAvailable = if (uiState.lnurl is LnurlParams.LnurlWithdraw) {
+                R.string.wallet__lnurl_w_max
+            } else {
+                R.string.wallet__send_available
             }
 
             Row(
@@ -421,13 +422,22 @@ private fun SendAmountNodeRunning(
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(top = if (uiState.paykitUsesUsdt) 16.dp else 12.dp))
-
+            VerticalSpacer(8.dp)
+        }
+        HorizontalDivider()
+        BoxWithConstraints(
+            contentAlignment = Alignment.BottomCenter,
+            modifier = Modifier.weight(1.5f).fillMaxWidth()
+        ) {
+            val numberPadModifier = Modifier
+                .height(maxHeight.coerceAtMost(300.dp))
+                .fillMaxWidth()
+                .testTag("SendAmountNumberPad")
             if (uiState.paykitUsesUsdt) {
                 NumberPad(
+                    modifier = numberPadModifier,
                     type = NumberPadType.DECIMAL,
                     decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
-                    availableHeight = maxHeight,
                     enabled = uiState.isAmountEditable,
                     onPress = {
                         app?.onUsdtAmountChange(
@@ -446,23 +456,20 @@ private fun SendAmountNodeRunning(
                     enabled = uiState.isAmountEditable,
                     viewModel = amountInputViewModel,
                     currencies = currencies,
-                    availableHeight = maxHeight,
-                    modifier = Modifier
-                        .testTag("SendAmountNumberPad")
+                    modifier = numberPadModifier,
                 )
             }
-
-            PrimaryButton(
-                text = stringResource(R.string.common__continue),
-                enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,
-                isLoading = uiState.isLoading,
-                onClick = onContinue,
-                textStyle = if (uiState.paykitUsesUsdt) AppTextStyles.BodySSB.copy(letterSpacing = 0.sp) else null,
-                modifier = Modifier.testTag("ContinueAmount")
-            )
-
-            VerticalSpacer(16.dp)
         }
+        VerticalSpacer(12.dp)
+        PrimaryButton(
+            text = stringResource(R.string.common__continue),
+            enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,
+            isLoading = uiState.isLoading,
+            onClick = onContinue,
+            textStyle = if (uiState.paykitUsesUsdt) AppTextStyles.BodySSB.copy(letterSpacing = 0.sp) else null,
+            modifier = Modifier.testTag("ContinueAmount")
+        )
+        VerticalSpacer(16.dp)
     }
 }
 
@@ -477,16 +484,14 @@ private fun PaymentMethodButton(
         uiState.canSwitchFundingSource -> "switch"
         uiState.paykitUsesUsdt -> "usdt"
         isHardware -> "trezor"
-        uiState.payMethod == SendMethod.ONCHAIN -> "savings"
-        else -> "spending"
+        else -> "bitcoin"
     }
     Box {
         NumberPadActionButton(
             text = when {
                 uiState.paykitUsesUsdt -> "USDT"
                 isHardware -> uiState.hardwareWalletName ?: stringResource(R.string.hardware__device_model_trezor)
-                uiState.payMethod == SendMethod.ONCHAIN -> stringResource(R.string.wallet__savings__title)
-                else -> stringResource(R.string.wallet__spending__title)
+                else -> stringResource(R.string.wallet_primary__bitcoin)
             },
             color = paymentMethodColor(uiState),
             textStyle = if (uiState.paykitUsesUsdt) {
@@ -499,7 +504,7 @@ private fun PaymentMethodButton(
             onClick = { expanded = true },
             enabled = uiState.fundingOptions.isNotEmpty(),
             isLoading = uiState.isFundingSourceLoading,
-            clickable = !uiState.isLoading,
+            clickable = uiState.canSwitchFundingSource && !uiState.isLoading,
             modifier = Modifier
                 .height(28.dp)
                 .testTag("AssetButton-$testId")
@@ -532,21 +537,40 @@ private fun PaymentMethodButton(
 private fun FundingSourceOption(option: SendFundingOption, state: SendUiState, onClick: () -> Unit) {
     val source = option.source
     val title = when (source) {
-        SendFundingSource.Savings -> stringResource(R.string.wallet__savings__title)
-        SendFundingSource.Spending -> stringResource(R.string.wallet__spending__title)
+        SendFundingSource.Savings, SendFundingSource.Spending -> stringResource(
+            if (state.directFundingRequest == null) {
+                R.string.wallet_primary__bitcoin
+            } else if (source == SendFundingSource.Savings) {
+                R.string.wallet_direct_funding__title
+            } else {
+                R.string.wallet_primary__lightning
+            },
+        )
         SendFundingSource.Usdt -> "USDT"
         is SendFundingSource.Hardware -> option.name ?: stringResource(R.string.hardware__device_model_trezor)
     }
     val color = when (source) {
-        SendFundingSource.Savings -> Colors.Brand
-        SendFundingSource.Spending -> Colors.Purple
+        SendFundingSource.Savings, SendFundingSource.Spending -> Colors.Brand
         SendFundingSource.Usdt -> Colors.Usdt
         is SendFundingSource.Hardware -> Colors.Blue
     }
     Row(
         Modifier.fillMaxWidth().alpha(if (option.enabled) 1f else DISABLED_FUNDING_SOURCE_ALPHA)
             .clickable(enabled = option.enabled && !state.isFundingSourceLoading, onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 12.dp),
+            .padding(horizontal = 24.dp, vertical = 12.dp)
+            .testTag(
+                when (source) {
+                    SendFundingSource.Savings, SendFundingSource.Spending -> if (state.directFundingRequest == null) {
+                        "SendFundingSourceBitcoin"
+                    } else if (source == SendFundingSource.Savings) {
+                        "SendFundingSourceDirectFunding"
+                    } else {
+                        "SendFundingSourceLightning"
+                    }
+                    SendFundingSource.Usdt -> "SendFundingSourceUsdt"
+                    is SendFundingSource.Hardware -> "SendFundingSourceHardware-${source.walletId}"
+                }
+            ),
     ) {
         WalletBalanceContent(
             title = title,
@@ -562,7 +586,7 @@ private fun FundingSourceOption(option: SendFundingOption, state: SendUiState, o
                 }
             },
         ) {
-            FundingSourceBalance(option)
+            FundingSourceBalance(option, state.directFundingRequest != null)
             FillWidth()
             if (state.isSelected(source)) {
                 Icon(
@@ -581,8 +605,7 @@ private fun FundingSourceIcon(source: SendFundingSource) {
     Image(
         painterResource(
             when (source) {
-                SendFundingSource.Savings -> R.drawable.ic_btc_circle
-                SendFundingSource.Spending -> R.drawable.ic_ln_circle
+                SendFundingSource.Savings, SendFundingSource.Spending -> R.drawable.ic_btc_circle
                 SendFundingSource.Usdt -> R.drawable.tether_circle
                 is SendFundingSource.Hardware -> R.drawable.ic_btc_circle_blue
             }
@@ -593,7 +616,7 @@ private fun FundingSourceIcon(source: SendFundingSource) {
 }
 
 @Composable
-private fun FundingSourceBalance(option: SendFundingOption) {
+private fun FundingSourceBalance(option: SendFundingOption, showRailBalance: Boolean) {
     val balances = LocalBalances.current
     val usdt = appViewModel?.usdtWallet?.collectAsStateWithLifecycle()?.value
     val hidden = settingsViewModel?.hideBalance?.collectAsStateWithLifecycle()?.value == true
@@ -606,8 +629,8 @@ private fun FundingSourceBalance(option: SendFundingOption) {
     } else {
         MoneyMSB(
             sats = when (source) {
-                SendFundingSource.Savings -> balances.maxSendOnchainSats.toLong()
-                SendFundingSource.Spending -> balances.maxSendLightningSats.toLong()
+                SendFundingSource.Savings, SendFundingSource.Spending ->
+                    if (showRailBalance) option.balance.toLong() else balances.totalSats.toLong()
                 else -> option.balance.toLong()
             },
             unit = PrimaryDisplay.BITCOIN,
@@ -629,8 +652,7 @@ private fun SendUiState.isSelected(source: SendFundingSource): Boolean = when (s
 private fun paymentMethodColor(uiState: SendUiState): Color = when {
     uiState.paykitUsesUsdt -> Colors.Usdt
     uiState.hardwareWalletId != null -> Colors.Blue
-    uiState.payMethod == SendMethod.ONCHAIN -> Colors.Brand
-    else -> Colors.Purple
+    else -> Colors.Brand
 }
 
 @Preview(showSystemUi = true)

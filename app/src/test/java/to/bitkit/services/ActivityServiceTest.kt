@@ -1,7 +1,9 @@
 package to.bitkit.services
 
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import kotlinx.coroutines.CompletableDeferred
@@ -11,6 +13,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Test
 import org.lightningdevkit.ldknode.ConfirmationStatus
+import org.lightningdevkit.ldknode.LspFeeLimits
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -27,8 +30,11 @@ import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
+import to.bitkit.ext.totalValue
 import to.bitkit.models.WalletScope
+import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.test.BaseUnitTest
+import javax.inject.Provider
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -45,6 +51,7 @@ class ActivityServiceTest : BaseUnitTest() {
     private val markActivityAsSeen = binding.methods.single { it.name.startsWith("markActivityAsSeen") }
 
     private val cacheStore = mock<CacheStore>()
+    private val privateContactResolver = mock<PrivatePaykitContactResolver>()
 
     private val sut by lazy {
         ActivityService(
@@ -52,7 +59,7 @@ class ActivityServiceTest : BaseUnitTest() {
             cacheStore = cacheStore,
             lightningService = mock(),
             settingsStore = mock(),
-            privatePaykitContactResolver = mock(),
+            privatePaykitContactResolver = Provider { privateContactResolver },
         )
     }
 
@@ -79,6 +86,46 @@ class ActivityServiceTest : BaseUnitTest() {
                 sut.markActivityAsSeen(ACTIVITY_ID, walletId = WALLET_ID, seenAt = SEEN_AT)
 
                 native.verify({ markActivityAsSeen.invoke(null, anyString(), anyString(), anyLong()) }, never())
+            }
+        }
+    }
+
+    @Test
+    fun `verified external confirmation preserves payment fields and can apply an authoritative reorg`() = test {
+        ServiceQueue.CORE.background {
+            val getByTx = binding.getMethod("getActivityByTxId", String::class.java, String::class.java)
+            val upsert = binding.getMethod("upsertActivity", Activity::class.java)
+            val original = activity().v1.copy(
+                txType = PaymentType.SENT,
+                timestamp = 200uL,
+                value = 5_000uL,
+                fee = 2_344uL,
+                contact = "contact",
+            )
+            var saved = original
+            mockStatic(binding).use { native ->
+                native.`when`<Any?> { getByTx.invoke(null, WALLET_ID, ACTIVITY_ID) }.thenAnswer { saved }
+                native.`when`<Any?> { upsert.invoke(null, any(Activity::class.java)) }.thenAnswer {
+                    saved = (it.getArgument<Activity>(0) as Activity.Onchain).v1
+                    Unit
+                }
+
+                sut.applyVerifiedSentOnchainConfirmation(original, ConfirmationStatus.Confirmed("block", 6u, 150uL))
+
+                assertTrue(saved.confirmed)
+                assertEquals(150uL, saved.confirmTimestamp)
+                assertEquals(150uL, saved.timestamp)
+                assertEquals(original.value, saved.value)
+                assertEquals(original.fee, saved.fee)
+                assertEquals(original.contact, saved.contact)
+                sut.applyVerifiedSentOnchainConfirmation(original, ConfirmationStatus.Unconfirmed)
+                kotlin.test.assertFalse(saved.confirmed)
+                kotlin.test.assertNull(saved.confirmTimestamp)
+
+                val changedAmount = saved.copy(value = 6_000uL)
+                saved = changedAmount
+                sut.applyVerifiedSentOnchainConfirmation(original, ConfirmationStatus.Confirmed("block", 6u, 150uL))
+                assertEquals(changedAmount, saved)
             }
         }
     }
@@ -253,6 +300,104 @@ class ActivityServiceTest : BaseUnitTest() {
             assertTrue(activity.confirmed)
         }
     }
+
+    @Test
+    fun `primary JIT receipt is created once with net value and actual skim after settlement`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+        val settled = jitPayment()
+        withLightningActivities { saved ->
+            sut.syncLdkNodePaymentsToActivities(listOf(settled.copy(status = PaymentStatus.PENDING)))
+            assertTrue(saved.isEmpty())
+
+            sut.syncLdkNodePaymentsToActivities(listOf(settled))
+            sut.syncLdkNodePaymentsToActivities(listOf(settled))
+
+            val receipt = saved.values.single()
+            assertEquals(settled.id, receipt.v1.id)
+            assertEquals(PaymentType.RECEIVED, receipt.v1.txType)
+            assertEquals(PaymentState.SUCCEEDED, receipt.v1.status)
+            assertEquals(19_880uL, receipt.v1.value)
+            assertEquals(120uL, receipt.v1.fee)
+            assertEquals(19_880uL, receipt.totalValue())
+            assertEquals("primary-invoice", receipt.v1.invoice)
+            assertEquals("receive note", receipt.v1.message)
+            assertEquals("preimage", receipt.v1.preimage)
+        }
+    }
+
+    @Test
+    fun `JIT receipt updates existing row without losing metadata or duplicating legacy history`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+        val payment = jitPayment()
+        val existing = LightningActivity.create(
+            id = payment.id,
+            txType = PaymentType.RECEIVED,
+            status = PaymentState.PENDING,
+            value = 20_000uL,
+            invoice = "primary-invoice",
+            timestamp = 50uL,
+            message = "saved note",
+            contact = "saved contact",
+            seenAt = 55uL,
+        )
+        val legacy = existing.copy(id = "legacy-funding-tx", value = 25_000uL, fee = 0uL, invoice = "legacy-invoice")
+        withLightningActivities { saved ->
+            saved[payment.id] = Activity.Lightning(existing)
+            saved[legacy.id] = Activity.Lightning(legacy)
+
+            sut.syncLdkNodePaymentsToActivities(listOf(payment))
+
+            assertEquals(2, saved.size)
+            assertEquals(Activity.Lightning(legacy), saved[legacy.id])
+            val updated = requireNotNull(saved[payment.id]).v1
+            assertEquals(19_880uL, updated.value)
+            assertEquals(120uL, updated.fee)
+            assertEquals(existing.message, updated.message)
+            assertEquals(existing.contact, updated.contact)
+            assertEquals(existing.seenAt, updated.seenAt)
+            assertEquals(20_000uL, Activity.Lightning(updated.copy(txType = PaymentType.SENT)).totalValue())
+        }
+    }
+
+    private fun jitPayment() = PaymentDetails(
+        id = "primary-payment",
+        kind = PaymentKind.Bolt11Jit(
+            hash = "primary-payment",
+            preimage = "preimage",
+            secret = null,
+            counterpartySkimmedFeeMsat = 120_000uL,
+            lspFeeLimits = LspFeeLimits(120_000uL, null),
+            description = "receive note",
+            bolt11 = "primary-invoice",
+        ),
+        amountMsat = 19_880_000uL,
+        feePaidMsat = null,
+        direction = PaymentDirection.INBOUND,
+        status = PaymentStatus.SUCCEEDED,
+        latestUpdateTimestamp = 100uL,
+    )
+
+    private suspend fun withLightningActivities(block: suspend (MutableMap<String, Activity.Lightning>) -> Unit) =
+        ServiceQueue.CORE.background {
+            val saved = mutableMapOf<String, Activity.Lightning>()
+            val upsert = binding.getMethod("upsertActivity", Activity::class.java)
+            mockStatic(binding).use { native ->
+                native.`when`<Any?> { getActivityById.invoke(null, anyString(), anyString()) }.thenAnswer {
+                    saved[it.getArgument<String>(1)]
+                }
+                native.`when`<Any?> { upsert.invoke(null, any(Activity::class.java)) }.thenAnswer {
+                    val activity = it.getArgument<Activity.Lightning>(0)
+                    saved[activity.v1.id] = activity
+                    Unit
+                }
+                native.`when`<Any?> { updateActivity.invoke(null, anyString(), any(Activity::class.java)) }.thenAnswer {
+                    val activity = it.getArgument<Activity.Lightning>(1)
+                    saved[activity.v1.id] = activity
+                    Unit
+                }
+                block(saved)
+            }
+        }
 
     private suspend fun withOnchainActivities(
         transactionId: String,

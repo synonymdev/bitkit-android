@@ -15,6 +15,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -23,6 +25,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.DirectFundingRequestDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.WordCount
 import to.bitkit.async.appScope
@@ -32,6 +35,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.calculateRemoteBalance
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
@@ -40,13 +44,17 @@ import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
+import to.bitkit.models.DirectFundingReceiveLink
 import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.models.WalletScope
+import to.bitkit.models.hasCommittedFunding
 import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toBalance
 import to.bitkit.models.toDerivationPath
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
+import to.bitkit.services.PrimaryWalletPendingError
+import to.bitkit.services.PrimaryWalletService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
@@ -74,6 +82,7 @@ class WalletRepo @Inject constructor(
     private val transferRepo: TransferRepo,
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
+    private val primaryWalletService: PrimaryWalletService,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
@@ -84,6 +93,7 @@ class WalletRepo @Inject constructor(
     val balanceState = _balanceState.asStateFlow()
 
     private var eventSyncJob: Job? = null
+    private var primaryFundingJob: Job? = null
     private val receiveStateMutex = Mutex()
     private val receiveUpdateStatusLock = Any()
     private var pendingReceiveUpdates = 0
@@ -96,6 +106,7 @@ class WalletRepo @Inject constructor(
             lightningRepo.nodeEventUpdates.collect { update ->
                 if (!walletExists()) return@collect
                 runSuspendCatching {
+                    invalidateSettledDirectFundingReceives(update.event)
                     refreshBip21ForEvent(
                         event = update.event,
                         settledReceiveInvoice = update.settledReceiveInvoice,
@@ -108,8 +119,132 @@ class WalletRepo @Inject constructor(
             }
         }
         repoScope.launch {
+            combine(settingsStore.data, lightningRepo.lightningState) { settings, lightning ->
+                val primary = settings.primaryNodeUri
+                Triple(
+                    primary,
+                    lightning.nodeLifecycleState.isRunning(),
+                    lightning.peers.any {
+                        it.nodeId == primary.substringBefore('@') && it.isConnected
+                    }
+                )
+            }.distinctUntilChanged().collect { (primary, running, connected) ->
+                if (!running || cacheStore.data.first().directFundingReceiveLinks.isEmpty()) return@collect
+                cacheStore.update { cache ->
+                    cache.copy(
+                        directFundingReceiveLinks = cache.directFundingReceiveLinks.map {
+                            if (it.primaryUri != primary || !connected) it.copy(invalidated = true) else it
+                        }
+                    )
+                }
+                reconcileDirectFundingReceives()
+            }
+        }
+        repoScope.launch {
             hwWalletRepo.wallets.collect { wallets ->
                 _balanceState.update { state -> state.copy(hardwareWallets = wallets.map { it.toBalance() }) }
+            }
+        }
+    }
+
+    suspend fun retainDirectFundingReceive(
+        request: DirectFundingRequestDetails,
+        invoice: String,
+        address: String,
+        primaryUri: String,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val lightningHash = when (val decoded = coreService.decode(invoice)) {
+                is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
+                is Scanner.OnChain -> decoded.extractLightningHash()
+                else -> null
+            }
+            val link = DirectFundingReceiveLink(
+                request.requestId,
+                lightningHash,
+                address,
+                primaryUri,
+                request.expiresAt
+            )
+            cacheStore.update { cache ->
+                cache.copy(
+                    directFundingReceiveLinks = cache.directFundingReceiveLinks.map {
+                        it.copy(invalidated = true)
+                    } + link
+                )
+            }
+            reconcileDirectFundingReceives()
+        }
+    }
+
+    private suspend fun invalidateSettledDirectFundingReceives(event: Event) {
+        if (cacheStore.data.first().directFundingReceiveLinks.isEmpty()) return
+        cacheStore.update { cache ->
+            cache.copy(
+                directFundingReceiveLinks = cache.directFundingReceiveLinks.map { link ->
+                    val settled = when (event) {
+                        is Event.PaymentReceived -> link.lightningPaymentHash == event.paymentHash
+                        is Event.OnchainTransactionReceived -> event.details.outputs.any {
+                            it.scriptpubkeyAddress == link.onchainAddress
+                        }
+                        else -> false
+                    }
+                    if (settled) link.copy(invalidated = true) else link
+                }
+            )
+        }
+        reconcileDirectFundingReceives()
+    }
+
+    suspend fun invalidateDirectFundingReceive(requestId: String): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            cacheStore.update { cache ->
+                cache.copy(
+                    directFundingReceiveLinks = cache.directFundingReceiveLinks.map {
+                        if (it.requestId == requestId) it.copy(invalidated = true) else it
+                    }
+                )
+            }
+            reconcileDirectFundingReceives()
+        }
+    }
+
+    suspend fun consumeDirectFundingReceive(requestId: String): Result<Unit> = updateReceiveState {
+        runSuspendCatching {
+            val links = cacheStore.data.first().directFundingReceiveLinks
+            val current = links.lastOrNull()?.takeIf { it.requestId == requestId }
+            if (current != null) {
+                _walletState.update { it.copy(lastDirectFundingReceiveRequestId = requestId) }
+                setBolt11Locked("")
+            }
+            cacheStore.update { cache ->
+                cache.copy(
+                    directFundingReceiveLinks = cache.directFundingReceiveLinks.filter {
+                        it.requestId != requestId
+                    }
+                )
+            }
+            if (current != null) updateBip21InvoiceLocked().getOrThrow()
+        }
+    }
+
+    private suspend fun reconcileDirectFundingReceives() {
+        val now = nowMillis().coerceAtLeast(0).toULong()
+        val links = cacheStore.data.first().directFundingReceiveLinks
+        if (links.isEmpty()) return
+        lightningRepo.listDirectFundingPayments().getOrNull().orEmpty().filter {
+            !it.isOutbound && it.status.hasCommittedFunding(isOutbound = false) &&
+                links.any { link -> link.requestId == it.requestId }
+        }.forEach { consumeDirectFundingReceive(it.requestId).getOrThrow() }
+        val removed = links.filter { link ->
+            link.expiresAt <= now || link.invalidated &&
+                lightningRepo.invalidateDirectFundingRequest(link.requestId).isSuccess
+        }.map { it.requestId }.toSet()
+        if (removed.isNotEmpty()) {
+            cacheStore.update { cache ->
+                cache.copy(
+                    directFundingReceiveLinks = cache.directFundingReceiveLinks.filter { it.requestId !in removed }
+                )
             }
         }
     }
@@ -386,6 +521,7 @@ class WalletRepo @Inject constructor(
             syncBalances()
             lightningRepo.sync().onSuccess {
                 syncBalances()
+                schedulePrimaryFunding()
             }.onFailure {
                 if (it is TimeoutCancellationException) {
                     syncBalances()
@@ -422,9 +558,22 @@ class WalletRepo @Inject constructor(
         eventSyncJob?.cancel()
         eventSyncJob = repoScope.launch {
             delay(EVENT_SYNC_DEBOUNCE_MS)
+            lightningRepo.refreshChannelsAndPeers()
             syncBalances()
             transferRepo.syncTransferStates()
             activityRepo.syncActivities()
+            schedulePrimaryFunding()
+        }
+    }
+
+    private fun schedulePrimaryFunding() {
+        if (primaryFundingJob?.isActive == true) return
+        primaryFundingJob = repoScope.launch {
+            primaryWalletService.fundIfNeeded().onFailure {
+                if (it !is PrimaryWalletPendingError) {
+                    Logger.warn("Failed to fund the primary channel", it, context = TAG)
+                }
+            }
         }
     }
 
@@ -1004,6 +1153,7 @@ class WalletRepo @Inject constructor(
 @Immutable
 data class WalletState(
     val onchainAddress: String = "",
+    val lastDirectFundingReceiveRequestId: String? = null,
     val bolt11: String = "",
     val bip21: String = "",
     val hasReceiveInvoiceError: Boolean = false,

@@ -16,9 +16,12 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.DirectFundingPaymentStatus
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.DIRECT_FUNDING_ACTIVITY_PREFIX
 import to.bitkit.models.WalletScope
+import to.bitkit.models.hasCommittedFunding
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainPreparedReceipt
@@ -65,6 +68,38 @@ class SendPendingViewModel @Inject constructor(
         }
         findActivity(paymentHash)
         observeResolution(paymentHash)
+    }
+
+    fun initDirectFunding(requestId: String, amount: Long) {
+        if (isInitialized) return
+        isInitialized = true
+        _uiState.update { it.copy(amount = amount) }
+        viewModelScope.launch {
+            while (true) {
+                val payment = lightningRepo.listDirectFundingPayments().getOrNull()?.firstOrNull {
+                    it.requestId == requestId && it.isOutbound
+                }
+                if (payment != null) {
+                    activityRepo.syncDirectFundingPayments()
+                    val complete = payment.status == DirectFundingPaymentStatus.MEMPOOL_SEEN ||
+                        payment.status == DirectFundingPaymentStatus.CONFIRMED
+                    val failed = payment.status == DirectFundingPaymentStatus.FAILED ||
+                        payment.status == DirectFundingPaymentStatus.ABORTED
+                    _uiState.update {
+                        it.copy(
+                            amount = payment.amountSats.toLong(),
+                            currentTxid = payment.fundingTxid,
+                            activityId = (DIRECT_FUNDING_ACTIVITY_PREFIX + requestId)
+                                .takeIf { payment.status.hasCommittedFunding() },
+                            recoveredTxid = payment.fundingTxid.takeIf { complete },
+                            resolution = PendingPaymentResolution.Failure(payment.paymentHash).takeIf { failed },
+                        )
+                    }
+                    if (complete || failed) return@launch
+                }
+                delay(5.seconds)
+            }
+        }
     }
 
     // Local activity is only a Details target; it cannot resolve or acknowledge an on-chain send.

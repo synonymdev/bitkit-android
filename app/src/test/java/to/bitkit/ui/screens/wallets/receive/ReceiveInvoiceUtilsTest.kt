@@ -6,46 +6,93 @@ import kotlin.test.assertEquals
 class ReceiveInvoiceUtilsTest {
 
     @Test
-    fun `pending updates keep Details on the loading view`() {
-        for (tab in listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING)) {
+    fun `Auto advertises direct funding with both fallback rails`() {
+        assertEquals(
+            "bitcoin:address?amount=0.0002&lightning=lnbc1&bgnq=signed",
+            getInvoiceForTab(
+                tab = ReceiveTab.AUTO,
+                bip21 = "bitcoin:address?amount=0.0002&lightning=lnbc1",
+                bolt11 = "lnbc1",
+                primaryInvoice = null,
+                isNodeRunning = true,
+                onchainAddress = "address",
+                directFundingRequest = "signed",
+            ),
+        )
+    }
+
+    @Test
+    fun `Spending stays lightning only and stopped node removes direct route`() {
+        assertEquals(
+            "lnbc1",
+            getInvoiceForTab(
+                ReceiveTab.SPENDING,
+                "bitcoin:address",
+                "lnbc1",
+                null,
+                true,
+                onchainAddress = "address",
+                directFundingRequest = "signed",
+            ),
+        )
+        assertEquals(
+            "bitcoin:address",
+            getInvoiceForTab(
+                ReceiveTab.AUTO,
+                "bitcoin:address?lightning=lnbc1",
+                "lnbc1",
+                null,
+                false,
+                onchainAddress = "address",
+                directFundingRequest = "signed",
+            ),
+        )
+    }
+
+    @Test
+    fun `advertisement cannot leak into another receive amount address or invoice`() {
+        val advertisement = DirectFundingReceiveAdvertisement("signed", 20_000uL, "address", "invoice")
+        assertEquals("signed", advertisement.requestFor(20_000uL, "address", "invoice"))
+        assertEquals(null, advertisement.requestFor(30_000uL, "address", "invoice"))
+        assertEquals(null, advertisement.requestFor(20_000uL, "new-address", "invoice"))
+        assertEquals(null, advertisement.requestFor(20_000uL, "address", "new-invoice"))
+    }
+
+    @Test
+    fun `lightning invoice errors and updates leave bitcoin receive available`() {
+        for (updating in listOf(false, true)) {
             assertEquals(
-                ReceiveInvoiceDisplayMode.LOADING,
-                getReceiveInvoiceDisplayMode(tab, null, hasInvoiceError = false, isUpdating = true, showDetails = true),
+                ReceiveInvoiceDisplayMode.DETAILS,
+                getReceiveInvoiceDisplayMode(
+                    ReceiveTab.AUTO,
+                    null,
+                    hasInvoiceError = true,
+                    isUpdating = updating,
+                    showDetails = true,
+                ),
             )
         }
     }
 
     @Test
-    fun `terminal invoice failure overrides Details while retry shows loading`() {
+    fun `lightning details show error or loading while ordinary invoice is unavailable`() {
         assertEquals(
             ReceiveInvoiceDisplayMode.ERROR,
-            getReceiveInvoiceDisplayMode(
-                ReceiveTab.AUTO,
-                null,
-                hasInvoiceError = true,
-                isUpdating = false,
-                showDetails = true,
-            ),
+            getReceiveInvoiceDisplayMode(ReceiveTab.SPENDING, null, true, false, true),
         )
         assertEquals(
             ReceiveInvoiceDisplayMode.LOADING,
-            getReceiveInvoiceDisplayMode(
-                ReceiveTab.AUTO,
-                null,
-                hasInvoiceError = true,
-                isUpdating = true,
-                showDetails = true,
-            ),
+            getReceiveInvoiceDisplayMode(ReceiveTab.SPENDING, null, true, true, true),
         )
     }
 
     @Test
-    fun `confirmed CJIT Details remain available during receive updates`() {
+    fun `confirmed primary Details remain available during receive updates`() {
         assertEquals(
             ReceiveInvoiceDisplayMode.DETAILS,
             getReceiveInvoiceDisplayMode(
                 ReceiveTab.SPENDING,
-                "confirmed-cjit",
+                "confirmed-primary",
                 hasInvoiceError = true,
                 isUpdating = true,
                 showDetails = true,
@@ -57,12 +104,12 @@ class ReceiveInvoiceUtilsTest {
     fun `pending receive updates hide previous invoices on Auto and Spending`() {
         for (tab in listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING)) {
             assertEquals(
-                "",
+                if (tab == ReceiveTab.AUTO) "bitcoin:address" else "",
                 getInvoiceForTab(
                     tab = tab,
                     bip21 = "bitcoin:address?lightning=old-invoice",
                     bolt11 = "old-invoice",
-                    cjitInvoice = null,
+                    primaryInvoice = null,
                     isNodeRunning = true,
                     onchainAddress = "address",
                     isReceiveInvoiceUpdating = true,
@@ -72,14 +119,14 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `pending receive updates preserve a confirmed CJIT invoice`() {
+    fun `pending receive updates preserve a confirmed primary invoice`() {
         assertEquals(
-            "confirmed-cjit",
+            "confirmed-primary",
             getInvoiceForTab(
                 tab = ReceiveTab.SPENDING,
                 bip21 = "bitcoin:address",
                 bolt11 = "old-invoice",
-                cjitInvoice = "confirmed-cjit",
+                primaryInvoice = "confirmed-primary",
                 isNodeRunning = true,
                 onchainAddress = "address",
                 isReceiveInvoiceUpdating = true,
@@ -93,7 +140,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.HARDWARE,
             bip21 = "bitcoin:software?lightning=lnbc1software",
             bolt11 = "lnbc1software",
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = "bc1qsoftware",
             hardwareAddress = "bc1qhardware",
@@ -108,7 +155,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.HARDWARE,
             bip21 = "bitcoin:software",
             bolt11 = "",
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = "bc1qsoftware",
             hardwareAddress = "bc1qhardware",
@@ -125,7 +172,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.HARDWARE,
             bip21 = "bitcoin:bc1qsoftware",
             bolt11 = "",
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = "bc1qsoftware",
             hardwareAddress = "bc1qhardware",
@@ -135,9 +182,34 @@ class ReceiveInvoiceUtilsTest {
         assertEquals("bitcoin:bc1qhardware", result)
     }
 
+    @Test
+    fun `approved primary invoice replaces old lightning while preserving bitcoin amount and note`() {
+        assertEquals(
+            "bitcoin:address?amount=0.001&message=Test&lightning=approved",
+            getInvoiceForTab(
+                tab = ReceiveTab.AUTO,
+                bip21 = "bitcoin:address?lightning=old&amount=0.001&message=Test",
+                bolt11 = "old",
+                primaryInvoice = "approved",
+                isNodeRunning = true,
+                canCreateLightningInvoice = false,
+                onchainAddress = "address",
+                isReceiveInvoiceUpdating = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `removing a first lightning parameter preserves a valid bitcoin query`() {
+        assertEquals(
+            "bitcoin:address?amount=0.001&message=Test",
+            removeLightningFromBip21("bitcoin:address?lightning=old&amount=0.001&message=Test", "address"),
+        )
+    }
+
     private val testAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
     private val testBolt11 = "lnbc1500n1pn2s39xpp5wyxw0e9fvvf..."
-    private val testCjitInvoice = "lnbc2000n1pn2s39xpp5zyxw0e9fvvf..."
+    private val testPrimaryInvoice = "lnbc2000n1pn2s39xpp5zyxw0e9fvvf..."
 
     @Test
     fun `getInvoiceForTab SAVINGS returns BIP21 without lightning parameter`() {
@@ -147,7 +219,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.SAVINGS,
             bip21 = bip21WithAmount,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = testAddress
         )
@@ -163,7 +235,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.SAVINGS,
             bip21 = bip21,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = testAddress
         )
@@ -179,7 +251,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.SAVINGS,
             bip21 = bip21WithoutLightning,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = testAddress
         )
@@ -193,7 +265,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.SAVINGS,
             bip21 = "",
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = testAddress
         )
@@ -209,7 +281,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.SAVINGS,
             bip21 = bip21OnlyLightning,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = testAddress
         )
@@ -225,7 +297,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.AUTO,
             bip21 = bip21,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = testAddress
         )
@@ -241,7 +313,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.AUTO,
             bip21 = bip21,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = false,
             onchainAddress = testAddress
         )
@@ -250,19 +322,19 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab AUTO stays loading until the unified invoice is ready`() {
+    fun `getInvoiceForTab AUTO keeps onchain receive available while lightning prepares`() {
         val bip21WithoutLightning = "bitcoin:$testAddress?amount=0.001&message=Test"
 
         val result = getInvoiceForTab(
             tab = ReceiveTab.AUTO,
             bip21 = bip21WithoutLightning,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = testAddress
         )
 
-        assertEquals("", result)
+        assertEquals(bip21WithoutLightning, result)
     }
 
     @Test
@@ -273,7 +345,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.AUTO,
             bip21 = bip21WithoutLightning,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = false,
             onchainAddress = testAddress
         )
@@ -289,7 +361,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.AUTO,
             bip21 = bip21,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             canCreateLightningInvoice = false,
             onchainAddress = testAddress
@@ -306,7 +378,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.AUTO,
             bip21 = bip21LightningFirst,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = testAddress
         )
@@ -315,30 +387,30 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab SPENDING returns CJIT invoice when available and node running`() {
+    fun `getInvoiceForTab SPENDING returns primary invoice when available and node running`() {
         val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
 
         val result = getInvoiceForTab(
             tab = ReceiveTab.SPENDING,
             bip21 = bip21,
             bolt11 = testBolt11,
-            cjitInvoice = testCjitInvoice,
+            primaryInvoice = testPrimaryInvoice,
             isNodeRunning = true,
             onchainAddress = testAddress
         )
 
-        assertEquals(testCjitInvoice, result)
+        assertEquals(testPrimaryInvoice, result)
     }
 
     @Test
-    fun `getInvoiceForTab SPENDING returns bolt11 when CJIT unavailable and lightning invoice can be created`() {
+    fun `getInvoiceForTab SPENDING returns bolt11 when primary unavailable and lightning invoice can be created`() {
         val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
 
         val result = getInvoiceForTab(
             tab = ReceiveTab.SPENDING,
             bip21 = bip21,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             onchainAddress = testAddress
         )
@@ -354,7 +426,7 @@ class ReceiveInvoiceUtilsTest {
             tab = ReceiveTab.SPENDING,
             bip21 = bip21,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = true,
             canCreateLightningInvoice = false,
             onchainAddress = testAddress
@@ -364,14 +436,14 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab SPENDING returns empty when node not running even with CJIT`() {
+    fun `getInvoiceForTab SPENDING returns empty when node not running even with primary`() {
         val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
 
         val result = getInvoiceForTab(
             tab = ReceiveTab.SPENDING,
             bip21 = bip21,
             bolt11 = testBolt11,
-            cjitInvoice = testCjitInvoice,
+            primaryInvoice = testPrimaryInvoice,
             isNodeRunning = false,
             onchainAddress = testAddress
         )
@@ -380,14 +452,14 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab SPENDING returns empty when node not running and no CJIT`() {
+    fun `getInvoiceForTab SPENDING returns empty when node not running and no primary`() {
         val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
 
         val result = getInvoiceForTab(
             tab = ReceiveTab.SPENDING,
             bip21 = bip21,
             bolt11 = testBolt11,
-            cjitInvoice = null,
+            primaryInvoice = null,
             isNodeRunning = false,
             onchainAddress = testAddress
         )

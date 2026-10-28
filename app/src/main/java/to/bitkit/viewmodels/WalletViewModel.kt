@@ -35,7 +35,6 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
-import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
@@ -65,7 +64,6 @@ class WalletViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
     private val backupRepo: BackupRepo,
-    private val blocktankRepo: BlocktankRepo,
     private val pubkyRepo: PubkyRepo,
     private val migrationService: MigrationService,
     private val connectivityRepo: ConnectivityRepo,
@@ -614,7 +612,6 @@ class WalletViewModel @Inject constructor(
     }
 
     fun refreshReceiveState() = viewModelScope.launch {
-        launch { blocktankRepo.refreshInfo() }
         walletRepo.refreshReceiveState().onFailure { error ->
             ToastEventBus.send(
                 type = Toast.ToastType.ERROR,

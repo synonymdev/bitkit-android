@@ -63,6 +63,10 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.DirectFundingPaymentDetails
+import org.lightningdevkit.ldknode.DirectFundingPaymentStatus
+import org.lightningdevkit.ldknode.DirectFundingRequestDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
@@ -104,6 +108,7 @@ import to.bitkit.data.dto.PlatformDetails
 import to.bitkit.data.dto.Platforms
 import to.bitkit.data.dto.ReleaseInfoDTO
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.domain.commands.NotifyChannelReady
 import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
@@ -772,6 +777,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
             .thenReturn(Result.failure(Exception("not mocked")))
+        whenever { lightningRepo.maximumPrimaryOnchainSendable(any(), any(), anyOrNull()) }
+            .thenReturn(Result.success(null))
+        whenever { lightningRepo.shouldUsePrimaryForOnchain(any(), any(), any()) }
+            .thenReturn(Result.success(false))
         whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(100uL))
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
@@ -5727,7 +5736,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.addTagToSelected("manual")
 
         sut.sendEffect.test {
-            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
             advanceUntilIdle()
             expectNoEvents()
 
@@ -5742,7 +5751,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `manual funding switch keeps amount entry and empty savings hardware cycle`() = test {
+    fun `funding switch keeps amount entry and cycles between bitcoin and hardware`() = test {
         settingsData.value = SettingsData(coinSelectAuto = false)
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
@@ -5757,14 +5766,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
                 assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
                 assertEquals(amount, sut.sendUiState.value.amount)
-                assertNull(sut.sendUiState.value.hardwareWalletId)
-                assertFalse(sut.sendUiState.value.isAmountInputValid)
+                assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
                 expectNoEvents()
 
                 sut.setSendEvent(SendEvent.PaymentMethodSwitch)
                 advanceUntilIdle()
 
-                assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+                assertNull(sut.sendUiState.value.hardwareWalletId)
+                assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
                 assertEquals(amount, sut.sendUiState.value.amount)
                 expectNoEvents()
             }
@@ -5827,6 +5836,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `higher fee reduces primary maximum and invalidates amount without changing recipient amount`() = test {
+        whenever(lightningRepo.maximumPrimaryOnchainSendable(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(900uL))
+        balanceState.value = BalanceState(maxSendOnchainSats = 10_000uL)
+        setUnifiedState(amount = 1_000uL, payMethod = SendMethod.ONCHAIN)
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(900uL, sut.maximumOnchainSendableSats())
+        assertEquals(1_000uL, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `automatic coin selection preserves primary funding when direct funds cannot cover the fee`() = test {
+        whenever(lightningRepo.shouldUsePrimaryForOnchain(any(), any(), any()))
+            .thenReturn(Result.success(true))
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        setUnifiedState(amount = 1_000u, payMethod = SendMethod.LIGHTNING)
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        advanceUntilIdle()
+
+        assertNull(sut.sendUiState.value.selectedUtxos)
+        verify(lightningRepo, never()).determineUtxosToSpend(any(), any())
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
+    }
+
+    @Test
     fun `automatic savings switch keeps preparing coins while tags change`() = test {
         val selectionStarted = CompletableDeferred<Unit>()
         val finishSelection = CompletableDeferred<Unit>()
@@ -5843,7 +5883,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         setUnifiedState(amount = 1_000u, payMethod = SendMethod.LIGHTNING)
 
         sut.sendEffect.test {
-            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
             selectionStarted.await()
             sut.addTagToSelected("automatic")
             finishSelection.complete(Unit)
@@ -5944,8 +5984,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 sut.sendEffect.test {
                     sut.setSendEvent(SendEvent.SwipeToPay)
                     settingsReadStarted.await()
-                    repeat(if (destination == "savings") 2 else 1) {
-                        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                    val targets = when (destination) {
+                        "hardware" -> listOf(SendFundingSource.Hardware(HARDWARE_WALLET_ID))
+                        "savings" -> listOf(SendFundingSource.Spending, SendFundingSource.Savings)
+                        else -> listOf(SendFundingSource.Spending)
+                    }
+                    targets.forEach { source ->
+                        sut.setSendEvent(SendEvent.PaymentMethodSelect(source))
                         advanceUntilIdle()
                     }
                     val current = sut.sendUiState.value
@@ -5978,7 +6023,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertTrue(sut.sendUiState.value.confirmedWarnings.isNotEmpty())
 
-        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
         advanceUntilIdle()
 
         assertTrue(sut.sendUiState.value.confirmedWarnings.isEmpty())
@@ -5993,7 +6038,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         setUnifiedState(amount = 1000u, payMethod = SendMethod.ONCHAIN)
         advanceUntilIdle()
 
-        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
         assertFalse(sut.sendUiState.value.isFundingSourceLoading)
         advanceUntilIdle()
 
@@ -7753,6 +7798,74 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed signed direct funding blocks unified request rescan and stale Lightning confirmation`() = test {
+        val bolt11 = "lnbcrt1failedfundingfallback"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.0002&lightning=$bolt11&bgnq=signed_request"
+        val request = DirectFundingRequestDetails(
+            request = "signed_request",
+            requestId = "failed-signed-request",
+            paymentHash = "12".repeat(32),
+            receiverNodeId = FOREIGN_NODE_ID,
+            amountSats = 20_000uL,
+            expiresAt = 1_800_000_000_000uL,
+        )
+        val failed = DirectFundingPaymentDetails(
+            requestId = request.requestId,
+            paymentHash = request.paymentHash,
+            amountSats = 20_000uL,
+            feeSats = 155uL,
+            fundingTxid = "34".repeat(32),
+            status = DirectFundingPaymentStatus.FAILED,
+            isOutbound = true,
+            createdAt = 1_700_000_000_000uL,
+        )
+        stubUnifiedScan(uri, bolt11, 20_000uL, FOREIGN_NODE_ID.fromHex())
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL, maxSendLightningSats = 100_000uL)
+        whenever(lightningRepo.directFundingRequestFromBip21(uri, 20_000uL, bolt11))
+            .thenReturn(Result.success(request))
+        whenever(lightningRepo.listDirectFundingPayments()).thenReturn(Result.success(listOf(failed)))
+        whenever(lightningRepo.decodeDirectFundingRequest(request.request)).thenReturn(Result.success(request))
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success("lightning-hash"))
+        sut.setIsAuthenticated(true)
+        sut.showSheet(Sheet.Send(SendRoute.QrScanner))
+        advanceUntilIdle()
+        val expected = SendEffect.NavigateToPending(
+            paymentHash = requireNotNull(failed.fundingTxid),
+            amount = 20_000L,
+            observeResolution = false,
+            isOnchain = true,
+            directFundingRequestId = request.requestId,
+        )
+
+        sut.sendEffect.test {
+            sut.onScanResult(uri)
+            advanceUntilIdle()
+            assertEquals(expected, awaitItem())
+            expectNoEvents()
+        }
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 20_000uL,
+                isUnified = true,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 20_000uL, FOREIGN_NODE_ID.fromHex()),
+                directFundingRequest = request,
+            ),
+        )
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(expected, awaitItem())
+            expectNoEvents()
+        }
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), any())
+        verify(lightningRepo, never()).sendDirectFunding(request.request, 20_000uL, 1_000uL)
+        verify(lightningRepo, never()).decodeDirectFundingRequest(request.request)
+    }
+
+    @Test
     fun `unified scan with foreign lightning invoice keeps lightning`() = test {
         val bolt11 = "lnbcrt1foreignunified"
         val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
@@ -8775,7 +8888,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(10_000uL, sut.sendUiState.value.amount)
 
-        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
         advanceUntilIdle()
         assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
         assertTrue(sut.sendUiState.value.isAmountEditable)
@@ -8807,7 +8920,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.setSendEvent(SendEvent.PaymentMethodSwitch)
             advanceUntilIdle()
             assertFalse(sut.sendUiState.value.paykitUsesUsdt)
-            assertEquals(if (it % 2 == 0) SendMethod.LIGHTNING else SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
         }
     }
 
@@ -9010,7 +9123,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 assertEquals("The minimum amount for this invoice is ₿ 547.", it.description)
             },
         )
-        verify(context, never()).getString(R.string.other__pay_insufficient_savings_amount_description)
+        verify(context, never()).getString(R.string.wallet_primary__insufficient_amount)
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
     }
@@ -9086,8 +9199,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val request = paymentRequest()
         stubIncomingOnchainRequest(request)
         balanceState.value = BalanceState(maxSendOnchainSats = 1_000u)
-        whenever(context.getString(R.string.other__pay_insufficient_savings)).thenReturn("Insufficient Savings")
-        whenever(context.getString(R.string.other__pay_insufficient_savings_amount_description))
+        whenever(context.getString(R.string.wallet_primary__insufficient)).thenReturn("Insufficient Savings")
+        whenever(context.getString(R.string.wallet_primary__insufficient_amount))
             .thenReturn("₿ {amount} more needed to pay this Bitcoin invoice.")
         whenever(formatMoneyValue(1_500uL)).thenReturn("1500")
         sut.setIsAuthenticated(true)
@@ -10939,7 +11052,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = request)
         setUnifiedState(amount = request.amount.atomic / 2u, payMethod = SendMethod.LIGHTNING)
         sut.sendEffect.test {
-            sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+            sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToAmount, awaitItem())
             assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
@@ -11076,7 +11189,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
         setUnifiedState(amount = 1_000u, payMethod = SendMethod.LIGHTNING)
-        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
         selectionStarted.await()
         setSendState(
             sut.sendUiState.value.copy(
@@ -12926,6 +13039,75 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `primary channel ready never shows legacy spending setup toast`() = test {
+        val primaryNodeId = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        settingsData.update { it.copy(primaryNodeUri = "$primaryNodeId@127.0.0.1:9735") }
+        whenever(notifyChannelReadyHandler(any())).thenReturn(Result.success(NotifyChannelReady.Result.Skip))
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.ChannelReady(
+                channelId = "primary-channel",
+                userChannelId = "primary-user-channel",
+                counterpartyNodeId = primaryNodeId,
+                fundingTxo = null,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(notifyChannelReadyHandler).invoke(any())
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `primary channel ready without event peer resolves channel before suppressing setup toast`() = test {
+        val primaryNodeId = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        settingsData.update { it.copy(primaryNodeUri = "$primaryNodeId@127.0.0.1:9735") }
+        whenever(notifyChannelReadyHandler(any())).thenReturn(Result.success(NotifyChannelReady.Result.Skip))
+        val channel = mock<ChannelDetails> {
+            on { channelId } doReturn "primary-channel"
+            on { counterpartyNodeId } doReturn primaryNodeId
+        }
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(channel))
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.ChannelReady(
+                channelId = "primary-channel",
+                userChannelId = "primary-user-channel",
+                counterpartyNodeId = null,
+                fundingTxo = null,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `non-primary channel ready preserves legacy setup toast`() = test {
+        val primaryNodeId = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        settingsData.update { it.copy(primaryNodeUri = "$primaryNodeId@127.0.0.1:9735") }
+        whenever(notifyChannelReadyHandler(any())).thenReturn(Result.success(NotifyChannelReady.Result.Skip))
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.ChannelReady(
+                channelId = "legacy-channel",
+                userChannelId = "legacy-user-channel",
+                counterpartyNodeId = "legacy-node",
+                fundingTxo = null,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(check { assertEquals("SpendingBalanceReadyToast", it.testTag) })
+    }
+
+    @Test
     fun `channel ready refreshes public Paykit endpoints when sharing enabled`() = test {
         enablePublicPaykitSharing()
         advanceUntilIdle()
@@ -14168,7 +14350,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(5_000uL, sut.sendUiState.value.amount)
         sut.sendEffect.test {
             for ((method, amount) in listOf(SendMethod.ONCHAIN to 2_500uL, SendMethod.LIGHTNING to 5_000uL)) {
-                sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                sut.setSendEvent(
+                    SendEvent.PaymentMethodSelect(
+                        if (method == SendMethod.ONCHAIN) SendFundingSource.Savings else SendFundingSource.Spending
+                    )
+                )
                 advanceUntilIdle()
                 expectNoEvents()
                 assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
@@ -14229,7 +14415,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                     ),
                 ).takeUnless { failure == "unavailable" } ?: request
                 setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = target, endpoints = endpoints)
-                sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Spending))
                 advanceUntilIdle()
                 assertEquals(SendEffect.NavigateToAmount, awaitItem())
                 assertFalse(sut.sendUiState.value.shouldConfirmPay)

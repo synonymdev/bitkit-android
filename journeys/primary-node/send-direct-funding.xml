@@ -1,0 +1,22 @@
+<journey name="send direct channel funding">
+  <description>
+    Requires two compatible wallets and a primary on the same regtest chain. The sender has one
+    confirmed onchain coin covering 20000 sats plus the 1000-sat fee ceiling, with automatic primary
+    funding paused or no configured primary. Obtain a real signed URI from the receiver. Repeat for
+    fresh-channel and splice receiving with LDK and Beignet providers. Android-only feature.
+  </description>
+  <actions>
+    <action>Open the receiver's fresh 20000 sat Bitcoin URI in the sender through its bitcoin deep link</action>
+    <action>If Lightning is selected, open the source selector and choose Direct channel funding (testTag "SendFundingSourceDirectFunding")</action>
+    <action>Continue to confirmation and tap Show Details (testTag "SendConfirmToggleDetails")</action>
+    <action>Verify the Direct channel funding label and the receiver node ID (testTag "DirectFundingReceiver"); scroll within the expanded details as needed and verify a maximum network fee of 1000 sats (testTag "DirectFundingMaximumFee")</action>
+    <action>Cancel before swiping and verify neither wallet has a new direct-funding activity</action>
+    <action>Open the same request again, select Direct channel funding, review and swipe to pay</action>
+    <action>Verify the sender shows success only after the funding transaction is observed, or shows a pending result while its outcome is unresolved</action>
+    <action>Reopen the same request while pending and verify it opens the existing result without offering another send or a Lightning fallback</action>
+    <action>Mine the funding transaction and refresh both wallets; verify exactly one sent direct-funding activity and exactly one incoming channel-credit activity for 20000 sats, with no own-wallet funding-transfer debit on the receiver</action>
+    <action>Restart both wallets and verify the same confirmed activity records remain, then open the request again and verify no second payment is sent</action>
+    <action>Open a copy with an empty or repeated bgnq parameter and verify it is rejected without payment confirmation or fallback</action>
+    <action>Repeat request entry on a sender with only channel balance and no confirmed onchain coin; verify Direct channel funding cannot be submitted</action>
+  </actions>
+</journey>

@@ -43,6 +43,7 @@ fun ActivityIcon(
     isCpfpChild: Boolean = false,
     isHardware: Boolean = false,
     contact: PubkyProfile? = null,
+    isPrimaryFunding: Boolean = false,
 ) {
     val isLightning = activity is Activity.Lightning
     val isBoosting = activity.isBoosting()
@@ -51,6 +52,13 @@ fun ActivityIcon(
     val arrowIcon = painterResource(if (txType == PaymentType.SENT) R.drawable.ic_sent else R.drawable.ic_received)
 
     when {
+        isPrimaryFunding -> CircularIcon(
+            icon = painterResource(R.drawable.ic_lightning),
+            iconColor = Colors.Purple,
+            backgroundColor = Colors.Purple16,
+            size = size,
+            modifier = modifier.testTag("PrimaryFundingIcon"),
+        )
         isCpfpChild || isBoosting -> {
             CircularIcon(
                 icon = painterResource(R.drawable.ic_timer_alt),

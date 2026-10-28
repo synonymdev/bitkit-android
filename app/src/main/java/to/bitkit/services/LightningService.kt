@@ -1,6 +1,7 @@
 package to.bitkit.services
 
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.FeeRates
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -31,6 +32,8 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Config
 import org.lightningdevkit.ldknode.ConfirmationStatus
+import org.lightningdevkit.ldknode.DirectFundingPaymentDetails
+import org.lightningdevkit.ldknode.DirectFundingRequestDetails
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
@@ -45,6 +48,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.PrimaryReceiveQuote
 import org.lightningdevkit.ldknode.PublicKey
 import org.lightningdevkit.ldknode.ScoringFeeParameters
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -66,11 +70,14 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.PrimaryNode
+import to.bitkit.models.PrimaryNodeError
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.msatFloorOf
+import to.bitkit.models.safe
 import to.bitkit.models.toAddressType
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
@@ -153,14 +160,18 @@ class LightningService internal constructor(
     private val watchOnlyAccountStore: WatchOnlyAccountStore,
     private val loggerLdk: LoggerLdk,
     private val watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
-    private val ldkQueue: CoroutineContext,
+    private val ldkQueue: CoroutineContext = ServiceQueue.LDK.queueContext,
     private val onchainFeeRateFactory: (ULong) -> FeeRate = { FeeRate.fromSatPerVbUnchecked(it) },
     private val clock: Clock = Clock.System,
+    private val primaryPeerTransport: PrimaryPeerTransport = TcpPrimaryPeerTransport,
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
         private const val TAG = "LightningService"
         private const val RELEASE_FEE_ATTEMPTS = 4
+
+        /** Extra inbound capacity requested alongside a primary receive. */
+        private const val PRIMARY_INBOUND_HEADROOM_SATS = 10_000uL
 
         /** A small fixed payment to a new wallet address; the rest returns as change, which pays the fee. */
         private const val RELEASE_AMOUNT_SATS = 1_000uL
@@ -205,6 +216,7 @@ class LightningService internal constructor(
         watchOnlyAccountStore: WatchOnlyAccountStore,
         loggerLdk: LoggerLdk,
         watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
+        primaryPeerTransport: IrohPeerTransport,
         clock: Clock = Clock.System,
     ) : this(
         bgDispatcher = bgDispatcher,
@@ -217,6 +229,7 @@ class LightningService internal constructor(
         watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
         ldkQueue = ServiceQueue.LDK.queueContext,
         clock = clock,
+        primaryPeerTransport = primaryPeerTransport,
     )
 
     @Volatile
@@ -268,9 +281,7 @@ class LightningService internal constructor(
     ): Config {
         val dirPath = Env.ldkStoragePath(walletIndex)
 
-        this.trustedPeers = trustedPeers?.takeIf { it.isNotEmpty() } ?: Env.trustedLnPeers.also {
-            Logger.warn("Missing trusted peers from LSP, falling back to preconfigured env peers", context = TAG)
-        }
+        this.trustedPeers = trustedPeers.orEmpty()
 
         val trustedPeerNodeIds = this.trustedPeers.map { it.nodeId }
 
@@ -316,6 +327,7 @@ class LightningService internal constructor(
             setScoringFeeParams(scorerFeeParameters())
             setAddressType(selectedType)
             setAddressTypesToMonitor(monitoredTypes)
+            trustedPeers.singleOrNull()?.let { setPrimaryNode(it.nodeId) }
 
             if (channelMigration != null) {
                 setChannelDataMigration(channelMigration)
@@ -499,6 +511,7 @@ class LightningService internal constructor(
         listenerJob = null
 
         val node = this@LightningService.node ?: run {
+            primaryPeerTransport.close()
             Logger.debug("Node already stopped", context = TAG)
             return@withContext
         }
@@ -511,7 +524,11 @@ class LightningService internal constructor(
                 }
             this@LightningService.node = null
         }
-        releaseHandle(node)
+        try {
+            primaryPeerTransport.close()
+        } finally {
+            releaseHandle(node)
+        }
         Logger.info("Node stopped", context = TAG)
     }
 
@@ -584,6 +601,7 @@ class LightningService internal constructor(
     }
 
     fun aresRequiredPeersInNetworkGraph(): Boolean {
+        if (trustedPeers.isEmpty()) return true
         val node = this.node ?: return true
         val graph = node.networkGraph()
 
@@ -743,35 +761,66 @@ class LightningService internal constructor(
 
         ServiceQueue.LDK.background(ldkQueue) {
             for (peer in trustedPeers) {
-                try {
-                    node.connect(peer.nodeId, peer.address, persist = true)
+                runSuspendCatching {
+                    node.connect(peer.nodeId, primaryPeerTransport.address(peer.nodeId, peer.address), persist = true)
                     Logger.info("Connected to trusted peer: $peer", context = TAG)
-                } catch (e: NodeException) {
-                    Logger.error("Peer connect error: $peer", LdkError(e), context = TAG)
+                }.onFailure {
+                    Logger.error("Peer connect error: $peer", it, context = TAG)
                 }
             }
-
-            verifyTrustedPeersOrFallback(node)
         }
     }
 
-    private fun verifyTrustedPeersOrFallback(node: Node) {
-        val connectedPeerIds = node.listPeers().map { it.nodeId }.toSet()
-        val trustedConnected = trustedPeers.count { it.nodeId in connectedPeerIds }
+    suspend fun resolvePrimaryNode(primary: PrimaryNode): PrimaryNode = ServiceQueue.LDK.background(ldkQueue) {
+        if (primary.address != null) return@background primary
+        settingsStore.data.first().primaryNodeUri.takeIf { it.isNotBlank() }
+            ?.let(PrimaryNode::parse)
+            ?.takeIf { it.nodeId == primary.nodeId && it.address?.startsWith("iroh:") == true }
+            ?.let { return@background it }
+        val runningNode = node ?: throw ServiceError.NodeNotStarted()
+        val address = runningNode.listPeers().firstOrNull { it.nodeId == primary.nodeId }?.address
+            ?: runningNode.networkGraph().node(primary.nodeId)?.announcementInfo?.addresses?.firstOrNull()
+            ?: throw PrimaryNodeError.AddressUnknown()
+        primary.copy(address = address)
+    }
 
-        if (trustedConnected == 0 && trustedPeers.isNotEmpty()) {
-            Logger.warn("No trusted peers connected, falling back to preconfigured env peers", context = TAG)
-            for (peer in Env.trustedLnPeers) {
-                try {
-                    node.connect(peer.nodeId, peer.address, persist = true)
-                    Logger.info("Connected to fallback peer: $peer", context = TAG)
-                } catch (e: NodeException) {
-                    Logger.error("Fallback peer connect error: $peer", LdkError(e), context = TAG)
-                }
-            }
-        } else {
-            Logger.info("Connected to $trustedConnected/${trustedPeers.size} trusted peers", context = TAG)
+    suspend fun checkPrimaryConnection(nodeId: String): Unit = ServiceQueue.LDK.background(ldkQueue) {
+        val runningNode = node ?: throw ServiceError.NodeNotStarted()
+        runningNode.checkPrimaryConnection(nodeId)
+    }
+
+    suspend fun quotePrimaryReceive(nodeId: String, amountMsat: ULong): PrimaryReceiveQuote =
+        ServiceQueue.LDK.background(ldkQueue) {
+            val runningNode = node ?: throw ServiceError.NodeNotStarted()
+            runningNode.quotePrimaryReceive(nodeId, amountMsat, PRIMARY_INBOUND_HEADROOM_SATS)
         }
+
+    suspend fun receiveViaPrimary(
+        nodeId: String,
+        amountMsat: ULong,
+        description: String,
+        expirySecs: UInt,
+        maxFeeMsat: ULong,
+    ): String = ServiceQueue.LDK.background(ldkQueue) {
+        val runningNode = node ?: throw ServiceError.NodeNotStarted()
+        runningNode.receiveViaPrimary(
+            nodeId,
+            amountMsat,
+            Bolt11InvoiceDescription.Direct(description),
+            expirySecs,
+            maxFeeMsat,
+            PRIMARY_INBOUND_HEADROOM_SATS,
+        ).toString()
+    }
+
+    suspend fun estimatedFeeRates(): FeeRates = ServiceQueue.LDK.background(ldkQueue) {
+        val runningNode = node ?: throw ServiceError.NodeNotStarted()
+        val rates = runningNode.estimatedFeeRates()
+        FeeRates(
+            fast = rates.fastSatPerVbyte.toUInt(),
+            mid = rates.normalSatPerVbyte.toUInt(),
+            slow = rates.slowSatPerVbyte.toUInt(),
+        )
     }
 
     suspend fun connectPeer(peer: PeerDetails): Result<Unit> {
@@ -779,18 +828,23 @@ class LightningService internal constructor(
         val uri = peer.uri
 
         return ServiceQueue.LDK.background(ldkQueue) {
-            try {
+            runSuspendCatching {
                 Logger.debug("Connecting peer: $uri", context = TAG)
-                node.connect(peer.nodeId, peer.address, persist = true)
+                node.connect(peer.nodeId, primaryPeerTransport.address(peer.nodeId, peer.address), persist = true)
                 Logger.info("Peer connected: $uri", context = TAG)
-                Result.success(Unit)
-            } catch (e: NodeException) {
-                val error = LdkError(e)
+                Unit
+            }.recoverCatching { e ->
+                val error = if (e is NodeException) LdkError(e) else e
                 Logger.error("Peer connect error: $uri", error, context = TAG)
-                Result.failure(error)
+                throw error
             }
         }
     }
+
+    suspend fun primaryPeerAddress(primary: PrimaryNode): String = primaryPeerTransport.address(
+        primary.nodeId,
+        requireNotNull(primary.address) { "The primary node needs a connection address." },
+    )
 
     suspend fun disconnectPeer(peer: PeerDetails): Result<Unit> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
@@ -832,13 +886,13 @@ class LightningService internal constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         return ServiceQueue.LDK.background(ldkQueue) {
-            try {
+            runSuspendCatching {
                 val pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u }
                 Logger.debug("Initiating channel open (sats: '$channelAmountSats') with: '${peer.uri}'", context = TAG)
 
                 val userChannelId = node.openChannel(
                     peer.nodeId,
-                    peer.address,
+                    primaryPeerTransport.address(peer.nodeId, peer.address),
                     channelAmountSats,
                     pushToCounterpartyMsat,
                     channelConfig,
@@ -854,11 +908,11 @@ class LightningService internal constructor(
 
                 Logger.info("Channel open initiated, result: $result", context = TAG)
 
-                Result.success(result)
-            } catch (e: NodeException) {
-                val error = LdkError(e)
+                result
+            }.recoverCatching { e ->
+                val error = if (e is NodeException) LdkError(e) else e
                 Logger.error("Error initiating channel open", error, context = TAG)
-                Result.failure(error)
+                throw error
             }
         }
     }
@@ -872,11 +926,6 @@ class LightningService internal constructor(
         val channelId = channel.channelId
         val userChannelId = channel.userChannelId
         val counterpartyNodeId = channel.counterpartyNodeId
-
-        // Prevent force closing channels with trusted peers (LSP nodes)
-        if (force && isTrustedPeer(counterpartyNodeId)) {
-            throw TrustedPeerForceCloseException()
-        }
 
         try {
             ServiceQueue.LDK.background(ldkQueue) {
@@ -928,6 +977,53 @@ class LightningService internal constructor(
         }
 
         return true
+    }
+
+    suspend fun createDirectFundingRequest(amountSats: ULong?): DirectFundingRequestDetails =
+        ServiceQueue.LDK.background(ldkQueue) {
+            val node = node ?: throw ServiceError.NodeNotSetup()
+            node.createDirectFundingRequest(amountSats, 600u)
+        }
+
+    suspend fun invalidateDirectFundingRequest(requestId: String): Unit = ServiceQueue.LDK.background(ldkQueue) {
+        val node = node ?: throw ServiceError.NodeNotSetup()
+        node.invalidateDirectFundingRequest(requestId)
+    }
+
+    suspend fun decodeDirectFundingRequest(request: String): DirectFundingRequestDetails =
+        ServiceQueue.LDK.background(ldkQueue) {
+            val node = node ?: throw ServiceError.NodeNotSetup()
+            node.decodeDirectFundingRequest(request)
+        }
+
+    suspend fun sendDirectFunding(
+        request: String,
+        amountSats: ULong,
+        maxFeeSats: ULong,
+    ): DirectFundingPaymentDetails = callOnchainSend {
+        val node = node ?: throw ServiceError.NodeNotSetup()
+        node.sendDirectFunding(request, amountSats, maxFeeSats)
+    }
+
+    suspend fun listDirectFundingPayments(): List<DirectFundingPaymentDetails> =
+        ServiceQueue.LDK.background(ldkQueue) {
+            val node = node ?: throw ServiceError.NodeNotSetup()
+            node.listDirectFundingPayments()
+        }
+
+    suspend fun maximumDirectFundingAmount(maxFeeSats: ULong): ULong = callOnchainSend {
+        val node = node ?: throw ServiceError.NodeNotSetup()
+        val confirmedTxids = node.listPayments().mapNotNull {
+            (it.kind as? PaymentKind.Onchain)?.takeIf { payment ->
+                payment.status is ConfirmationStatus.Confirmed
+            }?.txid
+        }.toSet()
+        val confirmed = node.onchainPayment().listSpendableOutputs().filter { it.outpoint.txid in confirmedTxids }
+        val total = confirmed.fold(0uL) { value, coin -> value.safe() + coin.valueSats.safe() }
+        val reserve = node.listBalances().totalAnchorChannelsReserveSats
+        val largest = confirmed.filter { total.safe() - it.valueSats.safe() >= reserve }
+            .maxOfOrNull { it.valueSats } ?: 0uL
+        largest.safe() - maxFeeSats.safe()
     }
 
     suspend fun receive(
@@ -1399,6 +1495,12 @@ class LightningService internal constructor(
     @Volatile
     private var shouldListenForEvents = true
 
+    @Volatile
+    var beforeEventAcknowledged: NodeEventHandler? = null
+
+    @Volatile
+    var onEventAcknowledged: NodeEventHandler? = null
+
     suspend fun startEventListener(onEvent: NodeEventHandler? = null): Result<Unit> = runSuspendCatching {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         // A re-arm requested from inside an event handler runs on the listener job itself: joining it
@@ -1433,9 +1535,12 @@ class LightningService internal constructor(
             }
 
             Logger.debug("LDK event fired: ${jsonLogOf(event)}", context = TAG)
+            beforeEventAcknowledged?.invoke(event)
             runCatching { node.eventHandled() }
                 .onSuccess { Logger.verbose("LDK eventHandled: '$event'", context = TAG) }
                 .onFailure { Logger.verbose("LDK eventHandled error: '$event'", it, context = TAG) }
+                .getOrThrow()
+            onEventAcknowledged?.invoke(event)
             onEvent?.invoke(event)
         }
     }
@@ -1544,10 +1649,6 @@ data class NetworkGraphInfo(
     val nodeCount: Int,
     val channelCount: Int,
     val latestRgsSyncTimestamp: ULong?,
-)
-
-class TrustedPeerForceCloseException : AppError(
-    "Cannot force close channel with trusted peer. Force close is disabled for Blocktank LSP channels."
 )
 
 class NetworkGraphCacheDeleteError : AppError("Failed to delete network graph cache")

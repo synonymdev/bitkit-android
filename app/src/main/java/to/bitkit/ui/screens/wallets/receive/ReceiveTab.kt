@@ -3,6 +3,8 @@ package to.bitkit.ui.screens.wallets.receive
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.theme.Colors
@@ -20,8 +22,8 @@ enum class ReceiveTab : TabItem {
         @Composable
         get() = when (this) {
             SAVINGS -> stringResource(R.string.wallet__receive_tab_savings)
-            AUTO -> stringResource(R.string.wallet__receive_tab_auto)
-            SPENDING -> stringResource(R.string.wallet__receive_tab_spending)
+            AUTO -> stringResource(R.string.wallet_primary__bitcoin)
+            SPENDING -> stringResource(R.string.wallet_primary__lightning)
             USDT -> "USDT"
             HARDWARE -> stringResource(R.string.hardware__receive_tab_hardware)
         }
@@ -35,3 +37,11 @@ enum class ReceiveTab : TabItem {
             HARDWARE -> Colors.Blue
         }
 }
+
+internal fun visibleReceiveTabs(hasHardwareWallet: Boolean, usdtEnabled: Boolean): ImmutableList<ReceiveTab> =
+    buildList {
+        if (hasHardwareWallet) add(ReceiveTab.HARDWARE)
+        add(ReceiveTab.AUTO)
+        add(ReceiveTab.SPENDING)
+        if (usdtEnabled) add(ReceiveTab.USDT)
+    }.toImmutableList()

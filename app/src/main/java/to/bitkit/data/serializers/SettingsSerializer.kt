@@ -5,12 +5,13 @@ import kotlinx.serialization.SerializationException
 import to.bitkit.data.SettingsData
 import to.bitkit.data.withDefaultPaykitPaymentMethods
 import to.bitkit.di.json
+import to.bitkit.env.Env
 import to.bitkit.utils.Logger
 import java.io.InputStream
 import java.io.OutputStream
 
 object SettingsSerializer : Serializer<SettingsData> {
-    override val defaultValue: SettingsData = SettingsData()
+    override val defaultValue: SettingsData = SettingsData(primaryNodeUri = Env.defaultPrimaryNodeUri)
 
     override suspend fun readFrom(input: InputStream): SettingsData {
         return try {
@@ -18,7 +19,7 @@ object SettingsSerializer : Serializer<SettingsData> {
                 .withDefaultPaykitPaymentMethods()
         } catch (e: SerializationException) {
             Logger.error("Failed to deserialize: $e")
-            defaultValue
+            SettingsData()
         }
     }
 

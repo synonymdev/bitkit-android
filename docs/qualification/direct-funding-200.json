@@ -1,0 +1,248 @@
+{
+  "build": 200,
+  "version_name": "3.0.1",
+  "built_at_utc": "2026-10-27T11:33:28.834066+00:00",
+  "source": {
+    "branch": "feat/primary-node-wallet",
+    "head": "dd143eeb98ab61aa98b0c581b4c0e34bea96acef",
+    "working_tree_changes_included": true,
+    "production_tracked_diff_sha256": "e9c44cca7dc6595a249cb3d95cf590b8ae230ba27dcbb5c6e11e17b6dbf9a826",
+    "untracked_production_source_sha256": {
+      "app/src/main/java/to/bitkit/models/DirectFunding.kt": "d6c11ee167faebe3165869a3061c8b61b4be8e6a628c16819a092b5500451df4",
+      "app/src/main/java/to/bitkit/models/PrimaryNode.kt": "6972b7bce47bdf2ad5b3c744742b62d6ba75cbbab226cff48b46525b1eba307a",
+      "app/src/main/java/to/bitkit/repositories/DirectFundingActivity.kt": "975839a72008f279d211fcd2fe70e6419f5e255efc39799839891eb4ce34f870",
+      "app/src/main/java/to/bitkit/repositories/PrimaryNodeRepo.kt": "4de0b50faf61b7cdbaa2f5f6e9604afa499da1cfa4d27c96510ecb82e05b543b",
+      "app/src/main/java/to/bitkit/services/PrimaryWalletError.kt": "b78445ea020c2771b7dc51795851b7708ffe59585f1900ea4c0649a7d564eb7a",
+      "app/src/main/java/to/bitkit/services/PrimaryWalletNodeService.kt": "03a27f5534bce75ae57944f6efece942aff7ba225f459337a2cd66bd10b0f7bd",
+      "app/src/main/java/to/bitkit/services/PrimaryWalletOperationStore.kt": "ba1055d10a2de6bd2d2568180af85b416de073894c2c35e6f45901c0fc5cf971",
+      "app/src/main/java/to/bitkit/services/PrimaryWalletService.kt": "290e6f719912eeb71e034d560912b6f2aab314d17716c5cad21676e05d2ae305",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/receive/DirectFundingReceiveViewModel.kt": "d16bbeb5674bcaa223bf93a6d92539a01b55d153da07fbdcd27c4e33f58cf843",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/receive/PrimaryReceiveConfirmScreen.kt": "500f44b35e6ae2a28cc3b1b94c248100453d231e6d159620926c003a443d032b",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/receive/PrimaryReceiveViewModel.kt": "6d74562d6eab4a5321c7883e0db3315a3a04838c333488c3f237408d13f6e00b",
+      "app/src/main/java/to/bitkit/ui/settings/primaryNode/PrimaryNodeScreen.kt": "b55ba2967ef2c2c2ee704804d18e61281599b30bf2803de3fdb7244b35decd78",
+      "app/src/main/java/to/bitkit/ui/settings/primaryNode/PrimaryNodeViewModel.kt": "e02bee9023c943c2111c0dff87ef4bb882d90a6530c532615a094b0606feb89b",
+      "app/src/main/java/to/bitkit/viewmodels/SendFundingOptions.kt": "e392946b0d66ea55cdfcc582a9d3c006f9b10b1c82437d0bae1f32a3ea32485b"
+    }
+  },
+  "native_aar": {
+    "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/.local-native/ldk-node-direct-funding-200.aar",
+    "sha256": "f2c95398bed9ac387f548bddc8b4d27edcd908541a527734d1d05e892122690c"
+  },
+  "checks": {
+    "mainnet": {
+      "command": [
+        "./gradlew",
+        "-I",
+        "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-mainnet/direct-funding-200/application-id.init.gradle",
+        "assembleMainnetDebug",
+        "--console=plain"
+      ],
+      "build_config": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/generated/source/buildConfig/mainnet/debug/to/bitkit/BuildConfig.java",
+      "build_config_fields": {
+        "APPLICATION_ID": "to.bitkit.primary",
+        "NETWORK": "BITCOIN",
+        "E2E_BACKEND": "network"
+      },
+      "artifacts": [
+        {
+          "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-mainnet/direct-funding-200/bitkit-primary-mainnet-debug-200-arm64-v8a.apk",
+          "abi": "arm64-v8a",
+          "bytes": 221199148,
+          "sha256": "2a2bdb308b7fb552283ddd911427e2da659d98e883d0c3fc75ea87a6d60ed739",
+          "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+          "application_id": "to.bitkit.primary",
+          "label": "Bitkit Primary",
+          "version_code": 200,
+          "network": "BITCOIN",
+          "e2e": false,
+          "zip_alignment": "passed",
+          "packaged_build_config_verified": true,
+          "ldk_native_sha256": {
+            "arm64-v8a": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3"
+          },
+          "ldk_native_matches_supplied_aar": true,
+          "delivery_path": "/Users/coreyphillips/Desktop/app-release/bitkit-android/bitkit-primary-mainnet-debug-200-arm64-v8a.apk"
+        },
+        {
+          "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-mainnet/direct-funding-200/bitkit-primary-mainnet-debug-200-universal.apk",
+          "abi": "universal",
+          "bytes": 363401244,
+          "sha256": "07990100ff7b39b8b61ce4cc7d73e5e14192f9c1e8a257dc59b5715dee8de956",
+          "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+          "application_id": "to.bitkit.primary",
+          "label": "Bitkit Primary",
+          "version_code": 200,
+          "network": "BITCOIN",
+          "e2e": false,
+          "zip_alignment": "passed",
+          "packaged_build_config_verified": true,
+          "ldk_native_sha256": {
+            "arm64-v8a": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3",
+            "armeabi-v7a": "2cf15b59b2a5e831822cc1404b83c6a81607cddee3760481c0ca324db9284cde",
+            "x86_64": "e08de64cd52c3d9a1b82b6a4611a46ab6f76bb80f3cd04c77bd6d6e561c0c234"
+          },
+          "ldk_native_matches_supplied_aar": true,
+          "delivery_path": "/Users/coreyphillips/Desktop/app-release/bitkit-android/bitkit-primary-mainnet-debug-200-universal.apk"
+        }
+      ]
+    },
+    "regtest": {
+      "command": [
+        "./gradlew",
+        "-I",
+        "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-regtest/direct-funding-200/application-id.init.gradle",
+        "assembleDevDebug",
+        "--console=plain"
+      ],
+      "build_config": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/generated/source/buildConfig/dev/debug/to/bitkit/BuildConfig.java",
+      "build_config_fields": {
+        "APPLICATION_ID": "to.bitkit.primary.regtest",
+        "NETWORK": "REGTEST",
+        "E2E_BACKEND": "local",
+        "E2E_ELECTRUM_URL": "tcp://192.168.50.211:60401",
+        "E2E_HOMEGATE_URL": "https://homegate.staging.pubky.app"
+      },
+      "artifacts": [
+        {
+          "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-regtest/direct-funding-200/bitkit-primary-regtest-debug-200-arm64-v8a.apk",
+          "abi": "arm64-v8a",
+          "bytes": 221199168,
+          "sha256": "07ac69b4d000abf98b156f0fded417a0a4f9ed8292144a2867d308d546db4837",
+          "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+          "application_id": "to.bitkit.primary.regtest",
+          "label": "Bitkit Primary Regtest",
+          "version_code": 200,
+          "network": "REGTEST",
+          "e2e": true,
+          "zip_alignment": "passed",
+          "packaged_build_config_verified": true,
+          "ldk_native_sha256": {
+            "arm64-v8a": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3"
+          },
+          "ldk_native_matches_supplied_aar": true,
+          "delivery_path": "/Users/coreyphillips/Desktop/app-release/bitkit-android/bitkit-primary-regtest-debug-200-arm64-v8a.apk"
+        },
+        {
+          "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-regtest/direct-funding-200/bitkit-primary-regtest-debug-200-universal.apk",
+          "abi": "universal",
+          "bytes": 363401264,
+          "sha256": "ad38853cee10912d906ce9aa5cbb4cac77c0569f0d4f55efad9259d292e6a86e",
+          "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+          "application_id": "to.bitkit.primary.regtest",
+          "label": "Bitkit Primary Regtest",
+          "version_code": 200,
+          "network": "REGTEST",
+          "e2e": true,
+          "zip_alignment": "passed",
+          "packaged_build_config_verified": true,
+          "ldk_native_sha256": {
+            "arm64-v8a": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3",
+            "armeabi-v7a": "2cf15b59b2a5e831822cc1404b83c6a81607cddee3760481c0ca324db9284cde",
+            "x86_64": "e08de64cd52c3d9a1b82b6a4611a46ab6f76bb80f3cd04c77bd6d6e561c0c234"
+          },
+          "ldk_native_matches_supplied_aar": true,
+          "delivery_path": "/Users/coreyphillips/Desktop/app-release/bitkit-android/bitkit-primary-regtest-debug-200-universal.apk"
+        }
+      ]
+    }
+  },
+  "artifacts": [
+    {
+      "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-mainnet/direct-funding-200/bitkit-primary-mainnet-debug-200-arm64-v8a.apk",
+      "abi": "arm64-v8a",
+      "bytes": 221199148,
+      "sha256": "2a2bdb308b7fb552283ddd911427e2da659d98e883d0c3fc75ea87a6d60ed739",
+      "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+      "application_id": "to.bitkit.primary",
+      "label": "Bitkit Primary",
+      "version_code": 200,
+      "network": "BITCOIN",
+      "e2e": false,
+      "zip_alignment": "passed",
+      "packaged_build_config_verified": true,
+      "ldk_native_sha256": {
+        "arm64-v8a": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3"
+      },
+      "ldk_native_matches_supplied_aar": true,
+      "delivery_path": "/Users/coreyphillips/Desktop/app-release/bitkit-android/bitkit-primary-mainnet-debug-200-arm64-v8a.apk"
+    },
+    {
+      "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-mainnet/direct-funding-200/bitkit-primary-mainnet-debug-200-universal.apk",
+      "abi": "universal",
+      "bytes": 363401244,
+      "sha256": "07990100ff7b39b8b61ce4cc7d73e5e14192f9c1e8a257dc59b5715dee8de956",
+      "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+      "application_id": "to.bitkit.primary",
+      "label": "Bitkit Primary",
+      "version_code": 200,
+      "network": "BITCOIN",
+      "e2e": false,
+      "zip_alignment": "passed",
+      "packaged_build_config_verified": true,
+      "ldk_native_sha256": {
+        "arm64-v8a": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3",
+        "armeabi-v7a": "2cf15b59b2a5e831822cc1404b83c6a81607cddee3760481c0ca324db9284cde",
+        "x86_64": "e08de64cd52c3d9a1b82b6a4611a46ab6f76bb80f3cd04c77bd6d6e561c0c234"
+      },
+      "ldk_native_matches_supplied_aar": true,
+      "delivery_path": "/Users/coreyphillips/Desktop/app-release/bitkit-android/bitkit-primary-mainnet-debug-200-universal.apk"
+    },
+    {
+      "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-regtest/direct-funding-200/bitkit-primary-regtest-debug-200-arm64-v8a.apk",
+      "abi": "arm64-v8a",
+      "bytes": 221199168,
+      "sha256": "07ac69b4d000abf98b156f0fded417a0a4f9ed8292144a2867d308d546db4837",
+      "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+      "application_id": "to.bitkit.primary.regtest",
+      "label": "Bitkit Primary Regtest",
+      "version_code": 200,
+      "network": "REGTEST",
+      "e2e": true,
+      "zip_alignment": "passed",
+      "packaged_build_config_verified": true,
+      "ldk_native_sha256": {
+        "arm64-v8a": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3"
+      },
+      "ldk_native_matches_supplied_aar": true,
+      "delivery_path": "/Users/coreyphillips/Desktop/app-release/bitkit-android/bitkit-primary-regtest-debug-200-arm64-v8a.apk"
+    },
+    {
+      "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/bitkit-primary-regtest/direct-funding-200/bitkit-primary-regtest-debug-200-universal.apk",
+      "abi": "universal",
+      "bytes": 363401264,
+      "sha256": "ad38853cee10912d906ce9aa5cbb4cac77c0569f0d4f55efad9259d292e6a86e",
+      "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+      "application_id": "to.bitkit.primary.regtest",
+      "label": "Bitkit Primary Regtest",
+      "version_code": 200,
+      "network": "REGTEST",
+      "e2e": true,
+      "zip_alignment": "passed",
+      "packaged_build_config_verified": true,
+      "ldk_native_sha256": {
+        "arm64-v8a": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3",
+        "armeabi-v7a": "2cf15b59b2a5e831822cc1404b83c6a81607cddee3760481c0ca324db9284cde",
+        "x86_64": "e08de64cd52c3d9a1b82b6a4611a46ab6f76bb80f3cd04c77bd6d6e561c0c234"
+      },
+      "ldk_native_matches_supplied_aar": true,
+      "delivery_path": "/Users/coreyphillips/Desktop/app-release/bitkit-android/bitkit-primary-regtest-debug-200-universal.apk"
+    }
+  ],
+  "additional_packaged_dex_checks": {
+    "both_networks": {
+      "FEATURE_PAYKIT_UI_DISABLED": false,
+      "E2E_HOMESERVER_PUBKY": "",
+      "TREZOR_BRIDGE": false
+    },
+    "independent_read_only_check": "passed"
+  },
+  "signing": "Existing custom Bitkit Primary debug signing key; package IDs unchanged, version code increases from 199 to 200.",
+  "test_basis": "Production source and native AAR are unchanged from the completed direct-funding qualification (4,523 Android tests). This request rebuilt custom packages and verified artifacts; it did not rerun payment journeys or install either APK.",
+  "prior_qualification": "docs/qualification/direct-funding-android.json",
+  "limitations": [
+    "Custom Firebase placeholder configuration retains the previous lack of Firebase push.",
+    "Regtest requires access to the Mint LAN Electrum endpoint tcp://192.168.50.211:60401.",
+    "No mainnet payment or device installation was performed for these builds."
+  ],
+  "temporary_google_configs_removed": true
+}

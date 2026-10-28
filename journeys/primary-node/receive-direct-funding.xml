@@ -1,0 +1,17 @@
+<journey name="receive direct channel funding">
+  <description>
+    Requires the rebuilt native direct-funding client and an online compatible primary on regtest,
+    as described in the suite README. Use a separate funded sender to inspect and pay the copied URI.
+    Repeat with no receiving channel, then with an existing receiving channel. Android-only feature.
+  </description>
+  <actions>
+    <action>Open Receive, select Bitcoin, set an amount of 20000 sats and return to the QR</action>
+    <action>Tap Copy (testTag "ReceiveCopyQR") and inspect the copied URI in the compatible sender; verify it contains the Bitcoin address, amount=0.0002 and one nonempty bgnq parameter</action>
+    <action>If a Lightning invoice is available, verify the same URI retains its lightning parameter; select the Lightning tab and verify Copy contains only that Lightning invoice</action>
+    <action>Return to Bitcoin, change the amount to 30000 sats and copy again; verify the amount and signed direct-funding request change together</action>
+    <action>Disconnect the primary and verify a newly copied Bitcoin request has no bgnq parameter while its Bitcoin address remains available</action>
+    <action>Reconnect the primary, reopen Receive and copy the Bitcoin request; leave the QR open for ten minutes and verify the expired direct-funding parameter disappears</action>
+    <action>Create another 20000 sat request, copy it to the compatible sender, close Receive and pay its Lightning or Bitcoin fallback once; reopen Receive and verify the old direct request is no longer advertised</action>
+    <action>Verify the compatible sender rejects a later direct-funding attempt against that revoked request without committing a payer witness</action>
+  </actions>
+</journey>

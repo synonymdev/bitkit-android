@@ -31,6 +31,11 @@ class FcmService : FirebaseMessagingService() {
         private const val TAG = "FcmService"
     }
 
+    override fun onNewToken(token: String) {
+        super.onNewToken(token)
+        Logger.debug("Refreshed messaging token", context = TAG)
+    }
+
     private var notificationType: BlocktankNotificationType? = null
     private var notificationPayload: JsonObject? = null
 
@@ -150,11 +155,6 @@ class FcmService : FirebaseMessagingService() {
         } catch (_: SerializationException) {
             false
         }
-    }
-
-    override fun onNewToken(token: String) {
-        Logger.debug("Got new FCM token via FirebaseMessagingService.onNewToken: '$token'", context = TAG)
-        lightningRepo.registerForNotificationsAsync(token)
     }
 }
 

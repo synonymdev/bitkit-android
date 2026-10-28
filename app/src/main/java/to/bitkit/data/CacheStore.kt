@@ -14,6 +14,7 @@ import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BalanceState
+import to.bitkit.models.DirectFundingReceiveLink
 import to.bitkit.models.FxRate
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.QuickPayLedger
@@ -175,6 +176,7 @@ data class AppCacheData(
     val bolt11: String = "",
     val bolt11PaymentHash: String = "",
     val bip21: String = "",
+    val directFundingReceiveLinks: List<DirectFundingReceiveLink> = emptyList(),
     val balance: BalanceState? = null,
     val backupStatuses: Map<BackupCategory, BackupItemStatus> = mapOf(),
     val deletedActivities: List<String> = listOf(),

@@ -29,7 +29,9 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -52,19 +54,39 @@ fun CloseConnectionScreen(
         }
     }
 
-    Content(
+    CloseConnectionContent(
         isLoading = uiState.isLoading,
+        showForceCloseConfirmation = uiState.showForceCloseConfirmation,
+        onClickForceClose = viewModel::requestForceClose,
+        onCancelForceClose = viewModel::cancelForceClose,
+        onConfirmForceClose = { viewModel.confirmForceClose(channelId) },
         onBack = { navController.popBackStack() },
         onClickClose = { viewModel.closeChannel(channelId) },
     )
 }
 
 @Composable
-private fun Content(
+internal fun CloseConnectionContent(
     isLoading: Boolean = false,
+    showForceCloseConfirmation: Boolean = false,
+    onClickForceClose: () -> Unit = {},
+    onCancelForceClose: () -> Unit = {},
+    onConfirmForceClose: () -> Unit = {},
     onBack: () -> Unit = {},
     onClickClose: () -> Unit = {},
 ) {
+    if (showForceCloseConfirmation) {
+        AppAlertDialog(
+            title = stringResource(R.string.wallet_primary__force_close),
+            text = stringResource(R.string.wallet_primary__force_close_warning),
+            onConfirm = onConfirmForceClose,
+            onDismiss = onCancelForceClose,
+            confirmText = stringResource(R.string.wallet_primary__force_close),
+            confirmTextColor = Colors.Red,
+            confirmTestTag = "ForceCloseConfirm",
+            dismissTestTag = "ForceCloseCancel",
+        )
+    }
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__close_conn),
@@ -116,6 +138,13 @@ private fun Content(
                 )
             }
             VerticalSpacer(16.dp)
+            TertiaryButton(
+                text = stringResource(R.string.wallet_primary__force_close),
+                onClick = onClickForceClose,
+                enabled = !isLoading,
+                modifier = Modifier.testTag("ForceCloseConnection")
+            )
+            VerticalSpacer(16.dp)
         }
     }
 }
@@ -124,6 +153,6 @@ private fun Content(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Content()
+        CloseConnectionContent()
     }
 }

@@ -76,6 +76,23 @@ class NotificationsTimedSheetTest : BaseUnitTest() {
     }
 
     @Test
+    fun `primary lightning balance never triggers background payment onboarding`() = test {
+        settingsFlow.value = defaultSettings.copy(
+            primaryNodeUri = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798@127.0.0.1:9735",
+            notificationsGranted = false,
+            notificationsIgnoredMillis = 0,
+        )
+
+        assertFalse(sut.shouldShow())
+
+        whenever(walletRepo.balanceState).thenReturn(
+            MutableStateFlow(BalanceState(totalLightningSats = 200_000uL))
+        )
+
+        assertFalse(sut.shouldShow())
+    }
+
+    @Test
     fun `should not show within one week timeout`() = test {
         val sixDaysAgo = System.currentTimeMillis() - (6L * 24 * 60 * 60 * 1000)
         settingsFlow.value = defaultSettings.copy(

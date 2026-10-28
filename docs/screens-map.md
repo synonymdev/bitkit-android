@@ -135,7 +135,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | SavingsAvailabilityScreen.kt | Transfer to Savings (Channel Closure) › Transfer warning |
 | SavingsConfirmScreen.kt | Transfer to Savings (Channel Closure) › Transfer all funds to savings review |
 | SavingsIntroScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings |
-| SavingsProgressScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings progress 2 |
+| SavingsProgressScreen.kt | `todo` |
 | SettingUpScreen.kt | Funds In Transfer › Transfer to Spending Progress 1 |
 | SpendingAdvancedScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Confirm Advanced |
 | SpendingAmountScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Input |
@@ -171,8 +171,8 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| HardwareWalletScreen.kt | Hardware › Wallet Hardware |
-| HomeScreen.kt | Wallet On-chain › Wallet BTC |
+| HardwareWalletScreen.kt | `todo` |
+| HomeScreen.kt | `todo` |
 | SavingsWalletScreen.kt | Savings, Spending, Hardware Balances › Savings Populated |
 | SpendingWalletScreen.kt | Savings, Spending, Hardware Balances › Spending Ready |
 
@@ -189,12 +189,10 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| EditInvoiceScreen.kt | Send (Contact) (Lightning) › Edit invoice populated |
-| LocationBlockScreen.kt | Send (Enter Manually) › CJIT Location Block |
-| ReceiveAmountScreen.kt | Receive CJIT Onboarding › CJIT Enter amount |
-| ReceiveConfirmScreen.kt | Send (Enter Manually) › CJIT Fee to connect |
-| ReceiveLiquidityScreen.kt | Send (Hardware Device) (On-chain) › Liquidity fee |
-| ReceiveQrScreen.kt | Receive Lightning Active › Receive Auto (Unified QR) |
+| EditInvoiceScreen.kt | `todo` |
+| PrimaryReceiveConfirmScreen.kt | `todo` |
+| ReceiveAmountScreen.kt | `todo` |
+| ReceiveQrScreen.kt | `todo` |
 
 ## ui/screens/wallets/send
 
@@ -203,9 +201,9 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | AddTagScreen.kt | Send (Paste) (On-chain) › Tag |
 | HwSendSignScreen.kt | Send (Hardware Device) (On-chain) › Sign with Hardware Device |
 | SendAddressScreen.kt | Send (Paste) (On-chain) › Address and Invoice |
-| SendAmountScreen.kt | Send (Paste) (On-chain) › Set amount |
+| SendAmountScreen.kt | `todo` |
 | SendCoinSelectionScreen.kt | Send (Paste) (On-chain) › Coin selection |
-| SendConfirmScreen.kt | Send (Paste) (On-chain) › Confirm Send Onchain |
+| SendConfirmScreen.kt | `todo` |
 | SendContactSelectScreen.kt | Send (Contact) (Lightning) › Send to contact |
 | SendErrorScreen.kt | Send (Paste) (On-chain) › Transaction failed |
 | SendFeeCustomScreen.kt | Send (Paste) (On-chain) › Set custom fee |
@@ -319,8 +317,14 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | Android | Figma |
 | - | - |
 | ChannelDetailScreen.kt | Settings > Advanced › Connection details |
-| CloseConnectionScreen.kt | Settings > Advanced › Close connection |
-| LightningConnectionsScreen.kt | Settings > Advanced › Lightning Connections overview |
+| CloseConnectionScreen.kt | `todo` |
+| LightningConnectionsScreen.kt | `todo` |
+
+## ui/settings/primaryNode
+
+| Android | Figma |
+| - | - |
+| PrimaryNodeScreen.kt | `todo` |
 
 ## ui/settings/pin
 

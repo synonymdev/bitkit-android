@@ -5,8 +5,13 @@ import com.synonym.bitkitcore.PaymentState
 import to.bitkit.R
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
+import to.bitkit.ext.totalValue
 
-fun Activity.getScreenTitleRes(): Int {
+fun Activity.displayValue(isPrimaryFunding: Boolean = false): ULong =
+    if (isPrimaryFunding && this is Activity.Onchain && isSent()) v1.fee else totalValue()
+
+fun Activity.getScreenTitleRes(isPrimaryFunding: Boolean = false): Int {
+    if (isPrimaryFunding && this is Activity.Onchain && isSent()) return R.string.primary_node__funding_fee
     val isSent = this.isSent()
 
     if (this is Activity.Lightning && isSent && v1.status == PaymentState.PENDING) {

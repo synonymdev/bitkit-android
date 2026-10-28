@@ -62,7 +62,6 @@ import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.navigateTo
-import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -94,7 +93,7 @@ fun LightningConnectionsScreen(
     Content(
         uiState = uiState,
         onBack = { navController.popBackStack() },
-        onClickAddConnection = { navController.navigateToTransferFunding() },
+        onClickPrimaryNode = { navController.navigateTo(Routes.PrimaryNode()) },
         onClickExportLogs = {
             viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
         },
@@ -112,7 +111,7 @@ fun LightningConnectionsScreen(
 private fun Content(
     uiState: LightningConnectionsUiState,
     onBack: () -> Unit = {},
-    onClickAddConnection: () -> Unit = {},
+    onClickPrimaryNode: () -> Unit = {},
     onClickExportLogs: () -> Unit = {},
     onClickChannel: (ChannelUi) -> Unit = {},
     onRefresh: () -> Unit = {},
@@ -127,12 +126,12 @@ private fun Content(
             onBackClick = onBack,
             actions = {
                 IconButton(
-                    onClick = onClickAddConnection,
+                    onClick = onClickPrimaryNode,
                     modifier = Modifier.testTag("NavigationAction")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
-                        contentDescription = stringResource(R.string.lightning__conn_button_add),
+                        contentDescription = stringResource(R.string.primary_node__title),
                     )
                 }
             }
@@ -165,8 +164,8 @@ private fun Content(
                     EmptyStateContent(modifier = Modifier.weight(1f))
 
                     PrimaryButton(
-                        text = stringResource(R.string.lightning__conn_onboarding_button),
-                        onClick = onClickAddConnection,
+                        text = stringResource(R.string.primary_node__connect),
+                        onClick = onClickPrimaryNode,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag(LightningConnectionsTestTags.ADD_CONNECTION_BUTTON)
@@ -261,8 +260,8 @@ private fun Content(
                     )
                     VerticalSpacer(16.dp)
                     PrimaryButton(
-                        text = stringResource(R.string.lightning__conn_button_add),
-                        onClick = onClickAddConnection,
+                        text = stringResource(R.string.primary_node__title),
+                        onClick = onClickPrimaryNode,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag(LightningConnectionsTestTags.ADD_CONNECTION_BUTTON)
@@ -397,14 +396,14 @@ private fun EmptyStateContent(modifier: Modifier = Modifier) {
         }
 
         Display(
-            text = stringResource(R.string.lightning__conn_onboarding_title)
+            text = stringResource(R.string.primary_node__title)
                 .withAccent(accentColor = Colors.Purple),
         )
 
         VerticalSpacer(8.dp)
 
         BodyM(
-            text = stringResource(R.string.lightning__conn_onboarding_text),
+            text = stringResource(R.string.primary_node__description),
             color = Colors.White64,
         )
 

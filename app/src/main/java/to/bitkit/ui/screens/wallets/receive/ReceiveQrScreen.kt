@@ -5,7 +5,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
-import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -102,12 +101,13 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 @Suppress("CyclomaticComplexMethod")
 fun ReceiveQrScreen(
-    cjitInvoice: String?,
+    primaryInvoice: String?,
     walletState: WalletState,
     lightningState: LightningState,
     onClickEditInvoice: (ReceiveTab) -> Unit,
-    onClickReceiveCjit: () -> Unit,
+    onClickReceiveLightning: () -> Unit,
     modifier: Modifier = Modifier,
+    directFundingRequest: String? = null,
     onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.HARDWARE) },
     initialTab: ReceiveTab? = null,
     onClose: () -> Unit = {},
@@ -147,18 +147,8 @@ fun ReceiveQrScreen(
 
     val usdtEnabled by appViewModel?.isUsdtEnabled?.collectAsStateWithLifecycle()
         ?: remember { mutableStateOf(false) }
-    val visibleTabs = remember(canCreateLightningInvoice, cjitInvoice, hardwareWalletId, usdtEnabled) {
-        buildList {
-            if (hardwareWalletId != null) {
-                add(ReceiveTab.HARDWARE)
-            }
-            add(ReceiveTab.SAVINGS)
-            if (canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
-                add(ReceiveTab.AUTO)
-            }
-            add(ReceiveTab.SPENDING)
-            if (usdtEnabled && cjitInvoice == null) add(ReceiveTab.USDT)
-        }.toImmutableList()
+    val visibleTabs = remember(hardwareWalletId, usdtEnabled) {
+        visibleReceiveTabs(hardwareWalletId != null, usdtEnabled)
     }
     val defaultTab = remember(visibleTabs, initialTab) {
         initialTab?.takeIf { it in visibleTabs } ?: visibleTabs.defaultReceiveTab()
@@ -169,8 +159,11 @@ fun ReceiveQrScreen(
         walletState.bip21,
         walletState.bolt11,
         walletState.onchainAddress,
-        cjitInvoice,
+        primaryInvoice,
+        directFundingRequest,
         lightningState.nodeLifecycleState,
+        canCreateLightningInvoice,
+        walletState.hasReceiveInvoiceError,
         hardwareReceiveState.address,
         walletState.bip21AmountSats,
         walletState.bip21Description,
@@ -181,9 +174,10 @@ fun ReceiveQrScreen(
                 tab = tab,
                 bip21 = walletState.bip21,
                 bolt11 = walletState.bolt11,
-                cjitInvoice = cjitInvoice,
+                primaryInvoice = primaryInvoice,
+                directFundingRequest = directFundingRequest,
                 isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
-                canCreateLightningInvoice = canCreateLightningInvoice,
+                canCreateLightningInvoice = canCreateLightningInvoice && !walletState.hasReceiveInvoiceError,
                 onchainAddress = walletState.onchainAddress,
                 hardwareAddress = hardwareReceiveState.address?.address.orEmpty(),
                 hardwareAmountSats = walletState.bip21AmountSats,
@@ -213,7 +207,6 @@ fun ReceiveQrScreen(
     }
     var hasAppliedInitialTab by remember { mutableStateOf(false) }
     var appliedInitialTab by remember { mutableStateOf<ReceiveTab?>(null) }
-    var hasUserSelectedTab by remember { mutableStateOf(false) }
 
     LaunchedEffect(visibleTabs, initialTab) {
         val requestedTab = initialTab?.takeIf { it in visibleTabs }
@@ -231,16 +224,6 @@ fun ReceiveQrScreen(
             val fallbackTab = visibleTabs.defaultReceiveTab()
             selectedTab = fallbackTab
             lazyListState.scrollToItem(visibleTabs.pageIndexOf(fallbackTab))
-        }
-    }
-
-    LaunchedEffect(canCreateLightningInvoice, cjitInvoice, initialTab) {
-        if (initialTab == ReceiveTab.HARDWARE || initialTab == ReceiveTab.USDT || selectedTab == ReceiveTab.USDT) {
-            return@LaunchedEffect
-        }
-        if (!canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
-            selectedTab = ReceiveTab.SAVINGS
-            lazyListState.scrollToItem(visibleTabs.pageIndexOf(ReceiveTab.SAVINGS))
         }
     }
 
@@ -268,36 +251,10 @@ fun ReceiveQrScreen(
             }
     }
 
-    LaunchedEffect(lazyListState) {
-        lazyListState.interactionSource.interactions.collect {
-            if (it is DragInteraction.Start) hasUserSelectedTab = true
-        }
-    }
-
-    // Jump to AUTO tab without animation when it becomes available before the user picks a tab
-    LaunchedEffect(canCreateLightningInvoice, cjitInvoice) {
-        val shouldAutoSwitch = shouldAutoSwitchToAuto(
-            selectedTab = selectedTab,
-            hasUserSelectedTab = hasUserSelectedTab,
-            canCreateLightningInvoice = canCreateLightningInvoice,
-            cjitInvoice = cjitInvoice,
-            initialTab = initialTab,
-        )
-        if (!shouldAutoSwitch) return@LaunchedEffect
-        if (ReceiveTab.AUTO !in visibleTabs) return@LaunchedEffect
-        val autoPage = visibleTabs.pageIndexOf(ReceiveTab.AUTO)
-        if (lazyListState.firstVisibleItemIndex == autoPage) return@LaunchedEffect
-        lazyListState.scrollToItem(autoPage)
-        selectedTab = ReceiveTab.AUTO
-    }
-
-    // Auto-switch to Spending tab when CJIT is not null
-    LaunchedEffect(cjitInvoice) {
-        if (cjitInvoice != null) {
-            if (ReceiveTab.SPENDING in visibleTabs) {
-                lazyListState.animateScrollToItem(visibleTabs.pageIndexOf(ReceiveTab.SPENDING))
-                selectedTab = ReceiveTab.SPENDING
-            }
+    LaunchedEffect(primaryInvoice) {
+        if (primaryInvoice != null) {
+            lazyListState.scrollToItem(visibleTabs.pageIndexOf(ReceiveTab.AUTO))
+            selectedTab = ReceiveTab.AUTO
         }
     }
 
@@ -308,16 +265,15 @@ fun ReceiveQrScreen(
         }
     }
 
-    val showingCjitOnboarding = remember(lightningState, cjitInvoice, canCreateLightningInvoice) {
+    val showingLightningRequest = remember(lightningState, primaryInvoice, canCreateLightningInvoice) {
         !canCreateLightningInvoice &&
             lightningState.nodeLifecycleState.isRunning() &&
-            cjitInvoice.isNullOrEmpty()
+            primaryInvoice.isNullOrEmpty()
     }
 
     fun selectReceiveTab(tab: ReceiveTab) {
         val wrapsToFirst = selectedTab == visibleTabs.last() && tab == visibleTabs.first()
         selectedTab = tab
-        hasUserSelectedTab = true
         scope.launch {
             // The pager composes again when leaving USDT; let it lay out before sliding
             repeat(2) { withFrameNanos {} }
@@ -388,7 +344,6 @@ fun ReceiveQrScreen(
                 onTabChange = { tab ->
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val newIndex = visibleTabs.pageIndexOf(tab)
-                    hasUserSelectedTab = true
                     selectedTab = tab
                     showDetails = false
                     scope.launch {
@@ -422,7 +377,7 @@ fun ReceiveQrScreen(
                 ) { _, tab ->
                     val displayMode = getReceiveInvoiceDisplayMode(
                         tab = tab,
-                        cjitInvoice = cjitInvoice,
+                        primaryInvoice = primaryInvoice,
                         hasInvoiceError = walletState.hasReceiveInvoiceError,
                         isUpdating = walletState.isReceiveInvoiceUpdating,
                         showDetails = showDetails,
@@ -434,8 +389,8 @@ fun ReceiveQrScreen(
                             .fillParentMaxHeight()
                     ) {
                         when {
-                            showingCjitOnboarding && tab == ReceiveTab.SPENDING -> {
-                                CjitOnBoardingView(
+                            showingLightningRequest && tab == ReceiveTab.SPENDING -> {
+                                PrimaryReceiveOnboardingView(
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -461,7 +416,7 @@ fun ReceiveQrScreen(
                                 ReceiveDetailsView(
                                     tab = tab,
                                     walletState = walletState,
-                                    cjitInvoice = cjitInvoice,
+                                    primaryInvoice = primaryInvoice,
                                     isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                                     onClickEditInvoice = { onClickEditInvoice(tab) },
                                     onClickHardwareEditInvoice = onClickHardwareEditInvoice,
@@ -507,9 +462,18 @@ fun ReceiveQrScreen(
 
             VerticalSpacer(24.dp)
 
-            val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
+            if (showingLightningRequest && selectedTab == ReceiveTab.AUTO) {
+                SecondaryButton(
+                    text = stringResource(R.string.wallet_primary__receive_action),
+                    onClick = onClickReceiveLightning,
+                    modifier = Modifier.padding(horizontal = 16.dp).testTag("PrimaryReceiveRequest")
+                )
+                VerticalSpacer(12.dp)
+            }
+
+            val showLightningRequestButton = showingLightningRequest && selectedTab == ReceiveTab.SPENDING
             val buttonVariant = when {
-                showCjitButton -> BottomButtonVariant.CJIT
+                showLightningRequestButton -> BottomButtonVariant.REQUEST_LIGHTNING
                 showDetails -> BottomButtonVariant.SHOW_QR
                 else -> BottomButtonVariant.SHOW_DETAILS
             }
@@ -518,8 +482,8 @@ fun ReceiveQrScreen(
                 label = "ReceiveBottomButtonCrossfade",
             ) { variant ->
                 when (variant) {
-                    BottomButtonVariant.CJIT -> PrimaryButton(
-                        text = stringResource(R.string.wallet__receive__cjit),
+                    BottomButtonVariant.REQUEST_LIGHTNING -> PrimaryButton(
+                        text = stringResource(R.string.wallet_primary__receive_action),
                         icon = {
                             Icon(
                                 painter = painterResource(R.drawable.ic_lightning_alt),
@@ -528,13 +492,13 @@ fun ReceiveQrScreen(
                             )
                         },
                         onClick = {
-                            onClickReceiveCjit()
+                            onClickReceiveLightning()
                             showDetails = false
                         },
                         fullWidth = true,
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
-                            .testTag("ShowDetails")
+                            .testTag("PrimaryReceiveRequest")
                     )
 
                     BottomButtonVariant.SHOW_QR -> Column(
@@ -594,18 +558,6 @@ private fun receivePageKey(index: Int, tab: ReceiveTab, tabCount: Int): String =
 
 private fun List<ReceiveTab>.defaultReceiveTab(): ReceiveTab {
     return if (contains(ReceiveTab.AUTO)) ReceiveTab.AUTO else ReceiveTab.SAVINGS
-}
-
-internal fun shouldAutoSwitchToAuto(
-    selectedTab: ReceiveTab,
-    hasUserSelectedTab: Boolean,
-    canCreateLightningInvoice: Boolean,
-    cjitInvoice: String?,
-    initialTab: ReceiveTab?,
-): Boolean {
-    if (initialTab != null || hasUserSelectedTab) return false
-    if (selectedTab == ReceiveTab.AUTO) return false
-    return canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -715,7 +667,7 @@ fun ReceiveQrView(
 }
 
 @Composable
-fun CjitOnBoardingView(modifier: Modifier = Modifier) {
+fun PrimaryReceiveOnboardingView(modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
@@ -723,10 +675,10 @@ fun CjitOnBoardingView(modifier: Modifier = Modifier) {
             .background(color = Colors.Black)
             .padding(32.dp)
     ) {
-        Display(stringResource(R.string.wallet__receive_onboarding_title).withAccent(accentColor = Colors.Purple))
+        Display(stringResource(R.string.wallet_primary__lightning).withAccent(accentColor = Colors.Purple))
         VerticalSpacer(8.dp)
         BodyM(
-            stringResource(R.string.wallet__receive_onboarding_description),
+            stringResource(R.string.wallet_primary__receive_description),
             color = Colors.White64,
             modifier = Modifier.fillMaxWidth()
         )
@@ -761,7 +713,7 @@ fun CjitOnBoardingView(modifier: Modifier = Modifier) {
 private fun ReceiveDetailsView(
     tab: ReceiveTab,
     walletState: WalletState,
-    cjitInvoice: String?,
+    primaryInvoice: String?,
     isNodeRunning: Boolean,
     onClickEditInvoice: () -> Unit,
     modifier: Modifier = Modifier,
@@ -810,10 +762,13 @@ private fun ReceiveDetailsView(
                             testTag = "ReceiveOnchainAddress",
                         )
                     }
-                    if (cjitInvoice != null || walletState.bolt11.isNotEmpty()) {
+                    val lightningInvoice = primaryInvoice ?: walletState.bolt11.takeIf {
+                        !walletState.isReceiveInvoiceUpdating && !walletState.hasReceiveInvoiceError
+                    }
+                    if (isNodeRunning && !lightningInvoice.isNullOrEmpty()) {
                         CopyAddressCard(
                             title = stringResource(R.string.wallet__receive_lightning_invoice),
-                            address = cjitInvoice ?: walletState.bolt11,
+                            address = lightningInvoice,
                             type = CopyAddressType.LIGHTNING,
                             onClickEditInvoice = onClickEditInvoice,
                             testTag = "ReceiveLightningAddress",
@@ -822,7 +777,9 @@ private fun ReceiveDetailsView(
                 }
 
                 ReceiveTab.SPENDING -> {
-                    val lightningInvoice = cjitInvoice ?: walletState.bolt11.takeIf { isNodeRunning }
+                    val lightningInvoice = (primaryInvoice ?: walletState.bolt11).takeIf {
+                        isNodeRunning && !walletState.isReceiveInvoiceUpdating && !walletState.hasReceiveInvoiceError
+                    }
                     if (!lightningInvoice.isNullOrEmpty()) {
                         CopyAddressCard(
                             title = stringResource(R.string.wallet__receive_lightning_invoice),
@@ -918,7 +875,7 @@ private fun ReceiveInvoiceErrorView(
     }
 }
 
-private enum class BottomButtonVariant { CJIT, SHOW_QR, SHOW_DETAILS }
+private enum class BottomButtonVariant { REQUEST_LIGHTNING, SHOW_QR, SHOW_DETAILS }
 
 enum class CopyAddressType { ONCHAIN, LIGHTNING }
 
@@ -1035,7 +992,7 @@ private fun PreviewSavingsMode() {
     AppThemeSurface {
         BottomSheetPreview {
             ReceiveQrScreen(
-                cjitInvoice = null,
+                primaryInvoice = null,
                 walletState = WalletState(
                     onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
                 ),
@@ -1046,7 +1003,7 @@ private fun PreviewSavingsMode() {
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
                 initialTab = ReceiveTab.SAVINGS,
-                onClickReceiveCjit = {},
+                onClickReceiveLightning = {},
             )
         }
     }
@@ -1102,7 +1059,7 @@ private fun PreviewAutoMode() {
     AppThemeSurface {
         BottomSheetPreview {
             ReceiveQrScreen(
-                cjitInvoice = null,
+                primaryInvoice = null,
                 walletState = WalletState(
                     onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
@@ -1118,7 +1075,7 @@ private fun PreviewAutoMode() {
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
                 initialTab = ReceiveTab.AUTO,
-                onClickReceiveCjit = {},
+                onClickReceiveLightning = {},
             )
         }
     }
@@ -1173,7 +1130,7 @@ private fun PreviewSpendingMode() {
     AppThemeSurface {
         BottomSheetPreview {
             ReceiveQrScreen(
-                cjitInvoice = null,
+                primaryInvoice = null,
                 walletState = WalletState(
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
@@ -1185,7 +1142,7 @@ private fun PreviewSpendingMode() {
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
                 initialTab = ReceiveTab.SPENDING,
-                onClickReceiveCjit = {},
+                onClickReceiveLightning = {},
             )
         }
     }
@@ -1197,12 +1154,12 @@ private fun PreviewNodeNotReady() {
     AppThemeSurface {
         BottomSheetPreview {
             ReceiveQrScreen(
-                cjitInvoice = null,
+                primaryInvoice = null,
                 walletState = WalletState(),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Starting,
                 ),
-                onClickReceiveCjit = {},
+                onClickReceiveLightning = {},
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
             )
@@ -1216,14 +1173,14 @@ private fun PreviewSmall() {
     AppThemeSurface {
         BottomSheetPreview {
             ReceiveQrScreen(
-                cjitInvoice = null,
+                primaryInvoice = null,
                 walletState = WalletState(),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
-                onClickReceiveCjit = {},
+                onClickReceiveLightning = {},
             )
         }
     }
@@ -1247,7 +1204,7 @@ private fun PreviewDetailsMode() {
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
-                cjitInvoice = null,
+                primaryInvoice = null,
                 isNodeRunning = true,
                 onClickEditInvoice = {},
                 modifier = Modifier.weight(1f)
@@ -1274,7 +1231,7 @@ private fun PreviewDetailsModeSpendingLoading() {
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
-                cjitInvoice = null,
+                primaryInvoice = null,
                 isNodeRunning = false,
                 onClickEditInvoice = {},
                 modifier = Modifier.weight(1f)

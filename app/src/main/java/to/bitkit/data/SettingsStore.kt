@@ -241,6 +241,8 @@ data class SettingsData(
     val coinSelectAuto: Boolean = true,
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
     val electrumServer: String = Env.electrumServerUrl,
+    val primaryNodeUri: String = "",
+    val primaryFundingPaused: Boolean = false,
     val rgsServerUrl: String? = Env.ldkRgsServerUrl,
     val selectedAddressType: String = DEFAULT_ADDRESS_TYPE_STRING,
     val addressTypesToMonitor: List<String> = listOf(DEFAULT_ADDRESS_TYPE_STRING),

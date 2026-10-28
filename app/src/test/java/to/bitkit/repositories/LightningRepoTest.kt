@@ -4,8 +4,6 @@ import app.cash.turbine.test
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.FeeRates
-import com.synonym.bitkitcore.IBtInfo
-import com.synonym.bitkitcore.ILspNode
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlException
 import com.synonym.bitkitcore.LnurlPayData
@@ -35,12 +33,14 @@ import org.lightningdevkit.ldknode.AddressTypeBalance
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.DirectFundingPaymentDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.PrimaryReceiveQuote
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.lightningdevkit.ldknode.TxOutput
@@ -74,6 +74,7 @@ import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.PrimaryNode
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.services.ActivityService
 import to.bitkit.services.BlocktankService
@@ -85,6 +86,7 @@ import to.bitkit.services.LnurlService
 import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
+import to.bitkit.services.PrimaryWalletService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
@@ -120,6 +122,7 @@ class LightningRepoTest : BaseUnitTest() {
     private lateinit var sut: LightningRepo
 
     private val lightningService = mock<LightningService>()
+    private val primaryWalletService = mock<PrimaryWalletService>()
     private val settingsStore = mock<SettingsStore>()
     private val coreService = mock<CoreService>()
     private val lspNotificationsService = mock<LspNotificationsService>()
@@ -149,10 +152,12 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        whenever(primaryWalletService.fundIfNeeded()).thenReturn(Result.success(Unit))
         whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(true)
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
             lightningService = lightningService,
+            primaryWalletService = primaryWalletService,
             settingsStore = settingsStore,
             coreService = coreService,
             lspNotificationsService = lspNotificationsService,
@@ -180,6 +185,18 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         // Simulate successful sync to set isSyncHealthy = true
         sut.sync()
+    }
+
+    @Test
+    fun `direct funding cannot dispatch while a durable ordinary onchain attempt is unresolved`() = test {
+        startNodeForTesting()
+        val previous = mock<OnchainSendAttempt> { on { blocksNextSend } doReturn true }
+        whenever(onchainSendAttemptStore.currentDurable()).thenReturn(previous)
+        whenever(primaryWalletService.withWalletOperation<DirectFundingPaymentDetails>(eq(false), any()))
+            .doSuspendableAnswer { it.getArgument<suspend () -> DirectFundingPaymentDetails>(1)() }
+        val result = sut.sendDirectFunding("request", 20_000uL, 1_000uL)
+        assertIs<OnchainSendBlockedError>(result.exceptionOrNull())
+        verify(lightningService, never()).sendDirectFunding(any(), any(), any())
     }
 
     @Test
@@ -230,6 +247,7 @@ class LightningRepoTest : BaseUnitTest() {
             transferRepo = mock(),
             activityRepo = mock(),
             hwWalletRepo = hardware,
+            primaryWalletService = primaryWalletService,
         )
     }
 
@@ -244,11 +262,12 @@ class LightningRepoTest : BaseUnitTest() {
         )
         val snapshotCaptured = CompletableDeferred<Unit>()
         val releaseSnapshot = CompletableDeferred<Unit>()
-        var cacheReads = 0
+        var holdNextSnapshot = false
         whenever(cacheStore.data).thenReturn(
             flow {
                 val snapshot = cached
-                if (cacheReads++ == 0) {
+                if (holdNextSnapshot) {
+                    holdNextSnapshot = false
                     snapshotCaptured.complete(Unit)
                     releaseSnapshot.await()
                 }
@@ -268,6 +287,7 @@ class LightningRepoTest : BaseUnitTest() {
             }
         }.launchIn(backgroundScope)
         testScheduler.runCurrent()
+        holdNextSnapshot = true
         wallet.loadFromCache()
         snapshotCaptured.await()
 
@@ -290,11 +310,12 @@ class LightningRepoTest : BaseUnitTest() {
         var cached = AppCacheData(onchainAddress = "cached-address", bip21 = "bitcoin:cached-address")
         val snapshotCaptured = CompletableDeferred<Unit>()
         val releaseSnapshot = CompletableDeferred<Unit>()
-        var cacheReads = 0
+        var holdNextSnapshot = false
         whenever(cacheStore.data).thenReturn(
             flow {
                 val snapshot = cached
-                if (cacheReads++ == 0) {
+                if (holdNextSnapshot) {
+                    holdNextSnapshot = false
                     snapshotCaptured.complete(Unit)
                     releaseSnapshot.await()
                 }
@@ -317,6 +338,7 @@ class LightningRepoTest : BaseUnitTest() {
             }
         }.launchIn(backgroundScope)
         testScheduler.runCurrent()
+        holdNextSnapshot = true
         wallet.loadFromCache()
         snapshotCaptured.await()
 
@@ -613,7 +635,7 @@ class LightningRepoTest : BaseUnitTest() {
             nodeRunning = true
             Unit
         }
-        whenever(coreService.isGeoBlocked()).doSuspendableAnswer { awaitCancellation() }
+        whenever(lightningService.sync()).doSuspendableAnswer { awaitCancellation() }
         var result: Result<Unit>? = null
 
         val job = launch { result = sut.start() }
@@ -639,27 +661,6 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertNull(result)
         assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
-        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
-    }
-
-    @Test
-    fun `start restores the initial state when cancelled while trusted peers are fetched`() = test {
-        stubNodeStatus { false }
-        val blocktank = coreService.blocktank
-        whenever(blocktank.info(any())).doSuspendableAnswer { awaitCancellation() }
-        var result: Result<Unit>? = null
-
-        val job = launch { result = sut.start(shouldRetry = false) }
-        runCurrent()
-        job.cancelAndJoin()
-        testScheduler.advanceUntilIdle()
-
-        assertNull(result)
-        assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
-        // The cancellation must unwind out of the trusted peers fetch instead of starting a node
-        verifyBlocking(lightningService, never()) {
-            setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
-        }
         verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
     }
 
@@ -1268,9 +1269,14 @@ class LightningRepoTest : BaseUnitTest() {
     fun `closeChannel should succeed when node is running`() = test {
         startNodeForTesting()
         whenever(lightningService.closeChannel(any(), any(), anyOrNull())).thenReturn(Unit)
+        whenever(primaryWalletService.closeConnection(any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(1)()
+        }
 
         val result = sut.closeChannel(createChannelDetails())
         assertTrue(result.isSuccess)
+        verify(primaryWalletService).closeConnection(any(), any())
+        verify(lightningService).closeChannel(any(), eq(false), anyOrNull())
     }
 
     @Test
@@ -1954,6 +1960,7 @@ class LightningRepoTest : BaseUnitTest() {
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
             lightningService = lightningService,
+            primaryWalletService = mock(),
             settingsStore = settingsStore,
             coreService = coreService,
             lspNotificationsService = lspNotificationsService,
@@ -2386,6 +2393,7 @@ class LightningRepoTest : BaseUnitTest() {
         val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
         sut = LightningRepo(
             bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
+            primaryWalletService = mock(),
             coreService = coreService, lspNotificationsService = lspNotificationsService,
             firebaseMessaging = firebaseMessaging, keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
@@ -2456,6 +2464,7 @@ class LightningRepoTest : BaseUnitTest() {
         val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
         sut = LightningRepo(
             bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
+            primaryWalletService = mock(),
             coreService = coreService, lspNotificationsService = lspNotificationsService,
             firebaseMessaging = firebaseMessaging, keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
@@ -2537,6 +2546,7 @@ class LightningRepoTest : BaseUnitTest() {
         }.whenever(store).broadcastPreparedCandidate(any(), any(), any(), any())
         sut = LightningRepo(
             bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
+            primaryWalletService = mock(),
             coreService = coreService, lspNotificationsService = lspNotificationsService,
             firebaseMessaging = firebaseMessaging, keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
@@ -3017,6 +3027,7 @@ class LightningRepoTest : BaseUnitTest() {
         val sutWithFailingValidator = LightningRepo(
             bgDispatcher = testDispatcher,
             lightningService = lightningService,
+            primaryWalletService = mock(),
             settingsStore = settingsStore,
             coreService = coreService,
             lspNotificationsService = lspNotificationsService,
@@ -3057,12 +3068,10 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `getFeeRateForSpeed should fetch from blocktank when feeRates is null`() = test {
+    fun `getFeeRateForSpeed should use native chain estimates when feeRates is null`() = test {
         val mockFeeRates = mock<FeeRates>()
         whenever(mockFeeRates.fast).thenReturn(30u)
-        val blocktank = mock<BlocktankService>()
-        whenever(blocktank.getFees()).thenReturn(Result.success(mockFeeRates))
-        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(lightningService.estimatedFeeRates()).thenReturn(mockFeeRates)
 
         val result = sut.getFeeRateForSpeed(TransactionSpeed.Fast, null)
 
@@ -3179,29 +3188,243 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `start should load trusted peers from blocktank info`() = test {
+    fun `configure primary resolves a bare key and verifies provider before retaining it`() = test {
+        val previous = primaryForTest()
+        val resolved = primaryForTest(other = true)
+        val settings = stubPrimaryConfiguration(previous)
+        settings.value = settings.value.copy(primaryFundingPaused = true)
+        val bare = resolved.copy(address = null)
+        whenever(lightningService.resolvePrimaryNode(bare)).thenReturn(resolved)
+        whenever(lightningService.checkPrimaryConnection(resolved.nodeId))
+            .doSuspendableAnswer {
+                assertEquals(previous.uri, settings.value.primaryNodeUri)
+                assertTrue(settings.value.primaryFundingPaused)
+            }
+
+        val result = sut.configurePrimaryNode(bare)
+
+        assertEquals(resolved, result.getOrThrow())
+        assertEquals(resolved.uri, settings.value.primaryNodeUri)
+        assertFalse(settings.value.primaryFundingPaused)
+        verify(lightningService).checkPrimaryConnection(resolved.nodeId)
+        verify(lightningService, never()).quotePrimaryReceive(any(), any())
+        verify(lightningService).setup(
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            argThat { peers -> peers?.singleOrNull()?.nodeId == resolved.nodeId },
+            anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `explicit reconnect to the same verified primary resumes automatic funding`() = test {
+        val primary = primaryForTest()
+        val settings = stubPrimaryConfiguration(primary)
+        settings.value = settings.value.copy(primaryFundingPaused = true)
+        whenever(lightningService.resolvePrimaryNode(primary)).thenReturn(primary)
+        whenever(lightningService.checkPrimaryConnection(primary.nodeId)).thenReturn(Unit)
+
+        assertEquals(primary, sut.configurePrimaryNode(primary).getOrThrow())
+        assertFalse(settings.value.primaryFundingPaused)
+    }
+
+    @Test
+    fun `configure primary accepts a compatible provider without funds but real receive quotes still fail`() = test {
+        val previous = primaryForTest()
+        val primary = primaryForTest(other = true)
+        val settings = stubPrimaryConfiguration(previous)
+        settings.value = settings.value.copy(primaryFundingPaused = true)
+        val insufficientFunds = AppError("Provider does not have funds for this receive")
+        whenever(lightningService.resolvePrimaryNode(primary)).thenReturn(primary)
+        whenever(lightningService.checkPrimaryConnection(primary.nodeId)).thenReturn(Unit)
+        whenever(lightningService.quotePrimaryReceive(eq(primary.nodeId), any()))
+            .doSuspendableAnswer { throw insufficientFunds }
+
+        assertEquals(primary, sut.configurePrimaryNode(primary).getOrThrow())
+
+        assertEquals(primary.uri, settings.value.primaryNodeUri)
+        assertFalse(settings.value.primaryFundingPaused)
+        verify(lightningService).checkPrimaryConnection(primary.nodeId)
+        verify(lightningService, never()).quotePrimaryReceive(any(), any())
+        assertEquals(insufficientFunds, sut.quotePrimaryReceive(100_000uL).exceptionOrNull())
+        verify(lightningService).quotePrimaryReceive(primary.nodeId, 100_000_000uL)
+    }
+
+    @Test
+    fun `primary quote publishes reconnected native peer before returning`() = test {
+        val primary = primaryForTest()
+        stubPrimaryConfiguration(primary)
+        var peer = PeerDetails(primary.nodeId, requireNotNull(primary.address), isPersisted = true, isConnected = false)
+        whenever(lightningService.peers).thenAnswer { listOf(peer) }
+        sut.syncState()
+        assertFalse(sut.lightningState.value.peers.single().isConnected)
+        val quote = PrimaryReceiveQuote(100_000_000uL, 200_000uL, 110_000uL)
+        whenever(lightningService.quotePrimaryReceive(primary.nodeId, 100_000_000uL)).doSuspendableAnswer {
+            peer = peer.copy(isConnected = true)
+            quote
+        }
+
+        assertEquals(quote, sut.quotePrimaryReceive(100_000uL).getOrThrow())
+
+        assertTrue(sut.lightningState.value.peers.single().isConnected)
+    }
+
+    @Test
+    fun `primary invoice publishes actual reconnect before its caller checks availability`() = test {
+        val primary = primaryForTest()
+        stubPrimaryConfiguration(primary)
+        var peer = PeerDetails(primary.nodeId, requireNotNull(primary.address), isPersisted = true, isConnected = false)
+        whenever(lightningService.peers).thenAnswer { listOf(peer) }
+        sut.syncState()
+        whenever(lightningService.receiveViaPrimary(eq(primary.nodeId), any(), any(), any(), any()))
+            .doSuspendableAnswer {
+                peer = peer.copy(isConnected = true)
+                "invoice"
+            }
+
+        assertEquals("invoice", sut.createPrimaryInvoice(100_000uL, "", 200_000uL).getOrThrow())
+
+        assertTrue(sut.lightningState.value.peers.single().isConnected)
+    }
+
+    @Test
+    fun `successful invoice does not conceal a disconnect observed after native creation`() = test {
+        val primary = primaryForTest()
+        stubPrimaryConfiguration(primary)
+        var peer = PeerDetails(primary.nodeId, requireNotNull(primary.address), isPersisted = true, isConnected = true)
+        whenever(lightningService.peers).thenAnswer { listOf(peer) }
+        sut.syncState()
+        whenever(lightningService.receiveViaPrimary(eq(primary.nodeId), any(), any(), any(), any()))
+            .doSuspendableAnswer {
+                peer = peer.copy(isConnected = false)
+                "invoice"
+            }
+
+        sut.createPrimaryInvoice(100_000uL, "", 200_000uL).getOrThrow()
+
+        assertFalse(sut.lightningState.value.peers.single().isConnected)
+    }
+
+    @Test
+    fun `configure primary rolls back saved node and native trust when protocol check fails`() = test {
+        val previous = primaryForTest()
+        val rejected = primaryForTest(other = true)
+        val settings = stubPrimaryConfiguration(previous)
+        settings.value = settings.value.copy(primaryFundingPaused = true)
+        val failure = AppError("Provider does not support primary receive")
+        whenever(lightningService.resolvePrimaryNode(rejected)).thenReturn(rejected)
+        whenever(lightningService.checkPrimaryConnection(rejected.nodeId))
+            .doSuspendableAnswer { throw failure }
+
+        val result = sut.configurePrimaryNode(rejected)
+
+        assertEquals(failure, result.exceptionOrNull())
+        assertEquals(previous.uri, settings.value.primaryNodeUri)
+        assertTrue(settings.value.primaryFundingPaused)
+        verify(settingsStore, never()).update(any())
+        val order = inOrder(lightningService)
+        order.verify(lightningService).setup(
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            argThat { peers -> peers?.singleOrNull()?.nodeId == rejected.nodeId },
+            anyOrNull(),
+        )
+        order.verify(lightningService).checkPrimaryConnection(rejected.nodeId)
+        order.verify(lightningService).setup(
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            argThat { peers -> peers?.singleOrNull()?.nodeId == previous.nodeId },
+            anyOrNull(),
+        )
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `cancelled primary capability check never persists unverified selection`() = test {
+        val previous = primaryForTest()
+        val candidate = primaryForTest(other = true)
+        val settings = stubPrimaryConfiguration(previous)
+        val checkingCapability = CompletableDeferred<Unit>()
+        whenever(lightningService.resolvePrimaryNode(candidate)).thenReturn(candidate)
+        whenever(lightningService.checkPrimaryConnection(candidate.nodeId)).doSuspendableAnswer {
+            checkingCapability.complete(Unit)
+            awaitCancellation()
+        }
+        var completed = false
+        val configuration = launch {
+            sut.configurePrimaryNode(candidate)
+            completed = true
+        }
+        checkingCapability.await()
+
+        assertEquals(previous.uri, settings.value.primaryNodeUri)
+        configuration.cancelAndJoin()
+
+        assertFalse(completed)
+        assertEquals(previous.uri, settings.value.primaryNodeUri)
+        verify(settingsStore, never()).update(any())
+        verify(lightningService).setup(
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            argThat { peers -> peers?.singleOrNull()?.nodeId == previous.nodeId },
+            anyOrNull(),
+        )
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `configure primary refuses replacing an existing primary channel`() = test {
+        val previous = primaryForTest()
+        val replacement = primaryForTest(other = true)
+        val settings = stubPrimaryConfiguration(previous)
+        whenever(lightningService.resolvePrimaryNode(replacement)).thenReturn(replacement)
+        whenever(lightningService.channels).thenReturn(
+            listOf(createChannelDetails().copy(counterpartyNodeId = previous.nodeId)),
+        )
+
+        val result = sut.configurePrimaryNode(replacement)
+
+        assertTrue(result.isFailure)
+        assertEquals(previous.uri, settings.value.primaryNodeUri)
+        verify(settingsStore, never()).update(any())
+        verify(lightningService, never()).stop()
+        verify(lightningService, never()).checkPrimaryConnection(any())
+    }
+
+    private fun primaryForTest(other: Boolean = false): PrimaryNode = PrimaryNode.parse(
+        "${if (other) "03" else "02"}79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798@localhost:9735",
+    )
+
+    private suspend fun stubPrimaryConfiguration(primary: PrimaryNode): MutableStateFlow<SettingsData> {
+        startNodeForTesting()
+        val settings = MutableStateFlow(SettingsData(primaryNodeUri = primary.uri))
+        whenever(settingsStore.data).thenReturn(settings)
+        whenever(settingsStore.update(any())).doSuspendableAnswer {
+            settings.value = it.getArgument<(SettingsData) -> SettingsData>(0)(settings.value)
+        }
+        whenever(primaryWalletService.withWalletOperation<PrimaryNode>(eq(true), any()))
+            .doSuspendableAnswer { it.getArgument<suspend () -> PrimaryNode>(1)() }
+        var node: Node? = lightningService.node
+        whenever(lightningService.node).thenAnswer { node }
+        whenever(lightningService.stop()).doSuspendableAnswer { node = null }
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer { node = mock() }
+        whenever(lightningService.connectPeer(any())).thenReturn(Result.success(Unit))
+        whenever(lightningService.channels).thenReturn(emptyList())
+        clearInvocations(lightningService, settingsStore)
+        return settings
+    }
+
+    @Test
+    fun `start trusts only the configured primary`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(null)
-
-        val blocktank = mock<BlocktankService>()
-        whenever(coreService.blocktank).thenReturn(blocktank)
-
-        val mockNodes = listOf(
-            ILspNode(
-                alias = "LSP1",
-                pubkey = "node1pubkey",
-                connectionStrings = listOf("node1pubkey@node1.example.com:9735"),
-                readonly = null,
-            ),
-            ILspNode(
-                alias = "LSP2",
-                pubkey = "node2pubkey",
-                connectionStrings = listOf("node2pubkey@node2.example.com:9735"),
-                readonly = null,
-            ),
-        )
-        val mockInfo = mock<IBtInfo> { on { nodes } doReturn mockNodes }
-        whenever(blocktank.info(refresh = false)).thenReturn(mockInfo)
+        val nodeId = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(primaryNodeUri = "$nodeId@localhost:9735")))
 
         val result = sut.start()
 
@@ -3211,28 +3434,22 @@ class LightningRepoTest : BaseUnitTest() {
             anyOrNull(),
             anyOrNull(),
             argThat { peers ->
-                peers?.size == 2 &&
-                    peers.any { it.nodeId == "node1pubkey" && it.address == "node1.example.com:9735" } &&
-                    peers.any { it.nodeId == "node2pubkey" && it.address == "node2.example.com:9735" }
+                peers?.singleOrNull()?.let { it.nodeId == nodeId && it.address == "localhost:9735" } == true
             },
             anyOrNull(),
         )
     }
 
     @Test
-    fun `start should pass null trusted peers when blocktank returns null`() = test {
+    fun `start without primary does not trust a default provider`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(null)
-
-        val blocktank = mock<BlocktankService>()
-        whenever(coreService.blocktank).thenReturn(blocktank)
-        whenever(blocktank.info(refresh = false)).thenReturn(null)
-        whenever(blocktank.info(refresh = true)).thenReturn(null)
 
         val result = sut.start()
 
         assertTrue(result.isSuccess)
-        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull())
+        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), eq(emptyList()), anyOrNull())
+        verify(coreService, never()).blocktank
     }
 
     @Test

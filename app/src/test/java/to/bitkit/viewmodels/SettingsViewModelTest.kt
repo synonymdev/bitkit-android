@@ -108,6 +108,22 @@ class SettingsViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `primary wallet settings gate updates when primary is configured`() = test {
+        sut.isPrimaryWallet.test {
+            advanceUntilIdle()
+            assertFalse(expectMostRecentItem())
+
+            settingsData.value = settingsData.value.copy(
+                primaryNodeUri = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798@127.0.0.1:9735"
+            )
+
+            advanceUntilIdle()
+            assertTrue(expectMostRecentItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `disabling Paykit clears settings and removes published endpoints`() = test {
         isPaykitEnabled.value = true
         settingsData.value = SettingsData(

@@ -6,7 +6,8 @@ import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.collections.immutable.persistentListOf
@@ -37,7 +38,7 @@ class SendAmountContentTest {
         isUnified = true,
         canSwitchFundingSource = true,
         fundingOptions = persistentListOf(
-            SendFundingOption(SendFundingSource.Savings, enabled = true),
+            SendFundingOption(SendFundingSource.Hardware("device"), name = "Trezor", enabled = true),
             SendFundingOption(SendFundingSource.Spending, enabled = true),
         ),
     )
@@ -102,9 +103,10 @@ class SendAmountContentTest {
         }
         composeTestRule.runOnIdle { assertNull(selectedSource) }
 
-        composeTestRule.onNodeWithText("SAVINGS").performClick()
+        composeTestRule.onAllNodesWithTag("SendFundingSourceBitcoin").assertCountEquals(1)
+        composeTestRule.onNodeWithTag("SendFundingSourceHardware-device").performClick()
 
-        composeTestRule.runOnIdle { assertEquals(SendFundingSource.Savings, selectedSource) }
+        composeTestRule.runOnIdle { assertEquals(SendFundingSource.Hardware("device"), selectedSource) }
         composeTestRule.onNodeWithTag("SendFundingSources").assertDoesNotExist()
     }
 

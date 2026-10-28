@@ -17,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -40,7 +39,6 @@ import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.modelNameRes
 import to.bitkit.ui.navigateTo
-import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestAmountScreen
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestDetailsScreen
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestRecipientScreen
@@ -50,11 +48,10 @@ import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
-import to.bitkit.ui.utils.rememberNotificationToggleClick
 import to.bitkit.ui.walletViewModel
+import to.bitkit.utils.Bip21Utils
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.AppViewModel
-import to.bitkit.viewmodels.SettingsViewModel
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.ExperimentalTime
@@ -63,7 +60,7 @@ import kotlin.time.ExperimentalTime
 @Composable
 fun ReceiveSheet(
     appViewModel: AppViewModel,
-    navigateToExternalConnection: () -> Unit,
+    navigateToPrimaryNode: () -> Unit,
     walletState: WalletState,
     isOffline: Boolean,
     startRoute: ReceiveRoute = ReceiveRoute.QR,
@@ -73,8 +70,9 @@ fun ReceiveSheet(
     hardwareWalletId: String? = null,
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
     paymentRequestAmountViewModel: AmountInputViewModel = hiltViewModel(key = "PaymentRequestAmount"),
-    settingsViewModel: SettingsViewModel = hiltViewModel(),
     hwReceiveViewModel: HwReceiveViewModel = hiltViewModel(),
+    primaryReceiveViewModel: PrimaryReceiveViewModel = hiltViewModel(),
+    directFundingViewModel: DirectFundingReceiveViewModel = hiltViewModel(),
 ) {
     val wallet = requireNotNull(walletViewModel)
     val navController = rememberNavController()
@@ -82,15 +80,36 @@ fun ReceiveSheet(
     val currencies = LocalCurrencies.current
 
     LaunchedEffect(Unit) { editInvoiceAmountViewModel.clearInput() }
-    val cjitSessionState = remember { ReceiveCjitSessionState() }
+    val primaryReceiveState by primaryReceiveViewModel.uiState.collectAsStateWithLifecycle()
+    val hasPrimaryNode by primaryReceiveViewModel.hasPrimaryNode.collectAsStateWithLifecycle()
+    val displayedWalletState = primaryReceiveState.offer?.takeIf { primaryReceiveState.invoice != null }?.let { offer ->
+        walletState.copy(
+            bip21 = Bip21Utils.buildBip21Url(
+                bitcoinAddress = primaryReceiveState.onchainAddress.orEmpty(),
+                amountSats = offer.amountSats,
+                message = offer.description,
+            ),
+            onchainAddress = primaryReceiveState.onchainAddress.orEmpty(),
+            bip21AmountSats = offer.amountSats,
+            bip21Description = offer.description,
+        )
+    } ?: walletState
+    val directFundingRequest by directFundingViewModel.request.collectAsStateWithLifecycle()
+    LaunchedEffect(displayedWalletState.bip21, displayedWalletState.onchainAddress, primaryReceiveState.invoice) {
+        directFundingViewModel.update(
+            displayedWalletState.bip21AmountSats,
+            displayedWalletState.onchainAddress,
+            primaryReceiveState.invoice ?: displayedWalletState.bip21,
+        )
+    }
     val invoiceEditState = remember { ReceiveInvoiceEditState() }
 
     LaunchedEffect(startRoute) {
-        cjitSessionState.clear()
+        primaryReceiveViewModel.clear()
         navController.navigateToReceiveStart(startRoute)
     }
-    var editInvoiceSourceTab by remember { mutableStateOf(ReceiveTab.SAVINGS) }
-    var isAdditionalLiquidityAmountEntry by remember { mutableStateOf(false) }
+    var editInvoiceSourceTab by remember { mutableStateOf(ReceiveTab.AUTO) }
+    var requestedAmountSats by remember { mutableStateOf<ULong?>(null) }
     val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
     val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     val paymentRequestContacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
@@ -108,8 +127,12 @@ fun ReceiveSheet(
     val hwReceiveState by hwReceiveViewModel.uiState.collectAsStateWithLifecycle()
     val selectedHardwareWalletId = hardwareWalletId ?: hardwareWallets.singleOrNull()?.id
 
-    DisposableEffect(hwReceiveViewModel) {
-        onDispose(hwReceiveViewModel::cancel)
+    DisposableEffect(hwReceiveViewModel, primaryReceiveViewModel) {
+        onDispose {
+            hwReceiveViewModel.cancel()
+            primaryReceiveViewModel.clear()
+            directFundingViewModel.clear()
+        }
     }
     var selectedPaymentRequestTarget by remember(startRoute) {
         mutableStateOf(
@@ -154,14 +177,20 @@ fun ReceiveSheet(
                 composableWithDefaultTransitions<ReceiveRoute.QR> {
                     ReceiveQrScreen(
                         onUsdtSelected = onUsdtSelected,
-                        cjitInvoice = cjitSessionState.cjitInvoice,
-                        walletState = walletState,
+                        primaryInvoice = primaryReceiveState.invoice,
+                        directFundingRequest = directFundingRequest?.requestFor(
+                            displayedWalletState.bip21AmountSats,
+                            displayedWalletState.onchainAddress,
+                            primaryReceiveState.invoice ?: displayedWalletState.bip21,
+                        ),
+                        walletState = displayedWalletState,
                         lightningState = lightningState,
-                        onClickReceiveCjit = {
-                            if (lightningState.isGeoBlocked) {
-                                navController.navigateTo(ReceiveRoute.GeoBlock)
+                        onClickReceiveLightning = {
+                            if (!hasPrimaryNode) {
+                                navigateToPrimaryNode()
                             } else {
-                                isAdditionalLiquidityAmountEntry = lightningState.channels.isNotEmpty()
+                                requestedAmountSats = walletState.bip21AmountSats
+                                primaryReceiveViewModel.clear()
                                 navController.navigateTo(ReceiveRoute.Amount)
                             }
                         },
@@ -285,96 +314,27 @@ fun ReceiveSheet(
                 }
                 composableWithDefaultTransitions<ReceiveRoute.Amount> {
                     ReceiveAmountScreen(
-                        onCjitCreated = { entry ->
-                            cjitSessionState.onCjitCreated(entry)
-                            navController.navigateTo(
-                                if (isAdditionalLiquidityAmountEntry) {
-                                    ReceiveRoute.ConfirmIncreaseInbound
-                                } else {
-                                    ReceiveRoute.Confirm
-                                }
-                            )
+                        primaryReceiveViewModel = primaryReceiveViewModel,
+                        description = walletState.bip21Description,
+                        initialAmountSats = requestedAmountSats,
+                        onQuoted = { navController.navigateTo(ReceiveRoute.Confirm) },
+                        onBack = {
+                            primaryReceiveViewModel.clear()
+                            navController.popBackStack()
                         },
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composableWithDefaultTransitions<ReceiveRoute.GeoBlock> {
-                    LocationBlockScreen(
-                        onBackPressed = { navController.popBackStack() },
-                        navigateAdvancedSetup = navigateToExternalConnection,
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.Confirm> {
-                    cjitSessionState.entryDetails?.let { entryDetails ->
-                        ReceiveConfirmScreen(
-                            entry = entryDetails,
-                            onLearnMore = { navController.navigateTo(ReceiveRoute.Liquidity) },
-                            onContinue = { invoice ->
-                                wallet.updateOnchainBip21Amount(entryDetails.receiveAmountSats.toULong())
-                                cjitSessionState.onCjitConfirmed(invoice)
-                                navController.navigateTo(
-                                    ReceiveRoute.QR
-                                ) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
-                            },
-                            onBack = { navController.popBackStack() },
-                        )
-                    }
-                }
-                composableWithDefaultTransitions<ReceiveRoute.ConfirmIncreaseInbound> {
-                    cjitSessionState.entryDetails?.let { entryDetails ->
-                        ReceiveConfirmScreen(
-                            entry = entryDetails,
-                            onLearnMore = { navController.navigateTo(ReceiveRoute.LiquidityAdditional) },
-                            onContinue = { invoice ->
-                                wallet.updateOnchainBip21Amount(entryDetails.receiveAmountSats.toULong())
-                                cjitSessionState.onCjitConfirmed(invoice)
-                                navController.navigateTo(
-                                    ReceiveRoute.QR
-                                ) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
-                            },
-                            isAdditional = true,
-                            onBack = { navController.popBackStack() },
-                        )
-                    }
-                }
-                composableWithDefaultTransitions<ReceiveRoute.Liquidity> {
-                    cjitSessionState.entryDetails?.let { entryDetails ->
-                        val context = LocalContext.current
-                        val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
-                        val onNotificationSwitchClick = rememberNotificationToggleClick(
-                            isGranted = notificationsGranted,
-                            onPermissionResult = { granted -> settingsViewModel.setNotificationPreference(granted) },
-                            onOpenSystemSettings = { context.openNotificationSettings() },
-                        )
-
-                        ReceiveLiquidityScreen(
-                            entry = entryDetails,
-                            onContinue = { navController.popBackStack() },
-                            onBack = { navController.popBackStack() },
-                            hasNotificationPermission = notificationsGranted,
-                            onSwitchClick = onNotificationSwitchClick,
-                        )
-                    }
-                }
-                composableWithDefaultTransitions<ReceiveRoute.LiquidityAdditional> {
-                    cjitSessionState.entryDetails?.let { entryDetails ->
-                        val context = LocalContext.current
-                        val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
-                        val onNotificationSwitchClick = rememberNotificationToggleClick(
-                            isGranted = notificationsGranted,
-                            onPermissionResult = { granted -> settingsViewModel.setNotificationPreference(granted) },
-                            onOpenSystemSettings = { context.openNotificationSettings() },
-                        )
-
-                        ReceiveLiquidityScreen(
-                            entry = entryDetails,
-                            onContinue = { navController.popBackStack() },
-                            isAdditional = true,
-                            onBack = { navController.popBackStack() },
-                            hasNotificationPermission = notificationsGranted,
-                            onSwitchClick = onNotificationSwitchClick,
-                        )
-                    }
+                    PrimaryReceiveConfirmScreen(
+                        viewModel = primaryReceiveViewModel,
+                        onCreated = { amountSats ->
+                            wallet.updateOnchainBip21Amount(amountSats)
+                            navController.navigateTo(ReceiveRoute.QR) {
+                                popUpTo(ReceiveRoute.QR) { inclusive = true }
+                            }
+                        },
+                        onBack = { navController.popBackStack() },
+                    )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.EditInvoice> {
                     val walletUiState by wallet.walletState.collectAsStateWithLifecycle()
@@ -382,20 +342,18 @@ fun ReceiveSheet(
                     EditInvoiceScreen(
                         amountInputViewModel = editInvoiceAmountViewModel,
                         walletUiState = walletUiState,
-                        lightningState = lightningState,
                         sourceTab = editInvoiceSourceTab,
                         onBack = { navController.popBackStack() },
                         updateInvoice = {
-                            if (!cjitSessionState.hasConfirmedInvoiceForAmount(it)) {
-                                cjitSessionState.clear()
-                                wallet.updateBip21Invoice(it)
-                            } else {
-                                wallet.updateOnchainBip21Amount(it)
-                            }
+                            primaryReceiveViewModel.clear()
+                            wallet.updateBip21Invoice(it)
                         },
                         onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
                         onClickTag = wallet::removeTag,
-                        onDescriptionUpdate = wallet::updateBip21Description,
+                        onDescriptionUpdate = {
+                            primaryReceiveViewModel.clear()
+                            wallet.updateBip21Description(it)
+                        },
                         showPaymentRequestButton = paymentRequestTargets.isNotEmpty(),
                         onClickPaymentRequest = { amountSats, note ->
                             paymentRequestDraft = PaykitPaymentRequestDraft(
@@ -408,17 +366,17 @@ fun ReceiveSheet(
                             isEditingPaymentRequestAmount = false
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
-                        navigateReceiveConfirm = { entry ->
-                            cjitSessionState.onCjitCreated(entry)
-                            navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
-                        },
                         onchainOnly = invoiceEditState.isHardwareInvoice,
                         updateOnchainInvoice = wallet::setBip21AmountSats,
-                        navigateCjitAmount = {
-                            isAdditionalLiquidityAmountEntry = true
-                            navController.navigateTo(ReceiveRoute.Amount)
+                        onRequestLightning = { amountSats ->
+                            requestedAmountSats = amountSats.takeIf { it > 0uL }
+                            primaryReceiveViewModel.clear()
+                            if (!hasPrimaryNode) {
+                                navigateToPrimaryNode()
+                            } else {
+                                navController.navigateTo(ReceiveRoute.Amount)
+                            }
                         },
-                        navigateGeoBlock = { navController.navigateTo(ReceiveRoute.GeoBlock) },
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.AddTag> {
@@ -450,34 +408,6 @@ fun ReceiveSheet(
         ) {
             ConnectionIssuesView(titleText = stringResource(R.string.wallet__receive_bitcoin))
         }
-    }
-}
-
-@Stable
-internal class ReceiveCjitSessionState {
-    var cjitInvoice by mutableStateOf<String?>(null)
-        private set
-    var entryDetails by mutableStateOf<CjitEntryDetails?>(null)
-        private set
-    private var confirmedAmountSats by mutableStateOf<ULong?>(null)
-
-    fun onCjitCreated(entry: CjitEntryDetails) {
-        entryDetails = entry
-    }
-
-    fun onCjitConfirmed(invoice: String) {
-        cjitInvoice = invoice
-        confirmedAmountSats = entryDetails?.receiveAmountSats?.toULong()
-    }
-
-    fun hasConfirmedInvoiceForAmount(amountSats: ULong?): Boolean {
-        return cjitInvoice != null && confirmedAmountSats == amountSats
-    }
-
-    fun clear() {
-        cjitInvoice = null
-        entryDetails = null
-        confirmedAmountSats = null
     }
 }
 
@@ -532,15 +462,6 @@ sealed interface ReceiveRoute {
     data object Confirm : InternalOnly
 
     @Serializable
-    data object ConfirmIncreaseInbound : InternalOnly
-
-    @Serializable
-    data object Liquidity : InternalOnly
-
-    @Serializable
-    data object LiquidityAdditional : InternalOnly
-
-    @Serializable
     data object EditInvoice : DeepLinkStart
 
     @Serializable
@@ -560,16 +481,12 @@ sealed interface ReceiveRoute {
     @Serializable
     data object PaymentRequestSent : InternalOnly
 
-    @Serializable
-    data object GeoBlock : DeepLinkStart
-
     companion object {
         private val DEEP_LINK_STARTS: List<DeepLinkStart> = listOf(
             QR,
             Amount,
             EditInvoice,
             AddTag,
-            GeoBlock,
         )
 
         fun fromDeepLink(path: String): DeepLinkStart? =

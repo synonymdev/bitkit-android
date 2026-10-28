@@ -10,6 +10,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+.local-native/
 # AI
 .ai
 .codex/

@@ -1,0 +1,33 @@
+<journey name="pair primary node">
+  <description>
+    Proves primary node editing, validation, pairing and persistence in the Android native LDK wallet.
+    Preconditions: an onboarded regtest wallet, a compatible Beignet or ldk-node provider on the same
+    chain, and its full publickey@host:port URI in a QR fixture. The provider must have its liquidity
+    provider enabled and be reachable from the device, but have no spendable onchain funds. Pairing
+    verifies protocol support without requiring liquidity for a sample receive. For the Android emulator,
+    use 10.0.2.2 for a provider listening on the host. The wallet Electrum server must use the same regtest chain.
+    iOS does not yet have this primary node flow, so this journey is Android-only.
+  </description>
+  <actions>
+    <action>Open Settings and select the General tab</action>
+    <action>Tap the Primary node row with tag "PrimaryNodeSettings"</action>
+    <action>Verify the primary node screen with tag "PrimaryNodeScreen" is visible</action>
+    <action>Enter "invalid" in the field with tag "PrimaryNodeInput"</action>
+    <action>Tap the button with tag "PrimaryNodeConnect"</action>
+    <action>Verify an inline validation error with tag "PrimaryNodeError" is visible</action>
+    <action>Tap the scan button with tag "PrimaryNodeScan" and scan the provider URI fixture</action>
+    <action>Verify the field with tag "PrimaryNodeInput" contains the complete provider URI</action>
+    <action>Verify the primary node has not connected merely from scanning the fixture</action>
+    <action>Tap the button with tag "PrimaryNodeConnect"</action>
+    <action>Wait for primary node setup to finish</action>
+    <action>Verify the successful setup message with tag "PrimaryNodeConnected" is visible</action>
+    <action>Verify the current primary with tag "PrimaryNodeCurrent" matches the provider URI</action>
+    <action>Leave the primary node screen and reopen it from Settings</action>
+    <action>Verify the current primary still matches the provider URI</action>
+    <action>Return to Home and verify the setup banner with tag "HomePrimaryNode" is absent</action>
+    <action>Fully close and reopen the app, then verify the Home setup banner remains absent</action>
+    <action>Stop the disposable provider and verify the Home setup banner remains absent while that primary is offline</action>
+    <action>Restart the same provider, open Settings, and tap the row with tag "PrimaryNodeSettings"</action>
+    <action>Verify the primary node screen and saved provider URI are still available from Settings</action>
+  </actions>
+</journey>

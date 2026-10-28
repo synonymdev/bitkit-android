@@ -2,7 +2,9 @@ package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.BtOrderState
 import com.synonym.bitkitcore.BtOrderState2
+import com.synonym.bitkitcore.BtPaymentState2
 import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.ChannelLiquidityParams
@@ -99,12 +101,13 @@ class BlocktankRepo @Inject constructor(
     private var isRefreshing = false
 
     init {
-        startPolling()
         observePaidOrders()
-
         repoScope.launch {
-            refreshInfo()
+            runSuspendCatching { coreService.blocktank.info(refresh = false) }
+                .onSuccess { info -> _blocktankState.update { it.copy(info = info) } }
+                .onFailure { Logger.debug("No cached Blocktank info available", context = TAG) }
             refreshOrders()
+            startPolling()
         }
     }
 
@@ -112,8 +115,8 @@ class BlocktankRepo @Inject constructor(
         if (!enablePolling) return
         flow {
             while (currentCoroutineContext().isActive) {
-                emit(Unit)
                 delay(Env.lspOrdersRefreshInterval)
+                emit(Unit)
             }
         }.flowOn(bgDispatcher)
             .onEach { refreshOrders() }
@@ -144,15 +147,16 @@ class BlocktankRepo @Inject constructor(
             fundingTx.id == fundingTxo.txid && fundingTx.vout == fundingTxo.vout.toULong()
         }
 
-        val cached = _blocktankState.value.cjitEntries
+        val cached = _blocktankState.value.cjitEntries.ifEmpty {
+            runSuspendCatching { coreService.blocktank.cjitEntries(refresh = false) }
+                .onSuccess { entries -> _blocktankState.update { it.copy(cjitEntries = entries.toImmutableList()) } }
+                .getOrDefault(emptyList())
+        }
         cached.matching()?.let { return@withContext it }
 
         // A ChannelReady can only be a CJIT if a live cached entry is still awaiting its channel; otherwise skip
         // the server round-trip so a non-CJIT transfer confirmation isn't delayed by a slow Blocktank API.
-        val hasPendingCjit = cached.any {
-            it.channel == null && it.state != CJitStateEnum.EXPIRED && it.state != CJitStateEnum.FAILED
-        }
-        if (cached.isNotEmpty() && !hasPendingCjit) return@withContext null
+        if (cached.none { it.needsLegacyRefresh() }) return@withContext null
 
         // Match against the freshly fetched list so a concurrent refreshOrders() can't clobber state before we read.
         return@withContext refreshCjitEntries().matching()
@@ -217,9 +221,12 @@ class BlocktankRepo @Inject constructor(
                 )
             }
 
-            // Then refresh from server
-            val orders = coreService.blocktank.orders(refresh = true)
-            val cjitEntries = coreService.blocktank.cjitEntries(refresh = true)
+            val orders = refreshLegacyOrders(cachedOrders, paidOrderIds)
+            val cjitEntries = if (cachedCjitEntries.any { it.needsLegacyRefresh() }) {
+                coreService.blocktank.cjitEntries(refresh = true)
+            } else {
+                cachedCjitEntries
+            }
             _blocktankState.update { state ->
                 state.copy(
                     orders = orders.toImmutableList(),
@@ -239,6 +246,35 @@ class BlocktankRepo @Inject constructor(
             isRefreshing = false
         }
     }
+
+    private suspend fun refreshLegacyOrders(cachedOrders: List<IBtOrder>, paidOrderIds: Set<String>): List<IBtOrder> {
+        val cachedIds = cachedOrders.map { it.id }.toSet()
+        val pendingIds = cachedOrders.filter { it.needsLegacyRefresh(it.id in paidOrderIds) }.map { it.id }
+        val refreshIds = (pendingIds + (paidOrderIds - cachedIds)).distinct()
+        if (refreshIds.isEmpty()) return cachedOrders
+        val refreshed = coreService.blocktank.orders(orderIds = refreshIds, refresh = true, refreshActive = false)
+        val refreshedById = refreshed.associateBy { it.id }
+        return cachedOrders.map { refreshedById[it.id] ?: it } + refreshed.filter { it.id !in cachedIds }
+    }
+
+    private fun IBtOrder.needsLegacyRefresh(wasPaid: Boolean): Boolean {
+        val refundIsPending = wasPaid && channel == null && state2 != BtOrderState2.EXECUTED &&
+            state != BtOrderState.OPEN && state != BtOrderState.CLOSED &&
+            payment?.state2 != BtPaymentState2.REFUNDED && payment?.state2 != BtPaymentState2.CANCELED
+        if (refundIsPending) return true
+        return when (state2) {
+            BtOrderState2.CREATED, BtOrderState2.PAID -> true
+            BtOrderState2.EXECUTED -> false
+            BtOrderState2.EXPIRED ->
+                payment?.state2 == BtPaymentState2.PAID || payment?.state2 == BtPaymentState2.REFUND_AVAILABLE
+            null ->
+                state == BtOrderState.CREATED || payment?.state2 == BtPaymentState2.PAID ||
+                    payment?.state2 == BtPaymentState2.REFUND_AVAILABLE
+        }
+    }
+
+    private fun IcJitEntry.needsLegacyRefresh(): Boolean =
+        channel == null && state != CJitStateEnum.EXPIRED && state != CJitStateEnum.FAILED
 
     suspend fun refreshMinCjitSats() = withContext(bgDispatcher) {
         runCatching {
@@ -461,7 +497,7 @@ class BlocktankRepo @Inject constructor(
     ): Result<IBtOrder?> = withContext(bgDispatcher) {
         runSuspendCatching {
             if (refresh) {
-                refreshOrders().getOrThrow()
+                fetchOrders(listOf(orderId)).getOrThrow()
             }
             val order = _blocktankState.value.orders.find { it.id == orderId }
             return@runSuspendCatching order

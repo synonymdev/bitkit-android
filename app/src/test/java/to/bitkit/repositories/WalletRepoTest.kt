@@ -25,6 +25,7 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
+import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
@@ -48,6 +49,7 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
+import to.bitkit.services.PrimaryWalletService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeIncomplete
@@ -78,6 +80,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val onchainService = mock<OnchainService>()
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
+    private val primaryWalletService = mock<PrimaryWalletService>()
 
     companion object Fixtures {
         const val ACTIVITY_TAG = "testTag"
@@ -136,6 +139,8 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever { settingsStore.update(any()) }.thenReturn(Unit)
         whenever(deriveBalanceStateUseCase.invoke()).thenReturn(Result.success(BalanceState()))
+        whenever(primaryWalletService.fundIfNeeded()).thenReturn(Result.success(Unit))
+        whenever(lightningRepo.refreshChannelsAndPeers(any())).thenReturn(Result.success(Unit))
 
         whenever(coreService.onchain).thenReturn(onchainService)
         whenever(preActivityMetadataRepo.addPreActivityMetadataTags(any(), any())).thenReturn(Result.success(Unit))
@@ -173,6 +178,7 @@ class WalletRepoTest : BaseUnitTest() {
         transferRepo = transferRepo,
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
+        primaryWalletService = primaryWalletService,
     )
 
     private fun lightningInvoice(bolt11: String, isExpired: Boolean = false) = LightningInvoice(
@@ -186,6 +192,31 @@ class WalletRepoTest : BaseUnitTest() {
         networkType = NetworkType.REGTEST,
         payeeNodeId = null,
     )
+
+    @Test
+    fun `debounced native sync publishes passive disconnection before deriving balances`() = test {
+        val peer = PeerDetails("primary", "localhost:9735", isPersisted = true, isConnected = true)
+        val state = MutableStateFlow(
+            LightningState(nodeLifecycleState = NodeLifecycleState.Running, peers = persistentListOf(peer))
+        )
+        whenever(lightningRepo.lightningState).thenReturn(state)
+        whenever(lightningRepo.refreshChannelsAndPeers(any())).doSuspendableAnswer {
+            state.value = state.value.copy(peers = persistentListOf(peer.copy(isConnected = false)))
+            Result.success(Unit)
+        }
+        whenever(deriveBalanceStateUseCase.invoke()).doSuspendableAnswer {
+            assertFalse(state.value.peers.single().isConnected)
+            Result.success(BalanceState())
+        }
+
+        sut.debounceSyncByEvent()
+        sut.debounceSyncByEvent()
+        testScheduler.advanceUntilIdle()
+
+        assertFalse(state.value.peers.single().isConnected)
+        verify(lightningRepo, times(1)).refreshChannelsAndPeers(any())
+        verify(deriveBalanceStateUseCase, times(1)).invoke()
+    }
 
     @Test
     fun `concurrent cache loads keep receive pending until both complete`() = test {

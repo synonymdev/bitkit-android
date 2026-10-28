@@ -7,10 +7,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.Suggestion
-import to.bitkit.models.TransferType
 import to.bitkit.models.toSuggestionOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,7 +18,6 @@ class SuggestionsRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val walletRepo: WalletRepo,
     private val settingsStore: SettingsStore,
-    private val transferRepo: TransferRepo,
     private val pubkyRepo: PubkyRepo,
     private val hwWalletRepo: HwWalletRepo,
 ) {
@@ -31,17 +28,14 @@ class SuggestionsRepo @Inject constructor(
     val suggestionsFlow: Flow<List<Suggestion>> = combine(
         walletRepo.balanceState,
         settingsStore.data,
-        transferRepo.activeTransfers,
         pubkyRepo.isAuthenticated,
         hwWalletRepo.wallets,
-    ) { balanceState, settings, transfers, profileAuthenticated, hardwareWallets ->
+    ) { balanceState, settings, profileAuthenticated, hardwareWallets ->
         val hasHardwareWallet = hardwareWallets.isNotEmpty()
-        val baseSuggestions = when {
-            balanceState.totalLightningSats > 0uL ->
-                spendingSuggestions(settings, profileAuthenticated, hasHardwareWallet)
-            balanceState.totalOnchainSats > 0uL ->
-                savingsOnlySuggestions(settings, transfers, profileAuthenticated, hasHardwareWallet)
-            else -> emptyWalletSuggestions(settings, transfers, profileAuthenticated, hasHardwareWallet)
+        val baseSuggestions = if (balanceState.totalSats > 0uL) {
+            fundedWalletSuggestions(settings, profileAuthenticated, hasHardwareWallet)
+        } else {
+            emptyWalletSuggestions(settings, profileAuthenticated, hasHardwareWallet)
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
         baseSuggestions
@@ -55,13 +49,14 @@ class SuggestionsRepo @Inject constructor(
         }
     }
 
-    private fun spendingSuggestions(
+    private fun fundedWalletSuggestions(
         settings: SettingsData,
         profileAuthenticated: Boolean,
         hasHardwareWallet: Boolean,
     ) = listOfNotNull(
+        Suggestion.BACK_UP.takeIf { !settings.backupVerified },
+        Suggestion.SECURE.takeIf { !settings.isPinEnabled },
         Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
-        Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
         Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
         Suggestion.SHOP,
         Suggestion.PROFILE.takeIf { !profileAuthenticated },
@@ -70,34 +65,12 @@ class SuggestionsRepo @Inject constructor(
         Suggestion.BUY,
     )
 
-    private fun savingsOnlySuggestions(
-        settings: SettingsData,
-        transfers: List<TransferEntity>,
-        profileAuthenticated: Boolean,
-        hasHardwareWallet: Boolean,
-    ) = listOfNotNull(
-        Suggestion.BACK_UP.takeIf { !settings.backupVerified },
-        Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-        Suggestion.LIGHTNING.takeIf {
-            transfers.all { it.type != TransferType.TO_SPENDING }
-        },
-        Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
-        Suggestion.SUPPORT,
-        Suggestion.PROFILE.takeIf { !profileAuthenticated },
-        Suggestion.INVITE,
-        Suggestion.BUY,
-    )
-
     private fun emptyWalletSuggestions(
         settings: SettingsData,
-        transfers: List<TransferEntity>,
         profileAuthenticated: Boolean,
         hasHardwareWallet: Boolean,
     ) = listOfNotNull(
         Suggestion.BUY,
-        Suggestion.LIGHTNING.takeIf {
-            transfers.all { it.type != TransferType.TO_SPENDING }
-        },
         Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
         Suggestion.SUPPORT,
         Suggestion.BACK_UP.takeIf { !settings.backupVerified },

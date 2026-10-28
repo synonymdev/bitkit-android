@@ -112,6 +112,9 @@ class SettingsViewModel @Inject constructor(
     val notificationsGranted = settingsStore.data.map { it.notificationsGranted }
         .asStateFlow(initialValue = false)
 
+    val isPrimaryWallet = settingsStore.data.map { it.primaryNodeUri.isNotBlank() }
+        .asStateFlow(initialValue = true)
+
     fun setNotificationPreference(granted: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(notificationsGranted = granted) }

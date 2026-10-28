@@ -1,0 +1,398 @@
+{
+  "recorded_at_utc": "2026-10-27T04:17:17.322022+00:00",
+  "scope": "Android direct funding working-tree implementation; regtest QA artifacts only. Existing emulator-5554 and user wallet were not modified. Manual funded evidence records the exact APK phases separately.",
+  "source": {
+    "head": "dd143eeb98ab61aa98b0c581b4c0e34bea96acef",
+    "branch": "feat/primary-node-wallet",
+    "working_tree": "Includes pre-existing uncommitted primary-node-wallet work and the new direct-funding integration. No commit or push was performed."
+  },
+  "environment": {
+    "java_home": "/Applications/Android Studio.app/Contents/jbr/Contents/Home",
+    "android_home": "/Users/coreyphillips/Library/Android/sdk",
+    "gradle": "9.5.0",
+    "just": "Unavailable; equivalent Gradle tasks executed directly."
+  },
+  "native_aar": {
+    "path": "/Users/coreyphillips/Documents/synonym/ldk-node/bindings/kotlin/ldk-node-android/lib/build/outputs/aar/lib-release.aar",
+    "sha256": "f2c95398bed9ac387f548bddc8b4d27edcd908541a527734d1d05e892122690c",
+    "native_qualification": "../../../ldk-node/docs/qualification/direct-funding.json"
+  },
+  "qa_apk": {
+    "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/direct-funding-qa-195/bitkit-dev-debug-195-arm64-v8a.apk",
+    "sha256": "639c778fe7025beaed0c3cb6ccffbfaa7041a3624fee731a361b8469d8a960f8",
+    "application_id": "to.bitkit.dev",
+    "version_code": 195,
+    "version_name": "3.0.1",
+    "network": "REGTEST",
+    "abis": [
+      "arm64-v8a"
+    ],
+    "e2e": true,
+    "e2e_backend": "local",
+    "e2e_electrum_url": "tcp://10.0.2.2:60412",
+    "installed_only_on": "emulator-5556, the preserved disposable regtest wallet; emulator stopped after verification.",
+    "signature_verified": true,
+    "signer_certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+    "alignment_16k_verified": true,
+    "libldk_node_identical_to_aar": true,
+    "libldk_node_sha256": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3",
+    "upgrade": "Passed adb install -r and app restart on the same wallet. Two incoming channel credits and one outgoing direct-funding receipt persisted; outgoing principal 20,000 sats and fee 155 sats remained confirmed. Native payment counts were unchanged and no payment was sent again.",
+    "archive_note": "Preserved before building custom mainnet and regtest version 200; artifact bytes unchanged."
+  },
+  "checks": [
+    {
+      "command": "E2E=true E2E_BACKEND=local E2E_ELECTRUM_URL=tcp://10.0.2.2:60412 ./gradlew compileDevDebugKotlin testDevDebugUnitTest lintDevDebug assembleDevDebug",
+      "result": "passed",
+      "log": "/tmp/bgnq-android-committed-failure-final-gates.log",
+      "unit_tests": {
+        "suites": 255,
+        "tests": 4523,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "android_lint": "No issues found."
+    },
+    {
+      "command": "./gradlew detekt --rerun-tasks",
+      "result": "passed",
+      "log": "/tmp/bgnq-android-committed-failure-final-detekt2.log"
+    },
+    {
+      "command": "E2E=true E2E_BACKEND=local E2E_ELECTRUM_URL=tcp://10.0.2.2:60412 ANDROID_SERIAL=emulator-5556 ./gradlew assembleDevDebug connectedDevDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=to.bitkit.ui.screens.wallets.receive.ReceiveAutoTabSelectionTest,to.bitkit.ui.screens.wallets.receive.ReceiveHardwareFlowTest,to.bitkit.ui.screens.wallets.receive.ReceiveAmountLayoutTest,to.bitkit.ui.screens.wallets.receive.EditInvoiceAmountLayoutTest,to.bitkit.ui.screens.wallets.receive.PrimaryReceiveConfirmLayoutTest,to.bitkit.ui.screens.wallets.send.SendAmountContentTest,to.bitkit.ui.screens.wallets.send.SendAmountLayoutTest,to.bitkit.ui.screens.wallets.send.SendConfirmNavigationTest",
+      "result": "passed",
+      "log": "/tmp/bgnq-android-device-gates.log",
+      "device": "emulator-5556",
+      "device_api": 36,
+      "viewport_pixels": "720x1280",
+      "density_dpi": 320,
+      "instrumentation": {
+        "suites": 1,
+        "tests": 20,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "sum_suite_seconds": 29.19
+      },
+      "test_classes": [
+        "to.bitkit.ui.screens.wallets.receive.ReceiveAutoTabSelectionTest",
+        "to.bitkit.ui.screens.wallets.receive.ReceiveHardwareFlowTest",
+        "to.bitkit.ui.screens.wallets.receive.ReceiveAmountLayoutTest",
+        "to.bitkit.ui.screens.wallets.receive.EditInvoiceAmountLayoutTest",
+        "to.bitkit.ui.screens.wallets.receive.PrimaryReceiveConfirmLayoutTest",
+        "to.bitkit.ui.screens.wallets.send.SendAmountContentTest",
+        "to.bitkit.ui.screens.wallets.send.SendAmountLayoutTest",
+        "to.bitkit.ui.screens.wallets.send.SendConfirmNavigationTest"
+      ],
+      "apk_sha256": "f3cf249c87e0e6746ee483e868d9c0639e510f6c9de4e8766b6ecabf7ac6359e",
+      "scope": "The 20 Compose tests passed on the initial APK before the activity-address fix and final signed-failure guard. They were not rerun on the later funded wallet; each later device check has its own artifact scope."
+    },
+    {
+      "command": "apksigner verify --print-certs <qa-apk>; zipalign -c -P 16 4 <qa-apk>",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check; parse changed string-resource and journey XML",
+      "result": "passed"
+    },
+    {
+      "command": "adb -s emulator-5556 install -r <qa-apk>; adb -s emulator-5556 install -r <test-apk>; adb -s emulator-5556 shell am instrument -w -e class to.bitkit.repositories.DirectFundingActivityStorageTest to.bitkit.dev.test/to.bitkit.test.HiltTestRunner",
+      "result": "passed",
+      "tests": 1,
+      "seconds": 0.167,
+      "test_apk": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/apk/androidTest/dev/debug/app-dev-debug-androidTest.apk",
+      "test_apk_sha256": "9a0732339a5fb8e77ec38f5bbb2cd15e151d07335299212cf8b9d32daca3d98e",
+      "scope": "Actual bitkit-core JNI and SQLite in a unique target-app cache directory; persists pending/outgoing/incoming receipts, replays and reopens the database. No wallet path, keychain, Env storage path or production wallet data is changed.",
+      "evidence": ".ai/direct-funding-20261027/results.md",
+      "apk_sha256": "7d48765018b6762fa9f6d4ed4a73ca8c8d12fa41d4ec85b3a3829b7230857843"
+    },
+    {
+      "command": "Verify final APK SHA-256; adb -s emulator-5556 install -r <qa-apk>; force-stop and restart to.bitkit.dev; inspect activity and native payment counts.",
+      "result": "passed",
+      "apk_sha256": "639c778fe7025beaed0c3cb6ccffbfaa7041a3624fee731a361b8469d8a960f8",
+      "scope": "In-place upgrade and history recovery only; no additional funded payment on the final guard build.",
+      "evidence": ".ai/direct-funding-20261027/manual-qualification.json",
+      "details": {
+        "hash_verified": true,
+        "install_r_wallet_preserved": true,
+        "process_restart": true,
+        "incoming_direct_funding_rows": 2,
+        "outgoing_direct_funding_rows": 1,
+        "outgoing_confirmed": true,
+        "outgoing_payment_sats": 20000,
+        "outgoing_fee_sats": 155,
+        "no_resend": true,
+        "native_committed_payment_counts_unchanged": true,
+        "scope": "History persistence/restart only; funded flows remain attributed to their earlier APK phases."
+      }
+    }
+  ],
+  "resolved_initial_failures": [
+    "First full unit gate had 4517 passes and two failures in receive snapshot-race tests. New recovery cache reads consumed an implicit first-read barrier in the fixture. The barrier now explicitly targets loadFromCache, preserving the settlement race under test. LightningRepoTest then passed, followed by the complete 4519-test rerun.",
+    "Detekt auto-correction initially reported LightningRepoTest import ordering while correcting it. Full final detekt rerun passed.",
+    "Real funded Android testing exposed the empty-address SQLite constraint failure despite the earlier mocked tests. The production target was corrected, an actual JNI/SQLite regression passed, and the original completed payment recovered on the same upgraded wallet without sending again.",
+    "The first new ActivityRepo recovery test had a Mockito default-argument fixture mismatch because mock construction skips the storage defaultWalletId field. Corrected the nullable matcher; focused tests and then all 4,520 unit tests passed.",
+    "Final review found the outbound Failed commitment edge and the Android guard was corrected with direction-aware regressions. No double payment was observed or deliberately induced.",
+    "The initial focused regression compile used the nonexistent Scan route; corrected it to QrScanner. Final detekt reported argument wrapping in the new repository test; fixed whitespace and reran full detekt successfully."
+  ],
+  "limitations": [
+    "The APK is a disposable regtest QA build, not a new mainnet/custom Bitkit Primary release. No physical phone, mainnet payment or user Umbrel deployment was exercised.",
+    "Actual Android outbound execution used the initial APK; the storage-repaired APK verified recovery, funded incoming new-channel/splice operations and receive lifecycle. The final guard APK has separate upgrade/restart verification only.",
+    "Individual LDK-provider device checks passed; this is not a blanket pass of every J8/J9 engine and state variant. Native Beignet interoperability remains separate evidence.",
+    "Android payer to existing-channel splice repeat",
+    "Separate Beignet provider UI repeat",
+    "Unresolved signed-pending reentry result UI",
+    "Exact zero-onchain-coin sender fixture",
+    "Unexpired committed-result reentry navigation",
+    "Lightning fallback settlement was not run on device; the Bitcoin fallback was observed in the mempool and revoked the direct request before reopening. That fallback transaction was not mined.",
+    "The combined-copy request was retired by the existing disconnect policy when the system clipboard editor backgrounded the app. Fallback revocation used a separate fresh request, so the evidence does not conflate the two causes."
+  ],
+  "journey_corrections": [
+    {
+      "journey": "J9: journeys/primary-node/send-direct-funding.xml",
+      "original_mismatch": "The original confirmation step expected the direct-funding label, receiver and maximum fee immediately on arrival. The existing confirmation screen initially hides these details.",
+      "observed_behavior": "On the final QA APK, tapping Show Details exposed Direct channel funding and the exact receiver node ID. At the compact 360x640 dp viewport, scrolling within the expanded details exposed the 1000-sat maximum fee. The parent SendConfirmDirectFunding tag was absent from the native accessibility dump, while the label and receiver/fee tags were present.",
+      "correction": "Split entry into an explicit Show Details action and a separate verification action that permits scrolling. No application code or APK changed; automated gate results remain applicable.",
+      "evidence": [
+        ".ai/direct-funding-20261027/send-confirm-review-layout.json",
+        ".ai/direct-funding-20261027/send-confirm-details-layout.json",
+        ".ai/direct-funding-20261027/send-confirm-fee-layout.json"
+      ],
+      "validation": "Corrected journey XML parsed successfully. Full funded manual journey results remain separate."
+    }
+  ],
+  "initial_qa_apk_before_storage_fix": {
+    "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/apk/dev/debug/app-dev-arm64-v8a-debug.apk",
+    "sha256": "f3cf249c87e0e6746ee483e868d9c0639e510f6c9de4e8766b6ecabf7ac6359e",
+    "application_id": "to.bitkit.dev",
+    "version_code": 195,
+    "version_name": "3.0.1",
+    "network": "REGTEST",
+    "abis": [
+      "arm64-v8a"
+    ],
+    "e2e": true,
+    "e2e_backend": "local",
+    "e2e_electrum_url": "tcp://10.0.2.2:60412",
+    "installed_only_on": "emulator-5556, a fresh disposable AVD",
+    "signature_verified": true,
+    "signer_certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+    "alignment_16k_verified": true,
+    "libldk_node_identical_to_aar": true,
+    "libldk_node_sha256": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3"
+  },
+  "storage_fix": {
+    "initial_failure": "A real 20000-sat direct funding send succeeded onchain, but the initial Android activity used an empty address. Core rejected the row with CHECK constraint failed: length(address)>0. An ordinary 20155-sat debit appeared instead.",
+    "production_fix": "Store the truthful stable direct-funding:<requestId> protocol target as the nonempty activity address. It is not presented as a Bitcoin destination address and is available before a funding transaction exists. No native API or AAR changed.",
+    "unit_regression": "Failed receipt persistence leaves the ordinary debit intact. Successful recovery inserts a 20,000-sat payment with a 155-sat fee under one stable request ID, removes the ordinary duplicate, and repeat synchronization does not insert another receipt.",
+    "real_sqlite_regression": "DirectFundingActivityStorageTest passed against the packaged native Core database.",
+    "same_wallet_recovery": {
+      "result": "passed",
+      "new_payment_sent": false,
+      "history": "Exactly one Direct channel funding activity; ordinary Sent duplicate removed.",
+      "details": "Confirmed, payment 20,000 sats, fee 155 sats; boosting disabled.",
+      "evidence": [
+        ".ai/direct-funding-20261027/funded-send-initial-failure.json",
+        ".ai/direct-funding-20261027/recovered-home-ready-layout.json",
+        ".ai/direct-funding-20261027/recovered-payment-detail-layout.json"
+      ],
+      "apk_sha256": "7d48765018b6762fa9f6d4ed4a73ca8c8d12fa41d4ec85b3a3829b7230857843"
+    }
+  },
+  "funded_qa_apk_before_failed_guard": {
+    "path": "/Users/coreyphillips/Documents/synonym/bitkit-android/app/build/outputs/apk/dev/debug/app-dev-arm64-v8a-debug.apk",
+    "sha256": "7d48765018b6762fa9f6d4ed4a73ca8c8d12fa41d4ec85b3a3829b7230857843",
+    "application_id": "to.bitkit.dev",
+    "version_code": 195,
+    "version_name": "3.0.1",
+    "network": "REGTEST",
+    "abis": [
+      "arm64-v8a"
+    ],
+    "e2e": true,
+    "e2e_backend": "local",
+    "e2e_electrum_url": "tcp://10.0.2.2:60412",
+    "installed_only_on": "emulator-5556, a fresh disposable AVD",
+    "signature_verified": true,
+    "signer_certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+    "alignment_16k_verified": true,
+    "libldk_node_identical_to_aar": true,
+    "libldk_node_sha256": "b15e6a657383c52713a57d565339d7b8d54595af65ad005d6b438d6ea723d8b3",
+    "upgrade": "Installed with adb install -r on the existing disposable emulator-5556 wallet; no uninstall, data clear or second payment."
+  },
+  "failed_signed_guard": {
+    "finding": "Native outbound Failed means a signed witness had already been committed. Treating it like a pre-sign abort could allow the Lightning rail of the same unified request.",
+    "fix": "Only Aborted permits another payment of the request. Failed outbound records remain committed and their removed activity can be restored, while failed inbound negotiations remain uncommitted. The pending failure screen continues to resolve as failure.",
+    "regressions": [
+      "A unified Bitcoin/Lightning/bgnq request with a failed signed record routes to the existing result on rescan and on a stale Lightning confirmation, without invoking either payer API.",
+      "Failed outbound records are restored as removed receipts; failed inbound negotiations do not create an activity.",
+      "Pending failure resolution and activity mapping remain consistent."
+    ],
+    "independent_read_only_review": "Native state meanings and all Android callers were checked; no reachable issue found.",
+    "apk_sha256": "639c778fe7025beaed0c3cb6ccffbfaa7041a3624fee731a361b8469d8a960f8",
+    "native_aar_changed": false
+  },
+  "manual_device_checks": {
+    "source_record": ".ai/direct-funding-20261027/manual-qualification.json",
+    "source_sha256": "5f2254cdb5bcca5eaff7909be2b4dc45848210fbd89d29d6772fac4ad524fb05",
+    "narrative": ".ai/direct-funding-20261027/results.md",
+    "record": {
+      "tested_at_utc": "2026-10-27",
+      "device": "emulator-5556",
+      "isolated_avd": "/tmp/bgnq-android-user/avd/medium_phone.avd",
+      "existing_user_device_untouched": "emulator-5554",
+      "apk_sha256": "7d48765018b6762fa9f6d4ed4a73ca8c8d12fa41d4ec85b3a3829b7230857843",
+      "regtest_only": true,
+      "electrum": "tcp://10.0.2.2:60412",
+      "database_regression": {
+        "class": "to.bitkit.repositories.DirectFundingActivityStorageTest",
+        "passed": 1,
+        "failed": 0,
+        "elapsed_seconds": 0.167,
+        "wallet_preserved": true
+      },
+      "sender": {
+        "request_id": "d31aa298adffb0ade04b2d67c36189ac",
+        "txid": "c9601803d40a27a551b2cc18b25924753cb26aa29530d7c958156bdb5e8e72b0",
+        "amount_sats": 20000,
+        "fee_sats": 155,
+        "cancel_before_swipe_no_payment": true,
+        "mempool_observed_before_success": true,
+        "confirmed": true,
+        "receiver_restart_count": 1,
+        "upgrade_recovered_activity": true,
+        "ordinary_row_deduplicated": true,
+        "detail_payment_sats": 20000,
+        "detail_fee_sats": 155,
+        "confirmed_reopen_did_not_offer_second_send": true,
+        "empty_bgnq_rejected": true,
+        "repeated_bgnq_rejected": true,
+        "insufficient_onchain_blocked_despite_channel_balance": true,
+        "exact_zero_onchain_case": "not run",
+        "unresolved_pending_reentry": "not run; transaction immediately observed in mempool",
+        "executed_apk_sha256": "f3cf249c87e0e6746ee483e868d9c0639e510f6c9de4e8766b6ecabf7ac6359e",
+        "fresh_channel_case": true,
+        "android_payer_to_existing_channel_splice_case": "not run",
+        "confirmed_reopen_after_expiry": true,
+        "unexpired_committed_result_reentry": "not established; no second confirmation was observed before mining"
+      },
+      "receiver": {
+        "node_id": "03d1d4bf77ee5740c74b6b899f48f1278eec0316fccbff43ba6fa08fc4fe38d650",
+        "channel_id": "e37be55353525e4e5eaeb768079fdf0094e873101a2e8c2871bf77f09cd2afaa",
+        "primary_user_channel_id": "314074214251324272533081109856885308781",
+        "no_channel_before_first_receive": true,
+        "clipboard_exactly_matches_qr": true,
+        "one_nonempty_bgnq_with_amount": true,
+        "paid_request_bgnq_retired": true,
+        "new_channel": {
+          "request_id": "48a2d72fafc86a41c1d77f63210bde00",
+          "txid": "31f5cbfc44470d9e0f9f5045714ad2b6be0e0f0290f8d5e3e040bec6310125c6",
+          "amount_sats": 20000,
+          "payer_fee_sats": 155,
+          "channel_capacity_sats": 20000,
+          "confirmed": true
+        },
+        "splice": {
+          "request_id": "fca60ea0ca9f5e142ebfd21b087c3016",
+          "txid": "88b8160105ab2f5d0b541b9c018d177a79a34758c11c0b7347fca55b30ca056c",
+          "amount_sats": 20000,
+          "payer_fee_sats": 252,
+          "channel_capacity_sats": 40000,
+          "same_channel": true,
+          "confirmed": true
+        },
+        "android_restart_preserved_both_credits": true,
+        "native_sender_restart_retry_same_tx": true,
+        "native_sender_committed_payment_count": 2,
+        "no_own_wallet_transfer_debit": true
+      },
+      "receive_lifecycle": {
+        "amount_and_signed_envelope_updated_20000_to_30000": true,
+        "lightning_only_copy": "passed on later explicitly approved primary quote",
+        "primary_disconnect_removed_bgnq_from_new_copy": true,
+        "primary_disconnect_preserved_bitcoin_fallback": true,
+        "primary_restart_restored_new_bgnq": true,
+        "expiry": "passed",
+        "fallback_settlement_revocation": "passed after wallet observed unconfirmed onchain payment",
+        "expiry_request_id": "465635466eae3983e512b294e85c1dd0",
+        "expiry_deadline_utc": "2026-10-27T04:02:13.546Z",
+        "same_request_at_midpoint": true,
+        "expiry_observed_utc": "2026-10-27T04:02:31Z",
+        "expiry_without_refresh_or_reopen": true,
+        "expiry_bitcoin_fallback_preserved": true,
+        "combined_copy": {
+          "request_id": "da51a6255f8c10f7c22d3a4ea89c0201",
+          "length": 794,
+          "full_system_clipboard_editor_text_matches_qr": true,
+          "contains_one_lightning_and_one_bgnq": true,
+          "lightning_only_copy_length": 343,
+          "lightning_only_exact_bolt_invoice": true
+        },
+        "fallback": {
+          "request_id": "3618331c7202cfe17838b798b1933a82",
+          "amount_sats": 20000,
+          "txid": "ab267aa619a4630cd35cb4c920f195d62a07c3b8dde82cee3462716496438e8d",
+          "paid_while_receive_closed": true,
+          "received_popup_amount_sats": 20000,
+          "direct_attempt_declined_before_reopen": true,
+          "reopened_address_and_request_replaced": true,
+          "direct_retry_declined_after_reopen": true,
+          "sender_status": "Aborted",
+          "sender_funding_txid": null,
+          "sender_fee_sats": null,
+          "sender_witness_released": false,
+          "mempool_only_contains_fallback_transaction": true,
+          "onchain_confirmation": "not mined; app observed and retired request from mempool receipt"
+        },
+        "clipboard_editor_background_note": "Opening the system clipboard editor backgrounded Bitkit and retired the earlier composite under disconnect policy. Fallback test used a separate fresh request, copied without leaving Bitkit, so that revocation is attributable to fallback receipt."
+      },
+      "provider_engine": "LDK",
+      "beignet_provider_ui_repeat": "not run; separate native interop evidence is not a substitute",
+      "overall_journeys": "Individual checks complete for documented LDK fixture; not an overall pass for every J8/J9 engine/state variant.",
+      "post_fix_logs_no_direct_funding_storage_error": true,
+      "apk_phases": {
+        "initial_outbound_execution": "f3cf249c87e0e6746ee483e868d9c0639e510f6c9de4e8766b6ecabf7ac6359e",
+        "storage_fix_recovery_and_funded_receive_lifecycle": "7d48765018b6762fa9f6d4ed4a73ca8c8d12fa41d4ec85b3a3829b7230857843",
+        "final_failed_guard_upgrade": "639c778fe7025beaed0c3cb6ccffbfaa7041a3624fee731a361b8469d8a960f8"
+      },
+      "unrun_device_variants": [
+        "Android payer to existing-channel splice repeat",
+        "Separate Beignet provider UI repeat",
+        "Unresolved signed-pending reentry result UI",
+        "Exact zero-onchain-coin sender fixture",
+        "Unexpired committed-result reentry navigation"
+      ],
+      "final_apk_sha256": "639c778fe7025beaed0c3cb6ccffbfaa7041a3624fee731a361b8469d8a960f8",
+      "final_upgrade_check": {
+        "hash_verified": true,
+        "install_r_wallet_preserved": true,
+        "process_restart": true,
+        "incoming_direct_funding_rows": 2,
+        "outgoing_direct_funding_rows": 1,
+        "outgoing_confirmed": true,
+        "outgoing_payment_sats": 20000,
+        "outgoing_fee_sats": 155,
+        "no_resend": true,
+        "native_committed_payment_counts_unchanged": true,
+        "scope": "History persistence/restart only; funded flows remain attributed to their earlier APK phases."
+      },
+      "cleanup": {
+        "completed": true,
+        "native_fixture_processes": "all three gracefully stopped; wrapper exited0; process list verified empty",
+        "electrs_container": "Owned disposable Electrum container removed and verified absent; incidental container label omitted.",
+        "emulator": "emulator-5556 stopped and absent from adb devices",
+        "reverse": "tcp:52160 removed before emulator shutdown",
+        "user_emulator": "emulator-5554 remained listed; never operated",
+        "core": "Owned disposable Bitcoin Core container left running for subsequent cleanup; incidental container label omitted.",
+        "artifacts": "UI layouts, logs and per-phase evidence retained in .ai; disposable AVD and native data remain under temporary paths for recovery"
+      }
+    }
+  },
+  "parent_core_cleanup": {
+    "container_label_omitted": true,
+    "stopped": true,
+    "verified_absent_from_running_containers": true,
+    "source": "The owned disposable Bitcoin Core container was stopped after native-fixture cleanup and verified absent from docker ps. Its incidental label is omitted.",
+    "scope": "This completes the cleanup after the earlier manual snapshot left Core running."
+  }
+}

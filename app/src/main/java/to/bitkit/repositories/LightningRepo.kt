@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlException
 import com.synonym.bitkitcore.LnurlPayData
+import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.createChannelRequestUrl
@@ -50,6 +51,9 @@ import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
+import org.lightningdevkit.ldknode.ConfirmationStatus
+import org.lightningdevkit.ldknode.DirectFundingPaymentDetails
+import org.lightningdevkit.ldknode.DirectFundingRequestDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
@@ -58,6 +62,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.PrimaryReceiveQuote
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.async.appScope
@@ -72,7 +77,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
-import to.bitkit.ext.toPeerDetailsList
+import to.bitkit.ext.toHex
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
@@ -81,8 +86,11 @@ import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.PrimaryNode
+import to.bitkit.models.PrimaryNodeError
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WalletScope
+import to.bitkit.models.directFundingParameter
 import to.bitkit.models.safe
 import to.bitkit.models.satsToMsat
 import to.bitkit.models.toAddressType
@@ -99,6 +107,7 @@ import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
+import to.bitkit.services.PrimaryWalletService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -121,6 +130,7 @@ import kotlin.time.Instant
 class LightningRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
+    private val primaryWalletService: PrimaryWalletService,
     private val settingsStore: SettingsStore,
     private val coreService: CoreService,
     private val lspNotificationsService: LspNotificationsService,
@@ -174,10 +184,15 @@ class LightningRepo @Inject constructor(
      * started. Recovery is cheap to wait on: it skips the release gate, so it is a plain rebuild.
      */
     private val configChangeMutex = Mutex()
+
+    @Volatile
+    private var configuringPrimary: PrimaryNode? = null
     private val isChangingAddressType = AtomicBoolean(false)
     private val refreshFailureLogged = AtomicBoolean(false)
 
     init {
+        lightningService.beforeEventAcknowledged = primaryWalletService::handleEvent
+        lightningService.onEventAcknowledged = primaryWalletService::onEventAcknowledged
         observeConnectivityForSyncRetry()
     }
 
@@ -306,7 +321,11 @@ class LightningRepo @Inject constructor(
         channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
         runSuspendCatching {
-            val trustedPeers = fetchTrustedPeers()
+            val primary = configuringPrimary
+                ?: settingsStore.data.first().primaryNodeUri.takeIf { it.isNotBlank() }?.let(PrimaryNode::parse)
+            val trustedPeers = primary?.address?.let {
+                listOf(PeerDetails(nodeId = primary.nodeId, address = it, isPersisted = true, isConnected = false))
+            }.orEmpty()
             lightningService.setup(
                 walletIndex,
                 customServerUrl,
@@ -318,16 +337,6 @@ class LightningRepo @Inject constructor(
             Logger.error("Node setup error", it, context = TAG)
         }
     }
-
-    private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runSuspendCatching {
-        val info = coreService.blocktank.info(refresh = false)
-            ?: coreService.blocktank.info(refresh = true)
-        info?.nodes?.toPeerDetailsList()?.also {
-            Logger.info("Fetched ${it.size} trusted peers from remote", context = TAG)
-        }
-    }.onFailure {
-        Logger.warn("fetchTrustedPeers error", it, context = TAG)
-    }.getOrNull()
 
     suspend fun start(
         walletIndex: Int = 0,
@@ -424,7 +433,10 @@ class LightningRepo @Inject constructor(
                 updateGeoBlockState()
                 refreshChannelCache()
 
-                if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
+                if (shouldValidateGraph && configuringPrimary == null &&
+                    settingsStore.data.first().primaryNodeUri.isBlank() &&
+                    !lightningService.aresRequiredPeersInNetworkGraph()
+                ) {
                     Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
 
                     lightningService.stop()
@@ -444,7 +456,6 @@ class LightningRepo @Inject constructor(
                 sync().onFailure { e ->
                     Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
                 }
-                scope.launch { registerForNotifications() }
                 Result.success(Unit)
             }.getOrElse { e ->
                 if (e is CancellationException) {
@@ -674,7 +685,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
         _lightningState.update {
-            it.copy(isGeoBlocked = coreService.isGeoBlocked())
+            it.copy(isGeoBlocked = false)
         }
     }
 
@@ -1316,6 +1327,194 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
+    suspend fun createDirectFundingRequest(amountSats: ULong?): Result<DirectFundingRequestDetails> =
+        executeWhenNodeRunning("createDirectFundingRequest") {
+            runSuspendCatching {
+                require(amountSats == null || amountSats >= 5000uL)
+                val primary = configuredPrimaryNode()
+                connectPrimaryNode(primary)
+                lightningService.createDirectFundingRequest(amountSats)
+            }
+        }
+
+    suspend fun invalidateDirectFundingRequest(requestId: String): Result<Unit> =
+        executeWhenNodeRunning("invalidateDirectFundingRequest") {
+            runSuspendCatching { lightningService.invalidateDirectFundingRequest(requestId) }
+        }
+
+    suspend fun decodeDirectFundingRequest(request: String): Result<DirectFundingRequestDetails> =
+        executeWhenNodeRunning("decodeDirectFundingRequest") {
+            runSuspendCatching { lightningService.decodeDirectFundingRequest(request) }
+        }
+
+    suspend fun directFundingRequestFromBip21(
+        input: String,
+        amountSats: ULong,
+        lightningInvoice: String?,
+    ): Result<DirectFundingRequestDetails?> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val encoded = directFundingParameter(input).getOrThrow() ?: return@runSuspendCatching null
+            val request = decodeDirectFundingRequest(encoded).getOrThrow()
+            check(request.receiverNodeId != getNodeId()) { "Cannot fund our own request" }
+            check(request.amountSats == null || amountSats == 0uL || request.amountSats == amountSats) {
+                "BIP21 amount differs from the signed request"
+            }
+            if (!lightningInvoice.isNullOrBlank()) {
+                val invoice = (coreService.decode(lightningInvoice) as? Scanner.Lightning)?.invoice
+                check(invoice != null) { "Invalid Lightning fallback" }
+                check(invoice.payeeNodeId?.toHex()?.equals(request.receiverNodeId, ignoreCase = true) != false) {
+                    "Lightning payee differs from the signed request"
+                }
+                check(
+                    request.amountSats == null || invoice.amountSatoshis == 0uL ||
+                        invoice.amountSatoshis == request.amountSats
+                ) { "Lightning amount differs from the signed request" }
+            }
+            request
+        }
+    }
+
+    suspend fun sendDirectFunding(
+        request: String,
+        amountSats: ULong,
+        maxFeeSats: ULong,
+    ): Result<DirectFundingPaymentDetails> = executeWhenNodeRunning("sendDirectFunding") {
+        runSuspendCatching {
+            primaryWalletService.withWalletOperation {
+                val previous = onchainSendAttemptStore.currentDurable()
+                if (previous?.blocksNextSend == true) throw OnchainSendBlockedError(previous)
+                lightningService.sendDirectFunding(request, amountSats, maxFeeSats)
+            }
+        }
+    }
+
+    suspend fun listDirectFundingPayments(): Result<List<DirectFundingPaymentDetails>> =
+        executeWhenNodeRunning("listDirectFundingPayments") {
+            runSuspendCatching { lightningService.listDirectFundingPayments() }
+        }
+
+    suspend fun maximumDirectFundingAmount(maxFeeSats: ULong): Result<ULong> =
+        executeWhenNodeRunning("maximumDirectFundingAmount") {
+            runSuspendCatching {
+                if (onchainSendAttemptStore.currentDurable()?.blocksNextSend == true ||
+                    primaryWalletService.currentOperation()?.blocksWallet == true
+                ) {
+                    0uL
+                } else {
+                    lightningService.maximumDirectFundingAmount(maxFeeSats)
+                }
+            }
+        }
+
+    suspend fun configurePrimaryNode(primary: PrimaryNode): Result<PrimaryNode> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            configChangeMutex.withLock {
+                primaryWalletService.withWalletOperation(allowPending = true) {
+                    configurePrimaryNodeLocked(primary)
+                }
+            }
+        }
+    }
+
+    suspend fun isPrimaryFundingTransaction(txid: String, walletId: String): Boolean =
+        primaryWalletService.isFundingTransaction(txid, walletId)
+
+    suspend fun verifiedExternalPaymentConfirmation(
+        activity: OnchainActivity,
+    ): ConfirmationStatus? = primaryWalletService.verifiedPaymentConfirmation(activity)
+
+    private suspend fun configurePrimaryNodeLocked(primary: PrimaryNode): PrimaryNode {
+        start().getOrThrow()
+        val resolved = lightningService.resolvePrimaryNode(primary)
+        val previousSettings = settingsStore.data.first()
+        val previous = previousSettings.primaryNodeUri
+        val previousId = previous.takeIf { it.isNotBlank() }?.let(PrimaryNode::parse)?.nodeId
+        if (previousId != resolved.nodeId &&
+            (
+                primaryWalletService.currentOperation()?.blocksWallet == true ||
+                    getChannels().orEmpty().any { it.counterpartyNodeId == previousId }
+                )
+        ) {
+            throw PrimaryNodeError.ConnectionInUse()
+        }
+        var configured = false
+        var persistenceAttempted = false
+        try {
+            configuringPrimary = resolved
+            restartNode().getOrThrow()
+            connectPrimaryNode(resolved)
+            lightningService.checkPrimaryConnection(resolved.nodeId)
+            persistenceAttempted = true
+            settingsStore.update { it.copy(primaryNodeUri = resolved.uri, primaryFundingPaused = false) }
+            configured = true
+            return resolved
+        } finally {
+            configuringPrimary = null
+            if (!configured) {
+                withContext(NonCancellable) {
+                    if (persistenceAttempted) {
+                        settingsStore.update {
+                            it.copy(
+                                primaryNodeUri = previous,
+                                primaryFundingPaused = previousSettings.primaryFundingPaused,
+                            )
+                        }
+                    }
+                    restartNode().onFailure {
+                        Logger.error("Failed to restore primary node configuration", it, context = TAG)
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun configuredPrimaryNode(): PrimaryNode =
+        settingsStore.data.first().primaryNodeUri.takeIf { it.isNotBlank() }?.let(PrimaryNode::parse)
+            ?: throw AppError("Choose a primary node in Settings before receiving Lightning.")
+
+    private suspend fun connectPrimaryNode(primary: PrimaryNode) {
+        val address = requireNotNull(primary.address) { "The primary node needs a connection address." }
+        lightningService.connectPeer(
+            PeerDetails(nodeId = primary.nodeId, address = address, isPersisted = true, isConnected = false),
+        ).getOrThrow()
+    }
+
+    suspend fun quotePrimaryReceive(amountSats: ULong): Result<PrimaryReceiveQuote> =
+        executeWhenNodeRunning("quotePrimaryReceive") {
+            runSuspendCatching {
+                require(amountSats > 0uL && amountSats <= MAX_PRIMARY_RECEIVE_SATS)
+                val primary = configuredPrimaryNode()
+                connectPrimaryNode(primary)
+                lightningService.quotePrimaryReceive(primary.nodeId, satsToMsat(amountSats)).also {
+                    refreshChannelsAndPeers().getOrThrow()
+                }
+            }
+        }
+
+    suspend fun createPrimaryInvoice(
+        amountSats: ULong,
+        description: String,
+        maxFeeMsat: ULong,
+    ): Result<String> = executeWhenNodeRunning("createPrimaryInvoice") {
+        runSuspendCatching {
+            require(amountSats > 0uL && amountSats <= MAX_PRIMARY_RECEIVE_SATS)
+            require(maxFeeMsat < satsToMsat(amountSats))
+            val primary = configuredPrimaryNode()
+            connectPrimaryNode(primary)
+            lightningService.receiveViaPrimary(
+                primary.nodeId,
+                satsToMsat(amountSats),
+                description,
+                Defaults.bolt11ExpirySec,
+                maxFeeMsat,
+            ).also { refreshChannelsAndPeers().getOrThrow() }
+        }
+    }
+
+    suspend fun decodePrimaryReceiveInvoice(bolt11: String): Result<LightningInvoice> = runSuspendCatching {
+        (coreService.decode(bolt11) as Scanner.Lightning).invoice
+    }
+
     suspend fun createInvoiceMsats(
         amountMsats: ULong,
         description: String,
@@ -1493,6 +1692,76 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun sendOnChain(
+        address: Address,
+        sats: ULong,
+        speed: TransactionSpeed? = null,
+        utxosToSpend: List<SpendableUtxo>? = null,
+        feeRates: FeeRates? = null,
+        isTransfer: Boolean = false,
+        channelId: String? = null,
+        isMaxAmount: Boolean = false,
+        tags: List<String> = emptyList(),
+        beforeSendAttempt: suspend () -> Unit = {},
+        onBroadcast: suspend (Txid) -> Unit = {},
+        requestId: PaykitPaymentRequestId? = null,
+        orderId: String? = null,
+        transferContext: OnchainTransferContext? = null,
+        payerIdentity: String? = null,
+        paymentDeadlineAt: Instant? = null,
+        contactPublicKey: String? = null,
+    ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
+        runSuspendCatching {
+            if (settingsStore.data.first().primaryNodeUri.isBlank()) {
+                return@runSuspendCatching sendOnChainDirect(
+                    address, sats, speed, utxosToSpend, feeRates, isTransfer, channelId, isMaxAmount,
+                    tags, beforeSendAttempt, onBroadcast, requestId, orderId, transferContext,
+                    payerIdentity, paymentDeadlineAt, contactPublicKey,
+                ).getOrThrow()
+            }
+            val rate = getFeeRateForSpeed(
+                speed ?: settingsStore.data.first().defaultTransactionSpeed,
+                feeRates,
+            ).getOrThrow()
+            ensureSyncedBeforeSend().getOrThrow()
+            val directFee = runSuspendCatching {
+                lightningService.calculateTotalFee(address, sats, rate, utxosToSpend)
+            }.getOrNull()
+            val available = getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+            val usePrimary = !isTransfer && utxosToSpend.isNullOrEmpty() &&
+                (directFee == null || sats.safe() + directFee.safe() > available)
+            if (usePrimary) {
+                if (requestId != null || orderId != null || transferContext != null || payerIdentity != null ||
+                    paymentDeadlineAt != null || contactPublicKey != null
+                ) {
+                    throw PrimaryPaymentContextUnsupportedError()
+                }
+                val outcome = primaryWalletService.sendOnchain(
+                    address,
+                    sats,
+                    rate,
+                    tags = tags,
+                    beforeSendAttempt = beforeSendAttempt,
+                ).getOrThrow()
+                if (outcome is OnchainSendOutcome.Accepted) {
+                    runSuspendCatching { onBroadcast(outcome.txid) }.onFailure {
+                        Logger.warn("Failed to continue accepted primary payment", it, context = TAG)
+                    }
+                    syncState()
+                }
+                outcome
+            } else {
+                primaryWalletService.withWalletOperation {
+                    sendOnChainDirect(
+                        address, sats, speed, utxosToSpend, feeRates, isTransfer, channelId, isMaxAmount,
+                        tags, beforeSendAttempt, onBroadcast, requestId, orderId, transferContext,
+                        payerIdentity, paymentDeadlineAt, contactPublicKey,
+                    ).getOrThrow()
+                }
+            }
+        }
+    }
+
+    private suspend fun sendOnChainDirect(
         address: Address,
         sats: ULong,
         speed: TransactionSpeed? = null,
@@ -2006,6 +2275,42 @@ class LightningRepo @Inject constructor(
         )
     }
 
+    suspend fun maximumPrimaryOnchainSendable(
+        address: Address,
+        speed: TransactionSpeed,
+        feeRates: FeeRates? = null,
+    ): Result<ULong?> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            if (settingsStore.data.first().primaryNodeUri.isBlank()) return@runSuspendCatching null
+            val rate = getFeeRateForSpeed(speed, feeRates).getOrThrow()
+            val available = lightningService.balances?.spendableOnchainBalanceSats ?: 0uL
+            val direct = if (available > 0uL) {
+                runSuspendCatching {
+                    available.safe() - lightningService.estimateSendAllFee(address, rate).safe()
+                }.getOrDefault(0uL)
+            } else {
+                0uL
+            }
+            maxOf(direct, primaryWalletService.maxSpliceOutSats(rate))
+        }
+    }
+
+    suspend fun shouldUsePrimaryForOnchain(
+        address: Address,
+        amountSats: ULong,
+        satsPerVByte: ULong,
+    ): Result<Boolean> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            if (settingsStore.data.first().primaryNodeUri.isBlank()) return@runSuspendCatching false
+            val available = lightningService.balances?.spendableOnchainBalanceSats ?: 0uL
+            val directFee = runSuspendCatching {
+                lightningService.calculateTotalFee(address, amountSats, satsPerVByte, null)
+            }.getOrNull()
+            val needsPrimary = directFee == null || amountSats.safe() + directFee.safe() > available
+            needsPrimary && primaryWalletService.estimateSpliceOutFee(amountSats, satsPerVByte) != null
+        }
+    }
+
     suspend fun calculateTotalFee(
         amountSats: ULong,
         address: Address? = null,
@@ -2013,18 +2318,27 @@ class LightningRepo @Inject constructor(
         utxosToSpend: List<SpendableUtxo>? = null,
         feeRates: FeeRates? = null,
     ): Result<ULong> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
             val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow()
             val addressOrDefault = address ?: cacheStore.data.first().onchainAddress
-
-            val fee = lightningService.calculateTotalFee(
-                address = addressOrDefault,
-                amountSats = amountSats,
-                satsPerVByte = satsPerVByte,
-                utxosToSpend = utxosToSpend,
-            )
-            return@runCatching fee
+            val available = lightningService.balances?.spendableOnchainBalanceSats ?: 0uL
+            val directFee = runSuspendCatching {
+                lightningService.calculateTotalFee(
+                    address = addressOrDefault,
+                    amountSats = amountSats,
+                    satsPerVByte = satsPerVByte,
+                    utxosToSpend = utxosToSpend,
+                )
+            }
+            if (utxosToSpend.isNullOrEmpty() &&
+                (directFee.isFailure || amountSats.safe() + directFee.getOrThrow().safe() > available)
+            ) {
+                primaryWalletService.estimateSpliceOutFee(amountSats, satsPerVByte)?.let {
+                    return@runSuspendCatching it
+                }
+            }
+            directFee.getOrThrow()
         }.recoverCatching {
             if (it is CancellationException) throw it
             val fallbackFee = 1000uL
@@ -2048,7 +2362,7 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun getFeeRates(): Result<FeeRates> = withContext(bgDispatcher) {
-        coreService.blocktank.getFees()
+        runSuspendCatching { lightningService.estimatedFeeRates() }
     }
 
     suspend fun getFeeRateForSpeed(
@@ -2056,7 +2370,7 @@ class LightningRepo @Inject constructor(
         feeRates: FeeRates? = null,
     ): Result<ULong> = withContext(bgDispatcher) {
         runCatching {
-            val fees = feeRates ?: coreService.blocktank.getFees().getOrThrow()
+            val fees = feeRates ?: getFeeRates().getOrThrow()
             val satsPerVByte = fees.getSatsPerVByteFor(speed)
             satsPerVByte.toULong()
         }.onFailure {
@@ -2088,7 +2402,13 @@ class LightningRepo @Inject constructor(
         force: Boolean = false,
         forceCloseReason: String? = null,
     ): Result<Unit> = executeWhenNodeRunning("closeChannel") {
-        runCatching { lightningService.closeChannel(channel, force, forceCloseReason) }.also {
+        runSuspendCatching {
+            configChangeMutex.withLock {
+                primaryWalletService.closeConnection(channel) {
+                    lightningService.closeChannel(channel, force, forceCloseReason)
+                }
+            }
+        }.also {
             syncState()
         }
     }
@@ -2633,6 +2953,9 @@ class LightningRepo @Inject constructor(
         private const val TAG = "LightningRepo"
         private const val LENGTH_CHANNEL_ID_PREVIEW = 10
         private const val VSS_KEY_SCORER = "scorer"
+
+        /** The Bitcoin supply bound also keeps the msat conversion within an unsigned integer. */
+        private const val MAX_PRIMARY_RECEIVE_SATS = 2_100_000_000_000_000uL
         private const val VSS_KEY_EXTERNAL_SCORES_CACHE = "external_pathfinding_scores_cache"
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
@@ -2707,6 +3030,8 @@ private data class PaymentRoutingRefreshStatus(
             "refreshStartedAtSecs='$refreshStartedAtSecs'"
     }
 }
+
+class PrimaryPaymentContextUnsupportedError : AppError("Primary channel does not support this payment context")
 
 class RecoveryModeError : AppError("App in recovery mode, skipping node start")
 

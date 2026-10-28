@@ -14,10 +14,13 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.DirectFundingPaymentDetails
+import org.lightningdevkit.ldknode.DirectFundingPaymentStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.WalletScope
@@ -65,6 +68,52 @@ class SendPendingViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.onchainSendAttemptUpdates).thenReturn(attemptUpdates)
         sut = createViewModel()
     }
+
+    @Test
+    fun `direct pending uses native evidence without ordinary send recovery`() = test {
+        val pending = directFundingPayment(DirectFundingPaymentStatus.SIGNED_PENDING)
+        whenever(lightningRepo.listDirectFundingPayments()).thenReturn(Result.success(listOf(pending)))
+        sut.initDirectFunding(pending.requestId, 1L)
+        runCurrent()
+        assertEquals(20_000L, sut.uiState.value.amount)
+        assertNull(sut.uiState.value.recoveredTxid)
+        assertNull(sut.uiState.value.recoveryAttempt)
+        assertNull(sut.uiState.value.abandonableAttempt)
+        verify(lightningRepo, never()).currentOnchainSendAttempt()
+        whenever(lightningRepo.listDirectFundingPayments()).thenReturn(
+            Result.success(listOf(pending.copy(status = DirectFundingPaymentStatus.MEMPOOL_SEEN))),
+        )
+        advanceTimeBy(5.seconds)
+        runCurrent()
+        assertEquals(pending.fundingTxid, sut.uiState.value.recoveredTxid)
+    }
+
+    @Test
+    fun `direct pending reports terminal conflict while retaining its committed receipt`() = test {
+        val pending = directFundingPayment(DirectFundingPaymentStatus.SIGNED_PENDING)
+        whenever(lightningRepo.listDirectFundingPayments()).thenReturn(Result.success(listOf(pending)))
+        sut.initDirectFunding(pending.requestId, 20_000L)
+        runCurrent()
+        whenever(lightningRepo.listDirectFundingPayments()).thenReturn(
+            Result.success(listOf(pending.copy(status = DirectFundingPaymentStatus.FAILED))),
+        )
+        advanceTimeBy(5.seconds)
+        runCurrent()
+        assertIs<PendingPaymentResolution.Failure>(sut.uiState.value.resolution)
+        assertEquals("direct-funding:${pending.requestId}", sut.uiState.value.activityId)
+        assertNull(sut.uiState.value.recoveryAttempt)
+    }
+
+    private fun directFundingPayment(status: DirectFundingPaymentStatus) = DirectFundingPaymentDetails(
+        requestId = "request-id",
+        paymentHash = "receipt-hash",
+        amountSats = 20_000uL,
+        feeSats = 150uL,
+        fundingTxid = "ab".repeat(32),
+        status = status,
+        isOutbound = true,
+        createdAt = 1_700_000_000_000uL,
+    )
 
     @Test
     fun `exact prepared fee and warnings precede original retry payment authentication`() = test {

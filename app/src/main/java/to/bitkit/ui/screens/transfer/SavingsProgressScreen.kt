@@ -141,21 +141,13 @@ private suspend fun runChannelClose(
         return
     }
 
-    // Check if any channels can be retried (filter out trusted peers)
-    val (_, nonTrustedChannels) = transfer.separateTrustedChannels(channelsFailedToCoopClose)
-
-    if (nonTrustedChannels.isEmpty()) {
-        // All channels are trusted peers - show error and navigate back immediately
-        onUnavailable()
-    } else {
-        transfer.startCoopCloseRetries(
-            channels = nonTrustedChannels,
-            onGiveUp = onGiveUp,
-            onTransferUnavailable = onUnavailable,
-        )
-        delay(2500)
-        onInterrupted()
-    }
+    transfer.startCoopCloseRetries(
+        channels = channelsFailedToCoopClose,
+        onGiveUp = onGiveUp,
+        onTransferUnavailable = onUnavailable,
+    )
+    delay(2500)
+    onInterrupted()
 }
 
 @Composable

@@ -21,6 +21,7 @@ import to.bitkit.models.toBalance
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
+import to.bitkit.services.PrimaryWalletService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
 import javax.inject.Inject
@@ -33,6 +34,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
     private val transferRepo: TransferRepo,
     private val settingsStore: SettingsStore,
     private val hwWalletRepo: HwWalletRepo,
+    private val primaryWalletService: PrimaryWalletService,
 ) {
     suspend operator fun invoke(): Result<BalanceState> = withContext(bgDispatcher) {
         runCatching {
@@ -63,7 +65,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
                 channelFundableBalance = channelFundableBalance,
                 totalLightningSats = totalLightningSats,
                 maxSendLightningSats = lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
-                maxSendOnchainSats = getMaxSendAmount(balanceDetails),
+                maxSendOnchainSats = maxOf(getMaxSendAmount(balanceDetails), primaryWalletService.maxSpliceOutSats()),
                 balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
                 balanceInTransferToSpending = toSpendingAmount,
                 hardwareWallets = hwWalletRepo.wallets.value.map { it.toBalance() },

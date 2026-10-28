@@ -15,10 +15,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.ConfirmationStatus
+import org.lightningdevkit.ldknode.DirectFundingPaymentDetails
+import org.lightningdevkit.ldknode.DirectFundingPaymentStatus
 import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.check
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -138,11 +144,19 @@ class ActivityRepoTest : BaseUnitTest() {
     fun setUp() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(coreService.activity).thenReturn(mock())
+        whenever {
+            coreService.activity.get(
+                walletId = WalletScope.default,
+                filter = ActivityFilter.ONCHAIN,
+                txType = PaymentType.SENT,
+            )
+        }.thenReturn(emptyList())
         whenever(clock.now()).thenReturn(Clock.System.now())
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever { transferRepo.getChannelIdsByFundingTxId() }.thenReturn(Result.success(emptyMap()))
 
+        whenever { lightningRepo.listDirectFundingPayments() }.thenReturn(Result.success(emptyList()))
         sut = ActivityRepo(
             bgDispatcher = testDispatcher,
             ioDispatcher = testDispatcher,
@@ -153,6 +167,92 @@ class ActivityRepoTest : BaseUnitTest() {
             transferRepo = transferRepo,
             clock = clock,
         )
+    }
+
+    @Test
+    fun `failed outbound receipt is restored while failed inbound negotiation has no activity`() = test {
+        val failed = DirectFundingPaymentDetails(
+            requestId = "failed-outbound",
+            paymentHash = "12".repeat(32),
+            amountSats = 20_000uL,
+            feeSats = 155uL,
+            fundingTxid = "34".repeat(32),
+            status = DirectFundingPaymentStatus.FAILED,
+            isOutbound = true,
+            createdAt = 1_700_000_000_000uL,
+        )
+        whenever(lightningRepo.listDirectFundingPayments()).thenReturn(
+            Result.success(listOf(failed, failed.copy(requestId = "failed-inbound", isOutbound = false))),
+        )
+        whenever(coreService.activity.get()).thenReturn(emptyList())
+
+        sut.syncDirectFundingPayments().getOrThrow()
+
+        verify(coreService.activity).upsert(
+            check {
+                val receipt = (it as Activity.Onchain).v1
+                assertEquals("direct-funding:failed-outbound", receipt.id)
+                assertEquals(20_000uL, receipt.value)
+                assertEquals(155uL, receipt.fee)
+                assertFalse(receipt.doesExist)
+                assertFalse(receipt.confirmed)
+            },
+        )
+    }
+
+    @Test
+    fun `direct funding recovery replaces an ordinary debit only after its receipt is durable`() = test {
+        val txid = "12".repeat(32)
+        val requestId = "34".repeat(32)
+        val receiptId = "direct-funding:$requestId"
+        val ordinary = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "ordinary-debit",
+            txId = txid,
+            value = 20_155uL,
+            fee = 0uL,
+        )
+        val rows = mutableMapOf<String, Activity>(ordinary.v1.id to ordinary)
+        val payment = DirectFundingPaymentDetails(
+            requestId = requestId,
+            paymentHash = "56".repeat(32),
+            amountSats = 20_000uL,
+            feeSats = 155uL,
+            fundingTxid = txid,
+            status = DirectFundingPaymentStatus.CONFIRMED,
+            isOutbound = true,
+            createdAt = 1_700_000_000_000uL,
+        )
+        whenever(lightningRepo.listDirectFundingPayments()).thenReturn(Result.success(listOf(payment)))
+        whenever(coreService.activity.getActivity(any(), anyOrNull())).doSuspendableAnswer {
+            rows[it.getArgument<String>(0)]
+        }
+        whenever(coreService.activity.get()).doSuspendableAnswer { rows.values.toList() }
+        var rejectWrite = true
+        whenever(coreService.activity.upsert(any())).doSuspendableAnswer {
+            if (rejectWrite) throw AppError("Receipt write failed")
+            val activity = it.getArgument<Activity.Onchain>(0)
+            rows[activity.v1.id] = activity
+            Unit
+        }
+        whenever(coreService.activity.delete(any(), anyOrNull())).doSuspendableAnswer {
+            rows.remove(it.getArgument<String>(0)) != null
+        }
+
+        assertTrue(sut.syncDirectFundingPayments().isFailure)
+        assertEquals(setOf(ordinary.v1.id), rows.keys)
+        verify(coreService.activity, never()).delete(any(), anyOrNull())
+
+        rejectWrite = false
+        sut.syncDirectFundingPayments().getOrThrow()
+        sut.syncDirectFundingPayments().getOrThrow()
+        assertEquals(setOf(receiptId), rows.keys)
+        val receipt = (rows.getValue(receiptId) as Activity.Onchain).v1
+        assertEquals(20_000uL, receipt.value)
+        assertEquals(155uL, receipt.fee)
+        assertEquals(receiptId, receipt.address)
+        verify(coreService.activity, times(2)).upsert(any())
+        verify(coreService.activity).delete(ordinary.v1.id)
     }
 
     @Test
@@ -267,6 +367,70 @@ class ActivityRepoTest : BaseUnitTest() {
         verify(lightningRepo).getPayments()
         verify(coreService.activity).syncLdkNodePaymentsToActivities(any(), any(), any())
         assertFalse(sut.isSyncingLdkNodePayments.value)
+    }
+
+    @Test
+    fun `external confirmation refresh uses durable history and ignores other wallets and transfers`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val sent = baseOnchainActivity.copy(walletId = WalletScope.default, confirmed = false)
+        val transfer = sent.copy(id = "transfer", txId = "transfer", isTransfer = true)
+        val hardware = sent.copy(id = "hardware", txId = "hardware", walletId = "hardware")
+        val received = sent.copy(id = "received", txId = "received", txType = PaymentType.RECEIVED)
+        whenever(
+            coreService.activity.get(
+                walletId = WalletScope.default,
+                filter = ActivityFilter.ONCHAIN,
+                txType = PaymentType.SENT,
+            )
+        ).thenReturn(listOf(sent, transfer, hardware, received).map { Activity.Onchain(it) })
+        val confirmed = ConfirmationStatus.Confirmed("block", 6u, 1_234_567_999uL)
+        whenever(lightningRepo.verifiedExternalPaymentConfirmation(sent)).thenReturn(confirmed)
+
+        assertTrue(sut.syncActivities().isSuccess)
+
+        verify(coreService.activity).applyVerifiedSentOnchainConfirmation(sent, confirmed)
+        verify(lightningRepo, times(1)).verifiedExternalPaymentConfirmation(any())
+    }
+
+    @Test
+    fun `native wallet payment confirmation remains owned by normal payment sync`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val sent = baseOnchainActivity.copy(walletId = WalletScope.default)
+        whenever(testPaymentDetails.kind).thenReturn(PaymentKind.Onchain(sent.txId, ConfirmationStatus.Unconfirmed))
+        whenever(testPaymentDetails.direction).thenReturn(PaymentDirection.OUTBOUND)
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(listOf(testPaymentDetails)))
+        whenever(
+            coreService.activity.get(
+                walletId = WalletScope.default,
+                filter = ActivityFilter.ONCHAIN,
+                txType = PaymentType.SENT,
+            )
+        ).thenReturn(listOf(Activity.Onchain(sent)))
+
+        assertTrue(sut.syncActivities().isSuccess)
+
+        verify(lightningRepo, never()).verifiedExternalPaymentConfirmation(any())
+        verify(coreService.activity, never()).applyVerifiedSentOnchainConfirmation(any(), any())
+    }
+
+    @Test
+    fun `unknown external confirmation keeps saved state unchanged and does not fail activity sync`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val sent = baseOnchainActivity.copy(walletId = WalletScope.default, confirmed = true)
+        whenever(
+            coreService.activity.get(
+                walletId = WalletScope.default,
+                filter = ActivityFilter.ONCHAIN,
+                txType = PaymentType.SENT,
+            )
+        ).thenReturn(listOf(Activity.Onchain(sent)))
+        whenever(lightningRepo.verifiedExternalPaymentConfirmation(sent)).doSuspendableAnswer {
+            throw AppError("Backend unavailable")
+        }
+
+        assertTrue(sut.syncActivities().isSuccess)
+
+        verify(coreService.activity, never()).applyVerifiedSentOnchainConfirmation(any(), any())
     }
 
     @Test

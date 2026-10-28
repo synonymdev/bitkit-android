@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.DirectFundingPaymentDetails
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -38,6 +39,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.contact
 import to.bitkit.ext.create
+import to.bitkit.ext.isDirectFunding
 import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.nowMillis
@@ -46,8 +48,10 @@ import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.walletId
 import to.bitkit.models.ActivityBackupV1
+import to.bitkit.models.DIRECT_FUNDING_ACTIVITY_PREFIX
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
+import to.bitkit.models.hasCommittedFunding
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -148,11 +152,63 @@ class ActivityRepo @Inject constructor(
      */
     suspend fun syncLdkNodePayments(payments: List<PaymentDetails>): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
-            val channelIdsByTxId = findChannelsForPayments(payments)
-            coreService.activity.syncLdkNodePaymentsToActivities(payments, channelIdsByTxId = channelIdsByTxId)
+            val directFunding = lightningRepo.listDirectFundingPayments().getOrThrow()
+            val fundingTxids = directFunding.mapNotNull { it.fundingTxid }.toSet()
+            val ordinaryPayments = payments.filter { (it.kind as? PaymentKind.Onchain)?.txid !in fundingTxids }
+            val channelIdsByTxId = findChannelsForPayments(ordinaryPayments)
+            coreService.activity.syncLdkNodePaymentsToActivities(ordinaryPayments, channelIdsByTxId = channelIdsByTxId)
+            persistDirectFundingPayments(directFunding)
+            syncExternalOnchainConfirmations(ordinaryPayments)
             notifyActivitiesChanged()
         }.onFailure {
             Logger.error("Error syncing LDK payments:", it, context = TAG)
+        }
+    }
+
+    suspend fun syncDirectFundingPayments(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            persistDirectFundingPayments(lightningRepo.listDirectFundingPayments().getOrThrow())
+            notifyActivitiesChanged()
+        }.onFailure { Logger.error("Failed to synchronize direct funding payments", it, context = TAG) }
+    }
+
+    private suspend fun persistDirectFundingPayments(payments: List<DirectFundingPaymentDetails>) {
+        val cache = cacheStore.data.first()
+        payments.forEach { payment ->
+            val id = DIRECT_FUNDING_ACTIVITY_PREFIX + payment.requestId
+            if (cache.isActivityDeleted(id, WalletScope.default)) return@forEach
+            val previous = (coreService.activity.getActivity(id) as? Activity.Onchain)?.v1
+            if (previous == null && !payment.status.hasCommittedFunding(payment.isOutbound)) return@forEach
+            val activity =
+                directFundingActivity(payment, previous, nowMillis(clock).coerceAtLeast(0).toULong() / 1000uL)
+            if (previous != activity) coreService.activity.upsert(Activity.Onchain(activity))
+            payment.fundingTxid?.let { txid ->
+                coreService.activity.get().filterIsInstance<Activity.Onchain>().filter {
+                    it.v1.txId == txid && it.v1.id != id && !it.isDirectFunding()
+                }.forEach { coreService.activity.delete(it.v1.id) }
+            }
+        }
+    }
+
+    private suspend fun syncExternalOnchainConfirmations(payments: List<PaymentDetails>) {
+        val walletTransactions = payments.mapNotNull { (it.kind as? PaymentKind.Onchain)?.txid }.toSet()
+        val externalPayments = coreService.activity.get(
+            walletId = WalletScope.default,
+            filter = ActivityFilter.ONCHAIN,
+            txType = PaymentType.SENT,
+        ).filterIsInstance<Activity.Onchain>().map { it.v1 }.filter {
+            it.walletId == WalletScope.default && it.txType == PaymentType.SENT &&
+                !it.isTransfer && !it.id.startsWith(DIRECT_FUNDING_ACTIVITY_PREFIX) &&
+                it.doesExist && it.txId !in walletTransactions
+        }
+        externalPayments.forEach { activity ->
+            runSuspendCatching {
+                val confirmation = lightningRepo.verifiedExternalPaymentConfirmation(activity)
+                    ?: return@runSuspendCatching
+                coreService.activity.applyVerifiedSentOnchainConfirmation(activity, confirmation)
+            }.onFailure {
+                Logger.warn("Could not refresh external payment confirmation for ${activity.txId}", it, context = TAG)
+            }
         }
     }
 
@@ -207,6 +263,11 @@ class ActivityRepo @Inject constructor(
         txid: String,
         walletId: String = WalletScope.default,
     ): OnchainActivity? = coreService.activity.getOnchainActivityByTxId(txid, walletId)
+
+    suspend fun isPrimaryFundingTransaction(txid: String, walletId: String): Boolean =
+        runSuspendCatching { lightningRepo.isPrimaryFundingTransaction(txid, walletId) }
+            .onFailure { Logger.warn("Failed to read primary funding activity marker", it, context = TAG) }
+            .getOrDefault(false)
 
     /** Local follow-up after the original hardware wallet independently observed this exact outgoing tx. */
     suspend fun completeObservedHardwarePayment(

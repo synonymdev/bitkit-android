@@ -77,6 +77,8 @@ val bcp47Locales = listOf(
 val e2eEnv = envFlag("E2E", default = false)
 val e2eBackendEnv = providers.environmentVariable("E2E_BACKEND").orElse("local")
 val e2eLocalHostEnv = providers.environmentVariable("E2E_LOCAL_HOST").orElse("10.0.2.2")
+val e2eElectrumUrlEnv = providers.environmentVariable("E2E_ELECTRUM_URL")
+    .orElse(e2eLocalHostEnv.map { "tcp://$it:60001" })
 val e2eHomegateUrlEnv = providers.environmentVariable("E2E_HOMEGATE_URL")
     .orElse(e2eLocalHostEnv.map { "http://$it:6288" })
 val e2eHomeserverPubkyEnv = providers.environmentVariable("E2E_HOMESERVER_PUBKY").orElse("")
@@ -359,12 +361,17 @@ androidComponents {
         buildConfigFields.put("E2E", e2eEnv.booleanField())
         buildConfigFields.put("E2E_BACKEND", e2eBackendEnv.stringField())
         buildConfigFields.put("E2E_LOCAL_HOST", e2eLocalHostEnv.stringField())
+        buildConfigFields.put("E2E_ELECTRUM_URL", e2eElectrumUrlEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_URL", e2eHomegateUrlEnv.stringField())
         buildConfigFields.put("E2E_HOMESERVER_PUBKY", e2eHomeserverPubkyEnv.stringField())
         buildConfigFields.put("TREZOR_BRIDGE", trezorBridgeEnv.booleanField())
         buildConfigFields.put("TREZOR_BRIDGE_URL", trezorBridgeUrlEnv.stringField())
         buildConfigFields.put("GEO", geoEnv.booleanField())
         buildConfigFields.put("FEATURE_PAYKIT_UI_DISABLED", paykitUiDisabledEnv.booleanField())
+        buildConfigFields.put(
+            "DEFAULT_PRIMARY_NODE_URI",
+            localProp("DEFAULT_PRIMARY_NODE_URI").orElse("").stringField(),
+        )
         buildConfigFields.put("LOCALES", provider { bcp47Locales.joinToString(",") }.stringField())
         buildConfigFields.put(
             "NETWORK",
@@ -552,21 +559,47 @@ dependencies {
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
     testImplementation(libs.bouncycastle.pkix.jdk) // test certificates
-    implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
+    val localLdkNodeAar = providers.gradleProperty("ldkNodeAar").orElse(
+        "../ldk-node/bindings/kotlin/ldk-node-android/lib/build/outputs/aar/lib-release.aar"
+    ).get()
+    val primaryNodeLibrary = rootProject.file(localLdkNodeAar)
+    require(primaryNodeLibrary.isFile) {
+        "Build the local LDK wallet client with ./bindgen.sh android in ldk-node, " +
+            "then set -PldkNodeAar=/path/to/lib-release.aar if it is outside the sibling checkout."
+    }
+    implementation(files(primaryNodeLibrary))
+    implementation(libs.atomicfu)
+    val localIrohAndroidAar = providers.gradleProperty("irohAndroidAar")
+        .orElse(".local-native/iroh-android-1.1.0-16kb.aar").get()
+    val irohAndroidLibrary = rootProject.file(localIrohAndroidAar)
+    require(irohAndroidLibrary.isFile) {
+        "Build the aligned Iroh library with scripts/build-iroh-android.sh, " +
+            "or set -PirohAndroidAar=/path/to/iroh-android-1.1.0-16kb.aar."
+    }
+    implementation(files(irohAndroidLibrary))
+    implementation("computer.iroh:iroh:1.1.0") {
+        exclude(group = "net.java.dev.jna", module = "jna")
+    }
     val localBitkitCoreAar = providers.gradleProperty("bitkitCoreAar").orNull
+        ?: rootProject.file(".local-native/bitkit-core-${libs.bitkit.core.get().versionConstraint.requiredVersion}.aar")
+            .takeIf { it.isFile }?.path
     if (localBitkitCoreAar != null) {
         debugImplementation(files(localBitkitCoreAar))
-        debugImplementation("org.jetbrains.kotlinx:atomicfu:0.23.1")
         releaseImplementation(libs.bitkit.core)
     } else {
         implementation(libs.bitkit.core)
     }
-    implementation(libs.paykit)
-    implementation(libs.vss.client)
+    val localPaykitAar = providers.gradleProperty("paykitAar").orNull
+        ?: rootProject.file(".local-native/paykit-${libs.paykit.get().versionConstraint.requiredVersion}.aar")
+            .takeIf { it.isFile }?.path
+    val localVssAar = providers.gradleProperty("vssAar").orNull
+        ?: rootProject.file(".local-native/vss-${libs.vss.client.get().versionConstraint.requiredVersion}.aar")
+            .takeIf { it.isFile }?.path
+    if (localPaykitAar != null) implementation(files(localPaykitAar)) else implementation(libs.paykit)
+    if (localVssAar != null) implementation(files(localVssAar)) else implementation(libs.vss.client)
     if (localBitkitCoreAar == null) nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
-    nativeDebugSymbols(libs.ldk.node.android.nativeDebugSymbolsArtifact())
-    nativeDebugSymbols(libs.paykit.nativeDebugSymbolsArtifact())
-    nativeDebugSymbols(libs.vss.client.nativeDebugSymbolsArtifact())
+    if (localPaykitAar == null) nativeDebugSymbols(libs.paykit.nativeDebugSymbolsArtifact())
+    if (localVssAar == null) nativeDebugSymbols(libs.vss.client.nativeDebugSymbolsArtifact())
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

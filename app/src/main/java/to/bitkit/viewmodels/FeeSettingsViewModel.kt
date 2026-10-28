@@ -1,41 +1,35 @@
 package to.bitkit.viewmodels
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.FeeRates
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.LightningRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class FeeSettingsViewModel @Inject constructor(
-    private val blocktankRepo: BlocktankRepo,
+    private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
-    val uiState: StateFlow<FeeSettingsUiState> = blocktankRepo.blocktankState
-        .map { blocktankState ->
-            FeeSettingsUiState(
-                feeRates = blocktankState.info?.onchain?.feeRates,
-            )
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = FeeSettingsUiState(),
-        )
+    private val _uiState = MutableStateFlow(FeeSettingsUiState())
+    val uiState = _uiState.asStateFlow()
 
     fun refreshFeeRates() {
         viewModelScope.launch {
-            blocktankRepo.refreshInfo()
+            lightningRepo.getFeeRates().onSuccess { rates ->
+                _uiState.update { it.copy(feeRates = rates) }
+            }
         }
     }
 }
 
+@Stable
 data class FeeSettingsUiState(
     val feeRates: FeeRates? = null,
 )

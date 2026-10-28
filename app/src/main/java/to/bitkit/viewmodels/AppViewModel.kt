@@ -79,6 +79,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ClosureReason
+import org.lightningdevkit.ldknode.DirectFundingPaymentDetails
+import org.lightningdevkit.ldknode.DirectFundingPaymentStatus
+import org.lightningdevkit.ldknode.DirectFundingRequestDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
@@ -124,6 +127,8 @@ import to.bitkit.ext.totalValue
 import to.bitkit.ext.walletId
 import to.bitkit.ext.watchUntil
 import to.bitkit.flags.PaykitFeatureFlags
+import to.bitkit.models.DIRECT_FUNDING_MAX_FEE_SATS
+import to.bitkit.models.DIRECT_FUNDING_MIN_SATS
 import to.bitkit.models.FeeRate
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwWalletVendor
@@ -136,6 +141,7 @@ import to.bitkit.models.PaykitAmountConversion
 import to.bitkit.models.PaykitAmountError
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPayment
+import to.bitkit.models.PrimaryNode
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyContactLink
 import to.bitkit.models.PubkyProfile
@@ -149,11 +155,14 @@ import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.models.USD
 import to.bitkit.models.WalletScope
+import to.bitkit.models.blocksAnotherPayment
+import to.bitkit.models.directFundingParameter
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
 import to.bitkit.models.sanitizedDeeplinkLogValue
 import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.models.toActivityFilter
+import to.bitkit.models.toCoreNetworkType
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
@@ -199,6 +208,7 @@ import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
+import to.bitkit.repositories.PrimaryPaymentContextUnsupportedError
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
@@ -223,7 +233,9 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
+import to.bitkit.services.PrimaryWalletPendingError
 import to.bitkit.services.PubkyService
+import to.bitkit.services.primaryWalletMessage
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
@@ -2650,12 +2662,21 @@ class AppViewModel @Inject constructor(
             return
         }
         if (result is NotifyChannelReady.Result.Duplicate) return
+        if (isPrimaryChannelReady(event)) return
         toast(
             type = Toast.ToastType.LIGHTNING,
             title = context.getString(R.string.lightning__channel_opened_title),
             description = context.getString(R.string.lightning__channel_opened_msg),
             testTag = "SpendingBalanceReadyToast",
         )
+    }
+
+    private suspend fun isPrimaryChannelReady(event: Event.ChannelReady): Boolean {
+        val uri = settingsStore.data.first().primaryNodeUri
+        val primary = runCatching { PrimaryNode.parse(uri) }.getOrNull() ?: return false
+        val counterparty = event.counterpartyNodeId ?: lightningRepo.getChannels()
+            ?.find { it.channelId == event.channelId }?.counterpartyNodeId
+        return counterparty == primary.nodeId
     }
 
     private suspend fun notifyTransactionRemoved(event: Event.OnchainTransactionEvicted) {
@@ -2845,6 +2866,8 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 addressInput = valueWithoutSpaces,
+                directFundingRequest = null,
+                directFundingAvailableSats = 0uL,
                 isAddressInputValid = false,
             )
         }
@@ -2901,7 +2924,7 @@ class AppViewModel @Inject constructor(
         }
 
         when (val decoded = scanResult.getOrNull()) {
-            is Scanner.OnChain -> validateOnChainAddress(decoded.invoice)
+            is Scanner.OnChain -> validateOnChainAddress(decoded.invoice, input)
             is Scanner.Lightning -> if (activeHardwareWalletId == null) {
                 validateLightningInvoice(decoded.invoice)
             } else {
@@ -2940,8 +2963,8 @@ class AppViewModel @Inject constructor(
                 val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
                 val shortfall = invoice.amountSatoshis.safe() - maxSendLightning.safe()
                 showAddressValidationError(
-                    titleRes = R.string.other__pay_insufficient_spending,
-                    descriptionRes = R.string.other__pay_insufficient_spending_amount_description,
+                    titleRes = R.string.wallet_primary__insufficient,
+                    descriptionRes = R.string.wallet_primary__insufficient_amount,
                     descriptionArgs = mapOf("amount" to formatMoneyValue(shortfall)),
                     testTag = "InsufficientSpendingToast",
                 )
@@ -2952,7 +2975,10 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
 
-    private suspend fun validateOnChainAddress(invoice: OnChainInvoice) {
+    private suspend fun validateOnChainAddress(invoice: OnChainInvoice, input: String) {
+        val directFunding = readDirectFundingRequest(input, invoice).getOrElse { return }
+        _sendUiState.update { it.copy(directFundingRequest = directFunding) }
+
         val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
                 showAddressValidationError(
@@ -2991,7 +3017,11 @@ class AppViewModel @Inject constructor(
         val selectedMaxSendOnchain = hardwareWalletId?.let {
             hardwareMaxSpendable(it, invoice.address, _sendUiState.value.speed)
         } ?: walletRepo.balanceState.value.maxSendOnchainSats
-        val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
+        val maxSendOnchain = if (directFunding != null) {
+            lightningRepo.maximumDirectFundingAmount(DIRECT_FUNDING_MAX_FEE_SATS).getOrDefault(0uL)
+        } else {
+            maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
+        }
 
         if (maxSendOnchain == 0uL) {
             if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params)) {
@@ -3003,8 +3033,8 @@ class AppViewModel @Inject constructor(
                 return
             }
             showAddressValidationError(
-                titleRes = R.string.other__pay_insufficient_savings,
-                descriptionRes = R.string.other__pay_insufficient_savings_description,
+                titleRes = R.string.wallet_primary__insufficient,
+                descriptionRes = R.string.wallet_primary__insufficient_description,
                 testTag = "InsufficientSavingsToast",
             )
             return
@@ -3013,8 +3043,8 @@ class AppViewModel @Inject constructor(
         if (invoice.amountSatoshis > 0uL && invoice.amountSatoshis > maxSendOnchain) {
             val shortfall = invoice.amountSatoshis - maxSendOnchain
             showAddressValidationError(
-                titleRes = R.string.other__pay_insufficient_savings,
-                descriptionRes = R.string.other__pay_insufficient_savings_amount_description,
+                titleRes = R.string.wallet_primary__insufficient,
+                descriptionRes = R.string.wallet_primary__insufficient_amount,
                 descriptionArgs = mapOf("amount" to formatMoneyValue(shortfall)),
                 testTag = "InsufficientSavingsToast",
             )
@@ -3676,7 +3706,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onAmountChange(amount: ULong) {
-        if (_sendUiState.value.paykitUsesUsdt || _sendUiState.value.fixedLightningAmount != null) return
+        if (_sendUiState.value.paykitUsesUsdt || !_sendUiState.value.isAmountEditable) return
         _sendUiState.update {
             it.copy(
                 amount = amount,
@@ -3742,6 +3772,8 @@ class AppViewModel @Inject constructor(
                     selectedUtxos = if (shouldResetUtxos) null else it.selectedUtxos,
                 )
             }
+            val validAmount = validateAmount(_sendUiState.value.amount)
+            _sendUiState.update { it.copy(isAmountInputValid = validAmount) }
             updateCanSwitchWallet()
             refreshOnchainSendIfNeeded() ?: updateOnchainFeeUi { it.copy(isLoading = false) }
         }
@@ -3761,7 +3793,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 canSwitchWallet = canSwitchWallet,
-                canSwitchFundingSource = availableFundingSources(state).size > 1,
+                canSwitchFundingSource = availableWalletFundingSources(state).size > 1,
                 fundingOptions = fundingOptions(state),
             )
         }
@@ -3834,7 +3866,11 @@ class AppViewModel @Inject constructor(
             (source == SendFundingSource.Savings || source == SendFundingSource.Spending)
 
     private fun nextFundingSource(current: SendUiState, requested: SendFundingSource?): SendFundingSource? {
-        val sources = availableFundingSources(current).filter { requested != null || it != SendFundingSource.Usdt }
+        val sources = if (requested == null) {
+            availableWalletFundingSources(current).filter { it != SendFundingSource.Usdt }
+        } else {
+            availableFundingSources(current)
+        }
         if (sources.isEmpty() || requested != null && requested !in sources) return null
         val selected = current.selectedFundingSource()
         return (requested ?: sources.nextAfter(selected)).takeUnless { it == selected }
@@ -4110,6 +4146,7 @@ class AppViewModel @Inject constructor(
         val generation = sendStateGeneration
         val sheet = currentSheet.value
         if (
+            state.usesDirectFunding ||
             state.hardwareWalletId != null ||
             state.payMethod == SendMethod.LIGHTNING ||
             state.selectedUtxos != null
@@ -4143,6 +4180,11 @@ class AppViewModel @Inject constructor(
         payMethod: SendMethod = _sendUiState.value.payMethod,
     ): Boolean {
         if (amount == 0uL) return false
+        val directFunding = _sendUiState.value.directFundingRequest
+        if (directFunding?.amountSats != null && directFunding.amountSats != amount) return false
+        if (directFunding != null && payMethod == SendMethod.ONCHAIN) {
+            return amount >= DIRECT_FUNDING_MIN_SATS && amount <= maximumOnchainSendableSats()
+        }
 
         return when (payMethod) {
             SendMethod.LIGHTNING -> {
@@ -4158,12 +4200,20 @@ class AppViewModel @Inject constructor(
             }
 
             SendMethod.ONCHAIN -> {
-                val maxSendable = _sendUiState.value.hardwareAvailableSats
-                    .takeIf { _sendUiState.value.hardwareWalletId != null }
-                    ?: walletRepo.balanceState.value.maxSendOnchainSats
+                val maxSendable = maximumOnchainSendableSats(_sendUiState.value)
                 amount > Defaults.dustLimit.toULong() && amount <= maxSendable
             }
         }
+    }
+
+    suspend fun maximumOnchainSendableSats(state: SendUiState = _sendUiState.value): ULong {
+        if (state.usesDirectFunding) {
+            return lightningRepo.maximumDirectFundingAmount(DIRECT_FUNDING_MAX_FEE_SATS).getOrDefault(0uL)
+        }
+        if (state.hardwareWalletId != null) return state.hardwareAvailableSats
+        if (state.address.isEmpty()) return walletRepo.balanceState.value.maxSendOnchainSats
+        return lightningRepo.maximumPrimaryOnchainSendable(state.address, state.speed, state.feeRates)
+            .getOrNull() ?: walletRepo.balanceState.value.maxSendOnchainSats
     }
 
     private fun maxSendableLightningSats(): ULong {
@@ -4344,17 +4394,19 @@ class AppViewModel @Inject constructor(
             }
         }
 
-        val scan = runSuspendCatching { coreService.decode(input) }
-            .onFailure {
-                if (isPaymentRequest) {
-                    Logger.error("Failed to decode incoming Paykit payment request target", context = TAG)
-                } else {
-                    val safeLogInput = SamRockSetupRequest.sanitizedDescription(input) ?: input
-                    Logger.error("Failed to decode scan data: '$safeLogInput'", it, context = TAG)
+        val primary = runCatching { PrimaryNode.parse(input) }.getOrNull()
+        val scan = primary?.let { Scanner.NodeId(it.uri, Env.network.toCoreNetworkType()) }
+            ?: runSuspendCatching { coreService.decode(input) }
+                .onFailure {
+                    if (isPaymentRequest) {
+                        Logger.error("Failed to decode incoming Paykit payment request target", context = TAG)
+                    } else {
+                        val safeLogInput = SamRockSetupRequest.sanitizedDescription(input) ?: input
+                        Logger.error("Failed to decode scan data: '$safeLogInput'", it, context = TAG)
+                    }
                 }
-            }
-            .onSuccess { logDecodedScan(it, isPaymentRequest) }
-            .getOrNull()
+                .onSuccess { logDecodedScan(it, isPaymentRequest) }
+                .getOrNull()
 
         currentCoroutineContext().ensureActive()
         handleDecodedScan(scan, input, fromMainScanner, suppressQuickPay)
@@ -4639,6 +4691,76 @@ class AppViewModel @Inject constructor(
         } ?: PubkyProfile.placeholder(publicKey)
     }
 
+    private suspend fun readDirectFundingRequest(
+        input: String,
+        invoice: OnChainInvoice,
+    ): Result<DirectFundingRequestDetails?> {
+        val parameter = directFundingParameter(input)
+        if (parameter.isSuccess && parameter.getOrNull() == null) return Result.success(null)
+        return runSuspendCatching {
+            parameter.getOrThrow()
+            check(activeHardwareWalletId == null && !hasActiveContactPaymentContext()) {
+                "Direct funding requires the software Bitcoin wallet"
+            }
+            lightningRepo.directFundingRequestFromBip21(
+                input,
+                invoice.amountSatoshis,
+                invoice.params?.get("lightning"),
+            ).getOrThrow()
+        }.onFailure {
+            Logger.warn("Rejected direct funding request", it, context = TAG)
+            showAddressValidationError(
+                titleRes = R.string.other__scan_err_decoding,
+                descriptionRes = R.string.wallet_direct_funding__invalid,
+                testTag = "InvalidDirectFundingToast",
+            )
+        }
+    }
+
+    private suspend fun previousDirectFundingPayment(
+        request: DirectFundingRequestDetails,
+    ): DirectFundingPaymentDetails? =
+        lightningRepo.listDirectFundingPayments().getOrThrow().firstOrNull {
+            it.isOutbound && it.requestId == request.requestId && it.status.blocksAnotherPayment()
+        }
+
+    private fun showDirectFundingPayment(payment: DirectFundingPaymentDetails, fromMainScanner: Boolean = false) {
+        val txid = payment.fundingTxid
+        if (txid != null && payment.status in setOf(
+                DirectFundingPaymentStatus.MEMPOOL_SEEN, DirectFundingPaymentStatus.CONFIRMED,
+            )
+        ) {
+            onSendSuccess(
+                NewTransactionSheetDetails(
+                    type = NewTransactionSheetType.ONCHAIN,
+                    direction = NewTransactionSheetDirection.SENT,
+                    paymentHashOrTxId = txid,
+                    sats = payment.amountSats.toLong(),
+                    isLoadingDetails = false,
+                ),
+            )
+            return
+        }
+        val id = txid ?: payment.paymentHash
+        navigateToSendRoute(
+            fromMainScanner,
+            SendRoute.Pending(
+                id,
+                payment.amountSats.toLong(),
+                observeResolution = false,
+                isOnchain = true,
+                directFundingRequestId = payment.requestId,
+            ),
+            SendEffect.NavigateToPending(
+                id,
+                payment.amountSats.toLong(),
+                observeResolution = false,
+                isOnchain = true,
+                directFundingRequestId = payment.requestId,
+            ),
+        )
+    }
+
     @Suppress("CyclomaticComplexMethod")
     private suspend fun onScanOnchain(
         invoice: OnChainInvoice,
@@ -4646,6 +4768,17 @@ class AppViewModel @Inject constructor(
         fromMainScanner: Boolean,
         suppressQuickPay: Boolean,
     ) {
+        val directFunding = readDirectFundingRequest(scanResult, invoice).getOrElse { return }
+        if (directFunding != null) {
+            val previous = runSuspendCatching { previousDirectFundingPayment(directFunding) }.getOrElse {
+                handlePaymentPreparationFailure(it, null)
+                return
+            }
+            if (previous != null) {
+                showDirectFundingPayment(previous, fromMainScanner)
+                return
+            }
+        }
         val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
                 if (clearIncomingPaymentRequestTarget()) return
@@ -4674,7 +4807,11 @@ class AppViewModel @Inject constructor(
         } else {
             walletRepo.balanceState.value.maxSendOnchainSats
         }
-        val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
+        val maxSendOnchain = if (directFunding != null) {
+            lightningRepo.maximumDirectFundingAmount(DIRECT_FUNDING_MAX_FEE_SATS).getOrDefault(0uL)
+        } else {
+            maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
+        }
 
         val incomingPaymentRequest = activeIncomingPaymentRequest()
         val lnInvoice = if (hardwareWalletId == null) {
@@ -4687,9 +4824,13 @@ class AppViewModel @Inject constructor(
         var amount = incomingPaymentRequest?.payment(
             if (lnInvoice != null) MethodId.Bolt11 else PublicPaykitRepo.onchainMethodId(invoice.address),
             Clock.System.now()
-        )?.amount?.atomic ?: lnInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: invoice.amountSatoshis
+        )?.amount?.atomic ?: directFunding?.amountSats ?: lnInvoice?.amountSatoshis?.takeIf {
+            it > 0uL
+        } ?: invoice.amountSatoshis
         _sendUiState.update {
             it.copy(
+                directFundingRequest = directFunding,
+                directFundingAvailableSats = maxSendOnchain.takeIf { directFunding != null } ?: 0uL,
                 address = invoice.address,
                 addressInput = scanResult,
                 isAddressInputValid = true,
@@ -4705,6 +4846,9 @@ class AppViewModel @Inject constructor(
                 hardwareWalletId = hardwareWalletId,
                 hardwareAvailableSats = selectedMaxSendOnchain.takeIf { hardwareWalletId != null } ?: 0uL,
             )
+        }
+        if (directFunding != null) {
+            _sendUiState.update { it.copy(isAmountInputValid = validateAmount(amount)) }
         }
         updateCanSwitchWallet()
 
@@ -4748,20 +4892,8 @@ class AppViewModel @Inject constructor(
                 val shortfall = amount.safe() - maxSendable.safe()
                 toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(
-                        if (isLightning) {
-                            R.string.other__pay_insufficient_spending
-                        } else {
-                            R.string.other__pay_insufficient_savings
-                        }
-                    ),
-                    description = context.getString(
-                        if (isLightning) {
-                            R.string.other__pay_insufficient_spending_amount_description
-                        } else {
-                            R.string.other__pay_insufficient_savings_amount_description
-                        }
-                    ).replace(
+                    title = context.getString(R.string.wallet_primary__insufficient),
+                    description = context.getString(R.string.wallet_primary__insufficient_amount).replace(
                         "{amount}",
                         formatMoneyValue(shortfall),
                     ),
@@ -4786,7 +4918,7 @@ class AppViewModel @Inject constructor(
                 amountSats = lnAmountSats,
                 invoice = lnInvoice,
                 fromMainScanner = fromMainScanner,
-                suppressQuickPay = suppressQuickPay,
+                suppressQuickPay = suppressQuickPay || directFunding != null,
             )
             if (quickPayHandled) return
 
@@ -4810,8 +4942,8 @@ class AppViewModel @Inject constructor(
             }
             toast(
                 type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__pay_insufficient_savings),
-                description = context.getString(R.string.other__pay_insufficient_savings_description),
+                title = context.getString(R.string.wallet_primary__insufficient),
+                description = context.getString(R.string.wallet_primary__insufficient_description),
                 testTag = "InsufficientSavingsToast",
             )
             clearActiveContactPaymentContext()
@@ -4820,15 +4952,15 @@ class AppViewModel @Inject constructor(
 
         // Check if on-chain invoice amount exceeds available balance
         if (
-            invoice.amountSatoshis > 0uL &&
-            invoice.amountSatoshis > maxSendOnchain &&
+            amount > 0uL &&
+            amount > maxSendOnchain &&
             _sendUiState.value.payMethod == SendMethod.ONCHAIN
         ) {
-            val shortfall = invoice.amountSatoshis - maxSendOnchain
+            val shortfall = amount.safe() - maxSendOnchain.safe()
             toast(
                 type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__pay_insufficient_savings),
-                description = context.getString(R.string.other__pay_insufficient_savings_amount_description)
+                title = context.getString(R.string.wallet_primary__insufficient),
+                description = context.getString(R.string.wallet_primary__insufficient_amount)
                     .replace("{amount}", formatMoneyValue(shortfall)),
                 testTag = "InsufficientSavingsToast",
             )
@@ -4929,10 +5061,23 @@ class AppViewModel @Inject constructor(
     }
 
     private fun fundingOptions(state: SendUiState): ImmutableList<SendFundingOption> {
-        val enabled = availableFundingSources(state)
+        val enabled = availableWalletFundingSources(state)
+        if (state.directFundingRequest != null) {
+            return enabled.map { source ->
+                SendFundingOption(
+                    source,
+                    balance = if (source == SendFundingSource.Savings) {
+                        state.directFundingAvailableSats
+                    } else {
+                        walletRepo.balanceState.value.maxSendLightningSats
+                    },
+                    enabled = true,
+                )
+            }.toImmutableList()
+        }
         return buildList {
-            add(SendFundingOption(SendFundingSource.Savings, enabled = SendFundingSource.Savings in enabled))
-            add(SendFundingOption(SendFundingSource.Spending, enabled = SendFundingSource.Spending in enabled))
+            val bitcoin = enabled.firstOrNull { it.isSoftwareBitcoin() } ?: state.preferredSoftwareFundingSource()
+            add(SendFundingOption(bitcoin, enabled = bitcoin in enabled))
             hwWalletRepo.wallets.value.forEach { wallet ->
                 val source = SendFundingSource.Hardware(wallet.id)
                 add(
@@ -4976,6 +5121,18 @@ class AppViewModel @Inject constructor(
             }
         }
     }
+
+    private fun availableWalletFundingSources(state: SendUiState): List<SendFundingSource> =
+        if (state.directFundingRequest != null) {
+            buildList {
+                if (state.decodedInvoice != null) add(SendFundingSource.Spending)
+                if (state.directFundingAvailableSats >= maxOf(state.amount, DIRECT_FUNDING_MIN_SATS)) {
+                    add(SendFundingSource.Savings)
+                }
+            }
+        } else {
+            availableFundingSources(state).withSingleBitcoinSource(state.preferredSoftwareFundingSource())
+        }
 
     private fun SendUiState.paykitMethod(
         source: SendFundingSource = selectedFundingSource(),
@@ -5042,8 +5199,8 @@ class AppViewModel @Inject constructor(
             val shortfall = amount.safe() - maxSendLightning.safe()
             toast(
                 type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.other__pay_insufficient_spending),
-                description = context.getString(R.string.other__pay_insufficient_spending_amount_description)
+                title = context.getString(R.string.wallet_primary__insufficient),
+                description = context.getString(R.string.wallet_primary__insufficient_amount)
                     .replace("{amount}", formatMoneyValue(shortfall)),
                 testTag = "InsufficientSpendingToast",
             )
@@ -5280,7 +5437,7 @@ class AppViewModel @Inject constructor(
         //     return
         // }
         hideSheet() // hide scan sheet if opened
-        val nextRoute = Routes.ExternalConnection(data.url)
+        val nextRoute = Routes.PrimaryNode(data.url)
         mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
     }
 
@@ -5497,6 +5654,25 @@ class AppViewModel @Inject constructor(
     private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
+        val directFunding = _sendUiState.value.directFundingRequest
+        if (directFunding != null) {
+            val previous = runSuspendCatching { previousDirectFundingPayment(directFunding) }.getOrElse {
+                handlePaymentPreparationFailure(it, contactPaymentContext)
+                return
+            }
+            if (previous != null) {
+                showDirectFundingPayment(previous)
+                return
+            }
+            if (_sendUiState.value.usesDirectFunding) {
+                proceedWithDirectFunding(directFunding)
+                return
+            }
+            lightningRepo.decodeDirectFundingRequest(directFunding.request).onFailure {
+                handlePaymentPreparationFailure(it, contactPaymentContext)
+                return
+            }
+        }
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
@@ -5597,6 +5773,34 @@ class AppViewModel @Inject constructor(
                 preparedPaymentProofRequest,
                 contactPaymentContext,
                 amount,
+            )
+        }
+    }
+
+    private suspend fun proceedWithDirectFunding(request: DirectFundingRequestDetails) {
+        val state = _sendUiState.value
+        val generation = sendStateGeneration
+        if (state.directFundingRequest != request || !state.usesDirectFunding) return
+        if (!validateAmount(state.amount)) {
+            handlePaymentPreparationFailure(AppError(context.getString(R.string.wallet_direct_funding__invalid)), null)
+            return
+        }
+        if (generation != sendStateGeneration || _sendUiState.value.directFundingRequest != request) return
+        lightningRepo.sendDirectFunding(request.request, state.amount, DIRECT_FUNDING_MAX_FEE_SATS).onSuccess {
+            activityRepo.syncDirectFundingPayments()
+            if (it.status.blocksAnotherPayment()) {
+                showDirectFundingPayment(it)
+            } else {
+                handlePaymentPreparationFailure(
+                    AppError(context.getString(R.string.wallet_direct_funding__failed)),
+                    null
+                )
+            }
+        }.onFailure {
+            Logger.warn("Failed to send direct funding payment", it, context = TAG)
+            handlePaymentPreparationFailure(
+                AppError(context.getString(R.string.wallet_direct_funding__failed), it),
+                null
             )
         }
     }
@@ -5703,6 +5907,31 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private suspend fun handlePrimaryOnchainFailure(
+        error: Throwable,
+        sendAttempted: Boolean,
+        paymentProofStarted: Boolean,
+        preparedPaymentProofRequest: PaykitPaymentRequest?,
+        contactPaymentContext: ContactPaymentContext?,
+    ): Boolean {
+        if (error !is PrimaryWalletPendingError && error !is PrimaryPaymentContextUnsupportedError) return false
+        if (!sendAttempted) releasePrivatePaymentListIfNeeded(contactPaymentContext)
+        if (!paymentProofStarted) cancelPaymentProofPreparation(preparedPaymentProofRequest)
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__error_sending_title),
+            description = context.getString(
+                if (error is PrimaryWalletPendingError) {
+                    R.string.wallet_primary__pending
+                } else {
+                    R.string.wallet_primary__unsupported_payment
+                },
+            ),
+        )
+        hideSheet()
+        return true
+    }
+
     private suspend fun handleOnchainPaymentFailure(
         error: Throwable,
         sendAttempted: Boolean,
@@ -5712,9 +5941,17 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
     ) {
         val amount = _sendUiState.value.amount
-        val unresolved = error is OnchainSendPendingError || error is OnchainSendBlockedError ||
-            error is OnchainSendAttemptUnreadableError ||
-            (sendAttempted && error !is OnchainSendNotDispatchedError)
+        if (handlePrimaryOnchainFailure(
+                error,
+                sendAttempted,
+                paymentProofStarted,
+                preparedPaymentProofRequest,
+                contactPaymentContext,
+            )
+        ) {
+            return
+        }
+        val unresolved = isUnresolvedOnchainFailure(error, sendAttempted)
         if (unresolved) {
             Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
             if (!sendAttempted) releasePrivatePaymentListIfNeeded(contactPaymentContext)
@@ -5805,7 +6042,8 @@ class AppViewModel @Inject constructor(
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.wallet__error_sending_title),
-                description = error.message ?: context.getString(R.string.common__error_body),
+                description = error.primaryWalletMessage(context) ?: error.message
+                    ?: context.getString(R.string.common__error_body),
             )
             hideSheet()
         }
@@ -5914,6 +6152,11 @@ class AppViewModel @Inject constructor(
             )
         )
     }
+
+    private fun isUnresolvedOnchainFailure(error: Throwable, sendAttempted: Boolean): Boolean =
+        error is OnchainSendPendingError || error is OnchainSendBlockedError ||
+            error is OnchainSendAttemptUnreadableError ||
+            (sendAttempted && error !is OnchainSendNotDispatchedError)
 
     private fun showUnresolvedOnchainSend(
         txid: String?,
@@ -6461,6 +6704,11 @@ class AppViewModel @Inject constructor(
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded(): Job? {
         val currentState = _sendUiState.value
+        if (currentState.usesDirectFunding) {
+            onchainSendRefreshJob?.cancel()
+            updateOnchainFeeUi { it.copy(sats = DIRECT_FUNDING_MAX_FEE_SATS.toLong(), isLoading = false) }
+            return null
+        }
         if (currentState.isRetainedHardwarePayment) return null
         if (currentState.payMethod != SendMethod.ONCHAIN ||
             currentState.amount == 0uL ||
@@ -6480,10 +6728,19 @@ class AppViewModel @Inject constructor(
             ) {
                 lightningRepo.getFeeRateForSpeed(currentState.speed, currentState.feeRates)
                     .mapCatching { satsPerVByte ->
-                        lightningRepo.determineUtxosToSpend(
-                            sats = currentState.amount,
-                            satsPerVByte = satsPerVByte,
-                        )
+                        if (lightningRepo.shouldUsePrimaryForOnchain(
+                                address = currentState.address,
+                                amountSats = currentState.amount,
+                                satsPerVByte = satsPerVByte,
+                            ).getOrDefault(false)
+                        ) {
+                            null
+                        } else {
+                            lightningRepo.determineUtxosToSpend(
+                                sats = currentState.amount,
+                                satsPerVByte = satsPerVByte,
+                            )
+                        }
                     }
                     .onSuccess { utxos ->
                         _sendUiState.update { it.copy(selectedUtxos = utxos?.toImmutableList()) }
@@ -6501,6 +6758,10 @@ class AppViewModel @Inject constructor(
 
     private suspend fun refreshOnchainFeeUi() = withContext(bgDispatcher) {
         val currentState = _sendUiState.value
+        if (currentState.usesDirectFunding) {
+            updateOnchainFeeUi { it.copy(sats = DIRECT_FUNDING_MAX_FEE_SATS.toLong(), isLoading = false) }
+            return@withContext
+        }
         if (currentState.isRetainedHardwarePayment) return@withContext
         updateOnchainFeeUi { it.copy(isLoading = true) }
 
@@ -6634,11 +6895,7 @@ class AppViewModel @Inject constructor(
         paykitAmountConversion = PaykitAmountConversion()
         paykitPaymentTerms = null
         val speed = settingsStore.data.first().defaultTransactionSpeed
-        val rates = let {
-            // Refresh blocktank info to get latest fee rates
-            blocktankRepo.refreshInfo()
-            blocktankRepo.blocktankState.value.info?.onchain?.feeRates
-        }
+        val rates = lightningRepo.getFeeRates().getOrNull()
 
         _sendUiState.update {
             SendUiState(
@@ -8082,6 +8339,8 @@ data class SendUiState(
     val address: String = "",
     val bolt11: String? = null,
     val addressInput: String = "",
+    val directFundingRequest: DirectFundingRequestDetails? = null,
+    val directFundingAvailableSats: ULong = 0uL,
     val isAddressInputValid: Boolean = false,
     val amount: ULong = 0u,
     val isAmountInputValid: Boolean = false,
@@ -8125,6 +8384,9 @@ data class SendUiState(
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 ) {
+    val usesDirectFunding: Boolean
+        get() = directFundingRequest != null && payMethod == SendMethod.ONCHAIN && hardwareWalletId == null
+
     val canSwitchBitcoinFundingSource: Boolean
         get() = fundingOptions.count { it.enabled && it.source != SendFundingSource.Usdt } > 1
 
@@ -8134,7 +8396,7 @@ data class SendUiState(
         }
 
     val isAmountEditable: Boolean
-        get() = !isPaymentRequest && fixedLightningAmount == null
+        get() = !isPaymentRequest && fixedLightningAmount == null && directFundingRequest?.amountSats == null
 
     val shouldAutomaticallyPay: Boolean
         get() = isInitialSubscriptionPayment && hardwareWalletId == null &&
@@ -8230,6 +8492,7 @@ sealed class SendEffect {
         val observeResolution: Boolean = true,
         val isOnchain: Boolean = false,
         val refusalReason: String? = null,
+        val directFundingRequestId: String? = null,
     ) : SendEffect()
 }
 

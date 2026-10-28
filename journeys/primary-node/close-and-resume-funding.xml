@@ -1,0 +1,16 @@
+<journey name="pause automatic funding after explicit primary close">
+  <description>
+    Requires a disposable regtest wallet with a funded primary connection and sufficient provider
+    funds. This closes the connection and spends network fees. Keep the same app wallet and node
+    identity across restarts. This Android flow is not implemented on iOS yet.
+  </description>
+  <actions>
+    <action>Open Settings, Advanced, Lightning Connections and cooperatively close the selected primary connection</action>
+    <action>Wait for closure confirmation and returned funds, then verify automatic funding does not reopen the connection</action>
+    <action>Restart Bitkit, allow the wallet to sync and verify the funds remain onchain with no reopened connection</action>
+    <action>Open Primary node and verify the paused-funding notice (testTag "PrimaryNodeFundingPaused")</action>
+    <action>While funding is paused, choose an unreachable primary and verify failed connection leaves funding paused and the previous primary retained</action>
+    <action>Tap Connect node for the same compatible primary and verify the pause notice disappears after successful verification</action>
+    <action>With at least 25,000 confirmed sats and funding fees below the limit, verify automatic funding opens a new connection after wallet sync</action>
+  </actions>
+</journey>

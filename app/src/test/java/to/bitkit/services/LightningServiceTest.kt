@@ -7,6 +7,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -33,6 +34,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -46,6 +48,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.async.newSingleThreadDispatcher
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WatchOnlyAccountReconciliationState
 import to.bitkit.data.WatchOnlyAccountStore
@@ -54,6 +57,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.ActiveOnchainAttemptBackup
+import to.bitkit.models.PrimaryNode
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WalletScope
 import to.bitkit.models.WatchOnlyAccountRecord
@@ -69,6 +73,7 @@ import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
+import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
@@ -92,6 +97,7 @@ class LightningServiceTest : BaseUnitTest() {
     private val watchOnlyAccountStore = mock<WatchOnlyAccountStore>()
     private val loggerLdk = mock<LoggerLdk>()
     private val node = mock<Node>()
+    private val primaryPeerTransport = mock<PrimaryPeerTransport>()
     private val onchainPayment = mock<OnchainPayment>()
     private val sendFeeRate = mock<FeeRate>()
     private val watchOnlyAccountLifecycleCoordinator = WatchOnlyAccountLifecycleCoordinator()
@@ -114,8 +120,47 @@ class LightningServiceTest : BaseUnitTest() {
             watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
             ldkQueue = testDispatcher,
             onchainFeeRateFactory = { sendFeeRate },
+            primaryPeerTransport = primaryPeerTransport,
         )
         sut.node = node
+    }
+
+    @Test
+    fun `Iroh connect authenticates the original Lightning key over the translated local address`() = test {
+        val primary = PrimaryNode.parse(
+            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798" +
+                "@iroh:${"ab".repeat(32)}?relay=https%3A%2F%2Frelay.example.%2F"
+        )
+        val peer = PeerDetails(primary.nodeId, requireNotNull(primary.address), false, false)
+        whenever(primaryPeerTransport.address(primary.nodeId, peer.address)).thenReturn("127.0.0.1:12345")
+
+        assertTrue(sut.connectPeer(peer).isSuccess)
+
+        verify(node).connect(primary.nodeId, "127.0.0.1:12345", true)
+        assertTrue(peer.address.startsWith("iroh:"))
+    }
+
+    @Test
+    fun `transport failure remains a failed connection result and never reaches native connect`() = test {
+        val peer = PeerDetails("key", "iroh:unavailable", false, false)
+        whenever(primaryPeerTransport.address(peer.nodeId, peer.address)).thenAnswer {
+            throw IOException("Unavailable")
+        }
+
+        assertTrue(sut.connectPeer(peer).exceptionOrNull() is IOException)
+        verify(node, never()).connect(any(), any(), any())
+    }
+
+    @Test
+    fun `bare primary key resolves the canonical saved Iroh URI before an ephemeral peer address`() = test {
+        val primary = PrimaryNode.parse(
+            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798" +
+                "@iroh:${"ab".repeat(32)}?relay=https%3A%2F%2Frelay.example.%2F"
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(primaryNodeUri = primary.uri)))
+
+        assertEquals(primary, sut.resolvePrimaryNode(PrimaryNode(primary.nodeId)))
+        verify(node, never()).listPeers()
     }
 
     @Test
@@ -387,6 +432,65 @@ class LightningServiceTest : BaseUnitTest() {
 
     // Regression: a stop requested from inside an event handler runs on the listener job, so joining
     // that job would deadlock; teardown must still complete
+    @Test
+    fun `primary state is persisted before acknowledgement and released before ordinary delivery`() = test {
+        val event = Event.PaymentSuccessful(null, "hash", null, null)
+        val releaseEvent = CompletableDeferred<Event>()
+        val order = mutableListOf<String>()
+        whenever(node.nextEventAsync()).doSuspendableAnswer { releaseEvent.await() }
+        whenever(node.eventHandled()).thenAnswer {
+            order.add("ack")
+            Unit
+        }
+        sut.beforeEventAcknowledged = { order.add("persist") }
+        sut.onEventAcknowledged = { order.add("release") }
+
+        sut.startEventListener {
+            order.add("deliver")
+            sut.stop()
+        }
+        releaseEvent.complete(event)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf("persist", "ack", "release", "deliver"), order)
+    }
+
+    @Test
+    fun `failed primary persistence keeps native event unacknowledged`() = test {
+        val event = Event.PaymentSuccessful(null, "hash", null, null)
+        val releaseEvent = CompletableDeferred<Event>()
+        var delivered = false
+        whenever(node.nextEventAsync()).doSuspendableAnswer { releaseEvent.await() }
+        sut.beforeEventAcknowledged = { error("storage unavailable") }
+        sut.onEventAcknowledged = { delivered = true }
+
+        sut.startEventListener { delivered = true }
+        releaseEvent.complete(event)
+        testScheduler.advanceUntilIdle()
+
+        verify(node, never()).eventHandled()
+        assertFalse(delivered)
+        sut.stop()
+    }
+
+    @Test
+    fun `failed native acknowledgement does not release primary gate or deliver the event`() = test {
+        val event = Event.PaymentSuccessful(null, "hash", null, null)
+        val releaseEvent = CompletableDeferred<Event>()
+        var delivered = false
+        whenever(node.nextEventAsync()).doSuspendableAnswer { releaseEvent.await() }
+        whenever(node.eventHandled()).thenThrow(IllegalStateException("storage unavailable"))
+        sut.onEventAcknowledged = { delivered = true }
+
+        sut.startEventListener { delivered = true }
+        releaseEvent.complete(event)
+        testScheduler.advanceUntilIdle()
+
+        verify(node).eventHandled()
+        assertFalse(delivered)
+        sut.stop()
+    }
+
     @Test
     fun `stop from within an event handler completes teardown without deadlock`() = test {
         val event = Event.PaymentSuccessful(null, "hash", null, null)

@@ -11,6 +11,7 @@ import to.bitkit.ext.ensureDir
 import to.bitkit.ext.of
 import to.bitkit.models.BlocktankNotificationType
 import to.bitkit.models.NodePeer
+import to.bitkit.models.PrimaryNode
 import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
@@ -44,6 +45,9 @@ internal object Env {
     const val e2eHomegateUrl = BuildConfig.E2E_HOMEGATE_URL
     val e2eHomeserverPubky = BuildConfig.E2E_HOMESERVER_PUBKY.takeIf { isLocalE2eBackend && it.isNotBlank() }
     val network = Network.valueOf(BuildConfig.NETWORK)
+    val defaultPrimaryNodeUri: String get() = BuildConfig.DEFAULT_PRIMARY_NODE_URI
+        .takeIf { network == Network.BITCOIN && it.isNotBlank() }
+        ?.let { PrimaryNode.parse(it).uri }.orEmpty()
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL
     const val walletSyncTimeoutSecs = 10_uL
@@ -308,7 +312,7 @@ private object ElectrumServers {
 
     object REGTEST {
         const val STAG = "ssl://electrs.bitkit.stag0.blocktank.to:9999"
-        val LOCAL get() = "tcp://${Env.e2eLocalHost}:60001"
+        const val LOCAL = BuildConfig.E2E_ELECTRUM_URL
     }
 
     const val TESTNET = "ssl://electrum.blockstream.info:60002"

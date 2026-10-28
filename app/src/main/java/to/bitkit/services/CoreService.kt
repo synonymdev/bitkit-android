@@ -866,6 +866,18 @@ class ActivityService(
                 processBolt11(kind = kind, payment = payment, state = state)
             }
 
+            is PaymentKind.Bolt11Jit -> {
+                val invoice = PaymentKind.Bolt11(kind.hash, kind.preimage, kind.secret, kind.description, kind.bolt11)
+                val receivedFee = kind.counterpartySkimmedFeeMsat.takeIf {
+                    payment.direction == PaymentDirection.INBOUND
+                }
+                processBolt11(
+                    kind = invoice,
+                    payment = payment.copy(feePaidMsat = receivedFee ?: payment.feePaidMsat),
+                    state = state,
+                )
+            }
+
             else -> Unit // Handle spontaneous payments if needed
         }
     }
@@ -1603,6 +1615,25 @@ class ActivityService(
             if (updated != existing) upsertActivity(Activity.Onchain(updated))
             val restored = requireNotNull(getOnchainActivityByTxId(txid, walletId))
             check(restored.fee == fee && restored.feeRate == feeRate)
+        }
+
+    /** Applies backend confirmation only after exact recipient-output and transaction-fee verification. */
+    suspend fun applyVerifiedSentOnchainConfirmation(expected: OnchainActivity, status: ConfirmationStatus) =
+        ServiceQueue.CORE.background {
+            val existing = getOnchainActivityByTxId(expected.txId, expected.walletId) ?: return@background
+            if (existing.walletId != expected.walletId || existing.txId != expected.txId ||
+                existing.txType != PaymentType.SENT || existing.isTransfer ||
+                existing.address != expected.address || existing.value != expected.value || existing.fee != expected.fee
+            ) {
+                return@background
+            }
+            val updated = existing.withConfirmation(
+                isConfirmed = status is ConfirmationStatus.Confirmed,
+                confirmTimestamp = (status as? ConfirmationStatus.Confirmed)?.timestamp,
+            )
+            if (updated != existing) {
+                upsert(Activity.Onchain(updated.copy(updatedAt = nowTimestamp().epochSecond.toULong())))
+            }
         }
 
     suspend fun handleOnchainTransactionReceived(txid: String, details: TransactionDetails) {

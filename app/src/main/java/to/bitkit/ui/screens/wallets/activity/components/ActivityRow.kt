@@ -31,10 +31,10 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
+import to.bitkit.ext.isDirectFunding
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.timestamp
-import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
 import to.bitkit.ext.uiDateStyleFor
 import to.bitkit.ext.walletId
@@ -60,6 +60,7 @@ import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
+import to.bitkit.ui.utils.displayValue
 import to.bitkit.ui.utils.uiDateText
 
 @Composable
@@ -92,14 +93,21 @@ fun ActivityRow(
     val isTransfer = item.isTransfer()
     val activityListViewModel = activityListViewModel
     var isCpfpChild by remember { mutableStateOf(false) }
-    val resolvedTitle = title.takeIf {
-        shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
+    var isPrimaryFunding by remember(item) { mutableStateOf(false) }
+    val resolvedTitle = if (item.isDirectFunding()) {
+        stringResource(if (isSent) R.string.wallet_direct_funding__title else R.string.wallet_direct_funding__incoming)
+    } else {
+        title.takeIf {
+            !isPrimaryFunding && shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
+        }
     }
     val resolvedContact = contact.takeIf {
-        shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
+        !isPrimaryFunding && shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
     }
 
     LaunchedEffect(item) {
+        isPrimaryFunding = item is Activity.Onchain && isSent &&
+            activityListViewModel?.isPrimaryFundingTransaction(item.v1.txId, item.walletId()) == true
         isCpfpChild = if (item is Activity.Onchain && activityListViewModel != null) {
             activityListViewModel.isCpfpChildTransaction(item.v1.txId, item.walletId())
         } else {
@@ -114,6 +122,7 @@ fun ActivityRow(
             isCpfpChild = isCpfpChild,
             isHardware = isHardware,
             contact = resolvedContact,
+            isPrimaryFunding = isPrimaryFunding,
         )
         HorizontalSpacer(16.dp)
         Column(
@@ -127,15 +136,20 @@ fun ActivityRow(
                 isTransfer = isTransfer,
                 isCpfpChild = isCpfpChild,
                 title = resolvedTitle,
+                isPrimaryFunding = isPrimaryFunding,
             )
             val context = LocalContext.current
             val subtitleText = when (item) {
                 is Activity.Lightning -> item.v1.message.ifEmpty { activityTimeText(timestamp) }
                 is Activity.Onchain -> {
                     when {
+                        item.isDirectFunding() && item.v1.doesExist && !item.v1.confirmed ->
+                            stringResource(R.string.wallet_direct_funding__confirming)
                         !item.v1.doesExist -> stringResource(R.string.wallet__activity_removed)
 
                         isCpfpChild -> stringResource(R.string.wallet__activity_boost_fee_description)
+
+                        isPrimaryFunding -> stringResource(R.string.primary_node__funding_description)
 
                         isTransfer && isSent -> if (item.v1.confirmed) {
                             stringResource(R.string.wallet__activity_transfer_spending_done)
@@ -173,6 +187,7 @@ fun ActivityRow(
         AmountView(
             item = item,
             prefix = amountPrefix,
+            isPrimaryFunding = isPrimaryFunding,
         )
     }
 }
@@ -199,6 +214,7 @@ private fun TransactionStatusText(
     isTransfer: Boolean,
     isCpfpChild: Boolean = false,
     title: String? = null,
+    isPrimaryFunding: Boolean = false,
 ) {
     if (title != null) {
         BodyMSB(text = title)
@@ -206,6 +222,7 @@ private fun TransactionStatusText(
     }
 
     when {
+        isPrimaryFunding -> BodyMSB(text = stringResource(R.string.primary_node__funding_fee))
         isTransfer -> BodyMSB(text = stringResource(R.string.wallet__activity_transfer))
         isCpfpChild -> BodyMSB(text = stringResource(R.string.wallet__activity_boost_fee))
         isLightning -> {
@@ -239,9 +256,10 @@ private fun TransactionStatusText(
 private fun AmountView(
     item: Activity,
     prefix: String,
+    isPrimaryFunding: Boolean = false,
     currencies: CurrencyState = LocalCurrencies.current,
 ) {
-    val amount = item.totalValue()
+    val amount = item.displayValue(isPrimaryFunding)
 
     val isPreview = LocalInspectionMode.current
     if (isPreview) {

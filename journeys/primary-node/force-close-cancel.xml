@@ -1,0 +1,14 @@
+<journey name="cancel primary force close">
+  <description>
+    Requires an open regtest channel to the selected primary. This journey checks cancellation only
+    and must leave the channel open. The UI confirmation also has an instrumented test. This
+    Android primary-node flow is not implemented on iOS yet.
+  </description>
+  <actions>
+    <action>Open Settings, Advanced, Lightning Connections and select the primary channel</action>
+    <action>Open Close Connection and tap Force close connection (testTag "ForceCloseConnection")</action>
+    <action>Verify the confirmation describes the Bitcoin network fee and the possible period before funds become available</action>
+    <action>Tap Cancel (testTag "ForceCloseCancel") and verify the confirmation closes without starting a channel closure</action>
+    <action>Return to Lightning Connections and verify the same channel remains open</action>
+  </actions>
+</journey>

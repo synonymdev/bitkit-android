@@ -572,6 +572,10 @@ private fun OnChainDetails(
     onEvent: (SendEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (uiState.usesDirectFunding) {
+        DirectFundingDetails(uiState, interactionsEnabled, onEvent, modifier)
+        return
+    }
     val feeUi = uiState.onchainFeeUi
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -589,7 +593,7 @@ private fun OnChainDetails(
                     text = if (uiState.hardwareWalletId != null) {
                         uiState.hardwareWalletName ?: stringResource(R.string.hardware__device_model_trezor)
                     } else {
-                        stringResource(R.string.wallet__savings__title)
+                        stringResource(R.string.wallet_primary__bitcoin)
                     },
                     color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
                     enabled = uiState.canSwitchBitcoinFundingSource && interactionsEnabled,
@@ -713,6 +717,44 @@ private fun OnChainDetails(
 }
 
 @Composable
+private fun DirectFundingDetails(
+    uiState: SendUiState,
+    interactionsEnabled: Boolean,
+    onEvent: (SendEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = modifier.fillMaxWidth()) {
+        SendCell(caption = stringResource(R.string.wallet__send_from)) {
+            NumberPadActionButton(
+                text = stringResource(R.string.wallet_direct_funding__title),
+                color = Colors.Brand,
+                enabled = uiState.canSwitchBitcoinFundingSource && interactionsEnabled,
+                clickable = interactionsEnabled,
+                icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchBitcoinFundingSource },
+                onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+                modifier = Modifier.testTag("SendConfirmDirectFunding")
+            )
+        }
+        SendCell(caption = stringResource(R.string.wallet__send_to)) {
+            BodySSB(
+                text = uiState.directFundingRequest?.receiverNodeId.orEmpty(),
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+                modifier = Modifier.testTag("DirectFundingReceiver")
+            )
+        }
+        SendCell(caption = stringResource(R.string.wallet_direct_funding__maximum_fee)) {
+            BodySSB(
+                text = rememberMoneyText(uiState.onchainFeeUi.sats ?: 0, showSymbol = true)
+                    .orEmpty().withAccent(accentColor = Colors.White),
+                modifier = Modifier.testTag("DirectFundingMaximumFee")
+            )
+        }
+        BodySSB(stringResource(R.string.wallet_direct_funding__confirming))
+    }
+}
+
+@Composable
 private fun LightningDetails(
     uiState: SendUiState,
     interactionsEnabled: Boolean,
@@ -742,7 +784,7 @@ private fun LightningDetails(
                 modifier = Modifier.weight(1f)
             ) {
                 NumberPadActionButton(
-                    text = stringResource(R.string.wallet__spending__title),
+                    text = stringResource(R.string.wallet_primary__bitcoin),
                     color = Colors.Purple,
                     enabled = uiState.canSwitchBitcoinFundingSource && interactionsEnabled,
                     isLoading = uiState.isFundingSourceLoading,

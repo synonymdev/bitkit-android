@@ -1,0 +1,16 @@
+<journey name="pay onchain from primary balance">
+  <description>
+    Requires a funded compatible primary channel with no spendable onchain funds in Bitkit, automatic
+    coin selection, and a separate regtest receiver. Repeat with Beignet and LDK Node providers.
+    Use regtest funds only. This Android flow is not implemented on iOS yet.
+  </description>
+  <actions>
+    <action>Scan the separate wallet's plain Bitcoin address and verify the amount screen shows the software source as Bitcoin</action>
+    <action>Tap Max and verify the amount accounts for the selected network fee</action>
+    <action>Continue to confirmation and select a higher network fee; if the amount no longer fits, verify payment is disabled and the recipient amount is unchanged</action>
+    <action>Return to the amount screen and choose an affordable amount, then approve the reviewed payment</action>
+    <action>Verify the payment uses the primary channel without asking for a Savings or Spending transfer or selecting insufficient onchain coins</action>
+    <action>While the transaction is pending, retry another send and verify the pending message prevents a duplicate wallet operation</action>
+    <action>Mine the required blocks, sync both wallets and verify the separate receiver gets exactly the approved amount and Bitkit shows one outgoing activity</action>
+  </actions>
+</journey>

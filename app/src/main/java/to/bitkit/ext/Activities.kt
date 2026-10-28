@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import to.bitkit.models.DIRECT_FUNDING_ACTIVITY_PREFIX
 import to.bitkit.models.WalletScope
 
 fun Activity.rawId(): String = when (this) {
@@ -31,7 +32,7 @@ fun Activity.txType(): PaymentType = when (this) {
 /**
  * Calculates the total value of an activity based on its type.
  *
- * For `Lightning` activity, the total value = `value + fee`.
+ * For sent `Lightning` activity, the total value = `value + fee`. Received value is already net of any fee.
  *
  * For `Onchain` activity:
  * - If it is a send, the total value = `value + fee`.
@@ -40,7 +41,10 @@ fun Activity.txType(): PaymentType = when (this) {
  * @return The total value as an `ULong`.
  */
 fun Activity.totalValue() = when (this) {
-    is Activity.Lightning -> v1.value + (v1.fee ?: 0u)
+    is Activity.Lightning -> when (v1.txType) {
+        PaymentType.SENT -> v1.value + (v1.fee ?: 0u)
+        else -> v1.value
+    }
     is Activity.Onchain -> when (v1.txType) {
         PaymentType.SENT -> v1.value + v1.fee
         else -> v1.value
@@ -73,6 +77,8 @@ fun Activity.matchesPaymentId(paymentHashOrTxId: String): Boolean = when (this) 
     is Activity.Lightning -> paymentHashOrTxId == v1.id
     is Activity.Onchain -> paymentHashOrTxId == v1.txId
 }
+
+fun Activity.isDirectFunding(): Boolean = rawId().startsWith(DIRECT_FUNDING_ACTIVITY_PREFIX)
 
 fun Activity.isTransfer() = this is Activity.Onchain && this.v1.isTransfer
 

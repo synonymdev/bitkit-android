@@ -299,6 +299,7 @@ fun SendSheet(
                                 observeResolution = it.observeResolution,
                                 isOnchain = it.isOnchain,
                                 refusalReason = it.refusalReason,
+                                directFundingRequestId = it.directFundingRequestId,
                             )
                         )
                         is SendEffect.NavigateToError -> navController.navigateTo(
@@ -678,6 +679,7 @@ fun SendSheet(
                         isOnchain = route.isOnchain,
                         walletId = route.walletId,
                         refusalReason = route.refusalReason,
+                        directFundingRequestId = route.directFundingRequestId,
                         retryOriginal = appViewModel::retryOriginalOnchainSend,
                         onRecoveredTransfer = appViewModel::onRecoveredTransfer,
                         onRecovered = { txid, originalAmount ->
@@ -900,6 +902,7 @@ sealed interface SendRoute {
         val refusalReason: String? = null,
         val retryRoute: SendRetryRoute = SendRetryRoute.Confirm,
         val paymentRequest: String? = null,
+        val directFundingRequestId: String? = null,
     ) : InternalOnly
 
     @Serializable

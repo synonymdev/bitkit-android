@@ -1,0 +1,19 @@
+<journey name="unified primary wallet">
+  <description>
+    Verify the single Bitcoin balance and primary-node entry on an onboarded local build. Start with
+    no primary configured, no hardware wallet paired and USDT disabled. Repeat with a hardware wallet to verify that its
+    separate device balance remains available. This Android flow is not implemented on iOS yet.
+  </description>
+  <actions>
+    <action>Open the wallet home screen and verify the total balance (testTag "TotalBalance") is visible</action>
+    <action>Verify the Savings and Spending cards (testTags "ActivitySavings" and "ActivitySpending") are absent</action>
+    <action>Tap Primary node (testTag "HomePrimaryNode") and verify the primary-node screen (testTag "PrimaryNodeScreen") opens</action>
+    <action>Return home, open Receive and verify Bitcoin (testTag "Tab-auto") is selected with an onchain QR even when there is no Lightning channel</action>
+    <action>Verify there is no Savings tab (testTag "Tab-savings") and no paid Lightning setup or liquidity purchase prompt</action>
+    <action>Close Receive, open widgets if enabled and verify the Lightning setup suggestion (testTag "Suggestion-lightning") is absent</action>
+    <action>With a primary configured and notification permission denied, receive a second payment and verify no Get paid passively prompt (testTag "BackgroundPaymentsIntro") appears</action>
+    <action>When automatic primary funding makes a channel ready, verify no Spending Balance Ready toast (testTag "SpendingBalanceReadyToast") appears and any actual received payment still appears normally</action>
+    <action>Verify the suggestions do not offer background payments and General settings has no legacy Background payments entry (testTag "BackgroundPaymentSettings") for the primary wallet</action>
+    <action>With a paired hardware wallet, open its home tile and verify its balance, address and history remain available without a Transfer To Spending button</action>
+  </actions>
+</journey>

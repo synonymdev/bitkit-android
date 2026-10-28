@@ -29,22 +29,24 @@ class ReceiveAutoTabSelectionTest {
     private val editedTabs = mutableListOf<ReceiveTab>()
 
     @Test
-    fun keepsTabPickedByTapWhenAutoBecomesAvailable() {
+    fun keepsLightningTabWhenInboundBecomesAvailable() {
         setContent()
 
         composeTestRule.onNodeWithTag("Tab-spending").performClick()
-        composeTestRule.onNodeWithTag("Tab-savings").performClick()
         composeTestRule.waitForIdle()
 
         makeAutoAvailable()
 
-        assertEquals(ReceiveTab.SAVINGS, selectedTab())
+        assertEquals(ReceiveTab.SPENDING, selectedTab())
     }
 
     @Test
-    fun jumpsToAutoWhenNoTabWasPicked() {
+    fun bitcoinTabIsAvailableBeforeInboundCapacity() {
         setContent()
         composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("Tab-auto").assertIsDisplayed()
+        assertEquals(ReceiveTab.AUTO, selectedTab())
 
         makeAutoAvailable()
 
@@ -55,11 +57,11 @@ class ReceiveAutoTabSelectionTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 ReceiveQrScreen(
-                    cjitInvoice = null,
+                    primaryInvoice = null,
                     walletState = WALLET_STATE,
                     lightningState = lightningState,
                     onClickEditInvoice = { editedTabs += it },
-                    onClickReceiveCjit = {},
+                    onClickReceiveLightning = {},
                 )
             }
         }

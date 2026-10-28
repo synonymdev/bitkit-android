@@ -58,11 +58,12 @@ import to.bitkit.ext.UiDateStyle
 import to.bitkit.ext.contact
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.ext.isDirectFunding
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
-import to.bitkit.ext.totalValue
+import to.bitkit.ext.walletId
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -95,6 +96,7 @@ import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
+import to.bitkit.ui.utils.displayValue
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.ui.utils.uiDateText
 import to.bitkit.viewmodels.ActivityDetailViewModel
@@ -188,9 +190,12 @@ fun ActivityDetailScreen(
                 val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
                 var showAddTagSheet by remember { mutableStateOf(false) }
                 var isCpfpChild by remember { mutableStateOf(false) }
+                var isPrimaryFunding by remember(item) { mutableStateOf(false) }
                 var boostTxDoesExist by remember { mutableStateOf<ImmutableMap<String, Boolean>>(persistentMapOf()) }
 
                 LaunchedEffect(item) {
+                    isPrimaryFunding = item is Activity.Onchain && item.isSent() &&
+                        listViewModel.isPrimaryFundingTransaction(item.v1.txId, item.walletId())
                     if (item is Activity.Onchain) {
                         isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId)
                         boostTxDoesExist = if (item.v1.boostTxIds.isNotEmpty()) {
@@ -223,10 +228,16 @@ fun ActivityDetailScreen(
                 ) {
                     AppTopBar(
                         titleText = stringResource(
-                            if (isCpfpChild) {
+                            if (item.isDirectFunding()) {
+                                if (item.isSent()) {
+                                    R.string.wallet_direct_funding__title
+                                } else {
+                                    R.string.wallet_direct_funding__incoming
+                                }
+                            } else if (isCpfpChild) {
                                 R.string.wallet__activity_boost_fee
                             } else {
-                                item.getScreenTitleRes()
+                                item.getScreenTitleRes(isPrimaryFunding)
                             }
                         ),
                         onBackClick = onBackClick,
@@ -245,8 +256,9 @@ fun ActivityDetailScreen(
                         onChannelClick = onChannelClick,
                         detailViewModel = detailViewModel,
                         isCpfpChild = isCpfpChild,
+                        isPrimaryFunding = isPrimaryFunding,
                         isHardware = uiState.isHardwareActivity,
-                        showContactActions = isPaykitEnabled &&
+                        showContactActions = isPaykitEnabled && !isPrimaryFunding &&
                             (!uiState.isHardwareActivity || assignedContact != null),
                         boostTxDoesExist = boostTxDoesExist,
                         onCopy = { text ->
@@ -330,6 +342,7 @@ private fun ActivityDetailContent(
     detailViewModel: ActivityDetailViewModel? = null,
     isCpfpChild: Boolean = false,
     isHardware: Boolean = false,
+    isPrimaryFunding: Boolean = false,
     showContactActions: Boolean = true,
     boostTxDoesExist: ImmutableMap<String, Boolean> = persistentMapOf(),
     onCopy: (String) -> Unit,
@@ -339,8 +352,8 @@ private fun ActivityDetailContent(
     val isLightning = item is Activity.Lightning
     val isSent = item.isSent()
     val isTransfer = item.isTransfer()
-    val isTransferFromSpending = isTransfer && !isSent
-    val isTransferToSpending = isTransfer && isSent
+    val isTransferFromSpending = isTransfer && !isPrimaryFunding && !isSent
+    val isTransferToSpending = isTransfer && !isPrimaryFunding && isSent
 
     val accentColor = when {
         isTransferFromSpending -> Colors.Purple
@@ -395,7 +408,7 @@ private fun ActivityDetailContent(
                 .padding(vertical = 16.dp)
         ) {
             BalanceHeaderView(
-                sats = item.totalValue().toLong(),
+                sats = item.displayValue(isPrimaryFunding).toLong(),
                 prefix = amountPrefix,
                 showBitcoinSymbol = false,
                 useSwipeToHide = true,
@@ -406,11 +419,12 @@ private fun ActivityDetailContent(
                 size = 48.dp,
                 isCpfpChild = isCpfpChild,
                 isHardware = isHardware,
+                isPrimaryFunding = isPrimaryFunding,
             )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        StatusSection(item, accentColor, feeRates)
+        StatusSection(item, accentColor, feeRates, isPrimaryFunding)
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
         // Timestamp section: date and time
@@ -460,7 +474,7 @@ private fun ActivityDetailContent(
                 HorizontalDivider()
             }
         }
-        if (isSent || isTransfer) {
+        if (isSent || isTransfer || (item is Activity.Lightning && (fee ?: 0uL) > 0uL)) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -468,6 +482,7 @@ private fun ActivityDetailContent(
                 Column(modifier = Modifier.weight(1f)) {
                     Caption13Up(
                         text = when {
+                            isPrimaryFunding -> stringResource(R.string.primary_node__funding_amount)
                             isTransferToSpending -> stringResource(R.string.wallet__activity_transfer_to_spending)
                             isTransferFromSpending -> stringResource(R.string.wallet__activity_transfer_to_savings)
                             isSelfSend -> stringResource(R.string.wallet__activity_sent_self)
@@ -482,6 +497,7 @@ private fun ActivityDetailContent(
                     ) {
                         Icon(
                             painter = when {
+                                isPrimaryFunding -> painterResource(R.drawable.ic_lightning)
                                 isTransferToSpending -> painterResource(R.drawable.ic_lightning)
                                 isTransferFromSpending -> painterResource(R.drawable.ic_bitcoin)
                                 else -> painterResource(R.drawable.ic_user)
@@ -699,6 +715,7 @@ private fun ActivityDetailContent(
                 )
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_explore),
+                    enabled = !item.isDirectFunding() || (item as? Activity.Onchain)?.v1?.txId?.isNotBlank() == true,
                     size = ButtonSize.Small,
                     onClick = { onExploreClick(item.rawId()) },
                     icon = {
@@ -836,6 +853,7 @@ private fun StatusSection(
     item: Activity,
     accentColor: Color,
     feeRates: FeeRates? = null,
+    isPrimaryFunding: Boolean = false,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Caption13Up(
@@ -879,8 +897,12 @@ private fun StatusSection(
                     var statusColor = accentColor // Use accent color for transfers
                     var statusText = stringResource(R.string.wallet__activity_confirming)
                     var statusTestTag: String? = null
+                    if (item.isDirectFunding()) {
+                        statusText = stringResource(R.string.wallet_direct_funding__confirming)
+                        statusTestTag = "StatusDirectFundingPending"
+                    }
 
-                    if (item.v1.isTransfer) {
+                    if (item.v1.isTransfer && !isPrimaryFunding) {
                         val context = LocalContext.current
                         val duration = context.getFeeShortDescription(item.v1.feeRate, feeRates)
                         statusText = stringResource(R.string.wallet__activity_transfer_pending)
@@ -1047,7 +1069,7 @@ private fun shouldEnableBoostButton(
     isHardware: Boolean,
     boostTxDoesExist: ImmutableMap<String, Boolean>,
 ): Boolean {
-    if (isHardware) return false
+    if (isHardware || item.isDirectFunding()) return false
     if (item !is Activity.Onchain) return false
 
     val activity = item.v1

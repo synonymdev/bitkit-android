@@ -83,7 +83,7 @@ class SendFeeViewModel @Inject constructor(
     }
 
     private fun getFeeLimit(): ULong {
-        val totalBalance = walletRepo.balanceState.value.totalOnchainSats
+        val totalBalance = walletRepo.balanceState.value.totalSats
         val halfBalance = (totalBalance.toDouble() * MAX_RATIO).toULong()
         val remainingFunds = maxOf(0u, totalBalance - sendUiState.amount)
         return minOf(halfBalance, remainingFunds)

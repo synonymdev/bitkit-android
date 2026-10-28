@@ -21,6 +21,7 @@ class NotificationsTimedSheet @Inject constructor(
 
     override suspend fun shouldShow(): Boolean {
         val settings = settingsStore.data.first()
+        if (settings.primaryNodeUri.isNotBlank()) return false
         if (settings.notificationsGranted) return false
         if (walletRepo.balanceState.value.totalLightningSats == 0UL) return false
 

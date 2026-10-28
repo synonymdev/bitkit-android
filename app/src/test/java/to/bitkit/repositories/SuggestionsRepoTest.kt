@@ -20,6 +20,7 @@ import to.bitkit.models.HwWallet
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransportType
 import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -28,7 +29,6 @@ class SuggestionsRepoTest : BaseUnitTest() {
 
     private val walletRepo = mock<WalletRepo>()
     private val settingsStore = mock<SettingsStore>()
-    private val transferRepo = mock<TransferRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
 
@@ -37,12 +37,12 @@ class SuggestionsRepoTest : BaseUnitTest() {
     private fun setUp(
         settings: SettingsData,
         wallets: ImmutableList<HwWallet> = persistentListOf(),
+        balance: BalanceState = BalanceState(),
     ) {
         hardwareWallets = MutableStateFlow(wallets)
 
-        whenever(walletRepo.balanceState).thenReturn(MutableStateFlow(BalanceState()))
+        whenever(walletRepo.balanceState).thenReturn(MutableStateFlow(balance))
         whenever(settingsStore.data).thenReturn(flowOf(settings))
-        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
         whenever(hwWalletRepo.wallets).thenReturn(hardwareWallets)
 
@@ -50,7 +50,6 @@ class SuggestionsRepoTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             walletRepo = walletRepo,
             settingsStore = settingsStore,
-            transferRepo = transferRepo,
             pubkyRepo = pubkyRepo,
             hwWalletRepo = hwWalletRepo,
         )
@@ -107,6 +106,51 @@ class SuggestionsRepoTest : BaseUnitTest() {
         val suggestions = sut.suggestionsFlow.first()
 
         assertFalse(Suggestion.HARDWARE in suggestions)
+    }
+
+    @Test
+    fun `wallet suggestions never offer paid lightning setup`() = test {
+        listOf(
+            BalanceState(),
+            BalanceState(totalOnchainSats = 10_000uL),
+            BalanceState(totalLightningSats = 10_000uL),
+            BalanceState(balanceInTransferToSpending = 10_000uL),
+        ).forEach { balance ->
+            setUp(SettingsData(), balance = balance)
+
+            assertFalse(Suggestion.LIGHTNING in sut.suggestionsFlow.first())
+        }
+    }
+
+    @Test
+    fun `funded wallet suggestions do not depend on payment rail`() = test {
+        setUp(SettingsData(), balance = BalanceState(totalOnchainSats = 10_000uL))
+        val onchainSuggestions = sut.suggestionsFlow.first()
+        setUp(SettingsData(), balance = BalanceState(totalLightningSats = 10_000uL))
+
+        assertEquals(onchainSuggestions, sut.suggestionsFlow.first())
+        assertTrue(Suggestion.BACK_UP in onchainSuggestions)
+        assertTrue(Suggestion.SECURE in onchainSuggestions)
+    }
+
+    @Test
+    fun `funded wallets never suggest guaranteed background payments`() = test {
+        listOf(
+            BalanceState(totalOnchainSats = 10_000uL),
+            BalanceState(totalLightningSats = 10_000uL),
+        ).forEach { balance ->
+            setUp(
+                SettingsData(
+                    backupVerified = true,
+                    isPinEnabled = true,
+                    isQuickPayEnabled = true,
+                    notificationsGranted = false,
+                ),
+                balance = balance,
+            )
+
+            assertFalse(Suggestion.NOTIFICATIONS in sut.suggestionsFlow.first())
+        }
     }
 
     private fun hardwareWallet() = HwWallet(

@@ -82,7 +82,7 @@ class SendConfirmNavigationTest {
                 canSwitchFundingSource = true,
                 fundingOptions = persistentListOf(
                     SendFundingOption(SendFundingSource.Savings, enabled = true),
-                    SendFundingOption(SendFundingSource.Spending, enabled = true),
+                    SendFundingOption(SendFundingSource.Hardware("device"), name = "Trezor", enabled = true),
                 ),
             ),
         )

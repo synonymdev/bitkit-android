@@ -94,19 +94,24 @@ fun SendPendingScreen(
     savedStateHandle: SavedStateHandle,
     onNavigateToPin: () -> Unit,
     onRecoveredTransfer: (OnchainSendAttempt) -> Unit = {},
+    directFundingRequestId: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val txid = paymentHash.takeIf { isOnchain && it.matches(Regex("[0-9a-fA-F]{64}")) }
+    val txid = paymentHash.takeIf {
+        directFundingRequestId == null && isOnchain && it.matches(Regex("[0-9a-fA-F]{64}"))
+    }
     LaunchedEffect(Unit) {
-        if (isOnchain) {
+        if (directFundingRequestId != null) {
+            viewModel.initDirectFunding(directFundingRequestId, amount)
+        } else if (isOnchain) {
             viewModel.initOnchain(txid, amount, walletId)
         } else if (observeResolution) {
             viewModel.init(paymentHash, amount)
         }
     }
 
-    uiState.resolution?.takeIf { observeResolution }?.let { resolution ->
+    uiState.resolution?.takeIf { observeResolution || directFundingRequestId != null }?.let { resolution ->
         LaunchedEffect(resolution) {
             when (resolution) {
                 is PendingPaymentResolution.Success -> onPaymentSuccess(

@@ -1,16 +1,17 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import to.bitkit.R
+import to.bitkit.models.appendDirectFundingParameter
 import to.bitkit.utils.Bip21Utils
 
 internal fun getReceiveInvoiceDisplayMode(
     tab: ReceiveTab,
-    cjitInvoice: String?,
+    primaryInvoice: String?,
     hasInvoiceError: Boolean,
     isUpdating: Boolean,
     showDetails: Boolean,
 ): ReceiveInvoiceDisplayMode {
-    if (tab.usesLightningInvoice() && cjitInvoice.isNullOrEmpty()) {
+    if (tab == ReceiveTab.SPENDING && primaryInvoice.isNullOrEmpty()) {
         if (isUpdating) return ReceiveInvoiceDisplayMode.LOADING
         if (hasInvoiceError) return ReceiveInvoiceDisplayMode.ERROR
     }
@@ -23,7 +24,7 @@ internal fun getReceiveInvoiceDisplayMode(
  * @param tab The selected receive tab
  * @param bip21 Full BIP21 invoice (onchain + lightning)
  * @param bolt11 Lightning invoice
- * @param cjitInvoice CJIT invoice from Blocktank (if active)
+ * @param primaryInvoice Approved receive invoice from the primary node (if active)
  * @param onchainAddress Pure Bitcoin address (fallback)
  * @return The invoice string to display/encode in QR
  */
@@ -31,7 +32,7 @@ fun getInvoiceForTab(
     tab: ReceiveTab,
     bip21: String,
     bolt11: String,
-    cjitInvoice: String?,
+    primaryInvoice: String?,
     isNodeRunning: Boolean,
     canCreateLightningInvoice: Boolean = true,
     onchainAddress: String,
@@ -39,8 +40,9 @@ fun getInvoiceForTab(
     hardwareAmountSats: ULong? = null,
     hardwareMessage: String = "",
     isReceiveInvoiceUpdating: Boolean = false,
+    directFundingRequest: String? = null,
 ): String {
-    if (isReceiveInvoiceUpdating && cjitInvoice.isNullOrEmpty() && tab.usesLightningInvoice()) {
+    if (isReceiveInvoiceUpdating && primaryInvoice.isNullOrEmpty() && tab == ReceiveTab.SPENDING) {
         return ""
     }
 
@@ -51,16 +53,26 @@ fun getInvoiceForTab(
         }
 
         ReceiveTab.AUTO -> {
-            if (isNodeRunning && canCreateLightningInvoice) {
-                bip21.takeIf { containsLightningParameter(it) }.orEmpty()
-            } else {
-                removeLightningFromBip21(bip21, onchainAddress)
+            val onchainInvoice = removeLightningFromBip21(bip21, onchainAddress)
+            val combinedInvoice = when {
+                isNodeRunning && !primaryInvoice.isNullOrEmpty() && onchainInvoice.isNotBlank() -> {
+                    val base = if (onchainInvoice.startsWith("bitcoin:")) onchainInvoice else "bitcoin:$onchainInvoice"
+                    val separator = if ('?' in base) '&' else '?'
+                    "$base${separator}lightning=$primaryInvoice"
+                }
+                isNodeRunning && canCreateLightningInvoice && !isReceiveInvoiceUpdating &&
+                    containsLightningParameter(bip21) -> bip21
+                else -> onchainInvoice
             }
+            appendDirectFundingParameter(
+                combinedInvoice,
+                directFundingRequest.takeIf { isNodeRunning && !isReceiveInvoiceUpdating },
+            )
         }
 
         ReceiveTab.SPENDING -> {
-            // Lightning only: prefer CJIT > bolt11, empty when node is not running
-            cjitInvoice?.takeIf { it.isNotEmpty() && isNodeRunning }
+            // Lightning only: prefer the approved request, empty when the node is not running
+            primaryInvoice?.takeIf { it.isNotEmpty() && isNodeRunning }
                 ?: bolt11.takeIf { isNodeRunning && canCreateLightningInvoice }.orEmpty()
         }
 
@@ -99,13 +111,11 @@ fun getSavingsCopyText(bip21: String, onchainAddress: String): String {
 fun removeLightningFromBip21(bip21: String, fallbackAddress: String): String {
     if (bip21.isBlank()) return fallbackAddress
 
-    // Remove lightning parameter using regex
-    // Handles both "?lightning=..." and "&lightning=..." cases
-    val withoutLightning = bip21
-        .replace(Regex("[?&]lightning=[^&]*"), "")
-        .replace(Regex("\\?$"), "") // Remove trailing ? if it's the last char
-
-    return withoutLightning.ifBlank { fallbackAddress }
+    val parts = bip21.split('?', limit = 2)
+    if (parts.size == 1) return bip21
+    val query = parts[1].split('&').filterNot { it.substringBefore('=').equals("lightning", ignoreCase = true) }
+        .filter(String::isNotEmpty).joinToString("&")
+    return (parts[0] + if (query.isEmpty()) "" else "?$query").ifBlank { fallbackAddress }
 }
 
 /**
@@ -115,7 +125,7 @@ fun removeLightningFromBip21(bip21: String, fallbackAddress: String): String {
  * @return true if the URI contains a lightning parameter, false otherwise
  */
 private fun containsLightningParameter(bip21: String): Boolean {
-    return Regex("[?&]lightning=[^&]*").containsMatchIn(bip21)
+    return Regex("[?&]lightning=[^&]+").containsMatchIn(bip21)
 }
 
 /**
@@ -133,5 +143,3 @@ fun getQrLogoResource(tab: ReceiveTab): Int {
         ReceiveTab.HARDWARE -> R.drawable.ic_btc_circle_blue
     }
 }
-
-private fun ReceiveTab.usesLightningInvoice(): Boolean = this == ReceiveTab.AUTO || this == ReceiveTab.SPENDING
