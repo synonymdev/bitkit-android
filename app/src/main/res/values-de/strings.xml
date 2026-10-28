@@ -455,6 +455,7 @@
     <string name="security__pin_disable_button">PIN deaktivieren</string>
     <string name="security__pin_enter">Bitte gib deinen PIN-Code ein</string>
     <string name="security__pin_last_attempt">Letzter Versuch. Wenn du den falschen PIN erneut eingibst, wird dein Wallet zurückgesetzt.</string>
+    <string name="security__pin_allowance">Bitte gib deinen PIN-Code ein, um diese Änderung des Budgets zu bestätigen.</string>
     <string name="security__pin_attempts">{attemptsRemaining} Versuche verbleiben. Hast du deinen PIN vergessen?</string>
     <string name="security__pin_forgot_title">PIN vergessen?</string>
     <string name="security__pin_forgot_text">PIN vergessen? Setze hier dein Bitkit-Wallet zurück und stelle es mit deiner Wiederherstellungsphrase wieder her. Vergebe eine neue PIN nach deiner Wiederherstellung.</string>
@@ -771,6 +772,7 @@
     <string name="usdt__error_fee_collection">Die Transaktionsgebühr kann nicht in USDT bezahlt werden. Versuche einen kleineren Betrag.</string>
     <string name="usdt__error_network">USDT konnte nicht aktualisiert werden. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="usdt__error_pending">Eine Zahlung ist noch ausstehend. Warte auf die Bestätigung, bevor du erneut sendest.</string>
+    <string name="usdt__error_quote_refreshed">Das Gebührenangebot ist abgelaufen und wurde aktualisiert. Prüfe die Gebühr und wische erneut.</string>
     <string name="usdt__error_rate_limit">Zu viele Anfragen. Bitte versuche es gleich erneut.</string>
     <string name="usdt__error_rejected">Das USDT-Netzwerk hat die Anfrage abgelehnt. Bitte versuche es erneut.</string>
     <string name="usdt__error_response">Der USDT-Dienst hat eine ungültige Antwort zurückgegeben. Bitte versuche es später erneut.</string>
@@ -1427,6 +1429,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Budget hinzugefügt</string>
     <string name="subscriptions__allowance_offer_explanation">Die Wallet von {name} bezahlt deine Anforderungen innerhalb dieser Limits, ohne jedes Mal nachzufragen. Ihr könnt es beide beenden.</string>
     <string name="subscriptions__allowance_offer_headline">{name} bietet dir\n&lt;accent&gt;ein Budget&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} haben dir Budgets eingerichtet</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} automatisch bezahlt</string>
     <string name="subscriptions__allowance_paid_so_far">Automatisch bezahlt</string>
     <string name="subscriptions__allowance_payment_in_progress">Diese Anforderung wird bereits automatisch bezahlt.</string>

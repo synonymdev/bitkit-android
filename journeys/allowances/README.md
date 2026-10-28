@@ -23,7 +23,10 @@ screen the sheet waits, so the notification is posted.
 
 The journeys set $5 a payment and $50 a month, the second stop on each slider, and the cap journey
 sets $5 a payment and $10 a month, the first monthly stop. Requests are one-time Payment Requests
-created from the Payments tab of the payee, in the fiat unit. Dollar amounts on screen are converted
+created from the Payments tab of the payee, priced in bitcoin. On Android, enter the amount in sats:
+a request entered in the fiat unit is priced in USD, and allowances pay only bitcoin-priced requests, so it
+stays manual. iOS converts a dollar entry to a bitcoin amount when it creates the request, so the fiat unit
+works there. Dollar amounts on screen are converted
 at the current rate, so a sats amount next to them will differ between runs.
 
 ## Reference evidence

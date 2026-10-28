@@ -472,6 +472,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Кодовая фраза:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Вы добавили кодовую фразу к фразе восстановления во время создания кошелька.</string>
     <string name="security__pass_your">Ваша Кодовая Фраза</string>
+    <string name="security__pin_allowance">Введите PIN-код, чтобы подтвердить это изменение бюджета.</string>
     <string name="security__pin_attempts">Осталось {attemptsRemaining} попыток. Забыли PIN-код?</string>
     <string name="security__pin_choose_header">Выберите 4-значный PIN-код</string>
     <string name="security__pin_choose_text">Пожалуйста, используйте PIN-код, который вы запомните. Если вы забудете свой PIN-код, вы можете сбросить его, но для этого потребуется восстановить кошелёк.</string>
@@ -788,6 +789,7 @@
     <string name="usdt__error_fee_collection">Не удалось оплатить комиссию за транзакцию в USDT. Попробуйте меньшую сумму.</string>
     <string name="usdt__error_network">Не удалось обновить USDT. Проверьте подключение и попробуйте ещё раз.</string>
     <string name="usdt__error_pending">Платёж всё ещё в ожидании. Дождитесь подтверждения, прежде чем отправлять снова.</string>
+    <string name="usdt__error_quote_refreshed">Расчёт комиссии устарел и был обновлён. Проверьте комиссию и проведите ещё раз.</string>
     <string name="usdt__error_rate_limit">Слишком много запросов. Попробуйте ещё раз чуть позже.</string>
     <string name="usdt__error_rejected">Сеть USDT отклонила запрос. Попробуйте ещё раз.</string>
     <string name="usdt__error_response">Сервис USDT вернул некорректный ответ. Попробуйте позже.</string>
@@ -1443,6 +1445,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Бюджет Добавлен</string>
     <string name="subscriptions__allowance_offer_explanation">Кошелёк {name} будет оплачивать ваши запросы в пределах этих лимитов, не спрашивая каждый раз. Любая из сторон может его завершить.</string>
     <string name="subscriptions__allowance_offer_headline">{name} предлагает\n&lt;accent&gt;бюджет&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} настроили для вас бюджеты</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} оплачено автоматически</string>
     <string name="subscriptions__allowance_paid_so_far">Оплачено автоматически</string>
     <string name="subscriptions__allowance_payment_in_progress">Этот запрос уже оплачивается автоматически.</string>
