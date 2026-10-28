@@ -6,7 +6,10 @@ import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.paykit.PaykitException
 import com.synonym.vssclient.VssItem
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -17,6 +20,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.junit.Before
@@ -75,15 +80,20 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import javax.inject.Provider
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -192,6 +202,36 @@ class BackupRepoTest : BaseUnitTest() {
 
         whenever { vssBackupClient.listKeys() }.thenReturn(Result.success(emptyList()))
         sut = createSut()
+    }
+
+    @Test
+    fun `restore marker storage reads leave Main responsive`() = test {
+        val entered = CompletableDeferred<Thread>()
+        val release = CountDownLatch(1)
+        val mainThread = Thread.currentThread()
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenAnswer {
+            entered.complete(Thread.currentThread())
+            check(release.await(5, TimeUnit.SECONDS)) { "Marker read was not released" }
+            false
+        }
+        Executors.newSingleThreadExecutor().asCoroutineDispatcher().use { ioDispatcher ->
+            sut = createSut(ioDispatcher)
+            try {
+                val read = async(Dispatchers.Main) { sut.hasPendingWalletRestore() }
+                val storageThread = withContext(Dispatchers.Default) {
+                    withTimeout(5.seconds) { entered.await() }
+                }
+                assertNotEquals(mainThread, storageThread)
+                assertTrue(async(Dispatchers.Main) { true }.await())
+                assertFalse(read.isCompleted)
+
+                release.countDown()
+
+                assertFalse(read.await())
+            } finally {
+                release.countDown()
+            }
+        }
     }
 
     @Test
@@ -2175,9 +2215,9 @@ class BackupRepoTest : BaseUnitTest() {
         verify(vssBackupClient, never()).getObject(any())
     }
 
-    private fun createSut() = BackupRepo(
+    private fun createSut(ioDispatcher: CoroutineDispatcher = testDispatcher) = BackupRepo(
         context = context,
-        ioDispatcher = testDispatcher,
+        ioDispatcher = ioDispatcher,
         cacheStore = cacheStore,
         vssBackupClient = vssBackupClient,
         vssBackupClientLdk = vssBackupClientLdk,
