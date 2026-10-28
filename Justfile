@@ -24,7 +24,7 @@ list:
         "lint" \
         "lint baseline" \
         "format" \
-        "e2e [network|no geo|TASK] [TASK]" \
+        "e2e [network|TASK] [TASK]" \
         "changelog [all|next|hotfix]" \
         "clean"
 
@@ -191,7 +191,7 @@ format:
     {{ gradle }} detekt --auto-correct --rerun-tasks
 
 e2e mode="" value="" task="assembleDevRelease":
-    {{ if mode == "" { "E2E=true " + gradle + " " + task } else if mode == "network" { "E2E=true E2E_BACKEND=network " + gradle + " " + if value == "" { task } else { value } } else if mode == "no" { if value == "geo" { "GEO=false E2E=true " + gradle + " " + task } else { error("usage: just e2e no geo [TASK]") } } else { "E2E=true " + gradle + " " + mode } }}
+    {{ if mode == "" { "E2E=true " + gradle + " " + task } else if mode == "network" { "E2E=true E2E_BACKEND=network " + gradle + " " + if value == "" { task } else { value } } else { "E2E=true " + gradle + " " + mode } }}
 
 changelog target="all":
     ./scripts/preview-changelog.sh --target {{ target }}

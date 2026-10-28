@@ -5,12 +5,11 @@ import to.bitkit.utils.Bip21Utils
 
 internal fun getReceiveInvoiceDisplayMode(
     tab: ReceiveTab,
-    cjitInvoice: String?,
     hasInvoiceError: Boolean,
     isUpdating: Boolean,
     showDetails: Boolean,
 ): ReceiveInvoiceDisplayMode {
-    if (tab.usesLightningInvoice() && cjitInvoice.isNullOrEmpty()) {
+    if (tab.usesLightningInvoice()) {
         if (isUpdating) return ReceiveInvoiceDisplayMode.LOADING
         if (hasInvoiceError) return ReceiveInvoiceDisplayMode.ERROR
     }
@@ -23,7 +22,6 @@ internal fun getReceiveInvoiceDisplayMode(
  * @param tab The selected receive tab
  * @param bip21 Full BIP21 invoice (onchain + lightning)
  * @param bolt11 Lightning invoice
- * @param cjitInvoice CJIT invoice from Blocktank (if active)
  * @param onchainAddress Pure Bitcoin address (fallback)
  * @return The invoice string to display/encode in QR
  */
@@ -31,7 +29,6 @@ fun getInvoiceForTab(
     tab: ReceiveTab,
     bip21: String,
     bolt11: String,
-    cjitInvoice: String?,
     isNodeRunning: Boolean,
     canCreateLightningInvoice: Boolean = true,
     onchainAddress: String,
@@ -40,7 +37,7 @@ fun getInvoiceForTab(
     hardwareMessage: String = "",
     isReceiveInvoiceUpdating: Boolean = false,
 ): String {
-    if (isReceiveInvoiceUpdating && cjitInvoice.isNullOrEmpty() && tab.usesLightningInvoice()) {
+    if (isReceiveInvoiceUpdating && tab.usesLightningInvoice()) {
         return ""
     }
 
@@ -59,9 +56,8 @@ fun getInvoiceForTab(
         }
 
         ReceiveTab.SPENDING -> {
-            // Lightning only: prefer CJIT > bolt11, empty when node is not running
-            cjitInvoice?.takeIf { it.isNotEmpty() && isNodeRunning }
-                ?: bolt11.takeIf { isNodeRunning && canCreateLightningInvoice }.orEmpty()
+            // Lightning only: empty when node is not running
+            bolt11.takeIf { isNodeRunning && canCreateLightningInvoice }.orEmpty()
         }
 
         ReceiveTab.USDT -> ""

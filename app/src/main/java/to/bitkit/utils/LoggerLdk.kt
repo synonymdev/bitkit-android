@@ -6,7 +6,6 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.LogRecord
 import org.lightningdevkit.ldknode.LogWriter
 import org.lightningdevkit.ldknode.Node
-import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import java.io.File
@@ -24,7 +23,7 @@ class LoggerLdk @Inject constructor(
         private const val TAG = "LogDumperLdk"
     }
 
-    fun dumpNetworkGraphInfo(node: Node, trustedPeers: List<PeerDetails>, bolt11: String) {
+    fun dumpNetworkGraphInfo(node: Node, bolt11: String) {
         val nodeIdPreviewLen = 20
 
         val sb = StringBuilder()
@@ -136,19 +135,6 @@ class LoggerLdk @Inject constructor(
                 }
             }
         }
-
-        sb.appendLine("\n  Checking for trusted peers in network graph:")
-        var foundTrustedNodes = 0
-        trustedPeers.forEach { peer ->
-            val nodeId = peer.nodeId
-            if (allNodes.any { it == nodeId }) {
-                foundTrustedNodes++
-                sb.appendLine("    OK: ${nodeId.take(nodeIdPreviewLen)}... found in graph")
-            } else {
-                sb.appendLine("    MISSING: ${nodeId.take(nodeIdPreviewLen)}... NOT in graph")
-            }
-        }
-        sb.appendLine("  Summary: $foundTrustedNodes/${trustedPeers.size} trusted peers found in graph")
 
         val nodesToShow = minOf(10, allNodes.size)
         sb.appendLine("\n  First $nodesToShow nodes:")

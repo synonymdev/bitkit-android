@@ -14,11 +14,12 @@ import to.bitkit.data.keychain.Keychain
 fun connectionRecoveryFixture(
     settings: SettingsStore,
     keychain: Keychain = mock(),
+    currentBinding: () -> String = { "test-wallet-binding" },
 ): WalletConnectionRecovery {
     val db = mock<AppDb>()
     whenever(db.configDao()).thenReturn(mock())
     whenever(db.configDao().getAll()).thenReturn(MutableStateFlow(listOf(ConfigEntity())))
     val binding = mock<VssStoreIdProvider>()
-    whenever(binding.getBackupWalletBinding(any())).thenReturn("test-wallet-binding")
+    whenever(binding.getBackupWalletBinding(any())).thenAnswer { currentBinding() }
     return WalletConnectionRecovery(keychain, db, binding, settings)
 }

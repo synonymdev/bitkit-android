@@ -82,6 +82,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.SwipeToConfirm
+import to.bitkit.ui.components.SyncNodeVariant
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.TextInput
@@ -120,6 +121,7 @@ fun SendConfirmScreen(
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
     onNavigateToPin: () -> Unit,
+    syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     autoPayContent: (@Composable () -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -186,6 +188,7 @@ fun SendConfirmScreen(
         isLoading = isLoading,
         showBiometrics = showBiometrics,
         canGoBack = canGoBack,
+        syncNodeVariant = syncNodeVariant,
         initialShowDetails = uiState.isInitialSubscriptionPayment && !uiState.shouldAutomaticallyPay,
         autoPayContent = autoPayContent,
         onBack = onBack,
@@ -238,6 +241,7 @@ internal fun SendConfirmContent(
     preparingContact: PubkyProfile? = null,
     canGoBack: Boolean = true,
     initialShowDetails: Boolean = false,
+    syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     autoPayContent: (@Composable () -> Unit)? = null,
     onBack: () -> Unit = {},
     onEvent: (SendEvent) -> Unit = {},
@@ -296,6 +300,7 @@ internal fun SendConfirmContent(
                 )
             } else {
                 SyncNodeView(
+                    variant = syncNodeVariant,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
@@ -592,10 +597,10 @@ private fun OnChainDetails(
                         stringResource(R.string.wallet__savings__title)
                     },
                     color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
-                    enabled = uiState.canSwitchBitcoinFundingSource && interactionsEnabled,
+                    enabled = uiState.canSwitchConfirmFundingSource && interactionsEnabled,
                     isLoading = uiState.isFundingSourceLoading,
                     clickable = interactionsEnabled && !uiState.isRetainedHardwarePayment,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchBitcoinFundingSource },
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchConfirmFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
@@ -744,9 +749,9 @@ private fun LightningDetails(
                 NumberPadActionButton(
                     text = stringResource(R.string.wallet__spending__title),
                     color = Colors.Purple,
-                    enabled = uiState.canSwitchBitcoinFundingSource && interactionsEnabled,
+                    enabled = uiState.canSwitchConfirmFundingSource && interactionsEnabled,
                     isLoading = uiState.isFundingSourceLoading,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchBitcoinFundingSource },
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchConfirmFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )

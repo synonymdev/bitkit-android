@@ -499,6 +499,24 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         verify(contacts, never()).contactsForAddresses(any())
     }
 
+    @Test
+    fun `repeated incoming payment sync does not fetch missing node transaction details`() = coreTest {
+        val txid = "ab".repeat(32)
+        val incoming = payment().copy(kind = PaymentKind.Onchain(txid, ConfirmationStatus.Unconfirmed))
+        whenever(lightningService.getTransactionDetails(txid, 0)).thenReturn(
+            LdkTransactionDetails(15_000, emptyList(), listOf(LdkTxOutput("", "", "request-address", 15_000, 0u))),
+        )
+
+        repeat(2) {
+            sut.syncLdkNodePaymentsToActivities(listOf(incoming))
+            rows = listOf(updates.last())
+        }
+
+        assertEquals(txid, (rows.single() as Activity.Onchain).v1.txId)
+        verify(lightningService, never()).getTransactionDetails(any(), any())
+        verify(lightningService, never()).addressInfosForType(any(), any(), any(), any(), any())
+    }
+
     private suspend fun receive(vararg addresses: String) {
         whenever(lightningService.listPayments()).thenReturn(listOf(payment()))
         sut.handleOnchainTransactionReceived(

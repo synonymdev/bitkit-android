@@ -206,19 +206,6 @@ private fun Content(
                         )
                     }
 
-                    // Closed & Failed Channels Section
-                    AnimatedVisibility(visible = showClosed && uiState.failedOrders.isNotEmpty()) {
-                        Column {
-                            VerticalSpacer(16.dp)
-                            Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
-                            ChannelList(
-                                status = ChannelStatusUi.CLOSED,
-                                channels = uiState.failedOrders,
-                                onClickChannel = onClickChannel,
-                            )
-                        }
-                    }
-
                     // Closed Channels Section
                     AnimatedVisibility(visible = showClosed && uiState.closedChannels.isNotEmpty()) {
                         Column {
@@ -233,7 +220,7 @@ private fun Content(
                     }
 
                     // Show/Hide Closed Channels Button
-                    if (uiState.failedOrders.isNotEmpty() || uiState.closedChannels.isNotEmpty()) {
+                    if (uiState.closedChannels.isNotEmpty()) {
                         VerticalSpacer(16.dp)
                         TertiaryButton(
                             text = stringResource(
@@ -449,28 +436,6 @@ private fun Preview() {
                             channelValueSats = 1_000_000u,
                             outboundCapacityMsat = 300_000_000u,
                             inboundCapacityMsat = 700_000_000u,
-                        ),
-                    ),
-                ).toImmutableList(),
-                failedOrders = listOf(
-                    ChannelUi(
-                        name = "Connection 4",
-                        details = createChannelDetails().copy(
-                            channelId = "failed_order_1",
-                            channelValueSats = 200_000u,
-                            outboundCapacityMsat = 50_000_000u,
-                            inboundCapacityMsat = 150_000_000u,
-                            isChannelReady = false,
-                            isUsable = false,
-                        ),
-                    ),
-                    ChannelUi(
-                        name = "Connection 5",
-                        details = createChannelDetails().copy(
-                            channelId = "failed_order_2",
-                            channelValueSats = 100_000u,
-                            outboundCapacityMsat = 30_000_000u,
-                            inboundCapacityMsat = 70_000_000u,
                         ),
                     ),
                 ).toImmutableList()

@@ -110,6 +110,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.rememberSubscriptionNotificationsRequest
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.utils.SubscriptionClockOffset
 import to.bitkit.utils.SubscriptionIcon
@@ -127,6 +128,7 @@ fun CreateSubscriptionSheet(
     val resources = LocalResources.current
     val currencies = LocalCurrencies.current
     val scope = rememberCoroutineScope()
+    val requestNotifications = rememberSubscriptionNotificationsRequest()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     val isCreating by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
@@ -242,6 +244,7 @@ fun CreateSubscriptionSheet(
             onSelected = { selectedTarget = it },
             onExpirationChange = { expiration = it },
             onPropose = {
+                requestNotifications()
                 selectedTarget?.let { target ->
                     appViewModel.createSubscription(
                         draft = PaykitSubscriptionDraft(

@@ -70,7 +70,6 @@ jobs:
           CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
           E2E: true
           E2E_BACKEND: network
-          GEO: false
         run: ./gradlew assembleDevDebug
 
       - name: Rename APK
