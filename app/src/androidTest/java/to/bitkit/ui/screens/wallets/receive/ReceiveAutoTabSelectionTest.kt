@@ -55,7 +55,6 @@ class ReceiveAutoTabSelectionTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 ReceiveQrScreen(
-                    cjitInvoice = null,
                     walletState = WALLET_STATE,
                     lightningState = lightningState,
                     onClickEditInvoice = { editedTabs += it },

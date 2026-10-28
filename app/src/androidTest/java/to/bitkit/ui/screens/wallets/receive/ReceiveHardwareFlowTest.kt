@@ -52,7 +52,6 @@ class ReceiveHardwareFlowTest {
                     }
                 } else {
                     ReceiveQrScreen(
-                        cjitInvoice = null,
                         walletState = WALLET_STATE,
                         lightningState = LightningState(),
                         onClickEditInvoice = {},

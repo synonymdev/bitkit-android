@@ -17,6 +17,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.WalletScope
@@ -120,11 +121,21 @@ data class OnchainSendAttempt(
     val highestCandidateFee: ULong
         get() = maxOf(candidateMiningFees.values.maxOrNull() ?: 0uL, verifiedWinningFeeSats ?: 0uL)
 
-    /** A Shop payment from the node wallet that dispatched but never had its acceptance confirmed. */
+    /** A transfer to spending that pays a Blocktank order, which Bitkit no longer buys. */
+    val isBlocktankFunding: Boolean
+        get() = requestId == null && isTransfer && orderId != null
+
+    /**
+     * A Shop payment, or a Blocktank funding, from the node wallet that dispatched but never had its acceptance
+     * confirmed.
+     */
     val canBeAbandoned: Boolean
-        get() = isUnresolved && requestId != null && !isTransfer &&
-            walletId == WalletScope.default && !payerIdentity.isNullOrBlank() && initialDispatchAttempted &&
-            txid != null && !originalInputs.isNullOrEmpty() && candidateTxids.isNotEmpty()
+        get() {
+            val isShopPayment = requestId != null && !isTransfer && !payerIdentity.isNullOrBlank()
+            return isUnresolved && (isShopPayment || isBlocktankFunding) && walletId == WalletScope.default &&
+                initialDispatchAttempted && txid != null && !originalInputs.isNullOrEmpty() &&
+                candidateTxids.isNotEmpty()
+        }
 }
 
 class OnchainSendBlockedError(val attempt: OnchainSendAttempt? = null) :
@@ -467,40 +478,49 @@ class OnchainSendAttemptStore @Inject constructor(
             if (current.hasPositiveEvidence) return@withLock OnchainSendOutcome.Accepted(requireNotNull(current.txid))
             require(txid.lowercase() in current.candidateTxids)
             val firstSubmission = !current.initialDispatchAttempted
+            val localPreparation = attemptId in inFlightPreparations
             if (!firstSubmission) {
                 persist(
                     current.copy(txid = txid.lowercase(), evidence = OnchainSendEvidence.Pending, refusalReason = null)
                 )
             }
             try {
-                broadcast {
-                    // Called on the native queue after wallet/deadline validation, while this mutex is owned.
+                runSuspendCatching {
+                    broadcast {
+                        // Called on the native queue after wallet/deadline validation, while this mutex is owned.
+                        val live = loadWithRetainedAccepted(walletIndex)
+                        check(live?.attemptId == attemptId && !live.hasPositiveEvidence)
+                        persist(live.copy(initialDispatchAttempted = true))
+                        inFlightPreparations -= attemptId
+                    }
+                }.getOrElse { error ->
+                    val nativeRefused = error is PreparedOnchainSendRefused
+                    if (!nativeRefused && error !is ServiceError.PaymentDeadlineExpired) throw error
                     val live = loadWithRetainedAccepted(walletIndex)
-                    check(live?.attemptId == attemptId && !live.hasPositiveEvidence)
-                    persist(live.copy(initialDispatchAttempted = true))
-                    inFlightPreparations -= attemptId
-                }
-            } catch (error: ServiceError.PaymentDeadlineExpired) {
-                // The native queue checks the deadline before the durable dispatch boundary.
-                // Any earlier submission or imported backup remains uncertain and guarded.
-                if (!firstSubmission || loadWithRetainedAccepted(walletIndex)?.initialDispatchAttempted != false ||
-                    current.restoredFromBackup || current.evidence != OnchainSendEvidence.Pending ||
-                    current.candidateTxids.size != 1
-                ) {
-                    throw error
-                }
-                persist(
-                    current.copy(
-                        txid = null,
-                        originalInputs = null,
-                        candidateTxids = emptyList(),
-                        candidateFeeRates = emptyMap(),
-                        candidateMiningFees = emptyMap(),
-                        preparationPending = current.requestId != null,
+                    val samePreparation = live == current || nativeRefused &&
+                        live == current.copy(initialDispatchAttempted = true)
+                    // Only the native handle can acknowledge refusal after the dispatch write-ahead.
+                    // Earlier submissions, imported backups and changed journals remain guarded.
+                    if (!firstSubmission || !localPreparation || !samePreparation ||
+                        walletIndex != lightningService.currentWalletIndex || current.restoredFromBackup ||
+                        current.evidence != OnchainSendEvidence.Pending || current.candidateTxids.size != 1
+                    ) {
+                        throw error
+                    }
+                    persist(
+                        current.copy(
+                            txid = null,
+                            originalInputs = null,
+                            candidateTxids = emptyList(),
+                            candidateFeeRates = emptyMap(),
+                            candidateMiningFees = emptyMap(),
+                            preparationPending = current.requestId != null,
+                            initialDispatchAttempted = false,
+                        )
                     )
-                )
-                // Shop proof cleanup still precedes guard deletion through the existing preparation path.
-                throw OnchainSendNotDispatchedError(error)
+                    // Shop proof cleanup still precedes guard deletion through the existing preparation path.
+                    throw OnchainSendNotDispatchedError(error)
+                }
             } finally {
                 inFlightPreparations -= attemptId
             }

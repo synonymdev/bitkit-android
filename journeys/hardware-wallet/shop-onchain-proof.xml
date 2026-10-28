@@ -16,7 +16,7 @@
     <action>Have the issuer publish a current regtest P2WPKH destination under identifier "btc-regtest-p2wpkh" with JSON payload {"value":"&lt;current address&gt;"}</action>
     <action>Have the issuer send a new proposed one-time Payment Request for amount "0.001", asset "btc", and accepted identifier "btc-regtest-p2wpkh"; record its exact request ID and payer identity for the backend proof check</action>
     <action>Verify Payment Request confirmation (testTag "PaymentRequestConfirm") shows 100,000 sats and the saved issuer contact under Show details (testTag "SendConfirmToggleDetails")</action>
-    <action>Tap the funding-source button (testTag "SendConfirmAssetButton"), waiting for balance loading between taps, until FROM shows the paired hardware wallet</action>
+    <action>Tap the funding-source button (testTag "AssetButton-switch"), select the paired hardware wallet from the dropdown (testTag "SendFundingSources"), and wait for FROM to show that wallet with the fixed 100,000-sat amount</action>
     <action>Swipe to confirm; verify hardware sign shows the original issuer destination (testTag "HardwareSendAddress") and 100,000 sats (testTag "HardwareSendAmount")</action>
     <action>Tap Open Trezor Connect (testTag "HardwareSendOpenTrezorConnect") once and approve the Bridge emulator's transaction prompts</action>
     <action>While signing or local proof observation is running, verify another tap cannot start another payment; wait for Success (testTag "SendSuccess") or the existing Payment Pending screen</action>

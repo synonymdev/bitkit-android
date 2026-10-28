@@ -15,11 +15,14 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.UsdtPreference
 import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -158,7 +161,7 @@ class UsdtPreferencesRepoTest : BaseUnitTest() {
         whenever(coreWallet.receiveUri()).thenReturn("wallet-uri")
         whenever(coreWallet.history()).thenReturn(listOf(settled))
         whenever(coreWallet.balance()).thenAnswer { throw AppError("offline") }
-        val usdt = UsdtRepo(service, testDispatcher)
+        val usdt = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         assertTrue(usdt.refresh(history = false).isFailure)
         val preferences = UsdtPreferencesRepo(settingsStore, usdt, testDispatcher)
         assertEquals(null, usdt.state.value.balance)
@@ -179,7 +182,7 @@ class UsdtPreferencesRepoTest : BaseUnitTest() {
         whenever(coreWallet.balance()).thenReturn(0u)
         whenever(coreWallet.history()).thenReturn(emptyList())
         whenever(coreWallet.refreshTransfers()).thenReturn(emptyList())
-        val usdt = UsdtRepo(service, testDispatcher)
+        val usdt = UsdtRepo(service, CacheStore(InMemoryDataStore(AppCacheData())), testDispatcher)
         usdt.refresh(history = false).getOrThrow()
         val pending: UsdtDeposit = mock {
             on { id } doReturn "pending-deposit"

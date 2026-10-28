@@ -4,6 +4,7 @@ package to.bitkit.viewmodels
 
 import android.content.Context
 import android.content.Intent
+import android.icu.text.ListFormatter
 import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.annotation.StringRes
@@ -19,7 +20,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
-import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlAuthData
@@ -31,6 +31,7 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.UsdtQuote
+import com.synonym.paykit.PaymentConversion
 import com.synonym.paykit.PaymentRequestLifecycleState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -86,6 +87,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.Txid
+import to.bitkit.App
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.data.CacheStore
@@ -330,9 +332,6 @@ class AppViewModel @Inject constructor(
 
     var splashVisible by mutableStateOf(true)
         private set
-
-    val isGeoBlocked = lightningRepo.lightningState.map { it.isGeoBlocked }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val forceCloseRemainingDuration = transferRepo.forceCloseRemainingDuration
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -643,9 +642,6 @@ class AppViewModel @Inject constructor(
             resetIsAuthenticatedState()
             delay(AUTH_CHECK_SPLASH_DELAY_MS)
             splashVisible = false
-        }
-        viewModelScope.launch {
-            lightningRepo.updateGeoBlockState()
         }
         viewModelScope.launch {
             quickPayRepo.unhandledFailures.collect {
@@ -1134,7 +1130,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             if (resolution.walletId == WalletScope.default) {
                 lightningRepo.sync()
-                activityRepo.syncActivities()
+                activityRepo.syncActivities(requireFresh = true)
             }
             activityRepo.setContact(
                 contactPublicKey = resolution.requestId.counterparty,
@@ -1201,13 +1197,22 @@ class AppViewModel @Inject constructor(
             releaseCoverage()
         }
         return result.onSuccess {
-            val acceptedOffers = paykitAllowanceRepo.acceptOffersFromAllowers(
+            paykitAllowanceRepo.acceptOffersFromAllowers(
                 canAnnounce = { !privatePaykitRepo.isProfileDeletionInProgress.value },
                 canContinue = { !(onlyWhileActive && isPaymentRequestPollingStopped.value) },
             )
-            announceAcceptedAllowanceOffers(acceptedOffers)
-            if (processAllowanceRequests()) paykitPaymentRequestRepo.refresh()
+            if (processAllowanceRequests()) refreshRequestsUnderCoverageHold()
             presentNextIncomingPaykitPaymentRequest()
+        }
+    }
+
+    private suspend fun refreshRequestsUnderCoverageHold() {
+        // An intake after automatic payments can bring an allowance change too, so it runs under the coverage hold.
+        val releaseCoverage = paykitAllowanceRepo.beginCoverageUpdate()
+        try {
+            paykitPaymentRequestRepo.refresh().onSuccess { paykitAllowanceRepo.refresh() }
+        } finally {
+            releaseCoverage()
         }
     }
 
@@ -1232,6 +1237,21 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             paykitAllowanceRepo.events.collect(::handlePaykitAllowanceEvent)
         }
+        viewModelScope.launch {
+            // Announced here rather than by the refresh that accepted them, which polling may cancel.
+            paykitAllowanceRepo.offersToAnnounce.filter { it.isNotEmpty() }.collect { offers ->
+                announceAcceptedAllowanceOffers(offers)
+                paykitAllowanceRepo.markOffersAnnounced(offers)
+            }
+        }
+        viewModelScope.launch {
+            // A request held while allowances updated is presented once they settle, whether or not the refresh
+            // succeeded, including one the user tapped.
+            paykitAllowanceRepo.isUpdatingFlow.drop(1).filter { !it }.collect {
+                val isCurrent = PubkyPublicKeyFormat.matches(paymentRequestIdentity, pubkyRepo.publicKey.value)
+                if (isPaykitEnabled.value && isCurrent) presentNextIncomingPaykitPaymentRequest()
+            }
+        }
     }
 
     private fun handlePaykitAllowanceEvent(event: PaykitAllowanceEvent) {
@@ -1245,29 +1265,37 @@ class AppViewModel @Inject constructor(
                 testTag = "AllowancePaidToast",
             )
 
-            is PaykitAllowanceEvent.LimitReached -> notifyAllowanceEvent(
-                type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.subscriptions__allowance_limit_title),
-                description = context.getString(R.string.subscriptions__allowance_limit_description)
-                    .replace("{amount}", allowanceFiatAmount(event.amountSats))
-                    .replace("{name}", allowanceContactName(event.counterparty)),
-                testTag = "AllowanceLimitToast",
-            )
+            is PaykitAllowanceEvent.LimitReached -> {
+                // Unlocked in the foreground, the request sheet already shows the request.
+                if (App.currentActivity?.value != null && _isAuthenticated.value) return
+                notifyAllowanceEvent(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.subscriptions__allowance_limit_title),
+                    description = context.getString(R.string.subscriptions__allowance_limit_description)
+                        .replace("{amount}", allowanceFiatAmount(event.amountSats))
+                        .replace("{name}", allowanceContactName(event.counterparty)),
+                    testTag = "AllowanceLimitToast",
+                )
+            }
 
             PaykitAllowanceEvent.LedgerChanged -> Unit
         }
     }
 
     private fun announceAcceptedAllowanceOffers(offers: List<PaykitAllowanceEntry>) {
-        offers.forEach { offer ->
-            notifyAllowanceEvent(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.subscriptions__allowance_offer_accepted_title),
-                description = context.getString(R.string.subscriptions__allowance_offer_accepted_description)
-                    .replace("{name}", allowanceContactName(offer.counterparty)),
-                testTag = "AllowanceOfferAcceptedToast",
-            )
-        }
+        // Several offers accepted in one refresh are announced together, so no toast replaces another.
+        val description = allowanceOffersAcceptedDescription(
+            names = offers.map { it.counterparty }.distinct().map(::allowanceContactName),
+            single = context.getString(R.string.subscriptions__allowance_offer_accepted_description),
+            several = context.getString(R.string.subscriptions__allowance_offers_accepted_description),
+            formatNames = { ListFormatter.getInstance().format(it) },
+        ) ?: return
+        notifyAllowanceEvent(
+            type = Toast.ToastType.SUCCESS,
+            title = context.getString(R.string.subscriptions__allowance_offer_accepted_title),
+            description = description,
+            testTag = "AllowanceOfferAcceptedToast",
+        )
     }
 
     /**
@@ -1564,7 +1592,8 @@ class AppViewModel @Inject constructor(
         }
         if (sheet !is Sheet.Send || sheet !== currentSheet.value || sheet.preparingRequest != null) return
         val request = activeIncomingPaymentRequest() ?: return
-        if (!paykitPaymentRequestRepo.isPending(request)) return
+        val isListed = paykitPaymentRequestRepo.pendingRequest(request.id) != null
+        if (!isListed || paykitPaymentRequestRepo.isExpired(request)) return
         completePaymentRequestPresentation(request)
         paymentRequestPresentationGeneration++
         clearRequestedPaymentRequest(restoreDeferredReminder = false)
@@ -1737,6 +1766,7 @@ class AppViewModel @Inject constructor(
             if (reopenRetainedHardwarePayment(request, generation, preparation)) return true
             val started = timeSource.markNow()
             val presentationResult = privatePaykitRepo.beginPaymentRequest(request)
+            paykitPaymentRequestRepo.syncPaymentProofs()
             val resolvedAfter = started.elapsedNow()
             val result = finishIncomingPaymentRequestPreparation(request, generation, preparation, presentationResult)
             Logger.debug(
@@ -3775,17 +3805,76 @@ class AppViewModel @Inject constructor(
         }
         refreshPaykitRequestAmount()
         updateCanSwitchWallet()
-        if (!openBitcoinRequestConfirmation(fromMainScanner)) {
+        val initialPayment = payment.initialUsdtSubscriptionPayment(Clock.System.now())?.takeIf { useUsdt }
+        if (initialPayment != null) {
+            paykitReviewedAmount = initialPayment.amount
+            paykitPaymentTerms = initialPayment
+            _sendUiState.update { it.copy(requiresAmountReview = false) }
+            navigateToSendRoute(fromMainScanner, SendRoute.UsdtReview, SendEffect.NavigateToUsdtReview)
+        } else if (!openPaykitRequestConfirmation(fromMainScanner)) {
             navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
         }
     }
 
-    private suspend fun openBitcoinRequestConfirmation(fromMainScanner: Boolean): Boolean {
-        if (activeIncomingPaymentRequest() == null || _sendUiState.value.usdtRecipient != null) return false
+    fun takeInitialUsdtSubscriptionAuthorization(): Boolean {
+        val state = _sendUiState.value
+        if (!state.initialSubscriptionPaymentAutoStartPending || !state.paykitUsesUsdt) return false
+        _sendUiState.update { it.copy(initialSubscriptionPaymentAutoStartPending = false) }
+        val payment = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+            ?.initialUsdtSubscriptionPayment(Clock.System.now()) ?: return false
+        return state.shouldAutomaticallyPay && payment == paykitPaymentTerms && payment.amount == paykitReviewedAmount
+    }
+
+    /**
+     * A request's amount is fixed, so it opens on the confirm step of its preselected asset.
+     * Amount is the fallback when those terms cannot be bound.
+     */
+    private suspend fun openPaykitRequestConfirmation(fromMainScanner: Boolean): Boolean {
+        if (activeIncomingPaymentRequest() == null) return false
+        if (_sendUiState.value.paykitUsesUsdt) {
+            if (!bindUsdtRequestTerms()) return false
+            navigateToSendRoute(fromMainScanner, SendRoute.UsdtReview, SendEffect.NavigateToUsdtReview)
+            return true
+        }
         if (!bindBitcoinRequestTerms()) return false
         navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
         refreshOnchainSendIfNeeded()
         estimateLightningRoutingFeesIfNeeded()
+        return true
+    }
+
+    private suspend fun bindUsdtRequestTerms(): Boolean {
+        if (!_sendUiState.value.paykitUsesUsdt || !_sendUiState.value.isAmountInputValid) return false
+        paykitPaymentTerms = null
+        paykitReviewedAmount = null
+        reviewPaykitAmount(navigateToUsdtReview = false)
+        return paykitReviewedAmount != null
+    }
+
+    /** Switching asset on a request's confirm step opens the other asset's confirm step in place of Amount. */
+    private suspend fun switchPaykitRequestAsset(previous: SendUiState, wasReviewed: Boolean): Boolean {
+        val current = _sendUiState.value
+        if (!wasReviewed || activeIncomingPaymentRequest() == null ||
+            previous.paykitUsesUsdt == current.paykitUsesUsdt
+        ) {
+            return false
+        }
+        paykitPaymentTerms = null
+        paykitReviewedAmount = null
+        val route = when {
+            current.paykitUsesUsdt -> SendRoute.UsdtReview.takeIf { bindUsdtRequestTerms() }
+            bindBitcoinRequestTerms() -> SendRoute.Confirm
+            else -> null
+        }
+        if (route == null) {
+            setSendEffect(SendEffect.NavigateToAmount)
+            return true
+        }
+        setSendEffect(SendEffect.ShowPaykitConfirmation(route))
+        if (route == SendRoute.Confirm) {
+            refreshOnchainSendIfNeeded()
+            estimateLightningRoutingFeesIfNeeded()
+        }
         return true
     }
 
@@ -3932,12 +4021,22 @@ class AppViewModel @Inject constructor(
         if (current.isRetainedHardwarePayment) return
         val nextSource = nextFundingSource(current, requested) ?: return
         val canReviewInPlace = canRebindBitcoinRequestTerms(current, nextSource)
-        val generation = ++sendStateGeneration
-        onchainSendRefreshJob?.cancel()
+        val wasReviewed = paykitReviewedAmount != null
         val target = if (nextSource == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
         val converted = try {
             paymentAmountForSource(current, nextSource)
         } catch (_: PaykitAmountError.RateUnavailable) {
+            if (wasReviewed && !canReviewInPlace) {
+                // The reviewed quote is still payable, so keep its confirmation and its fee refresh running.
+                toast(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.wallet__payment_request_rate_unavailable),
+                    testTag = "PaykitRateUnavailableToast",
+                )
+                return
+            }
+            ++sendStateGeneration
+            onchainSendRefreshJob?.cancel()
             _sendUiState.update { it.copy(paykitRateUnavailable = true) }
             if (canReviewInPlace) {
                 paykitPaymentTerms = null
@@ -3946,9 +4045,13 @@ class AppViewModel @Inject constructor(
             }
             return
         } catch (_: PaykitAmountError) {
+            ++sendStateGeneration
+            onchainSendRefreshJob?.cancel()
             _sendUiState.update { it.copy(paykitRateUnavailable = false) }
             return
         }
+        val generation = ++sendStateGeneration
+        onchainSendRefreshJob?.cancel()
         _sendUiState.update {
             it.copy(
                 isFundingSourceLoading = nextSource is SendFundingSource.Hardware,
@@ -3976,10 +4079,15 @@ class AppViewModel @Inject constructor(
             )
         }
         updateCanSwitchWallet()
-        reviewFundingSourceChange(current, canReviewInPlace)
+        reviewFundingSourceChange(current, canReviewInPlace, wasReviewed)
     }
 
-    private suspend fun reviewFundingSourceChange(previous: SendUiState, rebindBitcoinTerms: Boolean) {
+    private suspend fun reviewFundingSourceChange(
+        previous: SendUiState,
+        rebindBitcoinTerms: Boolean,
+        wasReviewed: Boolean,
+    ) {
+        if (switchPaykitRequestAsset(previous, wasReviewed)) return
         if (rebindBitcoinTerms && previous.paykitMethod() != _sendUiState.value.paykitMethod()) {
             paykitPaymentTerms = null
             paykitReviewedAmount = null
@@ -3990,14 +4098,21 @@ class AppViewModel @Inject constructor(
 
     private fun canRebindBitcoinRequestTerms(state: SendUiState, source: SendFundingSource): Boolean =
         paykitPaymentTerms != null && paykitReviewedAmount != null && !state.paykitUsesUsdt &&
-            state.hardwareWalletId == null &&
-            (source == SendFundingSource.Savings || source == SendFundingSource.Spending)
+            source != SendFundingSource.Usdt
 
     private fun nextFundingSource(current: SendUiState, requested: SendFundingSource?): SendFundingSource? {
-        val sources = availableFundingSources(current).filter { requested != null || it != SendFundingSource.Usdt }
+        val includesUsdt = requested != null || activeIncomingPaymentRequest() != null
+        val sources = availableFundingSources(current).filter { includesUsdt || it != SendFundingSource.Usdt }
         if (sources.isEmpty() || requested != null && requested !in sources) return null
         val selected = current.selectedFundingSource()
-        return (requested ?: sources.nextAfter(selected)).takeUnless { it == selected }
+        val priced = sources.filter { it == selected || hasPaymentRate(current, it) }.takeIf { it.size > 1 } ?: sources
+        return (requested ?: priced.nextAfter(selected)).takeUnless { it == selected }
+    }
+
+    private fun hasPaymentRate(current: SendUiState, source: SendFundingSource): Boolean {
+        val request = activeIncomingPaymentRequest() ?: return true
+        return runCatching { request.payment(current.paykitMethod(source), Clock.System.now()) }
+            .exceptionOrNull() !is PaykitAmountError.RateUnavailable
     }
 
     private fun reviewPaykitMethodChange(previous: SendUiState): Boolean {
@@ -4186,7 +4301,7 @@ class AppViewModel @Inject constructor(
         setSendEffect(SendEffect.NavigateToConfirm)
     }
 
-    private suspend fun reviewPaykitAmount(): Boolean {
+    private suspend fun reviewPaykitAmount(navigateToUsdtReview: Boolean = true): Boolean {
         val paykit = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (paykit == null || paykit.endpoints.isEmpty()) return true
         val current = _sendUiState.value
@@ -4228,7 +4343,7 @@ class AppViewModel @Inject constructor(
         }
         paykitReviewedAmount = payment
         paykitPaymentTerms = terms
-        if (current.paykitUsesUsdt) setSendEffect(SendEffect.NavigateToUsdtReview)
+        if (current.paykitUsesUsdt && navigateToUsdtReview) setSendEffect(SendEffect.NavigateToUsdtReview)
         return !current.paykitUsesUsdt
     }
 
@@ -4594,7 +4709,6 @@ class AppViewModel @Inject constructor(
             is Scanner.LnurlAuth -> handleNonPaymentScan { onScanLnurlAuth(scan.data, fromMainScanner) }
             is Scanner.LnurlChannel -> handleNonPaymentScan { onScanLnurlChannel(scan.data) }
             is Scanner.NodeId -> handleNonPaymentScan { onScanNodeId(scan) }
-            is Scanner.Gift -> handleNonPaymentScan { onScanGift(scan.code, scan.amount) }
             else -> {
                 val hasIncomingPaymentRequest = clearIncomingPaymentRequestTarget()
                 val logMessage = if (hasIncomingPaymentRequest) {
@@ -5445,11 +5559,6 @@ class AppViewModel @Inject constructor(
         mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
     }
 
-    private fun onScanGift(code: String, amount: ULong) {
-        hideSheet() // hide scan sheet if opened
-        showSheet(Sheet.Gift(code = code, amount = amount))
-    }
-
     private suspend fun handleQuickPayIfApplicable(
         amountSats: ULong,
         fromMainScanner: Boolean,
@@ -5909,6 +6018,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun isUnsentBlockedRequest(
+        sendAttempted: Boolean,
+        previous: OnchainSendAttempt?,
+        request: PaykitPaymentRequest?,
+    ): Boolean = !sendAttempted && previous != null && request != null && previous.requestId != request.id
+
     private suspend fun handleOnchainPaymentFailure(
         error: Throwable,
         sendAttempted: Boolean,
@@ -5924,10 +6039,11 @@ class AppViewModel @Inject constructor(
             (sendAttempted && error !is OnchainSendNotDispatchedError)
         if (unresolved) {
             Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
-            finishManualAllowancePayment(allowanceAttemptId, succeeded = null)
+            val previous = (error as? OnchainSendBlockedError)?.attempt
+            val unsentRequest = isUnsentBlockedRequest(sendAttempted, previous, incomingPaymentRequest)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = if (unsentRequest) false else null)
             if (!sendAttempted) releasePrivatePaymentListIfNeeded(contactPaymentContext)
             if (!paymentProofStarted) cancelPaymentProofPreparation(preparedPaymentProofRequest)
-            val previous = (error as? OnchainSendBlockedError)?.attempt
             if (previous != null &&
                 (incomingPaymentRequest == null || previous.requestId != incomingPaymentRequest.id)
             ) {
@@ -6025,6 +6141,14 @@ class AppViewModel @Inject constructor(
         feeRateSatsPerVByte: ULong,
         approvePrepared: suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit = { _, _ -> },
     ): Result<OnchainSendOutcome> {
+        // Blocktank no longer sells channels, so an unpaid order is never paid again.
+        if (original.orderId != null) {
+            Logger.warn("Stopped retrying a transfer to spending: transfers are unavailable", context = TAG)
+            showSheet(Sheet.TransferUnavailable)
+            return Result.failure(
+                IllegalStateException(context.getString(R.string.lightning__transfer_unavailable__nav_title))
+            )
+        }
         val request = original.requestId?.let { id ->
             (paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value)
                 .firstOrNull { it.id == id }
@@ -6057,15 +6181,6 @@ class AppViewModel @Inject constructor(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
                     attempt.orderId == original.orderId && attempt.payerIdentity == original.payerIdentity
             )
-            attempt.orderId?.let { orderId ->
-                val order = blocktankRepo.fetchOrders(listOf(orderId)).getOrThrow().singleOrNull { it.id == orderId }
-                check(order != null && order.payment?.onchain?.address == attempt.address)
-                val originalContext = requireNotNull(attempt.transferContext)
-                check(order.state2 == BtOrderState2.CREATED)
-                check(order.clientBalanceSat == originalContext.originalOrderClientBalanceSats)
-                check(order.feeSat == originalContext.originalOrderFeeSats)
-                check(kotlin.time.Instant.parse(order.orderExpiresAt) > kotlin.time.Clock.System.now())
-            }
             if (request != null) {
                 val currentRequest =
                     (
@@ -6084,8 +6199,6 @@ class AppViewModel @Inject constructor(
                 val winner = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
                 if (request != null) {
                     paykitPaymentProofRepo.completeRecoveredOnchainPayment(request, winner)
-                } else if (winner.isTransfer) {
-                    transferRepo.resumeAcceptedFunding().getOrThrow()
                 } else {
                     lightningRepo.completeAcceptedOrdinaryFollowup(requireNotNull(winner.txid))
                 }
@@ -6106,22 +6219,6 @@ class AppViewModel @Inject constructor(
                 mainScreenEffect(MainScreenEffect.Navigate(Routes.OrderDetail(orderId)))
             }.onFailure { Logger.warn("Failed to open recovered transfer", it, context = TAG) }
         }
-    }
-
-    fun showPendingTransfer(attempt: OnchainSendAttempt) {
-        if (!attempt.isTransfer || attempt.orderId == null || !attempt.blocksNextSend) return
-        showSheet(
-            Sheet.Send(
-                SendRoute.Pending(
-                    paymentHash = attempt.txid.orEmpty(),
-                    amount = attempt.amountSats.toLong(),
-                    observeResolution = false,
-                    isOnchain = true,
-                    walletId = attempt.walletId,
-                    refusalReason = attempt.refusalReason,
-                )
-            )
-        )
     }
 
     private fun showUnresolvedOnchainSend(
@@ -6442,6 +6539,7 @@ class AppViewModel @Inject constructor(
             rejectMismatchedPaymentRequest()
             return false
         }
+        if (incomingPaymentRequest != null) paykitPaymentRequestRepo.syncPaymentProofs()
         if (incomingPaymentRequest != null && !paykitPaymentRequestRepo.isPending(incomingPaymentRequest)) {
             toast(PaykitPaymentRequestError.RequestUnavailable)
             hideSheet()
@@ -6601,6 +6699,7 @@ class AppViewModel @Inject constructor(
         sats = amount,
         speed = _sendUiState.value.speed,
         utxosToSpend = _sendUiState.value.selectedUtxos,
+        feeRates = _sendUiState.value.feeRates,
         isMaxAmount = activeIncomingPaymentRequest() == null && _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
             amount == walletRepo.balanceState.value.maxSendOnchainSats,
         tags = tags,
@@ -8016,8 +8115,7 @@ class AppViewModel @Inject constructor(
         showPairingCodeSheet(requestId)
     }
 
-    private fun isHighPrioritySheet(sheet: Sheet?) = sheet is Sheet.Gift ||
-        sheet is Sheet.Send ||
+    private fun isHighPrioritySheet(sheet: Sheet?) = sheet is Sheet.Send ||
         sheet is Sheet.BTCPayConnection ||
         sheet is Sheet.LnurlAuth ||
         sheet is Sheet.Pin ||
@@ -8358,6 +8456,14 @@ data class SendUiState(
     val canSwitchBitcoinFundingSource: Boolean
         get() = fundingOptions.count { it.enabled && it.source != SendFundingSource.Usdt } > 1
 
+    /** A payment request's confirm step also switches between bitcoin and USDT. */
+    val canSwitchConfirmFundingSource: Boolean
+        get() = when {
+            incomingPaymentRequestId != null && usdtRecipient != null -> fundingOptions.count { it.enabled } > 1
+            paykitUsesUsdt -> false
+            else -> canSwitchBitcoinFundingSource
+        }
+
     val fixedLightningAmount: ULong?
         get() = decodedInvoice?.amountSatoshis?.takeIf {
             it > 0u && !paykitUsesUsdt && payMethod == SendMethod.LIGHTNING && lnurl == null
@@ -8413,7 +8519,28 @@ data class ContactPaymentContext(
     val isInitialSubscriptionPayment: Boolean = false,
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val endpoints: List<Endpoint> = emptyList(),
-)
+) {
+    fun initialUsdtSubscriptionPayment(at: Instant): PaykitRequestPayment? {
+        val request = incomingPaymentRequest ?: return null
+        if (!isInitialSubscriptionPayment || request.billingPeriod == null || request.isExpired(at)) return null
+        if (request.acceptedPaymentEndpointIdentifiers.toSet() != setOf(MethodId.UsdtArbitrum.rawValue) ||
+            endpoints.isEmpty() || endpoints.any { it.methodId != MethodId.UsdtArbitrum }
+        ) {
+            return null
+        }
+        val unchangedAmount = when (request.amount.asset) {
+            PaykitAsset.USDT -> request.pricing.conversion == null
+            PaykitAsset.USD -> {
+                val rates = (request.pricing.conversion as? PaymentConversion.Fixed)?.rates.orEmpty()
+                val rate = rates.firstOrNull { it.asset == "usdt-arbitrum" } ?: rates.firstOrNull { it.asset == "usdt" }
+                rate?.value?.toBigDecimalOrNull()?.compareTo(BigDecimal.ONE) == 0
+            }
+            else -> false
+        }
+        if (!unchangedAmount) return null
+        return runCatching { request.payment(MethodId.UsdtArbitrum, at) }.getOrNull()?.takeIf { it.isValid(at) }
+    }
+}
 
 private data class PaymentProofPreparation(
     val endpointIdentifier: String,
@@ -8443,6 +8570,7 @@ sealed class SendEffect {
     data object NavigateToScan : SendEffect()
     data object NavigateToConfirm : SendEffect()
     data object NavigateToUsdtReview : SendEffect()
+    data class ShowPaykitConfirmation(val route: SendRoute) : SendEffect()
     data object NavigateToHardwareSign : SendEffect()
     data object NavigateToWithdrawConfirm : SendEffect()
     data object NavigateToWithdrawError : SendEffect()
@@ -8554,4 +8682,21 @@ internal fun resolvePastedPubkyRoute(
     }
 
     return Routes.AddContact(normalizedKey)
+}
+
+/**
+ * One "Allowance Added" description for every offer accepted at once, or null when there is none; [formatNames] joins
+ * several names as the locale lists them.
+ */
+internal fun allowanceOffersAcceptedDescription(
+    names: List<String>,
+    single: String,
+    several: String,
+    formatNames: (List<String>) -> String,
+): String? {
+    return when (names.size) {
+        0 -> null
+        1 -> single.replace("{name}", names.single())
+        else -> several.replace("{names}", formatNames(names))
+    }
 }

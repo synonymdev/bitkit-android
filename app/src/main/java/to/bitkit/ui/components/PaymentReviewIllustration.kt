@@ -24,18 +24,21 @@ fun PaymentReviewIllustration(
     swipeProgress: () -> Float,
     modifier: Modifier = Modifier,
     isUsdt: Boolean = false,
+    isPaymentRequest: Boolean = false,
 ) {
     BoxWithConstraints(
         contentAlignment = Alignment.Center,
-        modifier = modifier.fillMaxWidth().then(if (isUsdt) Modifier.clipToBounds() else Modifier)
+        modifier = modifier.fillMaxWidth().then(if (isUsdt || isPaymentRequest) Modifier.clipToBounds() else Modifier)
     ) {
-        val imageModifier = if (isUsdt) {
+        val imageModifier = if (isUsdt || isPaymentRequest) {
             Modifier.requiredSize(minOf(maxHeight, 256.dp) * USDT_IMAGE_SIZE_RATIO)
         } else {
             Modifier.fillMaxWidth(IMAGE_FILL_PERCENTAGE).padding(bottom = 16.dp)
         }
         Image(
-            painter = painterResource(R.drawable.coin_stack_4),
+            painter = painterResource(
+                if (isPaymentRequest) R.drawable.payment_request_coins else R.drawable.coin_stack_4
+            ),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = imageModifier.graphicsLayer { rotationZ = swipeProgress() * SWIPE_ROTATION_DEGREES }

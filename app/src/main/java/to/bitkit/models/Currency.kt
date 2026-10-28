@@ -139,7 +139,12 @@ fun Long.formatToClassicDisplay(locale: Locale = Locale.getDefault()): String {
     return formatter.format(asBtc())
 }
 
-fun BigDecimal.formatCurrency(decimalPlaces: Int = FIAT_DECIMALS, locale: Locale = Locale.getDefault()): String? {
+fun BigDecimal.formatCurrency(
+    decimalPlaces: Int = FIAT_DECIMALS,
+    locale: Locale = Locale.getDefault(),
+    minimumFractionDigits: Int = decimalPlaces,
+    roundingMode: RoundingMode = RoundingMode.HALF_EVEN,
+): String? {
     val symbols = DecimalFormatSymbols(locale).apply {
         decimalSeparator = DECIMAL_SEPARATOR
         groupingSeparator = FIAT_GROUPING_SEPARATOR
@@ -147,8 +152,9 @@ fun BigDecimal.formatCurrency(decimalPlaces: Int = FIAT_DECIMALS, locale: Locale
 
     val decimalPlacesString = "0".repeat(decimalPlaces)
     val formatter = DecimalFormat("#,##0.$decimalPlacesString", symbols).apply {
-        minimumFractionDigits = decimalPlaces
+        this.minimumFractionDigits = minimumFractionDigits
         maximumFractionDigits = decimalPlaces
+        this.roundingMode = roundingMode
         isGroupingUsed = true
     }
 
