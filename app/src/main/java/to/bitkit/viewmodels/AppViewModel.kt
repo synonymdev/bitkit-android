@@ -3995,14 +3995,12 @@ class AppViewModel @Inject constructor(
         val nextSource = nextFundingSource(current, requested) ?: return
         val canReviewInPlace = canRebindBitcoinRequestTerms(current, nextSource)
         val wasReviewed = paykitReviewedAmount != null
-        val generation = ++sendStateGeneration
-        onchainSendRefreshJob?.cancel()
         val target = if (nextSource == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
         val converted = try {
             paymentAmountForSource(current, nextSource)
         } catch (_: PaykitAmountError.RateUnavailable) {
             if (wasReviewed && !canReviewInPlace) {
-                // The reviewed quote is still payable, so keep its confirmation and only report the missing rate.
+                // The reviewed quote is still payable, so keep its confirmation and its fee refresh running.
                 toast(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.wallet__payment_request_rate_unavailable),
@@ -4010,6 +4008,8 @@ class AppViewModel @Inject constructor(
                 )
                 return
             }
+            ++sendStateGeneration
+            onchainSendRefreshJob?.cancel()
             _sendUiState.update { it.copy(paykitRateUnavailable = true) }
             if (canReviewInPlace) {
                 paykitPaymentTerms = null
@@ -4018,9 +4018,13 @@ class AppViewModel @Inject constructor(
             }
             return
         } catch (_: PaykitAmountError) {
+            ++sendStateGeneration
+            onchainSendRefreshJob?.cancel()
             _sendUiState.update { it.copy(paykitRateUnavailable = false) }
             return
         }
+        val generation = ++sendStateGeneration
+        onchainSendRefreshJob?.cancel()
         _sendUiState.update {
             it.copy(
                 isFundingSourceLoading = nextSource is SendFundingSource.Hardware,

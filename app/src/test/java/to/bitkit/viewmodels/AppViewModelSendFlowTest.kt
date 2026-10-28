@@ -15124,6 +15124,50 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `no-rate pay from toast keeps the confirmation fee refresh running`() = test {
+        whenever(context.getString(R.string.wallet__payment_request_rate_unavailable)).thenReturn("Rates unavailable")
+        val finishFeeEstimate = CompletableDeferred<Unit>()
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                if (sut.currentSheet.value == Sheet.Send(SendRoute.Confirm)) finishFeeEstimate.await()
+                Result.success(150uL)
+            }
+        val bitcoin = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
+        val usdt = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = "")
+        val endpoints = listOf(bitcoin, usdt)
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 1_000u),
+            pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.00001")))),
+            acceptedPaymentEndpointIdentifiers = endpoints.map { it.methodId.rawValue },
+        )
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        usdtState.value = UsdtWalletState(balance = 50_000_000u)
+        usdtEnabled.value = true
+        runCurrent()
+        sut.openContactPayment(
+            REGTEST_ADDRESS,
+            testPublicKey,
+            incomingPaymentRequest = request,
+            endpoints = endpoints,
+        )
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertTrue(sut.sendUiState.value.onchainFeeUi.isLoading)
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Usdt))
+        runCurrent()
+        finishFeeEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.paykitUsesUsdt)
+        assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
+        assertTrue(sut.sendUiState.value.onchainFeeUi.estimates.isNotEmpty())
+    }
+
+    @Test
     fun `contact USDT review without a request keeps the pay from chip disabled`() = test {
         val bolt11 = "lnbcrt1contactamountless"
         stubLightningScan(bolt11, amountSats = 0u)
