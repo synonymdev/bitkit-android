@@ -14774,6 +14774,56 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pay from cycle skips USDT when the request has no USDT rate`() = test {
+        val lnurl = LnurlPayData(
+            uri = "lnurl1request",
+            callback = "https://example.com/pay",
+            minSendable = 1_000_000u,
+            maxSendable = 100_000_000u,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        val endpoints = listOf(
+            Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS),
+            Endpoint(MethodId.Lnurl, lnurl.uri, rawPayload = ""),
+            Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = ""),
+        )
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 250u),
+            pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.00001")))),
+            acceptedPaymentEndpointIdentifiers = endpoints.map { it.methodId.rawValue },
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        usdtState.value = UsdtWalletState(balance = 50_000_000u)
+        usdtEnabled.value = true
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = request, endpoints = endpoints)
+        setUnifiedState(amount = 2_500u, payMethod = SendMethod.ONCHAIN)
+        setSendState(
+            sut.sendUiState.value.copy(
+                lnurl = LnurlParams.LnurlPay(lnurl),
+                usdtRecipient = "0x1111111111111111111111111111111111111111",
+            )
+        )
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            clearInvocations(toastManager)
+            for (expected in listOf(SendMethod.LIGHTNING, SendMethod.ONCHAIN, SendMethod.LIGHTNING)) {
+                sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                advanceUntilIdle()
+                assertFalse(sut.sendUiState.value.paykitUsesUsdt)
+                assertEquals(expected, sut.sendUiState.value.payMethod)
+            }
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
     fun `fixed dollar request opens confirmation whether or not USDT is enabled`() = test {
         val bitcoin = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
         val usdt = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = "")
