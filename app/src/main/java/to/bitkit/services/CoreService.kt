@@ -35,6 +35,7 @@ import com.synonym.bitkitcore.getActivities
 import com.synonym.bitkitcore.getActivityById
 import com.synonym.bitkitcore.getActivityByTxId
 import com.synonym.bitkitcore.getAllClosedChannels
+import com.synonym.bitkitcore.getAllTransactionDetails
 import com.synonym.bitkitcore.getAllUniqueTags
 import com.synonym.bitkitcore.getCjitEntries
 import com.synonym.bitkitcore.getInfo
@@ -174,7 +175,9 @@ class CoreService @Inject constructor(
     }
 
     suspend fun isAddressUsed(address: String): Boolean = ServiceQueue.CORE.background {
-        com.synonym.bitkitcore.isAddressUsed(address = address)
+        com.synonym.bitkitcore.isAddressUsed(address = address) || getAllTransactionDetails().any { transaction ->
+            transaction.outputs.any { it.scriptpubkeyAddress == address }
+        }
     }
 
     suspend fun decode(input: String): Scanner = ServiceQueue.CORE.background {

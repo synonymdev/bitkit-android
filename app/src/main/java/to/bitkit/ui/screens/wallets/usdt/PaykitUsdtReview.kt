@@ -29,9 +29,11 @@ import to.bitkit.R
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.subscriptions.SubscriptionSuccess
 import to.bitkit.ui.screens.wallets.send.AutoPayOverlay
+import to.bitkit.ui.screens.wallets.send.SendFundingSourceButton
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendUiState
 import kotlin.time.Duration.Companion.seconds
 
@@ -83,6 +85,11 @@ fun PaykitUsdtReview(
     LaunchedEffect(Unit) {
         preparePayment(viewModel, app, uiState) { automaticPayment = it }
     }
+    LaunchedEffect(state.quote, state.error) {
+        if (state.quote == null && state.error == R.string.usdt__error_expired && uiState.isPaymentRequest) {
+            viewModel.requote(requireNotNull(uiState.usdtRecipient), uiState.paykitAmount, UsdtDestination.ARBITRUM)
+        }
+    }
     LaunchedEffect(state.submitted, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             reconcileSubmittedPayment(viewModel, app)
@@ -96,7 +103,7 @@ fun PaykitUsdtReview(
             confirmText = stringResource(R.string.wallet__send_yes),
             dismissText = stringResource(R.string.common__cancel),
             onConfirm = viewModel::acceptWarning,
-            onDismiss = viewModel::edit
+            onDismiss = viewModel::dismissWarning
         )
     }
     val transfer = wallet.transfers.firstOrNull { it.id == state.quote?.id }
@@ -151,6 +158,18 @@ fun PaykitUsdtReview(
                         paymentRequestNote = uiState.paymentRequestNote,
                         isMerchantRequest = uiState.isMerchantPaymentRequest,
                         contact = uiState.contactPaymentProfile,
+                        fundingSource = if (uiState.canSwitchConfirmFundingSource) {
+                            {
+                                SendFundingSourceButton(
+                                    uiState = uiState,
+                                    onClick = { app.setSendEvent(SendEvent.PaymentMethodSelect(it)) },
+                                    interactionsEnabled = !paymentActive && !state.submitted,
+                                    confirmation = true,
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     )
                 }
             }

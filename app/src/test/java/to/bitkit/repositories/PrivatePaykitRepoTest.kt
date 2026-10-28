@@ -3829,6 +3829,51 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `releasePrivatePaymentList gives a list back only to the owner that consumed it`() = test {
+        val context = PrivatePaykitPaymentContext(emptyMap(), 7uL)
+        fun consumed() = cacheData.value.contacts[CONTACT_KEY]?.consumedPrivatePaymentListVersion
+
+        sut.consumePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-b").getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a").getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, context).getOrThrow()
+        assertEquals(7uL, consumed())
+
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-b").getOrThrow()
+        assertNull(consumed())
+        assertNull(cacheData.value.contacts[CONTACT_KEY]?.consumedPrivatePaymentListOwner)
+
+        sut.consumePrivatePaymentList(CONTACT_KEY, context).getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a").getOrThrow()
+        assertEquals(7uL, consumed())
+    }
+
+    @Test
+    fun `a release overlapping another release's failed write still gives the list back`() = test {
+        val context = PrivatePaykitPaymentContext(emptyMap(), 7uL)
+        sut.consumePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a").getOrThrow()
+        val firstWrite = CompletableDeferred<Unit>()
+        var writes = 0
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            if (++writes == 1) {
+                firstWrite.await()
+                throw AppError("write")
+            }
+            val transform = it.getArgument<(PrivatePaykitCacheData) -> PrivatePaykitCacheData>(0)
+            cacheData.value = transform(cacheData.value)
+        }
+
+        val first = async { sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a") }
+        runCurrent()
+        val second = async { sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a") }
+        runCurrent()
+        firstWrite.complete(Unit)
+
+        assertTrue(first.await().isFailure)
+        assertTrue(second.await().isSuccess)
+        assertNull(cacheData.value.contacts[CONTACT_KEY]?.consumedPrivatePaymentListVersion)
+    }
+
+    @Test
     fun `releasePrivatePaymentList makes matching version reusable without clearing newer consumption`() = test {
         val releasedContext = PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to "bitkit"), 7uL)
         val newerContext = PrivatePaykitPaymentContext(mapOf(MethodId.Bolt11.rawValue to "bitkit"), 8uL)

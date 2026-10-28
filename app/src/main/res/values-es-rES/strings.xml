@@ -237,6 +237,7 @@
     <string name="lightning__transfer_success__text_savings">Tus fondos han sido transferidos. Puedes usar estos fondos inmediatamente.</string>
     <string name="lightning__transfer_success__title_savings">Fondos movidos\n&lt;accent&gt;a ahorros&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Por favor, espere a que Bitkit se conecte a la red de pagos (±10 segundos).</string>
+    <string name="lightning__wait_text_top_onchain">Por favor, espere a que Bitkit se conecte a la red bitcoin (±10 segundos).</string>
     <string name="lightning__wallet_balances">Saldos del monedero</string>
     <string name="lightning__conn_onboarding_button">Comenzar</string>
     <string name="lightning__conn_onboarding_text">Configura tu saldo de gastos para disfrutar de transacciones instantáneas y económicas con amigos, familiares y comerciantes.</string>
@@ -252,6 +253,8 @@
     <string name="notification__service__stop">Detener aplicación</string>
     <string name="onboarding__advanced">Avanzado</string>
     <string name="onboarding__advanced_setup">Configuración avanzada</string>
+    <string name="onboarding__connection_saved">Guardado. Reintenta para continuar la restauración.</string>
+    <string name="onboarding__connection_settings">Ajustes de conexión</string>
     <string name="onboarding__create_new_wallet">Crear nueva cartera</string>
     <string name="onboarding__empty_wallet">Para\nempezar\n&lt;accent&gt;envíe\nBitcoin&lt;/accent&gt;\na su\nmonedero</string>
     <string name="onboarding__get_started">Empezar</string>
@@ -454,6 +457,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Contraseña:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Añadiste una passphrase a tu frase de recuperación al configurar tu wallet.</string>
     <string name="security__pass_your">Su frase de acceso</string>
+    <string name="security__pin_allowance">Por favor, introduzca su código PIN para confirmar este cambio en la asignación.</string>
     <string name="security__pin_attempts">Quedan {attemptsRemaining} intentos. ¿Olvidó su PIN?</string>
     <string name="security__pin_choose_header">Elija un PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Por favor, utilice un PIN que recuerde. Si olvida su PIN puede restablecerlo, pero para ello tendrá que restaurar su monedero.</string>
@@ -768,6 +772,7 @@
     <string name="usdt__error_fee_collection">No se pudo pagar la comisión de la transacción en USDT. Prueba con una cantidad menor.</string>
     <string name="usdt__error_network">No se pudo actualizar USDT. Comprueba tu conexión e inténtalo de nuevo.</string>
     <string name="usdt__error_pending">Aún hay un pago pendiente. Espera a que se confirme antes de volver a enviar.</string>
+    <string name="usdt__error_quote_refreshed">La cotización de la comisión ha caducado y se ha actualizado. Revisa la comisión y desliza de nuevo.</string>
     <string name="usdt__error_rate_limit">Demasiadas solicitudes. Inténtalo de nuevo en breve.</string>
     <string name="usdt__error_rejected">La red USDT rechazó la solicitud. Inténtalo de nuevo.</string>
     <string name="usdt__error_response">El servicio USDT devolvió una respuesta no válida. Inténtalo de nuevo más tarde.</string>
@@ -1422,6 +1427,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Asignación añadida</string>
     <string name="subscriptions__allowance_offer_explanation">El monedero de {name} pagará tus solicitudes dentro de estos límites sin preguntar cada vez. Cualquiera de los dos puede finalizarla.</string>
     <string name="subscriptions__allowance_offer_headline">{name} te ofrece\n&lt;accent&gt;una asignación&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} te han configurado asignaciones</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pagado automáticamente</string>
     <string name="subscriptions__allowance_paid_so_far">Pagado automáticamente</string>
     <string name="subscriptions__allowance_payment_in_progress">Esta solicitud ya se está pagando automáticamente.</string>

@@ -84,6 +84,15 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     private val paykitSdkService = mock<PaykitSdkService>()
+    private var coverageReleases = 0
+    private val noCoverageRelease: () -> Unit = { coverageReleases++ }
+    private val allowanceRepo = mock<PaykitAllowanceRepo> {
+        on { beginCoverageUpdate() } doReturn noCoverageRelease
+    }
+
+    init {
+        whenever { allowanceRepo.refresh() }.thenReturn(Result.success(Unit))
+    }
     private val settingsStore = mock<SettingsStore>()
     private val presentationStore = mock<PaykitPaymentRequestPresentationStore>()
     private val diagnostics = mock<PaykitPaymentRequestDiagnostics>()
@@ -152,6 +161,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             mock { on { canReceive() }.thenReturn(true) },
             mock { on { currencyState }.thenReturn(MutableStateFlow(CurrencyState())) },
             mock { on { state }.thenReturn(MutableStateFlow(UsdtWalletState())) },
+            { allowanceRepo },
         )
         sut.activate(LOCAL_IDENTITY)
     }
@@ -715,6 +725,10 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
 
         assertEquals(Instant.parse("2027-01-01T08:00:00Z"), dueRequest?.billingPeriod?.startsAt)
         assertEquals(listOf(COUNTERPARTY), sut.eligibleTargets.value.map { it.publicKey })
+        // The intake after the acceptance runs under the coverage hold and refreshes the allowances.
+        verify(allowanceRepo).beginCoverageUpdate()
+        verifyBlocking(allowanceRepo) { refresh() }
+        assertEquals(1, coverageReleases)
         verifyBlocking(presentationStore) {
             saveSubscriptionState(
                 eq(LOCAL_IDENTITY),

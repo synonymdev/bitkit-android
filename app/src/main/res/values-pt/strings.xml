@@ -214,6 +214,7 @@
     <string name="lightning__order_state__open">Conexão aberta</string>
     <string name="lightning__order_state__inactive">Conexão inativa</string>
     <string name="lightning__wait_text_top">Por favor, espere que a Bitkit se conecte à rede de pagamento (±10 segundos).</string>
+    <string name="lightning__wait_text_top_onchain">Por favor, espere que a Bitkit se conecte à rede bitcoin (±10 segundos).</string>
     <string name="lightning__wallet_balances">Saldos da Carteira</string>
     <string name="lightning__lightning_balances">Saldos Lightning</string>
     <string name="lightning__spendable_onchain">Utilizável na Blockchain</string>
@@ -245,6 +246,8 @@
     <string name="notification__received__title">Pagamento Recebido</string>
     <string name="notification__service__body">A Bitkit está a ser executada em segundo plano para poder receber pagamentos e pedidos</string>
     <string name="notification__service__stop">Parar App</string>
+    <string name="onboarding__connection_saved">Guardado. Tente novamente para continuar o restauro.</string>
+    <string name="onboarding__connection_settings">Definições de ligação</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;termos de uso&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Termos de uso</string>
     <string name="onboarding__tos_checkbox_value">Ao continuar, você declara que leu e aceita os termos de uso.</string>
@@ -433,6 +436,7 @@
     <string name="security__pin_disable_button">Desativar PIN</string>
     <string name="security__pin_enter">Por favor, digite seu código PIN</string>
     <string name="security__pin_last_attempt">Última tentativa. Se digitar o PIN errado novamente, sua carteira será redefinida.</string>
+    <string name="security__pin_allowance">Digite seu código PIN para confirmar essa alteração na mesada.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentativas restantes. Esqueceu seu PIN?</string>
     <string name="security__pin_forgot_title">Esqueceu o PIN?</string>
     <string name="security__pin_forgot_text">Esqueceu seu PIN? Redefina e recupere sua carteira Bitkit com a sua frase de recuperação. Defina um novo PIN após concluir a recuperação.</string>
@@ -961,6 +965,7 @@
     <string name="usdt__error_fee_collection">Não foi possível pagar a taxa da transação em USDT. Tente um montante menor.</string>
     <string name="usdt__error_network">Não foi possível atualizar o USDT. Verifique a ligação e tente novamente.</string>
     <string name="usdt__error_pending">Ainda há um pagamento pendente. Aguarde a confirmação antes de enviar novamente.</string>
+    <string name="usdt__error_quote_refreshed">A cotação da taxa expirou e foi atualizada. Verifique a taxa e deslize novamente.</string>
     <string name="usdt__error_rate_limit">Demasiados pedidos. Tente novamente daqui a pouco.</string>
     <string name="usdt__error_rejected">A rede USDT rejeitou o pedido. Tente novamente.</string>
     <string name="usdt__error_response">O serviço USDT devolveu uma resposta inválida. Tente novamente mais tarde.</string>
@@ -1412,6 +1417,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Mesada adicionada</string>
     <string name="subscriptions__allowance_offer_explanation">A carteira de {name} pagará os seus pedidos dentro destes limites sem perguntar de cada vez. Qualquer uma das partes pode terminá-la.</string>
     <string name="subscriptions__allowance_offer_headline">{name} oferece\n&lt;accent&gt;uma mesada&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} configuraram mesadas para si</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pago automaticamente</string>
     <string name="subscriptions__allowance_paid_so_far">Pago automaticamente</string>
     <string name="subscriptions__allowance_payment_in_progress">Este pedido já está a ser pago automaticamente.</string>

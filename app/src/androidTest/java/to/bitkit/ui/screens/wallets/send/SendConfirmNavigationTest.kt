@@ -121,7 +121,7 @@ class SendConfirmNavigationTest {
                                     if (event == SendEvent.SwipeToPay) {
                                         swipes++
                                         if (!holdConfirmation) navController.navigateToCoinSelection()
-                                    } else if (event == SendEvent.PaymentMethodSwitch) {
+                                    } else if (event is SendEvent.PaymentMethodSelect) {
                                         fundingSwitches++
                                     } else {
                                         error("Unexpected send event: $event")
@@ -145,7 +145,7 @@ class SendConfirmNavigationTest {
 
         composeTestRule.onNodeWithTag("SendConfirmToggleDetails").performClick()
         repeat(3) { index ->
-            composeTestRule.onNodeWithTag("SendConfirmAssetButton").assertHasClickAction()
+            composeTestRule.onNodeWithTag("AssetButton-switch").assertHasClickAction()
             swipeToConfirm()
             composeTestRule.waitUntil(5_000) {
                 composeTestRule.onAllNodesWithTag("coin_selection_screen").fetchSemanticsNodes().isNotEmpty()
@@ -159,9 +159,9 @@ class SendConfirmNavigationTest {
         composeTestRule.runOnIdle { holdConfirmation = true }
         swipeToConfirm()
         composeTestRule.waitUntil(5_000) { swipes == 4 }
-        composeTestRule.onNodeWithTag("SendConfirmAssetButton").assertHasNoClickAction().performTouchInput { click() }
+        composeTestRule.onNodeWithTag("AssetButton-switch").assertHasNoClickAction().performTouchInput { click() }
         composeTestRule.runOnIdle { state.value = state.value.copy(payMethod = SendMethod.LIGHTNING) }
-        composeTestRule.onNodeWithTag("SendConfirmAssetButton").assertHasNoClickAction().performTouchInput { click() }
+        composeTestRule.onNodeWithTag("AssetButton-switch").assertHasNoClickAction().performTouchInput { click() }
         swipeToConfirm()
         composeTestRule.runOnIdle {
             assertEquals(4, swipes)

@@ -124,6 +124,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     private val store: PaykitPaymentProofStore,
     private val hwWalletRepo: HwWalletRepo,
     private val privatePaykitRepo: Lazy<PrivatePaykitRepo>,
+    private val allowanceExecutor: Lazy<PaykitAllowanceExecutor>,
 ) {
     companion object {
         private const val TAG = "PaykitPaymentProofRepo"
@@ -588,6 +589,9 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     /** Removes the original proof, then the attempt, once its release reached the network. */
     private suspend fun finishRelease(attempt: OnchainSendAttempt) {
+        // The release removes what allowance recovery reads, so the request's ledger attempt is failed first; a
+        // failure leaves the release unfinished, to be finished again later.
+        attempt.requestId?.let { allowanceExecutor.get().onchainSendReleased(attempt.payerIdentity, it) }
         val removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean =
             { if (it.isBlocktankFunding) true else removeOriginalShopProofs(it) }
         if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt, removeOriginalProof)) {

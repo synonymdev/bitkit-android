@@ -49,6 +49,7 @@ import to.bitkit.data.PrivatePaykitReservationData
 import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WatchOnlyAccountBackupSnapshot
 import to.bitkit.data.WatchOnlyAccountData
@@ -81,6 +82,7 @@ import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import javax.inject.Provider
 import kotlin.coroutines.cancellation.CancellationException
@@ -1167,7 +1169,7 @@ class BackupRepoTest : BaseUnitTest() {
         )
         var cacheRestored = false
 
-        val result = sut.performFullRestoreFromLatestBackup { cacheRestored = true }
+        val result = sut.performFullRestoreFromLatestBackup(onCacheRestored = { cacheRestored = true })
 
         assertTrue(result.isFailure)
         assertFalse(sut.isRestoring.value)
@@ -1194,7 +1196,7 @@ class BackupRepoTest : BaseUnitTest() {
         assertTrue(sut.persistWalletBackup().isFailure)
         verify(vssBackupClient, never()).putObject(any(), any())
 
-        sut.performFullRestoreFromLatestBackup { cacheRestored = true }.getOrThrow()
+        sut.performFullRestoreFromLatestBackup(onCacheRestored = { cacheRestored = true }).getOrThrow()
 
         assertTrue(cacheRestored)
         assertTrue(settingsData.value.backupVerified)
@@ -1465,7 +1467,7 @@ class BackupRepoTest : BaseUnitTest() {
         var cacheRestored = false
 
         assertFailsWith<CancellationException> {
-            sut.performFullRestoreFromLatestBackup { cacheRestored = true }
+            sut.performFullRestoreFromLatestBackup(onCacheRestored = { cacheRestored = true })
         }
 
         assertFalse(sut.isRestoring.value)
@@ -2831,6 +2833,22 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(lightningService.syncStatusChanged).thenReturn(MutableSharedFlow())
     }
 
+    @Test
+    fun `native restore gate survives malformed connection correction`() = test {
+        whenever(keychain.loadString(WalletConnectionRecovery.KEY, 0)).thenReturn("malformed")
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(keychain).upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, "")
+        verify(vssBackupClient, never()).getObject(any())
+    }
+
+    @Test
+    fun `legacy USDT restore gate precedes malformed connection correction`() = test {
+        whenever(keychain.loadString(WalletConnectionRecovery.KEY, 0)).thenReturn("malformed")
+        assertTrue(sut.restoreUsdtRecoveryAfterLegacyMigration().isFailure)
+        verify(keychain).upsertString(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name, "")
+        verify(vssBackupClient, never()).getObject(any())
+    }
+
     private fun createSut(
         reservationRepo: PrivatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
     ) = BackupRepo(
@@ -2865,6 +2883,7 @@ class BackupRepoTest : BaseUnitTest() {
         lightningService = lightningService,
         clock = clock,
         db = db,
+        connectionRecovery = connectionRecoveryFixture(settingsStore, keychain),
     )
 
     private class BackupRepoTestError(message: String) : AppError(message)

@@ -235,6 +235,7 @@
     <string name="lightning__transfer_success__text_savings">Je geld is overgeboekt. Je kunt dit geld direct gebruiken.</string>
     <string name="lightning__transfer_success__title_savings">Geld verplaatst\n&lt;accent&gt;naar spaargeld&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Wacht tot Bitkit verbinding maakt met het betaalnetwerk (±10 seconden).</string>
+    <string name="lightning__wait_text_top_onchain">Wacht tot Bitkit verbinding maakt met het bitcoinnetwerk (±10 seconden).</string>
     <string name="lightning__wallet_balances">Wallet-saldi</string>
     <string name="lightning__conn_onboarding_button">Aan de slag</string>
     <string name="lightning__conn_onboarding_text">Stel je uitgavenbalans in om te genieten van directe en goedkope transacties met vrienden, familie en winkels.</string>
@@ -250,6 +251,8 @@
     <string name="notification__service__stop">App stoppen</string>
     <string name="onboarding__advanced">Geavanceerd</string>
     <string name="onboarding__advanced_setup">Geavanceerde configuratie</string>
+    <string name="onboarding__connection_saved">Opgeslagen. Probeer opnieuw om het herstel voort te zetten.</string>
+    <string name="onboarding__connection_settings">Verbindingsinstellingen</string>
     <string name="onboarding__create_new_wallet">Nieuwe wallet aanmaken</string>
     <string name="onboarding__empty_wallet">Om te beginnen\n&lt;accent&gt;stuur\nBitcoin&lt;/accent&gt;\nnaar je\nwallet</string>
     <string name="onboarding__get_started">Aan de slag</string>
@@ -451,6 +454,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Wachtwoordzin:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Je hebt een wachtwoordzin toegevoegd aan je herstelzin tijdens het instellen van de wallet.</string>
     <string name="security__pass_your">Je wachtwoordzin</string>
+    <string name="security__pin_allowance">Voer je pincode in om deze wijziging van de toelage te bevestigen.</string>
     <string name="security__pin_attempts">{attemptsRemaining} pogingen over. Pincode vergeten?</string>
     <string name="security__pin_choose_header">Kies 4-cijferige pincode</string>
     <string name="security__pin_choose_text">Gebruik een pincode die je zult onthouden. Als je je pincode vergeet, kun je deze resetten, maar daarvoor moet je je wallet herstellen.</string>
@@ -764,6 +768,7 @@
     <string name="usdt__error_fee_collection">Kan de transactievergoeding niet in USDT betalen. Probeer een kleiner bedrag.</string>
     <string name="usdt__error_network">Kon USDT niet bijwerken. Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="usdt__error_pending">Er is nog een betaling in behandeling. Wacht op de bevestiging voordat u opnieuw verzendt.</string>
+    <string name="usdt__error_quote_refreshed">De vergoedingsofferte is verlopen en bijgewerkt. Controleer de vergoeding en veeg opnieuw.</string>
     <string name="usdt__error_rate_limit">Te veel verzoeken. Probeer het zo meteen opnieuw.</string>
     <string name="usdt__error_rejected">Het USDT-netwerk heeft het verzoek geweigerd. Probeer het opnieuw.</string>
     <string name="usdt__error_response">De USDT-dienst gaf een ongeldig antwoord. Probeer het later opnieuw.</string>
@@ -1424,6 +1429,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Toelage toegevoegd</string>
     <string name="subscriptions__allowance_offer_explanation">De wallet van {name} betaalt uw verzoeken binnen deze limieten zonder elke keer te vragen. Beide partijen kunnen de toelage beëindigen.</string>
     <string name="subscriptions__allowance_offer_headline">{name} biedt\n&lt;accent&gt;een toelage&lt;/accent&gt; aan</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} hebben een toelage voor u ingesteld</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} automatisch betaald</string>
     <string name="subscriptions__allowance_paid_so_far">Automatisch betaald</string>
     <string name="subscriptions__allowance_payment_in_progress">Dit verzoek wordt al automatisch betaald.</string>

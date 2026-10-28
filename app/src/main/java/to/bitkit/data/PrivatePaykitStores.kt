@@ -69,6 +69,7 @@ data class PrivatePaykitCacheData(
 data class PrivatePaykitContactCacheData(
     val remoteEndpoints: List<PrivatePaykitStoredPaymentEntryData> = emptyList(),
     val consumedPrivatePaymentListVersion: ULong? = null,
+    val consumedPrivatePaymentListOwner: String? = null,
     val localInvoice: PrivatePaykitStoredInvoiceData? = null,
     val receivedInvoicePaymentHashes: List<String> = emptyList(),
     val hasPublishedPrivatePaymentList: Boolean = false,
