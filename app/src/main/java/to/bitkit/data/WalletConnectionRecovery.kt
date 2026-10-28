@@ -62,6 +62,13 @@ class WalletConnectionRecovery @Inject constructor(
         }
     }
 
+    /** A queued UI intent remains bound to its original wallet, including same-seed replacement. */
+    internal fun currentGeneration(): Long? = synchronized(stateLock) { generation.takeUnless { wiping } }
+
+    internal fun isCurrentGeneration(expected: Long?): Boolean = synchronized(stateLock) {
+        expected != null && !wiping && generation == expected
+    }
+
     private fun admittedGeneration(): Long = synchronized(stateLock) {
         checkAdmission()
         generation
