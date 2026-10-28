@@ -42,9 +42,13 @@ internal object Env {
     val e2eHomeserverPubky = BuildConfig.E2E_HOMESERVER_PUBKY.takeIf { isLocalE2eBackend && it.isNotBlank() }
     val network = Network.valueOf(BuildConfig.NETWORK)
 
-    /** The Lightning-first primary node: it funds channels just in time and grows them by splicing. */
-    val primaryNode: PeerDetails? get() = when (network) {
-        Network.BITCOIN -> PeerDetails.of(PRIMARY_NODE_URI_MAINNET)
+    /**
+     * The Lightning-first primary node: it funds channels just in time and grows them by splicing.
+     * A `PRIMARY_NODE_URI` build property overrides it, for regtest runs against a local primary.
+     */
+    val primaryNode: PeerDetails? get() = when {
+        BuildConfig.PRIMARY_NODE_URI.isNotBlank() -> PeerDetails.of(BuildConfig.PRIMARY_NODE_URI)
+        network == Network.BITCOIN -> PeerDetails.of(PRIMARY_NODE_URI_MAINNET)
         else -> null
     }
     val locales = BuildConfig.LOCALES.split(",")

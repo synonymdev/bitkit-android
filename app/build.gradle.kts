@@ -356,6 +356,7 @@ androidComponents {
             "USDT_RPC_URL",
             localProp("USDT_RPC_URL").orElse("https://bitkit.to/v1/usdt/chain-rpc").stringField(),
         )
+        buildConfigFields.put("PRIMARY_NODE_URI", localProp("PRIMARY_NODE_URI").orElse("").stringField())
         buildConfigFields.put("E2E", e2eEnv.booleanField())
         buildConfigFields.put("E2E_BACKEND", e2eBackendEnv.stringField())
         buildConfigFields.put("E2E_LOCAL_HOST", e2eLocalHostEnv.stringField())
