@@ -4016,7 +4016,7 @@ class AppViewModel @Inject constructor(
 
     fun setTransactionSpeed(speed: TransactionSpeed) {
         if (_sendUiState.value.isRetainedHardwarePayment) return
-        onchainSendRefreshJob?.cancel()
+        cancelOnchainSendRefresh()
         val previous = _sendUiState.value
         _sendUiState.update {
             it.copy(
@@ -4082,7 +4082,7 @@ class AppViewModel @Inject constructor(
         val nextSource = nextFundingSource(current, requested) ?: return
         val canReviewInPlace = canRebindBitcoinRequestTerms(current, nextSource)
         val generation = ++sendStateGeneration
-        onchainSendRefreshJob?.cancel()
+        cancelOnchainSendRefresh()
         val target = if (nextSource == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
         val converted = try {
             paymentAmountForSource(current, nextSource)
@@ -4412,6 +4412,7 @@ class AppViewModel @Inject constructor(
                 rate = FeeRate.fromSpeed(state.speed),
                 sats = miningFeeSats.toLong(),
                 isLoading = false,
+                requiresRefresh = false,
             )
         }
         return true
@@ -5738,7 +5739,7 @@ class AppViewModel @Inject constructor(
 
     private fun onSwipeToPay() {
         Logger.debug("Swipe to pay event, checking send confirmation conditions", context = TAG)
-        if (!_sendUiState.value.isAmountInputValid) return
+        if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareFeeReady) return
         viewModelScope.launch {
             if (!prepareCoinSelection()) return@launch
             val amount = _sendUiState.value.amount
@@ -6897,6 +6898,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun cancelOnchainSendRefresh() {
+        val job = onchainSendRefreshJob
+        onchainSendRefreshJob = null
+        job?.cancel()
+    }
+
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
@@ -6913,7 +6920,7 @@ class AppViewModel @Inject constructor(
         }
 
         updateOnchainFeeUi { it.copy(isLoading = true) }
-        onchainSendRefreshJob?.cancel()
+        cancelOnchainSendRefresh()
         val job = viewModelScope.launch(bgDispatcher, start = CoroutineStart.LAZY) {
             requireCurrentPaymentPreparation(walletGeneration)
             if (generation != sendStateGeneration) return@launch
@@ -6946,7 +6953,23 @@ class AppViewModel @Inject constructor(
             refreshOnchainFeeUi(walletGeneration)
         }
         onchainSendRefreshJob = job
-        job.invokeOnCompletion {
+        job.invokeOnCompletion { cause ->
+            if (cause != null) {
+                _sendUiState.update {
+                    if (onchainSendRefreshJob !== job || generation != sendStateGeneration ||
+                        !connectionRecovery.isCurrentGeneration(walletGeneration) || it.isRetainedHardwarePayment
+                    ) {
+                        it
+                    } else {
+                        it.copy(
+                            onchainFeeUi = OnchainFeeUi(
+                                rate = FeeRate.fromSpeed(it.speed),
+                                requiresRefresh = true,
+                            ),
+                        )
+                    }
+                }
+            }
             if (onchainSendRefreshJob === job) onchainSendRefreshJob = null
         }
         job.start()
@@ -7578,7 +7601,11 @@ class AppViewModel @Inject constructor(
 
     private fun onConfirmPay() {
         Logger.debug("Payment checks confirmed, proceeding…", context = TAG)
-        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive) return
+        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive ||
+            !_sendUiState.value.isHardwareFeeReady
+        ) {
+            return
+        }
 
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) {
@@ -8697,6 +8724,9 @@ data class SendUiState(
             it > 0u && !paykitUsesUsdt && payMethod == SendMethod.LIGHTNING && lnurl == null
         }
 
+    val isHardwareFeeReady: Boolean
+        get() = hardwareWalletId == null || (!onchainFeeUi.isLoading && !onchainFeeUi.requiresRefresh)
+
     val isAmountEditable: Boolean
         get() = !isPaymentRequest && fixedLightningAmount == null
 
@@ -8711,6 +8741,7 @@ data class OnchainFeeUi(
     val sats: Long? = null,
     val estimates: ImmutableMap<FeeRate, Long> = persistentMapOf(),
     val isLoading: Boolean = false,
+    val requiresRefresh: Boolean = false,
 )
 
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
