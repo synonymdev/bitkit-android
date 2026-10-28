@@ -120,11 +120,21 @@ data class OnchainSendAttempt(
     val highestCandidateFee: ULong
         get() = maxOf(candidateMiningFees.values.maxOrNull() ?: 0uL, verifiedWinningFeeSats ?: 0uL)
 
-    /** A Shop payment from the node wallet that dispatched but never had its acceptance confirmed. */
+    /** A transfer to spending that pays a Blocktank order, which Bitkit no longer buys. */
+    val isBlocktankFunding: Boolean
+        get() = requestId == null && isTransfer && orderId != null
+
+    /**
+     * A Shop payment, or a Blocktank funding, from the node wallet that dispatched but never had its acceptance
+     * confirmed.
+     */
     val canBeAbandoned: Boolean
-        get() = isUnresolved && requestId != null && !isTransfer &&
-            walletId == WalletScope.default && !payerIdentity.isNullOrBlank() && initialDispatchAttempted &&
-            txid != null && !originalInputs.isNullOrEmpty() && candidateTxids.isNotEmpty()
+        get() {
+            val isShopPayment = requestId != null && !isTransfer && !payerIdentity.isNullOrBlank()
+            return isUnresolved && (isShopPayment || isBlocktankFunding) && walletId == WalletScope.default &&
+                initialDispatchAttempted && txid != null && !originalInputs.isNullOrEmpty() &&
+                candidateTxids.isNotEmpty()
+        }
 }
 
 class OnchainSendBlockedError(val attempt: OnchainSendAttempt? = null) :

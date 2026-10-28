@@ -19,7 +19,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
-import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlAuthData
@@ -333,9 +332,6 @@ class AppViewModel @Inject constructor(
     var splashVisible by mutableStateOf(true)
         private set
 
-    val isGeoBlocked = lightningRepo.lightningState.map { it.isGeoBlocked }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
     val forceCloseRemainingDuration = transferRepo.forceCloseRemainingDuration
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -645,9 +641,6 @@ class AppViewModel @Inject constructor(
             resetIsAuthenticatedState()
             delay(AUTH_CHECK_SPLASH_DELAY_MS)
             splashVisible = false
-        }
-        viewModelScope.launch {
-            lightningRepo.updateGeoBlockState()
         }
         viewModelScope.launch {
             quickPayRepo.unhandledFailures.collect {
@@ -4686,7 +4679,6 @@ class AppViewModel @Inject constructor(
             is Scanner.LnurlAuth -> handleNonPaymentScan { onScanLnurlAuth(scan.data, fromMainScanner) }
             is Scanner.LnurlChannel -> handleNonPaymentScan { onScanLnurlChannel(scan.data) }
             is Scanner.NodeId -> handleNonPaymentScan { onScanNodeId(scan) }
-            is Scanner.Gift -> handleNonPaymentScan { onScanGift(scan.code, scan.amount) }
             else -> {
                 val hasIncomingPaymentRequest = clearIncomingPaymentRequestTarget()
                 val logMessage = if (hasIncomingPaymentRequest) {
@@ -5537,11 +5529,6 @@ class AppViewModel @Inject constructor(
         mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
     }
 
-    private fun onScanGift(code: String, amount: ULong) {
-        hideSheet() // hide scan sheet if opened
-        showSheet(Sheet.Gift(code = code, amount = amount))
-    }
-
     private suspend fun handleQuickPayIfApplicable(
         amountSats: ULong,
         fromMainScanner: Boolean,
@@ -6124,6 +6111,14 @@ class AppViewModel @Inject constructor(
         feeRateSatsPerVByte: ULong,
         approvePrepared: suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit = { _, _ -> },
     ): Result<OnchainSendOutcome> {
+        // Blocktank no longer sells channels, so an unpaid order is never paid again.
+        if (original.orderId != null) {
+            Logger.warn("Stopped retrying a transfer to spending: transfers are unavailable", context = TAG)
+            showSheet(Sheet.TransferUnavailable)
+            return Result.failure(
+                IllegalStateException(context.getString(R.string.lightning__transfer_unavailable__nav_title))
+            )
+        }
         val request = original.requestId?.let { id ->
             (paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value)
                 .firstOrNull { it.id == id }
@@ -6156,15 +6151,6 @@ class AppViewModel @Inject constructor(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
                     attempt.orderId == original.orderId && attempt.payerIdentity == original.payerIdentity
             )
-            attempt.orderId?.let { orderId ->
-                val order = blocktankRepo.fetchOrders(listOf(orderId)).getOrThrow().singleOrNull { it.id == orderId }
-                check(order != null && order.payment?.onchain?.address == attempt.address)
-                val originalContext = requireNotNull(attempt.transferContext)
-                check(order.state2 == BtOrderState2.CREATED)
-                check(order.clientBalanceSat == originalContext.originalOrderClientBalanceSats)
-                check(order.feeSat == originalContext.originalOrderFeeSats)
-                check(kotlin.time.Instant.parse(order.orderExpiresAt) > kotlin.time.Clock.System.now())
-            }
             if (request != null) {
                 val currentRequest =
                     (
@@ -6183,8 +6169,6 @@ class AppViewModel @Inject constructor(
                 val winner = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
                 if (request != null) {
                     paykitPaymentProofRepo.completeRecoveredOnchainPayment(request, winner)
-                } else if (winner.isTransfer) {
-                    transferRepo.resumeAcceptedFunding().getOrThrow()
                 } else {
                     lightningRepo.completeAcceptedOrdinaryFollowup(requireNotNull(winner.txid))
                 }
@@ -6205,22 +6189,6 @@ class AppViewModel @Inject constructor(
                 mainScreenEffect(MainScreenEffect.Navigate(Routes.OrderDetail(orderId)))
             }.onFailure { Logger.warn("Failed to open recovered transfer", it, context = TAG) }
         }
-    }
-
-    fun showPendingTransfer(attempt: OnchainSendAttempt) {
-        if (!attempt.isTransfer || attempt.orderId == null || !attempt.blocksNextSend) return
-        showSheet(
-            Sheet.Send(
-                SendRoute.Pending(
-                    paymentHash = attempt.txid.orEmpty(),
-                    amount = attempt.amountSats.toLong(),
-                    observeResolution = false,
-                    isOnchain = true,
-                    walletId = attempt.walletId,
-                    refusalReason = attempt.refusalReason,
-                )
-            )
-        )
     }
 
     private fun showUnresolvedOnchainSend(
@@ -6701,6 +6669,7 @@ class AppViewModel @Inject constructor(
         sats = amount,
         speed = _sendUiState.value.speed,
         utxosToSpend = _sendUiState.value.selectedUtxos,
+        feeRates = _sendUiState.value.feeRates,
         isMaxAmount = activeIncomingPaymentRequest() == null && _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
             amount == walletRepo.balanceState.value.maxSendOnchainSats,
         tags = tags,
@@ -8116,8 +8085,7 @@ class AppViewModel @Inject constructor(
         showPairingCodeSheet(requestId)
     }
 
-    private fun isHighPrioritySheet(sheet: Sheet?) = sheet is Sheet.Gift ||
-        sheet is Sheet.Send ||
+    private fun isHighPrioritySheet(sheet: Sheet?) = sheet is Sheet.Send ||
         sheet is Sheet.BTCPayConnection ||
         sheet is Sheet.LnurlAuth ||
         sheet is Sheet.Pin ||

@@ -402,6 +402,23 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `newer RN restore still restores USDT recovery and never falls back after a USDT failure`() = test {
+        whenever(migrationService.getRNRemoteBackupTimestamp()).thenReturn(2uL)
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(
+            backupRepo.restoreUsdtRecoveryAfterLegacyMigration(),
+        ).thenReturn(Result.failure(AppError("VSS offline")))
+        whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        sut.restoreWallet("mnemonic", "passphrase")
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+        assertEquals(RestoreState.BackupFailed(1), sut.restoreState.value)
+        verify(migrationService).restoreFromRNRemoteBackup()
+        verify(backupRepo).restoreUsdtRecoveryAfterLegacyMigration()
+        verify(backupRepo, never()).performFullRestoreFromLatestBackup(any())
+    }
+
+    @Test
     fun `pending wallet restore retry bypasses newer RN backup`() = test {
         whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
         whenever { migrationService.getRNRemoteBackupTimestamp() }.thenReturn(2uL)

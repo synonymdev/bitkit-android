@@ -68,6 +68,7 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.rememberSubscriptionNotificationsRequest
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
 import kotlin.time.Duration.Companion.seconds
@@ -85,6 +86,7 @@ fun AllowanceSheet(
     viewModel: AllowancesViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val requestNotifications = rememberSubscriptionNotificationsRequest()
     // The view model outlives this sheet, so a check left open must never run in the next one.
     DisposableEffect(route) {
         onDispose { viewModel.onAuthorizationCancelled() }
@@ -128,7 +130,10 @@ fun AllowanceSheet(
                         allowance = allowance,
                         isWorking = uiState.isWorking,
                         onClickDecline = { viewModel.decline(allowance.id, onSuccess = appViewModel::hideSheet) },
-                        onClickAccept = { viewModel.accept(allowance.id, onSuccess = appViewModel::hideSheet) },
+                        onClickAccept = {
+                            requestNotifications()
+                            viewModel.accept(allowance.id, onSuccess = appViewModel::hideSheet)
+                        },
                         modifier = Modifier.sheetHeight()
                     )
                 }

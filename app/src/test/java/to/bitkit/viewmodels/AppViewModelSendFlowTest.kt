@@ -719,7 +719,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { migrationService.needsPostMigrationSync() }.thenReturn(false)
         whenever { migrationService.isMigrationChecked() }.thenReturn(true)
         whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
-        whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)
@@ -3588,6 +3587,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertTrue(sut.sendUiState.value.isPaymentRequest)
         verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+    }
+
+    @Test
+    fun `scanned gift code shows the unsupported code error and opens no sheet`() = test {
+        val giftCode = "bitkit://gift-abc123-3000"
+        whenever(context.getString(R.string.other__qr_error_header)).thenReturn("Unsupported QR")
+        whenever(context.getString(R.string.other__qr_error_text)).thenReturn("Bitkit can't read this QR.")
+        whenever(coreService.decode(giftCode)).thenReturn(Scanner.Gift(code = "abc123", amount = 3_000uL))
+        clearInvocations(toastManager)
+
+        sut.onScanResult(giftCode)
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, atLeastOnce()).enqueue(toastCaptor.capture())
+        assertEquals("Unsupported QR", toastCaptor.lastValue.title)
+        assertEquals("Bitkit can't read this QR.", toastCaptor.lastValue.description)
+        assertNull(sut.currentSheet.value)
     }
 
     @Test
@@ -12694,6 +12711,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ordinary send pays the fee rates shown on confirm`() = test {
+        val address = "bcrt1qconfirmedrates"
+        val confirmedRates = FeeRates(fast = 5u, mid = 3u, slow = 1u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        stubSuccessfulOnchainSend(address, 1_000u)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = confirmedRates,
+            )
+        )
+
+        confirmCurrentPayment()
+
+        verify(lightningRepo).sendOnChain(
+            address = eq(address),
+            sats = eq(1_000uL),
+            speed = eq(TransactionSpeed.Medium),
+            utxosToSpend = anyOrNull(),
+            feeRates = eq(confirmedRates),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            transferContext = anyOrNull(),
+            payerIdentity = anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `blocked ordinary payment never reports an earlier accepted send as its success`() = test {
         val address = "bcrt1qreopened"
         val txid = "ef".repeat(32)
@@ -12920,34 +12976,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `retained transfer Pending opens original funding recovery without changing send inputs`() = test {
-        val original = OnchainSendAttempt(
-            walletId = WalletScope.default, attemptId = "original-funding", requestId = null,
-            orderId = "order-1", address = "bcrt1qoriginalorder", amountSats = 1_000uL,
-            isMaxAmount = false, feeRateSatsPerVByte = 2uL, isTransfer = true,
-            channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Rejected,
-            txid = "ab".repeat(32), refusalReason = "declined",
-        )
-        setSendState(SendUiState(address = "bcrt1qother", amount = 9_000u))
-        sut.showPendingTransfer(original)
-        advanceUntilIdle()
-        assertEquals(
-            Sheet.Send(
-                SendRoute.Pending(
-                    paymentHash = requireNotNull(original.txid),
-                    amount = 1_000,
-                    observeResolution = false,
-                    isOnchain = true,
-                    walletId = original.walletId,
-                    refusalReason = original.refusalReason,
-                )
-            ),
-            sut.currentSheet.value,
-        )
-        assertEquals("bcrt1qother", sut.sendUiState.value.address)
-    }
-
-    @Test
     fun `retry fee approval works without USD rate and keeps the Bitcoin fee warning`() = test {
         val original = OnchainSendAttempt(
             walletId = WalletScope.default, attemptId = "original", requestId = null, orderId = null,
@@ -12984,7 +13012,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `recovery denies paid expired or changed original Blocktank order before broadcast`() = test {
+    fun `recovery of a Blocktank order shows the sheet and broadcasts nothing`() = test {
         val order = to.bitkit.ext.mockOrder().copy(
             orderExpiresAt = (Clock.System.now() + 60.seconds).toString(),
         )
@@ -13008,31 +13036,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             tags = emptyList(),
             evidence = OnchainSendEvidence.Unknown,
         )
-        var dispatched = 0
-        whenever(
-            lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
-        ).doSuspendableAnswer { invocation ->
-            val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
-            runCatching {
-                authorize(original)
-                dispatched += 1
-                OnchainSendOutcome.Accepted("ef".repeat(32))
-            }
-        }
-        val invalidOrders = listOf(
-            order.copy(state2 = com.synonym.bitkitcore.BtOrderState2.PAID),
-            order.copy(orderExpiresAt = (Clock.System.now() - 1.seconds).toString()),
-            order.copy(feeSat = order.feeSat + 1uL),
-            order.copy(clientBalanceSat = order.clientBalanceSat + 1uL),
-        )
-        for (invalidOrder in invalidOrders) {
-            whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(invalidOrder)))
-            assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isFailure)
-        }
-        assertEquals(0, dispatched)
-        whenever(blocktankRepo.fetchOrders(listOf(order.id))).thenReturn(Result.success(listOf(order)))
-        assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isSuccess)
-        assertEquals(1, dispatched)
+        assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isFailure)
+
+        verify(lightningRepo, never()).retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        assertEquals(Sheet.TransferUnavailable, sut.currentSheet.value)
     }
 
     @Test
