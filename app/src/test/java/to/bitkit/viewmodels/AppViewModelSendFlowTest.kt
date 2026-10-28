@@ -119,6 +119,7 @@ import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.BalanceState
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FeeRate
+import to.bitkit.models.FxRate
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
@@ -14567,6 +14568,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `switching from USDT to savings and back restores the entered USDT amount`() = test {
+        whenever(currencyRepo.currencyState).thenReturn(
+            MutableStateFlow(
+                CurrencyState(
+                    rates = persistentListOf(
+                        FxRate(
+                            symbol = "BTCUSD",
+                            lastPrice = "65432.10",
+                            base = "BTC",
+                            baseName = "Bitcoin",
+                            quote = "USD",
+                            quoteName = "US Dollar",
+                            currencySymbol = "$",
+                            currencyFlag = "",
+                            lastUpdatedAt = Clock.System.now().toEpochMilliseconds(),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                usdtRecipient = "0x1111111111111111111111111111111111111111",
+                paykitUsesUsdt = true,
+                paykitAmount = "5",
+                isAmountInputValid = true,
+            )
+        )
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        runCurrent()
+        assertFalse(sut.sendUiState.value.paykitUsesUsdt)
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Usdt))
+        runCurrent()
+        assertTrue(sut.sendUiState.value.paykitUsesUsdt)
+        assertEquals(5_000_000uL, PaykitAmount.parseInput(PaykitAsset.USDT, sut.sendUiState.value.paykitAmount).atomic)
+    }
+
+    @Test
     fun `selecting USDT with an empty amount preserves whole unit entry`() = test {
         setSendState(
             SendUiState(
@@ -14782,6 +14822,56 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pay from cycle skips USDT when the request has no USDT rate`() = test {
+        val lnurl = LnurlPayData(
+            uri = "lnurl1request",
+            callback = "https://example.com/pay",
+            minSendable = 1_000_000u,
+            maxSendable = 100_000_000u,
+            metadataStr = "[]",
+            commentAllowed = null,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        val endpoints = listOf(
+            Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS),
+            Endpoint(MethodId.Lnurl, lnurl.uri, rawPayload = ""),
+            Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = ""),
+        )
+        val request = paymentRequest().copy(
+            amount = PaykitAmount(PaykitAsset.USD, 250u),
+            pricing = PaykitRequestPricing(PaymentConversion.Fixed(listOf(ConversionRate("btc", "0.00001")))),
+            acceptedPaymentEndpointIdentifiers = endpoints.map { it.methodId.rawValue },
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        usdtState.value = UsdtWalletState(balance = 50_000_000u)
+        usdtEnabled.value = true
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = request, endpoints = endpoints)
+        setUnifiedState(amount = 2_500u, payMethod = SendMethod.ONCHAIN)
+        setSendState(
+            sut.sendUiState.value.copy(
+                lnurl = LnurlParams.LnurlPay(lnurl),
+                usdtRecipient = "0x1111111111111111111111111111111111111111",
+            )
+        )
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            clearInvocations(toastManager)
+            for (expected in listOf(SendMethod.LIGHTNING, SendMethod.ONCHAIN, SendMethod.LIGHTNING)) {
+                sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+                advanceUntilIdle()
+                assertFalse(sut.sendUiState.value.paykitUsesUsdt)
+                assertEquals(expected, sut.sendUiState.value.payMethod)
+            }
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
     fun `fixed dollar request opens confirmation whether or not USDT is enabled`() = test {
         val bitcoin = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
         val usdt = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = "")
@@ -14992,7 +15082,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pay from toward USDT returns to amount when the request has no USDT rate`() = test {
+    fun `pay from toward USDT keeps the confirmation when the request has no USDT rate`() = test {
+        whenever(context.getString(R.string.wallet__payment_request_rate_unavailable)).thenReturn("Rates unavailable")
         val bitcoin = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
         val usdt = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = "")
         val endpoints = listOf(bitcoin, usdt)
@@ -15017,13 +15108,40 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
 
+        val feeEstimateStarted = CompletableDeferred<Unit>()
+        val finishFeeEstimate = CompletableDeferred<Unit>()
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer {
+                feeEstimateStarted.complete(Unit)
+                finishFeeEstimate.await()
+                Result.success(200uL)
+            }
+        setSendState(sut.sendUiState.value.copy(feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u)))
+        clearInvocations(toastManager)
         sut.sendEffect.test {
+            sut.setTransactionSpeed(TransactionSpeed.Slow)
+            assertEquals(SendEffect.PopBack(SendRoute.Confirm), awaitItem())
+            feeEstimateStarted.await()
+            assertTrue(sut.sendUiState.value.onchainFeeUi.isLoading)
+
             sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Usdt))
+            runCurrent()
+            expectNoEvents()
+
+            finishFeeEstimate.complete(Unit)
             advanceUntilIdle()
-            assertEquals(SendEffect.NavigateToAmount, awaitItem())
-            assertTrue(sut.sendUiState.value.paykitRateUnavailable)
             expectNoEvents()
         }
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertFalse(sut.sendUiState.value.paykitUsesUsdt)
+        assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
+        assertEquals(200L, sut.sendUiState.value.onchainFeeUi.sats)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.WARNING, it.type)
+                assertEquals("Rates unavailable", it.title)
+            }
+        )
     }
 
     @Test

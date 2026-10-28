@@ -4000,14 +4000,21 @@ class AppViewModel @Inject constructor(
         val nextSource = nextFundingSource(current, requested) ?: return
         val canReviewInPlace = canRebindBitcoinRequestTerms(current, nextSource)
         val wasReviewed = paykitReviewedAmount != null
-        val generation = ++sendStateGeneration
-        onchainSendRefreshJob?.cancel()
         val target = if (nextSource == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
         val converted = try {
             paymentAmountForSource(current, nextSource)
         } catch (_: PaykitAmountError.RateUnavailable) {
+            if (wasReviewed && !canReviewInPlace) {
+                // The reviewed quote is still payable, so keep its confirmation and only report the missing rate.
+                toast(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.wallet__payment_request_rate_unavailable),
+                    testTag = "PaykitRateUnavailableToast",
+                )
+                return
+            }
             _sendUiState.update { it.copy(paykitRateUnavailable = true) }
-            if (wasReviewed) {
+            if (canReviewInPlace) {
                 paykitPaymentTerms = null
                 paykitReviewedAmount = null
                 setSendEffect(SendEffect.NavigateToAmount)
@@ -4017,6 +4024,8 @@ class AppViewModel @Inject constructor(
             _sendUiState.update { it.copy(paykitRateUnavailable = false) }
             return
         }
+        val generation = ++sendStateGeneration
+        onchainSendRefreshJob?.cancel()
         _sendUiState.update {
             it.copy(
                 isFundingSourceLoading = nextSource is SendFundingSource.Hardware,
@@ -4070,7 +4079,14 @@ class AppViewModel @Inject constructor(
         val sources = availableFundingSources(current).filter { includesUsdt || it != SendFundingSource.Usdt }
         if (sources.isEmpty() || requested != null && requested !in sources) return null
         val selected = current.selectedFundingSource()
-        return (requested ?: sources.nextAfter(selected)).takeUnless { it == selected }
+        val priced = sources.filter { it == selected || hasPaymentRate(current, it) }.takeIf { it.size > 1 } ?: sources
+        return (requested ?: priced.nextAfter(selected)).takeUnless { it == selected }
+    }
+
+    private fun hasPaymentRate(current: SendUiState, source: SendFundingSource): Boolean {
+        val request = activeIncomingPaymentRequest() ?: return true
+        return runCatching { request.payment(current.paykitMethod(source), Clock.System.now()) }
+            .exceptionOrNull() !is PaykitAmountError.RateUnavailable
     }
 
     private fun reviewPaykitMethodChange(previous: SendUiState): Boolean {
