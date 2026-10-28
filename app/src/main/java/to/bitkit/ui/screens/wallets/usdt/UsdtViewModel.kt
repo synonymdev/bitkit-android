@@ -258,6 +258,21 @@ class UsdtViewModel @Inject constructor(
     fun cancelAuthentication() = _state.update { it.copy(authenticationRequired = false) }
     fun edit() = _state.update { UsdtSendState(refreshError = it.refreshError) }
 
+    /** Keeps the reviewed quote when a warning is declined; the warning shows again on the next swipe. */
+    fun dismissWarning() = _state.update { it.copy(warning = null) }
+
+    // One automatic requote per expired submission; a later expiry waits for the user's own retry.
+    private var requotedExpiredSubmission = false
+
+    /** Replaces an expired quote and keeps the review, telling the user to check the new fee and swipe again. */
+    fun requote(recipient: String, amount: String, destination: UsdtDestination) = viewModelScope.launch {
+        if (_state.value.error != R.string.usdt__error_expired || requotedExpiredSubmission) return@launch
+        requotedExpiredSubmission = true
+        _state.update { it.copy(error = null) }
+        quote(recipient, amount, destination).join()
+        _state.update { if (it.quote != null) it.copy(error = R.string.usdt__error_quote_refreshed) else it }
+    }
+
     fun retryRecovery() = viewModelScope.launch {
         val current = state.value
         val quote = current.quote ?: return@launch
@@ -290,6 +305,7 @@ class UsdtViewModel @Inject constructor(
         if (_state.value.busy) return@launch
         maximumQuote = null
         preparedQuote = null
+        requotedExpiredSubmission = false
         _state.update { it.copy(busy = true, error = null) }
         runSuspendCatching {
             val payment = sendPayment

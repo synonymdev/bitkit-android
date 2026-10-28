@@ -78,6 +78,7 @@ import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SyncNodeVariant
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
@@ -118,6 +119,7 @@ fun SendAmountScreen(
     canGoBack: Boolean,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
+    syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     currencies: CurrencyState = LocalCurrencies.current,
     balances: BalanceState = LocalBalances.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
@@ -185,6 +187,7 @@ fun SendAmountScreen(
         nodeLifecycleState = nodeLifecycleState,
         uiState = uiState,
         amountInputViewModel = amountInputViewModel,
+        syncNodeVariant = syncNodeVariant,
         currencies = currencies,
         onBack = {
             onEvent(SendEvent.AmountReset)
@@ -212,6 +215,7 @@ fun SendAmountContent(
     uiState: SendUiState,
     amountInputViewModel: AmountInputViewModel,
     modifier: Modifier = Modifier,
+    syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     balances: BalanceState = LocalBalances.current,
     currencies: CurrencyState = LocalCurrencies.current,
     onBack: (() -> Unit)? = {},
@@ -253,6 +257,7 @@ fun SendAmountContent(
 
             else -> {
                 SyncNodeView(
+                    variant = syncNodeVariant,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)

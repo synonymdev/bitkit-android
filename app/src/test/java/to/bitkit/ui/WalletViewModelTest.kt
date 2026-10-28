@@ -65,6 +65,7 @@ import to.bitkit.viewmodels.canProceedWithoutRestore
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -1746,6 +1747,74 @@ class WalletViewModelTest : BaseUnitTest() {
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
         advanceUntilIdle()
         savePendingCorrection()
+    }
+
+    @Test
+    fun `connection retry keeps recovery visible while required download is pending`() = test {
+        preparePendingCorrection()
+        val finishRestore = CompletableDeferred<Unit>()
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).doSuspendableAnswer {
+            finishRestore.await()
+            Result.success(Unit)
+        }
+
+        sut.onRestoreRetry()
+        runCurrent()
+        try {
+            assertEquals(NodeLifecycleState.Running, lightningState.value.nodeLifecycleState)
+            assertEquals(null, sut.connectionStartupError.value)
+            assertEquals(RestoreState.InProgress.Metadata, sut.restoreState.value)
+            assertTrue(shouldPresentWalletRecovery(false, sut.restoreState.value, sut.connectionStartupError.value))
+            assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, sut.restoreState.value, false))
+        } finally {
+            finishRestore.complete(Unit)
+        }
+        advanceUntilIdle()
+        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertFalse(shouldPresentWalletRecovery(false, sut.restoreState.value, sut.connectionStartupError.value))
+    }
+
+    @Test
+    fun `cold retry retains recovery while initial marker observation is delayed`() = test {
+        runCurrent()
+        val finishObservation = CompletableDeferred<Unit>()
+        val finishRestart = CompletableDeferred<Unit>()
+        var markerReads = 0
+        whenever(backupRepo.hasPendingWalletRestore()).doSuspendableAnswer {
+            if (markerReads++ == 0) finishObservation.await()
+            true
+        }
+        whenever(walletRepo.walletExists()).thenReturn(true)
+        whenever(
+            lightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()),
+        ).thenReturn(Result.failure(AppError("node unavailable")))
+        whenever(lightningRepo.restartNode(anyOrNull(), any())).doSuspendableAnswer {
+            finishRestart.await()
+            Result.success(Unit)
+        }
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        walletState.value = walletState.value.copy(walletExists = true)
+        runCurrent()
+        try {
+            sut.start()
+            runCurrent()
+            assertEquals(RestoreState.Initial, sut.restoreState.value)
+            assertTrue(checkNotNull(sut.connectionStartupError.value).requiresRecovery)
+
+            sut.onRestoreRetry()
+            runCurrent()
+
+            verify(lightningRepo).restartNode(anyOrNull(), any())
+            assertEquals(RestoreState.Initial, sut.restoreState.value)
+            assertTrue(shouldPresentWalletRecovery(false, sut.restoreState.value, sut.connectionStartupError.value))
+        } finally {
+            finishObservation.complete(Unit)
+            finishRestart.complete(Unit)
+        }
+        advanceUntilIdle()
+        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertNull(sut.connectionStartupError.value)
+        assertFalse(shouldPresentWalletRecovery(false, sut.restoreState.value, sut.connectionStartupError.value))
     }
 
     @Test
