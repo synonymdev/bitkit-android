@@ -770,6 +770,7 @@
     <string name="usdt__error_fee_collection">Impossibile pagare la commissione di transazione in USDT. Prova con un importo minore.</string>
     <string name="usdt__error_network">Impossibile aggiornare USDT. Controlla la connessione e riprova.</string>
     <string name="usdt__error_pending">Un pagamento è ancora in sospeso. Attendi la conferma prima di inviare di nuovo.</string>
+    <string name="usdt__error_quote_refreshed">Il preventivo della commissione è scaduto ed è stato aggiornato. Controlla la commissione e scorri di nuovo.</string>
     <string name="usdt__error_rate_limit">Troppe richieste. Riprova tra poco.</string>
     <string name="usdt__error_rejected">La rete USDT ha rifiutato la richiesta. Riprova.</string>
     <string name="usdt__error_response">Il servizio USDT ha restituito una risposta non valida. Riprova più tardi.</string>

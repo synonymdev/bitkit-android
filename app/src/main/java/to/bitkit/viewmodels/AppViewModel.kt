@@ -3811,7 +3811,7 @@ class AppViewModel @Inject constructor(
             paykitPaymentTerms = initialPayment
             _sendUiState.update { it.copy(requiresAmountReview = false) }
             navigateToSendRoute(fromMainScanner, SendRoute.UsdtReview, SendEffect.NavigateToUsdtReview)
-        } else if (!openBitcoinRequestConfirmation(fromMainScanner)) {
+        } else if (!openPaykitRequestConfirmation(fromMainScanner)) {
             navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
         }
     }
@@ -3825,12 +3825,58 @@ class AppViewModel @Inject constructor(
         return state.shouldAutomaticallyPay && payment == paykitPaymentTerms && payment.amount == paykitReviewedAmount
     }
 
-    private suspend fun openBitcoinRequestConfirmation(fromMainScanner: Boolean): Boolean {
-        if (activeIncomingPaymentRequest() == null || _sendUiState.value.usdtRecipient != null) return false
+    /**
+     * A request's amount is fixed, so it opens on the confirm step of its preselected asset.
+     * Amount is the fallback when those terms cannot be bound.
+     */
+    private suspend fun openPaykitRequestConfirmation(fromMainScanner: Boolean): Boolean {
+        val request = activeIncomingPaymentRequest() ?: return false
+        // Subscription periods keep reviewing the asset choice on Amount.
+        if (request.billingPeriod != null && _sendUiState.value.usdtRecipient != null) return false
+        if (_sendUiState.value.paykitUsesUsdt) {
+            if (!bindUsdtRequestTerms()) return false
+            navigateToSendRoute(fromMainScanner, SendRoute.UsdtReview, SendEffect.NavigateToUsdtReview)
+            return true
+        }
         if (!bindBitcoinRequestTerms()) return false
         navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
         refreshOnchainSendIfNeeded()
         estimateLightningRoutingFeesIfNeeded()
+        return true
+    }
+
+    private suspend fun bindUsdtRequestTerms(): Boolean {
+        if (!_sendUiState.value.paykitUsesUsdt || !_sendUiState.value.isAmountInputValid) return false
+        paykitPaymentTerms = null
+        paykitReviewedAmount = null
+        reviewPaykitAmount(navigateToUsdtReview = false)
+        return paykitReviewedAmount != null
+    }
+
+    /** Switching asset on a request's confirm step opens the other asset's confirm step in place of Amount. */
+    private suspend fun switchPaykitRequestAsset(previous: SendUiState, wasReviewed: Boolean): Boolean {
+        val current = _sendUiState.value
+        if (!wasReviewed || activeIncomingPaymentRequest() == null ||
+            previous.paykitUsesUsdt == current.paykitUsesUsdt
+        ) {
+            return false
+        }
+        paykitPaymentTerms = null
+        paykitReviewedAmount = null
+        val route = when {
+            current.paykitUsesUsdt -> SendRoute.UsdtReview.takeIf { bindUsdtRequestTerms() }
+            bindBitcoinRequestTerms() -> SendRoute.Confirm
+            else -> null
+        }
+        if (route == null) {
+            setSendEffect(SendEffect.NavigateToAmount)
+            return true
+        }
+        setSendEffect(SendEffect.ShowPaykitConfirmation(route))
+        if (route == SendRoute.Confirm) {
+            refreshOnchainSendIfNeeded()
+            estimateLightningRoutingFeesIfNeeded()
+        }
         return true
     }
 
@@ -3977,12 +4023,22 @@ class AppViewModel @Inject constructor(
         if (current.isRetainedHardwarePayment) return
         val nextSource = nextFundingSource(current, requested) ?: return
         val canReviewInPlace = canRebindBitcoinRequestTerms(current, nextSource)
-        val generation = ++sendStateGeneration
-        onchainSendRefreshJob?.cancel()
+        val wasReviewed = paykitReviewedAmount != null
         val target = if (nextSource == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
         val converted = try {
             paymentAmountForSource(current, nextSource)
         } catch (_: PaykitAmountError.RateUnavailable) {
+            if (wasReviewed && !canReviewInPlace) {
+                // The reviewed quote is still payable, so keep its confirmation and its fee refresh running.
+                toast(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.wallet__payment_request_rate_unavailable),
+                    testTag = "PaykitRateUnavailableToast",
+                )
+                return
+            }
+            ++sendStateGeneration
+            onchainSendRefreshJob?.cancel()
             _sendUiState.update { it.copy(paykitRateUnavailable = true) }
             if (canReviewInPlace) {
                 paykitPaymentTerms = null
@@ -3991,9 +4047,13 @@ class AppViewModel @Inject constructor(
             }
             return
         } catch (_: PaykitAmountError) {
+            ++sendStateGeneration
+            onchainSendRefreshJob?.cancel()
             _sendUiState.update { it.copy(paykitRateUnavailable = false) }
             return
         }
+        val generation = ++sendStateGeneration
+        onchainSendRefreshJob?.cancel()
         _sendUiState.update {
             it.copy(
                 isFundingSourceLoading = nextSource is SendFundingSource.Hardware,
@@ -4021,10 +4081,15 @@ class AppViewModel @Inject constructor(
             )
         }
         updateCanSwitchWallet()
-        reviewFundingSourceChange(current, canReviewInPlace)
+        reviewFundingSourceChange(current, canReviewInPlace, wasReviewed)
     }
 
-    private suspend fun reviewFundingSourceChange(previous: SendUiState, rebindBitcoinTerms: Boolean) {
+    private suspend fun reviewFundingSourceChange(
+        previous: SendUiState,
+        rebindBitcoinTerms: Boolean,
+        wasReviewed: Boolean,
+    ) {
+        if (switchPaykitRequestAsset(previous, wasReviewed)) return
         if (rebindBitcoinTerms && previous.paykitMethod() != _sendUiState.value.paykitMethod()) {
             paykitPaymentTerms = null
             paykitReviewedAmount = null
@@ -4039,10 +4104,18 @@ class AppViewModel @Inject constructor(
             (source == SendFundingSource.Savings || source == SendFundingSource.Spending)
 
     private fun nextFundingSource(current: SendUiState, requested: SendFundingSource?): SendFundingSource? {
-        val sources = availableFundingSources(current).filter { requested != null || it != SendFundingSource.Usdt }
+        val includesUsdt = requested != null || activeIncomingPaymentRequest() != null
+        val sources = availableFundingSources(current).filter { includesUsdt || it != SendFundingSource.Usdt }
         if (sources.isEmpty() || requested != null && requested !in sources) return null
         val selected = current.selectedFundingSource()
-        return (requested ?: sources.nextAfter(selected)).takeUnless { it == selected }
+        val priced = sources.filter { it == selected || hasPaymentRate(current, it) }.takeIf { it.size > 1 } ?: sources
+        return (requested ?: priced.nextAfter(selected)).takeUnless { it == selected }
+    }
+
+    private fun hasPaymentRate(current: SendUiState, source: SendFundingSource): Boolean {
+        val request = activeIncomingPaymentRequest() ?: return true
+        return runCatching { request.payment(current.paykitMethod(source), Clock.System.now()) }
+            .exceptionOrNull() !is PaykitAmountError.RateUnavailable
     }
 
     private fun reviewPaykitMethodChange(previous: SendUiState): Boolean {
@@ -4231,7 +4304,7 @@ class AppViewModel @Inject constructor(
         setSendEffect(SendEffect.NavigateToConfirm)
     }
 
-    private suspend fun reviewPaykitAmount(): Boolean {
+    private suspend fun reviewPaykitAmount(navigateToUsdtReview: Boolean = true): Boolean {
         val paykit = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (paykit == null || paykit.endpoints.isEmpty()) return true
         val current = _sendUiState.value
@@ -4273,7 +4346,7 @@ class AppViewModel @Inject constructor(
         }
         paykitReviewedAmount = payment
         paykitPaymentTerms = terms
-        if (current.paykitUsesUsdt) setSendEffect(SendEffect.NavigateToUsdtReview)
+        if (current.paykitUsesUsdt && navigateToUsdtReview) setSendEffect(SendEffect.NavigateToUsdtReview)
         return !current.paykitUsesUsdt
     }
 
@@ -8386,6 +8459,14 @@ data class SendUiState(
     val canSwitchBitcoinFundingSource: Boolean
         get() = fundingOptions.count { it.enabled && it.source != SendFundingSource.Usdt } > 1
 
+    /** A payment request's confirm step also switches between bitcoin and USDT. */
+    val canSwitchConfirmFundingSource: Boolean
+        get() = when {
+            incomingPaymentRequestId != null && usdtRecipient != null -> fundingOptions.count { it.enabled } > 1
+            paykitUsesUsdt -> false
+            else -> canSwitchBitcoinFundingSource
+        }
+
     val fixedLightningAmount: ULong?
         get() = decodedInvoice?.amountSatoshis?.takeIf {
             it > 0u && !paykitUsesUsdt && payMethod == SendMethod.LIGHTNING && lnurl == null
@@ -8492,6 +8573,7 @@ sealed class SendEffect {
     data object NavigateToScan : SendEffect()
     data object NavigateToConfirm : SendEffect()
     data object NavigateToUsdtReview : SendEffect()
+    data class ShowPaykitConfirmation(val route: SendRoute) : SendEffect()
     data object NavigateToHardwareSign : SendEffect()
     data object NavigateToWithdrawConfirm : SendEffect()
     data object NavigateToWithdrawError : SendEffect()

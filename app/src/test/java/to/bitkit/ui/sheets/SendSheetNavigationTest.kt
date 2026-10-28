@@ -99,4 +99,24 @@ class SendSheetNavigationTest {
             }
         }
     }
+
+    @Test
+    fun `amount fallback after a pay from switch clears the replacing confirmation`() {
+        val switches = listOf(SendRoute.UsdtReview to SendRoute.Confirm, SendRoute.Confirm to SendRoute.UsdtReview)
+        for ((start, switched) in switches) {
+            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+                navigatorProvider.addNavigator(ComposeNavigator())
+                graph = createGraph(startDestination = start) {
+                    composable<SendRoute.Confirm> {}
+                    composable<SendRoute.Amount> {}
+                    composable<SendRoute.UsdtReview> {}
+                }
+            }
+            navController.navigateTo(switched) { popUpTo(start) { inclusive = true } }
+            navController.navigateToSendAmount(start)
+            assertTrue(navController.currentDestination?.hasRoute<SendRoute.Amount>() == true)
+            navController.popBackStack()
+            assertNull(navController.currentDestination)
+        }
+    }
 }

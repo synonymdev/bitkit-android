@@ -772,6 +772,7 @@
     <string name="usdt__error_fee_collection">Transakční poplatek nelze zaplatit v USDT. Zkuste menší částku.</string>
     <string name="usdt__error_network">USDT se nepodařilo aktualizovat. Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="usdt__error_pending">Platba stále čeká na vyřízení. Před dalším odesláním počkejte na potvrzení.</string>
+    <string name="usdt__error_quote_refreshed">Nabídka poplatku vypršela a byla aktualizována. Zkontrolujte poplatek a přejeďte znovu.</string>
     <string name="usdt__error_rate_limit">Příliš mnoho požadavků. Zkuste to prosím za chvíli.</string>
     <string name="usdt__error_rejected">Síť USDT požadavek odmítla. Zkuste to prosím znovu.</string>
     <string name="usdt__error_response">Služba USDT vrátila neplatnou odpověď. Zkuste to prosím později.</string>

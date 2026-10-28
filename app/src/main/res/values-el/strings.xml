@@ -752,6 +752,7 @@
     <string name="usdt__error_fee_collection">Δεν είναι δυνατή η πληρωμή του τέλους συναλλαγής σε USDT. Δοκίμασε μικρότερο ποσό.</string>
     <string name="usdt__error_network">Δεν ήταν δυνατή η ενημέρωση του USDT. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="usdt__error_pending">Μια πληρωμή εκκρεμεί ακόμα. Περίμενε την επιβεβαίωση πριν στείλεις ξανά.</string>
+    <string name="usdt__error_quote_refreshed">Η προσφορά τέλους έληξε και ενημερώθηκε. Έλεγξε το τέλος και σύρε ξανά.</string>
     <string name="usdt__error_rate_limit">Πάρα πολλά αιτήματα. Δοκίμασε ξανά σε λίγο.</string>
     <string name="usdt__error_rejected">Το δίκτυο USDT απέρριψε το αίτημα. Δοκίμασε ξανά.</string>
     <string name="usdt__error_response">Η υπηρεσία USDT επέστρεψε μη έγκυρη απάντηση. Δοκίμασε ξανά αργότερα.</string>

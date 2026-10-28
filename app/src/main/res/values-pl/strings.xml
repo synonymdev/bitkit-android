@@ -773,6 +773,7 @@
     <string name="usdt__error_fee_collection">Nie można zapłacić opłaty transakcyjnej w USDT. Spróbuj mniejszej kwoty.</string>
     <string name="usdt__error_network">Nie udało się zaktualizować USDT. Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="usdt__error_pending">Płatność wciąż oczekuje. Poczekaj na potwierdzenie, zanim wyślesz ponownie.</string>
+    <string name="usdt__error_quote_refreshed">Wycena opłaty wygasła i została zaktualizowana. Sprawdź opłatę i przesuń ponownie.</string>
     <string name="usdt__error_rate_limit">Zbyt wiele żądań. Spróbuj ponownie za chwilę.</string>
     <string name="usdt__error_rejected">Sieć USDT odrzuciła żądanie. Spróbuj ponownie.</string>
     <string name="usdt__error_response">Usługa USDT zwróciła nieprawidłową odpowiedź. Spróbuj ponownie później.</string>

@@ -1220,6 +1220,7 @@
     <string name="usdt__error_fee_collection">Unable to pay the transaction fee in USDT. Try a smaller amount.</string>
     <string name="usdt__error_network">Could not update USDT. Check your connection and try again.</string>
     <string name="usdt__error_pending">A payment is still pending. Wait for confirmation before sending again.</string>
+    <string name="usdt__error_quote_refreshed">The fee quote expired and was updated. Check the fee and swipe again.</string>
     <string name="usdt__error_rate_limit">Too many requests. Please try again shortly.</string>
     <string name="usdt__error_rejected">The USDT network rejected the request. Please try again.</string>
     <string name="usdt__error_response">The USDT service returned an invalid response. Please try again later.</string>

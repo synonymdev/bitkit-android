@@ -771,6 +771,7 @@
     <string name="usdt__error_fee_collection">Impossible de payer les frais de transaction en USDT. Essayez un montant plus faible.</string>
     <string name="usdt__error_network">Impossible de mettre à jour USDT. Vérifiez votre connexion et réessayez.</string>
     <string name="usdt__error_pending">Un paiement est toujours en attente. Attendez sa confirmation avant d\'envoyer à nouveau.</string>
+    <string name="usdt__error_quote_refreshed">Le devis des frais a expiré et a été mis à jour. Vérifiez les frais et faites glisser à nouveau.</string>
     <string name="usdt__error_rate_limit">Trop de requêtes. Veuillez réessayer dans un instant.</string>
     <string name="usdt__error_rejected">Le réseau USDT a rejeté la demande. Veuillez réessayer.</string>
     <string name="usdt__error_response">Le service USDT a renvoyé une réponse non valide. Veuillez réessayer plus tard.</string>

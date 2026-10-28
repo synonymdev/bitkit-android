@@ -766,6 +766,7 @@
     <string name="usdt__error_fee_collection">Kan de transactievergoeding niet in USDT betalen. Probeer een kleiner bedrag.</string>
     <string name="usdt__error_network">Kon USDT niet bijwerken. Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="usdt__error_pending">Er is nog een betaling in behandeling. Wacht op de bevestiging voordat u opnieuw verzendt.</string>
+    <string name="usdt__error_quote_refreshed">De vergoedingsofferte is verlopen en bijgewerkt. Controleer de vergoeding en veeg opnieuw.</string>
     <string name="usdt__error_rate_limit">Te veel verzoeken. Probeer het zo meteen opnieuw.</string>
     <string name="usdt__error_rejected">Het USDT-netwerk heeft het verzoek geweigerd. Probeer het opnieuw.</string>
     <string name="usdt__error_response">De USDT-dienst gaf een ongeldig antwoord. Probeer het later opnieuw.</string>
