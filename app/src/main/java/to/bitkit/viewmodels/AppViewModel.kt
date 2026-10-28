@@ -4086,8 +4086,11 @@ class AppViewModel @Inject constructor(
         return (requested ?: priced.nextAfter(selected)).takeUnless { it == selected }
     }
 
-    private fun hasPaymentRate(current: SendUiState, source: SendFundingSource): Boolean =
-        runCatching { paymentAmountForSource(current, source) }.exceptionOrNull() !is PaykitAmountError.RateUnavailable
+    private fun hasPaymentRate(current: SendUiState, source: SendFundingSource): Boolean {
+        val request = activeIncomingPaymentRequest() ?: return true
+        return runCatching { request.payment(current.paykitMethod(source), Clock.System.now()) }
+            .exceptionOrNull() !is PaykitAmountError.RateUnavailable
+    }
 
     private fun reviewPaykitMethodChange(previous: SendUiState): Boolean {
         if (previous.paykitMethod() == _sendUiState.value.paykitMethod() ||

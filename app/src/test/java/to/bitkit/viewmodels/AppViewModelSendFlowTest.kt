@@ -119,6 +119,7 @@ import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.BalanceState
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FeeRate
+import to.bitkit.models.FxRate
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
@@ -14564,6 +14565,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sut.sendUiState.value.paykitUsesUsdt)
         assertEquals("5", sut.sendUiState.value.paykitAmount)
         assertTrue(sut.sendUiState.value.paykitRateUnavailable)
+    }
+
+    @Test
+    fun `switching from USDT to savings and back restores the entered USDT amount`() = test {
+        whenever(currencyRepo.currencyState).thenReturn(
+            MutableStateFlow(
+                CurrencyState(
+                    rates = persistentListOf(
+                        FxRate(
+                            symbol = "BTCUSD",
+                            lastPrice = "65432.10",
+                            base = "BTC",
+                            baseName = "Bitcoin",
+                            quote = "USD",
+                            quoteName = "US Dollar",
+                            currencySymbol = "$",
+                            currencyFlag = "",
+                            lastUpdatedAt = Clock.System.now().toEpochMilliseconds(),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                usdtRecipient = "0x1111111111111111111111111111111111111111",
+                paykitUsesUsdt = true,
+                paykitAmount = "5",
+                isAmountInputValid = true,
+            )
+        )
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Savings))
+        runCurrent()
+        assertFalse(sut.sendUiState.value.paykitUsesUsdt)
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Usdt))
+        runCurrent()
+        assertTrue(sut.sendUiState.value.paykitUsesUsdt)
+        assertEquals(5_000_000uL, PaykitAmount.parseInput(PaykitAsset.USDT, sut.sendUiState.value.paykitAmount).atomic)
     }
 
     @Test
