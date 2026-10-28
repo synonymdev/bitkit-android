@@ -1,6 +1,8 @@
 package to.bitkit.usecases
 
+import androidx.datastore.core.DataStoreFactory
 import com.google.firebase.messaging.FirebaseMessaging
+import com.synonym.bitkitcore.AddressType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -8,6 +10,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -15,7 +18,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
@@ -26,6 +31,9 @@ import org.mockito.kotlin.whenever
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
+import to.bitkit.data.PrivatePaykitReservationData
+import to.bitkit.data.PrivatePaykitReservationSerializer
+import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.PubkyImageCacheEpoch
 import to.bitkit.data.PubkyStore
@@ -49,6 +57,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
+import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.PaykitSdkService
@@ -69,6 +78,8 @@ import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class WipeWalletUseCaseTest : BaseUnitTest() {
+    @get:Rule
+    val folder = TemporaryFolder()
 
     private val backupRepo = mock<BackupRepo>()
     private val keychain = mock<Keychain>()
@@ -140,6 +151,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private fun createSut(
         pubkyRepo: PubkyRepo = this.pubkyRepo,
         sharingRepo: ContactPaymentSettingsRepo = contactPaymentSettingsRepo,
+        reservations: PrivatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
     ) = WipeWalletUseCase(
         backupRepo = backupRepo,
         keychain = keychain,
@@ -157,7 +169,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         lightningRepo = lightningRepo,
         pubkyRepo = pubkyRepo,
         privatePaykitRepo = privatePaykitRepoProvider,
-        privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
+        privatePaykitAddressReservationRepo = reservations,
         firebaseMessaging = firebaseMessaging,
         migrationService = migrationService,
         paykitSdkService = paykitSdkService,
@@ -311,6 +323,46 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wipe replaces unreadable reservations after key acknowledgement before profile cleanup`() = test {
+        val file = folder.newFile("reservations").also { it.writeText("{broken") }
+        val storage = DataStoreFactory.create(PrivatePaykitReservationSerializer, scope = backgroundScope) { file }
+        val store = mock<PrivatePaykitReservationStore>()
+        whenever(store.data).thenReturn(storage.data)
+        whenever(store.update(any())).doSuspendableAnswer {
+            val transform = it.getArgument<(PrivatePaykitReservationData) -> PrivatePaykitReservationData>(0)
+            storage.updateData { current -> transform(current) }
+            Unit
+        }
+        whenever(store.reset()).doSuspendableAnswer {
+            verify(keychain).wipe()
+            storage.updateData { PrivatePaykitReservationData() }
+            Unit
+        }
+        whenever(settingsStore.data).thenReturn(MutableStateFlow(SettingsData()))
+        val reservations = PrivatePaykitAddressReservationRepo(
+            testDispatcher,
+            store,
+            settingsStore,
+            coreService,
+            lightningRepo,
+        )
+        val contact = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(
+            Result.success(AddressDerivationInfo("bcrt1qterdweva9vextackckt6pjy0mmuc54g87g6lsq", 1)),
+        )
+        assertTrue(reservations.currentOrRotatedAddress(contact).isFailure)
+        assertFalse(storage.data.first().receiptSourceReadable)
+        whenever(privatePaykitRepo.finishProfileRemoval(any())).doSuspendableAnswer {
+            assertTrue(storage.data.first().receiptSourceReadable)
+            reservations.clearContactAssignments(emptySet())
+            Result.success(Unit)
+        }
+        assertTrue(createSut(reservations = reservations).invoke(resetWalletState = {}, onSuccess = {}).isSuccess)
+        assertEquals(PrivatePaykitReservationData(), storage.data.first())
+        assertNull(profileRemovalStore.pendingAttempt())
+    }
+
+    @Test
     fun `pending restart wipe skips remote cleanup and only clears marker after local acknowledgement`() = test {
         val id = UUID.randomUUID().toString()
         profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
@@ -358,7 +410,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         assertEquals(failure.message, assertIs<WipeIncomplete>(result.exceptionOrNull()).cause?.message)
         verify(keychain).wipe()
         verify(privatePaykitRepo).finishProfileRemoval(profilePause)
-        verify(privatePaykitAddressReservationRepo, never()).clear()
+        verify(privatePaykitAddressReservationRepo).clear()
         assertNotNull(profileRemovalStore.pendingAttempt())
         assertFalse(onWipeCalled)
         assertFalse(onSetWalletExistsStateCalled)
@@ -423,9 +475,9 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(usdtRepo).wipe(any())
         inOrder.verify(keychain).wipe()
         inOrder.verify(paykitUsdtPaymentRepo).resetForWipe()
+        inOrder.verify(privatePaykitAddressReservationRepo).clear()
         inOrder.verify(privatePaykitRepo).finishProfileRemoval(profilePause)
         inOrder.verify(pubkyRepo).finishProfileWipeLocally()
-        inOrder.verify(privatePaykitAddressReservationRepo).clear()
         inOrder.verify(coreService).wipeData()
         inOrder.verify(db).clearAllTables()
         inOrder.verify(settingsStore).reset()
@@ -480,8 +532,34 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(lightningRepo, never()).wipeStorage(any())
         verify(keychain, never()).wipe()
         verify(db, never()).clearAllTables()
+        assertNull(profileRemovalStore.pendingAttempt())
         assertFalse(onWipeCalled)
         assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `cancellation while stopping preserves prior recovery scope without arming a fresh wipe`() = test {
+        for (pending in listOf(null, UUID.randomUUID().toString())) {
+            if (pending != null) profileRemovalStore.withAccess(pending) { profileRemovalStore.begin(pending) }
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            whenever(lightningRepo.stop()).doSuspendableAnswer {
+                entered.complete(Unit)
+                release.await()
+                Result.failure(CancellationException("Node stop cancelled"))
+            }
+            val wiping = launch { sut.invoke(resetWalletState = {}, onSuccess = {}) }
+            entered.await()
+            wiping.cancel()
+            release.complete(Unit)
+            wiping.join()
+            assertEquals(pending, profileRemovalStore.pendingAttempt())
+            // A failed pre-stop wipe must not upgrade an existing PROFILE obligation.
+            if (pending != null) profileRemovalStore.withAccess(pending) { profileRemovalStore.complete(pending) }
+            connectionRecovery.withReceiptOperation { it.requireCurrent() }
+        }
+        verify(keychain, never()).wipe()
+        verify(lightningRepo, never()).wipeStorage(any())
     }
 
     @Test
@@ -517,6 +595,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(settingsStore, never()).reset()
         assertFalse(onWipeCalled)
         verify(privatePaykitRepo, never()).finishProfileRemoval(any())
+        verify(privatePaykitAddressReservationRepo, never()).clear()
         assertNotNull(profileRemovalStore.pendingAttempt())
         assertFalse(onSetWalletExistsStateCalled)
     }

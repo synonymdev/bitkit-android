@@ -83,9 +83,13 @@ class ProfileViewModel @Inject constructor(
         )
     }
 
-    private val controls = combine(dialogControls, pubkyRepo.profileRecoveryPending, _localDisconnect) {
-            controls, pending, localOnly ->
-        controls.copy(recoveryPending = pending, localDisconnect = localOnly)
+    private val controls = combine(
+        dialogControls,
+        pubkyRepo.profileRecoveryPending,
+        _localDisconnect,
+        pubkyRepo.profileRecoveryCanDisconnect,
+    ) { controls, pending, localOnly, canDisconnect ->
+        controls.copy(recoveryPending = pending, localDisconnect = localOnly, recoveryCanDisconnect = canDisconnect)
     }
 
     init {
@@ -108,7 +112,10 @@ class ProfileViewModel @Inject constructor(
             publicKey = pubkyRepo.publicKey.value,
             isLoading = pubkyRepo.isLoadingProfile.value || pubkyRepo.isRestoringSession.value || _isRefreshing.value,
             cachedProfile = pubkyRepo.cachedProfile.value,
-            controls = ProfileControls(recoveryPending = pubkyRepo.profileRecoveryPending.value),
+            controls = ProfileControls(
+                recoveryPending = pubkyRepo.profileRecoveryPending.value,
+                recoveryCanDisconnect = pubkyRepo.profileRecoveryCanDisconnect.value,
+            ),
         ),
     )
 
@@ -148,6 +155,7 @@ class ProfileViewModel @Inject constructor(
     fun showSignOutConfirmation() {
         if (_isSigningOut.value) return
         val state = uiState.value
+        if (state.recoveryPending && !state.recoveryCanDisconnect) return
         val owner = if (state.recoveryPending) {
             pubkyRepo.profileOwner().takeIf { it.signIn == null } ?: state.owner
         } else {
@@ -274,6 +282,7 @@ class ProfileViewModel @Inject constructor(
                 publicKey == pubkyRepo.profile.value?.publicKey,
             isLoading = controls.recoveryPending == null || (controls.recoveryPending == false && isLoading),
             recoveryPending = controls.recoveryPending == true,
+            recoveryCanDisconnect = controls.recoveryCanDisconnect,
             localDisconnect = controls.localDisconnect,
             owner = displayedOwner,
             showSignOutDialog = controls.showSignOutDialog,
@@ -325,6 +334,7 @@ data class ProfileUiState(
     val publicKey: String? = null,
     val canEdit: Boolean = false,
     val recoveryPending: Boolean = false,
+    val recoveryCanDisconnect: Boolean = false,
     val localDisconnect: Boolean = false,
     val owner: PubkyProfileOwner? = null,
     val isLoading: Boolean = true,
@@ -336,6 +346,7 @@ data class ProfileUiState(
 
 private data class ProfileControls(
     val recoveryPending: Boolean? = null,
+    val recoveryCanDisconnect: Boolean = false,
     val localDisconnect: Boolean = false,
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,

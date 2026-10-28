@@ -272,6 +272,9 @@ class PubkyRepo @Inject constructor(
         .map<Boolean, Boolean?> { it }
         .stateIn(scope, SharingStarted.Eagerly, null)
 
+    val profileRecoveryCanDisconnect: StateFlow<Boolean> = profileRemovalStore.localDisconnectAvailable
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
     suspend fun requiresProfileRecovery(): Boolean = withContext(ioDispatcher) {
         runSuspendCatching { profileRemovalStore.requireNoPending() }.isFailure
     }

@@ -1360,6 +1360,7 @@
     <string name="profile__sign_out_title">Desconnectar el perfil</string>
     <string name="profile__source_lost">Aquest pubky ja no està disponible a Pubky Ring. El teu perfil s\'ha desconnectat.</string>
     <string name="profile__suggestions_to_add">Suggeriments per afegir</string>
+    <string name="profile__wallet_recovery_pending">Cal completar la recuperació de la cartera abans de desconnectar aquest perfil. Consulta la recuperació de la cartera a Configuració.</string>
     <string name="profile__your_pubky">El teu pubky</string>
     <string name="pubky_auth__already_signed_in">Ja has iniciat sessió</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

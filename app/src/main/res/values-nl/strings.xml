@@ -1359,6 +1359,7 @@
     <string name="profile__sign_out_description">Hiermee wordt uw Pubky-profiel ontkoppeld van Bitkit. U kunt op elk moment opnieuw verbinden.</string>
     <string name="profile__sign_out_title">Profiel ontkoppelen</string>
     <string name="profile__source_lost">Deze pubky is niet meer beschikbaar in Pubky Ring. Uw profiel is ontkoppeld.</string>
+    <string name="profile__wallet_recovery_pending">Het wallet-herstel moet worden voltooid voordat dit profiel kan worden losgekoppeld. Controleer het wallet-herstel in Instellingen.</string>
     <string name="profile__your_pubky">Uw pubky</string>
     <string name="pubky_auth__already_signed_in">Al ingelogd</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

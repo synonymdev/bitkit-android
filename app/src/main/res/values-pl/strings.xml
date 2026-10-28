@@ -1360,6 +1360,7 @@
     <string name="profile__sign_out_description">Spowoduje to odłączenie Twojego profilu Pubky od Bitkit. Możesz połączyć się ponownie w dowolnym momencie.</string>
     <string name="profile__sign_out_title">Odłącz profil</string>
     <string name="profile__source_lost">Ten pubky nie jest już dostępny w Pubky Ring. Twój profil został odłączony.</string>
+    <string name="profile__wallet_recovery_pending">Przed odłączeniem tego profilu należy ukończyć odzyskiwanie portfela. Sprawdź odzyskiwanie portfela w Ustawieniach.</string>
     <string name="profile__your_pubky">Twój pubky</string>
     <string name="pubky_auth__already_signed_in">Już zalogowano</string>
     <string name="pubky_auth__homeserver">Serwer domowy</string>

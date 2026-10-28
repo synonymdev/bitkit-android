@@ -272,8 +272,9 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     suspend fun clear() = withContext(ioDispatcher) {
         locked {
-            ledger = PrivatePaykitReservationData()
+            ledger = null
             reservationStore.reset()
+            ledger = PrivatePaykitReservationData()
             notifyBackupStateChanged()
         }
     }
@@ -303,10 +304,15 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
                     contactAssignments = current.contactAssignments + (assignmentKey to assignment),
                     contactAssignmentHistory = current.contactAssignmentHistory + (assignmentKey to history),
                 )
-                ledger = next
-                persist(next)
+                // A cancelled return can follow a committed write. Reload durable state on uncertainty.
+                ledger = null
+                try {
+                    persist(next)
+                    ledger = next
+                } finally {
+                    notifyBackupStateChanged()
+                }
             }
-            notifyBackupStateChanged()
             addressInfo.address
         }
     }

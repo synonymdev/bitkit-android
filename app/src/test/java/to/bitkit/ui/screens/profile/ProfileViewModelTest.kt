@@ -409,6 +409,26 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unknown wallet recovery cannot prepare profile disconnect`() = test {
+        val sut = createSut(
+            publicKey = null,
+            recoveryPending = MutableStateFlow(true),
+            recoveryCanDisconnect = MutableStateFlow(false),
+        )
+        sut.uiState.test {
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.recoveryPending)
+            assertFalse(sut.uiState.value.recoveryCanDisconnect)
+            sut.showSignOutConfirmation()
+            advanceUntilIdle()
+            assertFalse(sut.uiState.value.showSignOutDialog)
+            assertFalse(sut.uiState.value.isSigningOut)
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkyRepo, never()).signOutForProfileRemoval()
+    }
+
+    @Test
     fun `pending restart without credentials shows local recovery without authentication`() = test {
         val pending = MutableStateFlow<Boolean?>(null)
         fixture.current = PubkyProfileOwner(null, 4)
@@ -624,6 +644,7 @@ class ProfileViewModelTest : BaseUnitTest() {
     private fun createSut(
         profile: PubkyProfile? = null,
         recoveryPending: MutableStateFlow<Boolean?> = MutableStateFlow(false),
+        recoveryCanDisconnect: MutableStateFlow<Boolean> = MutableStateFlow(true),
         profileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(profile),
         readOnlyProfileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(null),
         publicKey: String? = "pubkyalice",
@@ -638,6 +659,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         whenever(context.getString(any<Int>())).thenReturn("")
         fixture.setup()
         whenever(pubkyRepo.profileRecoveryPending).thenReturn(recoveryPending)
+        whenever(pubkyRepo.profileRecoveryCanDisconnect).thenReturn(recoveryCanDisconnect)
         whenever(pubkyRepo.profile).thenReturn(profileFlow)
         whenever(pubkyRepo.readOnlyProfile).thenReturn(readOnlyProfileFlow)
         whenever(pubkyRepo.publicKey).thenReturn(publicKeyFlow)

@@ -491,6 +491,34 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unavailable invoice attribution still records a high reserved receiving address`() = coreTest {
+        val address = "bcrt1qterdweva9vextackckt6pjy0mmuc54g87g6lsq"
+        val store = mock<PrivatePaykitReservationStore>()
+        whenever(store.data).thenReturn(
+            flowOf(
+                PrivatePaykitReservationData(reservedReceiveIndexesByAddressType = mapOf("nativeSegwit" to setOf(9000)))
+            ),
+        )
+        val derivation = mock<LightningRepo>()
+        whenever(derivation.addressInfoForType(addressType = AddressType.P2WPKH, receiveIndex = 9000)).thenReturn(
+            Result.success(AddressDerivationInfo(address, 9000)),
+        )
+        receiptReservations = PrivatePaykitAddressReservationRepo(
+            testDispatcher, store, settingsStore, coreService, derivation,
+        )
+        whenever(privateCacheStore.data).thenReturn(flowOf(PrivatePaykitCacheData(receiptSourceReadable = false)))
+        whenever(lightningService.addressInfosForType(any(), any(), any(), any(), any())).thenReturn(emptyList())
+
+        receive(address)
+
+        val row = (updates.single() as Activity.Onchain).v1
+        assertEquals(address, row.address)
+        assertEquals(15_000uL, row.value)
+        assertNull(row.contact)
+        assertFalse(sut.backfillPaykitContacts())
+    }
+
+    @Test
     fun `held incoming search uses its captured high index reservation after profile cleanup`() = coreTest {
         val address = "bcrt1qterdweva9vextackckt6pjy0mmuc54g87g6lsq"
         val ledger = MutableStateFlow(

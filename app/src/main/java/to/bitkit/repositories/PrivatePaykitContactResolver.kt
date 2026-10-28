@@ -112,9 +112,13 @@ class PrivatePaykitContactResolver @Inject constructor(
 
         suspend fun isReservedReceiveAddress(address: String): Boolean {
             requireCurrent()
-            val source = snapshot ?: return false
             return lookupAssociations {
-                addressReservationRepo.get().contactsForReceipt(address, source.assignments).isNotEmpty()
+                val source = snapshot
+                if (source == null) {
+                    addressReservationRepo.get().isUnavailableForReusableReceive(address)
+                } else {
+                    addressReservationRepo.get().contactsForReceipt(address, source.assignments).isNotEmpty()
+                }
             } ?: false
         }
     }

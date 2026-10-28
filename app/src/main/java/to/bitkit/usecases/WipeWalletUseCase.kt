@@ -78,9 +78,9 @@ class WipeWalletUseCase @Inject constructor(
                             val pending = profileRemovalStore.pendingAttempt()
                             val attemptId = pending ?: UUID.randomUUID().toString()
                             profileRemovalStore.withAccess(attemptId, ProfileRemovalScope.WALLET_WIPE) {
-                                profileRemovalStore.begin(attemptId)
                                 privatePaykitRepo.get().withProfileDeletionPaused { pause ->
                                     stopNode().getOrThrow()
+                                    profileRemovalStore.begin(attemptId)
                                     if (pending == null) cleanupRemote()
                                     wipeLocal(walletIndex, pause) { credentialsMayBeErased = true }.getOrThrow()
                                     profileRemovalStore.complete(attemptId)
@@ -130,9 +130,9 @@ class WipeWalletUseCase @Inject constructor(
         usdtRepo.wipe { keychain.wipe() }.getOrThrow()
         paykitUsdtPaymentRepo.resetForWipe()
         // Consumption watermarks survive until the keychain wipe is acknowledged. Pending remains on any failure.
+        privatePaykitAddressReservationRepo.clear()
         privatePaykitRepo.get().finishProfileRemoval(pause).getOrElse { return Result.failure(it) }
         pubkyRepo.finishProfileWipeLocally()
-        privatePaykitAddressReservationRepo.clear()
         step("delete FCM token") { firebaseMessaging.deleteToken() }
         step("wipe core data") { coreService.wipeData() }
         step("clear database") { db.clearAllTables() }

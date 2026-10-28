@@ -13,6 +13,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -44,9 +45,11 @@ class ProfileRemovalStoreTest {
         val id = UUID.randomUUID().toString()
         store.withAccess(id) {
             store.begin(id)
+            assertTrue(store.localDisconnectAvailable.first())
             assertEquals("historical receipt", store.withReceiptSnapshot { "historical receipt" })
         }
         store.withAccess(id, ProfileRemovalScope.WALLET_WIPE) { store.begin(id) }
+        assertFalse(store.localDisconnectAvailable.first())
         assertFailsWith<ProfileRemovalPending> { store.withReceiptSnapshot { error("must not copy") } }
         assertFailsWith<IllegalStateException> { store.withAccess(id) { store.complete(id) } }
         assertEquals(id, store.pendingAttempt())
@@ -129,7 +132,9 @@ class ProfileRemovalStoreTest {
                 transform(state.value).also { state.value = it }
         })
         assertFailsWith<ProfileRemovalPending> { store.withReceiptSnapshot { error("legacy state") } }
+        assertFalse(store.localDisconnectAvailable.first())
         unavailable = true
+        assertFalse(store.localDisconnectAvailable.first())
         assertTrue(
             assertFailsWith<ProfileRemovalPending> {
                 store.withReceiptSnapshot { error("unavailable state") }
@@ -275,6 +280,8 @@ class ProfileRemovalStoreTest {
             ) { file }
         )
         assertEquals(recovered, second.pendingAttempt())
+        assertFalse(second.localDisconnectAvailable.first())
+        assertFailsWith<ProfileRemovalPending> { second.requireReceiptAccountingAccess() }
         assertFailsWith<IllegalStateException> { second.withAccess(recovered) { second.complete(recovered) } }
         second.withAccess(recovered, ProfileRemovalScope.WALLET_WIPE) {
             second.begin(recovered)

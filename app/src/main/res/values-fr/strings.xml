@@ -1358,6 +1358,7 @@
     <string name="profile__sign_out_title">Déconnecter le profil</string>
     <string name="profile__source_lost">Ce pubky n\'est plus disponible dans Pubky Ring. Votre profil a été déconnecté.</string>
     <string name="profile__suggestions">Suggestions</string>
+    <string name="profile__wallet_recovery_pending">La récupération du portefeuille doit être terminée avant de déconnecter ce profil. Consultez la récupération du portefeuille dans les Paramètres.</string>
     <string name="profile__your_pubky">Votre pubky</string>
     <string name="pubky_auth__already_signed_in">Déjà connecté</string>
     <string name="pubky_auth__homeserver">Serveur domestique</string>

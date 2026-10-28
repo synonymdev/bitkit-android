@@ -29,7 +29,9 @@ class ProfileRecoveryContentTest {
 
     @Test
     fun restartRecoveryWithoutCredentialsRequiresLocalConfirmation() {
-        var state by mutableStateOf(ProfileUiState(recoveryPending = true, localDisconnect = true))
+        var state by mutableStateOf(
+            ProfileUiState(recoveryPending = true, localDisconnect = true),
+        )
         var confirmations = 0
         var back = 0
         compose.setContent {
@@ -57,6 +59,9 @@ class ProfileRecoveryContentTest {
                 }
             }
         }
+        compose.onNodeWithText(context.getString(R.string.profile__wallet_recovery_pending)).assertIsDisplayed()
+        compose.onNodeWithTag("ProfileRecoveryDisconnect").assertDoesNotExist()
+        compose.runOnIdle { state = state.copy(recoveryCanDisconnect = true) }
         compose.onNodeWithText(context.getString(R.string.profile__cleanup_pending)).assertIsDisplayed()
         compose.onNodeWithTag("ProfileRecoveryDisconnect").assertIsDisplayed().performClick()
         compose.onNodeWithText(context.getString(R.string.profile__disconnect_local_description)).assertIsDisplayed()

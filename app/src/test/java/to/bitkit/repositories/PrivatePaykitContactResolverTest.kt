@@ -139,9 +139,11 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
         val storageScope = CoroutineScope(SupervisorJob() + testDispatcher)
         val storage = DataStoreFactory.create(PrivatePaykitCacheSerializer, scope = storageScope) { file }
         whenever(cacheStore.data).thenReturn(storage.data)
+        whenever(addressReservationRepo.isUnavailableForReusableReceive(PRIVATE_ADDRESS)).thenReturn(true)
         sut.withReceiptOperation {
             assertNull(it.snapshot)
             assertNull(it.contactForInvoice(PAYMENT_HASH))
+            assertTrue(it.isReservedReceiveAddress(PRIVATE_ADDRESS))
         }
         assertFailsWith<IllegalStateException> { storage.updateData { it.copy(cleanupPending = true) } }
         requireNotNull(storageScope.coroutineContext[Job]).cancelAndJoin()

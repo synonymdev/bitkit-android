@@ -1357,6 +1357,7 @@
     <string name="profile__sign_out_description">Esto desconectará tu perfil de Pubky de Bitkit. Puedes volver a conectarlo en cualquier momento.</string>
     <string name="profile__sign_out_title">Desconectar perfil</string>
     <string name="profile__source_lost">Este pubky ya no está disponible en Pubky Ring. Tu perfil se ha desconectado.</string>
+    <string name="profile__wallet_recovery_pending">Debes completar la recuperación de la cartera antes de desconectar este perfil. Revisa la recuperación de la cartera en Ajustes.</string>
     <string name="profile__your_pubky">Tu pubky</string>
     <string name="pubky_auth__already_signed_in">Ya has iniciado sesión</string>
     <string name="pubky_auth__homeserver">Servidor principal</string>

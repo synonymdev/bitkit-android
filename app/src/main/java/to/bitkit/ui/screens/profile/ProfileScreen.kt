@@ -145,14 +145,24 @@ internal fun ProfileContent(
         uiState.recoveryPending -> ScreenColumn {
             topBar(Modifier)
             VerticalSpacer(32.dp)
-            BodyM(text = stringResource(R.string.profile__cleanup_pending))
-            VerticalSpacer(24.dp)
-            PrimaryButton(
-                text = stringResource(R.string.profile__sign_out),
-                onClick = onClickSignOut,
-                enabled = !uiState.isSigningOut,
-                modifier = Modifier.testTag("ProfileRecoveryDisconnect"),
+            BodyM(
+                text = stringResource(
+                    if (uiState.recoveryCanDisconnect) {
+                        R.string.profile__cleanup_pending
+                    } else {
+                        R.string.profile__wallet_recovery_pending
+                    },
+                ),
             )
+            if (uiState.recoveryCanDisconnect) {
+                VerticalSpacer(24.dp)
+                PrimaryButton(
+                    text = stringResource(R.string.profile__sign_out),
+                    onClick = onClickSignOut,
+                    enabled = !uiState.isSigningOut,
+                    modifier = Modifier.testTag("ProfileRecoveryDisconnect"),
+                )
+            }
             if (uiState.isSigningOut) GradientCircularProgressIndicator(Modifier.size(32.dp))
         }
 

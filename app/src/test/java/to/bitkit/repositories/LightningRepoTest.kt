@@ -411,6 +411,47 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `receipt admission cancellation preserves the active listener event dispatch`() = test {
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(activityService.handlePaymentEvent("payment-id")).doSuspendableAnswer {
+            throw CancellationException("Receipt admission refused")
+        }
+        val eventHandler = startNodeAndCaptureEvents()
+        val publishedUpdate = async { sut.nodeEventUpdates.first() }
+        val event = Event.PaymentReceived("payment-id", "010203", 1_000uL, emptyList())
+
+        val outcome = runCatching { eventHandler(event) }
+
+        try {
+            assertTrue(outcome.isSuccess)
+            assertEquals(event, publishedUpdate.await().event)
+        } finally {
+            publishedUpdate.cancel()
+        }
+    }
+
+    @Test
+    fun `cancelling the listener still propagates through received payment admission`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(activityService.handlePaymentEvent("payment-id")).doSuspendableAnswer {
+            entered.complete(Unit)
+            awaitCancellation()
+        }
+        val eventHandler = startNodeAndCaptureEvents()
+        var returned = false
+        val handling = launch {
+            eventHandler(Event.PaymentReceived("payment-id", "010203", 1_000uL, emptyList()))
+            returned = true
+        }
+        entered.await()
+        handling.cancelAndJoin()
+        assertFalse(returned)
+    }
+
+    @Test
     fun `PaymentReceived preserves a cached invoice with a different payment hash`() = test {
         val bolt11 = "lnbc1"
         val activityService = mock<ActivityService>()

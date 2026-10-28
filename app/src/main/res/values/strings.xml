@@ -682,6 +682,7 @@
     <string name="profile__unlink_error_title">Unable to Unlink Pubky</string>
     <string name="profile__unlink_pubky">Unlink pubky</string>
     <string name="profile__unlink_success">Pubky unlinked</string>
+    <string name="profile__wallet_recovery_pending">Wallet recovery is required before this profile can be disconnected. Check wallet recovery in Settings.</string>
     <string name="profile__your_name">Your Name</string>
     <string name="profile__your_pubky">Your Pubky</string>
     <string name="pubky_auth__already_signed_in">Already signed in</string>

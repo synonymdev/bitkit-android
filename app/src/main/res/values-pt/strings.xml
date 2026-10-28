@@ -1345,6 +1345,7 @@
     <string name="profile__unlink_error_title">Não foi possível desassociar o pubky</string>
     <string name="profile__unlink_pubky">Desassociar pubky</string>
     <string name="profile__unlink_success">Pubky desassociado</string>
+    <string name="profile__wallet_recovery_pending">É necessário concluir a recuperação da carteira antes de desligar este perfil. Consulte a recuperação da carteira nas Definições.</string>
     <string name="profile__your_name">O seu nome</string>
     <string name="profile__your_pubky">O seu pubky</string>
     <string name="pubky_auth__already_signed_in">Sessão já iniciada</string>

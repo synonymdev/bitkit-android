@@ -1352,6 +1352,7 @@
     <string name="profile__unlink_error_title">Αδυναμία αποσύνδεσης pubky</string>
     <string name="profile__unlink_pubky">Αποσύνδεση pubky</string>
     <string name="profile__unlink_success">Το pubky αποσυνδέθηκε</string>
+    <string name="profile__wallet_recovery_pending">Πρέπει να ολοκληρωθεί η ανάκτηση του πορτοφολιού πριν αποσυνδεθεί αυτό το προφίλ. Ελέγξτε την ανάκτηση πορτοφολιού στις Ρυθμίσεις.</string>
     <string name="profile__your_name">Το όνομά σου</string>
     <string name="profile__your_pubky">Το pubky σου</string>
     <string name="pubky_auth__already_signed_in">Είσαι ήδη συνδεδεμένος</string>

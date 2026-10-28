@@ -1362,6 +1362,7 @@
     <string name="profile__sign_out_title">Odpojit profil</string>
     <string name="profile__source_lost">Tento pubky již není v Pubky Ring k dispozici. Váš profil byl odpojen.</string>
     <string name="profile__suggestions_to_add">Návrhy k přidání</string>
+    <string name="profile__wallet_recovery_pending">Před odpojením tohoto profilu je nutné dokončit obnovu peněženky. Zkontrolujte obnovu peněženky v Nastavení.</string>
     <string name="profile__your_pubky">Váš pubky</string>
     <string name="pubky_auth__already_signed_in">Již přihlášeno</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

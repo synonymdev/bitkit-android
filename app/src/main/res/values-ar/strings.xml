@@ -1346,6 +1346,7 @@
     <string name="profile__unlink_error_title">تعذر إلغاء ربط الـ pubky</string>
     <string name="profile__unlink_pubky">إلغاء ربط الـ pubky</string>
     <string name="profile__unlink_success">تم إلغاء ربط الـ pubky</string>
+    <string name="profile__wallet_recovery_pending">يجب إكمال استرداد المحفظة قبل فصل هذا الملف الشخصي. راجع استرداد المحفظة في الإعدادات.</string>
     <string name="profile__your_name">اسمك</string>
     <string name="profile__your_pubky">Pubky الخاص بك</string>
     <string name="pubky_auth__already_signed_in">تم تسجيل الدخول بالفعل</string>

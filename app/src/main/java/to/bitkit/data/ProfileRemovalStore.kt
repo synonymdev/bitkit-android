@@ -70,13 +70,19 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
     internal val generation: Long get() = observationRevision.value
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    internal val pending: Flow<Boolean> = observationRevision.flatMapLatest {
-        store.data.map { it.attemptId != null }
+    private val observedState: Flow<ProfileRemovalState?> = observationRevision.flatMapLatest {
+        store.data.map<ProfileRemovalState, ProfileRemovalState?> { it }
             .retryWhen { _, attempt ->
-                emit(true)
+                emit(null)
                 delay((250L shl attempt.coerceAtMost(8).toInt()).coerceAtMost(60_000).milliseconds)
                 true
             }
+    }
+
+    internal val pending: Flow<Boolean> = observedState.map { it == null || it.attemptId != null }
+
+    internal val localDisconnectAvailable: Flow<Boolean> = observedState.map {
+        it?.attemptId != null && it.scope == ProfileRemovalScope.PROFILE
     }
 
     internal suspend fun pendingAttempt(): String? = store.data.first().attemptId
@@ -263,7 +269,7 @@ internal object ProfileRemovalSerializer : Serializer<ProfileRemovalState> {
 }
 
 internal class ProfileRemovalPending(cause: Throwable? = null) : AppError(
-    "Profile cleanup is pending. Disconnect the profile to finish local recovery.",
+    "Local recovery is pending. Open the profile for recovery options.",
     cause,
 )
 
