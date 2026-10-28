@@ -122,8 +122,9 @@ internal fun NavController.navigateToCoinSelection() {
 internal fun NavController.navigateToSendAmount(startDestination: SendRoute) {
     if (popBackStack(SendRoute.Amount, inclusive = false)) return
     navigateTo(SendRoute.Amount) {
-        if (startDestination == SendRoute.Confirm) {
-            popUpTo(SendRoute.Confirm) { inclusive = true }
+        if (startDestination == SendRoute.Confirm || startDestination == SendRoute.UsdtReview) {
+            // A Pay From switch may have replaced the starting confirmation, so clear whichever one is there.
+            popUpTo(graph.id)
         }
     }
 }
@@ -289,6 +290,14 @@ fun SendSheet(
                         is SendEffect.NavigateToCoinSelection -> navController.navigateToCoinSelection()
                         is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
                         is SendEffect.NavigateToUsdtReview -> navController.navigateTo(SendRoute.UsdtReview)
+                        is SendEffect.ShowPaykitConfirmation -> {
+                            // Replace the other asset's confirmation, so Back never returns to its stale terms.
+                            val replaced = when (it.route) {
+                                SendRoute.Confirm -> SendRoute.UsdtReview
+                                else -> SendRoute.Confirm
+                            }
+                            navController.navigateTo(it.route) { popUpTo(replaced) { inclusive = true } }
+                        }
                         is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {

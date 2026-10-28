@@ -9,7 +9,7 @@
   </description>
   <actions>
     <action>Launch the E2E Bitkit app on both instances with no Active allowance between them and the payer's notification permission granted</action>
-    <action>On the payer instance, set an allowance for the payee as in set-and-accept.xml, but with the $5 stop (testTag "AllowancePerPaymentStop-1") and the $10 stop (testTag "AllowanceMonthlyStop-0"), and have the payee accept it</action>
+    <action>On the payer instance, set an allowance for the payee as in set-and-accept.xml, but with the $5 stop (testTag "AllowancePerPaymentStop-1") and the $10 stop (testTag "AllowanceMonthlyStop-0"); the payee's wallet accepts it by itself</action>
     <action>Verify the payer's row reads "Active · $5 a payment" with "$ 10.00" over "Monthly limit"</action>
     <action>On the payee instance, send the payer a one-time Payment Request for $4 with the note "Cap1"</action>
     <action>On the payer instance, verify it is paid without a sheet and a "Payment Executed" notification reads "Auto-pay sent $4.00 to &lt;payee&gt;"</action>

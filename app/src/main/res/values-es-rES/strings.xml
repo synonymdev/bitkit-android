@@ -457,6 +457,7 @@
     <string name="security__pass_recovery">&lt;accent&gt;Contraseña:&lt;/accent&gt; {passphrase}</string>
     <string name="security__pass_text">Añadiste una passphrase a tu frase de recuperación al configurar tu wallet.</string>
     <string name="security__pass_your">Su frase de acceso</string>
+    <string name="security__pin_allowance">Por favor, introduzca su código PIN para confirmar este cambio en la asignación.</string>
     <string name="security__pin_attempts">Quedan {attemptsRemaining} intentos. ¿Olvidó su PIN?</string>
     <string name="security__pin_choose_header">Elija un PIN de 4 dígitos</string>
     <string name="security__pin_choose_text">Por favor, utilice un PIN que recuerde. Si olvida su PIN puede restablecerlo, pero para ello tendrá que restaurar su monedero.</string>
@@ -771,6 +772,7 @@
     <string name="usdt__error_fee_collection">No se pudo pagar la comisión de la transacción en USDT. Prueba con una cantidad menor.</string>
     <string name="usdt__error_network">No se pudo actualizar USDT. Comprueba tu conexión e inténtalo de nuevo.</string>
     <string name="usdt__error_pending">Aún hay un pago pendiente. Espera a que se confirme antes de volver a enviar.</string>
+    <string name="usdt__error_quote_refreshed">La cotización de la comisión ha caducado y se ha actualizado. Revisa la comisión y desliza de nuevo.</string>
     <string name="usdt__error_rate_limit">Demasiadas solicitudes. Inténtalo de nuevo en breve.</string>
     <string name="usdt__error_rejected">La red USDT rechazó la solicitud. Inténtalo de nuevo.</string>
     <string name="usdt__error_response">El servicio USDT devolvió una respuesta no válida. Inténtalo de nuevo más tarde.</string>
@@ -1424,6 +1426,7 @@
     <string name="subscriptions__allowance_offer_accepted_title">Asignación añadida</string>
     <string name="subscriptions__allowance_offer_explanation">El monedero de {name} pagará tus solicitudes dentro de estos límites sin preguntar cada vez. Cualquiera de los dos puede finalizarla.</string>
     <string name="subscriptions__allowance_offer_headline">{name} te ofrece\n&lt;accent&gt;una asignación&lt;/accent&gt;</string>
+    <string name="subscriptions__allowance_offers_accepted_description">{names} te han configurado asignaciones</string>
     <string name="subscriptions__allowance_paid_automatically">{amount} pagado automáticamente</string>
     <string name="subscriptions__allowance_paid_so_far">Pagado automáticamente</string>
     <string name="subscriptions__allowance_payment_in_progress">Esta solicitud ya se está pagando automáticamente.</string>
