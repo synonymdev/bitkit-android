@@ -4009,7 +4009,7 @@ class AppViewModel @Inject constructor(
             paymentAmountForSource(current, nextSource)
         } catch (_: PaykitAmountError.RateUnavailable) {
             _sendUiState.update { it.copy(paykitRateUnavailable = true) }
-            if (canReviewInPlace) {
+            if (wasReviewed) {
                 paykitPaymentTerms = null
                 paykitReviewedAmount = null
                 setSendEffect(SendEffect.NavigateToAmount)

@@ -121,7 +121,8 @@ internal fun NavController.navigateToSendAmount(startDestination: SendRoute) {
     if (popBackStack(SendRoute.Amount, inclusive = false)) return
     navigateTo(SendRoute.Amount) {
         if (startDestination == SendRoute.Confirm || startDestination == SendRoute.UsdtReview) {
-            popUpTo(startDestination) { inclusive = true }
+            // A Pay From switch may have replaced the starting confirmation, so clear whichever one is there.
+            popUpTo(graph.id)
         }
     }
 }
