@@ -14984,7 +14984,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pay from toward USDT returns to amount when the request has no USDT rate`() = test {
+    fun `pay from toward USDT keeps the confirmation when the request has no USDT rate`() = test {
+        whenever(context.getString(R.string.wallet__payment_request_rate_unavailable)).thenReturn("Rates unavailable")
         val bitcoin = Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = REGTEST_ADDRESS)
         val usdt = Endpoint(MethodId.UsdtArbitrum, "0x1111111111111111111111111111111111111111", rawPayload = "")
         val endpoints = listOf(bitcoin, usdt)
@@ -15009,13 +15010,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
 
+        clearInvocations(toastManager)
         sut.sendEffect.test {
             sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Usdt))
             advanceUntilIdle()
-            assertEquals(SendEffect.NavigateToAmount, awaitItem())
-            assertTrue(sut.sendUiState.value.paykitRateUnavailable)
             expectNoEvents()
         }
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertFalse(sut.sendUiState.value.paykitUsesUsdt)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.WARNING, it.type)
+                assertEquals("Rates unavailable", it.title)
+            }
+        )
     }
 
     @Test

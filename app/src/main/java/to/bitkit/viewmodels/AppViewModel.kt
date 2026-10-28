@@ -4008,8 +4008,17 @@ class AppViewModel @Inject constructor(
         val converted = try {
             paymentAmountForSource(current, nextSource)
         } catch (_: PaykitAmountError.RateUnavailable) {
+            if (wasReviewed && !canReviewInPlace) {
+                // The reviewed quote is still payable, so keep its confirmation and only report the missing rate.
+                toast(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.wallet__payment_request_rate_unavailable),
+                    testTag = "PaykitRateUnavailableToast",
+                )
+                return
+            }
             _sendUiState.update { it.copy(paykitRateUnavailable = true) }
-            if (wasReviewed) {
+            if (canReviewInPlace) {
                 paykitPaymentTerms = null
                 paykitReviewedAmount = null
                 setSendEffect(SendEffect.NavigateToAmount)
