@@ -13,10 +13,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.ui.areNotificationsEnabled
+import to.bitkit.viewmodels.SettingsViewModel
 
 @Composable
 fun RequestNotificationPermissions(
@@ -117,6 +120,25 @@ fun rememberNotificationToggleClick(
             // Already granted: the runtime request is a no-op, so send the user to system
             // settings where they can actually turn notifications off.
             if (currentIsGranted) currentOnOpenSystemSettings() else requestPermission()
+        }
+    }
+}
+
+/** Asks for notification permission when a Paykit subscription starts, unless it is already granted. */
+@Composable
+fun rememberSubscriptionNotificationsRequest(
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+): () -> Unit {
+    val isGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
+    val requestPermission = rememberRequestNotificationPermission(
+        onPermissionResult = settingsViewModel::setNotificationPreference,
+        onPreTiramisu = {},
+    )
+    val currentIsGranted by rememberUpdatedState(isGranted)
+
+    return remember(requestPermission) {
+        {
+            if (!currentIsGranted) requestPermission()
         }
     }
 }

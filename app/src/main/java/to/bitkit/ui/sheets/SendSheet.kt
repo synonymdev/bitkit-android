@@ -57,8 +57,10 @@ import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.components.ConnectionIssuesView
+import to.bitkit.ui.components.SyncNodeVariant
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.navigateTo
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.subscriptions.SubscriptionFirstPaymentProgress
 import to.bitkit.ui.screens.subscriptions.SubscriptionSuccess
@@ -148,11 +150,12 @@ fun SendSheet(
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     var routingCacheResetAttempted by rememberSaveable(startDestination) { mutableStateOf(false) }
 
+    val hasAnyChannels = lightningState.channels.isNotEmpty()
+    val syncNodeVariant = if (hasAnyChannels) SyncNodeVariant.LIGHTNING else SyncNodeVariant.BITCOIN
     val shouldShowSyncOverlay = run {
         if (preparingRequest != null || sendUiState.paykitUsesUsdt) return@run false
         if (sendUiState.hardwareWalletId != null) return@run false
         if (!lightningState.nodeLifecycleState.isRunning()) return@run true
-        val hasAnyChannels = lightningState.channels.isNotEmpty()
         hasAnyChannels && lightningState.channels.none { it.isUsable }
     }
 
@@ -396,6 +399,7 @@ fun SendSheet(
                             lightningState.nodeLifecycleState
                         },
                         canGoBack = startDestination != SendRoute.Amount || uiState.isPaymentRequest,
+                        syncNodeVariant = syncNodeVariant,
                         onBack = {
                             if (!navController.popBackStack()) {
                                 appViewModel.hideSheet()
@@ -481,6 +485,7 @@ fun SendSheet(
                         isNodeRunning = uiState.hardwareWalletId != null ||
                             lightningState.nodeLifecycleState.isRunning(),
                         canAutoStart = !isOffline && !shouldShowSyncOverlay,
+                        syncNodeVariant = syncNodeVariant,
                         canGoBack = navController.previousBackStackEntry != null,
                         onBack = {
                             val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
@@ -845,12 +850,20 @@ fun SendSheet(
             enter = fadeIn(),
             exit = fadeOut(),
         ) {
-            SyncNodeView(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .gradientBackground()
                     .navigationBarsPadding()
-            )
+            ) {
+                SheetTopBar(titleText = stringResource(R.string.wallet__send_bitcoin))
+                SyncNodeView(
+                    variant = syncNodeVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                )
+            }
         }
     }
 }

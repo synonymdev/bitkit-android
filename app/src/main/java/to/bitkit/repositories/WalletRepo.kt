@@ -286,7 +286,6 @@ class WalletRepo @Inject constructor(
     ) {
         runSuspendCatching {
             lightningRepo.syncState()
-            lightningRepo.updateGeoBlockState()
             refreshBip21Locked().getOrThrow()
         }.onFailure {
             _walletState.update { state -> state.copy(hasReceiveInvoiceError = true) }
@@ -306,7 +305,6 @@ class WalletRepo @Inject constructor(
         return updateReceiveState {
             runSuspendCatching {
                 lightningRepo.syncState()
-                lightningRepo.updateGeoBlockState()
                 refreshAddressForInvoice().getOrThrow()
                 updateBip21InvoiceLocked(state.bip21AmountSats, state.bip21Description).getOrThrow()
             }.onFailure {
