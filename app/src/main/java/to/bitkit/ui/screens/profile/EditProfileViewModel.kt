@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyContactError
@@ -356,12 +357,17 @@ class EditProfileViewModel @Inject constructor(
     }
 
     private suspend fun showRemovalError(error: Throwable) {
-        if (error == PubkyContactError.ActiveSubscription) {
+        if (error is PubkyContactError.ActiveProfileSubscriptions || error == PubkyContactError.ActiveSubscription) {
             _uiState.update { it.copy(canDisconnectLocally = true) }
             ToastEventBus.send(
                 Toast.ToastType.ERROR,
                 context.getString(R.string.profile__delete_error_title),
-                context.getString(R.string.profile__delete_active_subscription),
+                listOfNotNull(
+                    context.getString(R.string.profile__delete_active_subscription),
+                    (error as? PubkyContactError.ActiveProfileSubscriptions)?.endsAtMillis?.let {
+                        context.getString(R.string.subscriptions__expires_date, it.toLocalizedTimestamp())
+                    },
+                ).joinToString("\n"),
             )
         } else {
             ToastEventBus.send(

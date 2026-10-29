@@ -90,6 +90,7 @@ sealed class PubkyContactError(message: String) : AppError(message) {
     data object CannotAddSelf : PubkyContactError("Cannot add your own pubky as a contact")
     data object InvalidFormat : PubkyContactError("Invalid pubky key format")
     data object ActiveSubscription : PubkyContactError("Contact has an active subscription")
+    class ActiveProfileSubscriptions(val endsAtMillis: Long?) : PubkyContactError("Profile has active subscriptions")
     data object SignInChanged : PubkyContactError("Pubky sign-in changed while saving the contact")
 }
 
@@ -494,7 +495,13 @@ class PubkyRepo @Inject constructor(
     private suspend fun restoreSessionIfNeededAdmitted() = withContext(ioDispatcher) {
         awaitInitialization()
         val restored = restoreSession()
-        if (restored) loadIdentityData()
+        if (restored) {
+            loadIdentityData()
+        } else {
+            currentSignIn()?.takeIf { _profile.value == null }?.let { signIn ->
+                scope.launch { loadProfile(signIn, onlyIfMissing = true) }
+            }
+        }
         restored
     }
 
@@ -940,9 +947,14 @@ class PubkyRepo @Inject constructor(
 
     suspend fun loadProfile() {
         val signIn = currentSignIn() ?: return loadReadOnlyProfile()
+        loadProfile(signIn)
+    }
+
+    private suspend fun loadProfile(signIn: PubkySignIn, onlyIfMissing: Boolean = false) {
         val version = completedProfileLoadVersion.get()
         loadProfileMutex.withLock {
             if (!isCurrent(signIn)) return
+            if (onlyIfMissing && _profile.value != null) return
             val writeGeneration = profileWriteGeneration.get()
             if (completedProfileLoadVersion.get() != version && completedProfileSignInGeneration == signIn.generation &&
                 completedProfileWriteGeneration == writeGeneration
@@ -1239,6 +1251,9 @@ class PubkyRepo @Inject constructor(
             }
             PubkyProfileDeletion(owner, revision, snapshot)
         }.recoverCatching {
+            generateSequence(it) { error -> error.cause }
+                .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
+                .firstOrNull()?.let { error -> throw error }
             if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
             throw it
         }
@@ -1249,6 +1264,9 @@ class PubkyRepo @Inject constructor(
             "Profile changed; review it before removing it"
         }
         runSuspendCatching { pubkyService.validateProfileDeletion(deletion.snapshot) }.recoverCatching {
+            generateSequence(it) { error -> error.cause }
+                .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
+                .firstOrNull()?.let { error -> throw error }
             if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
             throw it
         }.getOrThrow()
@@ -1262,6 +1280,9 @@ class PubkyRepo @Inject constructor(
         pubkyService.deletePaykitProfile(deletion.snapshot)
         profileWriteGeneration.incrementAndGet()
     }.recoverCatching {
+        generateSequence(it) { error -> error.cause }
+            .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
+            .firstOrNull()?.let { error -> throw error }
         if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
         throw it
     }

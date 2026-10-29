@@ -1780,6 +1780,43 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `active subscription is preserved through service wrappers before profile cleanup`() = test {
+        authenticateForTesting()
+        val expected = PubkyContactError.ActiveProfileSubscriptions(1_800_000_000_000L)
+        val wrapped = IllegalStateException("Service operation failed", expected)
+        whenever(pubkyService.captureProfileDeletion(any(), any())).thenAnswer { throw wrapped }
+        clearInvocations(pubkyStore, pubkyService)
+
+        assertSame(expected, sut.prepareProfileDeletion(sut.profileOwner()).exceptionOrNull())
+        assertSame(expected, sut.deleteProfile().exceptionOrNull())
+
+        verify(pubkyService, never()).contactRecords()
+        verify(pubkyService, never()).removeContactsForProfile(any())
+        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).signOut()
+        verify(pubkyStore, never()).update(any())
+    }
+
+    @Test
+    fun `late subscription rejection retains contacts and credentials`() = test {
+        authenticateForTesting()
+        val records = listOf(createContactRecord(VALID_CONTACT_KEY_A, label = "Retained"))
+        whenever(pubkyService.contactRecords()).thenReturn(records)
+        sut.loadContacts()
+        val expected = PubkyContactError.ActiveProfileSubscriptions(1_800_000_000_000L)
+        val wrapped = IllegalStateException("Service operation failed", expected)
+        whenever(pubkyService.removeContactsForProfile(any())).thenAnswer { throw wrapped }
+        clearInvocations(pubkyStore)
+
+        assertSame(expected, sut.deleteProfile().exceptionOrNull())
+
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+        verify(pubkyStore, never()).update(any())
+        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).signOut()
+    }
+
+    @Test
     fun `partial contact cleanup preserves retained contacts and stops profile deletion`() = test {
         authenticateForTesting()
         val records = listOf(
@@ -2983,6 +3020,74 @@ class PubkyRepoTest : BaseUnitTest() {
         verify(pubkyService, never()).importSession(any())
         withTimeout(1.seconds) { refreshed.await() }
         verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+    }
+
+    @Test
+    fun `active identity retries its missing profile on reconnect without delaying wallet maintenance`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenAnswer {
+            throw PaykitException.Transport("transport_error", "offline")
+        }
+        assertTrue(sut.restoreSessionIfNeeded())
+        val originalSignIn = assertNotNull(sut.currentSignIn())
+        assertNull(sut.profile.value)
+
+        val response = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            response.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Restored"))
+        }.whenever(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+        clearInvocations(pubkyService)
+        try {
+            repeat(3) { assertFalse(sut.restoreSessionIfNeeded()) }
+            yield()
+            runCurrent()
+            assertTrue(sut.isCurrent(originalSignIn))
+            verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+            assertTrue(sut.isLoadingProfile.value)
+            verify(pubkyService, never()).importSession(any())
+        } finally {
+            response.complete(Unit)
+        }
+        yield()
+        advanceUntilIdle()
+        assertEquals("Restored", sut.profile.value?.name)
+        assertFalse(sut.restoreSessionIfNeeded())
+        advanceUntilIdle()
+        verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+    }
+
+    @Test
+    fun `reconnect profile result cannot restore an ended identity`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenAnswer {
+            throw PaykitException.Transport("transport_error", "offline")
+        }
+        assertTrue(sut.restoreSessionIfNeeded())
+        val response = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            response.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Old"))
+        }.whenever(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+
+        try {
+            assertFalse(sut.restoreSessionIfNeeded())
+            yield()
+            runCurrent()
+            verify(pubkyService, times(3)).resolveContactProfile(VALID_SELF_KEY, true)
+            assertTrue(sut.isLoadingProfile.value)
+            sut.restoreSessionBackupState(null).getOrThrow()
+            assertNull(sut.currentSignIn())
+        } finally {
+            response.complete(Unit)
+        }
+        yield()
+        advanceUntilIdle()
+        assertNull(sut.profile.value)
     }
 
     @Test

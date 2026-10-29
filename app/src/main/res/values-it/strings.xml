@@ -1326,7 +1326,7 @@
     <string name="profile__choice_loading_profile">Caricamento del profilo…</string>
     <string name="profile__choice_title">Entra nel\n&lt;accent&gt;web della libertà&lt;/accent&gt;</string>
     <string name="profile__create_error">Impossibile creare il profilo</string>
-    <string name="profile__delete_active_subscription">Termina gli abbonamenti attivi prima di rimuovere questo profilo.</string>
+    <string name="profile__delete_active_subscription">Gli abbonamenti attivi impediscono la rimozione di questo profilo.</string>
     <string name="profile__delete_confirm_description">Eliminando il profilo lo rimuovi da Pubky. I contatti potrebbero conservare le informazioni di profilo e di pagamento condivise in precedenza con loro.</string>
     <string name="profile__delete_confirm_title">Eliminare il Profilo?</string>
     <string name="profile__delete_error_description">Non è stato possibile eliminare i dati del tuo profilo. Riprova, oppure disconnetti questo pubky da Bitkit.</string>

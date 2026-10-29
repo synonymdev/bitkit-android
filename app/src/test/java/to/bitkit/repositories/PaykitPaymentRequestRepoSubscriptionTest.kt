@@ -21,6 +21,7 @@ import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
+import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -53,6 +54,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
+import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.subscriptions.subscriptionPayments
@@ -125,6 +127,11 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         }
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers(any())).doSuspendableAnswer {
             paykitSdkService.receivePrivateMessagesFromLinkedPeers()
+        }
+        whenever(paykitSdkService.receiveAndObserveState(any(), any())).doSuspendableAnswer {
+            val reports = paykitSdkService.receivePrivateMessagesFromLinkedPeers(Priority.Background)
+            it.getArgument<(List<PrivateStreamCounterpartyIntakeReport>) -> Unit>(1)(reports)
+            paykitSdkService.observeState(it.getArgument(0), Priority.Background)
         }
         stubRequestReads()
         whenever(paykitSdkService.processOutboundPrivateMessages(any(), any())).doSuspendableAnswer {

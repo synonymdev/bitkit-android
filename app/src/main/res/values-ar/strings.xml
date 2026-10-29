@@ -1301,7 +1301,7 @@
     <string name="profile__choice_loading_profile">جارٍ تحميل ملفك الشخصي…</string>
     <string name="profile__choice_title">ادخل إلى\n&lt;accent&gt;ويب الحرية&lt;/accent&gt;</string>
     <string name="profile__create_error">فشل إنشاء الملف الشخصي</string>
-    <string name="profile__delete_active_subscription">أنه الاشتراكات النشطة قبل إزالة هذا الملف الشخصي.</string>
+    <string name="profile__delete_active_subscription">تمنع الاشتراكات النشطة إزالة هذا الملف الشخصي.</string>
     <string name="profile__delete_confirm_description">يؤدي حذف ملفك الشخصي إلى إزالته من Pubky. قد تحتفظ جهات الاتصال بمعلومات الملف الشخصي والدفع التي شاركتها معهم سابقًا.</string>
     <string name="profile__delete_confirm_title">حذف الملف الشخصي؟</string>
     <string name="profile__delete_error_description">تعذر علينا حذف بيانات ملفك الشخصي. أعد المحاولة، أو افصل هذا الـ pubky عن Bitkit.</string>

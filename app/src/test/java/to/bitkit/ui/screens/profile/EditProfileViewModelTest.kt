@@ -21,6 +21,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
@@ -31,6 +32,7 @@ import to.bitkit.repositories.PubkySignIn
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
+import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -44,6 +46,38 @@ class EditProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val fixture = ProfileRemovalUiFixture(pubkyRepo)
+
+    @Test
+    fun `fixed term refusal preserves expiry and offers only fresh local confirmation`() = test {
+        val previousLocale = Locale.getDefault()
+        Locale.setDefault(Locale.US)
+        try {
+            val sut = createSut()
+            val endsAt = 1_800_000_000_000L
+            whenever(pubkyRepo.prepareProfileDeletion(fixture.original))
+                .thenReturn(Result.failure(PubkyContactError.ActiveProfileSubscriptions(endsAt)))
+            advanceUntilIdle()
+            ToastEventBus.events.test {
+                sut.showDeleteConfirmation()
+                advanceUntilIdle()
+                awaitItem()
+            }
+            verify(context).getString(R.string.subscriptions__expires_date, endsAt.toLocalizedTimestamp())
+            assertFalse(sut.uiState.value.showDeleteDialog)
+            assertFalse(sut.uiState.value.showDeleteFailureDialog)
+            assertTrue(sut.uiState.value.canDisconnectLocally)
+            assertNull(fixture.store.pendingAttempt())
+            verify(fixture.privateRepo, never()).withProfileDeletionPaused<Unit>(any())
+            verify(pubkyRepo, never()).deleteProfile(any())
+            sut.showLocalDisconnectConfirmation()
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.showDeleteDialog)
+            assertTrue(sut.uiState.value.isLocalDisconnect)
+            assertNull(fixture.store.pendingAttempt())
+        } finally {
+            Locale.setDefault(previousLocale)
+        }
+    }
 
     @Test
     fun `active subscriptions refuse confirmation without starting cleanup`() = test {

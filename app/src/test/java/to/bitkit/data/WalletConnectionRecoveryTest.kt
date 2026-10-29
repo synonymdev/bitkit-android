@@ -164,6 +164,20 @@ class WalletConnectionRecoveryTest : BaseUnitTest() {
     }
 
     @Test
+    fun `queued wallet generation is revoked during same seed replacement`() = test {
+        val original = sut.currentGeneration()
+        assertTrue(sut.isCurrentGeneration(original))
+
+        sut.withIdentityChange {
+            assertFalse(sut.isCurrentGeneration(original))
+            assertNull(sut.currentGeneration())
+        }
+
+        assertFalse(sut.isCurrentGeneration(original))
+        assertTrue(sut.isCurrentGeneration(sut.currentGeneration()))
+    }
+
+    @Test
     fun `new instance preserves selected fields through remote restore without changing unrelated settings`() = test {
         sut.withOperation(sut.captureOwner()) { it.save(electrum = "ssl://chosen.example:50002") }
         val restarted = instance()
