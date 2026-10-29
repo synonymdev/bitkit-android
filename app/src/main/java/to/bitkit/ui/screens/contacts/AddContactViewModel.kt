@@ -7,6 +7,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +54,8 @@ class AddContactViewModel @Inject constructor(
     private val _effects = MutableSharedFlow<AddContactEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
+    private var profileJob: Job? = null
+
     init {
         fetchProfile(publicKey)
     }
@@ -60,10 +65,12 @@ class AddContactViewModel @Inject constructor(
     }
 
     fun fetchProfile(publicKey: String) {
-        viewModelScope.launch {
+        profileJob?.cancel()
+        profileJob = viewModelScope.launch {
             _uiState.update {
                 it.copy(
                     isLoading = true,
+                    fetchedProfile = null,
                     error = null,
                     publicKeyInput = publicKey,
                     hasPublicPaymentEndpoint = false,
@@ -71,16 +78,19 @@ class AddContactViewModel @Inject constructor(
             }
             pubkyRepo.fetchContactProfile(publicKey)
                 .onSuccess { profile ->
-                    val hasEndpoint = loadPaymentEndpoint(profile.publicKey)
+                    currentCoroutineContext().ensureActive()
                     _uiState.update {
                         it.copy(
                             fetchedProfile = profile,
-                            hasPublicPaymentEndpoint = hasEndpoint,
                             isLoading = false,
                         )
                     }
+                    val hasEndpoint = loadPaymentEndpoint(profile.publicKey)
+                    currentCoroutineContext().ensureActive()
+                    _uiState.update { it.copy(hasPublicPaymentEndpoint = hasEndpoint) }
                 }
                 .onFailure { error ->
+                    currentCoroutineContext().ensureActive()
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
@@ -156,9 +166,10 @@ class AddContactViewModel @Inject constructor(
     }
 
     fun saveContact() {
+        if (_uiState.value.isLoading) return
         val profile = _uiState.value.fetchedProfile ?: return
+        _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
             pubkyRepo.addContact(profile.publicKey, profile)
                 .onSuccess {
                     refreshContactPaykitLink(profile.publicKey)
