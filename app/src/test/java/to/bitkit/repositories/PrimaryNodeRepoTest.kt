@@ -17,8 +17,8 @@ class PrimaryNodeRepoTest {
         val plan = primaryFundingPlan(spendableSats = 50_000uL, inputs = 1uL, feeRate = 2uL, hasChannel = true)
 
         requireNotNull(plan)
-        assertEquals(1_200uL, plan.feeSats)
-        assertEquals(48_800uL, plan.amountSats)
+        assertEquals(540uL, plan.feeSats)
+        assertEquals(49_460uL, plan.amountSats)
         assertFalse(plan.opensChannel)
         assertTrue(plan.isAutomatic)
     }
@@ -33,7 +33,7 @@ class PrimaryNodeRepoTest {
     @Test
     fun `automatic funding waits below the minimum or above the fee limit`() {
         val small = primaryFundingPlan(spendableSats = 24_999uL, inputs = 1uL, feeRate = 1uL, hasChannel = true)
-        val expensive = primaryFundingPlan(spendableSats = 30_000uL, inputs = 1uL, feeRate = 3uL, hasChannel = true)
+        val expensive = primaryFundingPlan(spendableSats = 30_000uL, inputs = 1uL, feeRate = 6uL, hasChannel = true)
 
         assertFalse(requireNotNull(small).isAutomatic)
         assertFalse(requireNotNull(expensive).isAutomatic)
@@ -42,7 +42,7 @@ class PrimaryNodeRepoTest {
     @Test
     fun `funding plan is empty when nothing can be moved`() {
         assertNull(primaryFundingPlan(spendableSats = 0uL, inputs = 0uL, feeRate = 1uL, hasChannel = true))
-        assertNull(primaryFundingPlan(spendableSats = 500uL, inputs = 1uL, feeRate = 1uL, hasChannel = true))
+        assertNull(primaryFundingPlan(spendableSats = 200uL, inputs = 1uL, feeRate = 1uL, hasChannel = true))
     }
 
     @Test
@@ -51,8 +51,8 @@ class PrimaryNodeRepoTest {
             primaryFundingPlan(spendableSats = 50_000uL, inputs = 0uL, feeRate = 2uL, hasChannel = true)
         )
 
-        assertEquals(1_200uL, plan.feeSats)
-        assertEquals(48_800uL, plan.amountSats)
+        assertEquals(540uL, plan.feeSats)
+        assertEquals(49_460uL, plan.amountSats)
     }
 
     @Test

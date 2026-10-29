@@ -12,8 +12,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PrimaryReceiveQuote
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -51,11 +54,14 @@ class PrimaryNodeRepo @Inject constructor(
         /** Automatic funding waits while its mining fee is above this share of the amount moved. */
         const val MAX_FUNDING_FEE_PERCENT = 5uL
 
-        /** Virtual size of a splice or channel funding before its inputs, for fee estimates. */
-        const val FUNDING_BASE_VBYTES = 300uL
+        /**
+         * Virtual size of a splice before its wallet inputs, for fee estimates: the channel's shared input and
+         * output plus one more output, with a margin over the 180 vB a splice-out to one address takes.
+         */
+        const val FUNDING_BASE_VBYTES = 200uL
 
-        /** Virtual size each wallet input adds to a funding transaction. */
-        const val FUNDING_INPUT_VBYTES = 300uL
+        /** Virtual size each wallet input adds to a funding transaction, with a margin, change included. */
+        const val FUNDING_INPUT_VBYTES = 70uL
 
         /** How long a splice may take to reach its pending funding transaction. */
         private val SPLICE_TIMEOUT = 60.seconds
@@ -162,6 +168,7 @@ class PrimaryNodeRepo @Inject constructor(
         if (settingsStore.data.first().primaryFundingPaused) return@withContext Result.success(Unit)
         if (!operationMutex.tryLock()) return@withContext Result.success(Unit)
         try {
+            if (hasUnconfirmedDeposit()) return@withContext Result.success(Unit)
             val plan = fundingPlan().getOrElse { return@withContext Result.failure(it) }
                 ?: return@withContext Result.success(Unit)
             if (!plan.isAutomatic) return@withContext Result.success(Unit)
@@ -170,6 +177,12 @@ class PrimaryNodeRepo @Inject constructor(
         } finally {
             operationMutex.unlock()
         }
+    }
+
+    private suspend fun hasUnconfirmedDeposit(): Boolean = lightningRepo.getPayments().getOrDefault(emptyList()).any {
+        val kind = it.kind
+        it.direction == PaymentDirection.INBOUND && kind is PaymentKind.Onchain &&
+            kind.status is ConfirmationStatus.Unconfirmed
     }
 
     /** Transfer to Spending: moves the planned savings now, below the automatic fee limit too, and resumes funding. */
@@ -186,15 +199,18 @@ class PrimaryNodeRepo @Inject constructor(
     /** Fee for paying [amountSats] on-chain out of the primary channel, or null when the channel can't cover it. */
     fun spliceOutFee(amountSats: ULong, feeRate: ULong): ULong? {
         val channel = primaryChannel()?.takeIf { it.isUsable } ?: return null
-        val fee = feeRate * FUNDING_BASE_VBYTES
+        val fee = spliceOutFeeAt(feeRate)
         return fee.takeIf { USat(amountSats) + USat(it) <= channel.outboundCapacityMsat / 1000uL }
     }
 
     /** The most a single on-chain payment can take out of the primary channel at [feeRate]. */
     fun maxSpliceOutSats(feeRate: ULong): ULong {
         val channel = primaryChannel()?.takeIf { it.isUsable } ?: return 0uL
-        return USat(channel.outboundCapacityMsat / 1000uL) - USat(feeRate * FUNDING_BASE_VBYTES)
+        return USat(channel.outboundCapacityMsat / 1000uL) - USat(spliceOutFeeAt(feeRate))
     }
+
+    /** Estimated fee of a splice-out paying one address at [feeRate] sat/vB. */
+    fun spliceOutFeeAt(feeRate: ULong): ULong = feeRate * FUNDING_BASE_VBYTES
 
     /** Pays [amountSats] to [address] from the primary channel by splicing it out; returns the splice txid. */
     suspend fun sendOnchain(address: String, amountSats: ULong, feeRate: ULong): Result<String> =

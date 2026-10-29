@@ -27,6 +27,7 @@ import com.synonym.bitkitcore.LnurlChannelData
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
+import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.SortDirection
@@ -108,6 +109,7 @@ import to.bitkit.ext.amountSats
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.channelId
 import to.bitkit.ext.claimableAtHeight
+import to.bitkit.ext.create
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.isFixedAmount
@@ -117,6 +119,7 @@ import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.minWithdrawableSat
 import to.bitkit.ext.nowMillis
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.runSuspendCatching
@@ -235,6 +238,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PubkyService
+import to.bitkit.services.withConfirmation
 import to.bitkit.ui.ID_NOTIFICATION_SKIPPED
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AllowanceRoute
@@ -381,7 +385,7 @@ class AppViewModel @Inject constructor(
         requireCurrentPaymentPreparation(walletGeneration)
         lightningRepo.waitForUsableChannels()
         requireCurrentPaymentPreparation(walletGeneration)
-        walletRepo.refreshMaxSendLightning()
+        lightningRepo.refreshChannelsAndPeers(onRefreshed = walletRepo::refreshMaxSendLightning)
         requireCurrentPaymentPreparation(walletGeneration)
     }
 
@@ -2376,6 +2380,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleChannelReady(event: Event.ChannelReady) {
+        event.fundingTxo?.txid?.let { confirmPrimaryChannelSend(it) }
         refreshPaykitEndpointsAfterChannelAvailabilityChanged("channel ready")
         notifyChannelReady(event)
         delay(PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS)
@@ -6877,6 +6882,7 @@ class AppViewModel @Inject constructor(
                 return Result.failure(it)
             }
             return primaryNodeRepo.sendOnchain(address, amount, feeRate).map { txid ->
+                addPrimaryChannelSendActivity(txid, address, amount, primaryNodeRepo.spliceOutFeeAt(feeRate))
                 onBroadcast(txid)
                 OnchainSendOutcome.Accepted(txid, amount)
             }
@@ -6891,6 +6897,33 @@ class AppViewModel @Inject constructor(
             paymentDeadlineAt = paymentDeadlineAt,
             beforeSendAttempt = beforeSendAttempt,
             onBroadcast = onBroadcast,
+        )
+    }
+
+    private suspend fun addPrimaryChannelSendActivity(txid: String, address: String, amount: ULong, fee: ULong) {
+        val now = nowTimestamp().epochSecond.toULong()
+        activityRepo.upsertActivity(
+            Activity.Onchain(
+                OnchainActivity.create(
+                    id = txid,
+                    txType = PaymentType.SENT,
+                    txId = txid,
+                    value = amount,
+                    fee = fee,
+                    address = address,
+                    timestamp = now,
+                )
+            )
+        )
+    }
+
+    private suspend fun confirmPrimaryChannelSend(fundingTxid: String) {
+        val activity = activityRepo.getOnchainActivityByTxId(fundingTxid)?.takeIf {
+            !it.confirmed && it.txType == PaymentType.SENT
+        } ?: return
+        val now = nowTimestamp().epochSecond.toULong()
+        activityRepo.upsertActivity(
+            Activity.Onchain(activity.withConfirmation(isConfirmed = true, confirmTimestamp = now))
         )
     }
 
