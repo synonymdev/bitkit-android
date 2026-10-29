@@ -1450,7 +1450,9 @@ class LightningRepo @Inject constructor(
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
         if (shouldPayWithSpark(bolt11, sats)) {
+            runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
             if (!onBeforeSend()) return Result.failure(PaymentAbortedBeforeSend())
+            runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
             return sparkRepo.payInvoice(bolt11, sats)
         }
         return payInvoiceWithLdk(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, onBeforeSend)

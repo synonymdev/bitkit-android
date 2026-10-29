@@ -1103,6 +1103,37 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending wallet recovery prevents spark payment dispatch`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        var beforeSend = false
+
+        val result = sut.payInvoice("invoice", 1_000uL, onBeforeSend = {
+            beforeSend = true
+            true
+        })
+
+        assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
+        assertFalse(beforeSend)
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull())
+    }
+
+    @Test
+    fun `restore beginning during spark payment authorization prevents dispatch`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        val result = sut.payInvoice("invoice", 1_000uL, onBeforeSend = {
+            whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+            true
+        })
+
+        assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull())
+    }
+
+    @Test
     fun `restore beginning during payment authorization prevents dispatch`() = test {
         startNodeForTesting()
         val result = sut.payInvoice("invoice", null, onBeforeSend = {
