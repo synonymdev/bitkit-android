@@ -122,9 +122,14 @@ class PaykitSdkServiceTest {
             { receivePrivateMessagesFromLinkedPeers(it) },
             { processPendingPrivateMessages(it) },
             { observeState(RING_PUBKY, it) },
+            { identityStatus(it) },
+            { linkedPeers(it) },
+            { privateMessageSchedulingSnapshot(it) },
+            { hasPrivatePaymentAccess(it) },
+            { allPaymentRequests(null, it) },
         )
         for ((index, operation) in operations.withIndex()) {
-            for (queued in if (index == 2) listOf(true) else listOf(true, false)) {
+            for (queued in if (index >= 2) listOf(true) else listOf(true, false)) {
                 val sdk = mock<PaykitSdk>()
                 val release = CompletableDeferred<Unit>()
                 var reached = false
@@ -161,6 +166,22 @@ class PaykitSdkServiceTest {
                         emptyList(),
                     )
                 }
+                whenever(sdk.identityStatus()).thenAnswer {
+                    nativeCalls++
+                    null
+                }
+                whenever(sdk.linkedPeers()).thenAnswer {
+                    nativeCalls++
+                    emptyList<LinkedPeerRecord>()
+                }
+                whenever(sdk.privateMessageSchedulingSnapshot()).thenAnswer {
+                    nativeCalls++
+                    PrivateMessageSchedulingSnapshot(emptyList(), emptyList())
+                }
+                whenever(sdk.listPaymentRequests(any())).thenAnswer {
+                    nativeCalls++
+                    emptyList<PaymentRequestRecord>()
+                }
                 val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
                 val holder = if (queued) async { service.contactRecords() } else null
                 runCurrent()
@@ -179,7 +200,61 @@ class PaykitSdkServiceTest {
                 service.setPaymentSubmissionActive(false)
                 service.operation(Priority.Background)
                 assertEquals(2, nativeCalls)
+                service.setPaymentSubmissionActive(true)
+                service.operation(Priority.Interactive)
+                assertEquals(3, nativeCalls)
             }
+        }
+    }
+
+    @Test
+    fun `automatic publication yields before mutation while explicit publication and cleanup proceed`() = runTest {
+        for (queued in listOf(true, false)) {
+            val sdk = mock<PaykitSdk>()
+            val reached = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            whenever(sdk.contactRecords()).doSuspendableAnswer {
+                reached.complete(Unit)
+                release.await()
+                emptyList()
+            }
+            whenever(sdk.backupStateRevision()).doSuspendableAnswer {
+                if (!queued) {
+                    reached.complete(Unit)
+                    release.await()
+                }
+                "revision"
+            }
+            val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList())
+            whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).thenReturn(report)
+            val updates = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, listOf(mock())))
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val holder = if (queued) async { service.contactRecords() } else null
+            val publication = async {
+                runSuspendCatching { service.syncPrivatePaymentListsWithReservations(updates, false, true) }
+            }
+            reached.await()
+            if (queued) {
+                val cancelled = async {
+                    service.syncPrivatePaymentListsWithReservations(updates, false, true)
+                }
+                runCurrent()
+                cancelled.cancel()
+                assertFailsWith<CancellationException> { cancelled.await() }
+            }
+            service.setPaymentSubmissionActive(true)
+            release.complete(Unit)
+            holder?.await()
+
+            assertSame(PaykitPaymentRequestError.OperationInProgress, publication.await().exceptionOrNull())
+            verify(sdk, never()).syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())
+            assertEquals(0L, service.backupStateVersion.value)
+            assertSame(report, service.syncPrivatePaymentListsWithReservations(updates, false))
+            val cleanup = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, emptyList()))
+            assertSame(report, service.syncPrivatePaymentListsWithReservations(cleanup, false, true))
+            service.setPaymentSubmissionActive(false)
+            assertSame(report, service.syncPrivatePaymentListsWithReservations(updates, false, true))
+            verify(sdk, times(2)).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)
         }
     }
 
@@ -202,6 +277,11 @@ class PaykitSdkServiceTest {
             { receivePrivateMessagesFromLinkedPeers(Priority.Background) },
             { processPendingPrivateMessages(Priority.Background) },
             { observeState(RING_PUBKY) },
+            { identityStatus(Priority.Background) },
+            { linkedPeers(Priority.Background) },
+            { privateMessageSchedulingSnapshot(Priority.Background) },
+            { hasPrivatePaymentAccess(Priority.Background) },
+            { allPaymentRequests(null, Priority.Background) },
         )
         for (operation in operations) {
             assertSame(
@@ -438,6 +518,145 @@ class PaykitSdkServiceTest {
             assertEquals(report, removal.await())
             assertEquals(listOf("publication started", "publication finished", "removed"), events)
         }
+    }
+
+    @Test
+    fun `inbox observation precedes queued maintenance and accounts only for receive`() = runTest {
+        for (changed in listOf(false, true)) {
+            for (observeFails in listOf(false, true)) {
+                val sdk = mock<PaykitSdk>()
+                val release = CompletableDeferred<Unit>()
+                val calls = mutableListOf<String>()
+                var revision = "before"
+                whenever(sdk.backupStateRevision()).thenAnswer { revision }
+                whenever(sdk.receivePrivateMessagesFromLinkedPeers()).doSuspendableAnswer {
+                    calls += "receive"
+                    release.await()
+                    if (changed) revision = "after"
+                    emptyList()
+                }
+                whenever(sdk.observeState()).thenAnswer {
+                    calls += "observe"
+                    if (observeFails) throw PaykitException.SharedStateBusy("shared_state_busy", "Locked")
+                    PaykitStateObservation(RING_PUBKY, 1uL, "now", emptyList(), emptyList(), emptyList(), emptyList())
+                }
+                whenever(sdk.processPendingPrivateMessages()).thenAnswer {
+                    calls += "maintenance"
+                    emptyList<OutboundPrivateCounterpartySendReport>()
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val refresh = async {
+                    runSuspendCatching {
+                        service.receiveAndObserveState(RING_PUBKY) {
+                            calls += "received"
+                            assertEquals(if (changed) 1L else 0L, service.backupStateVersion.value)
+                        }
+                    }
+                }
+                runCurrent()
+                val maintenance = async { service.processPendingPrivateMessages(Priority.Background) }
+                runCurrent()
+                assertEquals(listOf("receive"), calls)
+                release.complete(Unit)
+                val result = refresh.await()
+                maintenance.await()
+
+                assertEquals(observeFails, result.isFailure)
+                assertEquals(listOf("receive", "received", "observe", "maintenance"), calls)
+                assertEquals(if (changed) 1L else 0L, service.backupStateVersion.value)
+                verify(sdk).receivePrivateMessagesFromLinkedPeers()
+                verify(sdk).observeState()
+            }
+        }
+    }
+
+    @Test
+    fun `inbox observation yields after receive to payment review cancellation and wipe`() = runTest {
+        for (boundary in listOf("payment", "review", "cancellation", "wipe")) {
+            val sdk = mock<PaykitSdk>()
+            val release = CompletableDeferred<Unit>()
+            var revision = "before"
+            var reports = 0
+            whenever(sdk.backupStateRevision()).thenAnswer { revision }
+            whenever(sdk.receivePrivateMessagesFromLinkedPeers()).doSuspendableAnswer {
+                release.await()
+                revision = "after"
+                emptyList()
+            }
+            whenever(sdk.contactRecords()).thenReturn(emptyList())
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val refresh = async { runSuspendCatching { service.receiveAndObserveState(RING_PUBKY) { reports++ } } }
+            runCurrent()
+            val endReview = if (boundary == "review") service.beginPaymentReview() else null
+            if (boundary == "payment") service.setPaymentSubmissionActive(true)
+            if (boundary == "cancellation") refresh.cancel()
+            val wipe = if (boundary == "wipe") async { service.withWalletWipe {} } else null
+            val authority = if (wipe == null) async { service.contactRecords() } else null
+            runCurrent()
+            assertEquals(0L, service.backupStateVersion.value)
+            verify(sdk, never()).contactRecords()
+            release.complete(Unit)
+
+            if (boundary == "cancellation") {
+                assertFailsWith<CancellationException> { refresh.await() }
+            } else {
+                val failure = refresh.await().exceptionOrNull()
+                if (boundary == "wipe") {
+                    assertIs<PaykitException.Storage>(failure)
+                } else {
+                    assertSame(PaykitPaymentRequestError.OperationInProgress, failure)
+                }
+            }
+            wipe?.await()
+            authority?.await()
+            assertEquals(if (boundary == "cancellation") 0 else 1, reports)
+            assertEquals(1L, service.backupStateVersion.value)
+            verify(sdk).receivePrivateMessagesFromLinkedPeers()
+            verify(sdk, never()).observeState()
+            endReview?.invoke()
+            service.setPaymentSubmissionActive(false)
+        }
+    }
+
+    @Test
+    fun `inbox receive failure dirties backup once and never observes or replays`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.backupStateRevision()).thenReturn("before")
+        val failure = PaykitException.SharedStateBusy("shared_state_busy", "Locked")
+        whenever(sdk.receivePrivateMessagesFromLinkedPeers()).thenThrow(failure)
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        var reports = 0
+
+        val result = runSuspendCatching { service.receiveAndObserveState(RING_PUBKY) { reports++ } }
+
+        assertSame(failure, result.exceptionOrNull())
+        assertEquals(0, reports)
+        assertEquals(1L, service.backupStateVersion.value)
+        verify(sdk).receivePrivateMessagesFromLinkedPeers()
+        verify(sdk, never()).observeState()
+    }
+
+    @Test
+    fun `queued inbox refresh rejects a replaced runtime before receiving`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val release = CompletableDeferred<Unit>()
+        whenever(sdk.contactRecords()).doSuspendableAnswer {
+            release.await()
+            emptyList()
+        }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val holder = async { service.contactRecords() }
+        runCurrent()
+        val reset = async { service.clearState() }
+        val refresh = async { runSuspendCatching { service.receiveAndObserveState(RING_PUBKY) {} } }
+        runCurrent()
+        release.complete(Unit)
+        holder.await()
+        reset.await()
+
+        assertIs<IllegalStateException>(refresh.await().exceptionOrNull())
+        verify(sdk, never()).receivePrivateMessagesFromLinkedPeers()
+        verify(sdk, never()).observeState()
     }
 
     @Test
@@ -1963,6 +2182,35 @@ class PaykitSdkServiceTest {
 
         assertEquals(listOf(server, bitkit), service.allPaymentRequests(RING_PUBKY))
         assertEquals(listOf(bitkit), service.paymentRequests())
+    }
+
+    @Test
+    fun `passive request reload defers after identity check without listing and releases its lock`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val checkingIdentity = CompletableDeferred<Unit>()
+        val releaseIdentity = CompletableDeferred<Unit>()
+        whenever(sdk.identityStatus()).doSuspendableAnswer {
+            checkingIdentity.complete(Unit)
+            releaseIdentity.await()
+            IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+        val records = listOf(mock<PaymentRequestRecord>())
+        whenever(sdk.listPaymentRequests(any())).thenReturn(records)
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val refresh = async {
+            runSuspendCatching { service.allPaymentRequests(RING_PUBKY, Priority.Background) }
+        }
+        checkingIdentity.await()
+        service.setPaymentSubmissionActive(true)
+        releaseIdentity.complete(Unit)
+
+        assertSame(PaykitPaymentRequestError.OperationInProgress, refresh.await().exceptionOrNull())
+        verify(sdk, never()).listPaymentRequests(any())
+        assertEquals(0L, service.backupStateVersion.value)
+        assertEquals(records, service.allPaymentRequests(RING_PUBKY))
+        service.setPaymentSubmissionActive(false)
+        assertEquals(records, service.allPaymentRequests(RING_PUBKY, Priority.Background))
+        verify(sdk, times(2)).listPaymentRequests(any())
     }
 
     @Test
