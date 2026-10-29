@@ -832,12 +832,12 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun syncPaykitApp(privatePaymentsEnabled: Boolean) = syncPaykitApp(privatePaymentsEnabled, Priority.Ordered)
 
-    internal suspend fun syncPaykitApp(privatePaymentsEnabled: Boolean, priority: Priority) {
+    internal suspend fun syncPaykitApp(privatePaymentsEnabled: Boolean?, priority: Priority) {
         syncPaykitApp(privatePaymentsEnabled, priority) { true }
     }
 
     internal suspend fun syncPaykitApp(
-        privatePaymentsEnabled: Boolean,
+        privatePaymentsEnabled: Boolean?,
         priority: Priority,
         canSync: suspend () -> Boolean,
     ): Boolean {
@@ -846,12 +846,13 @@ class PaykitSdkService @Inject constructor(
             withStateRevisionTracking { handle ->
                 if (!canSync()) return@withStateRevisionTracking false
                 val capabilities = appCapabilities(completeSdkCall { handle.identityStatus() })
+                val privateSharing = privatePaymentsEnabled ?: settingsStore.data.first().sharesPrivatePaykitEndpoints
                 if (!canSync()) return@withStateRevisionTracking false
                 completeSdkCall {
                     handle.publishPaykitApp(
                         displayName = "Bitkit",
                         capabilities = capabilities.copy(
-                            privatePayments = capabilities.privatePayments && privatePaymentsEnabled
+                            privatePayments = capabilities.privatePayments && privateSharing
                         ),
                     )
                 }

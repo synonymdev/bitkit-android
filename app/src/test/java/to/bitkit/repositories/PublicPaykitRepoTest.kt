@@ -5,6 +5,11 @@ import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
+import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.PaykitAppCapabilities
+import com.synonym.paykit.PaykitAppRegistry
+import com.synonym.paykit.PaykitSdk
+import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.PublicationStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -20,11 +25,13 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -105,14 +112,52 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `private capability follows sharing preference`() = test {
+    fun `implicit private capability is resolved by the SDK while explicit overrides are preserved`() = test {
         for (enabled in listOf(false, true)) {
             settingsFlow.value = settingsFlow.value.copy(sharesPrivatePaykitEndpoints = enabled)
             sut.syncPaykitApp().getOrThrow()
         }
-        val capabilities = argumentCaptor<Boolean>()
-        verifyBlocking(paykitSdkService, times(2)) { syncPaykitApp(capabilities.capture(), eq(Priority.Ordered)) }
-        assertEquals(listOf(false, true), capabilities.allValues)
+        verifyBlocking(paykitSdkService, times(2)) { syncPaykitApp(isNull(), eq(Priority.Ordered)) }
+        sut.syncPaykitApp(privateSharingEnabled = false).getOrThrow()
+        verifyBlocking(paykitSdkService) { syncPaykitApp(false, Priority.Ordered) }
+    }
+
+    @Test
+    fun `automatic registry refresh preserves a completed private sharing toggle`() = test {
+        val observed = mutableListOf<List<Boolean>>()
+        for (initiallyEnabled in listOf(false, true)) {
+            settingsFlow.value = settingsFlow.value.copy(sharesPrivatePaykitEndpoints = initiallyEnabled)
+            val sdk = mock<PaykitSdk>()
+            val published = mutableListOf<Boolean>()
+            whenever(sdk.identityStatus())
+                .thenReturn(IdentityStatus("pubkyself", PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+            whenever(sdk.publishPaykitApp(any(), any())).thenAnswer {
+                published += it.getArgument<PaykitAppCapabilities>(1).privatePayments
+                mock<PaykitAppRegistry>()
+            }
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = settingsStore) { sdk }
+            val repo = createRepo(paykitSdkService = service)
+            val validationEntered = CompletableDeferred<Unit>()
+            val resumeValidation = CompletableDeferred<Unit>()
+            var firstValidation = true
+            val refresh = async {
+                repo.syncPaykitApp(canSync = {
+                    if (firstValidation) {
+                        firstValidation = false
+                        validationEntered.complete(Unit)
+                        resumeValidation.await()
+                    }
+                    true
+                }).getOrThrow()
+            }
+            validationEntered.await()
+            settingsFlow.value = settingsFlow.value.copy(sharesPrivatePaykitEndpoints = !initiallyEnabled)
+            service.syncPaykitApp(privatePaymentsEnabled = !initiallyEnabled)
+            resumeValidation.complete(Unit)
+            refresh.await()
+            observed += published.toList()
+        }
+        assertEquals(listOf(listOf(true, true), listOf(false, false)), observed)
     }
 
     @Test
@@ -129,11 +174,11 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         val sharing = ContactPaymentSettingsRepo(settingsStore, sut, privateRepo, pubkyRepo, testDispatcher)
         var registryAvailable = false
-        whenever(paykitSdkService.syncPaykitApp(any(), any())).doSuspendableAnswer {
+        whenever(paykitSdkService.syncPaykitApp(anyOrNull(), any())).doSuspendableAnswer {
             if (!registryAvailable) throw AppError("registry unavailable")
             Unit
         }
-        whenever(paykitSdkService.syncPaykitApp(any(), any(), any())).doSuspendableAnswer {
+        whenever(paykitSdkService.syncPaykitApp(anyOrNull(), any(), any())).doSuspendableAnswer {
             val admission = it.getArgument<suspend () -> Boolean>(2)
             if (!admission()) return@doSuspendableAnswer false
             if (!registryAvailable) throw AppError("registry unavailable")
@@ -154,7 +199,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             sut.syncPublishedEndpoints(false, Priority.Ordered) { pubkyRepo.isCurrent(signIn) }.getOrThrow()
 
             verifyBlocking(paykitSdkService) {
-                syncPaykitApp(eq(privateEnabled), eq(Priority.Ordered), any())
+                syncPaykitApp(isNull(), eq(Priority.Ordered), any())
             }
             verifyBlocking(paykitSdkService) { syncPublicEndpoints(eq(emptyList()), any()) }
             assertFalse(settingsFlow.value.publicPaykitCleanupPending)
@@ -373,7 +418,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         stubPublicInvoice("lnbc1replacement", byteArrayOf(4, 5, 6))
         val appSyncStarted = CompletableDeferred<Unit>()
         val resumeAppSync = CompletableDeferred<Unit>()
-        whenever(paykitSdkService.syncPaykitApp(any(), any(), any())).doSuspendableAnswer {
+        whenever(paykitSdkService.syncPaykitApp(anyOrNull(), any(), any())).doSuspendableAnswer {
             appSyncStarted.complete(Unit)
             resumeAppSync.await()
             true
@@ -433,7 +478,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
                 }
                 syncReport()
             }.whenever(paykitSdkService).syncPublicEndpoints(any(), any())
-            whenever(paykitSdkService.syncPaykitApp(any(), any(), any())).doSuspendableAnswer {
+            whenever(paykitSdkService.syncPaykitApp(anyOrNull(), any(), any())).doSuspendableAnswer {
                 if (!appSyncStarted.isCompleted) {
                     appSyncStarted.complete(Unit)
                     resumeAppSync.await()
@@ -596,7 +641,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         isRestoringSession.value = false
 
         publication.await().getOrThrow()
-        verifyBlocking(paykitSdkService) { syncPaykitApp(eq(false), eq(Priority.Ordered), any()) }
+        verifyBlocking(paykitSdkService) { syncPaykitApp(isNull(), eq(Priority.Ordered), any()) }
         verifyBlocking(paykitSdkService) { syncPublicEndpoints(any(), any()) }
         verifyBlocking(pubkyRepo, never()) { currentPublicKey() }
         verifyBlocking(pubkyRepo, never()) { awaitInitialization() }
@@ -632,7 +677,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             publicPaykitOnchainEnabled = true,
         )
         val appError = RuntimeException("app registration failed")
-        whenever { paykitSdkService.syncPaykitApp(eq(false), eq(Priority.Ordered), any()) }
+        whenever { paykitSdkService.syncPaykitApp(isNull(), eq(Priority.Ordered), any()) }
             .thenThrow(appError)
 
         val error = sut.syncPublishedEndpoints(publish = true).exceptionOrNull()
@@ -664,7 +709,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             assertEquals(false, settingsFlow.value.publicPaykitCleanupPending)
             inOrder(paykitSdkService) {
                 verify(paykitSdkService).syncPublicEndpoints(eq(emptyList()), any())
-                verify(paykitSdkService).syncPaykitApp(privatePaymentsEnabled = false, priority = priority)
+                verify(paykitSdkService).syncPaykitApp(privatePaymentsEnabled = null, priority = priority)
             }
         }
     }
@@ -680,7 +725,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         sut.syncPublishedEndpoints(false).getOrThrow()
 
         verifyBlocking(paykitSdkService) { syncPublicEndpoints(eq(emptyList()), any()) }
-        verifyBlocking(paykitSdkService) { syncPaykitApp(false, Priority.Ordered) }
+        verifyBlocking(paykitSdkService) { syncPaykitApp(null, Priority.Ordered) }
         assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertEquals("", settingsFlow.value.publicPaykitBolt11)
         assertFalse(settingsFlow.value.publicPaykitCleanupPending)
@@ -690,7 +735,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     fun `syncPublishedEndpoints remove keeps cleanup pending when app capability update fails`() = test {
         settingsFlow.value = SettingsData(publicPaykitCleanupPending = true)
         val appError = RuntimeException("app registration failed")
-        whenever { paykitSdkService.syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Ordered) }
+        whenever { paykitSdkService.syncPaykitApp(privatePaymentsEnabled = null, priority = Priority.Ordered) }
             .thenThrow(appError)
 
         val error = sut.syncPublishedEndpoints(publish = false).exceptionOrNull()
@@ -705,7 +750,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         val endpointError = RuntimeException("endpoint failed")
         val appError = RuntimeException("app registration failed")
         whenever { paykitSdkService.syncPublicEndpoints(eq(emptyList()), any()) }.thenThrow(endpointError)
-        whenever { paykitSdkService.syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Interactive) }
+        whenever { paykitSdkService.syncPaykitApp(privatePaymentsEnabled = null, priority = Priority.Interactive) }
             .thenThrow(appError)
 
         val error = sut.syncPublishedEndpoints(
@@ -717,7 +762,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         assertEquals(listOf(appError), error?.suppressedExceptions)
         inOrder(paykitSdkService) {
             verify(paykitSdkService).syncPublicEndpoints(eq(emptyList()), any())
-            verify(paykitSdkService).syncPaykitApp(privatePaymentsEnabled = false, priority = Priority.Interactive)
+            verify(paykitSdkService).syncPaykitApp(privatePaymentsEnabled = null, priority = Priority.Interactive)
         }
     }
 

@@ -18,6 +18,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -153,7 +154,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
                     endpointWrites++
                     EndpointSyncReport(emptyList(), emptyList(), emptyList())
                 }
-                whenever(paykitSdkService.syncPaykitApp(eq(true), eq(Priority.Interactive), any()))
+                whenever(paykitSdkService.syncPaykitApp(isNull(), eq(Priority.Interactive), any()))
                     .doSuspendableAnswer {
                         val admission = it.getArgument<suspend () -> Boolean>(2)
                         if (!admission()) return@doSuspendableAnswer false
@@ -213,7 +214,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
                 }
                 EndpointSyncReport(emptyList(), emptyList(), emptyList())
             }
-            whenever(paykitSdkService.syncPaykitApp(eq(true), eq(Priority.Interactive), any())).doSuspendableAnswer {
+            whenever(paykitSdkService.syncPaykitApp(isNull(), eq(Priority.Interactive), any())).doSuspendableAnswer {
                 if (boundary == "registry") {
                     entered.complete(Unit)
                     release.await()

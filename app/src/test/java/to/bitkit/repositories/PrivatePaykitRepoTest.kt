@@ -2490,14 +2490,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             var registryCalls = 0
             doSuspendableAnswer {
                 registryCalls++
-                val enabled = it.getArgument<Boolean>(0)
+                val enabled = it.getArgument<Boolean?>(0) ?: settingsData.value.sharesPrivatePaykitEndpoints
                 assertFalse(enabled, "Cleanup must not enable private payments")
                 if (!failed && failureStage == "disable capability") {
                     failed = true
                     throw AppError("Registration unavailable")
                 }
                 capability = enabled
-            }.whenever(paykitSdkService).syncPaykitApp(any(), eq(Priority.Ordered))
+            }.whenever(paykitSdkService).syncPaykitApp(anyOrNull(), eq(Priority.Ordered))
             doSuspendableAnswer {
                 assertTrue(capability, "Withdrawal requires the private capability")
                 if (!failed && failureStage == "withdraw") {

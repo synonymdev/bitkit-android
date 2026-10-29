@@ -371,13 +371,11 @@ class PublicPaykitRepo @Inject constructor(
         canSync: (suspend () -> Boolean)? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val settings = settingsStore.data.first()
-            val privateSharing = privateSharingEnabled ?: settings.sharesPrivatePaykitEndpoints
             if (canSync?.invoke() == false) return@runSuspendCatching
             if (canSync == null) {
-                paykitSdkService.syncPaykitApp(privatePaymentsEnabled = privateSharing, priority = priority)
+                paykitSdkService.syncPaykitApp(privatePaymentsEnabled = privateSharingEnabled, priority = priority)
             } else {
-                paykitSdkService.syncPaykitApp(privateSharing, priority, canSync)
+                paykitSdkService.syncPaykitApp(privateSharingEnabled, priority, canSync)
             }
             Unit
         }
@@ -400,7 +398,7 @@ class PublicPaykitRepo @Inject constructor(
                 true
             } else {
                 paykitSdkService.syncPaykitApp(
-                    privatePaymentsEnabled = settingsStore.data.first().sharesPrivatePaykitEndpoints,
+                    privatePaymentsEnabled = null,
                     priority = priority,
                     canSync = canWithdraw,
                 )
