@@ -1,10 +1,12 @@
 package to.bitkit.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -277,23 +279,32 @@ fun BalanceHeader(
                         }
                     }
                     // The eye keeps the slot while the balance is hidden.
-                    val loaderAlpha by animateFloatAsState(
-                        targetValue = if (isLoading && !hideBalance) LOADER_ALPHA else 0f,
-                        label = "balanceLoaderAlpha",
-                    )
-                    if (loaderAlpha > 0f) {
-                        val description = stringResource(R.string.wallet__balance_updating)
-                        GradientCircularProgressIndicator(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .alpha(loaderAlpha)
-                                .semantics { contentDescription = description }
-                                .testTag("TotalBalanceUpdating")
-                        )
-                    }
+                    BalanceLoader(visible = isLoading && !hideBalance)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BalanceLoader(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier,
+    ) {
+        val description = stringResource(R.string.wallet__balance_updating)
+        GradientCircularProgressIndicator(
+            modifier = Modifier
+                .size(24.dp)
+                .alpha(LOADER_ALPHA)
+                .semantics { contentDescription = description }
+                .testTag("TotalBalanceUpdating")
+        )
     }
 }
 
