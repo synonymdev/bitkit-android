@@ -22,8 +22,8 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.navigateIfNotCurrent
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.utils.AppError
+import to.bitkit.viewmodels.ConnectionStartupFailure
 import to.bitkit.viewmodels.RestoreState
-import to.bitkit.viewmodels.TransferEffect
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -139,6 +139,17 @@ class ContentViewTest {
     }
 
     @Test
+    fun `ordinary foreground errors preserve navigation while initialization and required recovery stay restricted`() {
+        val ordinary = ConnectionStartupFailure("offline", requiresRecovery = false)
+        val required = ConnectionStartupFailure("restore incomplete")
+        assertFalse(shouldPresentWalletRecovery(false, RestoreState.Initial, ordinary))
+        assertFalse(shouldPresentWalletRecovery(false, RestoreState.Settled, ordinary))
+        assertTrue(shouldPresentWalletRecovery(true, RestoreState.Initial, ordinary))
+        assertTrue(shouldPresentWalletRecovery(false, RestoreState.BackupFailed(1), ordinary))
+        assertTrue(shouldPresentWalletRecovery(false, RestoreState.Initial, required))
+    }
+
+    @Test
     fun `running wallet waits for backup and metadata restoration`() {
         val pendingRestores = listOf(
             RestoreState.InProgress.Wallet,
@@ -146,6 +157,7 @@ class ContentViewTest {
             RestoreState.BackupFailed(1),
         )
         for (restore in pendingRestores) {
+            assertTrue(shouldPresentWalletRecovery(false, restore, null))
             assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, restore, false))
         }
         assertFalse(shouldFinishWalletInitialization(NodeLifecycleState.Running, RestoreState.Completed, true))
@@ -175,39 +187,6 @@ class ContentViewTest {
     }
 
     @Test
-    fun `spending start route uses intro until seen`() {
-        assertEquals(Routes.SpendingIntro, transferSpendingStartRoute(hasSeenSpendingIntro = false))
-        assertEquals(Routes.SpendingAmount, transferSpendingStartRoute(hasSeenSpendingIntro = true))
-    }
-
-    @Test
-    fun `hardware spending start route keeps device id after intro`() {
-        val deviceId = "trezor-1"
-
-        assertEquals(Routes.SpendingIntroHw(deviceId), transferSpendingStartRoute(false, deviceId))
-        assertEquals(Routes.SpendingAmountHw(deviceId), transferSpendingStartRoute(true, deviceId))
-    }
-
-    @Test
-    fun `transfer effect destinations cover funding paid and hw signed`() {
-        assertEquals(Routes.SettingUp, transferEffectDestination(TransferEffect.OnSpendingFundingPaid))
-        assertEquals(Routes.SpendingHwSigned, transferEffectDestination(TransferEffect.OnHwTxSigned))
-        assertNull(transferEffectDestination(TransferEffect.OnQuoteReady))
-    }
-
-    @Test
-    fun `funding paid removes spending confirmation from the back stack`() {
-        val navController = transferNavController()
-        navController.navigateTo(Routes.SpendingConfirm)
-
-        navController.navigateForTransferEffect(TransferEffect.OnSpendingFundingPaid)
-        assertTrue(navController.currentDestination?.hasRoute<Routes.SettingUp>() == true)
-
-        navController.popBackStack()
-        assertFalse(navController.currentDestination?.hasRoute<Routes.SpendingConfirm>() == true)
-    }
-
-    @Test
     fun `a handled root screen link dismisses the open sheet`() {
         val result = shouldDismissSheetForScreenLink(handled = true, currentSheet = Sheet.Receive())
 
@@ -231,7 +210,7 @@ class ContentViewTest {
     @Test
     fun `receive presentation key changes only between sheet presentations`() {
         val sheet = Sheet.Receive()
-        val samePresentation = sheet.copy(route = ReceiveRoute.Amount)
+        val samePresentation = sheet.copy(route = ReceiveRoute.EditInvoice)
         val nextPresentation = Sheet.Receive()
 
         assertEquals(receiveSheetPresentationKey(sheet), receiveSheetPresentationKey(samePresentation))
@@ -278,17 +257,17 @@ class ContentViewTest {
     }
 
     @Test
-    fun `savings transfer exit leaves a later transfer to spending alone`() {
+    fun `savings transfer exit leaves a later transfer screen alone`() {
         val navController = transferNavController()
         navController.navigateToTransferSavingsAvailability()
         navController.navigateTo(Routes.SavingsProgress)
         navController.navigateOnSavingsTransferExit()
         navController.navigateTo(Routes.Spending)
-        navController.navigateTo(Routes.SpendingConfirm)
+        navController.navigateTo(Routes.Funding)
 
         navController.navigateOnSavingsTransferExit()
 
-        assertTrue(navController.currentDestination?.hasRoute<Routes.SpendingConfirm>() == true)
+        assertTrue(navController.currentDestination?.hasRoute<Routes.Funding>() == true)
     }
 
     private fun transferNavController(): NavHostController =
@@ -301,8 +280,7 @@ class ContentViewTest {
                 navigation<Routes.TransferRoot>(startDestination = Routes.SavingsAvailability) {
                     composable<Routes.SavingsAvailability> {}
                     composable<Routes.SavingsProgress> {}
-                    composable<Routes.SpendingConfirm> {}
-                    composable<Routes.SettingUp> {}
+                    composable<Routes.Funding> {}
                 }
             }
         }

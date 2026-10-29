@@ -73,7 +73,7 @@ class ChannelDetailViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 channelLoadState = ChannelLoadState.Success(channelUi),
-                paidOrders = blocktankRepo.blocktankState.value.paidOrders,
+                orders = blocktankRepo.blocktankState.value.orders,
                 cjitEntries = blocktankRepo.blocktankState.value.cjitEntries,
                 isClosedChannel = isClosedChannel,
                 nodeId = lightningRepo.getNodeId().orEmpty(),
@@ -96,7 +96,7 @@ class ChannelDetailViewModel @Inject constructor(
         val channels = lightningRepo.lightningState.value.channels
         val blocktankState = blocktankRepo.blocktankState.value
 
-        return resolveActiveChannel(channelId, channels, blocktankState.paidOrders)
+        return resolveActiveChannel(channelId, channels)
             ?: closedChannels.find { it.details.channelId == channelId }
             ?: blocktankState.orders.find { it.id == channelId }?.let { order ->
                 createChannelDetails().copy(
@@ -106,34 +106,22 @@ class ChannelDetailViewModel @Inject constructor(
                     channelValueSats = order.clientBalanceSat.safe() + order.lspBalanceSat.safe(),
                     outboundCapacityMsat = order.clientBalanceSat * 1000u,
                     inboundCapacityMsat = order.lspBalanceSat * 1000u,
-                ).mapToUiModel(channels, blocktankState.paidOrders, connectionText)
+                ).mapToUiModel(channels, connectionText)
             }
     }
 
-    private fun resolveActiveChannel(
-        channelId: String,
-        channels: List<ChannelDetails>,
-        paidOrders: List<IBtOrder>,
-    ): ChannelUi? =
-        channels.find { it.channelId == channelId }
-            ?.mapToUiModel(channels, paidOrders, connectionText)
-            ?: getPendingOrdersAsChannels(channels, paidOrders)
-                .find { it.channelId == channelId }
-                ?.mapToUiModel(channels, paidOrders, connectionText)
-            ?: getFailedOrdersAsChannels(paidOrders)
-                .find { it.channelId == channelId }
-                ?.mapToUiModel(channels, paidOrders, connectionText)
+    private fun resolveActiveChannel(channelId: String, channels: List<ChannelDetails>): ChannelUi? =
+        channels.find { it.channelId == channelId }?.mapToUiModel(channels, connectionText)
 
     private suspend fun loadClosedChannels(): List<ChannelUi> {
         val channels = lightningRepo.lightningState.value.channels
-        val paidOrders = blocktankRepo.blocktankState.value.paidOrders
 
         return activityRepo.getClosedChannels(SortDirection.DESC)
             .onFailure { Logger.error("Failed to load closed channels", it, context = TAG) }
             .getOrNull()
             ?.mapIndexed { index, closedChannel ->
                 closedChannel.toChannelUi(
-                    baseIndex = channels.size + getPendingOrdersAsChannels(channels, paidOrders).size + index,
+                    baseIndex = channels.size + index,
                     connectionText = connectionText,
                 )
             }
@@ -167,14 +155,14 @@ class ChannelDetailViewModel @Inject constructor(
                 blocktankRepo.blocktankState,
             ) { lightningState, blocktankState ->
                 val channels = lightningState.channels
-                val updatedChannel = resolveActiveChannel(channelId, channels, blocktankState.paidOrders)
+                val updatedChannel = resolveActiveChannel(channelId, channels)
                 Pair(updatedChannel, blocktankState)
             }.collect { (updatedChannel, blocktankState) ->
                 if (updatedChannel != null) {
                     _uiState.update {
                         it.copy(
                             channelLoadState = ChannelLoadState.Success(updatedChannel),
-                            paidOrders = blocktankState.paidOrders,
+                            orders = blocktankState.orders,
                             cjitEntries = blocktankState.cjitEntries,
                             nodeId = lightningRepo.getNodeId().orEmpty(),
                         )
@@ -189,7 +177,7 @@ class ChannelDetailViewModel @Inject constructor(
                             it.copy(
                                 channelLoadState = ChannelLoadState.Success(closedChannel),
                                 isClosedChannel = true,
-                                paidOrders = blocktankState.paidOrders,
+                                orders = blocktankState.orders,
                                 cjitEntries = blocktankState.cjitEntries,
                                 nodeId = lightningRepo.getNodeId().orEmpty(),
                             )
@@ -206,7 +194,7 @@ class ChannelDetailViewModel @Inject constructor(
 @Stable
 data class ChannelDetailUiState(
     val channelLoadState: ChannelLoadState = ChannelLoadState.Loading,
-    val paidOrders: ImmutableList<IBtOrder> = persistentListOf(),
+    val orders: ImmutableList<IBtOrder> = persistentListOf(),
     val cjitEntries: ImmutableList<IcJitEntry> = persistentListOf(),
     val txTime: ULong? = null,
     val isRefreshing: Boolean = false,
