@@ -1940,6 +1940,15 @@ class AppViewModel @Inject constructor(
                     request,
                     IncomingPaykitPaymentRequestFailureReason.EndpointNotPayable,
                 )
+            } else if (
+                result != PublicPaykitPaymentResult.WaitingForUpdatedPaymentList &&
+                requestedPaymentRequestId.value == request.id
+            ) {
+                finishFailedRequestedPaymentRequestPresentation(
+                    request = request,
+                    reason = result?.incomingPaymentRequestFailureReason
+                        ?: IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+                )
             } else {
                 deferPaymentRequestPresentation(
                     request = request,
@@ -1960,6 +1969,24 @@ class AppViewModel @Inject constructor(
             walletGeneration = walletGeneration,
         )
         return true
+    }
+
+    private fun finishFailedRequestedPaymentRequestPresentation(
+        request: PaykitPaymentRequest,
+        reason: IncomingPaykitPaymentRequestFailureReason,
+    ) {
+        paykitPaymentRequestDiagnostics.logPresentationRejection(request.counterparty, reason)
+        val restorePaymentRequestSheet = shouldRestorePaymentRequestSheet
+        paymentRequestPresentationGeneration++
+        clearRequestedPaymentRequest()
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.slashtags__error_pay_waiting_msg),
+            testTag = "PaymentRequestWaitingForDetailsToast",
+        )
+        if (restorePaymentRequestSheet) showSheet(Sheet.PaymentRequests)
+        completePaymentRequestPresentation(request)
     }
 
     private fun finishPrivateLinkPendingPaymentRequestPresentation(request: PaykitPaymentRequest) {
@@ -6965,18 +6992,22 @@ class AppViewModel @Inject constructor(
             paymentDeadlineAt = paymentDeadlineAt,
             onBeforeSend = onBeforeSend,
         ).onSuccess { hash ->
-            // Wait until matching payment event is received (with timeout for hold invoices)
-            val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
-                when (it) {
-                    is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
-                    is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
-                        Result.failure(
-                            LightningPaymentFailedError(reason = it.reason, paymentRequest = bolt11)
-                        )
-                    )
+            fun outcome(event: Event): Result<PaymentId>? = when (event) {
+                is Event.PaymentSuccessful if event.paymentHash == hash -> Result.success(hash)
+                is Event.PaymentFailed if event.paymentHash == hash -> Result.failure(
+                    LightningPaymentFailedError(reason = event.reason, paymentRequest = bolt11)
+                )
 
-                    else -> WatchResult.Continue()
+                else -> null
+            }
+            // Wait until matching payment event is received (with timeout for hold invoices)
+            val result = coroutineScope {
+                val watch = async(start = CoroutineStart.UNDISPATCHED) {
+                    lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
+                        outcome(it)?.let { result -> WatchResult.Complete(result) } ?: WatchResult.Continue()
+                    }
                 }
+                lightningRepo.settledArkadeSendEvent(hash)?.let(::outcome)?.also { watch.cancel() } ?: watch.await()
             }
             return result ?: Result.failure(PaymentPendingException(hash))
         }

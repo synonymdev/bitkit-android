@@ -15,7 +15,9 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -76,6 +78,7 @@ class WalletRepo @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val arkadeRepo: ArkadeRepo,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
@@ -112,6 +115,16 @@ class WalletRepo @Inject constructor(
         repoScope.launch {
             hwWalletRepo.wallets.collect { wallets ->
                 _balanceState.update { state -> state.copy(hardwareWallets = wallets.map { it.toBalance() }) }
+            }
+        }
+        repoScope.launch {
+            arkadeRepo.state.map { it.isReady }.distinctUntilChanged().collect { isReady ->
+                if (isReady && walletExists()) refreshBip21()
+            }
+        }
+        repoScope.launch {
+            arkadeRepo.state.map { it.balanceSats to it.pendingDepositSats }.distinctUntilChanged().collect {
+                if (walletExists()) syncBalances()
             }
         }
     }
@@ -403,7 +416,8 @@ class WalletRepo @Inject constructor(
     fun refreshMaxSendLightning() {
         val state = lightningRepo.lightningState.value
         if (!state.nodeLifecycleState.isRunning()) return
-        _balanceState.update { it.copy(maxSendLightningSats = state.channels.totalNextOutboundHtlcLimitSats()) }
+        val maxSendSats = maxOf(state.channels.totalNextOutboundHtlcLimitSats(), arkadeRepo.state.value.balanceSats)
+        _balanceState.update { it.copy(maxSendLightningSats = maxSendSats) }
     }
 
     suspend fun syncBalances() {
@@ -786,7 +800,8 @@ class WalletRepo @Inject constructor(
             message = description,
             lightningInvoice = bolt11,
         )
-        val paymentHash = if (bolt11.isEmpty()) {
+        // Arkade answers an amountless receive with its Lightning address's LNURL, which has no payment hash.
+        val paymentHash = if (bolt11.isEmpty() || bolt11.startsWith("lnurl", ignoreCase = true)) {
             ""
         } else {
             runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }
@@ -964,11 +979,15 @@ class WalletRepo @Inject constructor(
         }
     }
 
+    /** Arkade receives any amount without inbound liquidity, so no channel or CJIT is needed. */
+    fun canReceiveWithArkade(): Boolean = arkadeRepo.canReceive()
+
     suspend fun inboundLiquiditySats(): ULong = withContext(bgDispatcher) {
         return@withContext currentReadyChannels().calculateRemoteBalance()
     }
 
     private fun canCreateLightningInvoice(amountSats: ULong?): Boolean {
+        if (arkadeRepo.canReceive()) return true
         val readyChannels = currentReadyChannels()
         return ReceiveLiquidityDecision.canCreateLightningInvoice(
             hasReadyChannels = readyChannels.isNotEmpty(),

@@ -16,20 +16,28 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.filterPending
 import to.bitkit.models.Toast
+import to.bitkit.models.safe
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.ArkadeDeposit
+import to.bitkit.repositories.ArkadeRepo
+import to.bitkit.repositories.ArkadeState
+import to.bitkit.repositories.ArkadeWithdrawal
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
@@ -46,6 +54,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val logsRepo: LogsRepo,
     private val activityRepo: ActivityRepo,
+    private val arkadeRepo: ArkadeRepo,
 ) : ViewModel() {
 
     companion object {
@@ -88,7 +97,7 @@ class LightningConnectionsViewModel @Inject constructor(
 
     private fun observeState() {
         viewModelScope.launch(bgDispatcher) {
-            lightningRepo.lightningState.collect { lightningState ->
+            combine(lightningRepo.lightningState, arkadeRepo.state, ::Pair).collect { (lightningState, arkadeState) ->
                 val channels = lightningState.channels
                 val connectionText = context.getString(R.string.lightning__connection)
 
@@ -101,8 +110,10 @@ class LightningConnectionsViewModel @Inject constructor(
                         pendingConnections = channels.filterPending()
                             .map { it.mapToUiModel(channels, connectionText) }
                             .reversed().toImmutableList(),
-                        localBalance = calculateLocalBalance(channels),
+                        localBalance = calculateLocalBalance(channels).safe() + arkadeState.balanceSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
+                        arkade = arkadeState.toUi(lightningRepo),
+                        isArkadeReceiving = arkadeState.isReady,
                     )
                 }
             }
@@ -136,6 +147,7 @@ class LightningConnectionsViewModel @Inject constructor(
     }
 
     suspend fun refreshObservedState() {
+        arkadeRepo.refreshState()
         lightningRepo.sync()
         blocktankRepo.refreshOrders()
         loadClosedChannels()
@@ -212,7 +224,43 @@ data class LightningConnectionsUiState(
     val closedChannels: ImmutableList<ChannelUi> = persistentListOf(),
     val localBalance: ULong = 0u,
     val remoteBalance: ULong = 0u,
+    val arkade: ArkadeUi? = null,
+    val isArkadeReceiving: Boolean = false,
 )
+
+/** The Arkade wallet shown as a connection, present once it holds a balance or a deposit. */
+data class ArkadeUi(
+    val balanceSats: ULong,
+    val deposits: ImmutableList<ArkadeDepositUi> = persistentListOf(),
+    val withdrawals: ImmutableList<ArkadeWithdrawal> = persistentListOf(),
+    val lightningAddress: String? = null,
+    /** Unix seconds of the soonest output expiry. */
+    val nextExpiryAt: Long? = null,
+) {
+    val pendingDeposits get() = deposits.filterNot { it.deposit.isClaimed }
+    val claimedDeposits get() = deposits.filter { it.deposit.isClaimed }
+}
+
+data class ArkadeDepositUi(
+    val deposit: ArkadeDeposit,
+    /** On-chain confirmations, known for deposits this wallet sent. */
+    val confirmations: UInt? = null,
+)
+
+internal suspend fun ArkadeState.toUi(lightningRepo: LightningRepo): ArkadeUi? {
+    if (!isReady) return null
+    // On regtest Arkade always shows, so testers reach its deposit address to fund it from the faucet.
+    if (balanceSats == 0uL && deposits.isEmpty() && Env.network != Network.REGTEST) return null
+    return ArkadeUi(
+        balanceSats = balanceSats,
+        deposits = deposits.map {
+            ArkadeDepositUi(it, if (it.isClaimed) null else lightningRepo.onchainConfirmations(it.txid))
+        }.toImmutableList(),
+        withdrawals = withdrawals,
+        lightningAddress = lightningAddress,
+        nextExpiryAt = nextExpiryAt,
+    )
+}
 
 data class ChannelUi(
     val name: String,

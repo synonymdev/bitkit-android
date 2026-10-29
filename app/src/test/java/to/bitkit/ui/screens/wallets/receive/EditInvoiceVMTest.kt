@@ -44,6 +44,25 @@ class EditInvoiceVMTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onClickContinue should emit none for spending above inbound when Arkade can receive`() = test {
+        whenever(walletRepo.canReceiveWithArkade()).thenReturn(true)
+
+        sut.editInvoiceEffect.test {
+            sut.onClickContinue(
+                source = ReceiveLiquiditySource.SPENDING,
+                amountSats = 10_000u,
+            )
+
+            assertEquals(
+                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.None),
+                awaitItem(),
+            )
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(walletRepo, times(0)).inboundLiquiditySats()
+    }
+
+    @Test
     fun `onClickContinue should emit transfer unavailable for spending above inbound`() = test {
         sut.editInvoiceEffect.test {
             sut.onClickContinue(

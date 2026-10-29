@@ -33,6 +33,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -63,6 +64,7 @@ import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
 import to.bitkit.models.ActivityBackupV1
+import to.bitkit.models.ArkadeExitBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.KnownDevice
@@ -123,6 +125,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val paykitPresentationStore = mock<PaykitPaymentRequestPresentationStore>()
     private val keychain = mock<Keychain>()
     private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
+    private val arkadeRepo = mock<ArkadeRepo>()
     private val vssStoreIdProvider = mock<to.bitkit.data.backup.VssStoreIdProvider>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val lightningService = mock<LightningService>()
@@ -199,6 +202,11 @@ class BackupRepoTest : BaseUnitTest() {
         }.thenReturn(Result.success(Unit))
 
         whenever { vssBackupClient.listKeys() }.thenReturn(Result.success(emptyList()))
+        whenever { arkadeRepo.exitBackup() }.thenReturn(Result.success(null))
+        whenever { arkadeRepo.restoreExitBackup(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever(arkadeRepo.exitStateChanged).thenReturn(MutableSharedFlow())
+        whenever(arkadeRepo.state).thenReturn(MutableStateFlow(ArkadeState()))
+
         sut = createSut()
     }
 
@@ -230,6 +238,54 @@ class BackupRepoTest : BaseUnitTest() {
                 release.countDown()
             }
         }
+    }
+
+    @Test
+    fun `arkade exit backup uploads the exported state and restores it before the wallet`() = test {
+        val backup = ArkadeExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "{\"pedigrees\":[]}")
+        whenever(arkadeRepo.exitBackup()).thenReturn(Result.success(backup))
+
+        sut.triggerBackup(BackupCategory.ARKADE_EXIT).getOrThrow()
+
+        val data = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(BackupCategory.ARKADE_EXIT.name), data.capture())
+        whenever(vssBackupClient.getObject(BackupCategory.ARKADE_EXIT.name)).thenReturn(
+            Result.success(VssItem(key = BackupCategory.ARKADE_EXIT.name, value = data.firstValue, version = 1))
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        inOrder(arkadeRepo, vssBackupClient) {
+            verify(arkadeRepo).restoreExitBackup(backup, 0)
+            verify(vssBackupClient).getObject(BackupCategory.WALLET.name)
+        }
+    }
+
+    @Test
+    fun `arkade exit backup uploads when Arkade was ready before observing started`() = test {
+        val statuses = MutableStateFlow(mapOf(BackupCategory.ARKADE_EXIT to BackupItemStatus(synced = 1, required = 1)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        whenever(arkadeRepo.state).thenReturn(MutableStateFlow(ArkadeState(isSupported = true, isReady = true)))
+        val backup = ArkadeExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "state")
+        whenever(arkadeRepo.exitBackup()).thenReturn(Result.success(backup))
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(6_000)
+            runCurrent()
+
+            verify(vssBackupClient).putObject(eq(BackupCategory.ARKADE_EXIT.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `arkade exit backup uploads nothing while Arkade is not connected`() = test {
+        sut.triggerBackup(BackupCategory.ARKADE_EXIT).getOrThrow()
+
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.ARKADE_EXIT.name), any())
     }
 
     @Test
@@ -2202,6 +2258,7 @@ class BackupRepoTest : BaseUnitTest() {
         keychain = keychain,
         onchainSendAttemptStore = onchainSendAttemptStore,
         lightningRepo = Provider { lightningRepo },
+        arkadeRepo = arkadeRepo,
         vssStoreIdProvider = vssStoreIdProvider,
         preActivityMetadataRepo = preActivityMetadataRepo,
         lightningService = lightningService,

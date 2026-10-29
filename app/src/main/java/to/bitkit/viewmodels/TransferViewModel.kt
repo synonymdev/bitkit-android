@@ -35,6 +35,7 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toUserMessage
 import to.bitkit.models.Toast
 import to.bitkit.models.TransferType
+import to.bitkit.repositories.ArkadeRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
@@ -59,6 +60,7 @@ class TransferViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val transferRepo: TransferRepo,
     private val boltzService: BoltzService,
+    private val arkadeRepo: ArkadeRepo,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -200,6 +202,7 @@ class TransferViewModel @Inject constructor(
     fun startSavingsSwap() {
         if (savingsSwapJob?.isActive == true || _savingsSwapResult.value != null) return
         savingsSwapJob = viewModelScope.launch {
+            withdrawArkadeToSavings()
             val result = executeSavingsSwap()
             _savingsSwapResult.update { result }
         }
@@ -302,10 +305,27 @@ class TransferViewModel @Inject constructor(
     private fun resolveSavingsTransferMode(): SavingsTransferMode =
         if (_savingsSwapState.value.quote != null) SavingsTransferMode.SWAP else SavingsTransferMode.CLOSE
 
-    /** Closes the channels selected earlier, pending closure */
-    suspend fun closeSelectedChannels() = closeChannels(channelsToClose)
+    /** Whether Transfer to Savings closes channels, rather than only withdrawing Arkade's balance. */
+    fun hasChannelsToClose(): Boolean = channelsToClose.isNotEmpty()
+
+    /** Withdraws Arkade's balance, then closes the channels selected earlier, pending closure */
+    suspend fun closeSelectedChannels(): List<ChannelDetails> {
+        withdrawArkadeToSavings()
+        return closeChannels(channelsToClose)
+    }
+
+    private suspend fun withdrawArkadeToSavings() {
+        val balance = arkadeRepo.state.value.balanceSats
+        if (balance == 0uL) return
+        val address = lightningRepo.newAddress().getOrElse {
+            Logger.error("Failed to get address for Arkade withdrawal", it, context = TAG)
+            return
+        }
+        arkadeRepo.withdrawAll(address).onFailure { ToastEventBus.send(it) }
+    }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
+        if (channels.isEmpty()) return emptyList()
         lightningRepo.awaitPeerConnected()
         val channelsFailedToClose = coroutineScope {
             channels.map { channel ->

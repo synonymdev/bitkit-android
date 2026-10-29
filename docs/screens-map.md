@@ -146,6 +146,14 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | ExternalSuccessScreen.kt | Manual Setup › Lightning Manual Done |
 | LnurlChannelScreen.kt | Third-party LSP › LSP LNBIG |
 
+## ui/screens/transfer/arkade
+
+| Android | Figma |
+| - | - |
+| ArkadeAmountScreen.kt | `todo` |
+| ArkadeConfirmScreen.kt | `todo` |
+| ArkadeDepositScreen.kt | `todo` |
+
 ## ui/screens/transfer/hardware
 
 | Android | Figma |
@@ -308,6 +316,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | ChannelDetailScreen.kt | Settings > Advanced › Connection details |
 | CloseConnectionScreen.kt | Settings > Advanced › Close connection |
 | LightningConnectionsScreen.kt | Settings > Advanced › Lightning Connections overview |
+| ArkadeDetailScreen.kt | `todo` |
 
 ## ui/settings/pin
 

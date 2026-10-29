@@ -18,6 +18,7 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.TransferType
 import to.bitkit.models.safe
 import to.bitkit.models.toBalance
+import to.bitkit.repositories.ArkadeRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
@@ -33,6 +34,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
     private val transferRepo: TransferRepo,
     private val settingsStore: SettingsStore,
     private val hwWalletRepo: HwWalletRepo,
+    private val arkadeRepo: ArkadeRepo,
 ) {
     suspend operator fun invoke(): Result<BalanceState> = withContext(bgDispatcher) {
         runCatching {
@@ -50,16 +52,20 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val channelFundableBalance = getMaxChannelFundableAmount(lightningRepo.getChannelFundableBalance())
             val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
             val afterClosingChannels = afterPendingChannels.safe() - toSavingsAmount.safe()
-            val totalLightningSats = afterClosingChannels.safe() - lingeringCoopCloseSats.safe()
+            val arkadeSats = arkadeRepo.state.value.balanceSats
+            val afterLingeringCoopClose = afterClosingChannels.safe() - lingeringCoopCloseSats.safe()
+            val totalLightningSats = afterLingeringCoopClose.safe() + arkadeSats.safe()
 
             val balanceState = BalanceState(
                 totalOnchainSats = totalOnchainSats,
                 channelFundableBalance = channelFundableBalance,
                 totalLightningSats = totalLightningSats,
-                maxSendLightningSats = lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
+                // A payment goes over one rail, so the larger of the two balances caps it.
+                maxSendLightningSats = maxOf(lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(), arkadeSats),
                 maxSendOnchainSats = getMaxSendAmount(balanceDetails),
                 balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
-                balanceInTransferToSpending = pendingChannelsSats,
+                balanceInTransferToSpending = pendingChannelsSats.safe() +
+                    arkadeRepo.state.value.pendingDepositSats.safe(),
                 hardwareWallets = hwWalletRepo.wallets.value.map { it.toBalance() },
             )
 

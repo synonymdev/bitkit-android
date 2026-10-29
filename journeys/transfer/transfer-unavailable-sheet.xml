@@ -8,7 +8,9 @@
     (testTag "TransferUnavailableContinue"), which opens the existing Manual Setup screen. Receive's Lightning
     path shows the same sheet content.
 
-    Precondition: dev build, onboarded wallet with a positive on-chain Savings balance and no channels. Start on
+    Precondition: dev build, onboarded wallet with a positive on-chain Savings balance, no channels and Arkade
+    not running (a build without a Breez API key, or Arkade's regtest unreachable); with Arkade ready, see
+    arkade-transfer-to-spending.xml. Start on
     the wallet home screen.
   </description>
   <actions>

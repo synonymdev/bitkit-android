@@ -16,6 +16,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.repositories.ArkadeRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.LightningRepo
 import javax.inject.Inject
@@ -25,6 +26,7 @@ class BackupsViewModel @Inject constructor(
     private val cacheStore: CacheStore,
     private val backupRepo: BackupRepo,
     private val lightningRepo: LightningRepo,
+    private val arkadeRepo: ArkadeRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BackupStatusUiState())
@@ -37,7 +39,10 @@ class BackupsViewModel @Inject constructor(
     private fun collectState() {
         viewModelScope.launch {
             cacheStore.backupStatuses.collect { cachedStatuses ->
-                val categories = BackupCategory.entries.map { category ->
+                // Arkade's exit data shows only where Arkade runs.
+                val categories = BackupCategory.entries.filter {
+                    it != BackupCategory.ARKADE_EXIT || arkadeRepo.state.value.isSupported
+                }.map { category ->
                     val cachedStatus = cachedStatuses[category] ?: BackupItemStatus(synced = 0, required = 1)
                     category.toUiState(cachedStatus)
                 }

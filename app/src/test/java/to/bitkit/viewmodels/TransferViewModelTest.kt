@@ -30,12 +30,14 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.idleArkadeRepo
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -50,6 +52,7 @@ class TransferViewModelTest : BaseUnitTest() {
     private val transferRepo = mock<TransferRepo>()
     private val clock = mock<Clock>()
     private val boltzService = mock<BoltzService>()
+    private val arkadeRepo = idleArkadeRepo()
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val boltzEvents = MutableSharedFlow<BoltzSwapEvent>(extraBufferCapacity = 8)
@@ -74,7 +77,17 @@ class TransferViewModelTest : BaseUnitTest() {
             transferRepo = transferRepo,
             boltzService = boltzService,
             clock = clock,
+            arkadeRepo = arkadeRepo,
         )
+    }
+
+    @Test
+    fun `transfer to savings with only arkade doesn't wait for a lightning peer`() = test {
+        sut.onTransferToSavingsConfirm(channels = emptyList(), mode = SavingsTransferMode.CLOSE)
+
+        assertFalse(sut.hasChannelsToClose())
+        assertTrue(sut.closeSelectedChannels().isEmpty())
+        verify(lightningRepo, never()).awaitPeerConnected(any())
     }
 
     @Test

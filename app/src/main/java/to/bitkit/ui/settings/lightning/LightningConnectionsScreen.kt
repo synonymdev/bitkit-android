@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
+import android.content.Intent
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -38,6 +39,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.collections.immutable.ImmutableList
@@ -51,10 +53,12 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.LightningChannel
+import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SyncNodeView
@@ -69,6 +73,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareZipFile
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.utils.withAccent
 
 private const val CLOSED_CHANNEL_ALPHA = 0.64f
@@ -101,6 +106,8 @@ fun LightningConnectionsScreen(
         onClickChannel = { channelUi ->
             navController.navigateTo(Routes.ChannelDetail(channelUi.details.channelId))
         },
+        onClickArkade = { navController.navigateTo(Routes.ArkadeDetail) },
+        onOpenTx = { txId -> context.startActivity(Intent(Intent.ACTION_VIEW, getBlockExplorerUrl(txId).toUri())) },
         onRefresh = {
             viewModel.onPullToRefresh()
         },
@@ -115,6 +122,8 @@ private fun Content(
     onClickAddConnection: () -> Unit = {},
     onClickExportLogs: () -> Unit = {},
     onClickChannel: (ChannelUi) -> Unit = {},
+    onClickArkade: () -> Unit = {},
+    onOpenTx: (String) -> Unit = {},
     onRefresh: () -> Unit = {},
 ) {
     var showClosed by remember { mutableStateOf(false) }
@@ -148,7 +157,8 @@ private fun Content(
             onRefresh = onRefresh,
             modifier = Modifier.fillMaxSize()
         ) {
-            val isEmpty = uiState.openChannels.isEmpty() &&
+            val isEmpty = uiState.arkade == null &&
+                uiState.openChannels.isEmpty() &&
                 uiState.pendingConnections.isEmpty() &&
                 uiState.closedChannels.isEmpty()
 
@@ -159,7 +169,11 @@ private fun Content(
                         .fillMaxSize()
                 ) {
                     VerticalSpacer(16.dp)
-                    LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
+                    LightningBalancesSection(
+                        uiState.localBalance,
+                        uiState.remoteBalance,
+                        isReceivingUnlimited = uiState.isArkadeReceiving
+                    )
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
                     EmptyStateContent(modifier = Modifier.weight(1f))
@@ -181,8 +195,18 @@ private fun Content(
                         .verticalScroll(rememberScrollState())
                 ) {
                     VerticalSpacer(16.dp)
-                    LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
+                    LightningBalancesSection(
+                        uiState.localBalance,
+                        uiState.remoteBalance,
+                        isReceivingUnlimited = uiState.isArkadeReceiving
+                    )
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+
+                    uiState.arkade?.let { arkade ->
+                        VerticalSpacer(16.dp)
+                        Caption13Up(stringResource(R.string.lightning__arkade), color = Colors.White64)
+                        ArkadeItem(arkade = arkade, onClick = onClickArkade, onOpenTx = onOpenTx)
+                    }
 
                     // Pending Channels Section
                     if (uiState.pendingConnections.isNotEmpty()) {
@@ -262,7 +286,7 @@ private fun Content(
 }
 
 @Composable
-private fun LightningBalancesSection(localBalance: ULong, remoteBalance: ULong) {
+private fun LightningBalancesSection(localBalance: ULong, remoteBalance: ULong, isReceivingUnlimited: Boolean = false) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -278,12 +302,20 @@ private fun LightningBalancesSection(localBalance: ULong, remoteBalance: ULong) 
             balance = remoteBalance,
             icon = R.drawable.ic_received,
             color = Colors.White,
+            // Arkade receives without inbound liquidity, so no channel caps receiving.
+            valueText = stringResource(R.string.lightning__arkade_receiving_unlimited).takeIf { isReceivingUnlimited },
         )
     }
 }
 
 @Composable
-private fun BalanceColumn(label: String, balance: ULong, @DrawableRes icon: Int, color: Color) {
+private fun BalanceColumn(
+    label: String,
+    balance: ULong,
+    @DrawableRes icon: Int,
+    color: Color,
+    valueText: String? = null,
+) {
     Column {
         Caption13Up(text = label, color = Colors.White64)
         VerticalSpacer(8.dp)
@@ -296,7 +328,7 @@ private fun BalanceColumn(label: String, balance: ULong, @DrawableRes icon: Int,
                 tint = color,
                 modifier = Modifier.size(22.dp)
             )
-            Title(text = balance.toLong().formatToModernDisplay(), color = color)
+            Title(text = valueText ?: balance.toLong().formatToModernDisplay(), color = color)
         }
     }
 }
@@ -364,6 +396,106 @@ private fun ChannelItem(
         )
         VerticalSpacer(16.dp)
         HorizontalDivider()
+    }
+}
+
+@Composable
+private fun ArkadeItem(
+    arkade: ArkadeUi,
+    onClick: () -> Unit,
+    onOpenTx: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickableAlpha { onClick() }
+            .testTag("ArkadeConnection")
+    ) {
+        VerticalSpacer(16.dp)
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            BodyMSB(
+                text = stringResource(R.string.lightning__arkade_provider_value),
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                painter = painterResource(R.drawable.ic_chevron_right),
+                contentDescription = null,
+                tint = Colors.White64,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        VerticalSpacer(8.dp)
+        LightningChannel(
+            capacity = arkade.balanceSats.toLong(),
+            localBalance = arkade.balanceSats.toLong(),
+            remoteBalance = 0L,
+            status = ChannelStatusUi.OPEN,
+            showReceiving = false,
+        )
+        arkade.pendingDeposits.forEach { ArkadeDepositRow(it, onOpenTx) }
+        VerticalSpacer(16.dp)
+        HorizontalDivider()
+    }
+}
+
+@Composable
+internal fun ArkadeDepositRow(
+    depositUi: ArkadeDepositUi,
+    onOpenTx: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ArkadeTransactionRow(
+        title = stringResource(R.string.lightning__arkade_deposit),
+        txid = depositUi.deposit.txid,
+        amountSats = depositUi.deposit.amountSats,
+        confirmations = depositUi.confirmations,
+        onOpenTx = onOpenTx,
+        modifier = modifier.testTag("ArkadeDeposit")
+    )
+}
+
+@Composable
+internal fun ArkadeTransactionRow(
+    title: String,
+    txid: String,
+    amountSats: ULong,
+    onOpenTx: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    confirmations: UInt? = null,
+) {
+    Row(
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+            .clickableAlpha { onOpenTx(txid) }
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            CaptionB(text = title)
+            CaptionB(
+                text = txid,
+                color = Colors.White64,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+            )
+        }
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.padding(start = 16.dp)
+        ) {
+            MoneyCaptionB(sats = amountSats.toLong(), symbol = true)
+            confirmations?.let {
+                CaptionB(
+                    text = stringResource(R.string.lightning__arkade_confirmations, minOf(it.toInt(), 3)),
+                    color = Colors.Purple,
+                )
+            }
+        }
     }
 }
 
