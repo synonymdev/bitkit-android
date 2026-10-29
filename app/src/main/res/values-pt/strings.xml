@@ -354,6 +354,7 @@
     <string name="primary_node__address">URI do nó</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">Esta chave pública não tem um endereço conhecido. Leia ou cole o URI completo publickey@host:port.</string>
+    <string name="primary_node__balance">Bitcoin</string>
     <string name="primary_node__busy">Ainda há uma alteração pendente no seu canal com o seu nó principal. Tente novamente quando for confirmada.</string>
     <string name="primary_node__connect">Conectar</string>
     <string name="primary_node__connected">Nó principal conectado</string>

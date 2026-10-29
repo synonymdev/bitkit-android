@@ -401,6 +401,7 @@
     <string name="primary_node__address">URI ноды</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">Для этого публичного ключа адрес неизвестен. Отсканируйте или вставьте полный URI publickey@host:port.</string>
+    <string name="primary_node__balance">Биткоин</string>
     <string name="primary_node__busy">Изменение вашего канала с основной нодой всё ещё в обработке. Повторите попытку после подтверждения.</string>
     <string name="primary_node__connect">Подключиться</string>
     <string name="primary_node__connected">Основная нода подключена</string>

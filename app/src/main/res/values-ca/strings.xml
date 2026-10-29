@@ -387,6 +387,7 @@
     <string name="primary_node__address">URI del node</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">Aquesta clau pública no té cap adreça coneguda. Escaneja o enganxa l\'URI complet publickey@host:port.</string>
+    <string name="primary_node__balance">Bitcoin</string>
     <string name="primary_node__busy">Encara hi ha un canvi pendent al teu canal amb el node principal. Torna-ho a provar quan es confirmi.</string>
     <string name="primary_node__connect">Connecta</string>
     <string name="primary_node__connected">Node principal connectat</string>

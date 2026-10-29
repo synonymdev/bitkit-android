@@ -390,6 +390,7 @@
     <string name="primary_node__address">URI uzlu</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">Tento veřejný klíč nemá známou adresu. Naskenujte nebo vložte celé URI publickey@host:port.</string>
+    <string name="primary_node__balance">Bitcoin</string>
     <string name="primary_node__busy">Změna vašeho kanálu s primárním uzlem stále probíhá. Zkuste to znovu, až bude potvrzena.</string>
     <string name="primary_node__connect">Připojit</string>
     <string name="primary_node__connected">Primární uzel připojen</string>

@@ -371,6 +371,7 @@
     <string name="primary_node__address">URI du nœud</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">Cette clé publique n\'a pas d\'adresse connue. Scannez ou collez l\'URI complet publickey@host:port.</string>
+    <string name="primary_node__balance">Bitcoin</string>
     <string name="primary_node__busy">Une modification de votre canal avec votre nœud principal est encore en attente. Réessayez une fois qu\'elle sera confirmée.</string>
     <string name="primary_node__connect">Connecter</string>
     <string name="primary_node__connected">Nœud principal connecté</string>

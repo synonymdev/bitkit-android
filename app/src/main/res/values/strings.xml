@@ -577,6 +577,7 @@
     <string name="primary_node__address">Node URI</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">This public key has no known address. Scan or paste the full publickey@host:port URI.</string>
+    <string name="primary_node__balance">Bitcoin</string>
     <string name="primary_node__busy">A change to your channel with your primary node is still pending. Try again once it confirms.</string>
     <string name="primary_node__connect">Connect</string>
     <string name="primary_node__connected">Primary node connected</string>

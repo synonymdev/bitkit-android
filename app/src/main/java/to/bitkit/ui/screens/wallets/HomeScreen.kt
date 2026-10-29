@@ -131,6 +131,7 @@ import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.effectiveSize
+import to.bitkit.models.safe
 import to.bitkit.models.toBalance
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlockModel
@@ -685,6 +686,7 @@ private fun WalletPage(
             VerticalSpacer(32.dp)
             BalancesSection(
                 balances = balances,
+                isUnified = homeUiState.hasPrimaryNode,
                 hardwareWallets = homeUiState.hardwareWallets,
                 onNavigateToSavings = onNavigateToSavings,
                 onNavigateToSpending = onNavigateToSpending,
@@ -747,11 +749,49 @@ private fun WalletPage(
 @Composable
 private fun BalancesSection(
     balances: BalanceState,
+    isUnified: Boolean,
     hardwareWallets: ImmutableList<HwWallet>,
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
     onClickHardwareWallet: (String) -> Unit,
     onClickUsdt: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (isUnified) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                WalletBalanceView(
+                    title = stringResource(R.string.primary_node__balance),
+                    sats = (balances.totalOnchainSats.safe() + balances.totalLightningSats.safe()).toLong(),
+                    icon = painterResource(id = R.drawable.ic_btc_circle),
+                    modifier = Modifier
+                        .clickableAlpha(onClick = onNavigateToSpending)
+                        .padding(vertical = 4.dp)
+                        .testTag("ActivityBitcoin")
+                )
+            }
+        } else {
+            SavingsAndSpending(
+                balances = balances,
+                onNavigateToSavings = onNavigateToSavings,
+                onNavigateToSpending = onNavigateToSpending,
+            )
+        }
+
+        AdditionalWallets(
+            wallets = hardwareWallets,
+            showUsdt = !LocalInspectionMode.current &&
+                (appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true),
+            onClickHardwareWallet = onClickHardwareWallet,
+            onClickUsdt = onClickUsdt,
+        )
+    }
+}
+
+@Composable
+private fun SavingsAndSpending(
+    balances: BalanceState,
+    onNavigateToSavings: () -> Unit,
+    onNavigateToSpending: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -780,14 +820,6 @@ private fun BalancesSection(
                     .testTag("ActivitySpending")
             )
         }
-
-        AdditionalWallets(
-            wallets = hardwareWallets,
-            showUsdt = !LocalInspectionMode.current &&
-                (appViewModel?.isUsdtVisible?.collectAsStateWithLifecycle()?.value == true),
-            onClickHardwareWallet = onClickHardwareWallet,
-            onClickUsdt = onClickUsdt,
-        )
     }
 }
 

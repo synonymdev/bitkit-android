@@ -37,6 +37,7 @@ data class HomeUiState(
     val isEditingWidgets: Boolean = false,
     val deleteWidgetAlert: WidgetType? = null,
     val showEmptyState: Boolean = false,
+    val hasPrimaryNode: Boolean = false,
     val currentPage: Int = 0,
     val showWidgetsOnboardingHint: Boolean = false,
 )

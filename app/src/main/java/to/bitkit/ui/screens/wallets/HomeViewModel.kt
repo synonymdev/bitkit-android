@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
@@ -23,6 +24,7 @@ import to.bitkit.data.isUsdtEnabled
 import to.bitkit.env.Env
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BannerItem
+import to.bitkit.models.PrimaryNode
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.ArticleModel
@@ -73,6 +75,12 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun setupStateObservation() {
+        viewModelScope.launch {
+            settingsStore.data
+                .map { PrimaryNode.effective(it.primaryNodeUri) != null }
+                .distinctUntilChanged()
+                .collect { has -> _uiState.update { it.copy(hasPrimaryNode = has) } }
+        }
         viewModelScope.launch {
             combine(
                 settingsStore.data,

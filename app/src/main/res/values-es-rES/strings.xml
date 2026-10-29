@@ -389,6 +389,7 @@
     <string name="primary_node__address">URI del nodo</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">Esta clave pública no tiene una dirección conocida. Escanee o pegue el URI completo publickey@host:port.</string>
+    <string name="primary_node__balance">Bitcoin</string>
     <string name="primary_node__busy">Aún hay un cambio pendiente en su canal con su nodo principal. Inténtelo de nuevo cuando se confirme.</string>
     <string name="primary_node__connect">Conectar</string>
     <string name="primary_node__connected">Nodo principal conectado</string>

@@ -88,6 +88,10 @@ class WalletRepo @Inject constructor(
 
     private var eventSyncJob: Job? = null
     private var primaryFundingJob: Job? = null
+
+    /** An invoice the primary node delivers, approved by the user for its amount; receive refreshes keep it. */
+    @Volatile
+    private var approvedPrimaryInvoice: Pair<String, ULong>? = null
     private val receiveStateMutex = Mutex()
     private val receiveUpdateStatusLock = Any()
     private var pendingReceiveUpdates = 0
@@ -452,6 +456,9 @@ class WalletRepo @Inject constructor(
         settledReceiveInvoice: SettledReceiveInvoice? = null,
         settledReceiveAddress: SettledReceiveAddress? = null,
     ) {
+        if (settledReceiveInvoice != null && settledReceiveInvoice.bolt11 == approvedPrimaryInvoice?.first) {
+            approvedPrimaryInvoice = null
+        }
         val trackPending = synchronized(receiveUpdateStatusLock) {
             val cacheLoadPending = pendingReceiveCacheLoads > 0
             if (!shouldHandleReceiveEvent(event, settledReceiveInvoice, settledReceiveAddress, cacheLoadPending)) return
@@ -952,6 +959,7 @@ class WalletRepo @Inject constructor(
             _walletState.update { it.copy(bip21AmountSats = amountSats, bip21Description = description) }
         },
     ) {
+        approvedPrimaryInvoice = bolt11 to amountSats
         runSuspendCatching { setBolt11Locked(bolt11, amountSats, description) }
     }
 
@@ -971,10 +979,15 @@ class WalletRepo @Inject constructor(
                 emptyList()
             }
 
-            val bolt11 = if (canCreateLightningInvoice(amountSats)) {
-                lightningRepo.createInvoice(amountSats, description).getOrThrow()
-            } else {
-                ""
+            val approved = approvedPrimaryInvoice?.takeIf { (invoice, sats) ->
+                sats == amountSats && runCatching { !Bolt11Invoice.fromStr(invoice).isExpired() }.getOrDefault(false)
+            }
+            val bolt11 = when {
+                approved != null -> approved.first
+                canCreateLightningInvoice(
+                    amountSats
+                ) -> lightningRepo.createInvoice(amountSats, description).getOrThrow()
+                else -> ""
             }
             setBolt11Locked(bolt11, amountSats, description)
             val newBip21Url = _walletState.value.bip21

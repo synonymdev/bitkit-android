@@ -372,6 +372,7 @@
     <string name="primary_node__address">Node-URI</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">Für diesen Public Key ist keine Adresse bekannt. Scanne oder füge den vollständigen URI publickey@host:port ein.</string>
+    <string name="primary_node__balance">Bitcoin</string>
     <string name="primary_node__busy">Eine Änderung an deinem Kanal mit deinem primären Node steht noch aus. Versuche es erneut, sobald sie bestätigt ist.</string>
     <string name="primary_node__connect">Verbinden</string>
     <string name="primary_node__connected">Primärer Node verbunden</string>

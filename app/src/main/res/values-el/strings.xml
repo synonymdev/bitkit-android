@@ -383,6 +383,7 @@
     <string name="primary_node__address">URI κόμβου</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">Αυτό το δημόσιο κλειδί δεν έχει γνωστή διεύθυνση. Σάρωσε ή επικόλλησε ολόκληρο το URI publickey@host:port.</string>
+    <string name="primary_node__balance">Μπιτκόιν</string>
     <string name="primary_node__busy">Μια αλλαγή στο κανάλι σου με τον κύριο κόμβο εκκρεμεί ακόμη. Δοκίμασε ξανά μόλις επιβεβαιωθεί.</string>
     <string name="primary_node__connect">Σύνδεση</string>
     <string name="primary_node__connected">Ο κύριος κόμβος συνδέθηκε</string>

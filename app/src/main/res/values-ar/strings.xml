@@ -383,6 +383,7 @@
     <string name="primary_node__address">عنوان URI للعقدة</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">لا يوجد عنوان معروف لهذا المفتاح العام. امسح عنوان URI الكامل publickey@host:port ضوئيًا أو الصقه.</string>
+    <string name="primary_node__balance">بيتكوين</string>
     <string name="primary_node__busy">ما زال هناك تغيير معلق في قناتك مع عقدتك الأساسية. حاول مرة أخرى بعد تأكيده.</string>
     <string name="primary_node__connect">اتصال</string>
     <string name="primary_node__connected">تم اتصال العقدة الأساسية</string>

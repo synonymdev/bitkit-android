@@ -135,11 +135,21 @@ class PrimaryNodeRepo @Inject constructor(
         lightningRepo.createPrimaryInvoice(amountSats, description, maxFeeMsat).mapPrimaryReceiveError()
     }
 
-    /** How much of the confirmed savings can move into the primary channel now, and at what fee. */
-    suspend fun fundingPlan(): Result<PrimaryFundingPlan?> = withContext(bgDispatcher) {
+    /**
+     * How much of the confirmed savings can move into the primary channel now, and at what fee.
+     * For a manual transfer, an offline primary or a pending funding fails instead of planning nothing.
+     */
+    suspend fun fundingPlan(isManual: Boolean = false): Result<PrimaryFundingPlan?> = withContext(bgDispatcher) {
         runSuspendCatching {
-            if (lightningRepo.primaryNode == null || !isPrimaryConnected()) return@runSuspendCatching null
-            if (lightningRepo.hasPendingFundingOperation().getOrThrow()) return@runSuspendCatching null
+            if (lightningRepo.primaryNode == null) return@runSuspendCatching null
+            if (!isPrimaryConnected()) {
+                if (isManual) throw PrimaryReceiveError.Offline(null)
+                return@runSuspendCatching null
+            }
+            if (lightningRepo.hasPendingFundingOperation().getOrThrow()) {
+                if (isManual) throw PrimaryWalletBusyError()
+                return@runSuspendCatching null
+            }
             val spendable = lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
             val inputs = lightningRepo.listSpendableOutputs().getOrThrow().size.toULong()
             val feeRate = lightningRepo.channelFundingFeeRate().getOrThrow()

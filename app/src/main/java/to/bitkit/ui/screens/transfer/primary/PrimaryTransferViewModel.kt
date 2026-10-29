@@ -47,7 +47,7 @@ class PrimaryTransferViewModel @Inject constructor(
                 _uiState.update { PrimaryTransferUiState(hasPrimaryNode = false) }
                 return@launch
             }
-            primaryNodeRepo.fundingPlan()
+            primaryNodeRepo.fundingPlan(isManual = true)
                 .onSuccess { plan -> _uiState.update { PrimaryTransferUiState(plan = plan) } }
                 .onFailure { error ->
                     _uiState.update {

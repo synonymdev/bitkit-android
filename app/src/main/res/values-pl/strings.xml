@@ -371,6 +371,7 @@
     <string name="primary_node__address">URI węzła</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">Ten klucz publiczny nie ma znanego adresu. Zeskanuj lub wklej pełny URI publickey@host:port.</string>
+    <string name="primary_node__balance">Bitcoin</string>
     <string name="primary_node__busy">Zmiana w Twoim kanale z węzłem głównym nadal oczekuje. Spróbuj ponownie po jej potwierdzeniu.</string>
     <string name="primary_node__connect">Połącz</string>
     <string name="primary_node__connected">Węzeł główny połączony</string>

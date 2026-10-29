@@ -387,6 +387,7 @@
     <string name="primary_node__address">Node-URI</string>
     <string name="primary_node__address_placeholder">publickey@host:port</string>
     <string name="primary_node__address_required">Voor deze publieke sleutel is geen adres bekend. Scan of plak de volledige URI publickey@host:port.</string>
+    <string name="primary_node__balance">Bitcoin</string>
     <string name="primary_node__busy">Een wijziging aan je kanaal met je primaire node is nog in behandeling. Probeer het opnieuw zodra die bevestigd is.</string>
     <string name="primary_node__connect">Verbinden</string>
     <string name="primary_node__connected">Primaire node verbonden</string>
