@@ -2071,6 +2071,97 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `committed recovery revision survives cancellation after an older permanent failure`() = test {
+        val category = BackupCategory.USDT_RECOVERY
+        val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        whenever(usdtRepo.backupSnapshot()).thenReturn("signed")
+        var attempts = 0
+        whenever { vssBackupClient.putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, any()) }
+            .doSuspendableAnswer {
+                attempts++
+                if (attempts == 1) {
+                    Result.failure(VssException.UnknownException("invalid data"))
+                } else {
+                    Result.success(VssItem(key = "recovery", value = byteArrayOf(), version = 1))
+                }
+            }
+        assertTrue(sut.persistUsdtRecoveryBackup("signed").isFailure)
+        val failedRevision = statuses.value.getValue(category).required
+        sut.startObservingBackups()
+        runCurrent()
+        advanceTimeBy(10_000)
+        runCurrent()
+        assertEquals(1, attempts)
+        val committed = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            statuses.update { current -> transform(AppCacheData(backupStatuses = current)).backupStatuses }
+            val status = statuses.value.getValue(category)
+            if (!committed.isCompleted && status.required > failedRevision && !status.running) {
+                committed.complete(Unit)
+                release.await()
+            }
+        }
+        val service = UsdtService(keychain, Provider { sut })
+        val callback = launch { service.recoveryBackup.persist("signed") }
+        try {
+            committed.await()
+            callback.cancel()
+            runCurrent()
+            release.complete(Unit)
+            callback.join()
+            assertEquals(0L, service.recoveryGeneration)
+            assertTrue(statuses.value.getValue(category).required > failedRevision)
+            advanceTimeBy(10_000)
+            runCurrent()
+            assertEquals(2, attempts)
+            assertFalse(statuses.value.getValue(category).isRequired)
+            assertEquals(0L, service.recoveryGeneration)
+        } finally {
+            release.complete(Unit)
+            callback.cancelAndJoin()
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `explicit recovery callback bypasses scheduled debounce and owns its acknowledgement`() = test {
+        val category = BackupCategory.USDT_RECOVERY
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        whenever(usdtRepo.backupSnapshot()).thenReturn("background")
+        val uploads = mutableListOf<String?>()
+        whenever { vssBackupClient.putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, any()) }
+            .doSuspendableAnswer {
+                val payload = json.decodeFromString<UsdtRecoveryBackupV1>(it.getArgument<ByteArray>(1).decodeToString())
+                uploads += payload.usdtWallet
+                Result.success(VssItem(key = "recovery", value = byteArrayOf(), version = 1))
+            }
+        sut.startObservingBackups()
+        runCurrent()
+        advanceTimeBy(150)
+        val service = UsdtService(keychain, Provider { sut })
+        val callback = async { service.recoveryBackup.persist("signed") }
+        try {
+            runCurrent()
+            assertTrue(callback.isCompleted, "Explicit recovery must not wait for scheduled debounce")
+            callback.await()
+            assertEquals(listOf<String?>("signed"), uploads)
+            assertEquals(1L, service.recoveryGeneration)
+            advanceTimeBy(5_000)
+            runCurrent()
+            assertEquals(listOf<String?>("signed"), uploads)
+        } finally {
+            callback.cancelAndJoin()
+            sut.reset()
+        }
+    }
+
+    @Test
     fun `cancelled queued USDT callback retains its required revision`() = test {
         val category = BackupCategory.USDT_RECOVERY
         val statuses = MutableStateFlow<Map<BackupCategory, BackupItemStatus>>(emptyMap())

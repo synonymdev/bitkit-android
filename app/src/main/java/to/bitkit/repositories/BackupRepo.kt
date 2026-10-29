@@ -536,17 +536,18 @@ class BackupRepo @Inject constructor(
             jobScope.launch(start = CoroutineStart.LAZY) {
                 try {
                     owner?.ready?.await()
+                    // Coalescing pending work must not delay an explicit recovery acknowledgement.
+                    delay(BACKUP_DEBOUNCE)
                     categoryMutexes.getValue(category).withLock {
                         runningBackups += category
                         try {
                             updateBackupStatus(category, expectedGeneration) { it.copy(running = true) }
-                            delay(BACKUP_DEBOUNCE)
                             if (category == BackupCategory.WALLET) {
                                 paykitSdkService.isPaymentSubmissionActive.first { !it }
                             }
                             val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
                             if (status.isRequired && !shouldSkipBackup(category) &&
-                                !failedBackupRequired.containsKey(category)
+                                failedBackupRequired[category] != status.required
                             ) {
                                 performBackup(category, expectedGeneration)
                             }
@@ -579,7 +580,6 @@ class BackupRepo @Inject constructor(
         }
         synchronized(lifecycleLock) {
             if (resetting || generation != expectedGeneration) return
-            if (failedBackupRequired.containsKey(category)) return
             if (!status.shouldBackup(category)) return
             if (category in explicitBackups) {
                 scheduleBackup(category, requestedGeneration = expectedGeneration)
