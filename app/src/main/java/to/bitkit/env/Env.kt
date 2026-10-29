@@ -125,10 +125,13 @@ internal object Env {
             Network.BITCOIN -> "https://api1.blocktank.to"
             else -> "https://api.stag0.blocktank.to"
         }
-    val blocktankApiUrl
-        get() = when (network) {
-            Network.BITCOIN -> "$blocktankBaseUrl/api"
-            else -> "$blocktankBaseUrl/blocktank/api/v2"
+    val blocktankApiUrl: String
+        get() {
+            val fixture = BlocktankTestEndpoint.resolve(isDebug && isE2eTest, BuildConfig.E2E_BLOCKTANK_API_URL)
+            return fixture ?: when (network) {
+                Network.BITCOIN -> "$blocktankBaseUrl/api"
+                else -> "$blocktankBaseUrl/blocktank/api/v2"
+            }
         }
 
     val btcRatesServer

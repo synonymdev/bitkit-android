@@ -395,7 +395,7 @@ private fun SendAmountNodeRunning(
 
                 val isLnurl = uiState.lnurl != null
                 if (!isLnurl || uiState.usdtRecipient != null) {
-                    PaymentMethodButton(uiState = uiState, onClick = onClickPayMethod)
+                    SendFundingSourceButton(uiState = uiState, onClick = onClickPayMethod)
                 }
                 if (uiState.paykitUsesUsdt) {
                     HorizontalSpacer(8.dp)
@@ -470,9 +470,12 @@ private fun SendAmountNodeRunning(
 }
 
 @Composable
-private fun PaymentMethodButton(
+internal fun SendFundingSourceButton(
     uiState: SendUiState,
     onClick: (SendFundingSource) -> Unit,
+    modifier: Modifier = Modifier,
+    interactionsEnabled: Boolean = true,
+    confirmation: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val isHardware = uiState.hardwareWalletId != null
@@ -483,7 +486,7 @@ private fun PaymentMethodButton(
         uiState.payMethod == SendMethod.ONCHAIN -> "savings"
         else -> "spending"
     }
-    Box {
+    Box(modifier = modifier) {
         NumberPadActionButton(
             text = when {
                 uiState.paykitUsesUsdt -> "USDT"
@@ -500,9 +503,10 @@ private fun PaymentMethodButton(
             outlined = true,
             trailingIcon = if (uiState.canSwitchFundingSource) R.drawable.ic_chevron_down else null,
             onClick = { expanded = true },
-            enabled = uiState.fundingOptions.isNotEmpty(),
+            enabled = uiState.fundingOptions.isNotEmpty() && interactionsEnabled &&
+                (!confirmation || uiState.canSwitchConfirmFundingSource),
             isLoading = uiState.isFundingSourceLoading,
-            clickable = !uiState.isLoading,
+            clickable = !uiState.isLoading && interactionsEnabled && !uiState.isRetainedHardwarePayment,
             modifier = Modifier
                 .height(28.dp)
                 .testTag("AssetButton-$testId")
@@ -517,12 +521,15 @@ private fun PaymentMethodButton(
                 .testTag("SendFundingSources")
         ) {
             VerticalSpacer(4.dp)
-            uiState.fundingOptions.forEachIndexed { index, option ->
+            val options = uiState.fundingOptions.filter {
+                !confirmation || uiState.isPaymentRequest || it.source != SendFundingSource.Usdt
+            }
+            options.forEachIndexed { index, option ->
                 FundingSourceOption(option, uiState, onClick = {
                     expanded = false
                     onClick(option.source)
                 })
-                if (index < uiState.fundingOptions.lastIndex) {
+                if (index < options.lastIndex) {
                     HorizontalDivider(Modifier.padding(horizontal = 24.dp), color = Colors.White10)
                 }
             }

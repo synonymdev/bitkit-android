@@ -395,7 +395,13 @@ class PubkyRepo @Inject constructor(
     suspend fun restoreSessionIfNeeded() = withContext(ioDispatcher) {
         awaitInitialization()
         val restored = restoreSession()
-        if (restored) loadIdentityData()
+        if (restored) {
+            loadIdentityData()
+        } else {
+            currentSignIn()?.takeIf { _profile.value == null }?.let { signIn ->
+                scope.launch { loadProfile(signIn, onlyIfMissing = true) }
+            }
+        }
         restored
     }
 
@@ -823,9 +829,14 @@ class PubkyRepo @Inject constructor(
 
     suspend fun loadProfile() {
         val signIn = currentSignIn() ?: return loadReadOnlyProfile()
+        loadProfile(signIn)
+    }
+
+    private suspend fun loadProfile(signIn: PubkySignIn, onlyIfMissing: Boolean = false) {
         val version = completedProfileLoadVersion.get()
         loadProfileMutex.withLock {
             if (!isCurrent(signIn)) return
+            if (onlyIfMissing && _profile.value != null) return
             val writeGeneration = profileWriteGeneration.get()
             if (completedProfileLoadVersion.get() != version && completedProfileSignInGeneration == signIn.generation &&
                 completedProfileWriteGeneration == writeGeneration

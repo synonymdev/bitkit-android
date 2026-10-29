@@ -692,10 +692,16 @@ class PaykitPaymentRequestRepo @Inject constructor(
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
     ): Result<Unit> = refresh(mode, forceFresh = true)
 
+    internal suspend fun refreshAfterStateChange(
+        mode: PaykitPaymentRequestRefreshMode,
+        priority: Priority,
+    ): Result<Unit> = refresh(mode, forceFresh = true, priority = priority)
+
     private suspend fun refresh(
         mode: PaykitPaymentRequestRefreshMode,
         forceFresh: Boolean,
         messagePriority: Priority = Priority.Background,
+        priority: Priority = if (forceFresh) Priority.Ordered else Priority.Background,
     ): Result<Unit> {
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity
@@ -718,13 +724,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         RefreshCheckpoint(actionVersion, proofVersion)
                     } ?: return@refresh
                     val snapshot = runSuspendCatching {
-                        val priority = if (forceFresh) Priority.Ordered else Priority.Background
                         fetchRequestSnapshot(
                             expectedIdentity,
                             mode,
                             priority,
-                            if (forceFresh) Priority.Ordered else messagePriority,
+                            if (forceFresh) priority else messagePriority,
                             observationOnly = true,
+                            combineReceiveObservation = !forceFresh,
                         )
                     }
                     operationMutex.withLock {
@@ -733,7 +739,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         runSuspendCatching {
                             val records = snapshot.getOrThrow()
                             if (checkpoint != RefreshCheckpoint(actionVersion, proofVersion)) {
-                                synchronizeLocked(generation, expectedIdentity, PaykitPaymentRequestRefreshMode.STORED)
+                                synchronizeLocked(
+                                    generation,
+                                    expectedIdentity,
+                                    PaykitPaymentRequestRefreshMode.STORED,
+                                    priority,
+                                )
                             } else {
                                 applyRequestSnapshotLocked(records, generation, expectedIdentity, proofVersion)
                             }
@@ -796,6 +807,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                 }
             }.onFailure {
+                if (it == PaykitPaymentRequestError.OperationInProgress) return@onFailure
                 Logger.warn("Failed to refresh Paykit payment request recipients", it, context = TAG)
                 val savedKeys = savedPublicKeys.mapNotNull(PubkyPublicKeyFormat::normalized).toSet()
                 operationMutex.withLock {
@@ -1397,9 +1409,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
         generation: Long,
         expectedIdentity: String?,
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
+        priority: Priority = Priority.Ordered,
     ) {
         val proofVersion = paymentProofVersion()
-        val snapshot = fetchRequestSnapshot(expectedIdentity, mode)
+        val snapshot = fetchRequestSnapshot(expectedIdentity, mode, priority)
         applyRequestSnapshotLocked(snapshot, generation, expectedIdentity, proofVersion)
     }
 
@@ -1409,8 +1422,21 @@ class PaykitPaymentRequestRepo @Inject constructor(
         priority: Priority = Priority.Ordered,
         messagePriority: Priority = Priority.Ordered,
         observationOnly: Boolean = false,
+        combineReceiveObservation: Boolean = false,
     ): RequestSnapshot {
         if (mode == PaykitPaymentRequestRefreshMode.FULL) processPendingMessages(priority = messagePriority)
+        if (combineReceiveObservation && observationOnly && mode != PaykitPaymentRequestRefreshMode.STORED &&
+            priority == Priority.Background && messagePriority == Priority.Background
+        ) {
+            val observation = paykitSdkService.receiveAndObserveState(
+                requireNotNull(expectedIdentity),
+                ::logIntakeFailures,
+            )
+            return RequestSnapshot(
+                observation.paymentRequests,
+                observation.linkedPeers.filter { it.state == LinkedPeerState.BLOCKED },
+            )
+        }
         if (mode != PaykitPaymentRequestRefreshMode.STORED) {
             paykitSdkService.receivePrivateMessagesFromLinkedPeers(messagePriority).also(::logIntakeFailures)
         }

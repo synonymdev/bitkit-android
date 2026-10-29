@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.BlocktankException
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.ClosedChannelDetails
@@ -62,6 +63,8 @@ import com.synonym.bitkitcore.wipeAllDatabases
 import io.ktor.client.request.get
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ConfirmationStatus
@@ -2123,16 +2126,38 @@ class BlocktankService(
     }
 
     suspend fun getFees(): Result<FeeRates> {
-        var fees = fees(refresh = true)
+        val fresh = runSuspendCatching { fees(refresh = true) }
+        val error = fresh.exceptionOrNull()
+        if (error != null && !isInfoBadGateway(error)) throw error
+        var fees = fresh.getOrNull()
         if (fees == null) {
+            currentCoroutineContext().ensureActive()
             Logger.warn("Failed to fetch fresh fee rate, using cached rate.")
             fees = fees(refresh = false)
+            currentCoroutineContext().ensureActive()
         }
         if (fees == null) {
-            return Result.failure(AppError("Fees unavailable from bitkit-core"))
+            return Result.failure(error ?: AppError("Fees unavailable from bitkit-core"))
         }
 
         return Result.success(fees)
+    }
+
+    private fun isInfoBadGateway(error: Throwable): Boolean {
+        var cause = error
+        repeat(8) {
+            when (val current = cause) {
+                is BlocktankException.DataException -> {
+                    val prefix = "Failed to fetch info from Blocktank: Blocktank error: " +
+                        "Failed to get info: Client error: "
+                    return current.errorDetails.startsWith(prefix + "Request failed with status 502 Bad Gateway:") ||
+                        current.errorDetails.startsWith(prefix + "Request failed (502 Bad Gateway):")
+                }
+                is AppError -> cause = current.cause ?: return false
+                else -> return false
+            }
+        }
+        return false
     }
 
     suspend fun cjitEntries(
