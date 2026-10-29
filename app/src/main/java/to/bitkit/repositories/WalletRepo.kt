@@ -815,7 +815,10 @@ class WalletRepo @Inject constructor(
         }
         cacheStore.update { it.copy(bolt11 = bolt11, bolt11PaymentHash = paymentHash, bip21 = bip21) }
         committedReceiveBip21 = bip21
-        _walletState.update { it.copy(bolt11 = bolt11, bip21 = bip21, hasReceiveInvoiceError = false) }
+        val isPrimaryInvoice = bolt11.isNotEmpty() && bolt11 == approvedPrimaryInvoice?.first
+        _walletState.update {
+            it.copy(bolt11 = bolt11, bip21 = bip21, hasReceiveInvoiceError = false, isPrimaryInvoice = isPrimaryInvoice)
+        }
     }
 
     suspend fun setBip21(bip21: String) = updateReceiveState(trackPending = false) { setBip21Locked(bip21) }
@@ -1053,6 +1056,8 @@ data class WalletState(
     val isReceiveInvoiceUpdating: Boolean = false,
     val bip21AmountSats: ULong? = null,
     val bip21Description: String = "",
+    /** The Lightning invoice is one the user approved with the primary node's fee, not one inbound capacity covers. */
+    val isPrimaryInvoice: Boolean = false,
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val walletExists: Boolean = false,
 )

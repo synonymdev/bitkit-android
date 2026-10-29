@@ -38,6 +38,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.primaryErrorMessageRes
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
@@ -76,6 +77,14 @@ fun SavingsProgressScreen(
                 onSuccess = { progressState = SavingsProgressState.SUCCESS },
                 onInterrupted = { progressState = SavingsProgressState.INTERRUPTED },
                 onGiveUp = { app.showSheet(Sheet.ForceTransfer) },
+                onFailure = {
+                    app.toast(
+                        type = Toast.ToastType.ERROR,
+                        title = resources.getString(R.string.common__error),
+                        description = resources.getString(it.primaryErrorMessageRes()),
+                    )
+                    onTransferUnavailable()
+                },
             )
         }
     }
@@ -122,8 +131,12 @@ private suspend fun runChannelClose(
     onSuccess: () -> Unit,
     onInterrupted: () -> Unit,
     onGiveUp: () -> Unit,
+    onFailure: (Throwable) -> Unit,
 ) {
-    val channelsFailedToCoopClose = transfer.closeSelectedChannels()
+    val channelsFailedToCoopClose = transfer.closeSelectedChannels().getOrElse {
+        onFailure(it)
+        return
+    }
 
     if (channelsFailedToCoopClose.isEmpty()) {
         wallet.refreshState()

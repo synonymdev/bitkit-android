@@ -834,6 +834,17 @@ class ActivityService(
                 processBolt11(kind = kind, payment = payment, state = state)
             }
 
+            is PaymentKind.Bolt11Jit -> {
+                val bolt11 = PaymentKind.Bolt11(
+                    hash = kind.hash,
+                    preimage = kind.preimage,
+                    secret = kind.secret,
+                    description = kind.description,
+                    bolt11 = kind.bolt11,
+                )
+                processBolt11(kind = bolt11, payment = payment, state = state)
+            }
+
             else -> Unit // Handle spontaneous payments if needed
         }
     }

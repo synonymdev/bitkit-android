@@ -823,6 +823,13 @@ class LightningRepo @Inject constructor(
             }
 
             is Event.ChannelClosed -> scope.launch { registerClosedChannel(event.channelId, event.reason) }
+            is Event.PaymentReceived,
+            is Event.PaymentSuccessful,
+            is Event.PaymentFailed,
+            is Event.SplicePending,
+            is Event.SpliceFailed,
+            -> scope.launch { refreshChannelsAndPeers() }
+
             else -> Unit
         }
     }

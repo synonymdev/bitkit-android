@@ -134,11 +134,13 @@ fun ReceiveQrScreen(
         hasReadyChannels,
         readyInboundLiquiditySats,
         walletState.bip21AmountSats,
+        walletState.isPrimaryInvoice,
     ) {
         ReceiveLiquidityDecision.canCreateLightningInvoice(
             hasReadyChannels = hasReadyChannels,
             inboundCapacitySats = readyInboundLiquiditySats,
             invoiceAmountSats = walletState.bip21AmountSats,
+            hasPrimaryInvoice = walletState.isPrimaryInvoice,
         )
     }
 

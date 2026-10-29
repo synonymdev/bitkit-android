@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import org.junit.Test
 import org.lightningdevkit.ldknode.NodeException
+import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -45,6 +46,16 @@ class PrimaryNodeRepoTest {
     }
 
     @Test
+    fun `funding plan counts one input for savings ldk-node does not list as spendable`() {
+        val plan = requireNotNull(
+            primaryFundingPlan(spendableSats = 50_000uL, inputs = 0uL, feeRate = 2uL, hasChannel = true)
+        )
+
+        assertEquals(1_200uL, plan.feeSats)
+        assertEquals(48_800uL, plan.amountSats)
+    }
+
+    @Test
     fun `liquidity errors map to what the user is told`() {
         fun map(e: NodeException) = LdkError(e).toPrimaryReceiveError()
 
@@ -57,7 +68,9 @@ class PrimaryNodeRepoTest {
     @Test
     fun `an unreachable primary is reported as offline`() {
         val error = LdkError(NodeException.ConnectionFailed("")).toPrimaryReceiveError()
+        val wrapped = AppError(LdkError(NodeException.ConnectionFailed(""))).toPrimaryReceiveError()
 
         assertIs<PrimaryReceiveError.Offline>(error)
+        assertIs<PrimaryReceiveError.Offline>(wrapped)
     }
 }

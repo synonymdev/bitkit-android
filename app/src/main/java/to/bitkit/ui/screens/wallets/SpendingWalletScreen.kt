@@ -68,6 +68,7 @@ fun SpendingWalletScreen(
     onTransferToSavingsClick: () -> Unit,
     onTransferFromSavingsClick: () -> Unit,
     onBackClick: () -> Unit,
+    hasPrimaryNode: Boolean = false,
     balances: BalanceState = LocalBalances.current,
 ) {
     val showEmptyState by remember(balances.totalLightningSats, lightningActivities.size) {
@@ -80,8 +81,8 @@ fun SpendingWalletScreen(
         val hasChannels = channels.isNotEmpty()
         mutableStateOf(hasLnBalance && hasChannels)
     }
-    val canTransferFromSavings by remember(showEmptyState, balances.totalOnchainSats) {
-        mutableStateOf(showEmptyState && balances.totalOnchainSats > 0uL)
+    val canTransferFromSavings by remember(showEmptyState, hasPrimaryNode, balances.totalOnchainSats) {
+        mutableStateOf((showEmptyState || hasPrimaryNode) && balances.totalOnchainSats > 0uL)
     }
     val hazeState = rememberHazeState()
 

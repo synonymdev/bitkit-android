@@ -163,7 +163,7 @@ private fun Content(
                 SecondaryButton(
                     text = stringResource(R.string.settings__es__button_reset),
                     onClick = onClickReset,
-                    enabled = !uiState.isLoading && !uiState.isDefault,
+                    enabled = !uiState.isLoading && !uiState.isInputDefault,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("PrimaryNodeReset")
@@ -192,7 +192,6 @@ private fun Preview() {
                 currentUri = "024a6cc632544189896cca8e06e375bdb1d1f34a71a4c25d09a39cf0ed920a299c@bore.pub:39101",
                 input = "024a6cc632544189896cca8e06e375bdb1d1f34a71a4c25d09a39cf0ed920a299c@bore.pub:39101",
                 isConnected = true,
-                isDefault = true,
             ),
         )
     }

@@ -1203,6 +1203,7 @@ private fun NavGraphBuilder.home(
     }
     deepLinkableComposable<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
+        val hasPrimaryNode by settingsViewModel.hasPrimaryNode.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
@@ -1221,6 +1222,7 @@ private fun NavGraphBuilder.home(
             },
             onTransferFromSavingsClick = { navController.navigateTo(Routes.PrimaryTransfer) },
             onBackClick = { navController.popBackStack() },
+            hasPrimaryNode = hasPrimaryNode,
         )
     }
     deepLinkableComposable<Routes.HardwareWallet> {

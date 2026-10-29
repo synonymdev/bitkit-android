@@ -28,7 +28,9 @@ object ReceiveLiquidityDecision {
         hasReadyChannels: Boolean,
         inboundCapacitySats: ULong?,
         invoiceAmountSats: ULong?,
+        hasPrimaryInvoice: Boolean = false,
     ): Boolean {
+        if (hasPrimaryInvoice) return true
         if (!hasReadyChannels || inboundCapacitySats == null) return false
 
         if (invoiceAmountSats == null || invoiceAmountSats == 0uL) {

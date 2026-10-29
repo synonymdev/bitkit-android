@@ -2358,8 +2358,8 @@ class AppViewModel @Inject constructor(
                     is Event.PaymentSuccessful -> handlePaymentSuccessful(event)
                     is Event.ProbeFailed -> Unit
                     is Event.ProbeSuccessful -> Unit
-                    is Event.SpliceFailed -> Unit
-                    is Event.SplicePending -> Unit
+                    is Event.SpliceFailed -> walletRepo.syncBalances()
+                    is Event.SplicePending -> walletRepo.syncNodeAndWallet()
                     is Event.SyncCompleted -> handleSyncCompleted(event)
                     is Event.SyncProgress -> Unit
                 }
@@ -6894,15 +6894,25 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    /** True when savings can't cover [amount] and its fee, but the primary channel can. */
     private suspend fun shouldSendFromPrimaryChannel(address: String, amount: ULong): Boolean {
         val state = _sendUiState.value
-        if (state.selectedUtxos != null || primaryNodeRepo.primaryChannel() == null) return false
+        return primaryChannelSendFee(address, amount, state.speed, state.selectedUtxos, state.feeRates) != null
+    }
+
+    /** The splice-out fee when savings can't cover [amount] and its fee, but the primary channel can; else null. */
+    private suspend fun primaryChannelSendFee(
+        address: String,
+        amount: ULong,
+        speed: TransactionSpeed,
+        selectedUtxos: List<SpendableUtxo>?,
+        feeRates: FeeRates?,
+    ): ULong? {
+        if (selectedUtxos != null || primaryNodeRepo.primaryChannel() == null) return null
         val spendable = lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
-        val fee = lightningRepo.calculateTotalFee(amount, address, state.speed, feeRates = state.feeRates).getOrNull()
-        if (fee != null && USat(amount) + USat(fee) <= spendable) return false
-        val feeRate = lightningRepo.getFeeRateForSpeed(state.speed, state.feeRates).getOrNull() ?: return false
-        return primaryNodeRepo.spliceOutFee(amount, feeRate) != null
+        val fee = lightningRepo.calculateTotalFee(amount, address, speed, feeRates = feeRates).getOrNull()
+        if (fee != null && USat(amount) + USat(fee) <= spendable) return null
+        val feeRate = lightningRepo.getFeeRateForSpeed(speed, feeRates).getOrNull() ?: return null
+        return primaryNodeRepo.spliceOutFee(amount, feeRate)
     }
 
     private suspend fun sendOnchainFromSavings(
@@ -7184,6 +7194,13 @@ class AppViewModel @Inject constructor(
                 satsPerVByte = satsPerVByte.toULong(),
             ).also { requireCurrentPaymentPreparation(walletGeneration) }.getOrNull()?.toLong() ?: 0
         }
+        primaryChannelSendFee(
+            address = currentState.address,
+            amount = currentState.amount,
+            speed = speed ?: currentState.speed,
+            selectedUtxos = currentState.selectedUtxos,
+            feeRates = currentState.feeRates,
+        )?.let { return it.toLong() }
         return lightningRepo.calculateTotalFee(
             amountSats = currentState.amount,
             address = currentState.address,

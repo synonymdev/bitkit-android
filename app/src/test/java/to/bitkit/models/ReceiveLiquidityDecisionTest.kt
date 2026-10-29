@@ -25,6 +25,18 @@ class ReceiveLiquidityDecisionTest {
     }
 
     @Test
+    fun `approved primary invoice is shown without inbound liquidity`() {
+        assertTrue(
+            ReceiveLiquidityDecision.canCreateLightningInvoice(
+                hasReadyChannels = false,
+                inboundCapacitySats = null,
+                invoiceAmountSats = 20_000u,
+                hasPrimaryInvoice = true,
+            )
+        )
+    }
+
+    @Test
     fun `variable lightning invoice requires non-zero inbound liquidity`() {
         assertFalse(
             ReceiveLiquidityDecision.canCreateLightningInvoice(

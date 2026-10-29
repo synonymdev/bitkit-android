@@ -34,7 +34,6 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toUserMessage
 import to.bitkit.models.Toast
-import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrimaryNodeRepo
@@ -308,17 +307,25 @@ class TransferViewModel @Inject constructor(
         else -> SavingsTransferMode.CLOSE
     }
 
-    /** Closes the channels selected earlier, pending closure */
-    suspend fun closeSelectedChannels() = closeChannels(channelsToClose)
+    /**
+     * Closes the channels selected earlier, pending closure. The primary channel stays open and its balance is
+     * spliced out to savings first; a failed splice-out fails the transfer instead of retrying as a close.
+     */
+    suspend fun closeSelectedChannels(): Result<List<ChannelDetails>> = runSuspendCatching {
+        val primaryChannelId = primaryNodeRepo.primaryChannel()?.channelId
+        if (primaryChannelId != null && channelsToClose.any { it.channelId == primaryChannelId }) {
+            val feeRate = lightningRepo.channelFundingFeeRate().getOrThrow()
+            primaryNodeRepo.transferToSavings(feeRate).getOrThrow()
+            channelsToClose = channelsToClose.filterNot { it.channelId == primaryChannelId }
+        }
+        closeChannels(channelsToClose)
+    }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
         lightningRepo.awaitPeerConnected()
         val channelsFailedToClose = coroutineScope {
             channels.map { channel ->
                 async {
-                    if (channel.channelId == primaryNodeRepo.primaryChannel()?.channelId) {
-                        return@async spliceOutPrimaryChannel(channel)
-                    }
                     lightningRepo.closeChannel(channel)
                         .onSuccess {
                             transferRepo.createTransfer(
@@ -337,18 +344,6 @@ class TransferViewModel @Inject constructor(
         }.filterNotNull()
 
         return channelsFailedToClose
-    }
-
-    /** The primary channel stays open: its balance is spliced out to savings instead. */
-    private suspend fun spliceOutPrimaryChannel(channel: ChannelDetails): ChannelDetails? {
-        val feeRate = lightningRepo.getFeeRateForSpeed(TransactionSpeed.default()).getOrElse { return channel }
-        return primaryNodeRepo.transferToSavings(feeRate).fold(
-            onSuccess = { null },
-            onFailure = {
-                Logger.warn("Failed to splice out primary channel '${channel.channelId}'", it, context = TAG)
-                channel
-            },
-        )
     }
 
     private var coopCloseRetryJob: Job? = null

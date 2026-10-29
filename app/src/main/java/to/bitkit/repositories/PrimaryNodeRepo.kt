@@ -26,8 +26,8 @@ import to.bitkit.models.PrimaryNodeError
 import to.bitkit.models.USat
 import to.bitkit.models.toPeerDetails
 import to.bitkit.utils.AppError
-import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.asNodeException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
@@ -75,14 +75,14 @@ class PrimaryNodeRepo @Inject constructor(
     /** The ready channel with the primary, if the wallet has one. */
     fun primaryChannel(): ChannelDetails? {
         val primary = lightningRepo.primaryNode ?: return null
-        return lightningRepo.lightningState.value.channels.firstOrNull {
+        return lightningRepo.getChannels().orEmpty().firstOrNull {
             it.counterpartyNodeId == primary.nodeId && it.isChannelReady
         }
     }
 
     fun isPrimaryConnected(): Boolean {
         val primary = lightningRepo.primaryNode ?: return false
-        return lightningRepo.lightningState.value.peers.any { it.nodeId == primary.nodeId && it.isConnected }
+        return lightningRepo.getPeers().orEmpty().any { it.nodeId == primary.nodeId && it.isConnected }
     }
 
     /**
@@ -96,7 +96,7 @@ class PrimaryNodeRepo @Inject constructor(
                 val primary = if (parsed.address != null) parsed else parsed.copy(address = knownAddress(parsed.nodeId))
                 val current = lightningRepo.primaryNode
                 val hasChannelWithCurrent = current != null && current.nodeId != primary.nodeId &&
-                    lightningRepo.lightningState.value.channels.any { it.counterpartyNodeId == current.nodeId }
+                    lightningRepo.getChannels().orEmpty().any { it.counterpartyNodeId == current.nodeId }
                 if (hasChannelWithCurrent) throw PrimaryNodeError.ConnectionInUse()
 
                 val previous = settingsStore.data.first()
@@ -160,17 +160,27 @@ class PrimaryNodeRepo @Inject constructor(
     /** Moves confirmed savings into the primary channel when the plan allows it and funding isn't paused. */
     suspend fun fundIfNeeded(): Result<Unit> = withContext(bgDispatcher) {
         if (settingsStore.data.first().primaryFundingPaused) return@withContext Result.success(Unit)
-        val plan = fundingPlan().getOrElse { return@withContext Result.failure(it) }
-            ?: return@withContext Result.success(Unit)
-        if (!plan.isAutomatic) return@withContext Result.success(Unit)
-        Logger.info("Funding primary channel with '${plan.amountSats}' sats, fee '${plan.feeSats}'", context = TAG)
-        executeFunding(plan)
+        if (!operationMutex.tryLock()) return@withContext Result.success(Unit)
+        try {
+            val plan = fundingPlan().getOrElse { return@withContext Result.failure(it) }
+                ?: return@withContext Result.success(Unit)
+            if (!plan.isAutomatic) return@withContext Result.success(Unit)
+            Logger.info("Funding primary channel with '${plan.amountSats}' sats, fee '${plan.feeSats}'", context = TAG)
+            executeFunding(plan)
+        } finally {
+            operationMutex.unlock()
+        }
     }
 
     /** Transfer to Spending: moves the planned savings now, below the automatic fee limit too, and resumes funding. */
     suspend fun transferToSpending(plan: PrimaryFundingPlan): Result<Unit> = withContext(bgDispatcher) {
-        settingsStore.update { it.copy(primaryFundingPaused = false) }
-        executeFunding(plan)
+        operationMutex.withLock {
+            if (lightningRepo.hasPendingFundingOperation().getOrDefault(false)) {
+                return@withContext Result.failure(PrimaryWalletBusyError())
+            }
+            settingsStore.update { it.copy(primaryFundingPaused = false) }
+            executeFunding(plan)
+        }
     }
 
     /** Fee for paying [amountSats] on-chain out of the primary channel, or null when the channel can't cover it. */
@@ -229,28 +239,29 @@ class PrimaryNodeRepo @Inject constructor(
         }
     }
 
-    private suspend fun executeFunding(plan: PrimaryFundingPlan): Result<Unit> = operationMutex.withLock {
-        runSuspendCatching {
-            val primary = lightningRepo.primaryNode ?: throw PrimaryNodeError.NotConfigured()
-            val channel = primaryChannel()
-            if (channel != null) {
-                lightningRepo.spliceIn(channel, plan.amountSats).getOrThrow()
-            } else {
-                val peer = primary.toPeerDetails() ?: throw PrimaryNodeError.AddressUnknown()
-                lightningRepo.openChannel(peer, plan.amountSats).getOrThrow()
-            }
-            Unit
+    private suspend fun executeFunding(plan: PrimaryFundingPlan): Result<Unit> = runSuspendCatching {
+        val primary = lightningRepo.primaryNode ?: throw PrimaryNodeError.NotConfigured()
+        val channel = primaryChannel()
+        if (channel != null) {
+            lightningRepo.spliceIn(channel, plan.amountSats).getOrThrow()
+        } else {
+            val peer = primary.toPeerDetails() ?: throw PrimaryNodeError.AddressUnknown()
+            lightningRepo.openChannel(peer, plan.amountSats).getOrThrow()
         }
+        Unit
     }
 
     private suspend fun verifyPrimary(primary: PrimaryNode): Result<Unit> = runSuspendCatching {
         lightningRepo.restartNode().getOrThrow()
         val peer = primary.toPeerDetails() ?: throw PrimaryNodeError.AddressUnknown()
+        lightningRepo.getPeers().orEmpty()
+            .firstOrNull { it.nodeId == peer.nodeId && it.isConnected && it.address != peer.address }
+            ?.let { lightningRepo.disconnectPeer(it) }
         lightningRepo.connectPeer(peer).mapPrimaryReceiveError().getOrThrow()
         lightningRepo.checkPrimaryConnection(primary.nodeId).mapPrimaryReceiveError().getOrThrow()
     }
 
-    private fun knownAddress(nodeId: String): String = lightningRepo.lightningState.value.peers
+    private fun knownAddress(nodeId: String): String = lightningRepo.getPeers().orEmpty()
         .firstOrNull { it.nodeId == nodeId }?.address
         ?: throw PrimaryNodeError.AddressUnknown()
 }
@@ -265,6 +276,8 @@ data class PrimaryFundingPlan(
 
 /**
  * Plans moving [spendableSats] of savings, held in [inputs] outputs, into the primary channel at [feeRate].
+ * ldk-node leaves outputs of a channel's own funding transaction out of [inputs], such as savings from a
+ * splice-out, so the estimate counts at least one input whenever there is something to move.
  * Returns null when there is nothing worth moving; [PrimaryFundingPlan.isAutomatic] is false when the
  * fee is above [PrimaryNodeRepo.MAX_FUNDING_FEE_PERCENT], so only a manual transfer moves it.
  */
@@ -274,8 +287,9 @@ internal fun primaryFundingPlan(
     feeRate: ULong,
     hasChannel: Boolean,
 ): PrimaryFundingPlan? {
-    if (inputs == 0uL || feeRate == 0uL) return null
-    val fee = feeRate * (PrimaryNodeRepo.FUNDING_BASE_VBYTES + PrimaryNodeRepo.FUNDING_INPUT_VBYTES * inputs)
+    if (spendableSats == 0uL || feeRate == 0uL) return null
+    val inputCount = inputs.coerceAtLeast(1uL)
+    val fee = feeRate * (PrimaryNodeRepo.FUNDING_BASE_VBYTES + PrimaryNodeRepo.FUNDING_INPUT_VBYTES * inputCount)
     if (USat(spendableSats) <= USat(fee)) return null
     val amount = USat(spendableSats) - USat(fee)
     return PrimaryFundingPlan(
@@ -302,7 +316,7 @@ sealed class PrimaryReceiveError(message: String, cause: Throwable? = null) : Ap
 
 internal fun <T> Result<T>.mapPrimaryReceiveError(): Result<T> = recoverCatching { throw it.toPrimaryReceiveError() }
 
-internal fun Throwable.toPrimaryReceiveError(): Throwable = when ((this as? LdkError)?.nodeException) {
+internal fun Throwable.toPrimaryReceiveError(): Throwable = when (asNodeException()) {
     is NodeException.LiquiditySourceInsufficientFunds -> PrimaryReceiveError.InsufficientFunds()
     is NodeException.LiquidityRequestRejected -> PrimaryReceiveError.Rejected()
     is NodeException.LiquidityRequestTimedOut -> PrimaryReceiveError.TimedOut()

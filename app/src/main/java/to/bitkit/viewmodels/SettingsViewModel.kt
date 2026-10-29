@@ -24,6 +24,7 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.hasPaykitState
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
+import to.bitkit.models.PrimaryNode
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ContactPaymentSettingsRepo
@@ -134,6 +135,9 @@ class SettingsViewModel @Inject constructor(
     }
 
     val hasSeenSavingsIntro = settingsStore.data.map { it.hasSeenSavingsIntro }
+        .asStateFlow(initialValue = false)
+
+    val hasPrimaryNode = settingsStore.data.map { PrimaryNode.effective(it.primaryNodeUri) != null }
         .asStateFlow(initialValue = false)
 
     fun setHasSeenSavingsIntro(value: Boolean) {

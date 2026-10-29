@@ -48,7 +48,6 @@ class PrimaryNodeViewModel @Inject constructor(
                     it.copy(
                         currentUri = primary?.uri.orEmpty(),
                         input = if (it.hasEdited) it.input else primary?.uri.orEmpty(),
-                        isDefault = primary?.uri == PrimaryNode.parseOrNull(Env.defaultPrimaryNodeUri)?.uri,
                         isConnected = isConnected,
                         isFundingPaused = isPaused,
                     )
@@ -99,9 +98,11 @@ data class PrimaryNodeUiState(
     val currentUri: String = "",
     val input: String = "",
     val hasEdited: Boolean = false,
-    val isDefault: Boolean = false,
+    val defaultUri: String = Env.defaultPrimaryNodeUri,
     val isConnected: Boolean = false,
     val isFundingPaused: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
-)
+) {
+    val isInputDefault: Boolean get() = input == defaultUri
+}
