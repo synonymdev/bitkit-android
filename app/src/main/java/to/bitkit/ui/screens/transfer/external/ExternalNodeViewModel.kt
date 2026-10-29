@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.UserChannelId
@@ -29,7 +28,6 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.UiState
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -41,10 +39,6 @@ class ExternalNodeViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val transferRepo: to.bitkit.repositories.TransferRepo,
 ) : ViewModel() {
-    companion object {
-        private const val TAG = "ExternalNodeViewModel"
-    }
-
     private val _uiState = MutableStateFlow(UiState())
     val uiState = _uiState.asStateFlow()
 
@@ -141,18 +135,10 @@ class ExternalNodeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            val peer = requireNotNull(_uiState.value.peer)
-            val readyChannel = lightningRepo.getChannels()
-                ?.firstOrNull { it.counterpartyNodeId == peer.nodeId && it.isChannelReady }
-            if (readyChannel != null) {
-                spliceIn(readyChannel)
-                return@launch
-            }
-
             @Suppress("ForbiddenComment")
             // TODO: pass customFeeRate to ldk-node when supported
             lightningRepo.openChannel(
-                peer = peer,
+                peer = requireNotNull(_uiState.value.peer),
                 channelAmountSats = _uiState.value.amount.sats.toULong(),
             ).mapCatching { result ->
                 awaitChannelPendingEvent(result.userChannelId).mapCatching { event ->
@@ -179,44 +165,6 @@ class ExternalNodeViewModel @Inject constructor(
             }
 
             _uiState.update { it.copy(isLoading = false) }
-        }
-    }
-
-    private suspend fun spliceIn(channel: ChannelDetails) {
-        val amountSats = _uiState.value.amount.sats.toULong()
-        lightningRepo.spliceIn(channel, amountSats).mapCatching {
-            val event = awaitSplicePendingEvent(channel.userChannelId).getOrThrow()
-            transferRepo.createTransfer(
-                type = TransferType.MANUAL_SETUP,
-                amountSats = amountSats.toLong(),
-                channelId = event.channelId,
-                fundingTxId = event.newFundingTxo.txid,
-            )
-        }.onSuccess {
-            setEffect(SideEffect.ConfirmSuccess)
-        }.onFailure {
-            Logger.warn("Failed to splice in to channel '${channel.channelId}'", it, context = TAG)
-            ToastEventBus.send(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.lightning__error_channel_purchase),
-                description = context.getString(R.string.lightning__error_channel_setup_msg)
-                    .replace("{raw}", it.message.orEmpty()),
-            )
-        }
-        _uiState.update { it.copy(isLoading = false) }
-    }
-
-    private suspend fun awaitSplicePendingEvent(userChannelId: UserChannelId): Result<Event.SplicePending> {
-        return lightningRepo.nodeEvents.watchUntil { event ->
-            when (event) {
-                is Event.SpliceFailed if event.userChannelId == userChannelId ->
-                    WatchResult.Complete(Result.failure(AppError("Splice failed for '$userChannelId'")))
-                is Event.SplicePending if event.userChannelId == userChannelId ->
-                    WatchResult.Complete(Result.success(event))
-                else -> WatchResult.Continue()
-            }
-        }.let {
-            checkNotNull(it) { "Timeout in awaitSplicePendingEvent for userChannelId='$userChannelId'" }
         }
     }
 

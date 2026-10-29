@@ -215,6 +215,7 @@ fun SettingsScreen(
                 SettingsEvent.LightningConnectionsClick -> navController.navigateTo(Routes.LightningConnections)
                 SettingsEvent.LightningNodeClick -> navController.navigateTo(Routes.NodeInfo)
                 SettingsEvent.ElectrumServerClick -> navController.navigateTo(Routes.ElectrumConfig)
+                SettingsEvent.PrimaryNodeClick -> navController.navigateTo(Routes.PrimaryNode)
                 SettingsEvent.RgsServerClick -> navController.navigateTo(Routes.RgsServer)
                 SettingsEvent.BackClick -> navController.popBackStack()
             }
@@ -604,6 +605,12 @@ private fun AdvancedTabContent(
         )
 
         SettingsButtonRow(
+            title = stringResource(R.string.primary_node__title),
+            icon = { SettingsIcon(R.drawable.ic_lightning) },
+            onClick = { onEvent(SettingsEvent.PrimaryNodeClick) },
+            modifier = Modifier.testTag("PrimaryNodeSettings")
+        )
+        SettingsButtonRow(
             title = stringResource(R.string.settings__adv__lightning_connections),
             icon = { SettingsIcon(R.drawable.ic_lightning) },
             value = if (state.openChannelCount > 0) {
@@ -727,6 +734,7 @@ sealed interface SettingsEvent {
     data object LightningConnectionsClick : SettingsEvent
     data object LightningNodeClick : SettingsEvent
     data object ElectrumServerClick : SettingsEvent
+    data object PrimaryNodeClick : SettingsEvent
     data object RgsServerClick : SettingsEvent
 
     // Navigation

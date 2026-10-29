@@ -14,37 +14,6 @@ class ReceiveLiquidityDecisionTest {
     )
 
     @Test
-    fun `primary node covers fixed amounts without channels`() {
-        assertTrue(
-            ReceiveLiquidityDecision.canCreateLightningInvoice(
-                hasReadyChannels = false,
-                inboundCapacitySats = null,
-                invoiceAmountSats = 5_000u,
-                hasPrimaryNode = true,
-            )
-        )
-
-        assertFalse(
-            ReceiveLiquidityDecision.canCreateLightningInvoice(
-                hasReadyChannels = false,
-                inboundCapacitySats = null,
-                invoiceAmountSats = null,
-                hasPrimaryNode = true,
-            )
-        )
-    }
-
-    @Test
-    fun `primary node needs no additional liquidity action`() {
-        assertEquals(
-            ReceiveAdditionalLiquidityAction.None,
-            ReceiveLiquidityDecision.additionalLiquidityAction(
-                defaultAdditionalLiquidityParams.copy(hasPrimaryNode = true)
-            ),
-        )
-    }
-
-    @Test
     fun `lightning invoice requires ready channel`() {
         assertFalse(
             ReceiveLiquidityDecision.canCreateLightningInvoice(

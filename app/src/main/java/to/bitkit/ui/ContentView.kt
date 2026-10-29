@@ -63,7 +63,6 @@ import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.appWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.ext.rawId
-import to.bitkit.ext.uri
 import to.bitkit.ext.walletId
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
@@ -195,6 +194,7 @@ import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
 import to.bitkit.ui.settings.pin.PinManagementScreen
+import to.bitkit.ui.settings.primaryNode.PrimaryNodeScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
@@ -1195,7 +1195,7 @@ private fun NavGraphBuilder.home(
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
-            onTransferToSpendingClick = { navController.navigateToTransferToSpending(appViewModel) },
+            onTransferToSpendingClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
             onBackClick = { navController.popBackStack() },
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
@@ -1218,7 +1218,7 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSavingsAvailability()
                 }
             },
-            onTransferFromSavingsClick = { navController.navigateToTransferToSpending(appViewModel) },
+            onTransferFromSavingsClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -1675,6 +1675,9 @@ private fun NavGraphBuilder.advancedSettingsSubScreens(navController: NavHostCon
     deepLinkableComposable<Routes.ElectrumConfig> {
         ElectrumConfigScreen(navController)
     }
+    deepLinkableComposable<Routes.PrimaryNode> {
+        PrimaryNodeScreen(navController)
+    }
     deepLinkableComposable<Routes.RgsServer> {
         RgsServerScreen(navController)
     }
@@ -2077,12 +2080,6 @@ fun NavController.navigateToDevSettings() = navigateTo(Routes.DevSettings)
 
 fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIntro)
 
-/** Opens a channel with the primary node, or explains that transfers need manual setup without one. */
-fun NavController.navigateToTransferToSpending(appViewModel: AppViewModel) {
-    val primary = Env.primaryNode ?: return appViewModel.showSheet(Sheet.TransferUnavailable)
-    navigateTo(ExternalConnection(scannedNodeUri = primary.uri))
-}
-
 fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
 
 /**
@@ -2195,6 +2192,9 @@ sealed interface Routes {
 
     @Serializable
     data object ElectrumConfig : Routes.DeepLinkable
+
+    @Serializable
+    data object PrimaryNode : Routes.DeepLinkable
 
     @Serializable
     data object RgsServer : Routes.DeepLinkable

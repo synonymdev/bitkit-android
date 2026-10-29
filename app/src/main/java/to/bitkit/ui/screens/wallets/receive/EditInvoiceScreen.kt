@@ -86,6 +86,7 @@ fun EditInvoiceScreen(
     onchainOnly: Boolean = false,
     updateOnchainInvoice: (ULong?) -> Unit = {},
     navigateTransferUnavailable: () -> Unit,
+    navigatePrimaryReceive: (ULong) -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
     editInvoiceVM: EditInvoiceVM = hiltViewModel(),
 ) {
@@ -106,6 +107,7 @@ fun EditInvoiceScreen(
                             onBack()
                         }
                         ReceiveAdditionalLiquidityAction.TransferUnavailable -> navigateTransferUnavailable()
+                        ReceiveAdditionalLiquidityAction.PrimaryReceive -> navigatePrimaryReceive(receiveSats)
                     }
                 }
             }

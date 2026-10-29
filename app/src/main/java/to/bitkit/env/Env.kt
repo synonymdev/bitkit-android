@@ -4,11 +4,9 @@ import android.os.Build
 import com.synonym.bitkitcore.UsdtDestination
 import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
-import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.BuildConfig
 import to.bitkit.BuildConfig.VERSION_NAME
 import to.bitkit.ext.ensureDir
-import to.bitkit.ext.of
 import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
@@ -43,13 +41,13 @@ internal object Env {
     val network = Network.valueOf(BuildConfig.NETWORK)
 
     /**
-     * The Lightning-first primary node: it funds channels just in time and grows them by splicing.
+     * The primary node a wallet uses until the user pairs another one in Settings.
      * A `PRIMARY_NODE_URI` build property overrides it, for regtest runs against a local primary.
      */
-    val primaryNode: PeerDetails? get() = when {
-        BuildConfig.PRIMARY_NODE_URI.isNotBlank() -> PeerDetails.of(BuildConfig.PRIMARY_NODE_URI)
-        network == Network.BITCOIN -> PeerDetails.of(PRIMARY_NODE_URI_MAINNET)
-        else -> null
+    val defaultPrimaryNodeUri: String get() = when {
+        BuildConfig.PRIMARY_NODE_URI.isNotBlank() -> BuildConfig.PRIMARY_NODE_URI
+        network == Network.BITCOIN -> PRIMARY_NODE_URI_MAINNET
+        else -> ""
     }
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL

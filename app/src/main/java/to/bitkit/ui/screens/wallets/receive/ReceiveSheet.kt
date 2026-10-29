@@ -27,7 +27,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import to.bitkit.R
-import to.bitkit.env.Env
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -71,6 +70,7 @@ fun ReceiveSheet(
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
     paymentRequestAmountViewModel: AmountInputViewModel = hiltViewModel(key = "PaymentRequestAmount"),
     hwReceiveViewModel: HwReceiveViewModel = hiltViewModel(),
+    primaryReceiveViewModel: PrimaryReceiveViewModel = hiltViewModel(),
 ) {
     val wallet = requireNotNull(walletViewModel)
     val navController = rememberNavController()
@@ -124,13 +124,6 @@ fun ReceiveSheet(
         }
     }
 
-    fun editSoftwareInvoice(tab: ReceiveTab) {
-        editInvoiceSourceTab = tab
-        invoiceEditState.beginSoftwareEdit(tab)
-        resetEditInvoiceAmount()
-        navController.navigateTo(ReceiveRoute.EditInvoice)
-    }
-
     LaunchedEffect(Unit) {
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
         wallet.refreshReceiveState()
@@ -157,13 +150,21 @@ fun ReceiveSheet(
                         walletState = walletState,
                         lightningState = lightningState,
                         onClickReceiveCjit = {
-                            if (Env.primaryNode != null) {
-                                editSoftwareInvoice(ReceiveTab.SPENDING)
+                            if (primaryReceiveViewModel.hasPrimaryNode) {
+                                editInvoiceSourceTab = ReceiveTab.SPENDING
+                                invoiceEditState.beginSoftwareEdit(ReceiveTab.SPENDING)
+                                resetEditInvoiceAmount()
+                                navController.navigateTo(ReceiveRoute.EditInvoice)
                             } else {
                                 navController.navigateTo(ReceiveRoute.TransferUnavailable)
                             }
                         },
-                        onClickEditInvoice = ::editSoftwareInvoice,
+                        onClickEditInvoice = {
+                            editInvoiceSourceTab = it
+                            invoiceEditState.beginSoftwareEdit(it)
+                            resetEditInvoiceAmount()
+                            navController.navigateTo(ReceiveRoute.EditInvoice)
+                        },
                         onClickHardwareEditInvoice = {
                             editInvoiceSourceTab = ReceiveTab.HARDWARE
                             invoiceEditState.beginHardwareEdit()
@@ -309,6 +310,19 @@ fun ReceiveSheet(
                         onchainOnly = invoiceEditState.isHardwareInvoice,
                         updateOnchainInvoice = wallet::setBip21AmountSats,
                         navigateTransferUnavailable = { navController.navigateTo(ReceiveRoute.TransferUnavailable) },
+                        navigatePrimaryReceive = {
+                            navController.navigateTo(ReceiveRoute.PrimaryReceiveConfirm(it.toLong()))
+                        },
+                    )
+                }
+                composableWithDefaultTransitions<ReceiveRoute.PrimaryReceiveConfirm> { backStackEntry ->
+                    val route = backStackEntry.toRoute<ReceiveRoute.PrimaryReceiveConfirm>()
+                    @Suppress("ViewModelForwarding")
+                    PrimaryReceiveConfirmScreen(
+                        amountSats = route.amountSats.toULong(),
+                        viewModel = primaryReceiveViewModel,
+                        onBack = { navController.popBackStack() },
+                        onCreated = { navController.popBackStack(ReceiveRoute.QR, inclusive = false) },
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.AddTag> {
@@ -409,6 +423,9 @@ sealed interface ReceiveRoute {
 
     @Serializable
     data object TransferUnavailable : DeepLinkStart
+
+    @Serializable
+    data class PrimaryReceiveConfirm(val amountSats: Long) : InternalOnly
 
     companion object {
         private val DEEP_LINK_STARTS: List<DeepLinkStart> = listOf(

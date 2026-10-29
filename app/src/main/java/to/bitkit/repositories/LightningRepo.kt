@@ -56,6 +56,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.PrimaryReceiveQuote
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.async.appScope
@@ -79,6 +80,7 @@ import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.PrimaryNode
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
@@ -1300,11 +1302,33 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
+    /** The primary node the running node was built with. */
+    val primaryNode: PrimaryNode? get() = lightningService.primaryNode
+
+    suspend fun quotePrimaryReceive(amountSats: ULong): Result<PrimaryReceiveQuote> =
+        executeWhenNodeRunning("quotePrimaryReceive") {
+            runSuspendCatching { lightningService.quotePrimaryReceive(amountSats) }.also { refreshChannelsAndPeers() }
+        }
+
     suspend fun createPrimaryInvoice(
         amountSats: ULong,
         description: String,
+        maxFeeMsat: ULong,
     ): Result<String> = executeWhenNodeRunning("createPrimaryInvoice") {
-        runSuspendCatching { lightningService.receiveViaPrimary(amountSats, description) }
+        requireWalletRestoreComplete()
+        runSuspendCatching { lightningService.receiveViaPrimary(amountSats, description, maxFeeMsat) }
+    }
+
+    suspend fun checkPrimaryConnection(nodeId: String): Result<Unit> = executeWhenNodeRunning("checkPrimaryConnection") {
+        runSuspendCatching { lightningService.checkPrimaryConnection(nodeId) }.also { refreshChannelsAndPeers() }
+    }
+
+    suspend fun hasPendingFundingOperation(): Result<Boolean> = executeWhenNodeRunning("hasPendingFundingOperation") {
+        runSuspendCatching { lightningService.hasPendingFundingOperation() }
+    }
+
+    suspend fun channelFundingFeeRate(): Result<ULong> = executeWhenNodeRunning("channelFundingFeeRate") {
+        runSuspendCatching { lightningService.channelFundingFeeRate() }
     }
 
     suspend fun createInvoiceMsats(
@@ -2102,6 +2126,18 @@ class LightningRepo @Inject constructor(
         amountSats: ULong,
     ): Result<Unit> = executeWhenNodeRunning("spliceIn") {
         lightningService.spliceIn(channel, amountSats).also {
+            syncState()
+        }
+    }
+
+    suspend fun spliceOut(
+        channel: ChannelDetails,
+        address: String,
+        amountSats: ULong,
+        feeRateSatsPerVByte: ULong,
+    ): Result<Unit> = executeWhenNodeRunning("spliceOut") {
+        requireWalletRestoreComplete()
+        lightningService.spliceOut(channel, address, amountSats, feeRateSatsPerVByte).also {
             syncState()
         }
     }

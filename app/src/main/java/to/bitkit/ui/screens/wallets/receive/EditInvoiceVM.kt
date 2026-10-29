@@ -9,17 +9,18 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.env.Env
 import to.bitkit.models.ReceiveAdditionalLiquidityAction
 import to.bitkit.models.ReceiveAdditionalLiquidityParams
 import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.models.ReceiveLiquiditySource
+import to.bitkit.repositories.PrimaryNodeRepo
 import to.bitkit.repositories.WalletRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class EditInvoiceVM @Inject constructor(
     private val walletRepo: WalletRepo,
+    private val primaryNodeRepo: PrimaryNodeRepo,
 ) : ViewModel() {
 
     private val _editInvoiceEffect = MutableSharedFlow<EditInvoiceScreenEffects>(extraBufferCapacity = 1)
@@ -46,7 +47,7 @@ class EditInvoiceVM @Inject constructor(
                     source = source,
                     invoiceAmountSats = amountSats,
                     inboundCapacitySats = inboundCapacitySats,
-                    hasPrimaryNode = Env.primaryNode != null,
+                    hasPrimaryNode = primaryNodeRepo.hasPrimaryNode,
                 )
             )
             editInvoiceEffect(EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(action))

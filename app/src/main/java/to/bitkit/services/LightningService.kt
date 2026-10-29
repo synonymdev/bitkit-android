@@ -37,6 +37,7 @@ import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.Node
+import org.lightningdevkit.ldknode.PrimaryReceiveQuote
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OnchainSendResult
@@ -71,6 +72,9 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.PrimaryNode
+import to.bitkit.models.PrimaryNodeError
+import to.bitkit.models.toPeerDetails
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
 import to.bitkit.models.WatchOnlyAccountRecord
@@ -207,7 +211,10 @@ class LightningService internal constructor(
         private const val NODE_ID_PREVIEW_LEN = 20
 
         /** Primary nodes authorize a just-in-time receive for ten minutes at most. */
-        private const val PRIMARY_INVOICE_EXPIRY_SECS = 600u
+        const val PRIMARY_INVOICE_EXPIRY_SECS = 600u
+
+        /** Inbound capacity a primary leaves on top of a receive, so the next payments fit without a splice. */
+        private const val PRIMARY_INBOUND_HEADROOM_SATS = 10_000uL
 
         /** LDK's defaults for route parameters, kept when only the routing fee is capped. */
         private const val DEFAULT_MAX_TOTAL_CLTV_EXPIRY_DELTA = 1008u
@@ -269,6 +276,11 @@ class LightningService internal constructor(
 
     @Volatile
     var node: Node? = null
+
+    /** The primary node the running node was built with, or null when the network has none. */
+    @Volatile
+    var primaryNode: PrimaryNode? = null
+        private set
 
     @Volatile
     var currentWalletIndex: Int = 0
@@ -345,7 +357,8 @@ class LightningService internal constructor(
             setScoringFeeParams(scorerFeeParameters())
             setAddressType(selectedType)
             setAddressTypesToMonitor(monitoredTypes)
-            Env.primaryNode?.let { setPrimaryNode(it.nodeId) }
+            primaryNode = PrimaryNode.effective(settings.primaryNodeUri)
+            primaryNode?.let { setPrimaryNode(it.nodeId) }
 
             if (channelMigration != null) {
                 setChannelDataMigration(channelMigration)
@@ -433,7 +446,7 @@ class LightningService internal constructor(
         }
 
         reconcileWatchOnlyAccountsBestEffort()
-        Env.primaryNode?.let { connectPeer(it) }
+        primaryNode?.toPeerDetails()?.let { connectPeer(it) }
 
         // start event listener after node started
         onEvent?.let { eventHandler ->
@@ -754,7 +767,7 @@ class LightningService internal constructor(
         ServiceQueue.LDK.background(ldkQueue) {
             val balances = node.listBalances()
             val idlePeerIds = idlePeerIds(
-                peers = node.listPeers().filter { it.nodeId != Env.primaryNode?.nodeId },
+                peers = node.listPeers().filter { it.nodeId != primaryNode?.nodeId },
                 channels = node.listChannels(),
                 lightningBalances = balances.lightningBalances,
                 pendingSweeps = balances.pendingBalancesFromChannelClosures,
@@ -817,6 +830,41 @@ class LightningService internal constructor(
                 Result.failure(LdkError(e))
             }
         }
+    }
+
+    suspend fun spliceOut(
+        channel: ChannelDetails,
+        address: Address,
+        amountSats: ULong,
+        feeRateSatsPerVByte: ULong,
+    ): Result<Unit> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background(ldkQueue) {
+            try {
+                Logger.debug("Splicing out '$amountSats' sats from channel '${channel.channelId}'", context = TAG)
+                node.spliceOutWithFeeRate(
+                    channel.userChannelId,
+                    channel.counterpartyNodeId,
+                    address,
+                    amountSats,
+                    feeRateSatsPerVByte,
+                )
+                Result.success(Unit)
+            } catch (e: NodeException) {
+                Result.failure(LdkError(e))
+            }
+        }
+    }
+
+    suspend fun hasPendingFundingOperation(): Boolean {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        return ServiceQueue.LDK.background(ldkQueue) { node.hasPendingFundingOperation() }
+    }
+
+    suspend fun channelFundingFeeRate(): ULong {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        return ServiceQueue.LDK.background(ldkQueue) { node.estimatedFeeRates().channelFundingSatPerVbyte }
     }
 
     suspend fun openChannel(
@@ -961,34 +1009,59 @@ class LightningService internal constructor(
         }
     }
 
-    /**
-     * Creates an invoice the primary node delivers through a channel it opens or grows just in time,
-     * accepting at most the fee it quotes now.
-     */
-    suspend fun receiveViaPrimary(sat: ULong, description: String): String {
+    /** Quotes the fee the primary node charges to deliver [sat] through a channel it opens or grows. */
+    suspend fun quotePrimaryReceive(sat: ULong): PrimaryReceiveQuote {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
-        val primary = requireNotNull(Env.primaryNode) { "No primary node for '${Env.network}'" }
-        val amountMsat = sat * 1000u
+        val primary = primaryNode ?: throw PrimaryNodeError.NotConfigured()
 
         return ServiceQueue.LDK.background(ldkQueue) {
             try {
-                if (node.listPeers().none { it.nodeId == primary.nodeId && it.isConnected }) {
-                    node.connect(primary.nodeId, primary.address, persist = true)
-                }
-                val quote = node.quotePrimaryReceive(primary.nodeId, amountMsat, targetInboundSats = 0u)
-                Logger.info("Received primary quote '$quote'", context = TAG)
+                node.connectPrimaryIfNeeded(primary)
+                node.quotePrimaryReceive(primary.nodeId, sat * 1000u, PRIMARY_INBOUND_HEADROOM_SATS)
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+    }
+
+    /** Creates an invoice the primary node delivers, accepting at most the [maxFeeMsat] the user approved. */
+    suspend fun receiveViaPrimary(sat: ULong, description: String, maxFeeMsat: ULong): String {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        val primary = primaryNode ?: throw PrimaryNodeError.NotConfigured()
+
+        return ServiceQueue.LDK.background(ldkQueue) {
+            try {
+                node.connectPrimaryIfNeeded(primary)
                 node.receiveViaPrimary(
                     nodeId = primary.nodeId,
-                    amountMsat = amountMsat,
+                    amountMsat = sat * 1000u,
                     description = Bolt11InvoiceDescription.Direct(description = description),
                     expirySecs = PRIMARY_INVOICE_EXPIRY_SECS,
-                    maxFeeMsat = quote.feeMsat,
-                    targetInboundSats = 0u,
+                    maxFeeMsat = maxFeeMsat,
+                    targetInboundSats = PRIMARY_INBOUND_HEADROOM_SATS,
                 ).toString()
             } catch (e: NodeException) {
                 throw LdkError(e)
             }
         }
+    }
+
+    /** Checks that the connected primary speaks the primary-wallet protocol; a funding refusal still passes. */
+    suspend fun checkPrimaryConnection(nodeId: String) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        ServiceQueue.LDK.background(ldkQueue) {
+            try {
+                node.checkPrimaryConnection(nodeId)
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+    }
+
+    private fun Node.connectPrimaryIfNeeded(primary: PrimaryNode) {
+        if (listPeers().any { it.nodeId == primary.nodeId && it.isConnected }) return
+        val address = primary.address ?: throw PrimaryNodeError.AddressUnknown()
+        connect(primary.nodeId, address, persist = true)
     }
 
     /** Prepare without dispatch; the caller must durably retain the receipt before calling broadcast. */

@@ -11,6 +11,9 @@ sealed interface ReceiveAdditionalLiquidityAction {
 
     /** More inbound capacity needs a new channel, and Blocktank no longer sells them. */
     data object TransferUnavailable : ReceiveAdditionalLiquidityAction
+
+    /** The primary node opens or grows the channel for this receive, once the user approves its fee. */
+    data object PrimaryReceive : ReceiveAdditionalLiquidityAction
 }
 
 data class ReceiveAdditionalLiquidityParams(
@@ -25,9 +28,7 @@ object ReceiveLiquidityDecision {
         hasReadyChannels: Boolean,
         inboundCapacitySats: ULong?,
         invoiceAmountSats: ULong?,
-        hasPrimaryNode: Boolean = false,
     ): Boolean {
-        if (hasPrimaryNode && (invoiceAmountSats ?: 0uL) > 0uL) return true
         if (!hasReadyChannels || inboundCapacitySats == null) return false
 
         if (invoiceAmountSats == null || invoiceAmountSats == 0uL) {
@@ -39,10 +40,11 @@ object ReceiveLiquidityDecision {
 
     fun additionalLiquidityAction(params: ReceiveAdditionalLiquidityParams): ReceiveAdditionalLiquidityAction {
         return when {
-            params.source != ReceiveLiquiditySource.SPENDING -> ReceiveAdditionalLiquidityAction.None
-            params.hasPrimaryNode -> ReceiveAdditionalLiquidityAction.None
+            params.source == ReceiveLiquiditySource.SAVINGS -> ReceiveAdditionalLiquidityAction.None
             !needsInboundLiquidity(params.invoiceAmountSats, params.inboundCapacitySats) ->
                 ReceiveAdditionalLiquidityAction.None
+            params.hasPrimaryNode && params.invoiceAmountSats > 0uL -> ReceiveAdditionalLiquidityAction.PrimaryReceive
+            params.source != ReceiveLiquiditySource.SPENDING -> ReceiveAdditionalLiquidityAction.None
             (params.inboundCapacitySats ?: 0uL) == 0uL -> ReceiveAdditionalLiquidityAction.None
             else -> ReceiveAdditionalLiquidityAction.TransferUnavailable
         }

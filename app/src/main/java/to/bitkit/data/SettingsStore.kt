@@ -239,6 +239,10 @@ data class SettingsData(
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
     val electrumServer: String = Env.electrumServerUrl,
     val rgsServerUrl: String? = Env.ldkRgsServerUrl,
+    /** The paired primary node's URI; blank means the network's default primary, see [Env.defaultPrimaryNodeUri]. */
+    val primaryNodeUri: String = "",
+    /** Set by a transfer to savings, so confirmed savings are not moved back into the primary channel. */
+    val primaryFundingPaused: Boolean = false,
     val selectedAddressType: String = DEFAULT_ADDRESS_TYPE_STRING,
     val addressTypesToMonitor: List<String> = listOf(DEFAULT_ADDRESS_TYPE_STRING),
     val pendingRestoreAddressTypePrune: Boolean = false,

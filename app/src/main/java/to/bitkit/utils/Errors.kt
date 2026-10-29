@@ -32,6 +32,7 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
 
     override val message get() = inner.message ?: super.message
     val compactType get() = inner.compactType
+    val nodeException: NodeException? get() = (inner as? LdkException.Node)?.exception
 
     sealed interface LdkException {
         val message: String?

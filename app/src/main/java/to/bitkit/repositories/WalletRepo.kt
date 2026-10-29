@@ -76,6 +76,7 @@ class WalletRepo @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val primaryNodeRepo: PrimaryNodeRepo,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
@@ -86,6 +87,7 @@ class WalletRepo @Inject constructor(
     val balanceState = _balanceState.asStateFlow()
 
     private var eventSyncJob: Job? = null
+    private var primaryFundingJob: Job? = null
     private val receiveStateMutex = Mutex()
     private val receiveUpdateStatusLock = Any()
     private var pendingReceiveUpdates = 0
@@ -386,6 +388,7 @@ class WalletRepo @Inject constructor(
             syncBalances()
             lightningRepo.sync().onSuccess {
                 syncBalances()
+                schedulePrimaryFunding()
             }.onFailure {
                 if (it is TimeoutCancellationException) {
                     syncBalances()
@@ -425,6 +428,16 @@ class WalletRepo @Inject constructor(
             syncBalances()
             transferRepo.syncTransferStates()
             activityRepo.syncActivities()
+            schedulePrimaryFunding()
+        }
+    }
+
+    private fun schedulePrimaryFunding() {
+        if (primaryFundingJob?.isActive == true) return
+        primaryFundingJob = repoScope.launch {
+            primaryNodeRepo.fundIfNeeded().onFailure {
+                Logger.warn("Failed to fund primary channel", it, context = TAG)
+            }
         }
     }
 
@@ -929,6 +942,19 @@ class WalletRepo @Inject constructor(
         updateBip21InvoiceLocked(amountSats, description)
     }
 
+    /** Shows [bolt11], an invoice the primary node delivers, as the current receive request for [amountSats]. */
+    suspend fun setPrimaryReceiveInvoice(
+        bolt11: String,
+        amountSats: ULong,
+        description: String,
+    ): Result<Unit> = updateReceiveState(
+        beforeLock = {
+            _walletState.update { it.copy(bip21AmountSats = amountSats, bip21Description = description) }
+        },
+    ) {
+        runSuspendCatching { setBolt11Locked(bolt11, amountSats, description) }
+    }
+
     private suspend fun updateBip21InvoiceLocked(
         amountSats: ULong? = walletState.value.bip21AmountSats,
         description: String = walletState.value.bip21Description,
@@ -945,15 +971,10 @@ class WalletRepo @Inject constructor(
                 emptyList()
             }
 
-            val bolt11 = when {
-                canCreateLightningInvoice(amountSats) ->
-                    lightningRepo.createInvoice(amountSats, description).getOrThrow()
-                amountSats != null && Env.primaryNode != null ->
-                    lightningRepo.createPrimaryInvoice(amountSats, description).getOrElse {
-                        Logger.warn("Failed to create primary invoice for '$amountSats' sats", it, context = TAG)
-                        ""
-                    }
-                else -> ""
+            val bolt11 = if (canCreateLightningInvoice(amountSats)) {
+                lightningRepo.createInvoice(amountSats, description).getOrThrow()
+            } else {
+                ""
             }
             setBolt11Locked(bolt11, amountSats, description)
             val newBip21Url = _walletState.value.bip21
