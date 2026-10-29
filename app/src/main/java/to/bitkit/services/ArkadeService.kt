@@ -1,329 +1,80 @@
 package to.bitkit.services
 
-import android.annotation.SuppressLint
-import android.content.Context
-import android.webkit.JavascriptInterface
-import android.webkit.RenderProcessGoneDetail
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.webkit.WebViewAssetLoader
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
-import org.lightningdevkit.ldknode.Network
-import to.bitkit.data.keychain.Keychain
-import to.bitkit.di.json
-import to.bitkit.env.Env
 import to.bitkit.utils.AppError
-import to.bitkit.utils.Logger
-import to.bitkit.utils.ServiceError
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Runs Ark Labs' TypeScript Arkade wallet, swap client and LNURL client (`@arkade-os/sdk`, `@arkade-os/swap`,
- * `@arkade-os/lnurl-client`) in a hidden WebView, since Arkade's Lightning client exists only in TypeScript. The
- * bundle is built from `arkade-bridge/` into `assets/arkade/` and answers over one JSON message channel. The Arkade
- * wallet derives its keys from the Bitkit seed on its own BIP86 account (`m/86'/0'/1'`), so there is no new phrase.
+ * Arkade's wallet and Lightning client for Bitkit. The engine is a Rust binding on `arkade-os/rust-sdk` (ark-rs) over
+ * UniFFI, which adds the Arkade Intents Lightning client the Rust SDK lacks; until it lands, Arkade stays off and
+ * every flow takes its channel path. The wallet derives its keys from the Bitkit seed on BIP86 account 1
+ * (`m/86'/0'/1'`), since account 0 holds Savings' Taproot keys.
  */
 @Singleton
-class ArkadeService @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val keychain: Keychain,
-) {
-    companion object {
-        private const val TAG = "ArkadeService"
-        private const val ASSET_HOST = "appassets.androidplatform.net"
-        private const val BRIDGE_URL = "https://$ASSET_HOST/assets/arkade/index.html"
-        private const val CALL_TIMEOUT_MS = 120_000L
-        private const val LOAD_TIMEOUT_MS = 30_000L
-    }
-
-    private val mutex = Mutex()
-    private val pending = ConcurrentHashMap<String, CompletableDeferred<Result<JsonElement>>>()
-    private val callIds = AtomicLong()
-    private var webView: WebView? = null
-    private var loaded = CompletableDeferred<Unit>()
-    private var startedWith: StartParams? = null
-    private var info: ArkadeInfo? = null
-
+class ArkadeService @Inject constructor() {
     private val _events = MutableSharedFlow<ArkadeEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<ArkadeEvent> = _events.asSharedFlow()
 
-    /** Arkade runs on mainnet against Ark Labs' operator, and on mutinynet, Arkade's test network, for dev builds. */
-    val isSupported: Boolean get() = config() != null
+    val isSupported: Boolean get() = false
 
-    val isConnected: Boolean get() = info != null
+    val isConnected: Boolean get() = false
 
-    val networkName: String? get() = config()?.network
+    val networkName: String? get() = null
 
     /**
      * Starts the wallet: [restore] scans the operator for the wallet's past outputs and swaps, which a wallet
-     * restored from its phrase needs; [backup] is a state export to import before the wallet opens its databases.
+     * restored from its phrase needs; [backup] is a state export to import before the wallet opens its storage.
      */
-    suspend fun connect(restore: Boolean, backup: String?): ArkadeInfo = mutex.withLock {
-        info?.let { return@withLock it }
-        val config = config() ?: throw ArkadeError.Unsupported()
-        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
-        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-        ensureWebView()
-        val params = StartParams(
-            mnemonic = mnemonic,
-            passphrase = passphrase,
-            network = config.network,
-            arkServerUrl = config.arkServerUrl,
-            delegateUrl = config.delegateUrl,
-            lnurlUrl = config.lnurlUrl,
-            restore = restore,
-            backup = backup,
-        )
-        val started = decode<ArkadeInfo>(call("start", json.encodeToJsonElement(StartParams.serializer(), params)))
-        startedWith = params.copy(restore = false, backup = null)
-        info = started
-        Logger.info("Connected Arkade wallet on '${config.network}'", context = TAG)
-        started
-    }
+    @Suppress("UnusedParameter")
+    suspend fun connect(restore: Boolean, backup: String?): ArkadeInfo = throw ArkadeError.Unsupported()
 
-    suspend fun disconnect() = mutex.withLock {
-        withContext(Dispatchers.Main) {
-            webView?.destroy()
-            webView = null
-        }
-        failPending(ArkadeError.NotConnected())
-        info = null
-        startedWith = null
-        Logger.info("Disconnected Arkade wallet", context = TAG)
-    }
+    suspend fun disconnect() = Unit
 
-    suspend fun wipeStorage() {
-        runCatching {
-            ensureWebView()
-            call("wipe")
-        }.onFailure { Logger.warn("Failed to wipe Arkade storage", it, context = TAG) }
-        disconnect()
-    }
+    suspend fun wipeStorage() = Unit
 
-    suspend fun info(): ArkadeInfo = decode(call("info"))
+    suspend fun reconnect() = Unit
 
-    suspend fun balance(): ArkadeBalance = decode(call("balance"))
+    suspend fun info(): ArkadeInfo = throw ArkadeError.Unsupported()
 
-    suspend fun vtxos(): List<ArkadeVtxo> = decode(call("vtxos"))
+    suspend fun balance(): ArkadeBalance = throw ArkadeError.Unsupported()
 
-    suspend fun history(): List<ArkadeHistoryEntry> = decode(call("history"))
+    suspend fun vtxos(): List<ArkadeVtxo> = throw ArkadeError.Unsupported()
 
-    suspend fun swaps(): List<ArkadeSwap> = decode(call("swaps"))
+    suspend fun history(): List<ArkadeHistoryEntry> = throw ArkadeError.Unsupported()
+
+    suspend fun swaps(): List<ArkadeSwap> = throw ArkadeError.Unsupported()
 
     /** An invoice for exactly [amountSats]: the payer pays it, and the wallet gets it less the solver's fee. */
-    suspend fun receive(amountSats: ULong, maxFeeSats: ULong? = null): ArkadeSwap =
-        decode(
-            call(
-                "receive",
-                buildJsonObject {
-                    put("amountSat", amountSats.toLong())
-                    maxFeeSats?.let { put("maxFeeSat", it.toLong()) }
-                },
-            ),
-        )
+    @Suppress("UnusedParameter")
+    suspend fun receive(amountSats: ULong, maxFeeSats: ULong? = null): ArkadeSwap = throw ArkadeError.Unsupported()
 
-    suspend fun quotePay(bolt11: String): ArkadePayQuote =
-        decode(call("quotePay", buildJsonObject { put("bolt11", bolt11) }))
+    @Suppress("UnusedParameter")
+    suspend fun quotePay(bolt11: String): ArkadePayQuote = throw ArkadeError.Unsupported()
 
     /** Funds the lockup for [bolt11] and returns at once; the outcome arrives as a swap event. */
-    suspend fun pay(bolt11: String, maxFeeSats: ULong?): ArkadeSwap =
-        decode(
-            call(
-                "pay",
-                buildJsonObject {
-                    put("bolt11", bolt11)
-                    maxFeeSats?.let { put("maxFeeSat", it.toLong()) }
-                },
-            ),
-        )
+    @Suppress("UnusedParameter")
+    suspend fun pay(bolt11: String, maxFeeSats: ULong?): ArkadeSwap = throw ArkadeError.Unsupported()
 
     /** Boards confirmed on-chain deposits now, instead of on the wallet's next one-minute pass. */
-    suspend fun settle(): String? = call(
-        "settle"
-    ).jsonObject["txid"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content
+    suspend fun settle(): String? = throw ArkadeError.Unsupported()
 
     /** Renews outputs nearing their batch expiry; the wallet also does it by itself 3 days before expiry. */
-    suspend fun renew(): String? = call(
-        "renew"
-    ).jsonObject["txid"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content
+    suspend fun renew(): String? = throw ArkadeError.Unsupported()
 
     /** Moves [amountSats], or everything when null, to the on-chain [address] in the next batch. */
-    suspend fun offboard(address: String, amountSats: ULong? = null): String =
-        call(
-            "offboard",
-            buildJsonObject {
-                put("address", address)
-                amountSats?.let { put("amountSat", it.toLong()) }
-            },
-        ).jsonObject.getValue("txid").jsonPrimitive.content
+    @Suppress("UnusedParameter")
+    suspend fun offboard(address: String, amountSats: ULong? = null): String = throw ArkadeError.Unsupported()
 
-    /** The wallet's Lightning address on Ark Labs' LNURL server, claimed on first use and found again from the seed. */
-    suspend fun lightningAddress(): ArkadeLightningAddress? =
-        call("lightningAddress").takeUnless { it is JsonNull }?.let { decode(it) }
+    /** The wallet's Lightning address, claimed on first use and found again from the seed. */
+    suspend fun lightningAddress(): ArkadeLightningAddress? = throw ArkadeError.Unsupported()
 
     /** Everything the wallet keeps locally, as one JSON document, for the VSS backup. */
-    suspend fun exportState(): String = call("exportState").jsonPrimitive.content
-
-    private suspend fun call(method: String, params: JsonElement = JsonObject(emptyMap())): JsonElement {
-        ensureWebView()
-        val id = "k${callIds.incrementAndGet()}"
-        val deferred = CompletableDeferred<Result<JsonElement>>()
-        pending[id] = deferred
-        val script = "window.bitkitArk.call(${quote(id)}, ${quote(method)}, ${quote(params.toString())})"
-        withContext(Dispatchers.Main) { requireNotNull(webView).evaluateJavascript(script, null) }
-        return try {
-            withTimeout(CALL_TIMEOUT_MS) { deferred.await() }.getOrThrow()
-        } finally {
-            pending.remove(id)
-        }
-    }
-
-    private suspend fun ensureWebView() {
-        if (webView != null) {
-            withTimeout(LOAD_TIMEOUT_MS) { loaded.await() }
-            return
-        }
-        loaded = CompletableDeferred()
-        withContext(Dispatchers.Main) { webView = createWebView() }
-        withTimeout(LOAD_TIMEOUT_MS) { loaded.await() }
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun createWebView(): WebView {
-        val assetLoader = WebViewAssetLoader.Builder()
-            .setDomain(ASSET_HOST)
-            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
-            .build()
-        return WebView(context).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            addJavascriptInterface(Bridge(), "BitkitArkNative")
-            webViewClient = object : WebViewClient() {
-                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                    assetLoader.shouldInterceptRequest(request.url)
-
-                override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-                    Logger.error("Arkade WebView renderer gone, crashed: '${detail.didCrash()}'", context = TAG)
-                    onRendererGone(view)
-                    return true
-                }
-            }
-            loadUrl(BRIDGE_URL)
-        }
-    }
-
-    // The renderer took the wallet with it: start it again with the parameters it last ran with.
-    private fun onRendererGone(view: WebView) {
-        if (webView === view) webView = null
-        view.destroy()
-        failPending(ArkadeError.NotConnected())
-        info = null
-        _events.tryEmit(ArkadeEvent.Restarted)
-    }
-
-    suspend fun reconnect() {
-        val params = startedWith ?: return
-        connect(restore = params.restore, backup = null)
-    }
-
-    private fun failPending(error: Throwable) {
-        pending.values.forEach { it.complete(Result.failure(error)) }
-        pending.clear()
-    }
-
-    private inner class Bridge {
-        @JavascriptInterface
-        fun postMessage(message: String) {
-            runCatching { onMessage(message) }
-                .onFailure { Logger.error("Failed to handle Arkade message", it, context = TAG) }
-        }
-    }
-
-    private fun onMessage(message: String) {
-        val obj = json.parseToJsonElement(message).jsonObject
-        val id = obj["id"]?.jsonPrimitive?.content
-        if (id != null) {
-            val ok = obj["ok"]?.jsonPrimitive?.content == "true"
-            val result = if (ok) {
-                Result.success(obj["result"] ?: JsonNull)
-            } else {
-                Result.failure(ArkadeError.Bridge(obj["error"]?.jsonPrimitive?.content ?: "unknown error"))
-            }
-            pending[id]?.complete(result)
-            return
-        }
-        when (obj["event"]?.jsonPrimitive?.content) {
-            "ready" -> loaded.complete(Unit)
-            "log" -> Logger.debug("bridge: ${obj["message"]?.jsonPrimitive?.content}", context = TAG)
-            "swap" -> obj["swap"]?.let { _events.tryEmit(ArkadeEvent.Swap(decode(it))) }
-            "history" -> _events.tryEmit(ArkadeEvent.History(decode(obj.getValue("entries"))))
-        }
-    }
-
-    private inline fun <reified T> decode(element: JsonElement): T = json.decodeFromJsonElement(element)
-
-    private fun quote(value: String): String = json.encodeToString(value)
-
-    private fun config(): ArkadeConfig? = when (Env.network) {
-        Network.BITCOIN -> ArkadeConfig(
-            network = "bitcoin",
-            arkServerUrl = "https://arkade.computer",
-            delegateUrl = "https://delegate.arkade.money",
-            lnurlUrl = "https://lnurl.arkade.sh",
-        )
-        Network.REGTEST -> ArkadeConfig(
-            network = "mutinynet",
-            arkServerUrl = "https://mutinynet.arkade.sh",
-            delegateUrl = "https://delegator.mutinynet.arkade.sh",
-            lnurlUrl = null,
-        )
-        else -> null
-    }
+    suspend fun exportState(): String = throw ArkadeError.Unsupported()
 }
-
-private data class ArkadeConfig(
-    val network: String,
-    val arkServerUrl: String,
-    val delegateUrl: String?,
-    val lnurlUrl: String?,
-)
-
-@Serializable
-private data class StartParams(
-    val mnemonic: String,
-    val passphrase: String?,
-    val network: String,
-    val arkServerUrl: String,
-    val delegateUrl: String?,
-    val lnurlUrl: String?,
-    val restore: Boolean,
-    val backup: String?,
-)
 
 @Serializable
 data class ArkadeInfo(
