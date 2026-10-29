@@ -1093,11 +1093,19 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    suspend fun checkProfileDeletionAllowed(): Result<Unit> = runSuspendCatching {
+        withContext(ioDispatcher) { pubkyService.checkProfileDeletionAllowed() }
+    }.recoverCatching {
+        if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
+        throw it
+    }
+
     suspend fun deleteProfile(): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
             requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
+            checkProfileDeletionAllowed().getOrThrow()
             clearSessionContactProfiles()
             deleteAllContacts()
             pubkyService.deletePaykitProfile()
@@ -1105,13 +1113,16 @@ class PubkyRepo @Inject constructor(
         }
         settingsStore.update { it.paykitDisabled(markPublicCleanupPending = it.hasPaykitState()) }
         signOut().getOrThrow()
+    }.recoverCatching {
+        if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
+        throw it
     }
 
     private suspend fun deleteAllContacts() {
         val records = pubkyService.contactRecords()
         if (records.isEmpty()) return
         val keys = records.map { it.publicKey.ensurePubkyPrefix() }.toSet()
-        val removedKeys = pubkyService.removeContacts(records.map { it.publicKey })
+        val removedKeys = pubkyService.removeContactsForProfile(records.map { it.publicKey })
             .map { it.publicKey.ensurePubkyPrefix() }.toSet().intersect(keys)
         pubkyStore.update { it.copy(contactProfileOverrides = it.contactProfileOverrides - removedKeys) }
         notifyBackupStateChanged()

@@ -1313,7 +1313,7 @@ class PubkyRepoTest : BaseUnitTest() {
             createContactRecord(VALID_CONTACT_KEY_B, label = "Bob"),
         )
         whenever(pubkyService.contactRecords()).thenReturn(records)
-        whenever(pubkyService.removeContacts(records.map { it.publicKey })).thenReturn(records)
+        whenever(pubkyService.removeContactsForProfile(records.map { it.publicKey })).thenReturn(records)
         val bulkCancelled = CompletableDeferred<Unit>()
         val screenCancelled = CompletableDeferred<Unit>()
         whenever(pubkyService.resolveContactProfile(VALID_CONTACT_KEY_A, true, PaykitReadLane.Bulk))
@@ -1352,8 +1352,43 @@ class PubkyRepoTest : BaseUnitTest() {
         deletion.await().getOrThrow()
         screenLookup.await()
         assertTrue(sut.contacts.value.isEmpty())
-        verify(pubkyService).removeContacts(records.map { it.publicKey })
+        verify(pubkyService).removeContactsForProfile(records.map { it.publicKey })
         verify(pubkyService, never()).removeContact(any())
+    }
+
+    @Test
+    fun `active subscription is preserved through service wrappers before profile cleanup`() = test {
+        authenticateForTesting()
+        val wrapped = IllegalStateException("Service operation failed", PubkyContactError.ActiveSubscription)
+        whenever(pubkyService.checkProfileDeletionAllowed()).thenAnswer { throw wrapped }
+        clearInvocations(pubkyStore, pubkyService)
+
+        assertSame(PubkyContactError.ActiveSubscription, sut.checkProfileDeletionAllowed().exceptionOrNull())
+        assertSame(PubkyContactError.ActiveSubscription, sut.deleteProfile().exceptionOrNull())
+
+        verify(pubkyService, never()).contactRecords()
+        verify(pubkyService, never()).removeContactsForProfile(any())
+        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).signOut()
+        verify(pubkyStore, never()).update(any())
+    }
+
+    @Test
+    fun `late subscription rejection retains contacts and credentials`() = test {
+        authenticateForTesting()
+        val records = listOf(createContactRecord(VALID_CONTACT_KEY_A, label = "Retained"))
+        whenever(pubkyService.contactRecords()).thenReturn(records)
+        sut.loadContacts()
+        val wrapped = IllegalStateException("Service operation failed", PubkyContactError.ActiveSubscription)
+        whenever(pubkyService.removeContactsForProfile(any())).thenAnswer { throw wrapped }
+        clearInvocations(pubkyStore)
+
+        assertSame(PubkyContactError.ActiveSubscription, sut.deleteProfile().exceptionOrNull())
+
+        assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
+        verify(pubkyStore, never()).update(any())
+        verify(pubkyService, never()).deletePaykitProfile()
+        verify(pubkyService, never()).signOut()
     }
 
     @Test
@@ -1373,7 +1408,9 @@ class PubkyRepoTest : BaseUnitTest() {
             Unit
         }
         whenever(pubkyService.contactRecords()).thenReturn(records)
-        whenever(pubkyService.removeContacts(records.map { it.publicKey })).thenReturn(listOf(records.first()))
+        whenever(
+            pubkyService.removeContactsForProfile(records.map { it.publicKey })
+        ).thenReturn(listOf(records.first()))
         sut.loadContacts()
 
         val result = sut.deleteProfile()
@@ -1396,7 +1433,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertSame(error, result.exceptionOrNull())
         verify(pubkyStore, never()).update(any())
-        verify(pubkyService, never()).removeContacts(any())
+        verify(pubkyService, never()).removeContactsForProfile(any())
         verify(pubkyService, never()).deletePaykitProfile()
         verify(pubkyService, never()).signOut()
     }
@@ -1408,7 +1445,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val records = listOf(record)
         val error = TestAppError("Contact removal acknowledgement lost")
         whenever(pubkyService.contactRecords()).thenReturn(records)
-        whenever(pubkyService.removeContacts(listOf(record.publicKey))).thenAnswer { throw error }
+        whenever(pubkyService.removeContactsForProfile(listOf(record.publicKey))).thenAnswer { throw error }
         sut.loadContacts()
         clearInvocations(pubkyStore)
 
@@ -4776,7 +4813,7 @@ class PubkyRepoTest : BaseUnitTest() {
             authenticateForTesting()
             whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
             val records = listOf(createContactRecord(VALID_CONTACT_KEY_A, "Saved"))
-            whenever(pubkyService.removeContacts(records.map { it.publicKey })).thenReturn(records)
+            whenever(pubkyService.removeContactsForProfile(records.map { it.publicKey })).thenReturn(records)
             whenever(pubkyService.deletePaykitProfile()).thenAnswer { throw TestAppError("Offline") }
             val newRead = createResolution(VALID_CONTACT_KEY_A, paykitProfile = createPaykitProfile("Alice", "New"))
             val oldRead = holdScreenLookup(VALID_CONTACT_KEY_A, laterRead = newRead)

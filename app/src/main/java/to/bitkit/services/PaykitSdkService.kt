@@ -764,6 +764,25 @@ class PaykitSdkService @Inject constructor(
         return imported
     }
 
+    suspend fun checkProfileDeletionAllowed() {
+        isSetup.await()
+        operationLock.withLock {
+            withStateRevisionTracking { handle ->
+                val now = nowMillis()
+                if (completeSdkCall { handle.paymentRequests() }.any { it.hasActiveSubscription(now) }) {
+                    throw PubkyContactError.ActiveSubscription
+                }
+            }
+        }
+    }
+
+    private fun PaymentRequestRecord.hasActiveSubscription(now: Long): Boolean {
+        val endsAt = terms?.recurrence?.endsAt?.let { timestamp ->
+            runCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull()
+        }
+        return state == PaymentRequestLifecycleState.ACTIVE_RECURRING && (endsAt == null || endsAt > now)
+    }
+
     suspend fun removeContact(publicKey: String): ContactRecord? {
         isSetup.await()
         return operationLock.withLock {
@@ -773,12 +792,7 @@ class PaykitSdkService @Inject constructor(
                 }
                 val now = nowMillis()
                 val hasActiveSubscription = completeSdkCall { handle.paymentRequests() }.any {
-                    val endsAt = it.terms?.recurrence?.endsAt?.let { timestamp ->
-                        runSuspendCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull()
-                    }
-                    PubkyPublicKeyFormat.matches(it.counterparty, publicKey) &&
-                        it.state == PaymentRequestLifecycleState.ACTIVE_RECURRING &&
-                        (endsAt == null || endsAt > now)
+                    PubkyPublicKeyFormat.matches(it.counterparty, publicKey) && it.hasActiveSubscription(now)
                 }
                 if (hasActiveSubscription) throw PubkyContactError.ActiveSubscription
                 peers.filter { it.state == LinkedPeerState.LINKED }.forEach {
@@ -798,18 +812,29 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun removeContacts(publicKeys: List<String>): List<ContactRecord> {
+    suspend fun removeContacts(publicKeys: List<String>): List<ContactRecord> =
+        removeContacts(publicKeys, requireAll = false)
+
+    suspend fun removeContactsForProfile(publicKeys: List<String>): List<ContactRecord> =
+        removeContacts(publicKeys, requireAll = true)
+
+    private suspend fun removeContacts(publicKeys: List<String>, requireAll: Boolean): List<ContactRecord> {
         if (publicKeys.isEmpty()) return emptyList()
         isSetup.await()
         return operationLock.withLock {
             withStateRevisionTracking { handle ->
                 val now = nowMillis()
-                val subscribedKeys = completeSdkCall { handle.paymentRequests() }.filter {
-                    val endsAt = it.terms?.recurrence?.endsAt?.let { timestamp ->
-                        runSuspendCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull()
-                    }
-                    it.state == PaymentRequestLifecycleState.ACTIVE_RECURRING && (endsAt == null || endsAt > now)
-                }.mapNotNull { PubkyPublicKeyFormat.normalized(it.counterparty) }.toSet()
+                val subscriptions = completeSdkCall { handle.paymentRequests() }.filter {
+                    it.hasActiveSubscription(
+                        now
+                    )
+                }
+                if (requireAll && subscriptions.isNotEmpty()) throw PubkyContactError.ActiveSubscription
+                val subscribedKeys = subscriptions.mapNotNull {
+                    PubkyPublicKeyFormat.normalized(
+                        it.counterparty
+                    )
+                }.toSet()
                 val removableKeys = publicKeys.filter { PubkyPublicKeyFormat.normalized(it) !in subscribedKeys }
                 if (removableKeys.isEmpty()) return@withStateRevisionTracking emptyList()
                 completeSdkCall { handle.removeContactsAndBlockPeers(removableKeys) }

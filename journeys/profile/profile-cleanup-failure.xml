@@ -2,12 +2,19 @@
   <description>
     Requires a disposable test identity with saved contacts and a controlled homeserver proxy.
     Never use a personal profile. Inject a private-endpoint withdrawal failure, then in a fresh
-    fixture inject an unknown contact-removal response or a partial removal retaining an active peer.
+    fixture inject an unknown contact-removal response or a partial removal acknowledging only some contacts.
+    Separately prepare an active recurring subscription in each role (payer and payee), with an
+    unrelated saved contact, and record endpoint/contact state before confirming removal. Verify
+    the subscription warning appears before cleanup; cancel or expire the subscription in the
+    disposable fixture and confirm removal again to verify it can proceed.
     Also inject a profile-deletion error whose message contains 404 Not Found, without confirming deletion.
     These controls are not available in standard staging. This journey covers stopping on incomplete
     cleanup, not cross-device conditional deletion or safe manual replay of an uncertain operation.
   </description>
   <actions>
+    <action>With an active subscription, confirm profile deletion or unlink and verify the localized instruction to end active subscriptions</action>
+    <action>Verify there is no generic Retry dialog, endpoint withdrawal, contact removal or profile deletion, including for the unrelated contact</action>
+    <action>After ending the subscription, explicitly confirm removal again and verify acknowledged cleanup succeeds</action>
     <action>Open Edit Profile and confirm deletion with the cleanup fault enabled</action>
     <action>Verify failure options appear without a success notification or onboarding navigation</action>
     <action>Verify a failed private withdrawal is followed by no contact or profile deletion</action>

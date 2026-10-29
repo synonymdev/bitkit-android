@@ -2090,6 +2090,10 @@ class PaykitSdkServiceTest {
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
             assertFailsWith<PubkyContactError.ActiveSubscription> { service.removeContact(RING_PUBKY) }
             assertTrue(service.removeContacts(listOf(RING_PUBKY)).isEmpty())
+            assertFailsWith<PubkyContactError.ActiveSubscription> { service.checkProfileDeletionAllowed() }
+            assertFailsWith<PubkyContactError.ActiveSubscription> {
+                service.removeContactsForProfile(listOf(RING_PUBKY, "pubkyunrelated"))
+            }
             verify(sdk, never()).blockPeer(any())
             verify(sdk, never()).removeContact(any())
             verify(sdk, never()).removeContactsAndBlockPeers(any())
@@ -2103,7 +2107,48 @@ class PaykitSdkServiceTest {
             val removed = listOf(mock<ContactRecord>())
             whenever(sdk.removeContactsAndBlockPeers(listOf(RING_PUBKY))).thenReturn(removed)
             assertEquals(removed, service.removeContacts(listOf(RING_PUBKY)))
+            service.checkProfileDeletionAllowed()
+            assertEquals(removed, service.removeContactsForProfile(listOf(RING_PUBKY)))
         }
+    }
+
+    @Test
+    fun `profile removal conservatively blocks unknown or future subscription expiry`() = runTest {
+        for (endsAt in listOf(null, "invalid", "2999-01-01T00:00:00Z")) {
+            val sdk = mock<PaykitSdk>()
+            val recurrence = mock<PaymentRequestRecurrence> { on { this.endsAt } doReturn endsAt }
+            val requestTerms = mock<PaymentRequestTerms> { on { this.recurrence } doReturn recurrence }
+            val request = mock<PaymentRequestRecord> {
+                on { counterparty } doReturn RING_PUBKY
+                on { state } doReturn PaymentRequestLifecycleState.ACTIVE_RECURRING
+                on { terms } doReturn requestTerms
+            }
+            whenever(sdk.paymentRequests()).thenReturn(listOf(request))
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+            assertFailsWith<PubkyContactError.ActiveSubscription> { service.checkProfileDeletionAllowed() }
+            assertFailsWith<PubkyContactError.ActiveSubscription> {
+                service.removeContactsForProfile(listOf("pubkyunrelated"))
+            }
+            verify(sdk, never()).removeContactsAndBlockPeers(any())
+        }
+    }
+
+    @Test
+    fun `profile removal fails closed when subscriptions cannot be read`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val error = IllegalStateException("Subscription storage unavailable")
+        whenever(sdk.paymentRequests()).thenAnswer { throw error }
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+        assertSame(error, assertFailsWith<IllegalStateException> { service.checkProfileDeletionAllowed() })
+        assertSame(
+            error,
+            assertFailsWith<IllegalStateException> {
+                service.removeContactsForProfile(listOf(RING_PUBKY))
+            }
+        )
+        verify(sdk, never()).removeContactsAndBlockPeers(any())
     }
 
     @Test

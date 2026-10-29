@@ -24,6 +24,7 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
@@ -40,6 +41,64 @@ class EditProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+
+    @Test
+    fun `active subscription stops profile deletion before private or contact cleanup`() = test {
+        val sut = createSut()
+        whenever(
+            pubkyRepo.checkProfileDeletionAllowed()
+        ).thenReturn(Result.failure(PubkyContactError.ActiveSubscription))
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
+        advanceUntilIdle()
+
+        sut.deleteProfile()
+        advanceUntilIdle()
+
+        verify(pubkyRepo).checkProfileDeletionAllowed()
+        verify(context).getString(R.string.profile__delete_active_subscription)
+        verify(privatePaykitRepo, never()).beginProfileDeletion()
+        verify(privatePaykitRepo, never()).endProfileDeletion()
+        verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
+        verify(privatePaykitRepo, never()).closeAndClear()
+        verify(pubkyRepo, never()).deleteProfile()
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isDeleting)
+    }
+
+    @Test
+    fun `unavailable subscription read retains cleanup and shows failure`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.checkProfileDeletionAllowed()).thenReturn(Result.failure(TestAppError("Unavailable")))
+        advanceUntilIdle()
+
+        sut.deleteProfile()
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isDeleting)
+        verify(privatePaykitRepo, never()).beginProfileDeletion()
+        verify(privatePaykitRepo, never()).endProfileDeletion()
+        verify(pubkyRepo, never()).deleteProfile()
+    }
+
+    @Test
+    fun `cancellation during subscription read does not start or end private cleanup`() = test {
+        val sut = createSut()
+        val read = CompletableDeferred<Result<Unit>>()
+        whenever(pubkyRepo.checkProfileDeletionAllowed()).doSuspendableAnswer { read.await() }
+        advanceUntilIdle()
+        sut.deleteProfile()
+        advanceUntilIdle()
+
+        sut.viewModelScope.cancel()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isDeleting)
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        verify(privatePaykitRepo, never()).beginProfileDeletion()
+        verify(privatePaykitRepo, never()).endProfileDeletion()
+        verify(pubkyRepo, never()).deleteProfile()
+    }
 
     @Test
     fun `disconnect finishes private cleanup after the screen is closed`() = test {
@@ -418,6 +477,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         } else {
             whenever { pubkyRepo.isRingAdoptedIdentity() }.thenReturn(isRingIdentity)
         }
+        whenever { pubkyRepo.checkProfileDeletionAllowed() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
