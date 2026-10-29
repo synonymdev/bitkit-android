@@ -37,7 +37,6 @@ import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.Node
-import org.lightningdevkit.ldknode.PrimaryReceiveQuote
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OnchainSendResult
@@ -48,6 +47,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.PendingSweepBalance
+import org.lightningdevkit.ldknode.PrimaryReceiveQuote
 import org.lightningdevkit.ldknode.PublicKey
 import org.lightningdevkit.ldknode.RouteParametersConfig
 import org.lightningdevkit.ldknode.ScoringFeeParameters
@@ -74,13 +74,13 @@ import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
 import to.bitkit.models.PrimaryNode
 import to.bitkit.models.PrimaryNodeError
-import to.bitkit.models.toPeerDetails
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
+import to.bitkit.models.toPeerDetails
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendInput

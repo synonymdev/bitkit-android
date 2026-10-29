@@ -1319,7 +1319,9 @@ class LightningRepo @Inject constructor(
         runSuspendCatching { lightningService.receiveViaPrimary(amountSats, description, maxFeeMsat) }
     }
 
-    suspend fun checkPrimaryConnection(nodeId: String): Result<Unit> = executeWhenNodeRunning("checkPrimaryConnection") {
+    suspend fun checkPrimaryConnection(nodeId: String): Result<Unit> = executeWhenNodeRunning(
+        "checkPrimaryConnection"
+    ) {
         runSuspendCatching { lightningService.checkPrimaryConnection(nodeId) }.also { refreshChannelsAndPeers() }
     }
 

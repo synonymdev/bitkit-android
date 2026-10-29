@@ -178,6 +178,7 @@ class WalletRepoTest : BaseUnitTest() {
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
         connectionRecovery = connectionRecovery,
+        primaryNodeRepo = mock(),
     )
 
     private fun lightningInvoice(bolt11: String, isExpired: Boolean = false) = LightningInvoice(

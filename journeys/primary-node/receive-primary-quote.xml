@@ -1,0 +1,16 @@
+<journey name="receive primary quote">
+  <description>
+    Proves a receive the channel cannot take goes through the primary only after the user approves its fee: on an
+    empty wallet the primary opens a channel, and above the channel's inbound it splices more in. Precondition: see
+    README.md.
+  </description>
+  <actions>
+    <action>Open Receive, switch to the Spending tab and tap the Lightning receive button</action>
+    <action>Enter 20000 sats and continue</action>
+    <action>Verify the "Review receive fee" screen (testTag "PrimaryReceiveConfirm") shows "PrimaryReceiveFee" and "PrimaryReceiveMin"</action>
+    <action>Tap "PrimaryReceiveApprove" and verify the receive QR shows a Lightning invoice for 20000 sats</action>
+    <action>Pay the invoice from the second wallet and verify the received sheet and a spending balance of at least the minimum shown</action>
+    <action>Open Receive again, edit the Spending invoice to an amount above the channel's inbound capacity and continue</action>
+    <action>Approve the fee, pay the invoice from the second wallet, and verify the payment arrives without a second channel in Settings › Advanced › Lightning connections</action>
+  </actions>
+</journey>

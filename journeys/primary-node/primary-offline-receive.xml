@@ -1,0 +1,13 @@
+<journey name="primary offline receive">
+  <description>
+    Proves a receive that needs the primary tells the user when the primary is unreachable, instead of a spinner.
+    Precondition: see README.md; stop the primary node before the quote step and start it again for the retry.
+  </description>
+  <actions>
+    <action>Stop the primary node</action>
+    <action>Open Receive, switch to the Spending tab, enter an amount above the channel's inbound capacity and continue</action>
+    <action>Verify "PrimaryReceiveError" says the primary node is offline or unreachable and "PrimaryReceiveRetry" is shown</action>
+    <action>Start the primary node, wait for the wallet to reconnect, and tap "PrimaryReceiveRetry"</action>
+    <action>Verify "PrimaryReceiveFee" is shown and "PrimaryReceiveApprove" is enabled</action>
+  </actions>
+</journey>

@@ -72,6 +72,7 @@ class TransferViewModelTest : BaseUnitTest() {
             lightningRepo = lightningRepo,
             walletRepo = walletRepo,
             transferRepo = transferRepo,
+            primaryNodeRepo = mock(),
             boltzService = boltzService,
             clock = clock,
         )

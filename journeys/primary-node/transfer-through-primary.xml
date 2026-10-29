@@ -1,0 +1,16 @@
+<journey name="transfer through primary">
+  <description>
+    Proves transfers move funds between savings and the primary channel without closing it, and that an on-chain send
+    larger than savings is paid from the channel. Precondition: see README.md; a wallet with a channel with the primary.
+  </description>
+  <actions>
+    <action>Open Spending and tap Transfer To Savings, then confirm the transfer</action>
+    <action>Verify the transfer completes, Settings › Advanced › Lightning connections still lists the channel, and the savings balance grew</action>
+    <action>Open Settings › Advanced › Primary node and verify "PrimaryNodeFundingPaused" is shown</action>
+    <action>Mine a block, open Savings and tap Transfer To Spending</action>
+    <action>Verify the "PrimaryTransfer" screen shows the amount and "PrimaryTransferFee", then tap "PrimaryTransferConfirm"</action>
+    <action>Verify the "Transfer started" toast, and after a block that the spending balance grew and "PrimaryNodeFundingPaused" is gone</action>
+    <action>Send on-chain to the second wallet an amount above the savings balance and below the spending balance</action>
+    <action>Verify the send completes and the spending balance fell by the amount plus fee</action>
+  </actions>
+</journey>

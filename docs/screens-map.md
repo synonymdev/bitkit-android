@@ -151,6 +151,12 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | Android | Figma |
 | - | - |
 
+## ui/screens/transfer/primary
+
+| Android | Figma |
+| - | - |
+| PrimaryTransferScreen.kt | `todo` |
+
 ## ui/screens/trezor
 
 | Android | Figma |
@@ -180,6 +186,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | Android | Figma |
 | - | - |
 | EditInvoiceScreen.kt | Send (Contact) (Lightning) › Edit invoice populated |
+| PrimaryReceiveConfirmScreen.kt | `todo` |
 | ReceiveQrScreen.kt | Receive Lightning Active › Receive Auto (Unified QR) |
 | TransferUnavailableScreen.kt | `todo` |
 
@@ -319,6 +326,12 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | PinManagementScreen.kt | Settings > Security › PIN Enabled |
 | PinPromptScreen.kt | Settings > Security › PIN Change Enter Current |
 | PinResultScreen.kt | Security › Create passcode |
+
+## ui/settings/primaryNode
+
+| Android | Figma |
+| - | - |
+| PrimaryNodeScreen.kt | `todo` |
 
 ## ui/settings/quickPay
 

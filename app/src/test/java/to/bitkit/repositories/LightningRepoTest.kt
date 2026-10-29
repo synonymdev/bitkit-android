@@ -229,6 +229,7 @@ class LightningRepoTest : BaseUnitTest() {
             activityRepo = mock(),
             hwWalletRepo = hardware,
             connectionRecovery = connectionRecoveryFixture(settingsStore),
+            primaryNodeRepo = mock(),
         )
     }
 

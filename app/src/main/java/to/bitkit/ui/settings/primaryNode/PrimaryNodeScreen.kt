@@ -95,7 +95,11 @@ private fun Content(
                 VerticalSpacer(4.dp)
                 BodyM(
                     text = stringResource(
-                        if (uiState.isConnected) R.string.primary_node__status_connected else R.string.primary_node__status_offline
+                        if (uiState.isConnected) {
+                            R.string.primary_node__status_connected
+                        } else {
+                            R.string.primary_node__status_offline
+                        }
                     ),
                     color = if (uiState.isConnected) Colors.Green else Colors.Red,
                     modifier = Modifier.testTag(if (uiState.isConnected) "PrimaryNodeOnline" else "PrimaryNodeOffline")

@@ -53,7 +53,11 @@ class PrimaryReceiveViewModel @Inject constructor(
                 }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(isLoading = false, maxFeeMsat = null, error = context.getString(error.primaryErrorMessageRes()))
+                        it.copy(
+                            isLoading = false,
+                            maxFeeMsat = null,
+                            error = context.getString(error.primaryErrorMessageRes())
+                        )
                     }
                 }
         }
@@ -77,7 +81,11 @@ class PrimaryReceiveViewModel @Inject constructor(
                 }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(isLoading = false, maxFeeMsat = null, error = context.getString(error.primaryErrorMessageRes()))
+                        it.copy(
+                            isLoading = false,
+                            maxFeeMsat = null,
+                            error = context.getString(error.primaryErrorMessageRes())
+                        )
                     }
                 }
         }

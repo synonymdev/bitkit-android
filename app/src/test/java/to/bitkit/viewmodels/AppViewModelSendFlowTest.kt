@@ -912,6 +912,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         keychain = keychain,
         connectionRecovery = connectionRecovery,
         lightningRepo = lightningRepo,
+        primaryNodeRepo = mock(),
         pendingPaymentRepo = pendingPaymentRepo,
         walletRepo = walletRepo,
         hwWalletRepo = hwWalletRepo,

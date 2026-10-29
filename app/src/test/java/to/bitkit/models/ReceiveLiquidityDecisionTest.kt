@@ -94,4 +94,36 @@ class ReceiveLiquidityDecisionTest {
 
     private fun additionalLiquidityAction(params: ReceiveAdditionalLiquidityParams) =
         ReceiveLiquidityDecision.additionalLiquidityAction(params)
+
+    @Test
+    fun `receive above inbound goes through the primary when one is set`() {
+        val params = defaultAdditionalLiquidityParams.copy(hasPrimaryNode = true)
+
+        assertEquals(
+            ReceiveAdditionalLiquidityAction.PrimaryReceive,
+            ReceiveLiquidityDecision.additionalLiquidityAction(params)
+        )
+        assertEquals(
+            ReceiveAdditionalLiquidityAction.PrimaryReceive,
+            ReceiveLiquidityDecision.additionalLiquidityAction(params.copy(inboundCapacitySats = 0u)),
+        )
+        assertEquals(
+            ReceiveAdditionalLiquidityAction.PrimaryReceive,
+            ReceiveLiquidityDecision.additionalLiquidityAction(params.copy(source = ReceiveLiquiditySource.AUTO)),
+        )
+    }
+
+    @Test
+    fun `primary is not asked for a receive that fits or a savings invoice`() {
+        val params = defaultAdditionalLiquidityParams.copy(hasPrimaryNode = true)
+
+        assertEquals(
+            ReceiveAdditionalLiquidityAction.None,
+            ReceiveLiquidityDecision.additionalLiquidityAction(params.copy(inboundCapacitySats = 20_000u)),
+        )
+        assertEquals(
+            ReceiveAdditionalLiquidityAction.None,
+            ReceiveLiquidityDecision.additionalLiquidityAction(params.copy(source = ReceiveLiquiditySource.SAVINGS)),
+        )
+    }
 }

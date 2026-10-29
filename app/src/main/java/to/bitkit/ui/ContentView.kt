@@ -135,7 +135,6 @@ import to.bitkit.ui.screens.subscriptions.SubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionsScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.SavingsAdvancedScreen
-import to.bitkit.ui.screens.transfer.primary.PrimaryTransferScreen
 import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen
 import to.bitkit.ui.screens.transfer.SavingsConfirmScreen
 import to.bitkit.ui.screens.transfer.SavingsIntroScreen
@@ -146,6 +145,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
+import to.bitkit.ui.screens.transfer.primary.PrimaryTransferScreen
 import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HardwareWalletScreen
 import to.bitkit.ui.screens.wallets.HomeScreen

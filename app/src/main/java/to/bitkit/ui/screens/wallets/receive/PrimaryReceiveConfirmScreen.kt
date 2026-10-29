@@ -89,7 +89,10 @@ private fun Content(
                     VerticalSpacer(24.dp)
                     Caption13Up(stringResource(R.string.primary_receive__capacity), color = Colors.White64)
                     VerticalSpacer(8.dp)
-                    MoneySSB(sats = uiState.channelFundingSats.toLong(), modifier = Modifier.testTag("PrimaryReceiveCapacity"))
+                    MoneySSB(
+                        sats = uiState.channelFundingSats.toLong(),
+                        modifier = Modifier.testTag("PrimaryReceiveCapacity")
+                    )
                 }
                 VerticalSpacer(24.dp)
                 BodyM(stringResource(R.string.primary_receive__note), color = Colors.White64)
@@ -135,7 +138,11 @@ private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
             Content(
-                uiState = PrimaryReceiveUiState(amountSats = 20_000uL, maxFeeMsat = 120_000uL, channelFundingSats = 30_000uL),
+                uiState = PrimaryReceiveUiState(
+                    amountSats = 20_000uL,
+                    maxFeeMsat = 120_000uL,
+                    channelFundingSats = 30_000uL
+                ),
                 modifier = Modifier.sheetHeight(),
             )
         }

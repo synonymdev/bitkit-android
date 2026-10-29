@@ -1,0 +1,16 @@
+<journey name="pair primary node">
+  <description>
+    Proves the primary node can be seen, changed and reset in Settings, and that a failed pairing keeps the previous
+    primary. Precondition: see README.md; a fresh wallet with no channel, so changing the primary is allowed.
+  </description>
+  <actions>
+    <action>Open Settings, the Advanced tab, and tap "Primary node" (testTag "PrimaryNodeSettings")</action>
+    <action>Verify "PrimaryNodeCurrent" shows the default primary URI and "PrimaryNodeOnline" is shown</action>
+    <action>Clear "PrimaryNodeInput", type a valid public key with an unreachable address such as 127.0.0.1:1, and tap "PrimaryNodeConnect"</action>
+    <action>Verify "PrimaryNodeError" says the primary node is offline or unreachable, and "PrimaryNodeCurrent" still shows the default primary</action>
+    <action>Type "not a node" into "PrimaryNodeInput" and tap "PrimaryNodeConnect"</action>
+    <action>Verify "PrimaryNodeError" asks for a valid node public key or URI</action>
+    <action>Tap "PrimaryNodeReset", then "PrimaryNodeConnect"</action>
+    <action>Verify the "Primary node connected" toast and "PrimaryNodeOnline"</action>
+  </actions>
+</journey>

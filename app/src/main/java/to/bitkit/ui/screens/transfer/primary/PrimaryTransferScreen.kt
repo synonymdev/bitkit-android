@@ -65,7 +65,10 @@ private fun Content(
             VerticalSpacer(16.dp)
             val plan = uiState.plan
             when {
-                !uiState.hasPrimaryNode -> BodyM(stringResource(R.string.primary_node__not_configured), color = Colors.White64)
+                !uiState.hasPrimaryNode -> BodyM(
+                    stringResource(R.string.primary_node__not_configured),
+                    color = Colors.White64
+                )
                 plan != null -> {
                     BalanceHeaderView(sats = plan.amountSats.toLong(), modifier = Modifier.fillMaxWidth())
                     VerticalSpacer(32.dp)
@@ -114,7 +117,12 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             uiState = PrimaryTransferUiState(
-                plan = PrimaryFundingPlan(amountSats = 48_200uL, feeSats = 600uL, opensChannel = false, isAutomatic = true),
+                plan = PrimaryFundingPlan(
+                    amountSats = 48_200uL,
+                    feeSats = 600uL,
+                    opensChannel = false,
+                    isAutomatic = true
+                ),
             ),
         )
     }

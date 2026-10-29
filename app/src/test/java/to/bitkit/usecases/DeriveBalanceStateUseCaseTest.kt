@@ -60,6 +60,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             transferRepo = transferRepo,
             settingsStore = settingsStore,
             hwWalletRepo = hwWalletRepo,
+            primaryNodeRepo = mock(),
         )
     }
 

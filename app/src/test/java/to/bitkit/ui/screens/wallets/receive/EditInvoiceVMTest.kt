@@ -23,7 +23,7 @@ class EditInvoiceVMTest : BaseUnitTest() {
     @Before
     fun setUp() = runBlocking {
         whenever(walletRepo.inboundLiquiditySats()).thenReturn(1_000u)
-        sut = EditInvoiceVM(walletRepo)
+        sut = EditInvoiceVM(walletRepo, mock())
     }
 
     @Test
