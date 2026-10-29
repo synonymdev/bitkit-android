@@ -1,12 +1,14 @@
 package to.bitkit.ui.components
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,21 +24,30 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.ext.areAnimationsDisabled
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
@@ -229,60 +240,55 @@ fun BalanceHeader(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AnimatedContent(
-                targetState = largeRowState,
-                transitionSpec = {
-                    BalanceAnimations.swapLargeRowTransition using
-                        SizeTransform(clip = false)
-                },
-                contentKey = { it.isBitcoinPrimary },
-                label = "largeRowSwapAnimation",
-            ) { state ->
-                val scale by transition.animateFloat(label = "largeRowScale") {
-                    if (it == EnterExitState.Visible) 1f else LARGE_ROW_SWAP_SCALE
-                }
-                LargeRow(
-                    prefix = state.prefix,
-                    prefixSpacing = prefixSpacing,
-                    text = state.text,
-                    symbol = state.symbol,
-                    showSymbol = state.showSymbol,
-                    isSymbolSuffix = state.isSymbolSuffix,
-                    hideBalance = hideBalance,
-                    modifier = largeRowModifier.graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        transformOrigin = TransformOrigin(0f, 0f)
+            BalanceShimmer(active = isLoading) {
+                AnimatedContent(
+                    targetState = largeRowState,
+                    transitionSpec = {
+                        BalanceAnimations.swapLargeRowTransition using
+                            SizeTransform(clip = false)
                     },
-                )
+                    contentKey = { it.isBitcoinPrimary },
+                    label = "largeRowSwapAnimation",
+                ) { state ->
+                    val scale by transition.animateFloat(label = "largeRowScale") {
+                        if (it == EnterExitState.Visible) 1f else LARGE_ROW_SWAP_SCALE
+                    }
+                    LargeRow(
+                        prefix = state.prefix,
+                        prefixSpacing = prefixSpacing,
+                        text = state.text,
+                        symbol = state.symbol,
+                        showSymbol = state.showSymbol,
+                        isSymbolSuffix = state.isSymbolSuffix,
+                        hideBalance = hideBalance,
+                        modifier = largeRowModifier.graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            transformOrigin = TransformOrigin(0f, 0f)
+                        },
+                    )
+                }
             }
 
             if (showEyeIcon) {
                 Spacer(modifier = Modifier.weight(1f))
-                Box(modifier = Modifier.size(24.dp)) {
-                    AnimatedContent(
-                        targetState = hideBalance,
-                        transitionSpec = { BalanceAnimations.eyeIconTransition },
-                        label = "eyeIconAnimation",
-                        modifier = Modifier.size(24.dp)
-                    ) { isHidden ->
-                        if (isHidden) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_eye),
-                                contentDescription = null,
-                                tint = Colors.White64,
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clickableAlpha { onRevealBalance() }
-                                    .testTag("ShowBalance")
-                            )
-                        }
+                AnimatedContent(
+                    targetState = hideBalance,
+                    transitionSpec = { BalanceAnimations.eyeIconTransition },
+                    label = "eyeIconAnimation",
+                    modifier = Modifier.size(24.dp)
+                ) { isHidden ->
+                    if (isHidden) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_eye),
+                            contentDescription = null,
+                            tint = Colors.White64,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickableAlpha { onRevealBalance() }
+                                .testTag("ShowBalance")
+                        )
                     }
-                    // The eye keeps the slot while the balance is hidden.
-                    BalanceLoader(
-                        visible = isLoading && !hideBalance,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
                 }
             }
         }
@@ -290,33 +296,88 @@ fun BalanceHeader(
 }
 
 @Composable
-private fun BalanceLoader(
-    visible: Boolean,
+private fun BalanceShimmer(
+    active: Boolean,
     modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
 ) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(),
-        exit = fadeOut(),
-        modifier = modifier,
-    ) {
-        val description = stringResource(R.string.wallet__balance_updating)
-        GradientCircularProgressIndicator(
-            modifier = Modifier
-                .size(16.dp)
-                .alpha(LOADER_ALPHA)
-                .semantics { contentDescription = description }
-                .testTag("TotalBalanceUpdating")
+    val intensity by animateFloatAsState(
+        targetValue = if (active) 1f else 0f,
+        animationSpec = tween(SHIMMER_FADE_MILLIS),
+        label = "balanceShimmerIntensity",
+    )
+    val description = stringResource(R.string.wallet__balance_updating)
+    val animationsDisabled = LocalContext.current.areAnimationsDisabled
+    val sweep = if (intensity > 0f && !animationsDisabled) {
+        rememberInfiniteTransition(label = "balanceShimmer").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(SHIMMER_SWEEP_MILLIS, easing = LinearEasing)),
+            label = "balanceShimmerSweep",
         )
+    } else {
+        null
     }
+    Box(
+        modifier = modifier
+            .then(
+                if (intensity > 0f) {
+                    Modifier
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = shimmerMask(intensity, sweep?.value),
+                                blendMode = BlendMode.DstIn,
+                            )
+                        }
+                } else {
+                    Modifier
+                }
+            )
+            .then(
+                if (active) {
+                    Modifier
+                        .semantics { stateDescription = description }
+                        .testTag("TotalBalanceUpdating")
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        content()
+    }
+}
+
+private fun DrawScope.shimmerMask(intensity: Float, sweep: Float?): Brush {
+    val dimmed = Color.Black.copy(alpha = 1f - intensity * (1f - SHIMMER_MIN_ALPHA))
+    if (sweep == null) return SolidColor(dimmed)
+    val band = size.width * SHIMMER_BAND_FRACTION
+    val center = -band + sweep * (size.width + 2 * band)
+    return Brush.linearGradient(
+        0f to dimmed,
+        0.5f to Color.Black,
+        1f to dimmed,
+        start = Offset(center - band, 0f),
+        end = Offset(center + band, size.height),
+    )
 }
 
 // Matches iOS: .scale(scale: 1.5) for small row, .scale(scale: 0.5) for large row
 private const val SMALL_ROW_SWAP_SCALE = 1.5f
 private const val LARGE_ROW_SWAP_SCALE = 0.5f
 
-/** Opacity of the balance loader in the eye icon slot. */
-private const val LOADER_ALPHA = 0.75f
+/** Opacity the headline dims to while its balance refreshes; the shimmer band brings it back to full. */
+private const val SHIMMER_MIN_ALPHA = 0.75f
+
+/** Duration of one shimmer pass over the headline. */
+private const val SHIMMER_SWEEP_MILLIS = 2000
+
+/** Duration of the shimmer's fade in and out. */
+private const val SHIMMER_FADE_MILLIS = 300
+
+/** Half-width of the shimmer band, as a fraction of the headline width. */
+private const val SHIMMER_BAND_FRACTION = 0.25f
 
 @Immutable
 private data class SmallRowState(
