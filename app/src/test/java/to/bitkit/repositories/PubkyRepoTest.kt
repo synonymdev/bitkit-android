@@ -2595,6 +2595,74 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `active identity retries its missing profile on reconnect without delaying wallet maintenance`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenAnswer {
+            throw PaykitException.Transport("transport_error", "offline")
+        }
+        assertTrue(sut.restoreSessionIfNeeded())
+        val originalSignIn = assertNotNull(sut.currentSignIn())
+        assertNull(sut.profile.value)
+
+        val response = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            response.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Restored"))
+        }.whenever(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+        clearInvocations(pubkyService)
+        try {
+            repeat(3) { assertFalse(sut.restoreSessionIfNeeded()) }
+            yield()
+            runCurrent()
+            assertTrue(sut.isCurrent(originalSignIn))
+            verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+            assertTrue(sut.isLoadingProfile.value)
+            verify(pubkyService, never()).importSession(any())
+        } finally {
+            response.complete(Unit)
+        }
+        yield()
+        advanceUntilIdle()
+        assertEquals("Restored", sut.profile.value?.name)
+        assertFalse(sut.restoreSessionIfNeeded())
+        advanceUntilIdle()
+        verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+    }
+
+    @Test
+    fun `reconnect profile result cannot restore an ended identity`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenAnswer {
+            throw PaykitException.Transport("transport_error", "offline")
+        }
+        assertTrue(sut.restoreSessionIfNeeded())
+        val response = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            response.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Old"))
+        }.whenever(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+
+        try {
+            assertFalse(sut.restoreSessionIfNeeded())
+            yield()
+            runCurrent()
+            verify(pubkyService, times(3)).resolveContactProfile(VALID_SELF_KEY, true)
+            assertTrue(sut.isLoadingProfile.value)
+            sut.restoreSessionBackupState(null).getOrThrow()
+            assertNull(sut.currentSignIn())
+        } finally {
+            response.complete(Unit)
+        }
+        yield()
+        advanceUntilIdle()
+        assertNull(sut.profile.value)
+    }
+
+    @Test
     fun `new restored identity proceeds while old scheduled profile loading is held`() = test {
         sut.awaitInitialization()
         var session: String? = "first_session"

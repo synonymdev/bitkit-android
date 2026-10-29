@@ -458,10 +458,14 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun hasPrivatePaymentAccess(): Boolean {
+    suspend fun hasPrivatePaymentAccess(): Boolean = hasPrivatePaymentAccess(Priority.Ordered)
+
+    internal suspend fun hasPrivatePaymentAccess(priority: Priority): Boolean {
         isSetup.await()
-        return operationLock.withLock {
+        return operationLock.withLock(priority) {
+            checkRefreshAdmission(priority)
             withPaykitKey {
+                checkRefreshAdmission(priority)
                 completeSdkCall { it.identityStatus() }?.capability == PubkyIdentityCapability.PRIVATE_LINK_CAPABLE
             }
         }
@@ -907,6 +911,16 @@ class PaykitSdkService @Inject constructor(
     suspend fun syncPrivatePaymentListsWithReservations(
         updates: List<PrivatePaymentListReservationUpdateInput>,
         clearUnlistedLinkedPeers: Boolean,
+    ): PrivatePaymentListDeliveryReport = syncPrivatePaymentListsWithReservations(
+        updates,
+        clearUnlistedLinkedPeers,
+        deferDuringPayment = false,
+    )
+
+    internal suspend fun syncPrivatePaymentListsWithReservations(
+        updates: List<PrivatePaymentListReservationUpdateInput>,
+        clearUnlistedLinkedPeers: Boolean,
+        deferDuringPayment: Boolean,
     ): PrivatePaymentListDeliveryReport {
         isSetup.await()
         val priority = if (clearUnlistedLinkedPeers || updates.any { it.reservations.isEmpty() }) {
@@ -915,7 +929,9 @@ class PaykitSdkService @Inject constructor(
             PaykitSdkOperationLock.Priority.Background
         }
         return operationLock.withLock(priority) {
-            withStateRevisionTracking { handle ->
+            val admissionPriority = if (deferDuringPayment) priority else Priority.Ordered
+            checkRefreshAdmission(admissionPriority)
+            withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(admissionPriority) }) { handle ->
                 completeSdkCall {
                     handle.syncPrivatePaymentListsWithReservationsAndProcessOutbound(
                         updates = updates,
@@ -997,6 +1013,50 @@ class PaykitSdkService @Inject constructor(
             checkRefreshAdmission(priority)
             withStateRevisionTracking(beforeOperation = { checkRefreshAdmission(priority) }) { handle ->
                 completeSdkCall { handle.receivePrivateMessagesFromLinkedPeers() }
+            }
+        }
+    }
+
+    internal suspend fun receiveAndObserveState(
+        expectedIdentity: String,
+        onReceive: (List<PrivateStreamCounterpartyIntakeReport>) -> Unit,
+    ): PaykitStateObservation {
+        isSetup.await()
+        val generation = runtimeGeneration
+        return operationLock.withLock(Priority.Background) {
+            check(runtimeGeneration == generation) { "Paykit runtime changed before inbox refresh" }
+            checkRefreshAdmission(Priority.Background)
+            withPaykitKey { handle ->
+                val key = cachedPaykitKey
+                check(key == null || PubkyPublicKeyFormat.matches(key.publicKey, expectedIdentity)) {
+                    "Paykit inbox identity changed"
+                }
+                val reports = withStateRevisionTracking(
+                    handle,
+                    beforeOperation = {
+                        operationLock.withoutLock {
+                            check(runtimeGeneration == generation && sdk === handle && cachedPaykitKey == key) {
+                                "Paykit runtime changed before inbox receive"
+                            }
+                            checkRefreshAdmission(Priority.Background)
+                        }
+                    },
+                ) { completeSdkCall { handle.receivePrivateMessagesFromLinkedPeers() } }
+                onReceive(reports)
+                operationLock.withoutLock {
+                    check(runtimeGeneration == generation && sdk === handle && cachedPaykitKey == key) {
+                        "Paykit runtime changed during inbox refresh"
+                    }
+                    checkRefreshAdmission(Priority.Background)
+                    val observation = completeSdkCall { handle.observeState() }
+                    check(PubkyPublicKeyFormat.matches(observation.publicKey, expectedIdentity)) {
+                        "Paykit observation identity changed"
+                    }
+                    key?.let {
+                        check(observation.keyGeneration == it.generation) { "Paykit observation key changed" }
+                    }
+                    observation
+                }
             }
         }
     }
@@ -1112,13 +1172,16 @@ class PaykitSdkService @Inject constructor(
     ): List<PaymentRequestRecord> {
         isSetup.await()
         return measuredOperation("allPaymentRequests", priority) {
+            checkRefreshAdmission(priority)
             withPaykitKey { handle ->
+                checkRefreshAdmission(priority)
                 if (expectedIdentity != null) {
                     val identity = completeSdkCall { handle.identityStatus() }?.publicKey
                     check(PubkyPublicKeyFormat.matches(identity, expectedIdentity)) {
                         "Payment Request identity changed"
                     }
                 }
+                checkRefreshAdmission(priority)
                 completeSdkCall {
                     handle.listPaymentRequests(
                         PaymentRequestFilter(
@@ -1139,7 +1202,13 @@ class PaykitSdkService @Inject constructor(
     internal suspend fun identityStatus(priority: Priority): IdentityStatus? {
         isSetup.await()
         return measuredOperation("identityStatus", priority) {
-            withPaykitKey { handle -> retryContendedRead { handle.identityStatus() } }
+            checkRefreshAdmission(priority)
+            withPaykitKey { handle ->
+                retryContendedRead {
+                    checkRefreshAdmission(priority)
+                    handle.identityStatus()
+                }
+            }
         }
     }
 
@@ -1434,7 +1503,13 @@ class PaykitSdkService @Inject constructor(
     internal suspend fun linkedPeers(priority: Priority): List<LinkedPeerRecord> {
         isSetup.await()
         return operationLock.withLock(priority) {
-            withPaykitKey { handle -> retryContendedRead { handle.linkedPeers() } }
+            checkRefreshAdmission(priority)
+            withPaykitKey { handle ->
+                retryContendedRead {
+                    checkRefreshAdmission(priority)
+                    handle.linkedPeers()
+                }
+            }
         }
     }
 
@@ -1443,7 +1518,13 @@ class PaykitSdkService @Inject constructor(
     ): PrivateMessageSchedulingSnapshot {
         isSetup.await()
         return operationLock.withLock(priority) {
-            withPaykitKey { handle -> retryContendedRead { handle.privateMessageSchedulingSnapshot() } }
+            checkRefreshAdmission(priority)
+            withPaykitKey { handle ->
+                retryContendedRead {
+                    checkRefreshAdmission(priority)
+                    handle.privateMessageSchedulingSnapshot()
+                }
+            }
         }
     }
 
@@ -1757,7 +1838,7 @@ class PaykitSdkService @Inject constructor(
         cachedBackupState = null
     }
 
-    private fun checkRefreshAdmission(priority: Priority) {
+    internal fun checkRefreshAdmission(priority: Priority) {
         val reviewing = synchronized(paymentReviews) { paymentReviews.isNotEmpty() }
         if (priority == Priority.Background && (isPaymentSubmissionActive.value || reviewing)) {
             throw PaykitPaymentRequestError.OperationInProgress
@@ -1768,32 +1849,38 @@ class PaykitSdkService @Inject constructor(
         beforeOperation: suspend () -> Unit = {},
         block: suspend (PaykitSdk) -> T,
     ): T = withPaykitKey { handle ->
-        withPaykitBackupStateTracking(
-            readRevision = {
-                val started = TimeSource.Monotonic.markNow()
-                try {
-                    runSuspendCatching { completeSdkCall { handle.backupStateRevision() } }
-                        .onFailure(::invalidatePaykitKeyIfNeeded)
-                        .getOrThrow()
-                } finally {
-                    if (BuildConfig.DEBUG) {
-                        Logger.debug("Read Paykit backup revision duration='${started.elapsedNow()}'", context = TAG)
-                    }
+        withStateRevisionTracking(handle, beforeOperation) { block(handle) }
+    }
+
+    private suspend fun <T> withStateRevisionTracking(
+        handle: PaykitSdk,
+        beforeOperation: suspend () -> Unit,
+        block: suspend () -> T,
+    ): T = withPaykitBackupStateTracking(
+        readRevision = {
+            val started = TimeSource.Monotonic.markNow()
+            try {
+                runSuspendCatching { completeSdkCall { handle.backupStateRevision() } }
+                    .onFailure(::invalidatePaykitKeyIfNeeded)
+                    .getOrThrow()
+            } finally {
+                if (BuildConfig.DEBUG) {
+                    Logger.debug("Read Paykit backup revision duration='${started.elapsedNow()}'", context = TAG)
                 }
-            },
-            readStateRevision = { handle.stateRevision() },
-            readObservedSnapshot = {
-                handle.observedBackupStateRevision()?.let {
-                    PaykitBackupStateSnapshot(it.stateRevision, it.backupRevision)
-                }
-            },
-            cachedSnapshot = cachedBackupState,
-            onSnapshot = { cachedBackupState = it },
-            onChange = ::notifyBackupStateChanged,
-            beforeOperation = beforeOperation,
-        ) {
-            block(handle)
-        }
+            }
+        },
+        readStateRevision = { handle.stateRevision() },
+        readObservedSnapshot = {
+            handle.observedBackupStateRevision()?.let {
+                PaykitBackupStateSnapshot(it.stateRevision, it.backupRevision)
+            }
+        },
+        cachedSnapshot = cachedBackupState,
+        onSnapshot = { cachedBackupState = it },
+        onChange = ::notifyBackupStateChanged,
+        beforeOperation = beforeOperation,
+    ) {
+        block()
     }
 
     private suspend fun handle(): PaykitSdk = handleMutex.withLock {
