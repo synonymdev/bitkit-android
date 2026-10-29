@@ -858,6 +858,7 @@
     <string name="wallet__send_confirming_in">Bestätigung in</string>
     <string name="wallet__send_contact_title">Kontakt auswählen</string>
     <string name="wallet__send_invoice_expiration">Rechnungsverfall</string>
+    <string name="wallet__send_swap_route">Route</string>
     <string name="wallet__send_swipe">Zum Bezahlen wischen</string>
     <string name="wallet__send_yes">Ja, senden</string>
     <string name="wallet__send_dialog1">Es scheint, dass du über $100 sendest. Möchtest du fortfahren?</string>

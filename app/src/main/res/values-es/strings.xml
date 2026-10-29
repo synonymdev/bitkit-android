@@ -850,6 +850,7 @@
     <string name="wallet__send_confirming_in">Confirmando en</string>
     <string name="wallet__send_contact_title">Seleccionar contacto</string>
     <string name="wallet__send_invoice_expiration">Expiración de la factura</string>
+    <string name="wallet__send_swap_route">Ruta</string>
     <string name="wallet__send_swipe">Deslizar para pagar</string>
     <string name="wallet__send_yes">Sí, enviar</string>
     <string name="wallet__send_dialog1">Parece que está enviando más de 100 dólares. ¿Desea continuar?</string>

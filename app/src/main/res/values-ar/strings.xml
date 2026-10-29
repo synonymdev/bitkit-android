@@ -977,6 +977,7 @@
     <string name="wallet__send_quickpay__title">جارٍ دفع\n&lt;accent&gt;الفاتورة...&lt;/accent&gt;</string>
     <string name="wallet__send_review">تأكيد</string>
     <string name="wallet__send_sent">تم إرسال Bitcoin</string>
+    <string name="wallet__send_swap_route">المسار</string>
     <string name="wallet__send_swipe">اسحب للدفع</string>
     <string name="wallet__send_to">إلى</string>
     <string name="wallet__send_yes">نعم، أرسل</string>

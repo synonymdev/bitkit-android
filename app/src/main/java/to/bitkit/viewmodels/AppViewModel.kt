@@ -27,7 +27,10 @@ import com.synonym.bitkitcore.LnurlChannelData
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
+import com.synonym.bitkitcore.PaykitEndpoint
+import com.synonym.bitkitcore.PaykitRoute
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.PubkySwapRouteQuote
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.UsdtQuote
@@ -214,6 +217,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayPaymentFailedError
@@ -316,6 +320,7 @@ class AppViewModel @Inject constructor(
     private val paykitPaymentRequestDiagnostics: PaykitPaymentRequestDiagnostics,
     private val refreshContactPaykitLink: RefreshContactPaykitLinkUseCase,
     private val usdtRepo: UsdtRepo,
+    private val pubkySwapsRouteRepo: PubkySwapsRouteRepo,
     val paykitUsdtPayments: PaykitUsdtPaymentRepo,
     private val samRockRepo: SamRockRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
@@ -3931,14 +3936,20 @@ class AppViewModel @Inject constructor(
         val canUseOnchain = address.isNotEmpty() &&
             walletRepo.balanceState.value.maxSendOnchainSats > Defaults.dustLimit.toULong()
         val useUsdt = recipient != null && prefersUsdt(payment, hasBitcoinEndpoint, canUseLightning || canUseOnchain)
-        val payMethod = paykitBitcoinMethod(canUseLightning, address, invoice, lnurl)
+        val swapRoute = paykitSwapRoute(payment, address, canUseLightning || canUseOnchain || useUsdt)
+        val payMethod = if (swapRoute != null) {
+            SendMethod.LIGHTNING
+        } else {
+            paykitBitcoinMethod(canUseLightning, address, invoice, lnurl)
+        }
         _sendUiState.update {
             it.copy(
                 address = address, addressInput = address, isAddressInputValid = address.isNotEmpty(),
                 decodedInvoice = invoice, lnurl = lnurl, paykitUsesUsdt = useUsdt, usdtRecipient = recipient,
                 amount = invoice?.amountSatoshis?.takeIf { payMethod == SendMethod.LIGHTNING } ?: 0u,
                 paykitAmount = "",
-                payMethod = payMethod
+                payMethod = payMethod,
+                paykitSwapRoute = swapRoute,
             )
         }
         if (usdtRepo.shouldRefresh(isUsdtEnabled.value)) usdtRepo.refresh(history = false)
@@ -4069,6 +4080,22 @@ class AppViewModel @Inject constructor(
             return quoted != null && quoted.isValid(now) && balance >= quoted.amount.atomic
         }
         return !canUseBitcoin && balance > 0u
+    }
+
+    /**
+     * A contact whose only reachable endpoint is on-chain, paid from spending when savings cannot cover it: bitkit-core
+     * routes it through a Pubky Swaps provider. Incoming requests keep their own proof flow and are never swap-routed.
+     */
+    private fun paykitSwapRoute(
+        payment: ContactPaymentContext,
+        address: String,
+        canPayDirectly: Boolean,
+    ): PaykitSwapRouteUi? {
+        if (!pubkySwapsRouteRepo.isEnabled || canPayDirectly || address.isEmpty()) return null
+        if (payment.incomingPaymentRequest != null) return null
+        if (walletRepo.balanceState.value.maxSendLightningSats == 0uL) return null
+        val methodId = payment.endpoints.firstOrNull { it.methodId.isOnchain }?.methodId ?: return null
+        return PaykitSwapRouteUi(endpoint = PaykitEndpoint(methodId = methodId.rawValue, value = address))
     }
 
     private fun canFundPaykitLightning(invoice: LightningInvoice?, lnurl: LnurlParams.LnurlPay?): Boolean {
@@ -4460,6 +4487,10 @@ class AppViewModel @Inject constructor(
             setSendEffect(SendEffect.NavigateToWithdrawConfirm)
             return
         }
+        _sendUiState.value.paykitSwapRoute?.let {
+            if (quotePaykitSwapRoute(it)) setSendEffect(SendEffect.NavigateToConfirm)
+            return
+        }
 
         _sendUiState.update { it.copy(isLoading = true) }
         try {
@@ -4472,6 +4503,46 @@ class AppViewModel @Inject constructor(
         updateCanSwitchWallet()
 
         setSendEffect(SendEffect.NavigateToConfirm)
+    }
+
+    private suspend fun quotePaykitSwapRoute(route: PaykitSwapRouteUi): Boolean {
+        _sendUiState.update { it.copy(isLoading = true) }
+        val balances = walletRepo.balanceState.value
+        val result = pubkySwapsRouteRepo.route(
+            amountSats = _sendUiState.value.amount,
+            endpoints = listOf(route.endpoint),
+            lightningSpendableSats = maxSendableLightningSats(),
+            onchainSpendableSats = balances.maxSendOnchainSats,
+        )
+        _sendUiState.update { it.copy(isLoading = false) }
+        val paykitRoute = result.getOrElse {
+            Logger.error("Failed to route Paykit payment through Pubky Swaps", it, context = TAG)
+            toast(it)
+            return false
+        }
+        val quote = when (paykitRoute) {
+            is PaykitRoute.Swap -> paykitRoute.quote
+            is PaykitRoute.None -> {
+                toast(AppError(paykitRoute.reason))
+                return false
+            }
+            // Balances changed after the contact opened: the regular flow must reopen it.
+            is PaykitRoute.Direct -> {
+                _sendUiState.update { it.copy(paykitSwapRoute = null) }
+                toast(AppError(context.getString(R.string.common__error_body)))
+                return false
+            }
+        }
+        _sendUiState.update {
+            it.copy(
+                paykitSwapRoute = route.copy(
+                    quote = quote,
+                    providerName = pubkySwapsRouteRepo.providerContact(quote.providerPubky)?.name,
+                ),
+                lightningFeeSats = quote.totalFeeSat.toLong(),
+            )
+        }
+        return true
     }
 
     private suspend fun reviewPaykitAmount(navigateToUsdtReview: Boolean = true): Boolean {
@@ -4749,7 +4820,10 @@ class AppViewModel @Inject constructor(
         resetQuickPay()
 
         val fromMainScanner = isMainScanner
-        if (contactPaymentContext != null && requiresPaykitAssetSelection(contactPaymentContext)) {
+        if (
+            contactPaymentContext != null &&
+            (requiresPaykitAssetSelection(contactPaymentContext) || requiresPaykitSwapRoute(contactPaymentContext))
+        ) {
             openPaykitContactPayment(contactPaymentContext, fromMainScanner, suppressQuickPay, walletGeneration)
             return@withContext
         }
@@ -4873,6 +4947,13 @@ class AppViewModel @Inject constructor(
         mainScreenEffect(MainScreenEffect.Navigate(Routes.UsdtPayment(request.recipient, amount))) {
             canPrepareSend(walletGeneration)
         }
+    }
+
+    private fun requiresPaykitSwapRoute(payment: ContactPaymentContext): Boolean {
+        if (!pubkySwapsRouteRepo.isEnabled || payment.incomingPaymentRequest != null) return false
+        if (payment.endpoints.isEmpty() || !payment.endpoints.all { it.methodId.isOnchain }) return false
+        val balances = walletRepo.balanceState.value
+        return balances.maxSendOnchainSats <= Defaults.dustLimit.toULong() && balances.maxSendLightningSats > 0uL
     }
 
     private fun requiresPaykitAssetSelection(payment: ContactPaymentContext): Boolean =
@@ -6108,6 +6189,11 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        _sendUiState.value.paykitSwapRoute?.quote?.let {
+            proceedWithSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId)
+            return
+        }
+
         when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> proceedWithOnchainPayment(
                 incomingPaymentRequest,
@@ -6479,6 +6565,42 @@ class AppViewModel @Inject constructor(
                 isOnchain = true,
                 refusalReason = refusalReason,
             )
+        )
+    }
+
+    private suspend fun proceedWithSwapRoutedPayment(
+        quote: PubkySwapRouteQuote,
+        contactPaymentContext: ContactPaymentContext?,
+        allowanceAttemptId: String?,
+    ) {
+        val payment = pubkySwapsRouteRepo.commit(quote.quoteId).getOrElse {
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
+        Logger.info("Committed Pubky Swaps route '${payment.swapId}' to '${payment.destinationAddress}'", context = TAG)
+        // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending until then.
+        lightningRepo.payInvoice(payment.invoice).getOrElse {
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
+        val claimTxid = pubkySwapsRouteRepo.awaitClaim(payment.swapId).getOrElse {
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
+        finishManualAllowancePayment(allowanceAttemptId, succeeded = true)
+        Logger.info("Claimed Pubky Swaps route '${payment.swapId}' in '$claimTxid'", context = TAG)
+        onSendSuccess(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.ONCHAIN,
+                direction = NewTransactionSheetDirection.SENT,
+                paymentHashOrTxId = claimTxid,
+                sats = payment.deliveredSat.toLong(),
+            ),
         )
     }
 
@@ -8860,6 +8982,7 @@ data class SendUiState(
     val requiresAmountReview: Boolean = false,
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
+    val paykitSwapRoute: PaykitSwapRouteUi? = null,
 ) {
     val canSwitchBitcoinFundingSource: Boolean
         get() = fundingOptions.count { it.enabled && it.source != SendFundingSource.Usdt } > 1
@@ -8887,6 +9010,14 @@ data class SendUiState(
         get() = isInitialSubscriptionPayment && hardwareWalletId == null &&
             !initialSubscriptionPaymentNeedsConfirmation && !requiresAmountReview
 }
+
+/** A Paykit payment routed through a Pubky Swaps provider: the endpoint, the route once quoted, and its provider. */
+@Stable
+data class PaykitSwapRouteUi(
+    val endpoint: PaykitEndpoint,
+    val quote: PubkySwapRouteQuote? = null,
+    val providerName: String? = null,
+)
 
 @Immutable
 data class OnchainFeeUi(

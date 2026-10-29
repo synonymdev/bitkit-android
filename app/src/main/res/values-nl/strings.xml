@@ -1001,6 +1001,7 @@
     <string name="wallet__send_quickpay__title">Factuur\n&lt;accent&gt;betalen...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Bevestigen</string>
     <string name="wallet__send_sent">Bitcoin verzonden</string>
+    <string name="wallet__send_swap_route">Route</string>
     <string name="wallet__send_swipe">Veeg om te betalen</string>
     <string name="wallet__send_to">Naar</string>
     <string name="wallet__send_yes">Ja, verzenden</string>

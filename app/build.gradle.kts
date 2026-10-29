@@ -81,6 +81,8 @@ val e2eHomegateUrlEnv = providers.environmentVariable("E2E_HOMEGATE_URL")
     .orElse(e2eLocalHostEnv.map { "http://$it:6288" })
 val e2eHomeserverPubkyEnv = providers.environmentVariable("E2E_HOMESERVER_PUBKY").orElse("")
 val e2eHomegateOverrideEnv = providers.environmentVariable("E2E_HOMEGATE_URL").orElse("")
+val pubkySwapsRoutesEnv = envFlag("PUBKY_SWAPS_ROUTES", default = false)
+val pubkySwapsProvidersEnv = providers.environmentVariable("PUBKY_SWAPS_PROVIDERS").orElse("")
 val paykitUiDisabledEnv = envFlag("PAYKIT_UI_DISABLED", default = false)
 val trezorBridgeEnv = localProp("TREZOR_BRIDGE").map { it.toBoolean().toString() }.orElse("false")
 val trezorBridgeUrlEnv = localProp("TREZOR_BRIDGE_URL").orElse("http://10.0.2.2:21325")
@@ -362,6 +364,8 @@ androidComponents {
         buildConfigFields.put("E2E_HOMEGATE_URL", e2eHomegateUrlEnv.stringField())
         buildConfigFields.put("E2E_HOMESERVER_PUBKY", e2eHomeserverPubkyEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_OVERRIDE", e2eHomegateOverrideEnv.stringField())
+        buildConfigFields.put("PUBKY_SWAPS_ROUTES", pubkySwapsRoutesEnv.booleanField())
+        buildConfigFields.put("PUBKY_SWAPS_PROVIDERS", pubkySwapsProvidersEnv.stringField())
         for (key in listOf("E2E_VSS_SERVER_URL", "E2E_LNURL_AUTH_SERVER_URL", "E2E_BLOCKTANK_API_URL")) {
             val value = if (variant.buildType == "debug") localProp(key).orElse("") else provider { "" }
             buildConfigFields.put(key, value.stringField())

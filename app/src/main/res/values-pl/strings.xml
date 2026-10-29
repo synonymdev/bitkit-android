@@ -861,6 +861,7 @@
     <string name="wallet__send_confirming_in">Potwierdzenie w ciągu</string>
     <string name="wallet__send_contact_title">Wybierz kontakt</string>
     <string name="wallet__send_invoice_expiration">Termin faktury</string>
+    <string name="wallet__send_swap_route">Trasa</string>
     <string name="wallet__send_swipe">Przesuń, aby zapłacić</string>
     <string name="wallet__send_yes">Tak, wyślij</string>
     <string name="wallet__send_dialog1">Wygląda na to, że wysyłasz ponad $100. Czy kontynuować?</string>

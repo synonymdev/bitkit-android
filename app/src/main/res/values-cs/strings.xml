@@ -1008,6 +1008,7 @@
     <string name="wallet__send_quickpay__title">Placení\n&lt;accent&gt;faktury...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Potvrdit</string>
     <string name="wallet__send_sent">bitcoin odeslán</string>
+    <string name="wallet__send_swap_route">Trasa</string>
     <string name="wallet__send_swipe">Zaplatit přejetím prstem</string>
     <string name="wallet__send_to">Komu</string>
     <string name="wallet__send_yes">Ano, odeslat</string>
