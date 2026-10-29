@@ -11,6 +11,7 @@ import com.synonym.vssclient.VssItem
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -93,13 +94,16 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Provider
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -268,6 +272,36 @@ class BackupRepoTest : BaseUnitTest() {
         }
         assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+    }
+
+    @Test
+    fun `restore marker storage reads leave Main responsive`() = test {
+        val entered = CompletableDeferred<Thread>()
+        val release = CountDownLatch(1)
+        val mainThread = Thread.currentThread()
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenAnswer {
+            entered.complete(Thread.currentThread())
+            check(release.await(5, TimeUnit.SECONDS)) { "Marker read was not released" }
+            false
+        }
+        Executors.newSingleThreadExecutor().asCoroutineDispatcher().use { ioDispatcher ->
+            sut = createSut(dispatcher = ioDispatcher)
+            try {
+                val read = async(Dispatchers.Main) { sut.hasPendingWalletRestore() }
+                val storageThread = withContext(Dispatchers.Default) {
+                    withTimeout(5.seconds) { entered.await() }
+                }
+                assertNotEquals(mainThread, storageThread)
+                assertTrue(async(Dispatchers.Main) { true }.await())
+                assertFalse(read.isCompleted)
+
+                release.countDown()
+
+                assertFalse(read.await())
+            } finally {
+                release.countDown()
+            }
+        }
     }
 
     @Test
