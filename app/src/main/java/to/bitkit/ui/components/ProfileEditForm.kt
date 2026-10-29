@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -87,6 +88,8 @@ fun ProfileEditForm(
     showFooterNote: Boolean = true,
     onDelete: (() -> Unit)? = null,
     deleteLabel: String = "",
+    deleteSectionLabel: String? = null,
+    @DrawableRes deleteIcon: Int = R.drawable.ic_trash,
 ) {
     val isBusy = isSaving || isDeleting
     val resolvedPublicKeyLabel = publicKeyLabel ?: stringResource(R.string.profile__your_pubky)
@@ -237,7 +240,7 @@ fun ProfileEditForm(
 
                 if (onDelete != null) {
                     HorizontalDivider()
-                    FieldLabel(text = stringResource(R.string.profile__edit_delete_section)) {
+                    FieldLabel(text = deleteSectionLabel ?: stringResource(R.string.profile__edit_delete_section)) {
                         PrimaryButton(
                             text = deleteLabel,
                             isLoading = isDeleting,
@@ -248,7 +251,7 @@ fun ProfileEditForm(
                             contentColor = Colors.Brand,
                             icon = {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_trash),
+                                    painter = painterResource(deleteIcon),
                                     contentDescription = null,
                                     tint = Colors.Brand,
                                     modifier = Modifier.size(16.dp)

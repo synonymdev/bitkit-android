@@ -2,6 +2,8 @@
 
 `delete-profile.xml` verifies visible progress and completion when deleting a disposable profile. Use a test identity that may be deleted.
 
+`unlink-ring-pubky.xml` verifies that a pubky adopted from Pubky Ring shows "Unlink pubky" instead of "Delete Profile" in Edit Profile, returns to profile onboarding after unlinking, and stays available in Pubky Ring. It needs Pubky Ring (`to.pubky.ring`) on the same emulator or device, signed with the same key as the Bitkit build (`app/debug.keystore` for a dev build), which is not a listed capability. Use a disposable Ring identity; a profile created in Bitkit keeps "Delete Profile", covered by `delete-profile.xml`.
+
 During profile deletion, automatic contact refresh, request intake and endpoint publication must not start new work. Already admitted operations and explicit deletion cleanup still finish. After a failed deletion, normal automatic work must resume for the retained identity. Verifying SDK admission and a controlled cleanup failure requires operation gates beyond the journey runner capabilities; this remains a manual check rather than a timed deletion guarantee.
 
 Contact-link retention after deletion is platform-specific. Android cancels a scan awaiting a signed-in contacts refresh when deletion signs out; it does not retry that scan as the iOS retained-link flow does. This change does not alter that cancellation behavior.
@@ -35,3 +37,7 @@ With an imported grant that cannot be restored and Ring unavailable, Disconnect 
 Profile deletion withdraws private payment lists before removing the profile and performs App Registry reconciliation during final public cleanup. An intermediate registry update is deferred; the existing private cleanup marker stays pending until deletion succeeds or normal cleanup retry completes. Public endpoint removal, capability checks, session revocation and uncertain-write safety waits remain required.
 
 For controlled fault testing, interrupt deletion after private withdrawal but before profile removal, then restart with the same identity. Verify cleanup remains pending, normal retry reconciles the registry, and a failed retry keeps the marker. Also hold a private withdrawal undelivered: it must remain pending, not be acknowledged by the deferred registry step. Check that Disconnect and disabling private sharing still reconcile the registry. These checks require operation gates and network fault injection beyond the journey runner capabilities.
+
+`create-profile.xml` records the name-only saving interval and checks the saved name after reopening and relaunching. Use a fresh unfunded identity per run and record the exact app/SDK revisions and network. With controlled network fault injection, block direct UDP while keeping the configured HTTP relays and homeserver reachable; saving should still complete. Reject the required profile write separately and verify saving reports failure instead of navigating to Pay Contacts. Fault injection is a manual check beyond journey-runner capabilities.
+
+On Android, the restart check waits for the full profile (`ProfileViewName`). A matching `ProfileCachedName` during loading does not complete that check. Record an unfinished load separately from a loaded profile with a missing or incorrect name.

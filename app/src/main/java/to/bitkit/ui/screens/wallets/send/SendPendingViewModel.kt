@@ -181,6 +181,13 @@ class SendPendingViewModel @Inject constructor(
     private fun offerAbandonIfRequestEnded(attempt: OnchainSendAttempt) {
         if (!attempt.canBeAbandoned) return
         viewModelScope.launch {
+            // Transfers do not come back once unavailable, so one check decides a Blocktank funding.
+            if (attempt.isBlocktankFunding) {
+                val hasEnded = runSuspendCatching { paykitPaymentProofRepo.onchainRequestHasEnded(attempt) }
+                    .getOrNull() == true
+                if (hasEnded) _uiState.update { it.copy(abandonableAttempt = attempt) }
+                return@launch
+            }
             var current = attempt
             while (_uiState.value.recoveryAttempt?.attemptId == attempt.attemptId &&
                 _uiState.value.abandonableAttempt == null

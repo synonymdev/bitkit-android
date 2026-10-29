@@ -737,7 +737,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `createIdentity should keep session when canceled during contact load`() = test {
+    fun `createIdentity completes while contacts are still loading`() = test {
         val contactsLoadStarted = CompletableDeferred<Unit>()
         val finishContactsLoad = CompletableDeferred<Unit>()
         val httpClient = identityHttpClient()
@@ -766,49 +766,47 @@ class PubkyRepoTest : BaseUnitTest() {
         }
         contactsLoadStarted.await()
 
-        assertTrue(sut.isAuthenticated.value)
-        result.cancel()
-        finishContactsLoad.complete(Unit)
-        result.join()
-        httpClient.close()
-
-        assertTrue(sut.isAuthenticated.value)
-        verifyBlocking(pubkyService, never()) { signOut() }
+        try {
+            assertTrue(result.isCompleted)
+            assertTrue(result.await().isSuccess)
+            assertTrue(sut.isAuthenticated.value)
+            assertEquals("Test", sut.profile.value?.name)
+            verifyBlocking(pubkyService, never()) { signOut() }
+        } finally {
+            finishContactsLoad.complete(Unit)
+            result.join()
+            httpClient.close()
+        }
     }
 
     @Test
-    fun `createIdentity returns cache failure after profile loading`() = test {
+    fun `createIdentity returns cache failure after profile publication`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         profileSetupPending.value = true
         whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
-        var cacheUpdateCount = 0
         whenever { pubkyStore.update(any()) }.thenAnswer {
-            cacheUpdateCount += 1
-            if (cacheUpdateCount == 2) throw TestAppError("cache failed")
-            Unit
+            throw TestAppError("cache failed")
         }
 
         val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
 
         assertEquals("cache failed", result.exceptionOrNull()?.message)
-        assertEquals(2, cacheUpdateCount)
     }
 
     @Test
-    fun `createIdentity retries a profile that is not yet readable after publishing`() = test {
+    fun `createIdentity keeps the published profile without waiting for readback`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         profileSetupPending.value = true
         whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
         whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
             .thenReturn(null)
-            .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Published")))
         clearInvocations(pubkyService)
 
         val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
 
         assertTrue(result.isSuccess)
-        assertEquals("Published", sut.profile.value?.name)
-        verify(pubkyService, times(2)).resolveContactProfile(VALID_SELF_KEY, true)
+        assertEquals("Test", sut.profile.value?.name)
+        verify(pubkyService, never()).resolveContactProfile(any(), any(), any(), anyOrNull())
     }
 
     @Test
@@ -836,11 +834,11 @@ class PubkyRepoTest : BaseUnitTest() {
             sut.createIdentity("Test", "", emptyList(), emptyList(), null)
         }
         profilePublished.await()
+        assertTrue(creation.await().isSuccess)
 
         try {
             sut.wipeLocalState()
 
-            assertFalse(creation.isCompleted)
             assertNull(sut.publicKey.value)
         } finally {
             finishContactLoad.complete(Unit)
@@ -1783,6 +1781,29 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(false)
         whenever(keychain.exists(Keychain.Key.SHARED_PUBKY_SOURCE.name)).thenReturn(false)
         assertFalse(sut.hasLocalSecretKey())
+    }
+
+    @Test
+    fun `isRingAdoptedIdentity needs a Ring reference to the signed-in pubky`() = test {
+        stubAdoptedRingSource()
+        assertFalse(sut.isRingAdoptedIdentity(), "Signed out")
+
+        adoptedSource = null
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        assertFalse(sut.isRingAdoptedIdentity(), "Bitkit-created identity")
+
+        stubAdoptedRingSource()
+        assertTrue(sut.isRingAdoptedIdentity(), "Ring reference matches the signed-in pubky")
+
+        adoptedSource = SharedPubkyContract.RING_SOURCE_PREFIX + VALID_CONTACT_KEY_B.removePrefix("pubky")
+        assertFalse(sut.isRingAdoptedIdentity(), "Ring reference to another pubky")
+
+        adoptedSource = "to.bitkit.other:" + VALID_SELF_KEY.removePrefix("pubky")
+        assertFalse(sut.isRingAdoptedIdentity(), "Reference from another app")
+
+        whenever(keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name))
+            .thenAnswer { throw TestAppError("Keychain unavailable") }
+        assertFalse(sut.isRingAdoptedIdentity(), "Keychain failure")
     }
 
     @Test

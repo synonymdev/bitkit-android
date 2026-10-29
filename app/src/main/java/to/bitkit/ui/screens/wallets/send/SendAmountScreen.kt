@@ -78,6 +78,7 @@ import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SyncNodeVariant
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
@@ -106,7 +107,6 @@ import to.bitkit.viewmodels.SendFundingSource
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.previewAmountInputViewModel
-import java.text.DecimalFormatSymbols
 
 /** Opacity of unavailable payment sources in the balance selector. */
 private const val DISABLED_FUNDING_SOURCE_ALPHA = 0.30f
@@ -119,6 +119,7 @@ fun SendAmountScreen(
     canGoBack: Boolean,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
+    syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     currencies: CurrencyState = LocalCurrencies.current,
     balances: BalanceState = LocalBalances.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
@@ -186,6 +187,7 @@ fun SendAmountScreen(
         nodeLifecycleState = nodeLifecycleState,
         uiState = uiState,
         amountInputViewModel = amountInputViewModel,
+        syncNodeVariant = syncNodeVariant,
         currencies = currencies,
         onBack = {
             onEvent(SendEvent.AmountReset)
@@ -213,6 +215,7 @@ fun SendAmountContent(
     uiState: SendUiState,
     amountInputViewModel: AmountInputViewModel,
     modifier: Modifier = Modifier,
+    syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     balances: BalanceState = LocalBalances.current,
     currencies: CurrencyState = LocalCurrencies.current,
     onBack: (() -> Unit)? = {},
@@ -254,6 +257,7 @@ fun SendAmountContent(
 
             else -> {
                 SyncNodeView(
+                    variant = syncNodeVariant,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
@@ -391,7 +395,7 @@ private fun SendAmountNodeRunning(
 
                 val isLnurl = uiState.lnurl != null
                 if (!isLnurl || uiState.usdtRecipient != null) {
-                    PaymentMethodButton(uiState = uiState, onClick = onClickPayMethod)
+                    SendFundingSourceButton(uiState = uiState, onClick = onClickPayMethod)
                 }
                 if (uiState.paykitUsesUsdt) {
                     HorizontalSpacer(8.dp)
@@ -426,7 +430,6 @@ private fun SendAmountNodeRunning(
             if (uiState.paykitUsesUsdt) {
                 NumberPad(
                     type = NumberPadType.DECIMAL,
-                    decimalSeparator = DecimalFormatSymbols.getInstance().decimalSeparator.toString(),
                     availableHeight = maxHeight,
                     enabled = uiState.isAmountEditable,
                     onPress = {
@@ -467,9 +470,12 @@ private fun SendAmountNodeRunning(
 }
 
 @Composable
-private fun PaymentMethodButton(
+internal fun SendFundingSourceButton(
     uiState: SendUiState,
     onClick: (SendFundingSource) -> Unit,
+    modifier: Modifier = Modifier,
+    interactionsEnabled: Boolean = true,
+    confirmation: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val isHardware = uiState.hardwareWalletId != null
@@ -480,7 +486,7 @@ private fun PaymentMethodButton(
         uiState.payMethod == SendMethod.ONCHAIN -> "savings"
         else -> "spending"
     }
-    Box {
+    Box(modifier = modifier) {
         NumberPadActionButton(
             text = when {
                 uiState.paykitUsesUsdt -> "USDT"
@@ -497,9 +503,10 @@ private fun PaymentMethodButton(
             outlined = true,
             trailingIcon = if (uiState.canSwitchFundingSource) R.drawable.ic_chevron_down else null,
             onClick = { expanded = true },
-            enabled = uiState.fundingOptions.isNotEmpty(),
+            enabled = uiState.fundingOptions.isNotEmpty() && interactionsEnabled &&
+                (!confirmation || uiState.canSwitchConfirmFundingSource),
             isLoading = uiState.isFundingSourceLoading,
-            clickable = !uiState.isLoading,
+            clickable = !uiState.isLoading && interactionsEnabled && !uiState.isRetainedHardwarePayment,
             modifier = Modifier
                 .height(28.dp)
                 .testTag("AssetButton-$testId")
@@ -514,12 +521,15 @@ private fun PaymentMethodButton(
                 .testTag("SendFundingSources")
         ) {
             VerticalSpacer(4.dp)
-            uiState.fundingOptions.forEachIndexed { index, option ->
+            val options = uiState.fundingOptions.filter {
+                !confirmation || uiState.isPaymentRequest || it.source != SendFundingSource.Usdt
+            }
+            options.forEachIndexed { index, option ->
                 FundingSourceOption(option, uiState, onClick = {
                     expanded = false
                     onClick(option.source)
                 })
-                if (index < uiState.fundingOptions.lastIndex) {
+                if (index < options.lastIndex) {
                     HorizontalDivider(Modifier.padding(horizontal = 24.dp), color = Colors.White10)
                 }
             }

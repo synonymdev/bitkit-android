@@ -58,7 +58,6 @@ import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun SavingsWalletScreen(
-    isGeoBlocked: Boolean,
     onchainActivities: ImmutableList<Activity>,
     onAllActivityButtonClick: () -> Unit,
     onEmptyActivityRowClick: () -> Unit,
@@ -74,8 +73,7 @@ fun SavingsWalletScreen(
         mutableStateOf(!hasFunds && !hasActivity)
     }
     val canTransfer by remember(balances.totalOnchainSats) {
-        val hasFunds = balances.totalOnchainSats > 0uL
-        mutableStateOf(hasFunds && !isGeoBlocked)
+        mutableStateOf(balances.totalOnchainSats > 0uL)
     }
 
     val hazeState = rememberHazeState()
@@ -198,7 +196,6 @@ private fun Preview() {
     AppThemeSurface {
         Box {
             SavingsWalletScreen(
-                isGeoBlocked = false,
                 onchainActivities = previewOnchainActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
@@ -218,7 +215,6 @@ private fun PreviewTransfer() {
     AppThemeSurface {
         Box {
             SavingsWalletScreen(
-                isGeoBlocked = false,
                 onchainActivities = previewOnchainActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
@@ -241,28 +237,7 @@ private fun PreviewNoActivity() {
     AppThemeSurface {
         Box {
             SavingsWalletScreen(
-                isGeoBlocked = false,
                 onchainActivities = persistentListOf(),
-                onAllActivityButtonClick = {},
-                onActivityItemClick = {},
-                onEmptyActivityRowClick = {},
-                onTransferToSpendingClick = {},
-                onBackClick = {},
-                balances = BalanceState(totalOnchainSats = 50_000u),
-            )
-            TabBar()
-        }
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-private fun PreviewGeoBlocked() {
-    AppThemeSurface {
-        Box {
-            SavingsWalletScreen(
-                isGeoBlocked = true,
-                onchainActivities = previewOnchainActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
@@ -281,7 +256,6 @@ private fun PreviewEmpty() {
     AppThemeSurface {
         Box {
             SavingsWalletScreen(
-                isGeoBlocked = false,
                 onchainActivities = persistentListOf(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},

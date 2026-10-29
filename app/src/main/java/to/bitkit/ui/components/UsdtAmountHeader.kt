@@ -8,13 +8,12 @@ import to.bitkit.ext.nowMillis
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitExchangeRate
+import to.bitkit.models.formatCurrency
 import to.bitkit.models.formatMoney
 import to.bitkit.repositories.paykitRate
 import to.bitkit.ui.LocalCurrencies
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.text.DecimalFormatSymbols
-import java.text.NumberFormat
 import java.util.Locale
 
 @Composable
@@ -34,7 +33,7 @@ internal fun UsdtAmountHeader(
         isBitcoinPrimary = false,
         smallRowText = btc ?: "USDT",
         smallRowSymbol = if (btc != null) BITCOIN_SYMBOL else null,
-        largeRowText = displayAmount ?: usdtInputAmount(amount),
+        largeRowText = displayAmount ?: amount,
         largeRowSymbol = "$",
         largeRowPrefix = prefix,
         showSymbol = true,
@@ -46,26 +45,22 @@ internal fun UsdtAmountHeader(
     )
 }
 
-internal fun usdtInputAmount(amount: String, locale: Locale = Locale.getDefault()): String =
-    amount.replace('.', DecimalFormatSymbols.getInstance(locale).decimalSeparator)
-
 private const val USDT_CENT = 10_000uL
 
 internal fun usdtOverviewAmount(amount: ULong, locale: Locale = Locale.getDefault()): String {
-    val format = NumberFormat.getNumberInstance(locale).apply {
-        minimumFractionDigits = 2
-        maximumFractionDigits = 2
-        roundingMode = RoundingMode.HALF_UP
+    if (amount > 0uL && amount < USDT_CENT) {
+        return "<" + checkNotNull(BigDecimal("0.01").formatCurrency(locale = locale))
     }
-    if (amount > 0uL && amount < USDT_CENT) return "<" + format.format(BigDecimal("0.01"))
-    return format.format(BigDecimal(amount.toString()).movePointLeft(PaykitAsset.USDT.decimals))
+    return checkNotNull(
+        BigDecimal(amount.toString()).movePointLeft(PaykitAsset.USDT.decimals)
+            .formatCurrency(locale = locale, roundingMode = RoundingMode.HALF_UP)
+    )
 }
 
-internal fun usdtExactAmount(amount: ULong, locale: Locale = Locale.getDefault()): String =
-    NumberFormat.getNumberInstance(locale).apply {
-        minimumFractionDigits = 2
-        maximumFractionDigits = PaykitAsset.USDT.decimals
-    }.format(BigDecimal(amount.toString()).movePointLeft(PaykitAsset.USDT.decimals))
+internal fun usdtExactAmount(amount: ULong, locale: Locale = Locale.getDefault()): String = checkNotNull(
+    BigDecimal(amount.toString()).movePointLeft(PaykitAsset.USDT.decimals)
+        .formatCurrency(decimalPlaces = PaykitAsset.USDT.decimals, locale = locale, minimumFractionDigits = 2)
+)
 
 internal fun usdtDisplaySats(amount: String, rate: PaykitExchangeRate?, now: Long = nowMillis()): Long? {
     val dollars = amount.toBigDecimalOrNull()?.takeIf { it.signum() >= 0 } ?: return null

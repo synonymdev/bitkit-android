@@ -102,7 +102,6 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 @Suppress("CyclomaticComplexMethod")
 fun ReceiveQrScreen(
-    cjitInvoice: String?,
     walletState: WalletState,
     lightningState: LightningState,
     onClickEditInvoice: (ReceiveTab) -> Unit,
@@ -147,17 +146,17 @@ fun ReceiveQrScreen(
 
     val usdtEnabled by appViewModel?.isUsdtEnabled?.collectAsStateWithLifecycle()
         ?: remember { mutableStateOf(false) }
-    val visibleTabs = remember(canCreateLightningInvoice, cjitInvoice, hardwareWalletId, usdtEnabled) {
+    val visibleTabs = remember(canCreateLightningInvoice, hardwareWalletId, usdtEnabled) {
         buildList {
             if (hardwareWalletId != null) {
                 add(ReceiveTab.HARDWARE)
             }
             add(ReceiveTab.SAVINGS)
-            if (canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
+            if (canCreateLightningInvoice) {
                 add(ReceiveTab.AUTO)
             }
             add(ReceiveTab.SPENDING)
-            if (usdtEnabled && cjitInvoice == null) add(ReceiveTab.USDT)
+            if (usdtEnabled) add(ReceiveTab.USDT)
         }.toImmutableList()
     }
     val defaultTab = remember(visibleTabs, initialTab) {
@@ -169,7 +168,6 @@ fun ReceiveQrScreen(
         walletState.bip21,
         walletState.bolt11,
         walletState.onchainAddress,
-        cjitInvoice,
         lightningState.nodeLifecycleState,
         hardwareReceiveState.address,
         walletState.bip21AmountSats,
@@ -181,7 +179,6 @@ fun ReceiveQrScreen(
                 tab = tab,
                 bip21 = walletState.bip21,
                 bolt11 = walletState.bolt11,
-                cjitInvoice = cjitInvoice,
                 isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                 canCreateLightningInvoice = canCreateLightningInvoice,
                 onchainAddress = walletState.onchainAddress,
@@ -234,11 +231,11 @@ fun ReceiveQrScreen(
         }
     }
 
-    LaunchedEffect(canCreateLightningInvoice, cjitInvoice, initialTab) {
+    LaunchedEffect(canCreateLightningInvoice, initialTab) {
         if (initialTab == ReceiveTab.HARDWARE || initialTab == ReceiveTab.USDT || selectedTab == ReceiveTab.USDT) {
             return@LaunchedEffect
         }
-        if (!canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
+        if (!canCreateLightningInvoice) {
             selectedTab = ReceiveTab.SAVINGS
             lazyListState.scrollToItem(visibleTabs.pageIndexOf(ReceiveTab.SAVINGS))
         }
@@ -275,12 +272,11 @@ fun ReceiveQrScreen(
     }
 
     // Jump to AUTO tab without animation when it becomes available before the user picks a tab
-    LaunchedEffect(canCreateLightningInvoice, cjitInvoice) {
+    LaunchedEffect(canCreateLightningInvoice) {
         val shouldAutoSwitch = shouldAutoSwitchToAuto(
             selectedTab = selectedTab,
             hasUserSelectedTab = hasUserSelectedTab,
             canCreateLightningInvoice = canCreateLightningInvoice,
-            cjitInvoice = cjitInvoice,
             initialTab = initialTab,
         )
         if (!shouldAutoSwitch) return@LaunchedEffect
@@ -291,16 +287,6 @@ fun ReceiveQrScreen(
         selectedTab = ReceiveTab.AUTO
     }
 
-    // Auto-switch to Spending tab when CJIT is not null
-    LaunchedEffect(cjitInvoice) {
-        if (cjitInvoice != null) {
-            if (ReceiveTab.SPENDING in visibleTabs) {
-                lazyListState.animateScrollToItem(visibleTabs.pageIndexOf(ReceiveTab.SPENDING))
-                selectedTab = ReceiveTab.SPENDING
-            }
-        }
-    }
-
     LaunchedEffect(selectedTab, hardwareWalletId) {
         showDetails = false
         if (selectedTab == ReceiveTab.HARDWARE && hardwareWalletId != null) {
@@ -308,10 +294,8 @@ fun ReceiveQrScreen(
         }
     }
 
-    val showingCjitOnboarding = remember(lightningState, cjitInvoice, canCreateLightningInvoice) {
-        !canCreateLightningInvoice &&
-            lightningState.nodeLifecycleState.isRunning() &&
-            cjitInvoice.isNullOrEmpty()
+    val showingCjitOnboarding = remember(lightningState, canCreateLightningInvoice) {
+        !canCreateLightningInvoice && lightningState.nodeLifecycleState.isRunning()
     }
 
     fun selectReceiveTab(tab: ReceiveTab) {
@@ -330,20 +314,26 @@ fun ReceiveQrScreen(
         onDispose { onUsdtSelected(false) }
     }
 
+    val tabLabels = remember(hardwareTabLabel) {
+        hardwareTabLabel?.let { persistentMapOf(ReceiveTab.HARDWARE to it) } ?: persistentMapOf()
+    }
+
     if (selectedTab == ReceiveTab.USDT) {
         Column(
             modifier = modifier.fillMaxSize().background(
                 Colors.Gray7
-            ).navigationBarsPadding().padding(horizontal = 16.dp)
+            ).navigationBarsPadding()
         ) {
             UsdtDepositReceiveScreen(
                 viewModel = hiltViewModel(),
                 tabs = visibleTabs,
+                tabLabels = tabLabels,
                 onSelectTab = ::selectReceiveTab,
                 onBack = onClose,
                 onBlockingChange = onBlockingChange,
                 onContacts = onClickPaymentRequestContacts.takeIf { showPaymentRequestContacts },
             )
+            VerticalSpacer(16.dp)
         }
         return
     }
@@ -382,9 +372,7 @@ fun ReceiveQrScreen(
             CustomTabRowWithSpacing(
                 tabs = visibleTabs,
                 currentTabIndex = visibleTabs.indexOf(selectedTab),
-                labelOverrides = remember(hardwareTabLabel) {
-                    hardwareTabLabel?.let { persistentMapOf(ReceiveTab.HARDWARE to it) } ?: persistentMapOf()
-                },
+                labelOverrides = tabLabels,
                 onTabChange = { tab ->
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val newIndex = visibleTabs.pageIndexOf(tab)
@@ -422,7 +410,6 @@ fun ReceiveQrScreen(
                 ) { _, tab ->
                     val displayMode = getReceiveInvoiceDisplayMode(
                         tab = tab,
-                        cjitInvoice = cjitInvoice,
                         hasInvoiceError = walletState.hasReceiveInvoiceError,
                         isUpdating = walletState.isReceiveInvoiceUpdating,
                         showDetails = showDetails,
@@ -461,7 +448,6 @@ fun ReceiveQrScreen(
                                 ReceiveDetailsView(
                                     tab = tab,
                                     walletState = walletState,
-                                    cjitInvoice = cjitInvoice,
                                     isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                                     onClickEditInvoice = { onClickEditInvoice(tab) },
                                     onClickHardwareEditInvoice = onClickHardwareEditInvoice,
@@ -600,12 +586,11 @@ internal fun shouldAutoSwitchToAuto(
     selectedTab: ReceiveTab,
     hasUserSelectedTab: Boolean,
     canCreateLightningInvoice: Boolean,
-    cjitInvoice: String?,
     initialTab: ReceiveTab?,
 ): Boolean {
     if (initialTab != null || hasUserSelectedTab) return false
     if (selectedTab == ReceiveTab.AUTO) return false
-    return canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()
+    return canCreateLightningInvoice
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -618,6 +603,7 @@ fun ReceiveQrView(
     accentColor: Color,
     modifier: Modifier = Modifier,
     shareContent: String = copyText,
+    copyMessage: String = stringResource(R.string.wallet__receive_copied),
 ) {
     val context = LocalContext.current
     val qrButtonTooltipState = rememberTooltipState()
@@ -631,7 +617,7 @@ fun ReceiveQrView(
         QrCodeImage(
             content = uri,
             logoPainter = qrLogoPainter,
-            tipMessage = stringResource(R.string.wallet__receive_copied),
+            tipMessage = copyMessage,
             onBitmapGenerated = { bitmap -> qrBitmap = bitmap },
             testTag = "QRCode",
             copyContent = copyText,
@@ -664,7 +650,7 @@ fun ReceiveQrView(
             }
             Box(modifier = Modifier.weight(1f)) {
                 Tooltip(
-                    text = stringResource(R.string.wallet__receive_copied),
+                    text = copyMessage,
                     tooltipState = qrButtonTooltipState,
                 ) {
                     PrimaryButton(
@@ -761,7 +747,6 @@ fun CjitOnBoardingView(modifier: Modifier = Modifier) {
 private fun ReceiveDetailsView(
     tab: ReceiveTab,
     walletState: WalletState,
-    cjitInvoice: String?,
     isNodeRunning: Boolean,
     onClickEditInvoice: () -> Unit,
     modifier: Modifier = Modifier,
@@ -810,10 +795,10 @@ private fun ReceiveDetailsView(
                             testTag = "ReceiveOnchainAddress",
                         )
                     }
-                    if (cjitInvoice != null || walletState.bolt11.isNotEmpty()) {
+                    if (walletState.bolt11.isNotEmpty()) {
                         CopyAddressCard(
                             title = stringResource(R.string.wallet__receive_lightning_invoice),
-                            address = cjitInvoice ?: walletState.bolt11,
+                            address = walletState.bolt11,
                             type = CopyAddressType.LIGHTNING,
                             onClickEditInvoice = onClickEditInvoice,
                             testTag = "ReceiveLightningAddress",
@@ -822,7 +807,7 @@ private fun ReceiveDetailsView(
                 }
 
                 ReceiveTab.SPENDING -> {
-                    val lightningInvoice = cjitInvoice ?: walletState.bolt11.takeIf { isNodeRunning }
+                    val lightningInvoice = walletState.bolt11.takeIf { isNodeRunning }
                     if (!lightningInvoice.isNullOrEmpty()) {
                         CopyAddressCard(
                             title = stringResource(R.string.wallet__receive_lightning_invoice),
@@ -934,6 +919,7 @@ fun CopyAddressCard(
     accentColor: Color? = null,
     shareContent: String = address,
     shareQrContent: String? = null,
+    copyMessage: String = stringResource(R.string.wallet__receive_copied),
 ) {
     val context = LocalContext.current
     val shareBitmap = shareQrContent?.let { rememberQrBitmap(it, 400.dp) }
@@ -982,7 +968,7 @@ fun CopyAddressCard(
             }
             Box(modifier = Modifier.weight(1f)) {
                 Tooltip(
-                    text = stringResource(R.string.wallet__receive_copied),
+                    text = copyMessage,
                     tooltipState = tooltipState
                 ) {
                     Box {
@@ -1035,7 +1021,6 @@ private fun PreviewSavingsMode() {
     AppThemeSurface {
         BottomSheetPreview {
             ReceiveQrScreen(
-                cjitInvoice = null,
                 walletState = WalletState(
                     onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
                 ),
@@ -1102,7 +1087,6 @@ private fun PreviewAutoMode() {
     AppThemeSurface {
         BottomSheetPreview {
             ReceiveQrScreen(
-                cjitInvoice = null,
                 walletState = WalletState(
                     onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
@@ -1173,7 +1157,6 @@ private fun PreviewSpendingMode() {
     AppThemeSurface {
         BottomSheetPreview {
             ReceiveQrScreen(
-                cjitInvoice = null,
                 walletState = WalletState(
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
@@ -1197,7 +1180,6 @@ private fun PreviewNodeNotReady() {
     AppThemeSurface {
         BottomSheetPreview {
             ReceiveQrScreen(
-                cjitInvoice = null,
                 walletState = WalletState(),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Starting,
@@ -1216,7 +1198,6 @@ private fun PreviewSmall() {
     AppThemeSurface {
         BottomSheetPreview {
             ReceiveQrScreen(
-                cjitInvoice = null,
                 walletState = WalletState(),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
@@ -1247,7 +1228,6 @@ private fun PreviewDetailsMode() {
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
-                cjitInvoice = null,
                 isNodeRunning = true,
                 onClickEditInvoice = {},
                 modifier = Modifier.weight(1f)
@@ -1274,7 +1254,6 @@ private fun PreviewDetailsModeSpendingLoading() {
                     bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
-                cjitInvoice = null,
                 isNodeRunning = false,
                 onClickEditInvoice = {},
                 modifier = Modifier.weight(1f)

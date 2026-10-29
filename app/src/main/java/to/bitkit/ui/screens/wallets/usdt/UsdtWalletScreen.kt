@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -9,7 +10,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -60,7 +60,6 @@ import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyMSB
-import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Sheet
@@ -79,6 +78,7 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -105,9 +105,7 @@ fun RowScope.UsdtWalletBalance(onClick: () -> Unit, viewModel: UsdtViewModel = h
             if (settings.hideBalance) {
                 UiConstants.HIDE_BALANCE_SHORT
             } else {
-                wallet.balance?.let {
-                    usdtOverviewAmount(it)
-                } ?: "—"
+                (wallet.balance ?: wallet.cachedBalance)?.let { "$ " + usdtOverviewAmount(it) } ?: "—"
             },
             style = UsdtDetailStyles.HistoryTitle
         )
@@ -184,7 +182,6 @@ fun UsdtWalletScreen(
     } else {
         UsdtWalletContent(
             wallet = wallet,
-            error = state.refreshError,
             hideBalance = settings.hideBalance,
             onReceive = {
                 app?.requestUsdtEnable {
@@ -290,7 +287,8 @@ fun UsdtWalletScreen(
                                 maximumAmount = it
                             }
                         },
-                        onConfirm = { viewModel.confirm() }, onDone = dismiss,
+                        onConfirm = { viewModel.confirm() }, onRetryRecovery = { viewModel.retryRecovery() },
+                        onDone = dismiss,
                         hideBalance = settings.hideBalance,
                         onDetails = {
                             selectedTransferId = state.quote?.id
@@ -317,9 +315,8 @@ internal fun rememberUsdtPage(initialRecipient: String, state: UsdtSendState): M
 }
 
 @Composable
-private fun UsdtWalletContent(
+internal fun UsdtWalletContent(
     wallet: UsdtWalletState,
-    error: Int?,
     hideBalance: Boolean,
     onReceive: () -> Unit,
     onSend: () -> Unit,
@@ -331,7 +328,7 @@ private fun UsdtWalletContent(
     val allowSwipe by settings?.enableSwipeToHideBalance?.collectAsStateWithLifecycle() ?: remember {
         mutableStateOf(false)
     }
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(Colors.Black).blockPointerInputPassthrough()) {
         UsdtCoinIllustration(
             modifier = Modifier.align(Alignment.TopEnd)
                 .offset(x = 81.dp, y = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 4.dp)
@@ -355,10 +352,6 @@ private fun UsdtWalletContent(
                         modifier = Modifier.testTag("UsdtBalance")
                     )
                     VerticalSpacer(32.dp)
-                    error?.let {
-                        BodyS(stringResource(it), color = Colors.Brand)
-                        VerticalSpacer(16.dp)
-                    }
                 }
                 itemsIndexed(wallet.transfers, key = { _, transfer -> transfer.id }) { index, transfer ->
                     val heading = activityGroupTitleResource(transfer.timestamp)
@@ -373,13 +366,6 @@ private fun UsdtWalletContent(
                     VerticalSpacer(16.dp)
                 }
                 item {
-                    if (!wallet.historyComplete) {
-                        BodyS(
-                            stringResource(R.string.usdt__history_sync),
-                            color = Colors.White64,
-                            modifier = Modifier.fillMaxWidth().background(Colors.Black).testTag("UsdtHistorySync")
-                        )
-                    }
                     VerticalSpacer(120.dp)
                 }
             }
@@ -462,13 +448,18 @@ internal fun UsdtRefreshEffect(
 }
 
 @Composable
-internal fun UsdtAuthentication(useBiometrics: Boolean, onCancel: () -> Unit, onVerified: () -> Unit) {
+internal fun UsdtAuthentication(
+    useBiometrics: Boolean,
+    onCancel: () -> Unit,
+    onVerified: () -> Unit,
+    @StringRes pinDescriptionRes: Int = R.string.security__pin_send,
+) {
     val supported = rememberBiometricAuthSupported()
     var fallbackToPin by remember { mutableStateOf(false) }
     if (useBiometrics && supported && !fallbackToPin) {
         BiometricsView(onSuccess = onVerified, onFailure = { fallbackToPin = true })
     } else {
-        SendPinCheckScreen(onBack = onCancel, onSuccess = onVerified)
+        SendPinCheckScreen(onBack = onCancel, onSuccess = onVerified, descriptionRes = pinDescriptionRes)
     }
 }
 
@@ -483,6 +474,6 @@ internal enum class UsdtPage {
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        UsdtWalletContent(UsdtWalletState(balance = 100_000_000u), null, false, {}, {}, {})
+        UsdtWalletContent(UsdtWalletState(balance = 100_000_000u), false, {}, {}, {})
     }
 }
