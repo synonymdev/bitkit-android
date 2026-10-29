@@ -279,7 +279,10 @@ fun BalanceHeader(
                         }
                     }
                     // The eye keeps the slot while the balance is hidden.
-                    BalanceLoader(visible = isLoading && !hideBalance)
+                    BalanceLoader(
+                        visible = isLoading && !hideBalance,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
                 }
             }
         }
@@ -300,7 +303,7 @@ private fun BalanceLoader(
         val description = stringResource(R.string.wallet__balance_updating)
         GradientCircularProgressIndicator(
             modifier = Modifier
-                .size(24.dp)
+                .size(16.dp)
                 .alpha(LOADER_ALPHA)
                 .semantics { contentDescription = description }
                 .testTag("TotalBalanceUpdating")
