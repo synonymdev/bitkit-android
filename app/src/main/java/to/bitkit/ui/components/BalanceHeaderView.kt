@@ -240,34 +240,33 @@ fun BalanceHeader(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BalanceShimmer(active = isLoading) {
-                AnimatedContent(
-                    targetState = largeRowState,
-                    transitionSpec = {
-                        BalanceAnimations.swapLargeRowTransition using
-                            SizeTransform(clip = false)
-                    },
-                    contentKey = { it.isBitcoinPrimary },
-                    label = "largeRowSwapAnimation",
-                ) { state ->
-                    val scale by transition.animateFloat(label = "largeRowScale") {
-                        if (it == EnterExitState.Visible) 1f else LARGE_ROW_SWAP_SCALE
-                    }
-                    LargeRow(
-                        prefix = state.prefix,
-                        prefixSpacing = prefixSpacing,
-                        text = state.text,
-                        symbol = state.symbol,
-                        showSymbol = state.showSymbol,
-                        isSymbolSuffix = state.isSymbolSuffix,
-                        hideBalance = hideBalance,
-                        modifier = largeRowModifier.graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                            transformOrigin = TransformOrigin(0f, 0f)
-                        },
-                    )
+            AnimatedContent(
+                targetState = largeRowState,
+                transitionSpec = {
+                    BalanceAnimations.swapLargeRowTransition using
+                        SizeTransform(clip = false)
+                },
+                contentKey = { it.isBitcoinPrimary },
+                label = "largeRowSwapAnimation",
+            ) { state ->
+                val scale by transition.animateFloat(label = "largeRowScale") {
+                    if (it == EnterExitState.Visible) 1f else LARGE_ROW_SWAP_SCALE
                 }
+                LargeRow(
+                    prefix = state.prefix,
+                    prefixSpacing = prefixSpacing,
+                    text = state.text,
+                    symbol = state.symbol,
+                    showSymbol = state.showSymbol,
+                    isSymbolSuffix = state.isSymbolSuffix,
+                    hideBalance = hideBalance,
+                    shimmer = isLoading,
+                    modifier = largeRowModifier.graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        transformOrigin = TransformOrigin(0f, 0f)
+                    },
+                )
             }
 
             if (showEyeIcon) {
@@ -352,8 +351,10 @@ private fun BalanceShimmer(
 private fun DrawScope.shimmerMask(intensity: Float, sweep: Float?): Brush {
     val dimmed = Color.Black.copy(alpha = 1f - intensity * (1f - SHIMMER_MIN_ALPHA))
     if (sweep == null) return SolidColor(dimmed)
-    val band = size.width * SHIMMER_BAND_FRACTION
-    val center = -band + sweep * (size.width + 2 * band)
+    val band = SHIMMER_BAND_HALF_WIDTH.toPx()
+    // The band runs diagonally, so each end of its travel reaches past the text by h² / (2 * band) to clear it fully.
+    val overshoot = band + size.height * size.height / (2 * band)
+    val center = -overshoot + sweep * (size.width + 2 * overshoot)
     return Brush.linearGradient(
         0f to dimmed,
         0.5f to Color.Black,
@@ -376,8 +377,8 @@ private const val SHIMMER_SWEEP_MILLIS = 2000
 /** Duration of the shimmer's fade in and out. */
 private const val SHIMMER_FADE_MILLIS = 300
 
-/** Half-width of the shimmer band, as a fraction of the headline width. */
-private const val SHIMMER_BAND_FRACTION = 0.25f
+/** Half-width of the shimmer band. */
+private val SHIMMER_BAND_HALF_WIDTH = 28.dp
 
 @Immutable
 private data class SmallRowState(
@@ -407,6 +408,7 @@ fun LargeRow(
     isSymbolSuffix: Boolean = false,
     hideBalance: Boolean = false,
     prefixSpacing: Dp = 8.dp,
+    shimmer: Boolean = false,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -428,15 +430,17 @@ fun LargeRow(
                     .testTag("MoneyFiatSymbol")
             )
         }
-        AnimatedContent(
-            targetState = hideBalance,
-            transitionSpec = { BalanceAnimations.mainBalanceTransition },
-            label = "largeRowTextAnimation",
-        ) { isHidden ->
-            Display(
-                text = if (isHidden) UiConstants.HIDE_BALANCE_LONG else text,
-                modifier = Modifier.testTag("MoneyText")
-            )
+        BalanceShimmer(active = shimmer) {
+            AnimatedContent(
+                targetState = hideBalance,
+                transitionSpec = { BalanceAnimations.mainBalanceTransition },
+                label = "largeRowTextAnimation",
+            ) { isHidden ->
+                Display(
+                    text = if (isHidden) UiConstants.HIDE_BALANCE_LONG else text,
+                    modifier = Modifier.testTag("MoneyText")
+                )
+            }
         }
         if (showSymbol && isSymbolSuffix) {
             SecondaryDisplay(

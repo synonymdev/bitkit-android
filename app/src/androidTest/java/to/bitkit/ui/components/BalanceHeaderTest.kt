@@ -11,8 +11,10 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.R
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 import kotlin.test.assertEquals
@@ -27,6 +29,9 @@ class BalanceHeaderTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
+    private val updatingDescription = InstrumentationRegistry.getInstrumentation().targetContext
+        .getString(R.string.wallet__balance_updating)
+
     private var isLoading by mutableStateOf(false)
     private var hideBalance by mutableStateOf(false)
 
@@ -37,7 +42,7 @@ class BalanceHeaderTest {
 
         composeTestRule.onNodeWithTag(UPDATING).assertExists()
         composeTestRule.onNodeWithTag(UPDATING)
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Updating balance…"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, updatingDescription))
     }
 
     @Test
