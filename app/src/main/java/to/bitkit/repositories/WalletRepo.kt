@@ -1,9 +1,11 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Immutable
+import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.LegacyRnCloseRecoveryScanResult
 import com.synonym.bitkitcore.LegacyRnCloseRecoverySweepPreview
+import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.ImmutableList
@@ -48,6 +50,7 @@ import to.bitkit.models.toBalance
 import to.bitkit.models.toDerivationPath
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
+import to.bitkit.services.withConfirmation
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
@@ -432,8 +435,25 @@ class WalletRepo @Inject constructor(
             syncBalances()
             transferRepo.syncTransferStates()
             activityRepo.syncActivities()
+            confirmPrimaryChannelSend()
             schedulePrimaryFunding()
         }
+    }
+
+    /**
+     * A send out of the primary channel is a splice, so it confirms with the channel's funding transaction.
+     * The splice can lock in at 0 confirmations, so the channel's confirmation count decides, not `ChannelReady`.
+     */
+    private suspend fun confirmPrimaryChannelSend() {
+        val channel = primaryNodeRepo.primaryChannel()?.takeIf { (it.confirmations ?: 0u) > 0u } ?: return
+        val fundingTxid = channel.fundingTxo?.txid ?: return
+        val activity = activityRepo.getOnchainActivityByTxId(fundingTxid)?.takeIf {
+            !it.confirmed && it.txType == PaymentType.SENT
+        } ?: return
+        val now = nowTimestamp().epochSecond.toULong()
+        activityRepo.upsertActivity(
+            Activity.Onchain(activity.withConfirmation(isConfirmed = true, confirmTimestamp = now))
+        )
     }
 
     private fun schedulePrimaryFunding() {

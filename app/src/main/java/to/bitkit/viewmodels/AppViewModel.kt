@@ -238,7 +238,6 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PubkyService
-import to.bitkit.services.withConfirmation
 import to.bitkit.ui.ID_NOTIFICATION_SKIPPED
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AllowanceRoute
@@ -2380,7 +2379,6 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleChannelReady(event: Event.ChannelReady) {
-        event.fundingTxo?.txid?.let { confirmPrimaryChannelSend(it) }
         refreshPaykitEndpointsAfterChannelAvailabilityChanged("channel ready")
         notifyChannelReady(event)
         delay(PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS)
@@ -6914,16 +6912,6 @@ class AppViewModel @Inject constructor(
                     timestamp = now,
                 )
             )
-        )
-    }
-
-    private suspend fun confirmPrimaryChannelSend(fundingTxid: String) {
-        val activity = activityRepo.getOnchainActivityByTxId(fundingTxid)?.takeIf {
-            !it.confirmed && it.txType == PaymentType.SENT
-        } ?: return
-        val now = nowTimestamp().epochSecond.toULong()
-        activityRepo.upsertActivity(
-            Activity.Onchain(activity.withConfirmation(isConfirmed = true, confirmTimestamp = now))
         )
     }
 
