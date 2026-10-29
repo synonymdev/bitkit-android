@@ -129,6 +129,7 @@ class ProfileRecoveryContentTest {
                         onAvatarSelected = {}, onAddLink = {}, onRemoveLink = {}, onAddTag = {}, onRemoveTag = {},
                         onSave = {}, onDelete = {}, onDismissDeleteDialog = {}, onConfirmDelete = onConfirm,
                         onRetryDelete = onReview, onDismissDeleteFailureDialog = {}, onDisconnectProfile = onDisconnect,
+                        onLocalDisconnect = { error("Fresh local disconnect is not part of this recovery scenario") },
                         onDismissAddLinkSheet = {}, onSaveLink = { _, _ -> }, onDismissAddTagSheet = {}, onSaveTag = {},
                     )
                 }
