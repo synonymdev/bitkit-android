@@ -300,6 +300,8 @@ fun BalanceHeader(
 // Matches iOS: .scale(scale: 1.5) for small row, .scale(scale: 0.5) for large row
 private const val SMALL_ROW_SWAP_SCALE = 1.5f
 private const val LARGE_ROW_SWAP_SCALE = 0.5f
+
+/** Opacity of the balance loader in the eye icon slot. */
 private const val LOADER_ALPHA = 0.75f
 
 @Immutable
