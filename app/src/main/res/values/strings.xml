@@ -602,6 +602,13 @@
     <string name="primary_receive__minimum">You receive at least</string>
     <string name="primary_receive__note">Your primary node takes this fee from the payment. Keep Bitkit open until the payment arrives.</string>
     <string name="primary_receive__title">Review receive fee</string>
+    <string name="primary_transfer__confirm">Transfer</string>
+    <string name="primary_transfer__fee">Network fee</string>
+    <string name="primary_transfer__note">Bitkit moves your confirmed savings into your channel with your primary node, so you can spend them instantly.</string>
+    <string name="primary_transfer__nothing">You have no confirmed savings to transfer yet.</string>
+    <string name="primary_transfer__started">Your savings are moving into your spending balance.</string>
+    <string name="primary_transfer__started_title">Transfer started</string>
+    <string name="primary_transfer__title">Transfer to spending</string>
     <string name="profile__add_link">Add Link</string>
     <string name="profile__add_link_label">LABEL</string>
     <string name="profile__add_link_label_placeholder">For example \'Website\'</string>

@@ -135,6 +135,7 @@ import to.bitkit.ui.screens.subscriptions.SubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionsScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.SavingsAdvancedScreen
+import to.bitkit.ui.screens.transfer.primary.PrimaryTransferScreen
 import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen
 import to.bitkit.ui.screens.transfer.SavingsConfirmScreen
 import to.bitkit.ui.screens.transfer.SavingsIntroScreen
@@ -1195,7 +1196,7 @@ private fun NavGraphBuilder.home(
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
-            onTransferToSpendingClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
+            onTransferToSpendingClick = { navController.navigateTo(Routes.PrimaryTransfer) },
             onBackClick = { navController.popBackStack() },
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
@@ -1218,7 +1219,7 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSavingsAvailability()
                 }
             },
-            onTransferFromSavingsClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
+            onTransferFromSavingsClick = { navController.navigateTo(Routes.PrimaryTransfer) },
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -1677,6 +1678,13 @@ private fun NavGraphBuilder.advancedSettingsSubScreens(navController: NavHostCon
     }
     deepLinkableComposable<Routes.PrimaryNode> {
         PrimaryNodeScreen(navController)
+    }
+    deepLinkableComposable<Routes.PrimaryTransfer> {
+        PrimaryTransferScreen(
+            onBack = { navController.popBackStack() },
+            onDone = { navController.popBackStack(Routes.Home, inclusive = false) },
+            onSetUpPrimaryNode = { navController.navigateTo(Routes.PrimaryNode) },
+        )
     }
     deepLinkableComposable<Routes.RgsServer> {
         RgsServerScreen(navController)
@@ -2195,6 +2203,9 @@ sealed interface Routes {
 
     @Serializable
     data object PrimaryNode : Routes.DeepLinkable
+
+    @Serializable
+    data object PrimaryTransfer : Routes.DeepLinkable
 
     @Serializable
     data object RgsServer : Routes.DeepLinkable

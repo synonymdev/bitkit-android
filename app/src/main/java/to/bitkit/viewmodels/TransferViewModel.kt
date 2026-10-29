@@ -34,8 +34,10 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toUserMessage
 import to.bitkit.models.Toast
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PrimaryNodeRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
@@ -58,6 +60,7 @@ class TransferViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
     private val transferRepo: TransferRepo,
+    private val primaryNodeRepo: PrimaryNodeRepo,
     private val boltzService: BoltzService,
     private val clock: Clock,
 ) : ViewModel() {
@@ -299,8 +302,11 @@ class TransferViewModel @Inject constructor(
         channelsToClose = channels
     }
 
-    private fun resolveSavingsTransferMode(): SavingsTransferMode =
-        if (_savingsSwapState.value.quote != null) SavingsTransferMode.SWAP else SavingsTransferMode.CLOSE
+    private fun resolveSavingsTransferMode(): SavingsTransferMode = when {
+        primaryNodeRepo.primaryChannel() != null -> SavingsTransferMode.CLOSE
+        _savingsSwapState.value.quote != null -> SavingsTransferMode.SWAP
+        else -> SavingsTransferMode.CLOSE
+    }
 
     /** Closes the channels selected earlier, pending closure */
     suspend fun closeSelectedChannels() = closeChannels(channelsToClose)
@@ -310,6 +316,9 @@ class TransferViewModel @Inject constructor(
         val channelsFailedToClose = coroutineScope {
             channels.map { channel ->
                 async {
+                    if (channel.channelId == primaryNodeRepo.primaryChannel()?.channelId) {
+                        return@async spliceOutPrimaryChannel(channel)
+                    }
                     lightningRepo.closeChannel(channel)
                         .onSuccess {
                             transferRepo.createTransfer(
@@ -328,6 +337,18 @@ class TransferViewModel @Inject constructor(
         }.filterNotNull()
 
         return channelsFailedToClose
+    }
+
+    /** The primary channel stays open: its balance is spliced out to savings instead. */
+    private suspend fun spliceOutPrimaryChannel(channel: ChannelDetails): ChannelDetails? {
+        val feeRate = lightningRepo.getFeeRateForSpeed(TransactionSpeed.default()).getOrElse { return channel }
+        return primaryNodeRepo.transferToSavings(feeRate).fold(
+            onSuccess = { null },
+            onFailure = {
+                Logger.warn("Failed to splice out primary channel '${channel.channelId}'", it, context = TAG)
+                channel
+            },
+        )
     }
 
     private var coopCloseRetryJob: Job? = null

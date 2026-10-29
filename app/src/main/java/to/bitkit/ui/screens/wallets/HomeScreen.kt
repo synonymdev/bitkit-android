@@ -313,7 +313,7 @@ fun HomeScreen(
                     appViewModel.showSheet(Sheet.Hardware())
                 }
 
-                Suggestion.LIGHTNING -> appViewModel.showSheet(Sheet.TransferUnavailable)
+                Suggestion.LIGHTNING -> rootNavController.navigateTo(Routes.PrimaryTransfer)
 
                 Suggestion.BACK_UP -> {
                     appViewModel.showSheet(Sheet.Backup(BackupRoute.Intro))

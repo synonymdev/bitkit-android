@@ -20,6 +20,7 @@ import to.bitkit.models.safe
 import to.bitkit.models.toBalance
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PrimaryNodeRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
@@ -33,6 +34,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
     private val transferRepo: TransferRepo,
     private val settingsStore: SettingsStore,
     private val hwWalletRepo: HwWalletRepo,
+    private val primaryNodeRepo: PrimaryNodeRepo,
 ) {
     suspend operator fun invoke(): Result<BalanceState> = withContext(bgDispatcher) {
         runCatching {
@@ -57,7 +59,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
                 channelFundableBalance = channelFundableBalance,
                 totalLightningSats = totalLightningSats,
                 maxSendLightningSats = lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
-                maxSendOnchainSats = getMaxSendAmount(balanceDetails),
+                maxSendOnchainSats = maxOf(getMaxSendAmount(balanceDetails), getMaxSpliceOutAmount()),
                 balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
                 balanceInTransferToSpending = pendingChannelsSats,
                 hardwareWallets = hwWalletRepo.wallets.value.map { it.toBalance() },
@@ -107,6 +109,13 @@ class DeriveBalanceStateUseCase @Inject constructor(
         }
 
         return toSavingsAmount
+    }
+
+    /** The most an on-chain send can take from the primary channel when savings fall short. */
+    private suspend fun getMaxSpliceOutAmount(): ULong {
+        val speed = settingsStore.data.first().defaultTransactionSpeed
+        val feeRate = lightningRepo.getFeeRateForSpeed(speed).getOrNull() ?: return 0uL
+        return primaryNodeRepo.maxSpliceOutSats(feeRate)
     }
 
     private suspend fun getMaxChannelFundableAmount(fundableBalance: ULong): ULong {

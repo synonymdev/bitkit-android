@@ -1,6 +1,9 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -9,12 +12,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PrimaryReceiveQuote
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.WatchResult
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.watchUntil
 import to.bitkit.models.PrimaryNode
 import to.bitkit.models.PrimaryNodeError
 import to.bitkit.models.USat
@@ -24,6 +30,7 @@ import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Lightning-first wallet operations through the primary node: pairing, just-in-time receives,
@@ -49,6 +56,9 @@ class PrimaryNodeRepo @Inject constructor(
 
         /** Virtual size each wallet input adds to a funding transaction. */
         const val FUNDING_INPUT_VBYTES = 300uL
+
+        /** How long a splice may take to reach its pending funding transaction. */
+        private val SPLICE_TIMEOUT = 60.seconds
     }
 
     private val operationMutex = Mutex()
@@ -166,20 +176,38 @@ class PrimaryNodeRepo @Inject constructor(
         return USat(channel.outboundCapacityMsat / 1000uL) - USat(feeRate * FUNDING_BASE_VBYTES)
     }
 
-    /** Pays [amountSats] to [address] from the primary channel by splicing it out. */
-    suspend fun sendOnchain(address: String, amountSats: ULong, feeRate: ULong): Result<Unit> =
+    /** Pays [amountSats] to [address] from the primary channel by splicing it out; returns the splice txid. */
+    suspend fun sendOnchain(address: String, amountSats: ULong, feeRate: ULong): Result<String> =
         withContext(bgDispatcher) {
             operationMutex.withLock {
                 runSuspendCatching {
                     val channel = primaryChannel()?.takeIf { it.isUsable } ?: throw PrimaryNodeError.NotConfigured()
                     if (lightningRepo.hasPendingFundingOperation().getOrThrow()) throw PrimaryWalletBusyError()
-                    lightningRepo.spliceOut(channel, address, amountSats, feeRate).getOrThrow()
+                    coroutineScope {
+                        val pending = async(start = CoroutineStart.UNDISPATCHED) { awaitSplice(channel.userChannelId) }
+                        lightningRepo.spliceOut(channel, address, amountSats, feeRate).onFailure { pending.cancel() }
+                            .getOrThrow()
+                        pending.await()
+                    }
                 }
             }
         }
 
+    private suspend fun awaitSplice(userChannelId: String): String {
+        val result = lightningRepo.nodeEvents.watchUntil(SPLICE_TIMEOUT) {
+            when (it) {
+                is Event.SplicePending if it.userChannelId == userChannelId ->
+                    WatchResult.Complete(Result.success(it.newFundingTxo.txid))
+                is Event.SpliceFailed if it.userChannelId == userChannelId ->
+                    WatchResult.Complete(Result.failure(PrimarySpliceFailedError()))
+                else -> WatchResult.Continue()
+            }
+        } ?: throw PrimaryWalletBusyError()
+        return result.getOrThrow()
+    }
+
     /** Transfer to Savings: splices the channel's spendable balance out to the wallet and pauses funding. */
-    suspend fun transferToSavings(feeRate: ULong): Result<ULong> = withContext(bgDispatcher) {
+    suspend fun transferToSavings(feeRate: ULong): Result<String> = withContext(bgDispatcher) {
         runSuspendCatching {
             val amount = maxSpliceOutSats(feeRate)
             if (amount == 0uL) throw PrimaryNodeError.NotConfigured()
@@ -188,7 +216,6 @@ class PrimaryNodeRepo @Inject constructor(
             sendOnchain(address, amount, feeRate).onFailure {
                 settingsStore.update { settings -> settings.copy(primaryFundingPaused = false) }
             }.getOrThrow()
-            amount
         }
     }
 
@@ -249,6 +276,8 @@ internal fun primaryFundingPlan(
             fee <= spendableSats / 100uL * PrimaryNodeRepo.MAX_FUNDING_FEE_PERCENT,
     )
 }
+
+class PrimarySpliceFailedError : AppError("The primary node could not complete the splice.")
 
 class PrimaryWalletBusyError : AppError("A primary channel operation is still pending. Try again once it confirms.")
 

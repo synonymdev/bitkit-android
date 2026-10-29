@@ -153,6 +153,7 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.models.USD
+import to.bitkit.models.USat
 import to.bitkit.models.WalletScope
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
@@ -206,6 +207,7 @@ import to.bitkit.repositories.PaykitUsdtPaymentRepo
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
+import to.bitkit.repositories.PrimaryNodeRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitPaymentContext
@@ -287,6 +289,7 @@ class AppViewModel @Inject constructor(
     private val keychain: Keychain,
     private val connectionRecovery: WalletConnectionRecovery,
     private val lightningRepo: LightningRepo,
+    private val primaryNodeRepo: PrimaryNodeRepo,
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val walletRepo: WalletRepo,
     private val hwWalletRepo: HwWalletRepo,
@@ -6864,6 +6867,54 @@ class AppViewModel @Inject constructor(
         paymentDeadlineAt: Instant? = null,
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
+    ): Result<OnchainSendOutcome> {
+        val hasPaymentContext = requestId != null || payerIdentity != null || contactPublicKey != null ||
+            paymentDeadlineAt != null
+        if (!hasPaymentContext && shouldSendFromPrimaryChannel(address, amount)) {
+            beforeSendAttempt()
+            val state = _sendUiState.value
+            val feeRate = lightningRepo.getFeeRateForSpeed(state.speed, state.feeRates).getOrElse {
+                return Result.failure(it)
+            }
+            return primaryNodeRepo.sendOnchain(address, amount, feeRate).map { txid ->
+                onBroadcast(txid)
+                OnchainSendOutcome.Accepted(txid, amount)
+            }
+        }
+        return sendOnchainFromSavings(
+            address = address,
+            amount = amount,
+            tags = tags,
+            requestId = requestId,
+            payerIdentity = payerIdentity,
+            contactPublicKey = contactPublicKey,
+            paymentDeadlineAt = paymentDeadlineAt,
+            beforeSendAttempt = beforeSendAttempt,
+            onBroadcast = onBroadcast,
+        )
+    }
+
+    /** True when savings can't cover [amount] and its fee, but the primary channel can. */
+    private suspend fun shouldSendFromPrimaryChannel(address: String, amount: ULong): Boolean {
+        val state = _sendUiState.value
+        if (state.selectedUtxos != null || primaryNodeRepo.primaryChannel() == null) return false
+        val spendable = lightningRepo.lightningState.value.balances?.spendableOnchainBalanceSats ?: 0uL
+        val fee = lightningRepo.calculateTotalFee(amount, address, state.speed, feeRates = state.feeRates).getOrNull()
+        if (fee != null && USat(amount) + USat(fee) <= spendable) return false
+        val feeRate = lightningRepo.getFeeRateForSpeed(state.speed, state.feeRates).getOrNull() ?: return false
+        return primaryNodeRepo.spliceOutFee(amount, feeRate) != null
+    }
+
+    private suspend fun sendOnchainFromSavings(
+        address: String,
+        amount: ULong,
+        tags: List<String>,
+        requestId: PaykitPaymentRequestId?,
+        payerIdentity: String?,
+        contactPublicKey: String?,
+        paymentDeadlineAt: Instant?,
+        beforeSendAttempt: suspend () -> Unit,
+        onBroadcast: suspend (Txid) -> Unit,
     ): Result<OnchainSendOutcome> = lightningRepo.sendOnChain(
         address = address,
         sats = amount,
