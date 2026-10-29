@@ -231,6 +231,7 @@
     <string name="lightning__transfer_success__text_savings">Τα κεφάλαιά σου μεταφέρθηκαν. Μπορείς να χρησιμοποιήσεις αυτά τα κεφάλαια αμέσως.</string>
     <string name="lightning__transfer_success__title_savings">Κεφάλαια μεταφέρθηκαν\n&lt;accent&gt;σε αποταμιεύσεις&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Περίμενε το Bitkit να συνδεθεί στο δίκτυο πληρωμών (±10 δευτερόλεπτα).</string>
+    <string name="lightning__wait_text_top_onchain">Περίμενε το Bitkit να συνδεθεί στο δίκτυο bitcoin (±10 δευτερόλεπτα).</string>
     <string name="lightning__wallet_balances">Υπόλοιπα πορτοφολιού</string>
     <string name="lightning__conn_onboarding_button">Ξεκινήστε</string>
     <string name="lightning__conn_onboarding_text">Ρυθμίστε το υπόλοιπο δαπανών σας για να απολαύσετε άμεσες και φθηνές συναλλαγές με φίλους, οικογένεια και εμπόρους.</string>
@@ -246,6 +247,8 @@
     <string name="notification__service__stop">Διακοπή εφαρμογής</string>
     <string name="onboarding__advanced">Για προχωρημένους</string>
     <string name="onboarding__advanced_setup">Ρύθμιση για προχωρημένους</string>
+    <string name="onboarding__connection_saved">Αποθηκεύτηκε. Δοκιμάστε ξανά για να συνεχίσετε την επαναφορά.</string>
+    <string name="onboarding__connection_settings">Ρυθμίσεις σύνδεσης</string>
     <string name="onboarding__create_new_wallet">Δημιουργία νέου πορτοφολιού</string>
     <string name="onboarding__empty_wallet">Για να\nξεκινήσεις\n&lt;accent&gt;στείλε\nBitcoin&lt;/accent&gt;\nστο\nπορτοφόλι σου</string>
     <string name="onboarding__get_started">Ξεκίνα</string>
@@ -741,7 +744,7 @@
     <string name="usdt__enable_title">Ενεργοποίηση USDT;</string>
     <string name="usdt__error_address">Εισάγαγε έγκυρη διεύθυνση για το επιλεγμένο δίκτυο.</string>
     <string name="usdt__error_amount">Εισάγαγε έγκυρο ποσό με έως 6 δεκαδικά ψηφία.</string>
-    <string name="usdt__error_backup">Δεν ήταν δυνατή η δημιουργία αντιγράφου ασφαλείας αυτής της πληρωμής. Θα γίνει νέα προσπάθεια όταν είναι διαθέσιμο το αντίγραφο ασφαλείας.</string>
+    <string name="usdt__error_backup">Δεν ήταν δυνατή η δημιουργία αντιγράφου ασφαλείας αυτής της πληρωμής. Η ίδια υπογεγραμμένη πληρωμή θα επαναληφθεί αυτόματα όταν γίνει διαθέσιμη η δημιουργία αντιγράφων ασφαλείας. Το κλείσιμο αυτής της οθόνης δεν την ακυρώνει.</string>
     <string name="usdt__error_balance">Δεν υπάρχουν αρκετά USDT για την κάλυψη του ποσού και των τελών.</string>
     <string name="usdt__error_bridge_amount">Το ποσό είναι πολύ μικρό για να καλύψει τα κόστη της γέφυρας. Δοκίμασε μεγαλύτερο ποσό.</string>
     <string name="usdt__error_clock">Ρύθμισε την ημερομηνία και την ώρα της συσκευής σου σε αυτόματη και δοκίμασε ξανά.</string>
@@ -751,6 +754,7 @@
     <string name="usdt__error_fee_collection">Δεν είναι δυνατή η πληρωμή του τέλους συναλλαγής σε USDT. Δοκίμασε μικρότερο ποσό.</string>
     <string name="usdt__error_network">Δεν ήταν δυνατή η ενημέρωση του USDT. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="usdt__error_pending">Μια πληρωμή εκκρεμεί ακόμα. Περίμενε την επιβεβαίωση πριν στείλεις ξανά.</string>
+    <string name="usdt__error_quote_refreshed">Η προσφορά τέλους έληξε και ενημερώθηκε. Έλεγξε το τέλος και σύρε ξανά.</string>
     <string name="usdt__error_rate_limit">Πάρα πολλά αιτήματα. Δοκίμασε ξανά σε λίγο.</string>
     <string name="usdt__error_rejected">Το δίκτυο USDT απέρριψε το αίτημα. Δοκίμασε ξανά.</string>
     <string name="usdt__error_response">Η υπηρεσία USDT επέστρεψε μη έγκυρη απάντηση. Δοκίμασε ξανά αργότερα.</string>

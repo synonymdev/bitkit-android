@@ -238,6 +238,7 @@
     <string name="lightning__transfer_success__text_savings">Vaše prostředky byly převedeny. Tyto prostředky můžete okamžitě použít.</string>
     <string name="lightning__transfer_success__title_savings">Prostředky převedeny\n&lt;accent&gt;do úspor&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Prosím vyčkejte, až se Bitkit připojí k platební síti (±10 sekund).</string>
+    <string name="lightning__wait_text_top_onchain">Prosím vyčkejte, až se Bitkit připojí k síti bitcoin (±10 sekund).</string>
     <string name="lightning__wallet_balances">Zůstatky peněženky</string>
     <string name="lightning__conn_onboarding_button">Začít</string>
     <string name="lightning__conn_onboarding_text">Nastavte si zůstatek pro výdaje a užívejte si okamžité a levné transakce s přáteli, rodinou a obchodníky.</string>
@@ -253,6 +254,8 @@
     <string name="notification__service__stop">Zastavit aplikaci</string>
     <string name="onboarding__advanced">Pokročilé</string>
     <string name="onboarding__advanced_setup">Pokročilé nastavení</string>
+    <string name="onboarding__connection_saved">Uloženo. Zkuste to znovu a pokračujte v obnově.</string>
+    <string name="onboarding__connection_settings">Nastavení připojení</string>
     <string name="onboarding__create_new_wallet">Vytvořit novou peněženku</string>
     <string name="onboarding__empty_wallet">Chcete-li\nzačít\n&lt;accent&gt;pošlete\nbitcoin&lt;/accent&gt;\ndo vaší\npeněženky</string>
     <string name="onboarding__get_started">Začít</string>
@@ -761,7 +764,7 @@
     <string name="usdt__enable_title">Zapnout USDT?</string>
     <string name="usdt__error_address">Zadejte platnou adresu pro vybranou síť.</string>
     <string name="usdt__error_amount">Zadejte platnou částku s nejvýše 6 desetinnými místy.</string>
-    <string name="usdt__error_backup">Tuto platbu nelze zálohovat. Záloha se zopakuje, jakmile bude zálohování dostupné.</string>
+    <string name="usdt__error_backup">Tuto platbu nelze zálohovat. Stejná podepsaná platba se automaticky zopakuje, jakmile bude zálohování dostupné. Zavřením této obrazovky ji nezrušíte.</string>
     <string name="usdt__error_balance">Nemáte dostatek USDT na pokrytí částky a poplatků.</string>
     <string name="usdt__error_bridge_amount">Částka je příliš malá na pokrytí nákladů mostu. Zkuste vyšší částku.</string>
     <string name="usdt__error_clock">Nastavte automatické datum a čas zařízení a zkuste to znovu.</string>
@@ -771,6 +774,7 @@
     <string name="usdt__error_fee_collection">Transakční poplatek nelze zaplatit v USDT. Zkuste menší částku.</string>
     <string name="usdt__error_network">USDT se nepodařilo aktualizovat. Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="usdt__error_pending">Platba stále čeká na vyřízení. Před dalším odesláním počkejte na potvrzení.</string>
+    <string name="usdt__error_quote_refreshed">Nabídka poplatku vypršela a byla aktualizována. Zkontrolujte poplatek a přejeďte znovu.</string>
     <string name="usdt__error_rate_limit">Příliš mnoho požadavků. Zkuste to prosím za chvíli.</string>
     <string name="usdt__error_rejected">Síť USDT požadavek odmítla. Zkuste to prosím znovu.</string>
     <string name="usdt__error_response">Služba USDT vrátila neplatnou odpověď. Zkuste to prosím později.</string>

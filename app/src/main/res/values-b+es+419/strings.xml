@@ -238,6 +238,7 @@
     <string name="lightning__transfer_success__text_savings">Sus fondos han sido transferidos. Podrá utilizar estos fondos inmediatamente.</string>
     <string name="lightning__transfer_success__title_savings">Fondos movidos\n&lt;accent&gt;a gastos&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Por favor, espere a que Bitkit se conecte a la red de pagos (±10 seg.).</string>
+    <string name="lightning__wait_text_top_onchain">Por favor, espere a que Bitkit se conecte a la red bitcoin (±10 seg.).</string>
     <string name="lightning__wallet_balances">Saldos de billetera</string>
     <string name="lightning__conn_onboarding_button">Comenzar</string>
     <string name="lightning__conn_onboarding_text">Configure su saldo de gastos para disfrutar de transacciones instantáneas y económicas con amigos, familiares y comerciantes.</string>
@@ -253,6 +254,8 @@
     <string name="notification__service__stop">Detener app</string>
     <string name="onboarding__advanced">Avanzado</string>
     <string name="onboarding__advanced_setup">Configuración avanzada</string>
+    <string name="onboarding__connection_saved">Guardado. Reintenta para continuar la restauración.</string>
+    <string name="onboarding__connection_settings">Configuración de conexión</string>
     <string name="onboarding__create_new_wallet">Crear nueva cartera</string>
     <string name="onboarding__empty_wallet">Para\nempezar\n&lt;accent&gt;envíe\nBitcoin&lt;/accent&gt;\na su\nbilletera</string>
     <string name="onboarding__get_started">Empezar</string>
@@ -763,7 +766,7 @@
     <string name="usdt__enable_title">¿Activar USDT?</string>
     <string name="usdt__error_address">Ingrese una dirección válida para la red seleccionada.</string>
     <string name="usdt__error_amount">Ingrese un monto válido con hasta 6 decimales.</string>
-    <string name="usdt__error_backup">No se pudo hacer una copia de seguridad de este pago. Se reintentará cuando la copia de seguridad esté disponible.</string>
+    <string name="usdt__error_backup">No se pudo hacer una copia de seguridad de este pago. Se reintentará automáticamente el mismo pago firmado cuando la copia de seguridad esté disponible. Cerrar esta pantalla no lo cancela.</string>
     <string name="usdt__error_balance">No tiene suficientes USDT para cubrir el monto y las comisiones.</string>
     <string name="usdt__error_bridge_amount">Monto demasiado bajo para cubrir los costos del puente. Pruebe con un monto mayor.</string>
     <string name="usdt__error_clock">Configure la fecha y la hora de su dispositivo en automático y vuelva a intentarlo.</string>
@@ -773,6 +776,7 @@
     <string name="usdt__error_fee_collection">No se pudo pagar la comisión de la transacción en USDT. Pruebe con un monto menor.</string>
     <string name="usdt__error_network">No se pudo actualizar USDT. Revise su conexión y vuelva a intentarlo.</string>
     <string name="usdt__error_pending">Aún hay un pago pendiente. Espere a que se confirme antes de volver a enviar.</string>
+    <string name="usdt__error_quote_refreshed">La cotización de la comisión venció y se actualizó. Revise la comisión y deslice de nuevo.</string>
     <string name="usdt__error_rate_limit">Demasiadas solicitudes. Vuelva a intentarlo en breve.</string>
     <string name="usdt__error_rejected">La red USDT rechazó la solicitud. Vuelva a intentarlo.</string>
     <string name="usdt__error_response">El servicio USDT devolvió una respuesta no válida. Vuelva a intentarlo más tarde.</string>

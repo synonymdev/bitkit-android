@@ -238,6 +238,7 @@
     <string name="lightning__order_state__open">Connexion ouverte</string>
     <string name="lightning__order_state__inactive">Connexion inactive</string>
     <string name="lightning__wait_text_top">Veuillez attendre que Bitkit se connecte au réseau de paiement (±10 secondes).</string>
+    <string name="lightning__wait_text_top_onchain">Veuillez attendre que Bitkit se connecte au réseau bitcoin (±10 secondes).</string>
     <string name="lightning__conn_onboarding_button">Commencer</string>
     <string name="lightning__conn_onboarding_text">Configurez votre solde de dépenses pour profiter de transactions instantanées et peu coûteuses avec vos amis, votre famille et les commerçants.</string>
     <string name="lightning__conn_onboarding_title">Activer les\n&lt;accent&gt;paiements&lt;/accent&gt;\nLightning</string>
@@ -250,6 +251,8 @@
     <string name="notification__received__title">Paiement reçu</string>
     <string name="notification__service__body">Bitkit fonctionne en arrière-plan pour que vous puissiez recevoir des paiements et des demandes</string>
     <string name="notification__service__stop">Arrêter l\'application</string>
+    <string name="onboarding__connection_saved">Enregistré. Réessayez pour poursuivre la restauration.</string>
+    <string name="onboarding__connection_settings">Paramètres de connexion</string>
     <string name="onboarding__tos_header">Bitkit \n&lt;accent&gt;Conditions d\'utilisation&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Conditions d\'utilisation</string>
     <string name="onboarding__tos_checkbox_value">En continuant, vous déclarez avoir lu et accepté les conditions d\'utilisation.</string>
@@ -760,7 +763,7 @@
     <string name="usdt__enable_title">Activer USDT ?</string>
     <string name="usdt__error_address">Saisissez une adresse valide pour le réseau sélectionné.</string>
     <string name="usdt__error_amount">Saisissez un montant valide avec 6 décimales au maximum.</string>
-    <string name="usdt__error_backup">Impossible de sauvegarder ce paiement. Une nouvelle tentative aura lieu dès que la sauvegarde sera disponible.</string>
+    <string name="usdt__error_backup">Impossible de sauvegarder ce paiement. Le même paiement signé sera réessayé automatiquement dès que la sauvegarde sera disponible. Fermer cet écran ne l’annule pas.</string>
     <string name="usdt__error_balance">USDT insuffisants pour couvrir le montant et les frais.</string>
     <string name="usdt__error_bridge_amount">Montant trop faible pour couvrir les coûts du pont. Essayez un montant plus élevé.</string>
     <string name="usdt__error_clock">Réglez la date et l\'heure de votre appareil en automatique, puis réessayez.</string>
@@ -770,6 +773,7 @@
     <string name="usdt__error_fee_collection">Impossible de payer les frais de transaction en USDT. Essayez un montant plus faible.</string>
     <string name="usdt__error_network">Impossible de mettre à jour USDT. Vérifiez votre connexion et réessayez.</string>
     <string name="usdt__error_pending">Un paiement est toujours en attente. Attendez sa confirmation avant d\'envoyer à nouveau.</string>
+    <string name="usdt__error_quote_refreshed">Le devis des frais a expiré et a été mis à jour. Vérifiez les frais et faites glisser à nouveau.</string>
     <string name="usdt__error_rate_limit">Trop de requêtes. Veuillez réessayer dans un instant.</string>
     <string name="usdt__error_rejected">Le réseau USDT a rejeté la demande. Veuillez réessayer.</string>
     <string name="usdt__error_response">Le service USDT a renvoyé une réponse non valide. Veuillez réessayer plus tard.</string>

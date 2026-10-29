@@ -23,6 +23,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doSuspendableAnswer
@@ -41,12 +42,15 @@ import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WatchOnlyAccountBackupSnapshot
 import to.bitkit.data.WatchOnlyAccountData
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.backup.UsdtRecoveryBackupStore
+import to.bitkit.data.backup.UsdtRecoveryBackupV1
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.dao.TransferDao
@@ -69,6 +73,7 @@ import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import javax.inject.Provider
 import kotlin.coroutines.cancellation.CancellationException
@@ -186,6 +191,7 @@ class BackupRepoTest : BaseUnitTest() {
             privatePaykitAddressReservationRepo.reconcileReservedIndexesWithLdk()
         }.thenReturn(Result.success(Unit))
 
+        whenever { vssBackupClient.listKeys() }.thenReturn(Result.success(emptyList()))
         sut = createSut()
     }
 
@@ -925,13 +931,35 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `Pubky unavailable does not prevent acknowledged USDT recovery backup`() = test {
+        whenever(privatePaykitRepo.backupSnapshot()).thenReturn(
+            Result.failure(PaykitException.SharedStateBusy("shared_state_busy", "lock unavailable")),
+        )
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        sut.persistUsdtRecoveryBackup("same-signed-operation").getOrThrow()
+        val payload = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, payload.capture())
+        assertEquals(
+            "same-signed-operation",
+            json.decodeFromString<UsdtRecoveryBackupV1>(payload.firstValue.decodeToString()).usdtWallet,
+        )
+        verify(privatePaykitRepo, times(1)).backupSnapshot()
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+    }
+
+    @Test
     fun `payment backup waits for earlier uploads and propagates failure`() = test {
         val release = CompletableDeferred<Unit>()
         val uploads = mutableListOf<String?>()
         var fail = false
         whenever(usdtRepo.backupSnapshot()).thenReturn("older")
-        whenever { vssBackupClient.putObject(eq(BackupCategory.WALLET.name), any()) }.doSuspendableAnswer {
-            val payload = json.decodeFromString<WalletBackupV1>(it.getArgument<ByteArray>(1).decodeToString())
+        whenever {
+            vssBackupClient.putObject(
+                argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) },
+                any(),
+            )
+        }.doSuspendableAnswer {
+            val payload = json.decodeFromString<UsdtRecoveryBackupV1>(it.getArgument<ByteArray>(1).decodeToString())
             if (payload.usdtWallet == "older") release.await()
             uploads += payload.usdtWallet
             if (fail) {
@@ -940,9 +968,9 @@ class BackupRepoTest : BaseUnitTest() {
                 Result.success(VssItem(key = BackupCategory.WALLET.name, value = byteArrayOf(), version = 1))
             }
         }
-        val background = async { sut.triggerBackup(BackupCategory.WALLET) }
+        val background = async { sut.triggerBackup(BackupCategory.USDT_RECOVERY) }
         runCurrent()
-        val payment = async { sut.persistWalletBackup("signed") }
+        val payment = async { sut.persistUsdtRecoveryBackup("signed") }
         runCurrent()
         assertTrue(uploads.isEmpty())
         release.complete(Unit)
@@ -950,7 +978,7 @@ class BackupRepoTest : BaseUnitTest() {
         payment.await().getOrThrow()
         assertEquals(listOf<String?>("older", "signed"), uploads.toList())
         fail = true
-        assertTrue(sut.persistWalletBackup("signed").isFailure)
+        assertTrue(sut.persistUsdtRecoveryBackup("signed").isFailure)
     }
 
     @Test
@@ -959,12 +987,69 @@ class BackupRepoTest : BaseUnitTest() {
             .thenReturn(Result.failure(BackupRepoTestError("offline")))
             .thenReturn(Result.success(Unit))
 
-        assertTrue(sut.persistWalletBackup("signed").isFailure)
+        assertTrue(sut.persistUsdtRecoveryBackup("signed").isFailure)
         verify(vssBackupClient, never()).putObject(any(), any())
 
-        sut.persistWalletBackup("signed").getOrThrow()
+        sut.persistUsdtRecoveryBackup("signed").getOrThrow()
         verify(vssBackupClient, times(2)).setup(any())
-        verify(vssBackupClient).putObject(eq(BackupCategory.WALLET.name), any())
+        verify(vssBackupClient).putObject(argThat { startsWith(UsdtRecoveryBackupStore.PREFIX) }, any())
+    }
+
+    @Test
+    fun `restart after legacy migration restores only pending USDT state`() = test {
+        whenever(keychain.exists(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(false)
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+        verify(keychain).delete(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name)
+        verify(privatePaykitRepo, never()).restoreBackup(anyOrNull())
+        verify(vssBackupClient, never()).getObject(BackupCategory.METADATA.name)
+        verify(vssBackupClient, never()).getObject(BackupCategory.SETTINGS.name)
+        verify(keychain, never()).upsertString(eq(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name), any())
+    }
+
+    @Test
+    fun `failed journal import retains legacy recovery and blocks replacement across restart`() = test {
+        val key = Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name
+        var retained: String? = null
+        whenever(keychain.exists(key)).thenAnswer { retained != null }
+        whenever(keychain.loadString(key)).thenAnswer { retained }
+        whenever(keychain.upsertString(eq(key), any())).thenAnswer {
+            retained = it.getArgument(1)
+            Unit
+        }
+        whenever(keychain.delete(key)).thenAnswer {
+            retained = null
+            Unit
+        }
+        stubWalletBackup(usdtWallet = "legacy-signed-operation")
+        whenever(vssBackupClient.listKeys()).thenReturn(Result.failure(BackupRepoTestError("offline")))
+
+        assertTrue(sut.restoreUsdtRecoveryAfterLegacyMigration().isFailure)
+        assertEquals(
+            "legacy-signed-operation",
+            json.decodeFromString<WalletBackupV1>(requireNotNull(retained)).usdtWallet,
+        )
+        assertTrue(sut.persistWalletBackup().isFailure)
+        assertTrue(sut.triggerBackup(BackupCategory.WALLET).isFailure)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+        verify(usdtRepo, never()).restoreBackup(any())
+
+        sut = createSut()
+        assertTrue(sut.hasPendingWalletRestore())
+        assertTrue(sut.persistWalletBackup().isFailure)
+        whenever(vssBackupClient.getObject(BackupCategory.WALLET.name))
+            .thenReturn(Result.failure(BackupRepoTestError("remote wallet changed")))
+        whenever(vssBackupClient.listKeys()).thenReturn(Result.success(emptyList()))
+        whenever(usdtRepo.restoreBackup("legacy-signed-operation")).thenReturn(Result.success(Unit))
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertNull(retained)
+        verify(usdtRepo).restoreBackup("legacy-signed-operation")
+        verify(vssBackupClient, times(1)).getObject(BackupCategory.WALLET.name)
+        verify(privatePaykitRepo, never()).restoreBackup(anyOrNull())
+        verify(vssBackupClient, never()).getObject(BackupCategory.METADATA.name)
+        verify(keychain, never()).upsertString(eq(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name), any())
     }
 
     @Test
@@ -2070,6 +2155,22 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(lightningService.syncStatusChanged).thenReturn(MutableSharedFlow())
     }
 
+    @Test
+    fun `native restore gate survives malformed connection correction`() = test {
+        whenever(keychain.loadString(WalletConnectionRecovery.KEY, 0)).thenReturn("malformed")
+        assertTrue(sut.performFullRestoreFromLatestBackup().isFailure)
+        verify(keychain).upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, "")
+        verify(vssBackupClient, never()).getObject(any())
+    }
+
+    @Test
+    fun `legacy USDT restore gate precedes malformed connection correction`() = test {
+        whenever(keychain.loadString(WalletConnectionRecovery.KEY, 0)).thenReturn("malformed")
+        assertTrue(sut.restoreUsdtRecoveryAfterLegacyMigration().isFailure)
+        verify(keychain).upsertString(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name, "")
+        verify(vssBackupClient, never()).getObject(any())
+    }
+
     private fun createSut() = BackupRepo(
         context = context,
         ioDispatcher = testDispatcher,
@@ -2103,6 +2204,7 @@ class BackupRepoTest : BaseUnitTest() {
         lightningService = lightningService,
         clock = clock,
         db = db,
+        connectionRecovery = connectionRecoveryFixture(settingsStore, keychain),
     )
 
     private class BackupRepoTestError(message: String) : AppError(message)

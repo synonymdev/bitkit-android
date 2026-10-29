@@ -235,6 +235,7 @@
     <string name="lightning__transfer_success__text_savings">Els teus fons han estat transferits. Pots utilitzar aquests fons immediatament.</string>
     <string name="lightning__transfer_success__title_savings">Fons moguts\n&lt;accent&gt;a estalvis&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Si us plau, espereu que Bitkit es connecti a la xarxa de pagament (±10 segons).</string>
+    <string name="lightning__wait_text_top_onchain">Si us plau, espereu que Bitkit es connecti a la xarxa bitcoin (±10 segons).</string>
     <string name="lightning__wallet_balances">Saldos de la cartera</string>
     <string name="lightning__conn_onboarding_button">Comença</string>
     <string name="lightning__conn_onboarding_text">Configura el teu saldo de despeses per gaudir de transaccions instantànies i econòmiques amb amics, familiars i comerciants.</string>
@@ -250,6 +251,8 @@
     <string name="notification__service__stop">Aturar aplicació</string>
     <string name="onboarding__advanced">Avançat</string>
     <string name="onboarding__advanced_setup">Configuració avançada</string>
+    <string name="onboarding__connection_saved">Desat. Torna-ho a provar per continuar restaurant.</string>
+    <string name="onboarding__connection_settings">Configuració de connexió</string>
     <string name="onboarding__create_new_wallet">Crear una nova cartera</string>
     <string name="onboarding__empty_wallet">Per començar\n&lt;accent&gt;envia\nBitcoin&lt;/accent&gt;\na la teva\ncartera</string>
     <string name="onboarding__get_started">Començar</string>
@@ -757,7 +760,7 @@
     <string name="usdt__enable_title">Activar USDT?</string>
     <string name="usdt__error_address">Introdueix una adreça vàlida per a la xarxa seleccionada.</string>
     <string name="usdt__error_amount">Introdueix un import vàlid amb un màxim de 6 decimals.</string>
-    <string name="usdt__error_backup">No es pot fer la còpia de seguretat d\'aquest pagament. Es tornarà a intentar quan la còpia de seguretat estigui disponible.</string>
+    <string name="usdt__error_backup">No es pot fer la còpia de seguretat d’aquest pagament. Es tornarà a intentar automàticament el mateix pagament signat quan la còpia de seguretat estigui disponible. Tancar aquesta pantalla no el cancel·la.</string>
     <string name="usdt__error_balance">No tens prou USDT per cobrir l\'import i les tarifes.</string>
     <string name="usdt__error_bridge_amount">L\'import és massa petit per cobrir els costos del pont. Prova amb un import més gran.</string>
     <string name="usdt__error_clock">Configura la data i l\'hora del dispositiu en mode automàtic i torna-ho a provar.</string>
@@ -767,6 +770,7 @@
     <string name="usdt__error_fee_collection">No es pot pagar la tarifa de la transacció en USDT. Prova amb un import més petit.</string>
     <string name="usdt__error_network">No s\'ha pogut actualitzar USDT. Comprova la connexió i torna-ho a provar.</string>
     <string name="usdt__error_pending">Encara hi ha un pagament pendent. Espera la confirmació abans de tornar a enviar.</string>
+    <string name="usdt__error_quote_refreshed">La cotització de la tarifa ha caducat i s’ha actualitzat. Revisa la tarifa i torna a lliscar.</string>
     <string name="usdt__error_rate_limit">Massa sol·licituds. Torna-ho a provar d\'aquí a una estona.</string>
     <string name="usdt__error_rejected">La xarxa USDT ha rebutjat la sol·licitud. Torna-ho a provar.</string>
     <string name="usdt__error_response">El servei USDT ha retornat una resposta no vàlida. Torna-ho a provar més tard.</string>

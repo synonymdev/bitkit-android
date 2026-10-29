@@ -231,6 +231,7 @@
     <string name="lightning__transfer_success__text_savings">تم تحويل أموالك. يمكنك استخدام هذه الأموال فورًا.</string>
     <string name="lightning__transfer_success__title_savings">تم نقل الأموال\n&lt;accent&gt;إلى المدخرات&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">يرجى الانتظار حتى يتصل Bitkit بشبكة الدفع (±10 ثوانٍ).</string>
+    <string name="lightning__wait_text_top_onchain">يرجى الانتظار حتى يتصل Bitkit بشبكة البيتكوين (±10 ثوانٍ).</string>
     <string name="lightning__wallet_balances">أرصدة المحفظة</string>
     <string name="lightning__conn_onboarding_button">ابدأ الآن</string>
     <string name="lightning__conn_onboarding_text">قم بإعداد رصيد الإنفاق الخاص بك للاستمتاع بمعاملات فورية ورخيصة مع الأصدقاء والعائلة والتجار.</string>
@@ -246,6 +247,8 @@
     <string name="notification__service__stop">إيقاف التطبيق</string>
     <string name="onboarding__advanced">متقدم</string>
     <string name="onboarding__advanced_setup">إعداد متقدم</string>
+    <string name="onboarding__connection_saved">تم الحفظ. أعد المحاولة لمتابعة الاستعادة.</string>
+    <string name="onboarding__connection_settings">إعدادات الاتصال</string>
     <string name="onboarding__create_new_wallet">إنشاء محفظة جديدة</string>
     <string name="onboarding__empty_wallet">للبدء\n&lt;accent&gt;أرسل\nBitcoin&lt;/accent&gt;\nإلى\nمحفظتك</string>
     <string name="onboarding__get_started">ابدأ</string>
@@ -740,7 +743,7 @@
     <string name="usdt__enable_title">تفعيل USDT؟</string>
     <string name="usdt__error_address">أدخل عنوانًا صالحًا للشبكة المحددة.</string>
     <string name="usdt__error_amount">أدخل مبلغًا صالحًا لا يتجاوز 6 منازل عشرية.</string>
-    <string name="usdt__error_backup">تعذر نسخ هذا الدفع احتياطيًا. ستُعاد المحاولة عند توفر النسخ الاحتياطي.</string>
+    <string name="usdt__error_backup">تعذر نسخ هذه الدفعة احتياطيًا. ستتم إعادة محاولة الدفعة الموقّعة نفسها تلقائيًا عند توفر النسخ الاحتياطي. إغلاق هذه الشاشة لا يلغيها.</string>
     <string name="usdt__error_balance">رصيد USDT غير كافٍ لتغطية المبلغ والرسوم.</string>
     <string name="usdt__error_bridge_amount">المبلغ صغير جدًا لتغطية تكاليف الجسر. جرّب مبلغًا أكبر.</string>
     <string name="usdt__error_clock">اضبط تاريخ جهازك ووقته تلقائيًا، ثم حاول مرة أخرى.</string>
@@ -750,6 +753,7 @@
     <string name="usdt__error_fee_collection">تعذر دفع رسوم المعاملة بـ USDT. جرّب مبلغًا أصغر.</string>
     <string name="usdt__error_network">تعذر تحديث USDT. تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="usdt__error_pending">لا يزال هناك دفع معلق. انتظر التأكيد قبل الإرسال مرة أخرى.</string>
+    <string name="usdt__error_quote_refreshed">انتهت صلاحية عرض الرسوم وتم تحديثه. تحقق من الرسوم واسحب مرة أخرى.</string>
     <string name="usdt__error_rate_limit">طلبات كثيرة جدًا. يرجى المحاولة مرة أخرى بعد قليل.</string>
     <string name="usdt__error_rejected">رفضت شبكة USDT الطلب. يرجى المحاولة مرة أخرى.</string>
     <string name="usdt__error_response">أعادت خدمة USDT استجابة غير صالحة. يرجى المحاولة مرة أخرى لاحقًا.</string>

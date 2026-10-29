@@ -25,15 +25,18 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.paykit.PaymentRequestLifecycleState
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import kotlinx.collections.immutable.persistentListOf
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -58,6 +61,10 @@ import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.OnchainFeeUi
+import to.bitkit.viewmodels.LnurlParams
+import to.bitkit.viewmodels.SendEvent
+import to.bitkit.viewmodels.SendFundingOption
+import to.bitkit.viewmodels.SendFundingSource
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import kotlin.test.assertEquals
@@ -78,6 +85,103 @@ class SendConfirmScreenTest {
     @Before
     fun setup() {
         hiltRule.inject()
+    }
+
+    @Test
+    fun fixedRequestSelectsAnAssetFromConfirmationWithoutAnAmountEditor() {
+        val request = PaykitPaymentRequest(
+            paymentRequestId = "fixed-request",
+            counterparty = "requester",
+            amount = PaykitAmount(PaykitAsset.BTC, 21_000u),
+            paymentReference = "test-reference",
+            note = "Lunch last week",
+            expiresAt = null,
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.Bolt11.rawValue, MethodId.UsdtArbitrum.rawValue),
+        )
+        var selected: SendEvent? = null
+        composeTestRule.setContent {
+            AppThemeSurface {
+                CompositionLocalProvider(LocalInspectionMode provides true) {
+                    SendConfirmContent(
+                        uiState = SendUiState(
+                            amount = request.amount.atomic,
+                            isPaymentRequest = true,
+                            isSubscriptionPayment = true,
+                            isAmountInputValid = true,
+                            payMethod = SendMethod.LIGHTNING,
+                            incomingPaymentRequestId = request.id,
+                            contactPaymentProfile = PubkyProfile.placeholder(request.counterparty).copy(name = "Areem Holden"),
+                            paymentRequestNote = request.note,
+                            usdtRecipient = "0x1111111111111111111111111111111111111111",
+                            canSwitchFundingSource = true,
+                            fundingOptions = persistentListOf(
+                                SendFundingOption(SendFundingSource.Spending, enabled = true),
+                                SendFundingOption(SendFundingSource.Usdt, enabled = true),
+                            ),
+                        ),
+                        isNodeRunning = true,
+                        isLoading = false,
+                        showBiometrics = false,
+                        onEvent = { selected = it },
+                        modifier = Modifier.sheetHeight()
+                    )
+                }
+            }
+        }
+        composeTestRule.onNodeWithTag("PaymentRequestFrom").assertTextEquals("Areem Holden")
+        composeTestRule.onNodeWithTag("PaymentRequestFor").assertTextEquals("Lunch last week")
+        composeTestRule.onNodeWithTag("SendAmountNumberPad").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("AssetButton-switch").performClick()
+        composeTestRule.onNodeWithTag("SendFundingSources").assertIsDisplayed()
+        composeTestRule.onNodeWithText("USDT").performClick()
+        composeTestRule.runOnIdle { assertEquals(SendEvent.PaymentMethodSelect(SendFundingSource.Usdt), selected) }
+        composeTestRule.onNodeWithTag("SendFundingSources").assertDoesNotExist()
+    }
+
+    @Test
+    fun fixedLnurlRequestDetailsAllowSupportedComments() {
+        val lnurl = LnurlPayData(
+            uri = "lnurl1comment",
+            callback = "https://example.com/callback",
+            minSendable = 1_000_000u,
+            maxSendable = 1_000_000u,
+            metadataStr = "[]",
+            commentAllowed = 100u,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        val state = mutableStateOf(
+            SendUiState(
+                amount = 1_000u,
+                isPaymentRequest = true,
+                isAmountInputValid = true,
+                payMethod = SendMethod.LIGHTNING,
+                lnurl = LnurlParams.LnurlPay(lnurl),
+            ),
+        )
+        var commentEvent: SendEvent? = null
+        composeTestRule.setContent {
+            AppThemeSurface {
+                CompositionLocalProvider(LocalInspectionMode provides true) {
+                    SendConfirmContent(
+                        uiState = state.value,
+                        isNodeRunning = true,
+                        isLoading = false,
+                        showBiometrics = false,
+                        onEvent = { commentEvent = it },
+                        modifier = Modifier.sheetHeight()
+                    )
+                }
+            }
+        }
+        composeTestRule.onNodeWithTag("CommentInput").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("SendConfirmToggleDetails").performClick()
+        composeTestRule.onNodeWithTag("CommentInput").performScrollTo().performTextInput("Thanks")
+        composeTestRule.runOnIdle {
+            assertEquals(SendEvent.CommentChange("Thanks"), commentEvent)
+            state.value = state.value.copy(lnurl = LnurlParams.LnurlPay(lnurl.copy(commentAllowed = 0u)))
+        }
+        composeTestRule.onNodeWithTag("CommentInput").assertDoesNotExist()
     }
 
     @Test

@@ -717,8 +717,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         completedRefreshGeneration = -1L
                         RefreshCheckpoint(actionVersion, proofVersion)
                     } ?: return@refresh
+                    val priority = if (forceFresh) Priority.Ordered else Priority.Background
                     val snapshot = runSuspendCatching {
-                        val priority = if (forceFresh) Priority.Ordered else Priority.Background
                         fetchRequestSnapshot(
                             expectedIdentity,
                             mode,
@@ -733,7 +733,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         runSuspendCatching {
                             val records = snapshot.getOrThrow()
                             if (checkpoint != RefreshCheckpoint(actionVersion, proofVersion)) {
-                                synchronizeLocked(generation, expectedIdentity, PaykitPaymentRequestRefreshMode.STORED)
+                                synchronizeLocked(
+                                    generation,
+                                    expectedIdentity,
+                                    PaykitPaymentRequestRefreshMode.STORED,
+                                    priority,
+                                )
                             } else {
                                 applyRequestSnapshotLocked(records, generation, expectedIdentity, proofVersion)
                             }
@@ -796,6 +801,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     }
                 }
             }.onFailure {
+                if (it == PaykitPaymentRequestError.OperationInProgress) return@onFailure
                 Logger.warn("Failed to refresh Paykit payment request recipients", it, context = TAG)
                 val savedKeys = savedPublicKeys.mapNotNull(PubkyPublicKeyFormat::normalized).toSet()
                 operationMutex.withLock {
@@ -1397,9 +1403,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
         generation: Long,
         expectedIdentity: String?,
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
+        priority: Priority = Priority.Ordered,
     ) {
         val proofVersion = paymentProofVersion()
-        val snapshot = fetchRequestSnapshot(expectedIdentity, mode)
+        val snapshot = fetchRequestSnapshot(expectedIdentity, mode, priority)
         applyRequestSnapshotLocked(snapshot, generation, expectedIdentity, proofVersion)
     }
 

@@ -235,6 +235,7 @@
     <string name="lightning__transfer_success__text_savings">Je geld is overgeboekt. Je kunt dit geld direct gebruiken.</string>
     <string name="lightning__transfer_success__title_savings">Geld verplaatst\n&lt;accent&gt;naar spaargeld&lt;/accent&gt;</string>
     <string name="lightning__wait_text_top">Wacht tot Bitkit verbinding maakt met het betaalnetwerk (±10 seconden).</string>
+    <string name="lightning__wait_text_top_onchain">Wacht tot Bitkit verbinding maakt met het bitcoinnetwerk (±10 seconden).</string>
     <string name="lightning__wallet_balances">Wallet-saldi</string>
     <string name="lightning__conn_onboarding_button">Aan de slag</string>
     <string name="lightning__conn_onboarding_text">Stel je uitgavenbalans in om te genieten van directe en goedkope transacties met vrienden, familie en winkels.</string>
@@ -250,6 +251,8 @@
     <string name="notification__service__stop">App stoppen</string>
     <string name="onboarding__advanced">Geavanceerd</string>
     <string name="onboarding__advanced_setup">Geavanceerde configuratie</string>
+    <string name="onboarding__connection_saved">Opgeslagen. Probeer opnieuw om het herstel voort te zetten.</string>
+    <string name="onboarding__connection_settings">Verbindingsinstellingen</string>
     <string name="onboarding__create_new_wallet">Nieuwe wallet aanmaken</string>
     <string name="onboarding__empty_wallet">Om te beginnen\n&lt;accent&gt;stuur\nBitcoin&lt;/accent&gt;\nnaar je\nwallet</string>
     <string name="onboarding__get_started">Aan de slag</string>
@@ -755,7 +758,7 @@
     <string name="usdt__enable_title">USDT inschakelen?</string>
     <string name="usdt__error_address">Voer een geldig adres in voor het geselecteerde netwerk.</string>
     <string name="usdt__error_amount">Voer een geldig bedrag in met maximaal 6 decimalen.</string>
-    <string name="usdt__error_backup">Kan deze betaling niet back-uppen. Dit wordt opnieuw geprobeerd zodra de back-up beschikbaar is.</string>
+    <string name="usdt__error_backup">Kan geen back-up van deze betaling maken. Dezelfde ondertekende betaling wordt automatisch opnieuw geprobeerd zodra de back-up beschikbaar is. Dit scherm sluiten annuleert de betaling niet.</string>
     <string name="usdt__error_balance">Niet genoeg USDT voor het bedrag en de vergoedingen.</string>
     <string name="usdt__error_bridge_amount">Bedrag te klein om de bridgekosten te dekken. Probeer een hoger bedrag.</string>
     <string name="usdt__error_clock">Stel de datum en tijd van uw apparaat in op automatisch en probeer het opnieuw.</string>
@@ -765,6 +768,7 @@
     <string name="usdt__error_fee_collection">Kan de transactievergoeding niet in USDT betalen. Probeer een kleiner bedrag.</string>
     <string name="usdt__error_network">Kon USDT niet bijwerken. Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="usdt__error_pending">Er is nog een betaling in behandeling. Wacht op de bevestiging voordat u opnieuw verzendt.</string>
+    <string name="usdt__error_quote_refreshed">De vergoedingsofferte is verlopen en bijgewerkt. Controleer de vergoeding en veeg opnieuw.</string>
     <string name="usdt__error_rate_limit">Te veel verzoeken. Probeer het zo meteen opnieuw.</string>
     <string name="usdt__error_rejected">Het USDT-netwerk heeft het verzoek geweigerd. Probeer het opnieuw.</string>
     <string name="usdt__error_response">De USDT-dienst gaf een ongeldig antwoord. Probeer het later opnieuw.</string>

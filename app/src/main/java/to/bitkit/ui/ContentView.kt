@@ -82,6 +82,7 @@ import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.onboarding.InitializingWalletView
+import to.bitkit.ui.onboarding.WalletConnectionRecoveryView
 import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.scaffold.AppAlertDialog
@@ -234,12 +235,23 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
+import to.bitkit.viewmodels.ConnectionStartupFailure
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import to.bitkit.viewmodels.canProceedWithoutRestore
+
+internal fun shouldPresentWalletRecovery(
+    walletIsInitializing: Boolean,
+    restoreState: RestoreState,
+    connectionFailure: ConnectionStartupFailure?,
+): Boolean = walletIsInitializing ||
+    restoreState is RestoreState.InProgress ||
+    restoreState is RestoreState.BackupFailed ||
+    connectionFailure?.requiresRecovery == true
 
 internal fun shouldFinishWalletInitialization(
     nodeLifecycleState: NodeLifecycleState,
@@ -404,16 +416,42 @@ fun ContentView(
         }
     }
 
-    val backupRestoreFailed =
-        restoreState is RestoreState.BackupFailed && nodeLifecycleState == NodeLifecycleState.Running
+    val backupRestoreFailed = restoreState is RestoreState.BackupFailed
 
-    if (walletIsInitializing || backupRestoreFailed) {
-        if (nodeLifecycleState is NodeLifecycleState.ErrorStarting || backupRestoreFailed) {
+    val connectionFailure by walletViewModel.connectionStartupError.collectAsStateWithLifecycle()
+    val connectionRetryBusy by walletViewModel.connectionRetryBusy.collectAsStateWithLifecycle()
+    val canProceedWithoutRestore = canProceedWithoutRestore(
+        restoreState,
+        connectionFailure?.canProceedWithoutRestore,
+    )
+
+    val connectionEditor by walletViewModel.connectionEditor.collectAsStateWithLifecycle()
+    if (connectionEditor != null) {
+        WalletConnectionRecoveryView(
+            state = checkNotNull(connectionEditor).let { it.copy(busy = it.busy || connectionRetryBusy) },
+            onBack = walletViewModel::closeConnectionRecovery,
+            onElectrum = walletViewModel::editRecoveryElectrum,
+            onRgs = walletViewModel::editRecoveryRgs,
+            onResetElectrum = { walletViewModel.editRecoveryElectrum(Env.electrumServerUrl) },
+            onResetRgs = { walletViewModel.editRecoveryRgs(Env.ldkRgsServerUrl.orEmpty()) },
+            onSave = walletViewModel::saveRecoveryConnection,
+            onRetry = walletViewModel::retryRecoveryConnection,
+        )
+        return
+    }
+
+    if (shouldPresentWalletRecovery(walletIsInitializing, restoreState, connectionFailure)) {
+        if (nodeLifecycleState is NodeLifecycleState.ErrorStarting ||
+            backupRestoreFailed || connectionFailure != null
+        ) {
             WalletRestoreErrorView(
                 retryCount = restoreState.retryCount(),
+                allowProceedWithoutRestore = canProceedWithoutRestore,
+                isBusy = connectionRetryBusy,
+                onConnectionSettings = walletViewModel::openConnectionRecovery,
                 hazeState = hazeState,
                 onRetry = {
-                    if (backupRestoreFailed) {
+                    if (backupRestoreFailed && nodeLifecycleState == NodeLifecycleState.Running) {
                         walletIsInitializing = true
                         walletViewModel.onBackupRestoreRetry()
                     } else {

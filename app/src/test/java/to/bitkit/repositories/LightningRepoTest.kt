@@ -2,7 +2,10 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.BlocktankException
 import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.IBtInfoOnchain
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlException
 import com.synonym.bitkitcore.LnurlPayData
@@ -46,8 +49,10 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doCallRealMethod
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.isNull
@@ -64,6 +69,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.WalletBackupRestorePendingError
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
 import to.bitkit.models.ActiveOnchainAttemptBackup
@@ -82,6 +88,7 @@ import to.bitkit.services.LnurlService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
@@ -221,6 +228,7 @@ class LightningRepoTest : BaseUnitTest() {
             transferRepo = mock(),
             activityRepo = mock(),
             hwWalletRepo = hardware,
+            connectionRecovery = connectionRecoveryFixture(settingsStore),
         )
     }
 
@@ -1049,6 +1057,109 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verify(lightningService).resetNetworkGraph(0)
+    }
+
+    @Test
+    fun `pending wallet recovery blocks new receiving data while node remains available`() = test {
+        startNodeForTesting()
+        whenever(lightningService.newAddress()).thenReturn("address")
+        for (marker in listOf(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE, Keychain.Key.USDT_PENDING_BACKUP_RESTORE)) {
+            whenever(keychain.exists(marker.name)).thenReturn(true)
+            assertIs<WalletBackupRestorePendingError>(sut.newAddress().exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.newAddressForType(AddressType.P2WPKH).exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.newAddressInfoForType(AddressType.P2WPKH).exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.createInvoice(description = "test").exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.createInvoiceMsats(1000uL, "test").exceptionOrNull())
+            assertTrue(sut.revealReceiveAddresses(505, AddressType.P2WPKH).isSuccess)
+            assertTrue(sut.sync().isSuccess)
+            whenever(keychain.exists(marker.name)).thenReturn(false)
+        }
+        verify(lightningService, never()).newAddress()
+        verify(lightningService, never()).newAddressForType(any())
+        verify(lightningService, never()).newAddressInfoForType(any())
+        verify(lightningService, never()).receive(anyOrNull(), any(), any())
+        verify(lightningService, never()).receiveMsats(any(), any(), any())
+        assertEquals("address", sut.newAddress().getOrThrow())
+    }
+
+    @Test
+    fun `pending wallet recovery prevents ordinary payment admission`() = test {
+        startNodeForTesting()
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        var beforeSend = false
+        sut.payInvoice("invoice", null, onBeforeSend = {
+            beforeSend = true
+            true
+        })
+        assertFalse(beforeSend)
+        assertIs<WalletBackupRestorePendingError>(sut.sendOnChain("address", 1000uL).exceptionOrNull())
+        verify(onchainSendAttemptStore, never()).current()
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `restore beginning during payment authorization prevents dispatch`() = test {
+        startNodeForTesting()
+        val result = sut.payInvoice("invoice", null, onBeforeSend = {
+            whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+            true
+        })
+        assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `unreadable restore admission fails closed`() = test {
+        startNodeForTesting()
+        val failure = IllegalStateException("Keychain unavailable")
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenThrow(failure)
+        assertEquals(failure, sut.newAddress().exceptionOrNull())
+        verify(lightningService, never()).newAddress()
+    }
+
+    @Test
+    fun `recreated repository retains durable recovery admission`() = test {
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        repeat(2) {
+            setUp()
+            startNodeForTesting()
+            assertIs<WalletBackupRestorePendingError>(sut.newAddress().exceptionOrNull())
+        }
+        verify(lightningService, never()).newAddress()
+    }
+
+    @Test
+    fun `pending restore blocks explicit recovery channel close and fee mutations`() = test {
+        startNodeForTesting()
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        val results = listOf(
+            sut.retryOriginalOnchainSend("attempt", "wallet", 1uL, authorizeOriginal = { error("Must not authorize") }),
+            sut.closeChannel(createChannelDetails()),
+            sut.openChannel(mock(), 1000uL),
+            sut.bumpFeeByRbf("txid", 1uL),
+            sut.accelerateByCpfp("txid", 1uL, "address"),
+        )
+        results.forEach { assertIs<WalletBackupRestorePendingError>(it.exceptionOrNull()) }
+        assertFailsWith<WalletBackupRestorePendingError> { sut.prepareRelease(pendingSendAttempt()) }
+        verify(lightningService, never()).prepareRelease(any())
+    }
+
+    @Test
+    fun `restore beginning after release preparation prevents broadcast`() = test {
+        val attempt = pendingSendAttempt()
+        var broadcasts = 0
+        val native = PreparedOnchainSend(preparedOutcome(OnchainSendOutcome.Accepted("release")).receipt) {
+            broadcasts++
+            OnchainSendOutcome.Accepted("release")
+        }
+        whenever(lightningService.prepareRelease(attempt)).thenReturn(native)
+        val prepared = sut.prepareRelease(attempt)
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        repeat(2) {
+            assertFailsWith<WalletBackupRestorePendingError> { prepared.broadcast() }
+        }
+        assertEquals(0, broadcasts)
     }
 
     @Test
@@ -3026,6 +3137,93 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(30uL, result.getOrNull())
+    }
+
+    @Test
+    fun `cached Blocktank rates preserve each selected speed after a gateway failure`() = test {
+        useCachedFeesAfterGatewayFailure()
+
+        assertEquals(37uL, sut.getFeeRateForSpeed(TransactionSpeed.Fast).getOrThrow())
+        assertEquals(19uL, sut.getFeeRateForSpeed(TransactionSpeed.Medium).getOrThrow())
+        assertEquals(7uL, sut.getFeeRateForSpeed(TransactionSpeed.Slow).getOrThrow())
+    }
+
+    @Test
+    fun `ordinary send uses the selected cached fee without bypassing preparation`() = test {
+        val attempt = pendingSendAttempt().copy(feeRateSatsPerVByte = 37uL)
+        val repo = prepareGuardedSend(attempt)
+        doCallRealMethod().whenever(repo).getFeeRateForSpeed(any(), anyOrNull())
+        val blocktank = useCachedFeesAfterGatewayFailure()
+        val accepted = OnchainSendOutcome.Accepted("ab".repeat(32))
+        whenever(
+            lightningService.prepareOnchainSend(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                paymentDeadlineAt = anyOrNull(),
+            )
+        ).thenReturn(preparedOutcome(accepted))
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = accepted.txid))
+
+        assertEquals(accepted, repo.sendOnChain("address", 1_000uL, speed = TransactionSpeed.Fast).getOrThrow())
+
+        verify(blocktank).info(true)
+        verify(blocktank).info(false)
+        verify(lightningService).prepareOnchainSend(
+            "address",
+            1_000uL,
+            37uL,
+            null,
+            false,
+            attempt.walletIndex,
+            null,
+        )
+        verify(onchainSendAttemptStore).broadcastPreparedCandidate(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `either required restore marker blocks send before cached fee recovery`() = test {
+        startNodeForTesting()
+        val blocktank = useCachedFeesAfterGatewayFailure()
+        for (marker in listOf(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE, Keychain.Key.USDT_PENDING_BACKUP_RESTORE)) {
+            whenever(keychain.exists(marker.name)).thenReturn(true)
+            assertIs<WalletBackupRestorePendingError>(sut.sendOnChain("address", 1_000uL).exceptionOrNull())
+            whenever(keychain.exists(marker.name)).thenReturn(false)
+        }
+        verify(blocktank, never()).info(any())
+        verify(onchainSendAttemptStore, never()).current()
+        verify(onchainSendAttemptStore, never()).broadcastPreparedCandidate(any(), any(), any(), any())
+        verify(lightningService, never()).prepareOnchainSend(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+            any(),
+            paymentDeadlineAt = anyOrNull(),
+        )
+    }
+
+    private suspend fun useCachedFeesAfterGatewayFailure(): BlocktankService {
+        val blocktank = spy(BlocktankService(coreService, lightningService))
+        val onchain = mock<IBtInfoOnchain>()
+        whenever(onchain.feeRates).thenReturn(FeeRates(fast = 37u, mid = 19u, slow = 7u))
+        val info = mock<IBtInfo>()
+        whenever(info.onchain).thenReturn(onchain)
+        val error = AppError(
+            BlocktankException.DataException(
+                "Failed to fetch info from Blocktank: Blocktank error: Failed to get info: " +
+                    "Client error: Request failed with status 502 Bad Gateway: gateway unavailable"
+            )
+        )
+        doThrow(error).whenever(blocktank).info(true)
+        doReturn(info).whenever(blocktank).info(false)
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        return blocktank
     }
 
     @Test

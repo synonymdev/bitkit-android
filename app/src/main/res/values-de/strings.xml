@@ -238,6 +238,7 @@
     <string name="lightning__total_onchain">Gesamt Onchain</string>
     <string name="lightning__transfer_in_progress">ÜBERTRAGUNG LÄUFT</string>
     <string name="lightning__wait_text_top">Bitte warte bis sich Bitkit mit dem Zahlungsnetzwerk verbunden hat (±10 Sekunden).</string>
+    <string name="lightning__wait_text_top_onchain">Bitte warte bis sich Bitkit mit dem Bitcoin-Netzwerk verbunden hat (±10 Sekunden).</string>
     <string name="lightning__wallet_balances">Wallet-Guthaben</string>
     <string name="lightning__conn_onboarding_button">Loslegen</string>
     <string name="lightning__conn_onboarding_text">Richte dein Ausgabenguthaben ein, um sofortige und günstige Transaktionen mit Freunden, Familie und Händlern zu genießen.</string>
@@ -251,6 +252,8 @@
     <string name="notification__received__title">Zahlung empfangen</string>
     <string name="notification__service__body">Bitkit läuft im Hintergrund, damit du Zahlungen und Anfragen empfangen kannst</string>
     <string name="notification__service__stop">App stoppen</string>
+    <string name="onboarding__connection_saved">Gespeichert. Versuche es erneut, um die Wiederherstellung fortzusetzen.</string>
+    <string name="onboarding__connection_settings">Verbindungseinstellungen</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;Nutzungs-bedingungen&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Nutzungsbedingungen</string>
     <string name="onboarding__tos_checkbox_value">Durch Fortfahren erklärst du, dass du die Nutzungsbedingungen gelesen und akzeptiert hast.</string>
@@ -759,7 +762,7 @@
     <string name="usdt__enable_title">USDT aktivieren?</string>
     <string name="usdt__error_address">Gib eine gültige Adresse für das ausgewählte Netzwerk ein.</string>
     <string name="usdt__error_amount">Gib einen gültigen Betrag mit bis zu 6 Dezimalstellen ein.</string>
-    <string name="usdt__error_backup">Diese Zahlung kann nicht gesichert werden. Die Sicherung wird wiederholt, sobald sie verfügbar ist.</string>
+    <string name="usdt__error_backup">Diese Zahlung kann nicht gesichert werden. Dieselbe signierte Zahlung wird automatisch erneut versucht, sobald die Sicherung verfügbar ist. Das Schließen dieses Bildschirms storniert sie nicht.</string>
     <string name="usdt__error_balance">Nicht genug USDT für Betrag und Gebühren.</string>
     <string name="usdt__error_bridge_amount">Der Betrag ist zu klein, um die Bridge-Kosten zu decken. Versuche einen höheren Betrag.</string>
     <string name="usdt__error_clock">Stelle Datum und Uhrzeit deines Geräts auf automatisch und versuche es dann erneut.</string>
@@ -769,6 +772,7 @@
     <string name="usdt__error_fee_collection">Die Transaktionsgebühr kann nicht in USDT bezahlt werden. Versuche einen kleineren Betrag.</string>
     <string name="usdt__error_network">USDT konnte nicht aktualisiert werden. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="usdt__error_pending">Eine Zahlung ist noch ausstehend. Warte auf die Bestätigung, bevor du erneut sendest.</string>
+    <string name="usdt__error_quote_refreshed">Das Gebührenangebot ist abgelaufen und wurde aktualisiert. Prüfe die Gebühr und wische erneut.</string>
     <string name="usdt__error_rate_limit">Zu viele Anfragen. Bitte versuche es gleich erneut.</string>
     <string name="usdt__error_rejected">Das USDT-Netzwerk hat die Anfrage abgelehnt. Bitte versuche es erneut.</string>
     <string name="usdt__error_response">Der USDT-Dienst hat eine ungültige Antwort zurückgegeben. Bitte versuche es später erneut.</string>

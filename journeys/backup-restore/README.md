@@ -56,3 +56,12 @@ recovery phrase, and what the app is allowed to upload while that restore is sti
   `SpendingIntro-button`, `SpendingAmount`, `SpendingAmountContinue`, `GRAB`,
   `TransferSuccess-button`.
 - Lightning connections: `Channel`, `CloseConnection`, `CloseConnectionButton`, `ChannelsClosed`.
+
+## Required-restore connection recovery
+
+`connection-recovery.xml` covers the restricted Electrum/RGS editor while required restoration is
+pending. Its setup is independent of the older reset-based journey above and does not authorize a
+wallet reset. Use only disposable fixture identities. The matching iOS AppScene recovery path and
+journey are implemented in bitkit-ios #1139. Its recorded disposable-app cases retain their exact
+revisions and fixture limits; they are not Android acceptance results. Component UI and repository
+tests remain separate from complete authenticated journeys.
