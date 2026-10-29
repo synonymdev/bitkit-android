@@ -1323,7 +1323,7 @@
     <string name="profile__choice_loading_profile">Cargando su perfil…</string>
     <string name="profile__choice_title">Entre a la\n&lt;accent&gt;web de la libertad&lt;/accent&gt;</string>
     <string name="profile__create_error">No se pudo crear el perfil</string>
-    <string name="profile__delete_active_subscription">Finaliza las suscripciones activas antes de eliminar este perfil.</string>
+    <string name="profile__delete_active_subscription">Las suscripciones activas impiden eliminar este perfil.</string>
     <string name="profile__delete_confirm_description">Al eliminar su perfil, se borra de Pubky. Es posible que sus contactos conserven la información de perfil y de pago que compartió con ellos anteriormente.</string>
     <string name="profile__delete_confirm_title">¿Eliminar perfil?</string>
     <string name="profile__delete_error_description">No pudimos eliminar los datos de su perfil. Vuelva a intentarlo o desconecte este pubky de Bitkit.</string>

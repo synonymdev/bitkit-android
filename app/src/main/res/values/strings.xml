@@ -630,7 +630,7 @@
     <string name="profile__choice_title">Enter the\n&lt;accent&gt;freedom web&lt;/accent&gt;</string>
     <string name="profile__create_error">Failed to create profile</string>
     <string name="profile__create_nav_title">Create Profile</string>
-    <string name="profile__delete_active_subscription">End active subscriptions before removing this profile.</string>
+    <string name="profile__delete_active_subscription">Active subscriptions prevent removing this profile.</string>
     <string name="profile__delete_confirm_description">Deleting your profile removes it from Pubky. Contacts may still retain profile and payment information previously shared with them.</string>
     <string name="profile__delete_confirm_title">Delete Profile?</string>
     <string name="profile__delete_error_description">We couldn\'t delete your profile data. Retry, or disconnect this pubky from Bitkit.</string>

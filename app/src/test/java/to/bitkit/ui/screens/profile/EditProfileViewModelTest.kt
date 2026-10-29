@@ -21,6 +21,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -28,6 +29,7 @@ import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -63,6 +65,32 @@ class EditProfileViewModelTest : BaseUnitTest() {
         verify(pubkyRepo, never()).deleteProfile()
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         assertFalse(sut.uiState.value.isDeleting)
+    }
+
+    @Test
+    fun `fixed term refusal displays the supplied expiry without starting cleanup`() = test {
+        val previousLocale = Locale.getDefault()
+        Locale.setDefault(Locale.US)
+        try {
+            val sut = createSut()
+            val endsAt = 1_800_000_000_000L
+            whenever(pubkyRepo.checkProfileDeletionAllowed()).thenReturn(
+                Result.failure(PubkyContactError.ActiveProfileSubscriptions(endsAt)),
+            )
+            advanceUntilIdle()
+
+            sut.deleteProfile()
+            advanceUntilIdle()
+
+            verify(context).getString(R.string.profile__delete_active_subscription)
+            verify(context).getString(R.string.subscriptions__expires_date, endsAt.toLocalizedTimestamp())
+            verify(privatePaykitRepo, never()).beginProfileDeletion()
+            verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
+            verify(pubkyRepo, never()).deleteProfile()
+            assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        } finally {
+            Locale.setDefault(previousLocale)
+        }
     }
 
     @Test

@@ -1319,7 +1319,7 @@
     <string name="profile__choice_loading_profile">Uw profiel laden…</string>
     <string name="profile__choice_title">Betreed het\n&lt;accent&gt;vrije web&lt;/accent&gt;</string>
     <string name="profile__create_error">Profiel aanmaken mislukt</string>
-    <string name="profile__delete_active_subscription">Beëindig actieve abonnementen voordat je dit profiel verwijdert.</string>
+    <string name="profile__delete_active_subscription">Actieve abonnementen verhinderen het verwijderen van dit profiel.</string>
     <string name="profile__delete_confirm_description">Als u uw profiel verwijdert, wordt het van Pubky verwijderd. Contacten kunnen eerder gedeelde profiel- en betaalgegevens nog bewaren.</string>
     <string name="profile__delete_confirm_title">Profiel verwijderen?</string>
     <string name="profile__delete_error_description">We konden uw profielgegevens niet verwijderen. Probeer het opnieuw, of ontkoppel deze pubky van Bitkit.</string>

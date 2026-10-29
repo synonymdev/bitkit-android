@@ -89,6 +89,7 @@ sealed class PubkyContactError(message: String) : AppError(message) {
     data object CannotAddSelf : PubkyContactError("Cannot add your own pubky as a contact")
     data object InvalidFormat : PubkyContactError("Invalid pubky key format")
     data object ActiveSubscription : PubkyContactError("Contact has an active subscription")
+    class ActiveProfileSubscriptions(val endsAtMillis: Long?) : PubkyContactError("Profile has active subscriptions")
     data object SignInChanged : PubkyContactError("Pubky sign-in changed while saving the contact")
 }
 
@@ -1096,6 +1097,9 @@ class PubkyRepo @Inject constructor(
     suspend fun checkProfileDeletionAllowed(): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) { pubkyService.checkProfileDeletionAllowed() }
     }.recoverCatching {
+        generateSequence(it) { error -> error.cause }
+            .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
+            .firstOrNull()?.let { error -> throw error }
         if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
         throw it
     }
@@ -1114,6 +1118,9 @@ class PubkyRepo @Inject constructor(
         settingsStore.update { it.paykitDisabled(markPublicCleanupPending = it.hasPaykitState()) }
         signOut().getOrThrow()
     }.recoverCatching {
+        generateSequence(it) { error -> error.cause }
+            .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
+            .firstOrNull()?.let { error -> throw error }
         if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
         throw it
     }

@@ -1359,12 +1359,13 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `active subscription is preserved through service wrappers before profile cleanup`() = test {
         authenticateForTesting()
-        val wrapped = IllegalStateException("Service operation failed", PubkyContactError.ActiveSubscription)
+        val expected = PubkyContactError.ActiveProfileSubscriptions(1_800_000_000_000L)
+        val wrapped = IllegalStateException("Service operation failed", expected)
         whenever(pubkyService.checkProfileDeletionAllowed()).thenAnswer { throw wrapped }
         clearInvocations(pubkyStore, pubkyService)
 
-        assertSame(PubkyContactError.ActiveSubscription, sut.checkProfileDeletionAllowed().exceptionOrNull())
-        assertSame(PubkyContactError.ActiveSubscription, sut.deleteProfile().exceptionOrNull())
+        assertSame(expected, sut.checkProfileDeletionAllowed().exceptionOrNull())
+        assertSame(expected, sut.deleteProfile().exceptionOrNull())
 
         verify(pubkyService, never()).contactRecords()
         verify(pubkyService, never()).removeContactsForProfile(any())
@@ -1379,11 +1380,12 @@ class PubkyRepoTest : BaseUnitTest() {
         val records = listOf(createContactRecord(VALID_CONTACT_KEY_A, label = "Retained"))
         whenever(pubkyService.contactRecords()).thenReturn(records)
         sut.loadContacts()
-        val wrapped = IllegalStateException("Service operation failed", PubkyContactError.ActiveSubscription)
+        val expected = PubkyContactError.ActiveProfileSubscriptions(1_800_000_000_000L)
+        val wrapped = IllegalStateException("Service operation failed", expected)
         whenever(pubkyService.removeContactsForProfile(any())).thenAnswer { throw wrapped }
         clearInvocations(pubkyStore)
 
-        assertSame(PubkyContactError.ActiveSubscription, sut.deleteProfile().exceptionOrNull())
+        assertSame(expected, sut.deleteProfile().exceptionOrNull())
 
         assertEquals(listOf(VALID_CONTACT_KEY_A), sut.contacts.value.map { it.publicKey })
         verify(pubkyStore, never()).update(any())

@@ -96,6 +96,7 @@ import to.bitkit.repositories.PubkyContactError
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
+import java.time.Instant
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -2090,8 +2091,8 @@ class PaykitSdkServiceTest {
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
             assertFailsWith<PubkyContactError.ActiveSubscription> { service.removeContact(RING_PUBKY) }
             assertTrue(service.removeContacts(listOf(RING_PUBKY)).isEmpty())
-            assertFailsWith<PubkyContactError.ActiveSubscription> { service.checkProfileDeletionAllowed() }
-            assertFailsWith<PubkyContactError.ActiveSubscription> {
+            assertFailsWith<PubkyContactError.ActiveProfileSubscriptions> { service.checkProfileDeletionAllowed() }
+            assertFailsWith<PubkyContactError.ActiveProfileSubscriptions> {
                 service.removeContactsForProfile(listOf(RING_PUBKY, "pubkyunrelated"))
             }
             verify(sdk, never()).blockPeer(any())
@@ -2126,10 +2127,45 @@ class PaykitSdkServiceTest {
             whenever(sdk.paymentRequests()).thenReturn(listOf(request))
             val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
 
-            assertFailsWith<PubkyContactError.ActiveSubscription> { service.checkProfileDeletionAllowed() }
-            assertFailsWith<PubkyContactError.ActiveSubscription> {
+            assertFailsWith<PubkyContactError.ActiveProfileSubscriptions> { service.checkProfileDeletionAllowed() }
+            assertFailsWith<PubkyContactError.ActiveProfileSubscriptions> {
                 service.removeContactsForProfile(listOf("pubkyunrelated"))
             }
+            verify(sdk, never()).removeContactsAndBlockPeers(any())
+        }
+    }
+
+    @Test
+    fun `profile refusal reports a date only when every blocking subscription has a finite end`() = runTest {
+        val earlier = "2999-01-01T00:00:00Z"
+        val later = "3000-01-01T00:00:00Z"
+        val cases = listOf(
+            listOf(earlier, later) to later,
+            listOf(later, earlier) to later,
+            listOf(earlier, null) to null,
+            listOf("invalid", later) to null,
+            listOf("2000-01-01T00:00:00Z", later) to later,
+        )
+        for ((ends, expected) in cases) {
+            val sdk = mock<PaykitSdk>()
+            val requests = ends.map { end ->
+                val recurrence = mock<PaymentRequestRecurrence> { on { endsAt } doReturn end }
+                val terms = mock<PaymentRequestTerms> { on { this.recurrence } doReturn recurrence }
+                mock<PaymentRequestRecord> {
+                    on { state } doReturn PaymentRequestLifecycleState.ACTIVE_RECURRING
+                    on { this.terms } doReturn terms
+                }
+            }
+            whenever(sdk.paymentRequests()).thenReturn(requests)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val refusal = assertFailsWith<PubkyContactError.ActiveProfileSubscriptions> {
+                service.checkProfileDeletionAllowed()
+            }
+            assertEquals(expected?.let { Instant.parse(it).toEpochMilli() }, refusal.endsAtMillis)
+            val lateRefusal = assertFailsWith<PubkyContactError.ActiveProfileSubscriptions> {
+                service.removeContactsForProfile(listOf(RING_PUBKY))
+            }
+            assertEquals(refusal.endsAtMillis, lateRefusal.endsAtMillis)
             verify(sdk, never()).removeContactsAndBlockPeers(any())
         }
     }

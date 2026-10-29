@@ -769,18 +769,27 @@ class PaykitSdkService @Inject constructor(
         operationLock.withLock {
             withStateRevisionTracking { handle ->
                 val now = nowMillis()
-                if (completeSdkCall { handle.paymentRequests() }.any { it.hasActiveSubscription(now) }) {
-                    throw PubkyContactError.ActiveSubscription
-                }
+                val requests = completeSdkCall { handle.paymentRequests() }
+                val subscriptions = requests.filter { it.hasActiveSubscription(now) }
+                requireNoProfileSubscriptions(subscriptions)
             }
         }
     }
 
     private fun PaymentRequestRecord.hasActiveSubscription(now: Long): Boolean {
-        val endsAt = terms?.recurrence?.endsAt?.let { timestamp ->
-            runCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull()
-        }
+        val endsAt = subscriptionEndsAtMillis()
         return state == PaymentRequestLifecycleState.ACTIVE_RECURRING && (endsAt == null || endsAt > now)
+    }
+
+    private fun PaymentRequestRecord.subscriptionEndsAtMillis(): Long? = terms?.recurrence?.endsAt?.let { timestamp ->
+        runCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull()
+    }
+
+    private fun requireNoProfileSubscriptions(subscriptions: List<PaymentRequestRecord>) {
+        if (subscriptions.isEmpty()) return
+        val endDates = subscriptions.mapNotNull { it.subscriptionEndsAtMillis() }
+        val latestEnd = if (endDates.size == subscriptions.size) endDates.maxOrNull() else null
+        throw PubkyContactError.ActiveProfileSubscriptions(latestEnd)
     }
 
     suspend fun removeContact(publicKey: String): ContactRecord? {
@@ -829,7 +838,7 @@ class PaykitSdkService @Inject constructor(
                         now
                     )
                 }
-                if (requireAll && subscriptions.isNotEmpty()) throw PubkyContactError.ActiveSubscription
+                if (requireAll) requireNoProfileSubscriptions(subscriptions)
                 val subscribedKeys = subscriptions.mapNotNull {
                     PubkyPublicKeyFormat.normalized(
                         it.counterparty

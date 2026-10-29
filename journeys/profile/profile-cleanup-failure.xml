@@ -12,7 +12,7 @@
     cleanup, not cross-device conditional deletion or safe manual replay of an uncertain operation.
   </description>
   <actions>
-    <action>With an active subscription, confirm profile deletion or unlink and verify the localized instruction to end active subscriptions</action>
+    <action>With an active subscription, confirm profile deletion or unlink and verify the localized refusal; show the latest expiry only when all blocking subscriptions have known finite ends, and no date for open-ended or unknown terms</action>
     <action>Verify there is no generic Retry dialog, endpoint withdrawal, contact removal or profile deletion, including for the unrelated contact</action>
     <action>After ending the subscription, explicitly confirm removal again and verify acknowledged cleanup succeeds</action>
     <action>Open Edit Profile and confirm deletion with the cleanup fault enabled</action>

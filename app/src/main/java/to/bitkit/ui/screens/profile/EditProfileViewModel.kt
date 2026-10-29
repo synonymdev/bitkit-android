@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -297,10 +298,15 @@ class EditProfileViewModel @Inject constructor(
                 _effects.emit(EditProfileEffect.DeleteSuccess)
             } else {
                 val error = requireNotNull(result.exceptionOrNull()) { "Profile delete failed without an error" }
-                if (error == PubkyContactError.ActiveSubscription) {
+                if (error is PubkyContactError.ActiveProfileSubscriptions ||
+                    error == PubkyContactError.ActiveSubscription
+                ) {
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__delete_active_subscription),
+                        description = (error as? PubkyContactError.ActiveProfileSubscriptions)?.endsAtMillis?.let {
+                            context.getString(R.string.subscriptions__expires_date, it.toLocalizedTimestamp())
+                        },
                     )
                 } else {
                     Logger.error("Failed to delete profile", error, context = TAG)
