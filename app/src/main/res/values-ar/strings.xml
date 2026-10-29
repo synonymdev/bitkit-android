@@ -386,7 +386,7 @@
     <string name="profile__cleanup_pending">لم يكتمل تنظيف الملف الشخصي. افصل الاتصال محليًا لإزالة وصول هذا الجهاز دون إعادة محاولة الحذف عن بُعد.</string>
     <string name="profile__create_nav_title">إنشاء ملف شخصي</string>
     <string name="profile__delete_review_description">قد تكون بعض التغييرات قد اكتملت. راجع الحالة الحالية قبل التأكيد مجددًا، أو افصل الاتصال محليًا.</string>
-    <string name="profile__disconnect_local_description">أزل وصول هذا الجهاز وأكمل التنظيف المحلي. لن يؤدي هذا إلى حذف الملف الشخصي من Pubky.</string>
+    <string name="profile__disconnect_local_description">أزل وصول هذا الجهاز وأكمل التنظيف المحلي. لا يُجري هذا أي تغييرات إضافية على ملفك الشخصي أو اشتراكاتك أو صلاحيات وصولك على الخادم.</string>
     <string name="profile__nav_title">الملف الشخصي</string>
     <string name="profile__retry_load">حاول مرة أخرى</string>
     <string name="profile__review_removal">مراجعة</string>

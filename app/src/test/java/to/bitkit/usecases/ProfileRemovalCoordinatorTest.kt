@@ -7,6 +7,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -134,6 +135,114 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
             events += "private local"
             Result.success(Unit)
         }
+    }
+
+    @Test
+    fun `fresh local disconnect reads no remote state and clears only after confirmation`() = test {
+        val confirmation = sut.prepareLocalDisconnect(original).getOrThrow()
+        assertTrue(confirmation.localOnly)
+        assertNull(confirmation.deletion)
+        assertNull(store.pendingAttempt())
+        assertTrue(events.isEmpty())
+        verify(pubky, never()).prepareProfileDeletion(any())
+        assertSame(ended, sut.remove(confirmation).getOrThrow())
+        assertEquals(
+            listOf("local credentials and metadata", "private local", "wallet backup ready", "backup ready"),
+            events,
+        )
+        verify(privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        verify(pubky, never()).removeBitkitPaymentEndpoints()
+        verify(pubky, never()).deleteProfile(any())
+        verify(pubky, never()).signOutForProfileRemoval()
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertNull(store.pendingAttempt())
+    }
+
+    @Test
+    fun `fresh local disconnect retains private watermarks when credential forget fails`() = test {
+        doSuspendableAnswer {
+            throw IOException("credential store unavailable")
+        }.whenever(pubky).finishProfileRemovalLocally()
+        val confirmation = sut.prepareLocalDisconnect(original).getOrThrow()
+        val failure = assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+        assertSame(confirmation, failure.confirmation)
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        verify(privateRepo, never()).finishProfileRemoval(any())
+        verify(privateRepo, never()).notifyProfileRemovalCompleted(any())
+        verify(pubky, never()).signOutForProfileRemoval()
+    }
+
+    @Test
+    fun `fresh local disconnect cannot prepare when pending state is unreadable`() = test {
+        val failure = IOException("pending store unavailable")
+        store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = flow<ProfileRemovalState> { throw failure }
+            override suspend fun updateData(
+                transform: suspend (ProfileRemovalState) -> ProfileRemovalState
+            ): ProfileRemovalState = error("Preparation must not write removal state")
+        })
+        assertSame(failure, sut.prepareLocalDisconnect(original).exceptionOrNull())
+        assertTrue(events.isEmpty())
+        verify(pubky, never()).performProfileRemoval(any(), any(), any())
+        verify(pubky, never()).finishProfileRemovalLocally()
+        verify(privateRepo, never()).finishProfileRemoval(any())
+        verify(pubky, never()).deleteProfile(any())
+        verify(pubky, never()).signOutForProfileRemoval()
+    }
+
+    @Test
+    fun `fresh local disconnect cannot clear credentials when durable begin fails`() = test {
+        val failure = IOException("pending marker not acknowledged")
+        var writes = 0
+        store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = MutableStateFlow(ProfileRemovalState())
+            override suspend fun updateData(
+                transform: suspend (ProfileRemovalState) -> ProfileRemovalState
+            ): ProfileRemovalState {
+                writes++
+                throw failure
+            }
+        })
+        val confirmation = sut.prepareLocalDisconnect(original).getOrThrow()
+        val result = assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+        assertSame(failure, result.cause)
+        assertEquals(1, writes)
+        assertNull(store.pendingAttempt())
+        assertTrue(events.isEmpty())
+        verify(pubky, never()).finishProfileRemovalLocally()
+        verify(privateRepo, never()).finishProfileRemoval(any())
+        verify(privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        verify(pubky, never()).removeBitkitPaymentEndpoints()
+        verify(pubky, never()).deleteProfile(any())
+        verify(pubky, never()).signOutForProfileRemoval()
+        assertTrue(sut.remove(confirmation).isFailure)
+        assertEquals(1, writes)
+    }
+
+    @Test
+    fun `fresh local disconnect rejects replacement owner and unrelated pending cleanup`() = test {
+        current = PubkyProfileOwner(PubkySignIn("identity", 3), 3)
+        assertTrue(sut.prepareLocalDisconnect(original).isFailure)
+        current = original
+        val pending = UUID.randomUUID().toString()
+        store.withAccess(pending) { store.begin(pending) }
+        assertTrue(sut.prepareLocalDisconnect(original).isFailure)
+        assertEquals(pending, store.pendingAttempt())
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `fresh local confirmation cannot clear a replacement or another pending attempt`() = test {
+        val confirmation = sut.prepareLocalDisconnect(original).getOrThrow()
+        current = PubkyProfileOwner(PubkySignIn("identity", 3), 3)
+        assertTrue(sut.remove(confirmation).isFailure)
+        current = original
+        val second = sut.prepareLocalDisconnect(original).getOrThrow()
+        val pending = UUID.randomUUID().toString()
+        store.withAccess(pending) { store.begin(pending) }
+        assertTrue(sut.remove(second).isFailure)
+        assertEquals(pending, store.pendingAttempt())
+        assertTrue(events.isEmpty())
     }
 
     @Test

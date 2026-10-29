@@ -97,6 +97,14 @@ class ProfileRemovalCoordinator @Inject constructor(
         )
     }
 
+    suspend fun prepareLocalDisconnect(owner: PubkyProfileOwner): Result<ProfileRemovalConfirmation> =
+        runSuspendCatching {
+            check(pubkyRepo.isProfileOwnerCurrent(owner)) { "The profile identity changed" }
+            removalStore.requireNoPending()
+            check(pubkyRepo.isProfileOwnerCurrent(owner)) { "The profile identity changed" }
+            ProfileRemovalConfirmation(owner, UUID.randomUUID().toString(), deletion = null, localOnly = true)
+        }
+
     suspend fun prepareLocalDisconnect(failure: ProfileRemovalFailure): Result<ProfileRemovalConfirmation> =
         runSuspendCatching {
             val pending = removalStore.pendingAttempt()

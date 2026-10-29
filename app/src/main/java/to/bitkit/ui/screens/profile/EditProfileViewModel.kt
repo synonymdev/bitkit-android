@@ -296,9 +296,23 @@ class EditProfileViewModel @Inject constructor(
         }
     }
 
+    fun showLocalDisconnectConfirmation() {
+        if (_uiState.value.isBusy || !_uiState.value.canDisconnectLocally) return
+        viewModelScope.launch {
+            prepareConfirmation(screenOwner) { removalCoordinator.prepareLocalDisconnect(screenOwner) }
+        }
+    }
+
     private suspend fun performRemoval(confirmation: ProfileRemovalConfirmation) {
         if (_uiState.value.isBusy) return
-        _uiState.update { it.copy(showDeleteDialog = false, showDeleteFailureDialog = false, isDeleting = true) }
+        _uiState.update {
+            it.copy(
+                showDeleteDialog = false,
+                showDeleteFailureDialog = false,
+                canDisconnectLocally = false,
+                isDeleting = true,
+            )
+        }
         try {
             removalCoordinator.remove(confirmation).onSuccess { endedOwner ->
                 removalFailure = null
@@ -343,6 +357,7 @@ class EditProfileViewModel @Inject constructor(
 
     private suspend fun showRemovalError(error: Throwable) {
         if (error == PubkyContactError.ActiveSubscription) {
+            _uiState.update { it.copy(canDisconnectLocally = true) }
             ToastEventBus.send(
                 Toast.ToastType.ERROR,
                 context.getString(R.string.profile__delete_error_title),
@@ -377,6 +392,7 @@ data class EditProfileUiState(
     val isDeleting: Boolean = false,
     val isPreparingRemoval: Boolean = false,
     val isLocalDisconnect: Boolean = false,
+    val canDisconnectLocally: Boolean = false,
     val canReviewRemoval: Boolean = true,
     val showDeleteDialog: Boolean = false,
     val showDeleteFailureDialog: Boolean = false,

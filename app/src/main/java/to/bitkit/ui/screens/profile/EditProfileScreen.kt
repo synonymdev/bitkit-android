@@ -32,10 +32,13 @@ import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ui.components.AddLinkSheet
 import to.bitkit.ui.components.AddTagSheet
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.ProfileEditForm
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.components.PubkyImage
+import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -78,6 +81,7 @@ fun EditProfileScreen(
         onRetryDelete = viewModel::retryDeleteProfile,
         onDismissDeleteFailureDialog = viewModel::dismissDeleteFailureDialog,
         onDisconnectProfile = viewModel::disconnectProfile,
+        onLocalDisconnect = viewModel::showLocalDisconnectConfirmation,
         onDismissAddLinkSheet = viewModel::dismissAddLinkSheet,
         onSaveLink = viewModel::addLink,
         onDismissAddTagSheet = viewModel::dismissAddTagSheet,
@@ -104,6 +108,7 @@ internal fun EditProfileContent(
     onRetryDelete: () -> Unit,
     onDismissDeleteFailureDialog: () -> Unit,
     onDisconnectProfile: () -> Unit,
+    onLocalDisconnect: () -> Unit,
     onDismissAddLinkSheet: () -> Unit,
     onSaveLink: (String, String) -> Unit,
     onDismissAddTagSheet: () -> Unit,
@@ -180,6 +185,22 @@ internal fun EditProfileContent(
                 deleteLabel = stringResource(removal.label),
                 deleteSectionLabel = stringResource(removal.sectionLabel),
                 deleteIcon = removal.icon,
+                additionalActions = {
+                    if (uiState.canDisconnectLocally) {
+                        VerticalSpacer(16.dp)
+                        BodyS(
+                            text = stringResource(R.string.profile__disconnect_local_description),
+                            color = Colors.White64,
+                        )
+                        VerticalSpacer(12.dp)
+                        SecondaryButton(
+                            text = stringResource(R.string.profile__sign_out),
+                            enabled = !uiState.isBusy,
+                            onClick = onLocalDisconnect,
+                            modifier = Modifier.testTag("ProfileLocalDisconnect")
+                        )
+                    }
+                },
             )
         }
     }
@@ -201,6 +222,7 @@ internal fun EditProfileContent(
             ),
             onConfirm = onConfirmDelete,
             onDismiss = onDismissDeleteDialog,
+            confirmTestTag = if (uiState.isLocalDisconnect) "ProfileLocalDisconnectConfirm" else "DialogConfirm",
         )
     }
 
@@ -306,6 +328,7 @@ private fun Preview() {
             onRetryDelete = {},
             onDismissDeleteFailureDialog = {},
             onDisconnectProfile = {},
+            onLocalDisconnect = {},
             onDismissAddLinkSheet = {},
             onSaveLink = { _, _ -> },
             onDismissAddTagSheet = {},

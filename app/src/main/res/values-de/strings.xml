@@ -378,7 +378,7 @@
     <string name="profile__cleanup_pending">Die Profilbereinigung ist unvollständig. Trenne die Verbindung lokal, um den Zugriff dieses Geräts zu entfernen, ohne die entfernte Löschung erneut zu versuchen.</string>
     <string name="profile__create_nav_title">Profil erstellen</string>
     <string name="profile__delete_review_description">Einige Änderungen wurden möglicherweise abgeschlossen. Prüfe den aktuellen Stand vor einer erneuten Bestätigung oder trenne die Verbindung lokal.</string>
-    <string name="profile__disconnect_local_description">Entferne den Zugriff dieses Geräts und schließe die lokale Bereinigung ab. Dadurch wird das Profil nicht aus Pubky gelöscht.</string>
+    <string name="profile__disconnect_local_description">Entferne den Zugriff dieses Geräts und schließe die lokale Bereinigung ab. Dadurch werden keine weiteren Änderungen an deinem Profil, deinen Abonnements oder deinem Zugriff auf dem Server vorgenommen.</string>
     <string name="profile__edit_nav_title">Profil bearbeiten</string>
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Erneut versuchen</string>

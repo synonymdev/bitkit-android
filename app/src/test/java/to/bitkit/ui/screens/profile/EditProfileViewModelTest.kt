@@ -58,9 +58,61 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         assertFalse(sut.uiState.value.showDeleteDialog)
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        assertTrue(sut.uiState.value.canDisconnectLocally)
         assertNull(fixture.store.pendingAttempt())
         verify(fixture.privateRepo, never()).withProfileDeletionPaused<Unit>(any())
         verify(pubkyRepo, never()).deleteProfile(any())
+    }
+
+    @Test
+    fun `subscription refusal offers fresh local confirmation without remote cleanup`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.prepareProfileDeletion(fixture.original))
+            .thenReturn(Result.failure(PubkyContactError.ActiveSubscription))
+        advanceUntilIdle()
+        sut.showLocalDisconnectConfirmation()
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.showDeleteDialog)
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        sut.showLocalDisconnectConfirmation()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.showDeleteDialog)
+        assertTrue(sut.uiState.value.isLocalDisconnect)
+        assertNull(fixture.store.pendingAttempt())
+        sut.dismissDeleteDialog()
+        sut.deleteProfile()
+        advanceUntilIdle()
+        verify(pubkyRepo, never()).finishProfileRemovalLocally()
+        sut.showLocalDisconnectConfirmation()
+        advanceUntilIdle()
+        sut.effects.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+            assertIs<EditProfileEffect.RemovalCompleted>(awaitItem())
+        }
+        verify(pubkyRepo, times(1)).prepareProfileDeletion(fixture.original)
+        verify(pubkyRepo, never()).deleteProfile(any())
+        verify(pubkyRepo, never()).removeBitkitPaymentEndpoints()
+        verify(pubkyRepo, never()).signOutForProfileRemoval()
+        verify(fixture.privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        assertNull(fixture.store.pendingAttempt())
+    }
+
+    @Test
+    fun `fresh local disconnect never recaptures the replacement screen owner`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.prepareProfileDeletion(fixture.original))
+            .thenReturn(Result.failure(PubkyContactError.ActiveSubscription))
+        advanceUntilIdle()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        fixture.current = PubkyProfileOwner(PubkySignIn(TEST_PUBLIC_KEY, 3), 3)
+        sut.showLocalDisconnectConfirmation()
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.showDeleteDialog)
+        assertNull(fixture.store.pendingAttempt())
+        verify(pubkyRepo, never()).finishProfileRemovalLocally()
     }
 
     @Test
@@ -78,6 +130,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         assertNull(fixture.store.pendingAttempt())
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        assertTrue(sut.uiState.value.canDisconnectLocally)
         verify(fixture.privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
         verify(pubkyRepo, never()).deleteProfile(any())
     }

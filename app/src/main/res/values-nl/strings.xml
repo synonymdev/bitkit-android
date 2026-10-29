@@ -391,7 +391,7 @@
     <string name="profile__cleanup_pending">Het opschonen van het profiel is niet voltooid. Verbreek lokaal de verbinding om de toegang van dit apparaat te verwijderen zonder de verwijdering op afstand opnieuw te proberen.</string>
     <string name="profile__create_nav_title">Profiel aanmaken</string>
     <string name="profile__delete_review_description">Sommige wijzigingen zijn mogelijk voltooid. Controleer de huidige status voordat je opnieuw bevestigt, of verbreek lokaal de verbinding.</string>
-    <string name="profile__disconnect_local_description">Verwijder de toegang van dit apparaat en voltooi het lokaal opschonen. Dit verwijdert het profiel niet uit Pubky.</string>
+    <string name="profile__disconnect_local_description">Verwijder de toegang van dit apparaat en voltooi de lokale opschoning. Dit brengt geen verdere wijzigingen aan in je profiel, abonnementen of toegang op de server.</string>
     <string name="profile__edit_nav_title">Profiel Bewerken</string>
     <string name="profile__nav_title">Profiel</string>
     <string name="profile__retry_load">Probeer opnieuw</string>

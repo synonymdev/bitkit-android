@@ -397,7 +397,7 @@
     <string name="profile__cleanup_pending">Vyčištění profilu není dokončeno. Odpojte se místně a odeberte přístup tohoto zařízení bez dalšího pokusu o vzdálené smazání.</string>
     <string name="profile__create_nav_title">Vytvořit profil</string>
     <string name="profile__delete_review_description">Některé změny již mohly být dokončeny. Před dalším potvrzením zkontrolujte aktuální stav nebo se odpojte místně.</string>
-    <string name="profile__disconnect_local_description">Odeberte přístup tohoto zařízení a dokončete místní vyčištění. Tím se profil z Pubky nesmaže.</string>
+    <string name="profile__disconnect_local_description">Odeberte přístup tohoto zařízení a dokončete místní vyčištění. Tím se neprovedou žádné další změny vašeho profilu, předplatných ani přístupu na serveru.</string>
     <string name="profile__edit_nav_title">Upravit profil</string>
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Zkusit znovu</string>

@@ -641,7 +641,7 @@
     <string name="profile__delete_success">Profile deleted</string>
     <string name="profile__deriving_keys">Deriving your keys…</string>
     <string name="profile__disconnect_error">Failed to disconnect profile</string>
-    <string name="profile__disconnect_local_description">Remove this device’s access and finish local cleanup. This does not delete the profile from Pubky.</string>
+    <string name="profile__disconnect_local_description">Remove this device’s access and finish local cleanup. This makes no further changes to your profile, subscriptions or access on the server.</string>
     <string name="profile__edit_bio">BIO</string>
     <string name="profile__edit_bio_placeholder">Short note. Tell a bit about yourself.</string>
     <string name="profile__edit_delete_section">DELETE</string>

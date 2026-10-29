@@ -356,7 +356,7 @@
     <string name="profile__cleanup_pending">A limpeza do perfil está incompleta. Desligue-se localmente para remover o acesso deste dispositivo sem voltar a tentar a eliminação remota.</string>
     <string name="profile__create_nav_title">Criar Perfil</string>
     <string name="profile__delete_review_description">Algumas alterações poderão ter sido concluídas. Reveja o estado atual antes de confirmar novamente ou desligue-se localmente.</string>
-    <string name="profile__disconnect_local_description">Remova o acesso deste dispositivo e conclua a limpeza local. Isto não elimina o perfil do Pubky.</string>
+    <string name="profile__disconnect_local_description">Remove o acesso deste dispositivo e conclui a limpeza local. Isto não faz mais alterações ao teu perfil, às subscrições ou ao acesso no servidor.</string>
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Tente novamente</string>
     <string name="profile__review_removal">Rever</string>

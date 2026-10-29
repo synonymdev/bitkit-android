@@ -378,7 +378,7 @@
     <string name="profile__cleanup_pending">Le nettoyage du profil est incomplet. Déconnectez-vous localement pour retirer l’accès de cet appareil sans réessayer la suppression à distance.</string>
     <string name="profile__create_nav_title">Créer un profil</string>
     <string name="profile__delete_review_description">Certaines modifications ont peut-être été effectuées. Vérifiez l’état actuel avant de confirmer à nouveau, ou déconnectez-vous localement.</string>
-    <string name="profile__disconnect_local_description">Retirez l’accès de cet appareil et terminez le nettoyage local. Cela ne supprime pas le profil de Pubky.</string>
+    <string name="profile__disconnect_local_description">Retirez l’accès de cet appareil et terminez le nettoyage local. Cela n’apporte aucune autre modification à votre profil, à vos abonnements ou à votre accès sur le serveur.</string>
     <string name="profile__edit_nav_title">Modifier le profil</string>
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Réessayer</string>
