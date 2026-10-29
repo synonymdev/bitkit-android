@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import app.cash.turbine.test
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
@@ -11,8 +10,6 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.ReceiveAdditionalLiquidityAction
 import to.bitkit.models.ReceiveLiquiditySource
-import to.bitkit.repositories.BlocktankRepo
-import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.wallets.receive.EditInvoiceVM.EditInvoiceScreenEffects
@@ -22,13 +19,11 @@ class EditInvoiceVMTest : BaseUnitTest() {
 
     private lateinit var sut: EditInvoiceVM
     private val walletRepo: WalletRepo = mock()
-    private val blocktankRepo: BlocktankRepo = mock()
 
     @Before
     fun setUp() = runBlocking {
-        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(minCjitSats = 5_000)))
         whenever(walletRepo.inboundLiquiditySats()).thenReturn(1_000u)
-        sut = EditInvoiceVM(walletRepo, blocktankRepo)
+        sut = EditInvoiceVM(walletRepo)
     }
 
     @Test
@@ -37,7 +32,6 @@ class EditInvoiceVMTest : BaseUnitTest() {
             sut.onClickContinue(
                 source = ReceiveLiquiditySource.AUTO,
                 amountSats = 10_000u,
-                isGeoBlocked = false,
             )
 
             assertEquals(
@@ -50,38 +44,16 @@ class EditInvoiceVMTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onClickContinue should emit choose amount for spending below CJIT minimum`() = test {
-        whenever(blocktankRepo.maxCjitAmountSats()).thenReturn(Result.success(100_000u))
-
-        sut.editInvoiceEffect.test {
-            sut.onClickContinue(
-                source = ReceiveLiquiditySource.SPENDING,
-                amountSats = 4_000u,
-                isGeoBlocked = false,
-            )
-
-            assertEquals(
-                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.ChooseAmount),
-                awaitItem(),
-            )
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `onClickContinue should emit create CJIT for spending amount within limits`() = test {
-        whenever(blocktankRepo.maxCjitAmountSats()).thenReturn(Result.success(100_000u))
-
+    fun `onClickContinue should emit transfer unavailable for spending above inbound`() = test {
         sut.editInvoiceEffect.test {
             sut.onClickContinue(
                 source = ReceiveLiquiditySource.SPENDING,
                 amountSats = 10_000u,
-                isGeoBlocked = false,
             )
 
             assertEquals(
                 EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(
-                    ReceiveAdditionalLiquidityAction.CreateCjit(10_000u)
+                    ReceiveAdditionalLiquidityAction.TransferUnavailable
                 ),
                 awaitItem(),
             )
@@ -90,16 +62,15 @@ class EditInvoiceVMTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onClickContinue should emit geo blocked without fetching CJIT limits`() = test {
+    fun `onClickContinue should emit none for spending within inbound`() = test {
         sut.editInvoiceEffect.test {
             sut.onClickContinue(
                 source = ReceiveLiquiditySource.SPENDING,
-                amountSats = 10_000u,
-                isGeoBlocked = true,
+                amountSats = 500u,
             )
 
             assertEquals(
-                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.GeoBlocked),
+                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.None),
                 awaitItem(),
             )
             cancelAndIgnoreRemainingEvents()
