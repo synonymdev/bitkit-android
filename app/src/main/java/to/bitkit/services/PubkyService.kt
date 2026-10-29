@@ -285,6 +285,10 @@ class PubkyService @Inject constructor(
         paykitSdkService.removeContacts(publicKeys)
     }
 
+    suspend fun removeContactsForProfile(publicKeys: List<String>): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.removeContactsForProfile(publicKeys)
+    }
+
     suspend fun resolveContactProfile(
         publicKey: String,
         allowPubkyProfileFallback: Boolean,

@@ -1325,6 +1325,7 @@
     <string name="profile__choice_loading_profile">Načítání vašeho profilu…</string>
     <string name="profile__choice_title">Vstupte do\n&lt;accent&gt;svobodného webu&lt;/accent&gt;</string>
     <string name="profile__create_error">Profil se nepodařilo vytvořit</string>
+    <string name="profile__delete_active_subscription">Před odstraněním tohoto profilu ukončete aktivní předplatná.</string>
     <string name="profile__delete_confirm_description">Smazáním profilu ho odstraníte z Pubky. Kontakty si mohou ponechat informace o profilu a platbách, které jste s nimi dříve sdíleli.</string>
     <string name="profile__delete_confirm_title">Smazat profil?</string>
     <string name="profile__delete_error_description">Data vašeho profilu se nepodařilo smazat. Zkuste to znovu, nebo tento pubky od Bitkitu odpojte.</string>

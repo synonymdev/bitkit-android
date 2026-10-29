@@ -1238,6 +1238,9 @@ class PubkyRepo @Inject constructor(
                 "Profile changed; review it before removing it"
             }
             PubkyProfileDeletion(owner, revision, snapshot)
+        }.recoverCatching {
+            if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
+            throw it
         }
 
     internal suspend fun validateProfileDeletion(deletion: PubkyProfileDeletion) {
@@ -1245,22 +1248,28 @@ class PubkyRepo @Inject constructor(
         check(isProfileOwnerCurrent(deletion.owner) && deletion.profileWriteRevision == profileWriteGeneration.get()) {
             "Profile changed; review it before removing it"
         }
-        pubkyService.validateProfileDeletion(deletion.snapshot)
+        runSuspendCatching { pubkyService.validateProfileDeletion(deletion.snapshot) }.recoverCatching {
+            if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
+            throw it
+        }.getOrThrow()
     }
 
-    internal suspend fun deleteProfile(deletion: PubkyProfileDeletion): Result<Unit> = runSuspendCatching {
+    internal suspend fun deleteProfile(deletion: PubkyProfileDeletion): Result<Unit> = runSuspendCatching<Unit> {
         identityOperations.requireRemoval()
         check(isProfileOwnerCurrent(deletion.owner)) { "Profile removal identity changed" }
         clearSessionContactProfiles()
         deleteContacts(deletion.snapshot.contacts)
         pubkyService.deletePaykitProfile(deletion.snapshot)
         profileWriteGeneration.incrementAndGet()
+    }.recoverCatching {
+        if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
+        throw it
     }
 
     private suspend fun deleteContacts(records: List<ContactRecord>) {
         if (records.isEmpty()) return
         val keys = records.map { it.publicKey.ensurePubkyPrefix() }.toSet()
-        val removedKeys = pubkyService.removeContacts(records.map { it.publicKey })
+        val removedKeys = pubkyService.removeContactsForProfile(records.map { it.publicKey })
             .map { it.publicKey.ensurePubkyPrefix() }.toSet().intersect(keys)
         pubkyStore.update { it.copy(contactProfileOverrides = it.contactProfileOverrides - removedKeys) }
         notifyBackupStateChanged()

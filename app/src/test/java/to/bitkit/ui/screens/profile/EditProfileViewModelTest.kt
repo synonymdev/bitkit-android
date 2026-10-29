@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -23,6 +24,7 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyProfileOwner
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
@@ -42,6 +44,62 @@ class EditProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val fixture = ProfileRemovalUiFixture(pubkyRepo)
+
+    @Test
+    fun `active subscriptions refuse confirmation without starting cleanup`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.prepareProfileDeletion(fixture.original))
+            .thenReturn(Result.failure(PubkyContactError.ActiveSubscription))
+        advanceUntilIdle()
+        ToastEventBus.events.test {
+            sut.showDeleteConfirmation()
+            advanceUntilIdle()
+            assertEquals("End active subscriptions first", awaitItem().description)
+        }
+        assertFalse(sut.uiState.value.showDeleteDialog)
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        assertNull(fixture.store.pendingAttempt())
+        verify(fixture.privateRepo, never()).withProfileDeletionPaused<Unit>(any())
+        verify(pubkyRepo, never()).deleteProfile(any())
+    }
+
+    @Test
+    fun `subscription beginning after confirmation prevents endpoint withdrawal and marker`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        doAnswer { throw PubkyContactError.ActiveSubscription }
+            .whenever(pubkyRepo).validateProfileDeletion(fixture.deletion)
+        ToastEventBus.events.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+            assertEquals("End active subscriptions first", awaitItem().description)
+        }
+        assertNull(fixture.store.pendingAttempt())
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        verify(fixture.privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        verify(pubkyRepo, never()).deleteProfile(any())
+    }
+
+    @Test
+    fun `late subscription rejection retains durable removal and explicit review`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.deleteProfile(fixture.deletion))
+            .thenReturn(Result.failure(PubkyContactError.ActiveSubscription))
+        advanceUntilIdle()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        sut.deleteProfile()
+        advanceUntilIdle()
+        assertNotNull(fixture.store.pendingAttempt())
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+        verify(pubkyRepo, never()).signOutForProfileRemoval()
+        sut.retryDeleteProfile()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.showDeleteDialog)
+        verify(pubkyRepo, times(1)).deleteProfile(fixture.deletion)
+    }
 
     @Test
     fun `confirmation is required and consumed once`() = test {
@@ -396,6 +454,8 @@ class EditProfileViewModelTest : BaseUnitTest() {
     ): EditProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever(context.getString(R.string.profile__delete_success)).thenReturn("Profile deleted")
+        whenever(context.getString(R.string.profile__delete_active_subscription))
+            .thenReturn("End active subscriptions first")
         whenever(context.getString(R.string.profile__unlink_success)).thenReturn("Pubky unlinked")
         if (ringCheck != null) {
             whenever { pubkyRepo.isRingAdoptedIdentity() }.doSuspendableAnswer { ringCheck.await() }

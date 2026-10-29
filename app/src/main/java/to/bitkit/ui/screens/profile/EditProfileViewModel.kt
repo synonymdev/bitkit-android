@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyProfileOwner
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
@@ -172,7 +173,7 @@ class EditProfileViewModel @Inject constructor(
     fun showDeleteConfirmation() {
         if (_uiState.value.isBusy || _uiState.value.isLoading) return
         viewModelScope.launch {
-            prepareConfirmation { removalCoordinator.prepareDeletion(screenOwner) }
+            prepareConfirmation(screenOwner) { removalCoordinator.prepareDeletion(screenOwner) }
         }
     }
 
@@ -188,7 +189,10 @@ class EditProfileViewModel @Inject constructor(
         }
     }
 
-    private suspend fun prepareConfirmation(prepare: suspend () -> Result<ProfileRemovalConfirmation>) {
+    private suspend fun prepareConfirmation(
+        owner: PubkyProfileOwner,
+        prepare: suspend () -> Result<ProfileRemovalConfirmation>,
+    ) {
         if (_uiState.value.isBusy) return
         val revision = ++preparationRevision
         _uiState.update { it.copy(isPreparingRemoval = true) }
@@ -206,11 +210,8 @@ class EditProfileViewModel @Inject constructor(
                     )
                 }
             }.onFailure { error ->
-                ToastEventBus.send(
-                    Toast.ToastType.ERROR,
-                    context.getString(R.string.profile__disconnect_error),
-                    error.message
-                )
+                if (revision != preparationRevision || !removalCoordinator.isCurrent(owner)) return@onFailure
+                showRemovalError(error)
             }
         } finally {
             _uiState.update { it.copy(isPreparingRemoval = false) }
@@ -274,7 +275,11 @@ class EditProfileViewModel @Inject constructor(
     fun retryDeleteProfile() {
         if (_uiState.value.isBusy) return
         val failure = removalFailure ?: return
-        viewModelScope.launch { prepareConfirmation { removalCoordinator.reviewAgain(failure) } }
+        viewModelScope.launch {
+            prepareConfirmation(
+                failure.confirmation.owner
+            ) { removalCoordinator.reviewAgain(failure) }
+        }
     }
 
     fun dismissDeleteFailureDialog() {
@@ -287,7 +292,7 @@ class EditProfileViewModel @Inject constructor(
         if (_uiState.value.isBusy) return
         val failure = removalFailure ?: return
         viewModelScope.launch {
-            prepareConfirmation { removalCoordinator.prepareLocalDisconnect(failure) }
+            prepareConfirmation(failure.recoveryOwner) { removalCoordinator.prepareLocalDisconnect(failure) }
         }
     }
 
@@ -321,11 +326,7 @@ class EditProfileViewModel @Inject constructor(
                         )
                     }
                 } else {
-                    ToastEventBus.send(
-                        Toast.ToastType.ERROR,
-                        context.getString(R.string.profile__disconnect_error),
-                        error.message,
-                    )
+                    if (removalCoordinator.isCurrent(confirmation.owner)) showRemovalError(error)
                 }
             }
         } finally {
@@ -337,6 +338,22 @@ class EditProfileViewModel @Inject constructor(
                     canReviewRemoval = removalFailure?.canReview == true,
                 )
             }
+        }
+    }
+
+    private suspend fun showRemovalError(error: Throwable) {
+        if (error == PubkyContactError.ActiveSubscription) {
+            ToastEventBus.send(
+                Toast.ToastType.ERROR,
+                context.getString(R.string.profile__delete_error_title),
+                context.getString(R.string.profile__delete_active_subscription),
+            )
+        } else {
+            ToastEventBus.send(
+                Toast.ToastType.ERROR,
+                context.getString(R.string.profile__disconnect_error),
+                error.message,
+            )
         }
     }
 

@@ -1341,6 +1341,7 @@
     <string name="profile__choice_loading_profile">Загрузка вашего профиля…</string>
     <string name="profile__choice_title">Войдите в\n&lt;accent&gt;свободный веб&lt;/accent&gt;</string>
     <string name="profile__create_error">Не удалось создать профиль</string>
+    <string name="profile__delete_active_subscription">Завершите активные подписки перед удалением этого профиля.</string>
     <string name="profile__delete_confirm_description">Удаление профиля удалит его из Pubky. У контактов могут остаться данные профиля и платёжные данные, которыми вы делились ранее.</string>
     <string name="profile__delete_confirm_title">Удалить Профиль?</string>
     <string name="profile__delete_error_description">Не удалось удалить данные вашего профиля. Повторите попытку или отключите этот pubky от Bitkit.</string>
