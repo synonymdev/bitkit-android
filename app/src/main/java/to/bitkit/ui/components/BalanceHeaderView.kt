@@ -4,7 +4,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,11 +20,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -55,6 +61,7 @@ fun BalanceHeaderView(
     useSwipeToHide: Boolean = true,
     showEyeIcon: Boolean = false,
     isUnavailable: Boolean = false,
+    isLoading: Boolean = false,
     testTag: String = "",
 ) {
     val isPreview = LocalInspectionMode.current
@@ -71,6 +78,7 @@ fun BalanceHeaderView(
             hideBalance = false,
             isSwipeToHideEnabled = false,
             showEyeIcon = showEyeIcon,
+            isLoading = isLoading,
             onClick = {},
             onToggleHideBalance = {},
             onRevealBalance = {},
@@ -112,6 +120,7 @@ fun BalanceHeaderView(
             hideBalance = shouldHideBalance,
             isSwipeToHideEnabled = allowSwipeToHide,
             showEyeIcon = showEyeIcon,
+            isLoading = isLoading,
             onClick = onClick ?: { currency.switchBalanceUnit() },
             onToggleHideBalance = { settings.toggleHideBalanceFromSwipe() },
             onRevealBalance = { settings.setHideBalance(false) },
@@ -140,6 +149,7 @@ fun BalanceHeader(
     hideBalance: Boolean = false,
     isSwipeToHideEnabled: Boolean = false,
     showEyeIcon: Boolean = false,
+    isLoading: Boolean = false,
     onToggleHideBalance: () -> Unit = {},
     onRevealBalance: () -> Unit = {},
     testTag: String? = null,
@@ -247,21 +257,38 @@ fun BalanceHeader(
 
             if (showEyeIcon) {
                 Spacer(modifier = Modifier.weight(1f))
-                AnimatedContent(
-                    targetState = hideBalance,
-                    transitionSpec = { BalanceAnimations.eyeIconTransition },
-                    label = "eyeIconAnimation",
-                    modifier = Modifier.size(24.dp)
-                ) { isHidden ->
-                    if (isHidden) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_eye),
-                            contentDescription = null,
-                            tint = Colors.White64,
+                Box(modifier = Modifier.size(24.dp)) {
+                    AnimatedContent(
+                        targetState = hideBalance,
+                        transitionSpec = { BalanceAnimations.eyeIconTransition },
+                        label = "eyeIconAnimation",
+                        modifier = Modifier.size(24.dp)
+                    ) { isHidden ->
+                        if (isHidden) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_eye),
+                                contentDescription = null,
+                                tint = Colors.White64,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickableAlpha { onRevealBalance() }
+                                    .testTag("ShowBalance")
+                            )
+                        }
+                    }
+                    // The eye keeps the slot while the balance is hidden.
+                    val loaderAlpha by animateFloatAsState(
+                        targetValue = if (isLoading && !hideBalance) LOADER_ALPHA else 0f,
+                        label = "balanceLoaderAlpha",
+                    )
+                    if (loaderAlpha > 0f) {
+                        val description = stringResource(R.string.wallet__balance_updating)
+                        GradientCircularProgressIndicator(
                             modifier = Modifier
                                 .size(24.dp)
-                                .clickableAlpha { onRevealBalance() }
-                                .testTag("ShowBalance")
+                                .alpha(loaderAlpha)
+                                .semantics { contentDescription = description }
+                                .testTag("TotalBalanceUpdating")
                         )
                     }
                 }
@@ -273,6 +300,7 @@ fun BalanceHeader(
 // Matches iOS: .scale(scale: 1.5) for small row, .scale(scale: 0.5) for large row
 private const val SMALL_ROW_SWAP_SCALE = 1.5f
 private const val LARGE_ROW_SWAP_SCALE = 0.5f
+private const val LOADER_ALPHA = 0.75f
 
 @Immutable
 private data class SmallRowState(
