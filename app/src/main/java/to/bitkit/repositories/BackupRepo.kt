@@ -865,7 +865,7 @@ class BackupRepo @Inject constructor(
         }
         if (isUsdtRestorePending() && !keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
             return@withContext restoreUsdtRecoveryAfterLegacyMigration(
-                connectionSession
+                connectionSession,
             ).map { emptySet<BackupCategory>() }
         }
         Logger.debug("Full restore starting", context = TAG)
@@ -921,7 +921,7 @@ class BackupRepo @Inject constructor(
                 }
                 performRestore(BackupCategory.BLOCKTANK, failedCategories) { dataBytes ->
                     val parsed = decodeBackup<BlocktankBackupV1>(String(dataBytes))
-                    blocktankRepo.restoreFromBackup(parsed)
+                    blocktankRepo.restoreFromBackup(parsed).getOrThrow()
                     parsed.createdAt
                 }
                 performRestore(BackupCategory.ACTIVITY, failedCategories) { dataBytes ->
@@ -1023,10 +1023,12 @@ class BackupRepo @Inject constructor(
                 Logger.warn("Failed to restore pubky session backup state", it, context = TAG)
             }
             .isSuccess
-        pubkyRepo.restoreContactProfileOverrides(parsed.pubkyContactProfileOverrides)
+        val overridesRestored = pubkyRepo.restoreContactProfileOverrides(parsed.pubkyContactProfileOverrides)
             .onFailure {
                 Logger.warn("Failed to restore pubky contact profile overrides", it, context = TAG)
             }
+            .isSuccess
+        val complete = persisted && sessionRestored && overridesRestored
         // App-owned, so it takes no part in the Core field migration above and never sets needsRewrite.
         // Restored names wait as pending ones until each wallet is paired again. Failing to store them
         // must not discard the rest of this envelope, which has already been applied by here.
@@ -1037,8 +1039,8 @@ class BackupRepo @Inject constructor(
 
         return RestoredCoreBackup(
             createdAt = parsed.createdAt,
-            needsRewrite = migration.changed && persisted,
-            complete = sessionRestored,
+            needsRewrite = migration.changed && complete,
+            complete = complete,
         )
     }
 
@@ -1051,11 +1053,10 @@ class BackupRepo @Inject constructor(
             ),
         )
         val parsed = decodeBackup<ActivityBackupV1>(migration.json)
-        val persisted = activityRepo.restoreFromBackup(parsed)
-            .onFailure { Logger.warn("Skipped activity backup rewrite after a failed restore", context = TAG) }
-            .isSuccess
+        // Failing here reports ACTIVITY as not restored and leaves its stored backup in place.
+        activityRepo.restoreFromBackup(parsed).getOrThrow()
 
-        return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)
+        return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed)
     }
 
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
@@ -1317,7 +1318,8 @@ private data class CoreFieldMigration(
  * @param createdAt the restored envelope's timestamp, used as the category's synced marker.
  * @param needsRewrite whether the envelope was migrated **and** Core persisted the result, meaning its VSS
  * backup can safely be rewritten with current entries.
- * @param complete false when part of the envelope, such as the Pubky profile session, failed to restore.
+ * @param complete false when part of the envelope, such as the Pubky profile session, failed to restore;
+ * such an envelope is never rewritten.
  */
 private data class RestoredCoreBackup(
     val createdAt: Long,

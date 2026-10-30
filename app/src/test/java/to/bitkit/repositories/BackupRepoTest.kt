@@ -1636,7 +1636,8 @@ class BackupRepoTest : BaseUnitTest() {
         stubMetadataRestore(envelope = iosFixture("metadata"))
         whenever { pubkyRepo.restoreSessionBackupState(anyOrNull()) }
             .thenReturn(Result.failure(BackupRepoTestError("pubky")))
-        stubRestoreEnvelope(BackupCategory.BLOCKTANK, "{not json")
+        stubRestoreEnvelope(BackupCategory.BLOCKTANK, iosFixture("blocktank"))
+        whenever { blocktankRepo.restoreFromBackup(any()) }.thenReturn(Result.failure(BackupRepoTestError("core")))
 
         val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
 
@@ -2010,7 +2011,7 @@ class BackupRepoTest : BaseUnitTest() {
 
         val result = sut.performFullRestoreFromLatestBackup()
 
-        assertTrue(result.isSuccess)
+        assertEquals(setOf(BackupCategory.ACTIVITY), result.getOrThrow())
         // Rewriting here would replace the legacy backup with whatever Core happens to hold.
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
     }
@@ -2024,8 +2025,8 @@ class BackupRepoTest : BaseUnitTest() {
 
         val result = sut.performFullRestoreFromLatestBackup()
 
-        // Only WALLET is fatal, so the restore still reports success overall.
-        assertTrue(result.isSuccess)
+        // Only WALLET is fatal, so the restore still succeeds and reports the category.
+        assertEquals(setOf(BackupCategory.ACTIVITY), result.getOrThrow())
         // The legacy slice stays unmigrated and no longer decodes, so nothing of this category is applied.
         verifyBlocking(activityRepo, never()) { restoreFromBackup(any()) }
         // Nothing was restored, so the stored backup must not be replaced.

@@ -12,6 +12,7 @@ import org.junit.Test
 import to.bitkit.data.SettingsData
 import to.bitkit.di.json
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
@@ -35,10 +36,11 @@ class BackupJsonTest {
         val settings = decodeSettingsBackup(iosFixture("settings")).settings
 
         assertEquals(listOf("nativeSegwit", "taproot"), settings.addressTypesToMonitor)
-        assertEquals(PrimaryDisplay.BITCOIN, settings.primaryDisplay)
-        assertEquals(BitcoinDisplayUnit.MODERN, settings.displayUnit)
-        assertEquals(TransactionSpeed.Medium, settings.defaultTransactionSpeed)
-        assertEquals(CoinSelectionPreference.BranchAndBound, settings.coinSelectPreference)
+        assertEquals(PrimaryDisplay.FIAT, settings.primaryDisplay)
+        assertEquals(BitcoinDisplayUnit.CLASSIC, settings.displayUnit)
+        assertEquals(TransactionSpeed.Fast, settings.defaultTransactionSpeed)
+        assertEquals(CoinSelectionPreference.LargestFirst, settings.coinSelectPreference)
+        assertEquals(false, settings.coinSelectAuto)
         assertEquals("tcp://192.168.1.10:60001", settings.electrumServer)
         assertEquals(true, settings.backupVerified)
     }
@@ -51,6 +53,11 @@ class BackupJsonTest {
 
         assertEquals(PrimaryDisplay.FIAT, settings.primaryDisplay)
         assertEquals(SettingsData().quickPayAmount, settings.quickPayAmount)
+    }
+
+    @Test
+    fun `rejects a settings envelope without settings`() {
+        assertFails { decodeSettingsBackup("""{"version":1,"createdAt":1}""") }
     }
 
     @Test

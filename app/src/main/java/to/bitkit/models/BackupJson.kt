@@ -50,7 +50,7 @@ internal fun <T> decodeBackup(serializer: KSerializer<T>, raw: String): T {
  */
 internal fun decodeSettingsBackup(raw: String): SettingsBackupV1 {
     val root = backupJson.parseToJsonElement(raw).jsonObject
-    val settings = (root["settings"] as? JsonObject).orEmpty()
+    val settings = requireNotNull(root["settings"] as? JsonObject) { "Settings backup has no settings object" }
     val serializer = SettingsData.serializer()
     val readable = settings.entries.fold(JsonObject(emptyMap())) { kept, (key, value) ->
         val candidate = JsonObject(kept + (key to value.asAndroidSetting(key)))
