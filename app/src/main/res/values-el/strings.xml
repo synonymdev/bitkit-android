@@ -1303,6 +1303,7 @@
     <string name="profile__choice_loading_profile">Φόρτωση του προφίλ σου…</string>
     <string name="profile__choice_title">Μπες στον\n&lt;accent&gt;ελεύθερο ιστό&lt;/accent&gt;</string>
     <string name="profile__create_error">Αποτυχία δημιουργίας προφίλ</string>
+    <string name="profile__delete_active_subscription">Οι ενεργές συνδρομές εμποδίζουν την αφαίρεση αυτού του προφίλ.</string>
     <string name="profile__delete_confirm_description">Η διαγραφή του προφίλ σου το αφαιρεί από το Pubky. Οι επαφές μπορεί να διατηρούν ακόμα πληροφορίες προφίλ και πληρωμών που τους κοινοποιήθηκαν παλαιότερα.</string>
     <string name="profile__delete_confirm_title">Διαγραφή προφίλ;</string>
     <string name="profile__delete_error_description">Δεν μπορέσαμε να διαγράψουμε τα δεδομένα του προφίλ σου. Δοκίμασε ξανά ή αποσύνδεσε αυτό το pubky από το Bitkit.</string>

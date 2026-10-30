@@ -1320,6 +1320,7 @@
     <string name="profile__choice_loading_profile">Wczytywanie Twojego profilu…</string>
     <string name="profile__choice_title">Wejdź do\n&lt;accent&gt;wolnej sieci&lt;/accent&gt;</string>
     <string name="profile__create_error">Nie udało się utworzyć profilu</string>
+    <string name="profile__delete_active_subscription">Aktywne subskrypcje uniemożliwiają usunięcie tego profilu.</string>
     <string name="profile__delete_confirm_description">Usunięcie profilu usuwa go z Pubky. Kontakty mogą nadal przechowywać udostępnione im wcześniej dane profilu i płatności.</string>
     <string name="profile__delete_confirm_title">Usunąć profil?</string>
     <string name="profile__delete_error_description">Nie udało się usunąć danych Twojego profilu. Spróbuj ponownie lub odłącz ten pubky od Bitkit.</string>

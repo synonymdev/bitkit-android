@@ -207,6 +207,14 @@ class PubkyService @Inject constructor(
         paykitSdkService.uploadProfileAvatar(bytes, contentType)
     }
 
+    suspend fun checkProfileDeletionAllowed() = ServiceQueue.CORE.background {
+        paykitSdkService.checkProfileDeletionAllowed()
+    }
+
+    suspend fun removeContactsForProfile(publicKeys: List<String>): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.removeContactsForProfile(publicKeys)
+    }
+
     suspend fun deletePaykitProfile() = ServiceQueue.CORE.background {
         paykitSdkService.deletePaykitProfile()
     }

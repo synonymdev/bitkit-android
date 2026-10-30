@@ -89,6 +89,7 @@ sealed class PubkyContactError(message: String) : AppError(message) {
     data object CannotAddSelf : PubkyContactError("Cannot add your own pubky as a contact")
     data object InvalidFormat : PubkyContactError("Invalid pubky key format")
     data object ActiveSubscription : PubkyContactError("Contact has an active subscription")
+    class ActiveProfileSubscriptions(val endsAtMillis: Long?) : PubkyContactError("Profile has active subscriptions")
     data object SignInChanged : PubkyContactError("Pubky sign-in changed while saving the contact")
 }
 
@@ -1104,49 +1105,51 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    suspend fun checkProfileDeletionAllowed(): Result<Unit> = runSuspendCatching {
+        withContext(ioDispatcher) { pubkyService.checkProfileDeletionAllowed() }
+    }.recoverCatching {
+        generateSequence(it) { error -> error.cause }
+            .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
+            .firstOrNull()?.let { error -> throw error }
+        if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
+        throw it
+    }
+
     suspend fun deleteProfile(): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
             requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
+            checkProfileDeletionAllowed().getOrThrow()
             clearSessionContactProfiles()
             deleteAllContacts()
-            runSuspendCatching {
-                pubkyService.deletePaykitProfile()
-            }.getOrElse {
-                if (!it.isMissingPubkyData()) {
-                    throw it
-                }
-                Logger.info("Continuing sign out, bitkit profile storage already missing", context = TAG)
-            }
+            pubkyService.deletePaykitProfile()
             profileWriteGeneration.incrementAndGet()
         }
         settingsStore.update { it.paykitDisabled(markPublicCleanupPending = it.hasPaykitState()) }
         signOut().getOrThrow()
+    }.recoverCatching {
+        generateSequence(it) { error -> error.cause }
+            .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
+            .firstOrNull()?.let { error -> throw error }
+        if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
+        throw it
     }
 
     private suspend fun deleteAllContacts() {
-        val records = runSuspendCatching {
-            pubkyService.contactRecords()
-        }.getOrElse {
-            if (!it.isMissingPubkyData()) throw it
-            emptyList()
-        }
-        runSuspendCatching {
-            val removed = pubkyService.removeContacts(records.map { it.publicKey })
-            if (removed.size != records.size) {
-                Logger.warn("Retained contacts that could not be removed during profile deletion", context = TAG)
-            }
-        }.onFailure {
-            Logger.warn("Failed to delete contacts", it, context = TAG)
-        }
-        pubkyStore.update { it.copy(contactProfileOverrides = emptyMap()) }
+        val records = pubkyService.contactRecords()
+        if (records.isEmpty()) return
+        val keys = records.map { it.publicKey.ensurePubkyPrefix() }.toSet()
+        val removedKeys = pubkyService.removeContactsForProfile(records.map { it.publicKey })
+            .map { it.publicKey.ensurePubkyPrefix() }.toSet().intersect(keys)
+        pubkyStore.update { it.copy(contactProfileOverrides = it.contactProfileOverrides - removedKeys) }
         notifyBackupStateChanged()
         synchronized(contactsLock) {
             cancelContactScreenLookups()
-            updateContacts { emptyList() }
+            updateContacts { current -> current.filterNot { it.publicKey in removedKeys } }
         }
         markContactsLoaded()
+        if (removedKeys != keys) throw PrivatePaykitError.PrivateUnavailable
         Logger.info("Deleted all contacts", context = TAG)
     }
 
@@ -2279,22 +2282,6 @@ class PubkyRepo @Inject constructor(
         if (startsWith(PUBKY_PREFIX)) this else "$PUBKY_PREFIX$this"
 
     private fun redacted(publicKey: String): String = PubkyPublicKeyFormat.redacted(publicKey)
-
-    private fun Throwable.isMissingPubkyData(): Boolean {
-        val fullMessage = buildErrorMessage()
-        return fullMessage.contains("404") ||
-            fullMessage.contains("not found", ignoreCase = true) ||
-            fullMessage.contains("missing", ignoreCase = true)
-    }
-
-    private fun Throwable.buildErrorMessage(): String =
-        buildString {
-            append(message.orEmpty())
-            cause?.message?.takeIf { it.isNotBlank() }?.let {
-                append(" ")
-                append(it)
-            }
-        }
 
     // endregion
 }
