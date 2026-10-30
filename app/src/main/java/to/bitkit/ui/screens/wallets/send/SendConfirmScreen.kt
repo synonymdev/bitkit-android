@@ -37,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -368,8 +369,7 @@ private fun ContentRunning(
     val isHardwareFeeLoading = uiState.hardwareWalletId != null && uiState.onchainFeeUi.isLoading
 
     val accentColor = when {
-        preparingRequest?.acceptedPaymentEndpointIdentifiers?.toSet() == setOf(MethodId.UsdtArbitrum.rawValue) ->
-            Colors.Usdt
+        preparingRequest != null -> preparingRequest.preparingAccentColor()
         uiState.payMethod == SendMethod.LIGHTNING -> Colors.Purple
         else -> Colors.Brand
     }
@@ -986,6 +986,19 @@ private fun sendUiState() = SendUiState(
         description = "Some invoice description",
     ),
 )
+
+private fun PaykitPaymentRequest.preparingAccentColor(): Color {
+    val methods = acceptedPaymentEndpointIdentifiers.mapNotNull { id ->
+        MethodId.entries.firstOrNull { it.rawValue == id }
+    }
+    return when {
+        methods.isEmpty() -> Colors.White64
+        methods.all { it == MethodId.UsdtArbitrum } -> Colors.Usdt
+        methods.all { it == MethodId.Bolt11 || it == MethodId.Lnurl } -> Colors.Purple
+        methods.all { it.isOnchain } -> Colors.Brand
+        else -> Colors.White64
+    }
+}
 
 @Preview(showSystemUi = true, group = "onchain")
 @Composable
