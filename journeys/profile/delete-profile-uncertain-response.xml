@@ -1,0 +1,17 @@
+<journey name="profile deletion uncertain response">
+  <description>
+    Requires a disposable test identity and a controlled homeserver proxy; never use a personal profile.
+    Configure the proxy to accept one profile deletion but lose its acknowledgement, retaining a redacted
+    request counter. This is a fault-injection fixture requirement, not evidence that this journey has run.
+    Normal SDK recovery may retry an individual request only after a confirmed authentication rejection;
+    the app must not restart contact cleanup and profile deletion because a request has an uncertain outcome.
+  </description>
+  <actions>
+    <action>Open Edit Profile and confirm deletion</action>
+    <action>Drop the acknowledgement after the server accepts the profile deletion</action>
+    <action>Verify failure options are shown and no success notification or onboarding navigation occurs</action>
+    <action>Wait through the network timeout and verify the app starts no second contact cleanup, profile deletion or sign-in</action>
+    <action>Cancel the failure dialog and verify no mutation is retried</action>
+    <action>Restart the app without choosing Retry and verify it does not automatically repeat the deletion</action>
+  </actions>
+</journey>
