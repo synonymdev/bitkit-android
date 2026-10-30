@@ -8,6 +8,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -59,6 +60,19 @@ class PaykitAllowanceStoreTest : BaseUnitTest() {
         assertEquals(setOf("kept"), sut.load(other).notifiedRequestIds)
         assertEquals(before + 1, sut.backupStateVersion.value)
         assertEquals(2, sut.backupSnapshot().size)
+    }
+
+    @Test
+    fun `state saved before the automatic payment checks still loads`() = test {
+        val key = PubkyPublicKeyFormat.normalized(identity) ?: identity
+        stored = """{"statesByIdentity":{"$key":{"notifiedRequestIds":["request-1"]}}}"""
+
+        val state = sut.load(identity)
+
+        assertEquals(setOf("request-1"), state.notifiedRequestIds)
+        assertEquals(null, state.ledgerRevisionFloor)
+        assertEquals(emptyList(), state.automaticSpends)
+        assertEquals(emptySet(), state.endedAllowanceIds)
     }
 
     @Test
