@@ -1,6 +1,8 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.PaymentState
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Before
 import org.junit.Rule
@@ -9,6 +11,7 @@ import org.junit.rules.TemporaryFolder
 import org.lightningdevkit.ldknode.Event
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -46,7 +49,7 @@ class ArkadeRepoTest : BaseUnitTest() {
     @Before
     fun setUp() {
         Env.initAppStoragePath(tempFolder.root.absolutePath)
-        whenever { arkadeService.connect(any(), anyOrNull()) }.thenReturn(ArkadeInfo("ark1", "bc1p", "bitcoin"))
+        whenever { arkadeService.connect(any(), any(), anyOrNull()) }.thenReturn(ArkadeInfo("ark1", "bc1p", "bitcoin"))
         whenever { arkadeService.balance() }.thenReturn(ArkadeBalance(available = 1_000))
         whenever { arkadeService.history() }.thenReturn(emptyList())
         whenever { arkadeService.vtxos() }.thenReturn(emptyList())
@@ -63,10 +66,10 @@ class ArkadeRepoTest : BaseUnitTest() {
     @Test
     fun `scans the operator for funds only on the wallet's first start`() = test {
         createSut().start(0)
-        verify(arkadeService).connect(eq(true), anyOrNull())
+        verify(arkadeService).connect(any(), eq(true), anyOrNull())
 
         createSut().start(0)
-        verify(arkadeService).connect(eq(false), anyOrNull())
+        verify(arkadeService).connect(any(), eq(false), anyOrNull())
     }
 
     @Test
@@ -132,6 +135,21 @@ class ArkadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `keeps a send that needs recovery pending`() = test {
+        val sut = createSut()
+        sut.start(0)
+
+        sut.nodeEvents.test {
+            arkadeEvents.emit(ArkadeEvent.Swap(swap(direction = "send", outcome = "needs_recovery")))
+            expectNoEvents()
+        }
+        argumentCaptor<Activity> {
+            verify(activityRepo).upsertActivity(capture())
+            assertEquals(PaymentState.PENDING, assertIs<Activity.Lightning>(firstValue).v1.status)
+        }
+    }
+
+    @Test
     fun `refuses to pay an invoice without an amount`() = test {
         val result = createSut().payInvoice("lnbc1notaninvoice", 1_000uL)
 
@@ -153,7 +171,7 @@ class ArkadeRepoTest : BaseUnitTest() {
 
         sut.restoreExitBackup(ArkadeExitBackupV1(createdAt = 1, network = "bitcoin", exitState = "{\"version\":1}"), 0)
 
-        verify(arkadeService).connect(eq(true), eq("{\"version\":1}"))
+        verify(arkadeService).connect(any(), eq(true), eq("{\"version\":1}"))
         assertFalse(File(Env.arkadeExitRestorePath(0)).exists())
     }
 

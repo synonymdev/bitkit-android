@@ -91,7 +91,7 @@ class ArkadeRepo @Inject constructor(
             val restoreFile = File(Env.arkadeExitRestorePath(walletIndex))
             val backup = restoreFile.takeIf { it.exists() }?.readText()
             val startedMarker = File(Env.arkadeStartedMarkerPath(walletIndex))
-            arkadeService.connect(restore = !startedMarker.exists(), backup = backup)
+            arkadeService.connect(walletIndex, restore = !startedMarker.exists(), backup = backup)
             startedMarker.apply { parentFile?.mkdirs() }.writeText(nowMillis().toString())
             if (backup != null) {
                 restoreFile.delete()
@@ -117,7 +117,7 @@ class ArkadeRepo @Inject constructor(
 
     suspend fun wipe(walletIndex: Int) = withContext(bgDispatcher) {
         runSuspendCatching {
-            arkadeService.wipeStorage()
+            arkadeService.wipeStorage(walletIndex)
             File(Env.arkadeExitRestorePath(walletIndex)).delete()
             File(Env.arkadeStartedMarkerPath(walletIndex)).delete()
         }.onFailure { Logger.error("Failed to wipe Arkade wallet", it, context = TAG) }
@@ -340,12 +340,6 @@ class ArkadeRepo @Inject constructor(
             when (event) {
                 is ArkadeEvent.Swap -> onSwap(event.swap)
                 is ArkadeEvent.History -> onHistory(event.entries)
-                ArkadeEvent.Restarted -> {
-                    Logger.warn("Restarting Arkade wallet after its WebView renderer stopped", context = TAG)
-                    _state.update { it.copy(isReady = false) }
-                    arkadeService.reconnect()
-                    refresh()
-                }
             }
         }.onFailure {
             Logger.error("Failed to handle Arkade event '$event'", it, context = TAG)

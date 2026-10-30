@@ -1,80 +1,235 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.ArkadeEventListener
+import com.synonym.bitkitcore.ArkadeNetwork
+import com.synonym.bitkitcore.ArkadeStartParams
+import com.synonym.bitkitcore.arkadeBalance
+import com.synonym.bitkitcore.arkadeExportState
+import com.synonym.bitkitcore.arkadeHistory
+import com.synonym.bitkitcore.arkadeInfo
+import com.synonym.bitkitcore.arkadeLightningAddress
+import com.synonym.bitkitcore.arkadeOffboard
+import com.synonym.bitkitcore.arkadePay
+import com.synonym.bitkitcore.arkadeQuotePay
+import com.synonym.bitkitcore.arkadeReceive
+import com.synonym.bitkitcore.arkadeRenew
+import com.synonym.bitkitcore.arkadeSetListener
+import com.synonym.bitkitcore.arkadeSettle
+import com.synonym.bitkitcore.arkadeStart
+import com.synonym.bitkitcore.arkadeStop
+import com.synonym.bitkitcore.arkadeSwaps
+import com.synonym.bitkitcore.arkadeVtxos
+import com.synonym.bitkitcore.arkadeWipe
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import org.lightningdevkit.ldknode.Network
+import to.bitkit.data.keychain.Keychain
+import to.bitkit.di.IoDispatcher
+import to.bitkit.env.Env
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.synonym.bitkitcore.ArkadeBalance as CoreArkadeBalance
+import com.synonym.bitkitcore.ArkadeHistoryEntry as CoreArkadeHistoryEntry
+import com.synonym.bitkitcore.ArkadeInfo as CoreArkadeInfo
+import com.synonym.bitkitcore.ArkadeSwap as CoreArkadeSwap
+import com.synonym.bitkitcore.ArkadeVtxo as CoreArkadeVtxo
 
 /**
- * Arkade's wallet and Lightning client for Bitkit. The engine is a Rust binding on `arkade-os/rust-sdk` (ark-rs) over
- * UniFFI, which adds the Arkade Intents Lightning client the Rust SDK lacks; until it lands, Arkade stays off and
- * every flow takes its channel path. The wallet derives its keys from the Bitkit seed on BIP86 account 1
- * (`m/86'/0'/1'`), since account 0 holds Savings' Taproot keys.
+ * Arkade's wallet and Lightning client for Bitkit, run by bitkit-core's Rust Arkade module (ark-rs plus the Arkade
+ * Intents Lightning client). The wallet derives its keys from the Bitkit seed on BIP86 account 1 (`m/86'/0'/1'`),
+ * since account 0 holds Savings' Taproot keys.
  */
 @Singleton
-class ArkadeService @Inject constructor() {
+class ArkadeService @Inject constructor(
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val keychain: Keychain,
+) {
+    companion object {
+        private const val TAG = "ArkadeService"
+
+        /** The network name core reports in [ArkadeInfo.network] and backups record. */
+        private const val NETWORK_NAME = "bitcoin"
+    }
+
+    private val mutex = Mutex()
+    private var info: ArkadeInfo? = null
+    private var dataDir: String? = null
+    private var isListening = false
+
     private val _events = MutableSharedFlow<ArkadeEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<ArkadeEvent> = _events.asSharedFlow()
 
-    val isSupported: Boolean get() = false
+    private val listener = object : ArkadeEventListener {
+        override fun onHistory(entries: List<CoreArkadeHistoryEntry>, balance: CoreArkadeBalance) {
+            _events.tryEmit(ArkadeEvent.History(entries.map { it.toApp() }))
+        }
 
-    val isConnected: Boolean get() = false
-
-    val networkName: String? get() = null
+        override fun onSwap(swap: CoreArkadeSwap) {
+            _events.tryEmit(ArkadeEvent.Swap(swap.toApp()))
+        }
+    }
 
     /**
-     * Starts the wallet: [restore] scans the operator for the wallet's past outputs and swaps, which a wallet
-     * restored from its phrase needs; [backup] is a state export to import before the wallet opens its storage.
+     * Arkade runs on mainnet against Ark Labs' operator; bitkit-core has no Lightning swap client or LNURL server on
+     * mutinynet, so other networks keep their channel paths.
      */
-    @Suppress("UnusedParameter")
-    suspend fun connect(restore: Boolean, backup: String?): ArkadeInfo = throw ArkadeError.Unsupported()
+    val isSupported: Boolean get() = Env.network == Network.BITCOIN
 
-    suspend fun disconnect() = Unit
+    val isConnected: Boolean get() = info != null
 
-    suspend fun wipeStorage() = Unit
+    val networkName: String? get() = if (isSupported) NETWORK_NAME else null
 
-    suspend fun reconnect() = Unit
+    /**
+     * Starts the wallet in [walletIndex]'s storage: [restore] scans the operator for the wallet's past outputs and
+     * swaps, which a wallet restored from its phrase needs; [backup] is a state export to import before the wallet
+     * opens its storage.
+     */
+    suspend fun connect(walletIndex: Int, restore: Boolean, backup: String?): ArkadeInfo = mutex.withLock {
+        info?.let { return@withLock it }
+        if (!isSupported) throw ArkadeError.Unsupported()
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        if (!isListening) {
+            arkadeSetListener(listener)
+            isListening = true
+        }
+        val path = Env.arkadeStoragePath(walletIndex)
+        val params = ArkadeStartParams(
+            dataDir = path,
+            mnemonic = mnemonic,
+            passphrase = passphrase,
+            network = ArkadeNetwork.BITCOIN,
+            restore = restore,
+            backup = backup,
+        )
+        val started = arkadeStart(params).toApp()
+        dataDir = path
+        info = started
+        Logger.info("Connected Arkade wallet on '$NETWORK_NAME'", context = TAG)
+        started
+    }
 
-    suspend fun info(): ArkadeInfo = throw ArkadeError.Unsupported()
+    suspend fun disconnect() = mutex.withLock {
+        arkadeStop()
+        info = null
+        dataDir = null
+        Logger.info("Disconnected Arkade wallet", context = TAG)
+    }
 
-    suspend fun balance(): ArkadeBalance = throw ArkadeError.Unsupported()
+    /** Stops the wallet and deletes its storage for [walletIndex]. */
+    suspend fun wipeStorage(walletIndex: Int) = mutex.withLock {
+        if (!isSupported) return@withLock
+        arkadeWipe(Env.arkadeStoragePath(walletIndex))
+        info = null
+        dataDir = null
+    }
 
-    suspend fun vtxos(): List<ArkadeVtxo> = throw ArkadeError.Unsupported()
+    suspend fun info(): ArkadeInfo = arkadeInfo().toApp()
 
-    suspend fun history(): List<ArkadeHistoryEntry> = throw ArkadeError.Unsupported()
+    suspend fun balance(): ArkadeBalance = arkadeBalance().toApp()
 
-    suspend fun swaps(): List<ArkadeSwap> = throw ArkadeError.Unsupported()
+    suspend fun vtxos(): List<ArkadeVtxo> = arkadeVtxos().map { it.toApp() }
+
+    suspend fun history(): List<ArkadeHistoryEntry> = arkadeHistory().map { it.toApp() }
+
+    suspend fun swaps(): List<ArkadeSwap> = arkadeSwaps().map { it.toApp() }
 
     /** An invoice for exactly [amountSats]: the payer pays it, and the wallet gets it less the solver's fee. */
-    @Suppress("UnusedParameter")
-    suspend fun receive(amountSats: ULong, maxFeeSats: ULong? = null): ArkadeSwap = throw ArkadeError.Unsupported()
+    suspend fun receive(amountSats: ULong): ArkadeSwap = arkadeReceive(amountSats).toApp()
 
-    @Suppress("UnusedParameter")
-    suspend fun quotePay(bolt11: String): ArkadePayQuote = throw ArkadeError.Unsupported()
+    suspend fun quotePay(bolt11: String): ArkadePayQuote = arkadeQuotePay(bolt11).let {
+        ArkadePayQuote(feeSat = it.feeSat.toLong(), giveSat = it.giveSat.toLong(), takeSat = it.takeSat.toLong())
+    }
 
     /** Funds the lockup for [bolt11] and returns at once; the outcome arrives as a swap event. */
-    @Suppress("UnusedParameter")
-    suspend fun pay(bolt11: String, maxFeeSats: ULong?): ArkadeSwap = throw ArkadeError.Unsupported()
+    suspend fun pay(bolt11: String, maxFeeSats: ULong?): ArkadeSwap = arkadePay(bolt11, maxFeeSats).toApp()
 
     /** Boards confirmed on-chain deposits now, instead of on the wallet's next one-minute pass. */
-    suspend fun settle(): String? = throw ArkadeError.Unsupported()
+    suspend fun settle(): String? = arkadeSettle()
 
     /** Renews outputs nearing their batch expiry; the wallet also does it by itself 3 days before expiry. */
-    suspend fun renew(): String? = throw ArkadeError.Unsupported()
+    suspend fun renew(): String? = arkadeRenew()
 
     /** Moves [amountSats], or everything when null, to the on-chain [address] in the next batch. */
-    @Suppress("UnusedParameter")
-    suspend fun offboard(address: String, amountSats: ULong? = null): String = throw ArkadeError.Unsupported()
+    suspend fun offboard(address: String, amountSats: ULong? = null): String = arkadeOffboard(address, amountSats)
 
-    /** The wallet's Lightning address, claimed on first use and found again from the seed. */
-    suspend fun lightningAddress(): ArkadeLightningAddress? = throw ArkadeError.Unsupported()
+    /** The wallet's Lightning address on Ark Labs' LNURL server, claimed on first use and found again from the seed. */
+    suspend fun lightningAddress(): ArkadeLightningAddress? = arkadeLightningAddress().let {
+        ArkadeLightningAddress(handle = it.handle, lightningAddress = it.lightningAddress, lnurl = it.lnurl)
+    }
 
     /** Everything the wallet keeps locally, as one JSON document, for the VSS backup. */
-    suspend fun exportState(): String = throw ArkadeError.Unsupported()
+    suspend fun exportState(): String = withContext(ioDispatcher) {
+        arkadeExportState(dataDir ?: throw ArkadeError.NotConnected())
+    }
 }
+
+private fun CoreArkadeInfo.toApp() = ArkadeInfo(
+    arkAddress = arkAddress,
+    boardingAddress = boardingAddress,
+    network = network,
+    dust = dust.toLong(),
+    unilateralExitDelay = unilateralExitDelay.toLong(),
+    boardingExitDelay = boardingExitDelay.toLong(),
+    delegate = delegate,
+)
+
+private fun CoreArkadeBalance.toApp() = ArkadeBalance(
+    available = available.toLong(),
+    settled = settled.toLong(),
+    preconfirmed = preconfirmed.toLong(),
+    recoverable = recoverable.toLong(),
+    boardingConfirmed = boardingConfirmed.toLong(),
+    boardingUnconfirmed = boardingUnconfirmed.toLong(),
+    total = total.toLong(),
+)
+
+private fun CoreArkadeVtxo.toApp() = ArkadeVtxo(
+    txid = txid,
+    vout = vout.toInt(),
+    value = value.toLong(),
+    state = state,
+    batchExpiry = batchExpiry?.toLong(),
+    createdAt = createdAt?.toLong(),
+    isPreconfirmed = isPreconfirmed,
+    isSwept = isSwept,
+)
+
+private fun CoreArkadeHistoryEntry.toApp() = ArkadeHistoryEntry(
+    key = key,
+    boardingTxid = boardingTxid,
+    commitmentTxid = commitmentTxid,
+    arkTxid = arkTxid,
+    type = txType,
+    tag = tag,
+    amount = amount.toLong(),
+    settled = settled,
+    createdAt = createdAt.toLong(),
+)
+
+private fun CoreArkadeSwap.toApp() = ArkadeSwap(
+    id = id,
+    direction = direction,
+    outcome = outcome,
+    giveSat = giveSat.toLong(),
+    takeSat = takeSat.toLong(),
+    feeSat = feeSat.toLong(),
+    bolt11 = bolt11.ifEmpty { null },
+    paymentHash = paymentHash.ifEmpty { null },
+    createdAt = createdAt.toLong().takeIf { it > 0 },
+    updatedAt = updatedAt.toLong().takeIf { it > 0 },
+    blockedReason = blockedReason,
+    expiresAt = expiresAt.toLong().takeIf { it > 0 },
+)
 
 @Serializable
 data class ArkadeInfo(
@@ -154,7 +309,6 @@ data class ArkadeLightningAddress(val handle: String, val lightningAddress: Stri
 sealed interface ArkadeEvent {
     data class Swap(val swap: ArkadeSwap) : ArkadeEvent
     data class History(val entries: List<ArkadeHistoryEntry>) : ArkadeEvent
-    data object Restarted : ArkadeEvent
 }
 
 sealed class ArkadeError(message: String) : AppError(message) {
