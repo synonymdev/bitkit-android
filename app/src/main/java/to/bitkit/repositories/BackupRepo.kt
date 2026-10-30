@@ -773,8 +773,8 @@ class BackupRepo @Inject constructor(
         // propagate and fail the backup rather than upload an empty set over the stored ones.
         val hwWalletNames = hwWalletStore.backupSnapshot().takeIf { it.isNotEmpty() }
         val cacheData = cacheStore.data.first()
-        val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrDefault(null)
-        val pubkyContactProfileOverrides = pubkyRepo.snapshotContactProfileOverrides().getOrDefault(null)
+        val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrThrow()
+        val pubkyContactProfileOverrides = pubkyRepo.snapshotContactProfileOverrides().getOrThrow()
 
         val payload = MetadataBackupV1(
             createdAt = currentTimeMillis(),
@@ -812,6 +812,9 @@ class BackupRepo @Inject constructor(
         val privateRepo = privatePaykitRepo.get()
         val privateVersion = privateRepo.backupStateVersion.value
         val paykitSdkBackupState = privateRepo.backupSnapshot().getOrThrow()
+        check(paykitSdkBackupState.state != null || !pubkyRepo.hasIdentityForBackup()) {
+            "Paykit identity is unavailable for backup"
+        }
         val reservationRepo = privatePaykitAddressReservationRepo.get()
         val reservationVersion = reservationRepo.backupStateVersion.value
         val privateReservations = reservationRepo.backupSnapshot().getOrThrow()

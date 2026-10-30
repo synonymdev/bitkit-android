@@ -333,6 +333,8 @@ class PubkyRepo @Inject constructor(
     }
 
     private val initializationReady = CompletableDeferred<Unit>()
+    private val restoreInitializationLock = Any()
+    private var restoreInitialization: Pair<Long, Job>? = null
 
     init {
         scope.launch { initialize() }.invokeOnCompletion {
@@ -350,16 +352,56 @@ class PubkyRepo @Inject constructor(
         runSuspendCatching { pubkyService.republishIdentityIfNeeded(publicKey.value) }
     }
 
-    suspend fun initialize() = withContext(ioDispatcher) {
-        val restored = initializeMutex.withLock { initializeSession() }
+    suspend fun initialize() = initializeForRevision()
+
+    fun scheduleInitializationAfterRestore() {
+        val job = synchronized(restoreInitializationLock) {
+            val revision = storedIdentityRevision.get()
+            restoreInitialization?.takeIf { it.first == revision && !it.second.isCompleted }?.second
+                ?: scope.launch(start = CoroutineStart.LAZY) {
+                    initializeForRevision(revision)
+                }.also { pending ->
+                    restoreInitialization = revision to pending
+                    pending.invokeOnCompletion {
+                        synchronized(restoreInitializationLock) {
+                            if (restoreInitialization?.second === pending) restoreInitialization = null
+                        }
+                    }
+                }
+        }
+        job.start()
+    }
+
+    private suspend fun initializeForRevision(
+        expectedRevision: Long? = null,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        val (restored, revision) = initializeMutex.withLock {
+            if (expectedRevision != null && expectedRevision != storedIdentityRevision.get()) {
+                return@withContext Result.success(Unit)
+            }
+            val restored = if (expectedRevision != null && _publicKey.value != null) {
+                true
+            } else {
+                initializeSession()
+            }
+            restored to storedIdentityRevision.get()
+        }
+        if (revision != storedIdentityRevision.get()) return@withContext Result.success(Unit)
         if (restored) loadIdentityData()
+        if (revision != storedIdentityRevision.get()) return@withContext Result.success(Unit)
         checkAdoptedSource()
     }
 
     suspend fun restoreSessionIfNeeded() = withContext(ioDispatcher) {
         awaitInitialization()
         val restored = restoreSession()
-        if (restored) loadIdentityData()
+        if (restored) {
+            loadIdentityData()
+        } else {
+            currentSignIn()?.takeIf { _profile.value == null }?.let { signIn ->
+                scope.launch { loadProfile(signIn, onlyIfMissing = true) }
+            }
+        }
         restored
     }
 
@@ -787,9 +829,14 @@ class PubkyRepo @Inject constructor(
 
     suspend fun loadProfile() {
         val signIn = currentSignIn() ?: return loadReadOnlyProfile()
+        loadProfile(signIn)
+    }
+
+    private suspend fun loadProfile(signIn: PubkySignIn, onlyIfMissing: Boolean = false) {
         val version = completedProfileLoadVersion.get()
         loadProfileMutex.withLock {
             if (!isCurrent(signIn)) return
+            if (onlyIfMissing && _profile.value != null) return
             val writeGeneration = profileWriteGeneration.get()
             if (completedProfileLoadVersion.get() != version && completedProfileSignInGeneration == signIn.generation &&
                 completedProfileWriteGeneration == writeGeneration
@@ -1576,6 +1623,14 @@ class PubkyRepo @Inject constructor(
         _publicKey.value != null ||
             !keychain.loadString(Keychain.Key.PAYKIT_SESSION.name).isNullOrEmpty() ||
             !keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name).isNullOrEmpty()
+    }
+
+    internal suspend fun hasIdentityForBackup(): Boolean = withContext(ioDispatcher) {
+        _publicKey.value != null || listOf(
+            Keychain.Key.PAYKIT_SESSION,
+            Keychain.Key.PUBKY_SECRET_KEY,
+            Keychain.Key.SHARED_PUBKY_SOURCE,
+        ).any { !keychain.loadString(it.name).isNullOrEmpty() }
     }
 
     suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthRequest> = runSuspendCatching {

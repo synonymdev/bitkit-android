@@ -486,7 +486,7 @@ class WalletViewModel @Inject constructor(
                         connectionSession = connectionSession,
                     )
                         .getOrThrow()
-                    pubkyRepo.initialize()
+                    pubkyRepo.scheduleInitializationAfterRestore()
                 } else {
                     restoreFromMostRecentBackup(connectionSession)
                 }
@@ -527,7 +527,7 @@ class WalletViewModel @Inject constructor(
                 .getOrThrow()
         }
 
-        pubkyRepo.initialize()
+        pubkyRepo.scheduleInitializationAfterRestore()
     }
 
     private suspend fun restoreFromRNRemoteBackup(connectionSession: WalletConnectionRecovery.Session) {
