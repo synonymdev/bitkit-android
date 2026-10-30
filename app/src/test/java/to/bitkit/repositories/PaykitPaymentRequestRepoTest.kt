@@ -274,6 +274,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paymentSubmissionActive.value = it.getArgument(0)
             Unit
         }
+        doAnswer { {} }.whenever(paykitSdkService).beginPaymentReview()
         stubMessageProcessing()
         whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
@@ -2539,6 +2540,121 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `creation holds review through eligibility and targeted delivery without ending another review`() = test {
+        val activity = stubPaymentReview()
+        val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalOutboundMessageId = 7uL)
+        val target = stubProposal(record)
+        val draft = PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "Lunch", clock.now().plus(60.seconds))
+        val finishIdentity = CompletableDeferred<Unit>()
+        val finishDelivery = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.identityStatus()).doSuspendableAnswer {
+            assertFailsWith<PaykitPaymentRequestError.OperationInProgress> {
+                activity.checkRefreshAdmission(Priority.Background)
+            }
+            finishIdentity.await()
+            IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+        whenever(paykitSdkService.proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))).doSuspendableAnswer {
+            assertFailsWith<PaykitPaymentRequestError.OperationInProgress> {
+                activity.checkRefreshAdmission(Priority.Background)
+            }
+            record
+        }
+        whenever(paykitSdkService.processOutboundPrivateMessages(COUNTERPARTY)).doSuspendableAnswer {
+            finishDelivery.await()
+            OutboundPrivateSendReport(listOf(7uL), listOf(7uL), emptyList(), emptyList(), emptyList())
+        }
+        val proposal = async { sut.propose(draft, target, listOf(COUNTERPARTY)).getOrThrow() }
+        runCurrent()
+        assertTrue(sut.isCreatingRequest.value)
+        assertFalse(activity.isPaymentSubmissionActive.value)
+        activity.checkRefreshAdmission(Priority.Ordered)
+        activity.checkRefreshAdmission(Priority.Interactive)
+        finishIdentity.complete(Unit)
+        runCurrent()
+        verify(paykitSdkService).processOutboundPrivateMessages(COUNTERPARTY, Priority.Interactive)
+        assertFailsWith<PaykitPaymentRequestError.OperationInProgress> {
+            activity.checkRefreshAdmission(Priority.Background)
+        }
+        val finishOther = activity.beginPaymentReview()
+        finishDelivery.complete(Unit)
+        assertEquals(PaykitPaymentRequestDeliveryStatus.Sent, proposal.await().request.deliveryStatus)
+        assertFalse(sut.isCreatingRequest.value)
+        assertFailsWith<PaykitPaymentRequestError.OperationInProgress> {
+            activity.checkRefreshAdmission(Priority.Background)
+        }
+        finishOther()
+        activity.checkRefreshAdmission(Priority.Background)
+        sut.propose(draft, target, listOf(COUNTERPARTY)).getOrThrow()
+        activity.checkRefreshAdmission(Priority.Background)
+        verify(paykitSdkService, times(2)).proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))
+        verify(paykitSdkService, never()).processPendingPrivateMessages()
+    }
+
+    @Test
+    fun `cancelled creation releases review during eligibility or delivery and permits another creation`() = test {
+        val activity = stubPaymentReview()
+        val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalOutboundMessageId = 7uL)
+        val draft = PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "Lunch", clock.now().plus(60.seconds))
+        for (duringDelivery in listOf(false, true)) {
+            var block = true
+            val target = stubProposal(record)
+            if (duringDelivery) {
+                whenever(paykitSdkService.processOutboundPrivateMessages(COUNTERPARTY)).doSuspendableAnswer {
+                    if (block) awaitCancellation()
+                    OutboundPrivateSendReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+                }
+            } else {
+                whenever(paykitSdkService.identityStatus()).doSuspendableAnswer {
+                    if (block) awaitCancellation()
+                    IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+                }
+            }
+            val proposal = async { sut.propose(draft, target, listOf(COUNTERPARTY)).getOrThrow() }
+            runCurrent()
+            assertFailsWith<PaykitPaymentRequestError.OperationInProgress> {
+                activity.checkRefreshAdmission(Priority.Background)
+            }
+            proposal.cancel()
+            assertFailsWith<CancellationException> { proposal.await() }
+            proposal.join()
+            assertFalse(sut.isCreatingRequest.value)
+            activity.checkRefreshAdmission(Priority.Background)
+
+            block = false
+            stubProposal(record)
+            sut.propose(draft, target, listOf(COUNTERPARTY)).getOrThrow()
+            activity.checkRefreshAdmission(Priority.Background)
+        }
+    }
+
+    @Test
+    fun `creation releases review when fresh eligibility rejects the target`() = test {
+        val activity = stubPaymentReview()
+        val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE)
+        val target = stubProposal(record)
+        val draft = PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "Lunch", clock.now().plus(60.seconds))
+        whenever(paykitSdkService.identityStatus()).doSuspendableAnswer {
+            assertFailsWith<PaykitPaymentRequestError.OperationInProgress> {
+                activity.checkRefreshAdmission(Priority.Background)
+            }
+            IdentityStatus(SECOND_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE)
+        }
+        assertSame(
+            PaykitPaymentRequestError.RequestUnavailable,
+            sut.propose(draft, target, listOf(COUNTERPARTY)).exceptionOrNull(),
+        )
+        assertFalse(sut.isCreatingRequest.value)
+        activity.checkRefreshAdmission(Priority.Background)
+        verify(paykitSdkService, never()).proposePaymentRequest(any(), any(), any())
+        doReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+            .whenever(paykitSdkService).identityStatus()
+        stubProposal(record)
+        sut.propose(draft, target, listOf(COUNTERPARTY)).getOrThrow()
+        activity.checkRefreshAdmission(Priority.Background)
+    }
+
+    @Test
     fun `proposal uses canonical terms and accepts available selected methods`() = test {
         val target =
             stubProposal(paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE, counterparty = COUNTERPARTY))
@@ -2622,6 +2738,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `proposal skips status lookup only after its durable send failure`() = test {
+        val activity = stubPaymentReview()
         val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalOutboundMessageId = 7uL)
         val target = stubProposal(record)
         val error = mock<PrivateOperationError> {
@@ -2649,6 +2766,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 listOf(COUNTERPARTY),
             ).getOrThrow()
 
+            activity.checkRefreshAdmission(Priority.Background)
+            assertFalse(sut.isCreatingRequest.value)
             val expected = if (failedMessageId == 7uL) {
                 PaykitPaymentRequestDeliveryStatus.Queued
             } else {
@@ -2661,6 +2780,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `proposal remains created after status read failure and propagates status read cancellation`() = test {
+        val activity = stubPaymentReview()
         val record = paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE).copy(proposalOutboundMessageId = 7uL)
         val target = stubProposal(record)
         val draft = PaykitPaymentRequestDraft(PaykitAmount(PaykitAsset.BTC, 1uL), "Lunch", clock.now().plus(60.seconds))
@@ -2674,10 +2794,12 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(PaykitPaymentRequestDeliveryStatus.Queued, creation.request.deliveryStatus)
         assertEquals(listOf(creation.request), sut.paymentRequestHistory.value)
+        activity.checkRefreshAdmission(Priority.Background)
         cancelled = true
         assertFailsWith<CancellationException> { sut.propose(draft, target, listOf(COUNTERPARTY)) }
         verify(paykitSdkService, times(2)).proposePaymentRequest(any(), any(), eq(LOCAL_IDENTITY))
         assertFalse(sut.isCreatingRequest.value)
+        activity.checkRefreshAdmission(Priority.Background)
     }
 
     @Test
@@ -2756,6 +2878,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `identity switch keeps a committed proposal out of the replacement identity state`() = test {
+        val activity = stubPaymentReview()
         val target = PaykitPaymentRequestTarget(COUNTERPARTY)
         val proposalStarted = CompletableDeferred<Unit>()
         val finishProposal = CompletableDeferred<Unit>()
@@ -2787,12 +2910,17 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             ).getOrThrow()
         }
         proposalStarted.await()
+        assertFailsWith<PaykitPaymentRequestError.OperationInProgress> {
+            activity.checkRefreshAdmission(Priority.Background)
+        }
         val activation = async { sut.activate(SECOND_IDENTITY) }
         runCurrent()
         finishProposal.complete(Unit)
 
         val creation = proposal.await()
         activation.await()
+        activity.checkRefreshAdmission(Priority.Background)
+        assertFalse(sut.isCreatingRequest.value)
 
         assertEquals(LOCAL_IDENTITY, creation.creatorIdentity)
         assertFalse(creation.wasPublishedToActiveState)
@@ -3368,6 +3496,12 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         advanceTimeBy(1_000)
 
         assertTrue(!sut.isPending(request))
+    }
+
+    private fun stubPaymentReview(): PaykitSdkService {
+        val activity = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { mock() }
+        doAnswer { activity.beginPaymentReview() }.whenever(paykitSdkService).beginPaymentReview()
+        return activity
     }
 
     private suspend fun stubProposal(record: PaymentRequestRecord): PaykitPaymentRequestTarget {
