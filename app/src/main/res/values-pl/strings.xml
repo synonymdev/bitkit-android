@@ -789,7 +789,7 @@
     <string name="usdt__from_address">Z adresu</string>
     <string name="usdt__hide_details">Ukryj szczegóły</string>
     <string name="usdt__intro_decline">Nie, dzięki</string>
-    <string name="usdt__intro_description">Bitcoin w sercu. Dolary, gdy ich potrzebujesz. Włącz USDT (Tether), aby wysyłać i otrzymywać cyfrowe dolary w Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin w sercu. Dolary, gdy ich potrzebujesz. Włącz USDT (Tether), aby szybko wysyłać i otrzymywać cyfrowe dolary w Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLARY?&lt;/accent&gt;\nTWÓJ WYBÓR</string>
     <string name="usdt__intro_title">Nowość: USDT</string>
     <string name="usdt__maximum_total">Maks. obciążenie</string>

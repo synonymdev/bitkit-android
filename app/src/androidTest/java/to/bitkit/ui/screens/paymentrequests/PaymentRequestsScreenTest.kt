@@ -207,7 +207,6 @@ class PaymentRequestsScreenTest {
                     contacts = persistentListOf(),
                     subscriptions = persistentListOf(),
                     dismissingRequestIds = persistentSetOf(),
-                    canRequestPayment = true,
                     onBack = {},
                     onRequestPayment = {},
                     onPay = {},
@@ -245,7 +244,6 @@ class PaymentRequestsScreenTest {
                     contacts = persistentListOf(),
                     subscriptions = persistentListOf(),
                     dismissingRequestIds = persistentSetOf(),
-                    canRequestPayment = true,
                     onBack = {},
                     onRequestPayment = {},
                     onPay = {},
@@ -287,7 +285,6 @@ class PaymentRequestsScreenTest {
                     contacts = persistentListOf(),
                     subscriptions = persistentListOf(),
                     dismissingRequestIds = persistentSetOf(),
-                    canRequestPayment = true,
                     onBack = {},
                     onRequestPayment = {},
                     onPay = {},
@@ -303,29 +300,6 @@ class PaymentRequestsScreenTest {
             "You have not made any payments to providers and don’t have any payment requests yet."
         ).assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertIsDisplayed()
-    }
-
-    @Test
-    fun requestPaymentIsHiddenWithoutEligibleRecipients() {
-        composeTestRule.setContent {
-            PaymentRequestsTestSurface {
-                PaymentRequestsContent(
-                    requests = persistentListOf(),
-                    pending = persistentListOf(),
-                    contacts = persistentListOf(),
-                    subscriptions = persistentListOf(),
-                    dismissingRequestIds = persistentSetOf(),
-                    canRequestPayment = false,
-                    onBack = {},
-                    onRequestPayment = {},
-                    onPay = {},
-                    onDismiss = { Result.success(Unit) },
-                    onDetails = {},
-                )
-            }
-        }
-
-        composeTestRule.onNodeWithTag("PaymentRequestCreate").assertDoesNotExist()
     }
 
     @Test
@@ -495,7 +469,6 @@ class PaymentRequestsScreenTest {
                     contacts = persistentListOf(),
                     subscriptions = persistentListOf(),
                     dismissingRequestIds = persistentSetOf(),
-                    canRequestPayment = true,
                     onBack = {},
                     onRequestPayment = {},
                     onPay = {},

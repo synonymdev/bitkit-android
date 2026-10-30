@@ -786,7 +786,7 @@
     <string name="usdt__from_address">Absenderadresse</string>
     <string name="usdt__hide_details">Details ausblenden</string>
     <string name="usdt__intro_decline">Nein danke</string>
-    <string name="usdt__intro_description">Im Herzen Bitcoin. Dollar, wenn du sie brauchst. Aktiviere USDT (Tether), um mit Bitkit digitale Dollar zu senden und zu empfangen.</string>
+    <string name="usdt__intro_description">Im Herzen Bitcoin. Dollar, wenn du sie brauchst. Aktiviere USDT (Tether), um mit Bitkit schnell digitale Dollar zu senden und zu empfangen.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLAR?&lt;/accent&gt;\nDU ENTSCHEIDEST</string>
     <string name="usdt__intro_title">Neu: USDT</string>
     <string name="usdt__maximum_total">Max. Abbuchung</string>

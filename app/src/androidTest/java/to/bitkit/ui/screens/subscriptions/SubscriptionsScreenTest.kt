@@ -137,7 +137,6 @@ class SubscriptionsScreenTest {
                             contacts = persistentListOf(),
                             subscriptions = persistentListOf(),
                             dismissingRequestIds = persistentSetOf(),
-                            canRequestPayment = true,
                             onBack = {},
                             onRequestPayment = { requestedPayment = true },
                             onPay = {},

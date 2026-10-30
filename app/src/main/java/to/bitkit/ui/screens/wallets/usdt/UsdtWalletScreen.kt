@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -378,14 +376,11 @@ internal fun UsdtWalletContent(
 
 @Composable
 internal fun UsdtCoinIllustration(modifier: Modifier = Modifier) {
-    Box(contentAlignment = Alignment.Center, modifier = modifier.size(256.dp)) {
-        Image(
-            painterResource(R.drawable.tether_coin),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.requiredSize(width = 304.76.dp, height = 228.57.dp)
-        )
-    }
+    Image(
+        painterResource(R.drawable.tether_coin),
+        contentDescription = null,
+        modifier = modifier.size(256.dp).offset(y = 32.dp)
+    )
 }
 
 internal val UsdtDestination.label: String get() = when (this) {
