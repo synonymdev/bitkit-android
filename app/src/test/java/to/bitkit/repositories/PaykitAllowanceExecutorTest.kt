@@ -1402,6 +1402,19 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a manual payment is not reported to a ledger behind this wallet`() = test {
+        sut.activate(identity)
+        sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
+        accountingState = fixtures.accountingState(revision = 4uL)
+
+        val attemptId = sut.beginManualPayment(fixtures.paymentRequest(), fixtures.lightningIdentifier).getOrThrow()
+
+        assertNull(attemptId)
+        assertTrue(reconciliations.isEmpty())
+        verify(sdk, never()).reserveManualPayment(any(), any())
+    }
+
+    @Test
     fun `manual payment is journaled and submitted when ready`() = test {
         sut.activate(identity)
         val request = fixtures.paymentRequest()
