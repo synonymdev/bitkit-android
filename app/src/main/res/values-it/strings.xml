@@ -1006,6 +1006,7 @@
     <string name="wallet__send_quickpay__title">Pagamento\n&lt;accent&gt;fattura...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Conferma</string>
     <string name="wallet__send_sent">Bitcoin Inviati</string>
+    <string name="wallet__send_swap_route">Percorso</string>
     <string name="wallet__send_swipe">Scorri per Pagare</string>
     <string name="wallet__send_to">A</string>
     <string name="wallet__send_yes">Si, Invia</string>

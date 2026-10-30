@@ -201,6 +201,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayCompletionKind
@@ -304,6 +305,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitPaymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val paykitPaymentRequestDiagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val usdtRepo = mock<UsdtRepo>()
+    private val pubkySwapsRouteRepo = mock<PubkySwapsRouteRepo>()
     private val usdtState = MutableStateFlow(UsdtWalletState(balance = 1_000_000u))
     private val paykitUsdtPayments = mock<PaykitUsdtPaymentRepo>()
     private val samRockRepo = mock<SamRockRepo>()
@@ -954,6 +956,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         paykitPaymentRequestDiagnostics = paykitPaymentRequestDiagnostics,
         refreshContactPaykitLink = refreshContactPaykitLink,
         usdtRepo = usdtRepo,
+        pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         paykitUsdtPayments = paykitUsdtPayments,
         samRockRepo = samRockRepo,
         appUpdateSheet = mock { on { type } doReturn TimedSheetType.APP_UPDATE },

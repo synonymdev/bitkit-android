@@ -1565,6 +1565,8 @@
     <string name="wallet__send_quickpay__title">Paying\n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Confirm</string>
     <string name="wallet__send_sent">Bitcoin Sent</string>
+    <string name="wallet__send_swap_route">Route</string>
+    <string name="wallet__send_swap_route_provider" translatable="false">Pubky Swaps · %1$s</string>
     <string name="wallet__send_swipe">Swipe To Pay</string>
     <string name="wallet__send_to">To</string>
     <string name="wallet__send_yes">Yes, Send</string>

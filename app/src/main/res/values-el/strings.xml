@@ -982,6 +982,7 @@
     <string name="wallet__send_quickpay__title">Πληρωμή\n&lt;accent&gt;τιμολογίου...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Επιβεβαίωση</string>
     <string name="wallet__send_sent">Τα Bitcoin στάλθηκαν</string>
+    <string name="wallet__send_swap_route">Διαδρομή</string>
     <string name="wallet__send_swipe">Σύρε για πληρωμή</string>
     <string name="wallet__send_to">Προς</string>
     <string name="wallet__send_yes">Ναι, Στείλε</string>

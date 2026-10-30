@@ -722,6 +722,7 @@
     <string name="wallet__send_review">Confirmar</string>
     <string name="wallet__send_confirming_in">Confirmando em</string>
     <string name="wallet__send_invoice_expiration">Vencimento do invoice</string>
+    <string name="wallet__send_swap_route">Rota</string>
     <string name="wallet__send_swipe">Deslize para Pagar</string>
     <string name="wallet__send_yes">Sim, Enviar</string>
     <string name="wallet__send_dialog1">Parece que você está enviando mais de US$ 100. Deseja continuar?</string>
