@@ -2,7 +2,6 @@ package to.bitkit.ui.screens.profile
 
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.data.ProfileRemovalStore
@@ -51,7 +50,7 @@ internal class ProfileRemovalUiFixture(val pubky: PubkyRepo) {
         whenever { privateRepo.withProfileDeletionPaused<Unit>(any()) }.doSuspendableAnswer {
             it.getArgument<suspend (PrivatePaykitRepo.ProfileDeletionPause) -> Unit>(0).invoke(pause)
         }
-        whenever { privateRepo.removePublishedEndpointsForCleanup(any(), eq(true)) }.thenReturn(Result.success(Unit))
+        whenever { privateRepo.removePublishedEndpointsForProfileRemoval() }.thenReturn(Result.success(Unit))
         whenever { pubky.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
         whenever { pubky.deleteProfile(deletion) }.thenReturn(Result.success(Unit))
         whenever { pubky.finishProfileRemovalLocally() }.thenAnswer { current = ended }

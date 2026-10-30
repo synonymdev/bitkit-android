@@ -34,8 +34,10 @@ class ProfileRemovalFailure internal constructor(
     internal val confirmation: ProfileRemovalConfirmation,
     internal val recoveryOwner: PubkyProfileOwner,
     internal val localCompletionStarted: Boolean,
+    private val privateWithdrawalAcknowledged: Boolean,
 ) : AppError("Profile removal did not finish. Review its state or disconnect locally.", cause) {
-    internal val canReview: Boolean get() = confirmation.deletion != null && !localCompletionStarted
+    internal val canReview: Boolean
+        get() = confirmation.deletion != null && !localCompletionStarted && privateWithdrawalAcknowledged
 }
 
 /** Remote work never resumes automatically from the durable local cleanup obligation. */
@@ -69,7 +71,7 @@ class ProfileRemovalCoordinator @Inject constructor(
 
     /** Re-read the original identity's remote state, then require a new user confirmation. */
     suspend fun reviewAgain(failure: ProfileRemovalFailure): Result<ProfileRemovalConfirmation> = runSuspendCatching {
-        check(!failure.localCompletionStarted) { "Finish disconnecting this profile locally" }
+        check(failure.canReview) { "Finish disconnecting this profile locally" }
         val previous = failure.confirmation
         check(previous.deletion != null) { "Disconnect this profile locally to finish cleanup" }
         var deletion: PubkyProfileDeletion? = null
@@ -126,6 +128,7 @@ class ProfileRemovalCoordinator @Inject constructor(
         sharingRepo.withProfileRemoval {
             pubkyRepo.performProfileRemoval(confirmation.owner, confirmation.attemptId) {
                 var localCompletionStarted = false
+                var privateWithdrawalAcknowledged = false
                 var removalMayHaveStarted = removalStore.pendingAttempt() != null
                 try {
                     check(confirmation.deletion == null || confirmation.reviewCeiling.get() === confirmation.deletion) {
@@ -136,7 +139,8 @@ class ProfileRemovalCoordinator @Inject constructor(
                         removalMayHaveStarted = true
                         removalStore.begin(confirmation.attemptId)
                         if (!confirmation.localOnly) {
-                            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG, deferAppSync = true).getOrThrow()
+                            privatePaykitRepo.removePublishedEndpointsForProfileRemoval().getOrThrow()
+                            privateWithdrawalAcknowledged = true
                             pubkyRepo.removeBitkitPaymentEndpoints().getOrThrow()
                             confirmation.deletion?.let { pubkyRepo.deleteProfile(it).getOrThrow() }
                             pubkyRepo.signOutForProfileRemoval()
@@ -152,11 +156,18 @@ class ProfileRemovalCoordinator @Inject constructor(
                         }
                     }
                 } catch (error: CancellationException) {
-                    if (removalMayHaveStarted) captureFailure(error, confirmation, localCompletionStarted)
+                    if (removalMayHaveStarted) {
+                        captureFailure(
+                            error,
+                            confirmation,
+                            localCompletionStarted,
+                            privateWithdrawalAcknowledged
+                        )
+                    }
                     throw error
                 } catch (error: Throwable) {
                     if (!removalMayHaveStarted) throw error
-                    throw captureFailure(error, confirmation, localCompletionStarted)
+                    throw captureFailure(error, confirmation, localCompletionStarted, privateWithdrawalAcknowledged)
                 }
             }.getOrThrow()
         }
@@ -166,9 +177,16 @@ class ProfileRemovalCoordinator @Inject constructor(
         error: Throwable,
         confirmation: ProfileRemovalConfirmation,
         localCompletionStarted: Boolean,
+        privateWithdrawalAcknowledged: Boolean,
     ): ProfileRemovalFailure {
         // Admission still excludes replacements, even when our own cleanup has ended the sign-in.
-        val failure = ProfileRemovalFailure(error, confirmation, pubkyRepo.profileOwner(), localCompletionStarted)
+        val failure = ProfileRemovalFailure(
+            error,
+            confirmation,
+            pubkyRepo.profileOwner(),
+            localCompletionStarted,
+            privateWithdrawalAcknowledged,
+        )
         confirmation.failure.set(failure)
         return failure
     }
@@ -176,8 +194,4 @@ class ProfileRemovalCoordinator @Inject constructor(
     fun failureFor(confirmation: ProfileRemovalConfirmation): ProfileRemovalFailure? = confirmation.failure.get()
 
     fun isCurrent(owner: PubkyProfileOwner): Boolean = pubkyRepo.isProfileOwnerCurrent(owner)
-
-    private companion object {
-        const val TAG = "ProfileRemovalCoordinator"
-    }
 }

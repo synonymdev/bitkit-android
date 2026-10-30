@@ -559,10 +559,19 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun removePublishedEndpointsForCleanup(
         context: String,
         deferAppSync: Boolean,
+    ): Result<Unit> = removePublishedEndpointsForCleanup(context, deferAppSync, requireAcknowledgement = false)
+
+    suspend fun removePublishedEndpointsForProfileRemoval(): Result<Unit> =
+        removePublishedEndpointsForCleanup("profile removal", deferAppSync = true, requireAcknowledgement = true)
+
+    private suspend fun removePublishedEndpointsForCleanup(
+        context: String,
+        deferAppSync: Boolean,
+        requireAcknowledgement: Boolean,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             updateContactSharingCleanupPending(true)
-            removePublishedEndpoints().getOrThrow()
+            removePublishedEndpoints(requireAcknowledgement).getOrThrow()
             if (!deferAppSync) {
                 syncPaykitAppAfterCleanup().getOrThrow()
                 updateContactSharingCleanupPending(false)
@@ -2063,13 +2072,14 @@ class PrivatePaykitRepo @Inject constructor(
         persistState(markWalletBackup = true)
     }
 
-    private suspend fun removePublishedEndpoints(): Result<Unit> = withContext(serializedDispatcher) {
-        runSuspendCatching {
-            publicationMutex.withLock {
-                removePublishedEndpointsLocked().getOrThrow()
+    private suspend fun removePublishedEndpoints(requireAcknowledgement: Boolean = false): Result<Unit> =
+        withContext(serializedDispatcher) {
+            runSuspendCatching {
+                publicationMutex.withLock {
+                    removePublishedEndpointsLocked(requireAcknowledgement = requireAcknowledgement).getOrThrow()
+                }
             }
         }
-    }
 
     private suspend fun removePublishedEndpoints(
         publicKeys: Collection<String>,
@@ -2084,23 +2094,29 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun removePublishedEndpointsLocked(
         publicKeys: Collection<String>? = null,
         isStillCurrent: (() -> Boolean)? = null,
+        requireAcknowledgement: Boolean = false,
     ): Result<Unit> =
         runSuspendCatching {
             checkPaykitContactSync(isStillCurrent)
             val peers = paykitSdkService.linkedPeers()
             checkPaykitContactSync(isStillCurrent)
-            val linkedPublicKeys = peers
+            val cleanupPeers = peers
                 .filter {
                     it.state == LinkedPeerState.LINKED || it.state == LinkedPeerState.LINKING ||
                         it.state == LinkedPeerState.RECOVERY_REQUIRED
                 }
-                .mapNotNull { normalizedPublicKey(it.counterparty) }
-                .toSet()
+            if (requireAcknowledgement && cleanupPeers.any { normalizedPublicKey(it.counterparty) == null }) {
+                throw PrivatePaykitError.PrivateUnavailable
+            }
+            val linkedPublicKeys = cleanupPeers.mapNotNull { normalizedPublicKey(it.counterparty) }.toSet()
             val keys = publicKeys ?: (
                 knownSavedContactKeys + ensureState().contacts.keys + pendingDeletedContactCleanupPublicKeys() +
                     linkedPublicKeys
                 )
             val normalizedBatch = normalizedPublicKeyBatch(keys)
+            if (requireAcknowledgement && normalizedBatch.invalidKeys.isNotEmpty()) {
+                throw PrivatePaykitError.PrivateUnavailable
+            }
             discardInvalidCleanupKeys(normalizedBatch.invalidKeys, isStillCurrent)
             val normalizedKeys = normalizedBatch.normalizedKeys
             if (normalizedKeys.isEmpty()) return@runSuspendCatching
@@ -2108,12 +2124,21 @@ class PrivatePaykitRepo @Inject constructor(
             ensureState()
             checkPaykitContactSync(isStillCurrent)
             val cleanupStateByPublicKey = normalizedKeys.associateWith(::publishedEndpointCleanupState)
-            val preparation = clearPrivatePaymentLists(normalizedKeys, linkedPublicKeys, isStillCurrent)
+            val preparation = clearPrivatePaymentLists(
+                normalizedKeys,
+                linkedPublicKeys,
+                isStillCurrent,
+                requireAcknowledgement,
+            )
             checkPaykitContactSync(isStillCurrent)
             val failedPublicKeys = preparation.failedPublicKeys.toMutableSet()
             var firstError = preparation.firstError
 
-            val pendingRetryKeys = drainPendingEndpointWithdrawals(preparation.clearedRetryKeys, isStillCurrent)
+            val pendingRetryKeys = if (requireAcknowledgement) {
+                emptySet()
+            } else {
+                drainPendingEndpointWithdrawals(preparation.clearedRetryKeys, isStillCurrent)
+            }
             if (pendingRetryKeys.isNotEmpty()) {
                 failedPublicKeys += pendingRetryKeys
                 firstError = firstError ?: PrivatePaykitError.PrivateUnavailable
@@ -2181,6 +2206,7 @@ class PrivatePaykitRepo @Inject constructor(
         publicKeys: Collection<String>,
         linkedPublicKeys: Set<String>,
         isStillCurrent: (() -> Boolean)? = null,
+        requireAcknowledgement: Boolean = false,
     ): PrivateEndpointCleanupPreparation {
         val cleanupKeys = publicKeys.filter {
             it in linkedPublicKeys || state?.contacts?.get(it)?.hasPublishedPrivatePaymentList == true
@@ -2189,7 +2215,14 @@ class PrivatePaykitRepo @Inject constructor(
 
         return runSuspendCatching {
             val report = paykitSdkService.clearPrivatePaymentLists(cleanupKeys, isStillCurrent)
-                ?: return@runSuspendCatching PrivateEndpointCleanupPreparation(emptyList(), emptySet(), null)
+            if (requireAcknowledgement) {
+                if (report == null || !hasAcknowledgedWithdrawals(report, cleanupKeys)) {
+                    throw PrivatePaykitError.PrivateUnavailable
+                }
+            }
+            if (report == null) {
+                return@runSuspendCatching PrivateEndpointCleanupPreparation(emptyList(), emptySet(), null)
+            }
             logPrivatePaymentListDeliveryFailures(report, "cleanup")
             val failedPublicKeys = (
                 report.failedToQueue.map { it.counterparty } +
@@ -2205,6 +2238,20 @@ class PrivatePaykitRepo @Inject constructor(
         }.getOrElse {
             Logger.warn("Failed to clear private Paykit endpoints: ${it::class.simpleName}", context = TAG)
             PrivateEndpointCleanupPreparation(emptyList(), cleanupKeys.toSet(), it)
+        }
+    }
+
+    private fun hasAcknowledgedWithdrawals(
+        report: PrivatePaymentListDeliveryReport,
+        publicKeys: Collection<String>,
+    ): Boolean {
+        if (report.failedToQueue.isNotEmpty() || report.failedToDeliver.isNotEmpty()) return false
+        return publicKeys.all { publicKey ->
+            val clear = report.cleared.singleOrNull { normalizedPublicKey(it.counterparty) == publicKey }
+            val messageId = clear?.outboundMessageId
+            clear?.error == null && messageId != null && report.acknowledged.any {
+                normalizedPublicKey(it.counterparty) == publicKey && it.outboundMessageId == messageId
+            }
         }
     }
 

@@ -13,7 +13,6 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -98,7 +97,7 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
             events += "validate"
             Unit
         }
-        whenever { privateRepo.removePublishedEndpointsForCleanup(any(), eq(true)) }.doSuspendableAnswer {
+        whenever { privateRepo.removePublishedEndpointsForProfileRemoval() }.doSuspendableAnswer {
             assertNotNull(store.pendingAttempt())
             events += "private endpoints"
             Result.success(Unit)
@@ -138,6 +137,27 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `missing private withdrawal receipt prevents every destructive profile stage`() = test {
+        val failure = IOException("withdrawal acknowledgement missing")
+        doReturn(Result.failure<Unit>(failure)).whenever(privateRepo).removePublishedEndpointsForProfileRemoval()
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+
+        val result = assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+
+        assertSame(failure, result.cause)
+        assertFalse(result.canReview)
+        assertTrue(sut.reviewAgain(result).isFailure)
+        verify(pubky, times(1)).prepareProfileDeletion(original)
+        verify(privateRepo, times(1)).removePublishedEndpointsForProfileRemoval()
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        verify(pubky, never()).removeBitkitPaymentEndpoints()
+        verify(pubky, never()).deleteProfile(any())
+        verify(pubky, never()).signOutForProfileRemoval()
+        verify(pubky, never()).finishProfileRemovalLocally()
+        verify(privateRepo, never()).finishProfileRemoval(any())
+    }
+
+    @Test
     fun `fresh local disconnect reads no remote state and clears only after confirmation`() = test {
         val confirmation = sut.prepareLocalDisconnect(original).getOrThrow()
         assertTrue(confirmation.localOnly)
@@ -150,7 +170,7 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
             listOf("local credentials and metadata", "private local", "wallet backup ready", "backup ready"),
             events,
         )
-        verify(privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval()
         verify(pubky, never()).removeBitkitPaymentEndpoints()
         verify(pubky, never()).deleteProfile(any())
         verify(pubky, never()).signOutForProfileRemoval()
@@ -211,7 +231,7 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
         assertTrue(events.isEmpty())
         verify(pubky, never()).finishProfileRemovalLocally()
         verify(privateRepo, never()).finishProfileRemoval(any())
-        verify(privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval()
         verify(pubky, never()).removeBitkitPaymentEndpoints()
         verify(pubky, never()).deleteProfile(any())
         verify(pubky, never()).signOutForProfileRemoval()
@@ -474,7 +494,7 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
         val confirmation = sut.prepareDeletion(original).getOrThrow()
         assertTrue(sut.remove(confirmation).isFailure)
         assertNull(store.pendingAttempt())
-        verify(privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval()
     }
 
     @Test
@@ -486,7 +506,7 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
         assertNull(sut.failureFor(confirmation))
         assertNull(store.pendingAttempt())
         verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>())
-        verify(privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval()
         assertTrue(sut.prepareDeletion(original).isSuccess)
     }
 
@@ -527,7 +547,7 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
         assertTrue(sut.remove(confirmation).isSuccess)
         verify(pubky, never()).signOutForProfileRemoval()
         verify(pubky, never()).removeBitkitPaymentEndpoints()
-        verify(privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        verify(privateRepo, never()).removePublishedEndpointsForProfileRemoval()
         val unusedOldConfirmation = sut.prepareSignOut(current).getOrThrow()
         val newerId = UUID.randomUUID().toString()
         store.withAccess(newerId) { store.begin(newerId) }

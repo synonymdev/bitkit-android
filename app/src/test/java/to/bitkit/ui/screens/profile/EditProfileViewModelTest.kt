@@ -14,7 +14,6 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -129,7 +128,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         verify(pubkyRepo, never()).deleteProfile(any())
         verify(pubkyRepo, never()).removeBitkitPaymentEndpoints()
         verify(pubkyRepo, never()).signOutForProfileRemoval()
-        verify(fixture.privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        verify(fixture.privateRepo, never()).removePublishedEndpointsForProfileRemoval()
         assertNull(fixture.store.pendingAttempt())
     }
 
@@ -165,7 +164,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         assertNull(fixture.store.pendingAttempt())
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         assertTrue(sut.uiState.value.canDisconnectLocally)
-        verify(fixture.privateRepo, never()).removePublishedEndpointsForCleanup(any(), any())
+        verify(fixture.privateRepo, never()).removePublishedEndpointsForProfileRemoval()
         verify(pubkyRepo, never()).deleteProfile(any())
     }
 
@@ -274,14 +273,14 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         verify(pubkyRepo, times(1)).deleteProfile(fixture.deletion)
         verify(pubkyRepo, never()).signOutForProfileRemoval()
-        verify(fixture.privateRepo, times(1)).removePublishedEndpointsForCleanup(any(), eq(true))
+        verify(fixture.privateRepo, times(1)).removePublishedEndpointsForProfileRemoval()
         assertNull(fixture.store.pendingAttempt())
     }
 
     @Test
     fun `failed private cleanup retains marker and stops profile deletion`() = test {
         val sut = createSut()
-        whenever(fixture.privateRepo.removePublishedEndpointsForCleanup(any(), eq(true)))
+        whenever(fixture.privateRepo.removePublishedEndpointsForProfileRemoval())
             .thenReturn(Result.failure(TestAppError("pending cleanup")))
         advanceUntilIdle()
         sut.showDeleteConfirmation()
@@ -326,7 +325,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
     fun `cancelled screen preserves pending removal without success`() = test {
         val sut = createSut()
         val cleanup = CompletableDeferred<Result<Unit>>()
-        whenever(fixture.privateRepo.removePublishedEndpointsForCleanup(any(), eq(true)))
+        whenever(fixture.privateRepo.removePublishedEndpointsForProfileRemoval())
             .doSuspendableAnswer { cleanup.await() }
         advanceUntilIdle()
         sut.showDeleteConfirmation()

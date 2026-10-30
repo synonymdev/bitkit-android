@@ -457,7 +457,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             cancelAndIgnoreRemainingEvents()
         }
         verify(pubkyRepo, never()).signOutForProfileRemoval()
-        verify(fixture.privateRepo, never()).removePublishedEndpointsForCleanup(any(), eq(true))
+        verify(fixture.privateRepo, never()).removePublishedEndpointsForProfileRemoval()
         assertNull(fixture.store.pendingAttempt())
     }
 
@@ -528,7 +528,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             assertIs<ProfileEffect.SignedOut>(awaitItem())
         }
         verify(pubkyRepo, times(1)).signOutForProfileRemoval()
-        verify(fixture.privateRepo, times(1)).removePublishedEndpointsForCleanup(any(), eq(true))
+        verify(fixture.privateRepo, times(1)).removePublishedEndpointsForProfileRemoval()
     }
 
     @Test

@@ -15,6 +15,7 @@ import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PrivateMessageSchedulingSnapshot
+import com.synonym.paykit.PrivatePaymentListAcknowledgement
 import com.synonym.paykit.PrivatePaymentListDeliveryFailure
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
@@ -2716,6 +2717,142 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `profile removal requires a matching acknowledgement for every original clear`() = test {
+        val validClear = PrivatePaymentListSyncChange(CONTACT_KEY, 17uL, null)
+        val validAck = PrivatePaymentListAcknowledgement(CONTACT_KEY, 17uL)
+        val reports = listOf(
+            null,
+            privateListDeliveryReport(),
+            privateListDeliveryReport().copy(cleared = listOf(validClear)),
+            privateListDeliveryReport().copy(acknowledged = listOf(validAck)),
+            privateListDeliveryReport().copy(
+                cleared = listOf(validClear),
+                acknowledged = listOf(PrivatePaymentListAcknowledgement(OTHER_CONTACT_KEY, 17uL)),
+            ),
+            privateListDeliveryReport().copy(
+                cleared = listOf(validClear),
+                acknowledged = listOf(PrivatePaymentListAcknowledgement(CONTACT_KEY, 18uL)),
+            ),
+            privateListDeliveryReport().copy(
+                cleared = listOf(validClear.copy(outboundMessageId = null)),
+                acknowledged = listOf(validAck),
+            ),
+            privateListDeliveryReport().copy(
+                cleared = listOf(validClear.copy(error = mock())),
+                acknowledged = listOf(validAck),
+            ),
+            privateListDeliveryReport(failedToQueue = listOf(validClear)).copy(
+                cleared = listOf(validClear),
+                acknowledged = listOf(validAck),
+            ),
+            privateListDeliveryReport(
+                failedToDeliver = listOf(PrivatePaymentListDeliveryFailure(CONTACT_KEY, null, null, mock())),
+            ).copy(cleared = listOf(validClear), acknowledged = listOf(validAck)),
+            privateListDeliveryReport().copy(
+                cleared = listOf(validClear, validClear.copy(outboundMessageId = 18uL)),
+                acknowledged = listOf(validAck),
+            ),
+        )
+        for ((index, report) in reports.withIndex()) {
+            cacheData.value = PrivatePaykitCacheData(contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
+            sut = createSut()
+            whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY))).thenReturn(report)
+
+            val result = sut.removePublishedEndpointsForProfileRemoval()
+
+            assertTrue(result.isFailure, "Withdrawal report $index must remain unacknowledged")
+            assertTrue(cacheData.value.cleanupPending)
+            assertTrue(cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList)
+        }
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any())
+    }
+
+    @Test
+    fun `profile removal accepts only the exact clear receipt without a registry sync`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact().copy(
+                    consumedPrivatePaymentListVersion = 88uL,
+                    consumedPrivatePaymentListOwner = CONTACT_KEY,
+                )
+            )
+        )
+        sut = createSut()
+        whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY))).thenReturn(
+            privateListDeliveryReport().copy(
+                cleared = listOf(PrivatePaymentListSyncChange(CONTACT_KEY, 17uL, null)),
+                acknowledged = listOf(PrivatePaymentListAcknowledgement(CONTACT_KEY, 17uL)),
+            ),
+        )
+
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenReturn(listOf(CONTACT_KEY))
+
+        sut.removePublishedEndpointsForProfileRemoval().getOrThrow()
+
+        assertTrue(cacheData.value.cleanupPending)
+        val retained = cacheData.value.contacts.getValue(CONTACT_KEY)
+        assertFalse(retained.hasPublishedPrivatePaymentList)
+        assertEquals(88uL, retained.consumedPrivatePaymentListVersion)
+        assertEquals(CONTACT_KEY, retained.consumedPrivatePaymentListOwner)
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any())
+        verify(paykitSdkService, times(1)).clearPrivatePaymentLists(listOf(CONTACT_KEY))
+    }
+
+    @Test
+    fun `profile removal cannot infer an empty cleanup scope from invalid stored keys`() = test {
+        val invalid = "not-a-pubky"
+        cacheData.value = PrivatePaykitCacheData(contacts = mapOf(invalid to cachedPublishedContact()))
+        sut = createSut()
+
+        assertTrue(sut.removePublishedEndpointsForProfileRemoval().isFailure)
+
+        assertTrue(cacheData.value.contacts.getValue(invalid).hasPublishedPrivatePaymentList)
+        assertTrue(cacheData.value.cleanupPending)
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(any(), anyOrNull())
+    }
+
+    @Test
+    fun `profile removal retains all intended targets when the report acknowledges only one`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(CONTACT_KEY to cachedPublishedContact(), OTHER_CONTACT_KEY to cachedPublishedContact()),
+        )
+        sut = createSut()
+        whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY, OTHER_CONTACT_KEY))).thenReturn(
+            privateListDeliveryReport().copy(
+                cleared = listOf(PrivatePaymentListSyncChange(CONTACT_KEY, 17uL, null)),
+                acknowledged = listOf(PrivatePaymentListAcknowledgement(CONTACT_KEY, 17uL)),
+            ),
+        )
+
+        assertTrue(sut.removePublishedEndpointsForProfileRemoval().isFailure)
+
+        assertTrue(cacheData.value.contacts.values.all { it.hasPublishedPrivatePaymentList })
+        assertTrue(cacheData.value.cleanupPending)
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any())
+    }
+
+    @Test
+    fun `profile removal refuses an unreadable linked counterparty instead of treating scope as empty`() = test {
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer("invalid-key", LinkedPeerState.LINKED)))
+
+        assertTrue(sut.removePublishedEndpointsForProfileRemoval().isFailure)
+
+        assertTrue(cacheData.value.cleanupPending)
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(any(), anyOrNull())
+    }
+
+    @Test
+    fun `profile removal accepts an explicitly empty withdrawal scope`() = test {
+        sut.removePublishedEndpointsForProfileRemoval().getOrThrow()
+
+        assertTrue(cacheData.value.cleanupPending)
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(any(), anyOrNull())
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+    }
+
+    @Test
     fun `profile deletion withdraws private lists without an intermediate registry sync`() = test {
         cacheData.value = PrivatePaykitCacheData(contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
         sut = createSut()
@@ -4524,6 +4661,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 error = null,
             )
         },
+        acknowledged = emptyList(),
         failedToQueue = failedToQueue,
         failedToDeliver = failedToDeliver,
     )
@@ -4541,6 +4679,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         cleared = updates
             .filter { it.reservations.isEmpty() }
             .map { privateListSyncChange(it.counterparty) },
+        acknowledged = emptyList(),
         failedToQueue = emptyList(),
         failedToDeliver = emptyList(),
     )
