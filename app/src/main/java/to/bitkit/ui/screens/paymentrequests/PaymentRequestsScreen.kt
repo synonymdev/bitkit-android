@@ -208,6 +208,9 @@ fun PaymentRequestsScreen(
     val receipts by appViewModel.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()
     val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
+    val publicKey by appViewModel.pubkyPublicKey.collectAsStateWithLifecycle()
+    val contactsLoadVersion by appViewModel.pubkyContactsLoadVersion.collectAsStateWithLifecycle()
+    val hasNoContacts = publicKey == null || (contactsLoadVersion > 0 && contacts.isEmpty())
     val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
     val dismissingRequestIds by appViewModel.rejectingPaymentRequestIds.collectAsStateWithLifecycle()
     PaymentRequestsContent(
@@ -219,7 +222,7 @@ fun PaymentRequestsScreen(
         dismissingRequestIds = dismissingRequestIds.toImmutableSet(),
         autoPaidRequestIds = autoPaidRequestIds,
         onBack = onBack,
-        onRequestPayment = if (contacts.isEmpty()) onAddContact else onRequestPayment,
+        onRequestPayment = if (hasNoContacts) onAddContact else onRequestPayment,
         onPay = appViewModel::openIncomingPaymentRequest,
         onDismiss = appViewModel::dismissIncomingPaymentRequest,
         onDetails = onDetails,

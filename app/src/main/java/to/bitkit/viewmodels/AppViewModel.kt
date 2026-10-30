@@ -442,6 +442,8 @@ class AppViewModel @Inject constructor(
     val isRetryingInitialSubscriptionPayment = _isRetryingInitialSubscriptionPayment.asStateFlow()
     val subscriptions = paykitPaymentRequestRepo.subscriptions
     val pubkyContacts = pubkyRepo.contacts
+    val pubkyPublicKey = pubkyRepo.publicKey
+    val pubkyContactsLoadVersion = pubkyRepo.contactsLoadVersion
     private var sheetTransitionJob: Job? = null
     private var isUsdtIntroPresented = false
     private var transitionSheet: Sheet? = null
