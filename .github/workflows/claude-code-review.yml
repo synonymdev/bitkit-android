@@ -7,6 +7,11 @@ on:
         description: "Pull request number to review"
         required: true
         type: number
+      force_review:
+        description: "Review again even if Claude previously commented"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ inputs.pr_number }}
@@ -60,6 +65,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ inputs.pr_number }}'
+          prompt: >-
+            ${{ inputs.force_review && format('Perform a fresh code review of {0}/pull/{1}. Use gh pr view to capture the latest full head SHA, read the complete PR diff, relevant CLAUDE.md instructions and surrounding callers, and validate concrete actionable defects. Prior Claude comments concern earlier reviews; do not invoke the code-review plugin eligibility gate or skip this explicit fresh review. This is review only: do not edit files, commit, push, merge, or change PR state. Check the PR head again before posting one gh pr comment containing the exact reviewed full SHA and either actionable findings with file and line references or an explicit no-issues verdict. If the head changed, state the mismatch rather than declaring the new head clear.', github.repository, inputs.pr_number) || format('/code-review:code-review --comment {0}/pull/{1}', github.repository, inputs.pr_number) }}
           claude_args: |
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*),Bash(git log:*),Bash(git diff:*),Bash(git blame:*),Read,Glob,Grep"
