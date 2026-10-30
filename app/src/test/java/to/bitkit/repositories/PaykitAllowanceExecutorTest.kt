@@ -487,6 +487,30 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovery drops the spend of a failed attempt the journal no longer holds`() = test {
+        val spend = PaykitAllowanceLocalState.AutomaticSpend(
+            attemptId = "trimmed-1",
+            counterparty = fixtures.counterpartyKey,
+            allowanceId = ALLOWANCE_ID,
+            amountSats = 1_000uL,
+            admittedAtMillis = 1L,
+        )
+        sut.updateLocalState(identity) { it.copy(automaticSpends = listOf(spend)) }
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(
+                fixtures.occurrence(
+                    "trimmed-1",
+                    listOf(fixtures.attemptRecord("trimmed-1", status = PaymentExecutionStatus.FAILED)),
+                ),
+            ),
+        )
+
+        sut.recover(identity)
+
+        assertTrue(sut.localState(identity).automaticSpends.isEmpty())
+    }
+
+    @Test
     fun `an allowance seen ended never pays automatically again`() = test {
         sut.rememberEndedAllowances(identity, listOf(fixtures.allowance(state = AllowanceLifecycleState.ENDED)))
 
