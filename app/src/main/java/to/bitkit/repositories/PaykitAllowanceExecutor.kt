@@ -395,7 +395,12 @@ class PaykitAllowanceExecutor @Inject constructor(
                 PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
         }
         if (matching.isEmpty()) return@withContext false
-        val attempts = automaticAttempts()
+        val read = runSuspendCatching { paykitSdkService.allowanceAccountingState() }
+        // A ledger behind this wallet keeps the request manual, without waiting for the node.
+        if (read.isSuccess && runSuspendCatching { !acceptsLedger(read.getOrNull(), identity) }.getOrDefault(true)) {
+            return@withContext true
+        }
+        val attempts = read.getOrNull()?.let { PaykitAllowanceCapacity.attempts(it.history) }.orEmpty()
         val localAttempts = PaykitAllowanceCapacity.attempts(localState(identity).automaticSpends)
         if (matching.any { PaykitAllowanceCapacity.fits(amountSats, it, attempts, now, localAttempts) }) {
             return@withContext false
@@ -510,12 +515,6 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
         return entry
     }
-
-    private suspend fun automaticAttempts(): List<PaykitAllowanceCapacity.Attempt> =
-        runSuspendCatching { paykitSdkService.allowanceAccountingState() }
-            .getOrNull()
-            ?.let { PaykitAllowanceCapacity.attempts(it.history) }
-            .orEmpty()
 
     // endregion
 

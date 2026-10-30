@@ -1176,6 +1176,18 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `local capacity check hands back a request while the ledger is behind`() = test {
+        collectEvents()
+        sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
+        accountingState = fixtures.accountingState(revision = 4uL)
+
+        val isManual = sut.classifyAboveLimit(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertTrue(isManual)
+        assertTrue(events.isEmpty(), "A ledger behind the wallet raises no Limit Reached")
+    }
+
+    @Test
     fun `local capacity check flags only requests that fit no allowance`() = test {
         collectEvents()
         accountingState = stateNearTheMonthlyCap()
