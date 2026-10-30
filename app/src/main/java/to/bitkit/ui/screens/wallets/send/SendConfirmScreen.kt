@@ -988,9 +988,7 @@ private fun sendUiState() = SendUiState(
 )
 
 private fun PaykitPaymentRequest.preparingAccentColor(): Color {
-    val methods = acceptedPaymentEndpointIdentifiers.mapNotNull { id ->
-        MethodId.entries.firstOrNull { it.rawValue == id }
-    }
+    val methods = acceptedPaymentEndpointIdentifiers.mapNotNull(MethodId::fromRawValue)
     return when {
         methods.isEmpty() -> Colors.White64
         methods.all { it == MethodId.UsdtArbitrum } -> Colors.Usdt

@@ -1366,13 +1366,6 @@ class AppViewModel @Inject constructor(
         clearRequestedPaymentRequest()
     }
 
-    suspend fun canRequestPayment(): Boolean {
-        if (eligiblePaymentRequestTargets.value.isEmpty() && pubkyContacts.value.isNotEmpty()) {
-            refreshPaymentRequestTargets(force = true)
-        }
-        return eligiblePaymentRequestTargets.value.isNotEmpty()
-    }
-
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
         if (privatePaykitRepo.isProfileDeletionInProgress.value) return
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
