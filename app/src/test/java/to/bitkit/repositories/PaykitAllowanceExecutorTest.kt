@@ -46,6 +46,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
@@ -101,6 +102,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     private val recordedOutcomes = mutableListOf<PaymentOutcomeReport>()
     private val reconciliations = mutableListOf<AllowanceAccountingReconciliation>()
     private val nodeStatuses = mutableMapOf<String, PaymentStatus>()
+    private var nodeListsPayments = true
     private val events = mutableListOf<PaykitAllowanceEvent>()
     private lateinit var sut: PaykitAllowanceExecutor
 
@@ -227,6 +229,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(payer.payLightning(any(), anyOrNull(), anyOrNull(), any())).thenReturn(Result.success(PAYMENT_HASH))
         whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
         whenever(payer.lightningPaymentStatus(any())).thenAnswer { nodeStatuses[it.getArgument<String>(0)] }
+        whenever(payer.canListLightningPayments()).thenAnswer { nodeListsPayments }
     }
 
     // region Admission
@@ -898,6 +901,95 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovery counts automatic payments the ledger keeps beyond the journal`() = test {
+        val counted = fixtures.paymentRequest(id = "req-counted")
+        sut.updateLocalState(identity) {
+            it.copy(
+                autoPaidSatsByAllowance = mapOf(PaykitAllowance.key(counted.counterparty, ALLOWANCE_ID) to 1_000uL),
+                autoPaidRequestIds = setOf(counted.id),
+            )
+        }
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(
+                occurrence("counted", PaymentExecutionStatus.SUCCEEDED),
+                occurrence("restored", PaymentExecutionStatus.SUCCEEDED),
+                occurrence("failed", PaymentExecutionStatus.FAILED),
+            ),
+        )
+
+        sut.recover(identity)
+
+        val state = sut.localState(identity)
+        val key = PaykitAllowance.key(counted.counterparty, ALLOWANCE_ID)
+        assertEquals(mapOf(key to 2_000uL), state.autoPaidSatsByAllowance, "Only the uncounted success is added")
+        assertEquals(
+            setOf("req-counted", "req-restored"),
+            state.autoPaidRequestIds.mapTo(mutableSetOf()) { it.paymentRequestId },
+        )
+    }
+
+    @Test
+    fun `a ledger success whose journal entry is still open counts once`() = test {
+        sut.activate(identity)
+        val request = fixtures.paymentRequest(id = "req-pending")
+        seedJournal(journalEntry("pending", request, Stage.SENT, paymentHash = PAYMENT_HASH))
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("pending", PaymentExecutionStatus.SUCCEEDED)),
+        )
+
+        sut.recover(identity)
+
+        val state = sut.localState(identity)
+        assertEquals(Stage.SUCCEEDED, state.journal.single().stage)
+        assertEquals(
+            mapOf(PaykitAllowance.key(request.counterparty, ALLOWANCE_ID) to 1_000uL),
+            state.autoPaidSatsByAllowance,
+        )
+    }
+
+    @Test
+    fun `recovery settles a restored submitted attempt from the node`() = test {
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("restored", PaymentExecutionStatus.SUBMITTED)),
+        )
+        val captured = PaykitAllowanceLocalState(
+            journal = listOf(journalEntry("restored", request, Stage.SUBMITTED, paymentHash = PAYMENT_HASH)),
+        )
+        seedJournal(*PaykitAllowanceStateBackup(captured).restored().journal.toTypedArray())
+        nodeStatuses[PAYMENT_HASH] = PaymentStatus.SUCCEEDED
+
+        sut.recover(identity)
+
+        assertEquals(listOf(PaymentOutcome.SUCCEEDED), recordedOutcomes.map { it.outcome })
+        assertEquals(Stage.SUCCEEDED, sut.localState(identity).journal.single().stage)
+    }
+
+    @Test
+    fun `a restored submitted attempt waits until the node can list payments`() = test {
+        val request = fixtures.paymentRequest()
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence("restored", PaymentExecutionStatus.SUBMITTED)),
+        )
+        val captured = PaykitAllowanceLocalState(
+            journal = listOf(journalEntry("restored", request, Stage.SUBMITTED, paymentHash = PAYMENT_HASH)),
+        )
+        seedJournal(*PaykitAllowanceStateBackup(captured).restored().journal.toTypedArray())
+        nodeStatuses[PAYMENT_HASH] = PaymentStatus.SUCCEEDED
+        nodeListsPayments = false
+
+        sut.recover(identity)
+
+        assertTrue(recordedOutcomes.isEmpty(), "Nothing is settled before the node runs")
+        assertEquals(Stage.SUBMITTED, sut.localState(identity).journal.single().stage)
+
+        nodeListsPayments = true
+        sut.recover(identity)
+
+        assertEquals(listOf(PaymentOutcome.SUCCEEDED), recordedOutcomes.map { it.outcome })
+    }
+
+    @Test
     fun `recovery gives the payment list back when it fails an automatic attempt`() = test {
         val request = fixtures.paymentRequest()
         accountingState = fixtures.accountingState(
@@ -1102,6 +1194,34 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             emptyList(),
             recordedOutcomes.filter { it.attemptId == attemptId && it.outcome == PaymentOutcome.FAILED },
         )
+    }
+
+    @Test
+    fun `recovery settles a manual lightning payment restored from a backup taken before the send`() = test {
+        sut.activate(identity)
+        val attemptId = checkNotNull(
+            sut.beginManualPayment(fixtures.paymentRequest(), fixtures.lightningIdentifier, PAYMENT_HASH.uppercase())
+                .getOrThrow(),
+        )
+        val captured = sut.localState(identity)
+        assertEquals(Stage.SUBMITTED, captured.journal.single().stage)
+        seedJournal(*PaykitAllowanceStateBackup(captured).restored().journal.toTypedArray())
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence(attemptId, PaymentExecutionStatus.SUBMITTED)),
+        )
+        nodeStatuses[PAYMENT_HASH] = PaymentStatus.SUCCEEDED
+        val restarted = PaykitAllowanceExecutor(
+            ioDispatcher = testDispatcher,
+            paykitSdkService = sdk,
+            store = PaykitAllowanceStore(keychain),
+            payer = payer,
+            clock = clock,
+            accountingAmount = { _, _ -> fixtures.accountingAmount("0.00001") },
+        )
+
+        restarted.recover(identity)
+
+        assertEquals(listOf(PaymentOutcomeReport(attemptId, PaymentOutcome.SUCCEEDED)), recordedOutcomes)
     }
 
     @Test
