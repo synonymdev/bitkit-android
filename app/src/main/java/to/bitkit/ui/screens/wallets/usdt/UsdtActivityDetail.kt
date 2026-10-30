@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.usdt
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
@@ -119,7 +121,7 @@ internal fun UsdtActivityDetail(
     var showDetails by rememberSaveable(transfer.id) { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     LaunchedEffect(transfer.id, showDetails) { scrollState.scrollTo(0) }
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().background(Colors.Black).navigationBarsPadding()) {
         AppTopBar(
             titleText = stringResource(
                 transfer.detailTitleResource

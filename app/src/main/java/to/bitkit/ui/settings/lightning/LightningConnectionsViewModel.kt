@@ -5,9 +5,7 @@ import android.net.Uri
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ClosedChannelDetails
-import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.SortDirection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,7 +16,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -32,7 +29,6 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.filterPending
 import to.bitkit.models.Toast
-import to.bitkit.models.safe
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
@@ -71,8 +67,7 @@ class LightningConnectionsViewModel @Inject constructor(
                 .onSuccess { closedChannels ->
                     val channels = lightningRepo.lightningState.value.channels
                     val openChannels = channels.filterOpen()
-                    val pendingConnections =
-                        getPendingConnections(channels, blocktankRepo.blocktankState.value.paidOrders)
+                    val pendingConnections = channels.filterPending()
 
                     _uiState.update { state ->
                         state.copy(
@@ -93,12 +88,7 @@ class LightningConnectionsViewModel @Inject constructor(
 
     private fun observeState() {
         viewModelScope.launch(bgDispatcher) {
-            combine(
-                lightningRepo.lightningState,
-                blocktankRepo.blocktankState,
-            ) { lightningState, blocktankState ->
-                Pair(lightningState, blocktankState)
-            }.collect { (lightningState, blocktankState) ->
+            lightningRepo.lightningState.collect { lightningState ->
                 val channels = lightningState.channels
                 val connectionText = context.getString(R.string.lightning__connection)
 
@@ -106,13 +96,10 @@ class LightningConnectionsViewModel @Inject constructor(
                     it.copy(
                         isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                         openChannels = channels.filterOpen().map { channel ->
-                            channel.mapToUiModel(channels, blocktankState.paidOrders, connectionText)
+                            channel.mapToUiModel(channels, connectionText)
                         }.reversed().toImmutableList(),
-                        pendingConnections = getPendingConnections(channels, blocktankState.paidOrders)
-                            .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) }
-                            .reversed().toImmutableList(),
-                        failedOrders = getFailedOrdersAsChannels(blocktankState.paidOrders)
-                            .map { it.mapToUiModel(channels, blocktankState.paidOrders, connectionText) }
+                        pendingConnections = channels.filterPending()
+                            .map { it.mapToUiModel(channels, connectionText) }
                             .reversed().toImmutableList(),
                         localBalance = calculateLocalBalance(channels),
                         remoteBalance = channels.calculateRemoteBalance(),
@@ -154,16 +141,6 @@ class LightningConnectionsViewModel @Inject constructor(
         loadClosedChannels()
     }
 
-    private fun getPendingConnections(
-        knownChannels: List<ChannelDetails>,
-        paidOrders: List<IBtOrder>,
-    ): List<ChannelDetails> {
-        val pendingLdkChannels = knownChannels.filterPending()
-        val pendingOrderChannels = getPendingOrdersAsChannels(knownChannels, paidOrders)
-
-        return pendingOrderChannels + pendingLdkChannels
-    }
-
     private fun calculateLocalBalance(channels: List<ChannelDetails>): ULong {
         return channels
             .filterOpen()
@@ -185,85 +162,21 @@ class LightningConnectionsViewModel @Inject constructor(
     }
 }
 
-internal fun getPendingOrdersAsChannels(
-    knownChannels: List<ChannelDetails>,
-    paidOrders: List<IBtOrder>,
-): List<ChannelDetails> {
-    return paidOrders.mapNotNull { order ->
-        if (knownChannels.any { channel -> channel.fundingTxo?.txid == order.channel?.fundingTx?.id }) {
-            return@mapNotNull null
-        }
-
-        if (order.state2 !in listOf(BtOrderState2.CREATED, BtOrderState2.PAID)) return@mapNotNull null
-
-        createChannelDetails().copy(
-            channelId = order.id,
-            counterpartyNodeId = order.lspNode?.pubkey.orEmpty(),
-            fundingTxo = order.channel?.fundingTx?.let { OutPoint(txid = it.id, vout = it.vout.toUInt()) },
-            channelValueSats = order.clientBalanceSat.safe() + order.lspBalanceSat.safe(),
-            outboundCapacityMsat = order.clientBalanceSat * 1000u,
-            inboundCapacityMsat = order.lspBalanceSat * 1000u,
-        )
-    }
-}
-
-internal fun getFailedOrdersAsChannels(
-    paidOrders: List<IBtOrder>,
-): List<ChannelDetails> {
-    return paidOrders.mapNotNull { order ->
-        if (order.state2 != BtOrderState2.EXPIRED) return@mapNotNull null
-
-        createChannelDetails().copy(
-            channelId = order.id,
-            counterpartyNodeId = order.lspNode?.pubkey.orEmpty(),
-            fundingTxo = order.channel?.fundingTx?.let { OutPoint(txid = it.id, vout = it.vout.toUInt()) },
-            channelValueSats = order.clientBalanceSat.safe() + order.lspBalanceSat.safe(),
-            outboundCapacityMsat = order.clientBalanceSat * 1000u,
-            inboundCapacityMsat = order.lspBalanceSat * 1000u,
-            isChannelReady = false,
-            isUsable = false,
-        )
-    }
-}
-
-@Suppress("ForbiddenComment")
 internal fun getChannelName(
     channel: ChannelDetails,
     allChannels: List<ChannelDetails>,
-    paidOrders: List<IBtOrder>,
     connectionText: String,
 ): String {
-    val default = channel.inboundScidAlias?.toString() ?: "${channel.channelId.take(10)}…"
-
-    // orders without a corresponding known channel are considered pending
-    val pendingChannels = paidOrders.filter { order ->
-        allChannels.none { ch -> ch.fundingTxo?.txid == order.channel?.fundingTx?.id }
-    }
-    val pendingIndex = pendingChannels.indexOfFirst { order -> channel.channelId == order.id }
-
-    // TODO: sort channels to get consistent index; node.listChannels returns a list in random order
     val channelIndex = allChannels.indexOfFirst { channel.channelId == it.channelId }
-
-    return when {
-        channelIndex == -1 -> {
-            if (pendingIndex == -1) {
-                default
-            } else {
-                val index = allChannels.size + pendingIndex
-                "$connectionText ${index + 1}"
-            }
-        }
-
-        else -> "$connectionText ${channelIndex + 1}"
-    }
+    if (channelIndex == -1) return channel.inboundScidAlias?.toString() ?: "${channel.channelId.take(10)}…"
+    return "$connectionText ${channelIndex + 1}"
 }
 
 internal fun ChannelDetails.mapToUiModel(
     allChannels: List<ChannelDetails>,
-    paidOrders: List<IBtOrder>,
     connectionText: String,
 ): ChannelUi = ChannelUi(
-    name = getChannelName(this, allChannels, paidOrders, connectionText),
+    name = getChannelName(this, allChannels, connectionText),
     details = this,
 )
 
@@ -296,7 +209,6 @@ data class LightningConnectionsUiState(
     val isRefreshing: Boolean = false,
     val openChannels: ImmutableList<ChannelUi> = persistentListOf(),
     val pendingConnections: ImmutableList<ChannelUi> = persistentListOf(),
-    val failedOrders: ImmutableList<ChannelUi> = persistentListOf(),
     val closedChannels: ImmutableList<ChannelUi> = persistentListOf(),
     val localBalance: ULong = 0u,
     val remoteBalance: ULong = 0u,

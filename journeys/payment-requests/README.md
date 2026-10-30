@@ -47,6 +47,16 @@ existing foreground synchronization. A protocol proof changes the note-free subt
 "Proof submitted"; a nonblank note still takes precedence. This is not inferred from a chain
 payment. iOS keeps a static note/date receipt with no lifecycle subtitle, so these receipt-status
 steps do not apply there.
+The USDT history step in `request-summary.xml` requires both instances opted in, a payer funded with
+local test USDT, and two completed requests (one USD-denominated and one BTC-denominated), each paid
+in USDT with a verified receipt. Establish these using the local USDT fixture before the journey and
+record the USD request amount and each payer activity detail's rounded Payment value. The USD
+receipt matches the request amount. The BTC request's receipt retains up to six decimals and rounds
+to that Payment value (shown as less than 0.01 below one cent), not the fee-inclusive activity total.
+The two payments need not have equal amounts. iOS uses a supported 375-point device with enlarged
+Dynamic Type; Android uses 320 dp. `contact-request-
+or-pay.xml` also needs a third linked contact that publishes no payment endpoints, so the failure
+and retry steps are reproducible.
 
 `contact-request-or-pay.xml` uses the same two-instance setup and starts from the payer's Contact Detail screen, opened through the `bitkit://contact` deeplink. Its timing step assumes the payer has been running for about a minute: right after launch, the Paykit session restore and link refresh hold the SDK and can push the Pay step well past the budget.
 

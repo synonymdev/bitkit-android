@@ -113,6 +113,8 @@ private fun Content(
 ) {
     BackHandler(enabled = uiState.isBusy) {}
 
+    val removal = uiState.removal
+
     val pickMedia = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { onAvatarSelected(it) } }
@@ -177,16 +179,18 @@ private fun Content(
                     )
                 },
                 onDelete = onDelete,
-                deleteLabel = stringResource(R.string.profile__delete_profile),
+                deleteLabel = stringResource(removal.label),
+                deleteSectionLabel = stringResource(removal.sectionLabel),
+                deleteIcon = removal.icon,
             )
         }
     }
 
     if (uiState.showDeleteDialog) {
         AppAlertDialog(
-            title = stringResource(R.string.profile__delete_confirm_title),
-            text = stringResource(R.string.profile__delete_confirm_description),
-            confirmText = stringResource(R.string.common__delete_yes),
+            title = stringResource(removal.confirmTitle),
+            text = stringResource(removal.confirmDescription),
+            confirmText = stringResource(removal.confirmText),
             onConfirm = onConfirmDelete,
             onDismiss = onDismissDeleteDialog,
         )
@@ -194,8 +198,8 @@ private fun Content(
 
     if (uiState.showDeleteFailureDialog) {
         AppAlertDialog(
-            title = stringResource(R.string.profile__delete_error_title),
-            text = stringResource(R.string.profile__delete_error_description),
+            title = stringResource(removal.errorTitle),
+            text = stringResource(removal.errorDescription),
             confirmText = stringResource(R.string.common__retry),
             dismissText = stringResource(R.string.profile__sign_out),
             onConfirm = onRetryDelete,

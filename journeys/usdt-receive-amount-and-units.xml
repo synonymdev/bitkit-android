@@ -4,14 +4,15 @@
     <action>Enable USDT in the introductory sheet or Settings, General, Payments before starting this flow.</action>
     <action>Open USDT from Home. Verify the USDT balance, teal Tether icon and existing activity rows.</action>
     <action>Open Receive. Verify Receive Dollars, the USDT tab and Network: Arbitrum One on the QR screen.</action>
+    <action>Tap Edit. Verify the Amount screen slides in from the right, as Edit Invoice does on the Savings tab. Tap Back and verify it slides out to the right over the QR.</action>
     <action>Tap Edit, enter 5 and tap Back. Verify the QR has no uint256 amount.</action>
-    <action>Tap Edit. Enter 3.5. Verify the dollar amount and BTC equivalent are displayed, there is no input-unit toggle, the keypad follows the divider, and Continue stays at the bottom without overlap.</action>
+    <action>Tap Edit. Enter 3.50. Verify the dollar amount and BTC equivalent are displayed, there is no input-unit toggle, the keypad follows the divider, and Continue stays at the bottom without overlap.</action>
     <action>Continue to the QR. Verify it requests the Arbitrum USDT token, the wallet address and uint256=3500000, never Bitcoin.</action>
     <action>Tap Edit, enter a different amount and tap Back. Verify the QR still requests uint256=3500000.</action>
-    <action>Tap Copy on the QR screen and verify the clipboard contains only the receiving address. Tap the QR and verify it copies the same address, while the QR still encodes the payment URI including uint256=3500000.</action>
-    <action>Open Share and verify the text includes the plain receiving address, Network: Arbitrum One and 3.5 USDT, together with a QR image encoding the payment URI. Cancel sharing. Open Show Details and verify Copy contains the same plain address and Share includes the same text and QR image. Cancel sharing.</action>
+    <action>Tap Copy on the QR screen and verify the clipboard contains only the receiving address. Capture the tooltip immediately and verify it says &quot;Address copied to clipboard. Make sure USDT is only sent on the selected network.&quot; After it disappears, tap the QR and verify the same address and warning, while the QR still encodes the payment URI including uint256=3500000.</action>
+    <action>Open Share and verify the text includes the plain receiving address, Network: Arbitrum One and 3.5 USDT, together with a QR image encoding the payment URI. Cancel sharing. Open Show Details and verify Copy contains the same plain address and shows the same USDT network reminder, and Share includes the same text and QR image. Cancel sharing.</action>
     <action>Open Network and verify Arbitrum is marked Default and all enabled bridge networks remain available, with circular USDT icons. Return to the QR.</action>
-    <action>Select Savings. Verify Receive Bitcoin and a Bitcoin QR. Select USDT and verify Receive Dollars and the Arbitrum USDT QR.</action>
+    <action>Select Savings. Verify Receive Bitcoin and a Bitcoin QR. Tap Copy and verify its usual copy feedback contains no USDT network warning. Select USDT and verify Receive Dollars and the Arbitrum USDT QR.</action>
     <action>Close Receive and return Home. Open a USDT activity row, then Show All. Verify USDT details and mixed activity remain reachable.</action>
   </actions>
 </journey>

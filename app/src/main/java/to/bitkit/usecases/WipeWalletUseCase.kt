@@ -5,6 +5,7 @@ import kotlinx.coroutines.sync.Mutex
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.runSuspendCatching
@@ -50,6 +51,7 @@ class WipeWalletUseCase @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
     private val usdtRepo: UsdtRepo,
     private val paykitUsdtPaymentRepo: PaykitUsdtPaymentRepo,
+    private val connectionRecovery: WalletConnectionRecovery,
 ) {
     private val wipeMutex = Mutex()
 
@@ -63,11 +65,13 @@ class WipeWalletUseCase @Inject constructor(
         lightningRepo.setWiping(true)
         val result = try {
             runSuspendCatching {
-                paykitSdkService.withWalletWipe {
-                    stopNode().getOrThrow()
-                    cleanupRemote()
-                    wipeLocal(walletIndex, resetWalletState).getOrThrow()
-                    onSuccess()
+                connectionRecovery.withIdentityChange {
+                    paykitSdkService.withWalletWipe {
+                        stopNode().getOrThrow()
+                        cleanupRemote()
+                        wipeLocal(walletIndex, resetWalletState).getOrThrow()
+                        onSuccess()
+                    }
                 }
             }
         } finally {

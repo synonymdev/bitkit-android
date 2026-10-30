@@ -8,6 +8,7 @@ import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateSendReport
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -19,6 +20,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -36,6 +38,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.SubscriptionClockOffset
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -66,6 +69,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
     private val proposedTerms = mutableListOf<Pair<Instant, List<String>>>()
     private var localState = PaykitAllowanceLocalState()
+    private var failDurableSave = false
     private var records = listOf<AllowanceRecord>()
     private lateinit var sut: PaykitAllowanceRepo
 
@@ -74,6 +78,12 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         whenever(executor.events).thenReturn(executorEvents)
         whenever(executor.localState(any())).thenAnswer { localState }
         whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
+            val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
+            localState = change(localState)
+            localState
+        }
+        whenever(executor.updateLocalStateDurably(any(), any())).doSuspendableAnswer {
+            if (failDurableSave) throw PaykitAllowanceError.Unavailable
             val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
             localState = change(localState)
             localState
@@ -152,27 +162,22 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `auto-paid sats and requests come from succeeded automatic payments`() = test {
+    fun `auto-paid sats and requests come from the lasting totals, not the trimmed journal`() = test {
         records = listOf(fixtures.record(allowanceId = ALLOWANCE_ID))
         val paid = fixtures.paymentRequest(id = "paid")
-        val failed = fixtures.paymentRequest(id = "failed")
-        val secondPaid = fixtures.paymentRequest(id = "second")
+        val trimmedAway = fixtures.paymentRequest(id = "journaled")
         localState = PaykitAllowanceLocalState(
             groups = listOf(group(ALLOWANCE_ID)),
-            journal = listOf(
-                journalEntry("a", paid, ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED),
-                journalEntry("b", secondPaid, ALLOWANCE_ID, 2_000uL, Stage.SUCCEEDED),
-                journalEntry("c", failed, ALLOWANCE_ID, 5_000uL, Stage.FAILED),
-                journalEntry("d", fixtures.paymentRequest(id = "manual"), null, 7_000uL, Stage.SUCCEEDED, false),
-            ),
+            journal = listOf(journalEntry("b", trimmedAway, ALLOWANCE_ID, 2_000uL, Stage.SUCCEEDED)),
+            autoPaidSatsByAllowance = mapOf(entryKey to 3_000uL),
+            autoPaidRequestIds = setOf(paid.id),
         )
 
         sut.activate(identity)
 
         assertEquals(mapOf("group-1" to 3_000uL), sut.autoPaidSats.value)
         assertTrue(sut.isAutoPaid(paid.id))
-        assertFalse(sut.isAutoPaid(failed.id))
-        assertFalse(sut.isAutoPaid(fixtures.paymentRequest(id = "manual").id))
+        assertFalse(sut.isAutoPaid(trimmedAway.id))
     }
 
     @Test
@@ -181,14 +186,11 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             fixtures.record(),
             fixtures.record(counterparty = fixtures.otherCounterpartyKey),
         )
-        val otherPaid = fixtures.paymentRequest(id = "other-paid", counterparty = fixtures.otherCounterpartyKey)
-        localState = PaykitAllowanceLocalState(
-            journal = listOf(journalEntry("a", otherPaid, ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED)),
-        )
+        val otherKey = "${PubkyPublicKeyFormat.normalized(fixtures.otherCounterpartyKey)}/$ALLOWANCE_ID"
+        localState = PaykitAllowanceLocalState(autoPaidSatsByAllowance = mapOf(otherKey to 1_000uL))
 
         sut.activate(identity)
 
-        val otherKey = "${PubkyPublicKeyFormat.normalized(fixtures.otherCounterpartyKey)}/$ALLOWANCE_ID"
         assertEquals(mapOf(entryKey to 0uL, otherKey to 1_000uL), sut.autoPaidSats.value)
     }
 
@@ -213,6 +215,20 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         sut.refresh()
 
         assertFalse(sut.coversRequest(fixtures.paymentRequest()))
+    }
+
+    @Test
+    fun `a bitcoin request payable only over USDT is never held for an allowance`() = test {
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        val usdtOnly = fixtures.paymentRequest().copy(
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.UsdtArbitrum.rawValue),
+        )
+
+        assertFalse(sut.coversRequest(usdtOnly))
+        assertFalse(sut.isAutomaticallyHandling(usdtOnly))
+        assertFalse(sut.processIncomingRequests(listOf(usdtOnly)))
+        verify(executor, never()).classifyAboveLimit(any(), any(), any())
     }
 
     @Test
@@ -356,6 +372,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertTrue(entry.canEnd, "The allowee can still end it")
         assertNull(sut.proposalForPresentation())
 
+        sut.markOffersAnnounced(accepted)
         assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An accepted offer is not accepted or announced twice")
         verify(sdk, times(1)).acceptAllowance(any(), any(), any())
     }
@@ -371,7 +388,9 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertNull(sut.proposalForPresentation(), "A failed offer still never opens the review sheet")
 
         acceptFlipsRecordToActive()
-        assertEquals(listOf(fixtures.counterpartyKey), sut.acceptOffersFromAllowers().map { it.counterparty })
+        val accepted = sut.acceptOffersFromAllowers()
+        assertEquals(listOf(fixtures.counterpartyKey), accepted.map { it.counterparty })
+        sut.markOffersAnnounced(accepted)
         assertTrue(sut.acceptOffersFromAllowers().isEmpty())
         verify(sdk, times(2)).acceptAllowance(any(), any(), any())
     }
@@ -409,6 +428,85 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `offer whose accept committed as its refresh was cancelled is announced once on the next refresh`() = test {
+        records = listOf(receivedProposal())
+        whenever(sdk.acceptAllowance(any(), any(), any())).thenAnswer {
+            records = listOf(fixtures.record(localRole = AllowanceLocalRole.ALLOWEE, proposedByMe = false))
+            throw CancellationException("The app left the foreground")
+        }
+        sut.activate(identity)
+
+        assertFailsWith<CancellationException> { sut.acceptOffersFromAllowers() }
+        sut.refresh()
+
+        val unannounced = sut.acceptOffersFromAllowers()
+        assertEquals(listOf(fixtures.counterpartyKey), unannounced.map { it.counterparty })
+        assertEquals(unannounced, sut.offersToAnnounce.value, "It waits for the app to announce it")
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An overlapping refresh never adds it twice")
+        sut.markOffersAnnounced(unannounced)
+        assertTrue(sut.offersToAnnounce.value.isEmpty())
+        assertTrue(localState.acceptingOfferIds.isEmpty(), "Its mark is cleared with it")
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "It is announced once")
+        assertTrue(localState.acceptingOfferIds.isEmpty())
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
+    fun `a refresh while an announced offer's mark is cleared never queues it again`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+        val announced = sut.acceptOffersFromAllowers()
+        var duringClear: List<PaykitAllowanceEntry>? = null
+        var clearing = false
+        whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
+            val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
+            if (!clearing) {
+                clearing = true
+                duringClear = sut.acceptOffersFromAllowers()
+            }
+            localState = change(localState)
+            localState
+        }
+
+        sut.markOffersAnnounced(announced)
+
+        assertEquals(emptyList(), duringClear)
+        assertTrue(sut.offersToAnnounce.value.isEmpty())
+    }
+
+    @Test
+    fun `an announced offer whose cleared mark could not be saved is not announced again`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+        val announced = sut.acceptOffersFromAllowers()
+        assertEquals(listOf(fixtures.counterpartyKey), announced.map { it.counterparty })
+        // updateLocalState logs a failed save and returns the changed state without storing it.
+        whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
+            val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
+            change(localState)
+        }
+
+        sut.markOffersAnnounced(announced)
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty(), "An offer already announced is not announced again")
+    }
+
+    @Test
+    fun `offer is not accepted while its mark cannot be saved`() = test {
+        records = listOf(receivedProposal())
+        acceptFlipsRecordToActive()
+        sut.activate(identity)
+        failDurableSave = true
+
+        assertTrue(sut.acceptOffersFromAllowers().isEmpty())
+
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+    }
+
+    @Test
     fun `offer accepted while the profile is being deleted is not announced`() = test {
         records = listOf(receivedProposal())
         acceptFlipsRecordToActive()
@@ -422,7 +520,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `offer accept never answers an ask that joined the entry after the check`() = test {
+    fun `offer accept never answers another contact's ask under the same allowance id`() = test {
         val secondAllower = "pubky" + "a".repeat(52)
         val asker = "pubky" + "m".repeat(52)
         val offerX = fixtures.record(
@@ -643,6 +741,17 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an allowance that can no longer pay never holds a request back`() = test {
+        records = listOf(fixtures.record(state = AllowanceLifecycleState.ENDED))
+        sut.activate(identity)
+        assertFalse(sut.mayCover(fixtures.paymentRequest()))
+
+        records = listOf(fixtures.record())
+        sut.refresh()
+        assertTrue(sut.mayCover(fixtures.paymentRequest()))
+    }
+
+    @Test
     fun `a request above the limits is never held back while channels reconnect`() = test {
         records = listOf(fixtures.record())
         sut.activate(identity)
@@ -755,16 +864,22 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     fun `automatic payment is attributed to the contact's activity`() = test {
         records = listOf(fixtures.record())
         sut.activate(identity)
-        localState = PaykitAllowanceLocalState(
-            journal = listOf(
-                journalEntry("a", fixtures.paymentRequest(), ALLOWANCE_ID, 1_000uL, Stage.SUCCEEDED),
-            ),
-        )
+        localState = PaykitAllowanceLocalState(autoPaidSatsByAllowance = mapOf(entryKey to 1_000uL))
 
         executorEvents.emit(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, TXID))
 
         verify(activityRepo).setContact(eq(fixtures.counterpartyKey), eq(TXID), any(), any())
         assertEquals(mapOf(entryKey to 1_000uL), sut.autoPaidSats.value)
+    }
+
+    @Test
+    fun `running node recovers attempts left open for it`() = test {
+        sut.activate(identity)
+        clearInvocations(executor)
+
+        nodeReady()
+
+        verify(executor).recover(identity)
     }
 
     @Test
