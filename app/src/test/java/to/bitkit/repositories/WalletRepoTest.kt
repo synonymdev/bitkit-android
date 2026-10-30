@@ -57,6 +57,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.test.idleArkadeRepo
 import to.bitkit.ui.screens.wallets.receive.ReceiveTab
 import to.bitkit.ui.screens.wallets.receive.getInvoiceForTab
 import to.bitkit.usecases.DeriveBalanceStateUseCase
@@ -77,6 +78,7 @@ class WalletRepoTest : BaseUnitTest() {
     private lateinit var sut: WalletRepo
 
     private val keychain = mock<Keychain>()
+    private val arkadeRepo = idleArkadeRepo()
     private val coreService = mock<CoreService>()
     private val settingsStore = mock<SettingsStore>()
     private val lightningRepo = mock<LightningRepo>()
@@ -188,6 +190,7 @@ class WalletRepoTest : BaseUnitTest() {
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
         connectionRecovery = connectionRecovery,
+        arkadeRepo = arkadeRepo,
     )
 
     private fun lightningInvoice(bolt11: String, isExpired: Boolean = false) = LightningInvoice(

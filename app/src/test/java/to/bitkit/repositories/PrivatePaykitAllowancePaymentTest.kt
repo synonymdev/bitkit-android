@@ -54,6 +54,7 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
     private val cacheStore = mock<PrivatePaykitCacheStore>()
     private val settingsStore = mock<SettingsStore>()
     private val lightningRepo = mock<LightningRepo>()
+    private val arkadeRepo = mock<ArkadeRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val coreService = mock<CoreService>()
     private val clock = mock<Clock>()
@@ -75,6 +76,8 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
             }
         }
         PublicPaykitRepo.lightningRouteHintsValidator = { true }
+        whenever { arkadeRepo.receivedLightningPaymentHashes() }.thenReturn(emptySet())
+        whenever { arkadeRepo.attemptedLightningPaymentHashes() }.thenReturn(emptySet())
 
         sut = PrivatePaykitRepo(
             ioDispatcher = testDispatcher,
@@ -84,6 +87,7 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
             settingsStore = settingsStore,
             addressReservationRepo = mock<PrivatePaykitAddressReservationRepo>(),
             lightningRepo = lightningRepo,
+            arkadeRepo = arkadeRepo,
             walletRepo = mock<WalletRepo>(),
             publicPaykitRepo = publicPaykitRepo,
             paymentRequestRepo = mock<PaykitPaymentRequestRepo>(),

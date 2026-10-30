@@ -583,6 +583,11 @@ class PublicPaykitRepo @Inject constructor(
             description = "",
             expirySeconds = publicBolt11Expiry.inWholeSeconds.toUInt(),
         ).getOrThrow()
+        // Arkade has no amountless invoice: it answers with its Lightning address, which also takes payments offline.
+        if (coreService.decode(bolt11) is Scanner.LnurlPay) {
+            clearPublicBolt11Metadata()
+            return Endpoint(methodId = MethodId.Lnurl, value = bolt11, rawPayload = serializePayload(bolt11))
+        }
         val invoice = (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice
             ?: throw PublicPaykitError.InvalidPayload
         if (!hasLightningRouteHints(bolt11)) {

@@ -1,0 +1,20 @@
+<journey name="arkade transfer to spending">
+  <description>
+    Verifies that Arkade is the easy option where Transfer To Spending otherwise leads to Manual Setup. With Arkade
+    ready, Funding leads with "Transfer from Savings" (testTag "FundTransfer") and "Use Other Wallet" (testTag
+    "FundReceive") above "Manual Setup" (testTag "FundManual"), and the Savings and Spending transfer buttons open
+    the Arkade amount screen (testTag "SpendingAmount") instead of the Transfer Unavailable sheet. The confirm screen
+    shows the network fee and the Arkade boarding fee. Boarding needs the deposit confirmed on the chain Arkade runs
+    on, so this journey stops before the swipe.
+
+    Precondition: dev build with Arkade connected on mutinynet (no key needed), onboarded wallet with a positive
+    on-chain Savings balance and no channels. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the Savings balance card (testTag "ActivitySavings"), tap "Transfer To Spending" (testTag "TransferToSpending") and verify the amount screen (testTag "SpendingAmount") opens with the available amount, not the Transfer Unavailable sheet</action>
+    <action>Tap "Max" (testTag "SpendingAmountMax"), tap "Continue" (testTag "SpendingAmountContinue") and verify the confirm screen shows "Network fees", "Boarding fee", "To spending" and "Total", and a swipe to transfer</action>
+    <action>Go back to the wallet home, open Settings › Advanced › Lightning Connections and tap add connection (testTag "add_connection_button")</action>
+    <action>Verify "Transfer from Savings" (testTag "FundTransfer") and "Use Other Wallet" (testTag "FundReceive") are enabled above "Manual Setup" (testTag "FundManual"), and "Transfer from HW wallet" (testTag "FundHardware") is disabled</action>
+    <action>Tap "Transfer from Savings" and verify the amount screen (testTag "SpendingAmount") opens</action>
+  </actions>
+</journey>

@@ -4,6 +4,7 @@ package to.bitkit.ui
 import android.Manifest
 import android.content.Intent
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -139,6 +140,10 @@ import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen
 import to.bitkit.ui.screens.transfer.SavingsConfirmScreen
 import to.bitkit.ui.screens.transfer.SavingsIntroScreen
 import to.bitkit.ui.screens.transfer.SavingsProgressScreen
+import to.bitkit.ui.screens.transfer.arkade.ArkadeAmountScreen
+import to.bitkit.ui.screens.transfer.arkade.ArkadeConfirmScreen
+import to.bitkit.ui.screens.transfer.arkade.ArkadeDepositScreen
+import to.bitkit.ui.screens.transfer.arkade.ArkadeFundingViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalAmountScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConfirmScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
@@ -189,6 +194,7 @@ import to.bitkit.ui.settings.general.HardwareWalletsSettingsScreen
 import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.general.TagsSettingsScreen
 import to.bitkit.ui.settings.general.WidgetsSettingsScreen
+import to.bitkit.ui.settings.lightning.ArkadeDetailScreen
 import to.bitkit.ui.settings.lightning.ChannelDetailScreen
 import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
@@ -1051,10 +1057,48 @@ private fun RootNavHost(
                 )
             }
             deepLinkableComposable<Routes.Funding> {
+                val arkadeState by walletViewModel.arkadeState.collectAsStateWithLifecycle()
                 FundingScreen(
+                    canFundWithArkade = arkadeState.isReady,
+                    onTransfer = { navController.navigateTo(Routes.ArkadeFundingNav) },
+                    onFund = {
+                        scope.launch {
+                            navController.navigateToHome()
+                            delay(500) // Wait for nav to actually finish
+                            appViewModel.showSheet(Sheet.Receive())
+                        }
+                    },
                     onManual = { navController.navigateTo(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                 )
+            }
+            navigationWithDefaultTransitions<Routes.ArkadeFundingNav>(
+                startDestination = Routes.ArkadeAmount,
+            ) {
+                composableWithDefaultTransitions<Routes.ArkadeAmount> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ArkadeFundingNav) }
+                    ArkadeAmountScreen(
+                        viewModel = hiltViewModel<ArkadeFundingViewModel>(parentEntry),
+                        onContinue = { navController.navigateTo(Routes.ArkadeConfirm) },
+                        onBackClick = { navController.popBackStack() },
+                    )
+                }
+                composableWithDefaultTransitions<Routes.ArkadeConfirm> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ArkadeFundingNav) }
+                    ArkadeConfirmScreen(
+                        viewModel = hiltViewModel<ArkadeFundingViewModel>(parentEntry),
+                        onSent = { navController.navigateTo(Routes.ArkadeDeposit) },
+                        onBackClick = { navController.popBackStack() },
+                    )
+                }
+                composableWithDefaultTransitions<Routes.ArkadeDeposit> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ArkadeFundingNav) }
+                    BackHandler { navController.navigateToHome() }
+                    ArkadeDepositScreen(
+                        viewModel = hiltViewModel<ArkadeFundingViewModel>(parentEntry),
+                        onContinueClick = { navController.navigateToHome() },
+                    )
+                }
             }
             navigationWithDefaultTransitions<Routes.ExternalNav>(
                 startDestination = ExternalConnection(),
@@ -1186,6 +1230,7 @@ private fun NavGraphBuilder.home(
         )
     }
     deepLinkableComposable<Routes.Savings> {
+        val arkadeState by walletViewModel.arkadeState.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
         val forceCloseRemainingDuration by appViewModel.forceCloseRemainingDuration.collectAsStateWithLifecycle()
 
@@ -1194,18 +1239,26 @@ private fun NavGraphBuilder.home(
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
-            onTransferToSpendingClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
+            onTransferToSpendingClick = {
+                if (arkadeState.isReady) {
+                    navController.navigateTo(Routes.ArkadeFundingNav)
+                } else {
+                    appViewModel.showSheet(Sheet.TransferUnavailable)
+                }
+            },
             onBackClick = { navController.popBackStack() },
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
     }
     deepLinkableComposable<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
+        val arkadeState by walletViewModel.arkadeState.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
         SpendingWalletScreen(
             channels = lightningState.channels,
+            hasArkadeBalance = arkadeState.balanceSats > 0uL,
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
@@ -1217,7 +1270,13 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSavingsAvailability()
                 }
             },
-            onTransferFromSavingsClick = { appViewModel.showSheet(Sheet.TransferUnavailable) },
+            onTransferFromSavingsClick = {
+                if (arkadeState.isReady) {
+                    navController.navigateTo(Routes.ArkadeFundingNav)
+                } else {
+                    appViewModel.showSheet(Sheet.TransferUnavailable)
+                }
+            },
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -1815,6 +1874,20 @@ private fun NavGraphBuilder.lightningConnections(
                 navController = navController,
             )
         }
+        deepLinkableComposable<Routes.ArkadeDetail> {
+            val hasSeenSavingsIntro = settingsViewModel?.hasSeenSavingsIntro
+                ?.collectAsStateWithLifecycle()?.value == true
+            ArkadeDetailScreen(
+                onBack = { navController.popBackStack() },
+                onTransferToSavings = {
+                    if (hasSeenSavingsIntro) {
+                        navController.navigateToTransferSavingsAvailability()
+                    } else {
+                        navController.navigateToTransferSavingsIntro()
+                    }
+                },
+            )
+        }
         deepLinkableComposable<Routes.CloseConnection> {
             val route = it.toRoute<Routes.CloseConnection>()
             CloseConnectionScreen(
@@ -2258,6 +2331,9 @@ sealed interface Routes {
     data class ChannelDetail(val channelId: String) : Routes.DeepLinkable
 
     @Serializable
+    data object ArkadeDetail : Routes.DeepLinkable
+
+    @Serializable
     data class CloseConnection(val channelId: String) : Routes.DeepLinkable
 
     @Serializable
@@ -2304,6 +2380,18 @@ sealed interface Routes {
 
     @Serializable
     data object ExternalNav : Routes.DeepLinkable
+
+    @Serializable
+    data object ArkadeFundingNav : Routes.InternalOnly
+
+    @Serializable
+    data object ArkadeAmount : Routes.InternalOnly
+
+    @Serializable
+    data object ArkadeConfirm : Routes.InternalOnly
+
+    @Serializable
+    data object ArkadeDeposit : Routes.InternalOnly
 
     @Serializable
     data class ExternalConnection(val scannedNodeUri: String? = null) : Routes.DeepLinkable

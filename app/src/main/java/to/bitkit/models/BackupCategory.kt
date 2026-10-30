@@ -42,6 +42,10 @@ enum class BackupCategory(
         icon = R.drawable.ic_tag,
         title = R.string.settings__backup__category_tags,
     ),
+    ARKADE_EXIT(
+        icon = R.drawable.ic_lightning,
+        title = R.string.settings__backup__category_arkade_exit,
+    ),
     // Descoped in v1, will return in v2:
     // PROFILE(
     //     icon = R.drawable.ic_user,

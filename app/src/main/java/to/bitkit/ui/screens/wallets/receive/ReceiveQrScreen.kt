@@ -122,6 +122,7 @@ fun ReceiveQrScreen(
     onVerifyHardwareAddress: () -> Unit = {},
     showPaymentRequestContacts: Boolean = false,
     onClickPaymentRequestContacts: () -> Unit = {},
+    canReceiveWithArkade: Boolean = false,
 ) {
     SetMaxBrightness()
 
@@ -134,8 +135,9 @@ fun ReceiveQrScreen(
         hasReadyChannels,
         readyInboundLiquiditySats,
         walletState.bip21AmountSats,
+        canReceiveWithArkade,
     ) {
-        ReceiveLiquidityDecision.canCreateLightningInvoice(
+        canReceiveWithArkade || ReceiveLiquidityDecision.canCreateLightningInvoice(
             hasReadyChannels = hasReadyChannels,
             inboundCapacitySats = readyInboundLiquiditySats,
             invoiceAmountSats = walletState.bip21AmountSats,

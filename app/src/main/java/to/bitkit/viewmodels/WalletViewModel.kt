@@ -41,6 +41,7 @@ import to.bitkit.ext.of
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
+import to.bitkit.repositories.ArkadeRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
@@ -79,6 +80,7 @@ class WalletViewModel @Inject constructor(
     private val connectivityRepo: ConnectivityRepo,
     private val boltzService: BoltzService,
     private val connectionRecovery: WalletConnectionRecovery,
+    arkadeRepo: ArkadeRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
@@ -98,6 +100,7 @@ class WalletViewModel @Inject constructor(
     }
 
     val lightningState = lightningRepo.lightningState
+    val arkadeState = arkadeRepo.state
     val walletState = walletRepo.walletState
     val balanceState = walletRepo.balanceState
 

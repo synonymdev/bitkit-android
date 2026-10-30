@@ -311,6 +311,7 @@
     <string name="lightning__funding__button2">Use Other Wallet</string>
     <string name="lightning__funding__button_hw">Transfer from HW wallet</string>
     <string name="lightning__funding__nav_title">Spending Balance</string>
+    <string name="lightning__funding__text">The easiest option is to use your Bitkit savings or send bitcoin from a different wallet.</string>
     <string name="lightning__funding__title">Fund your &lt;accent&gt;spending balance&lt;/accent&gt;</string>
     <string name="lightning__funding_advanced__button2">Manual Setup</string>
     <string name="lightning__inbound_capacity">Inbound Capacity</string>
@@ -367,11 +368,27 @@
     <string name="lightning__savings_settling__text">Your transfer has been initiated and is &lt;accent&gt;settling on-chain&lt;/accent&gt;. Your savings balance will update automatically once it completes.</string>
     <string name="lightning__savings_settling__title">Transfer\n&lt;accent&gt;on the way&lt;/accent&gt;</string>
     <string name="lightning__scores_sync_time">Pathfinding Scores Sync Time</string>
+    <string name="lightning__arkade">Arkade</string>
+    <string name="lightning__arkade_claim_fee">Boarding fee</string>
+    <string name="lightning__arkade_confirmations">%1$d/1 confirmations</string>
+    <string name="lightning__arkade_deposit">Deposit</string>
+    <string name="lightning__arkade_deposit__boarded">Arkade added it to your spending balance.</string>
+    <string name="lightning__arkade_deposit__boarding">Confirmed. Arkade adds it to your spending balance in its next batch, usually within a minute.</string>
+    <string name="lightning__arkade_deposit__looking">Waiting for the first confirmation, about 10 minutes.</string>
+    <string name="lightning__arkade_deposits_claimed">Boarded deposits</string>
+    <string name="lightning__arkade_deposits_pending">Deposits in progress</string>
+    <string name="lightning__arkade_expiry">Next renewal</string>
+    <string name="lightning__arkade_lightning_address">Lightning address</string>
+    <string name="lightning__arkade_provider">Provider</string>
+    <string name="lightning__arkade_provider_value">Ark Labs</string>
+    <string name="lightning__arkade_receiving_unlimited">No limit</string>
+    <string name="lightning__arkade_trust">This balance is held on Arkade, run by Ark Labs, which can\'t spend it without you. Its funds expire unless renewed: Bitkit renews them while open, and Ark Labs\' renewal service while closed. Leaving without Ark Labs takes an on-chain exit of about a week.</string>
     <string name="lightning__spendable_onchain">Spendable Onchain</string>
     <string name="lightning__spending">Spending</string>
     <string name="lightning__spending_amount__error_max__description">The amount you can transfer to your spending balance is currently limited to ₿ {amount}.</string>
     <string name="lightning__spending_amount__error_max__title">Spending Balance Maximum</string>
     <string name="lightning__spending_amount__quarter">25%</string>
+    <string name="lightning__spending_amount__title">Transfer\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
     <string name="lightning__spending_confirm__amount">To spending</string>
     <string name="lightning__spending_confirm__lsp_fee">Service fees</string>
     <string name="lightning__spending_confirm__network_fee">Network fees</string>
@@ -853,6 +870,7 @@
     <string name="settings__backup__category_contacts" tools:ignore="UnusedResources">Contacts</string>
     <string name="settings__backup__category_profile" tools:ignore="UnusedResources">Profile</string>
     <string name="settings__backup__category_settings">Settings</string>
+    <string name="settings__backup__category_arkade_exit">Arkade wallet data</string>
     <string name="settings__backup__category_tags">Tags</string>
     <string name="settings__backup__category_transaction_log">Transaction Log</string>
     <string name="settings__backup__category_wallet">Boosts &amp; Transfers</string>

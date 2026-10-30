@@ -226,6 +226,17 @@ internal object Env {
 
     fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
 
+    /** Where the Arkade wallet keeps its database. */
+    fun arkadeStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "arkade")
+
+    /** A restored Arkade wallet data backup waiting to be imported when the Arkade wallet next starts. */
+    fun arkadeExitRestorePath(walletIndex: Int) =
+        Path(storagePathOf(walletIndex, network.name.lowercase(), "arkade-restore"), "wallet-state.json").toString()
+
+    /** Written after the Arkade wallet's first start on this install; until then it scans the operator for funds. */
+    fun arkadeStartedMarkerPath(walletIndex: Int) =
+        Path(storagePathOf(walletIndex, network.name.lowercase(), "arkade-restore"), "started").toString()
+
     fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")
     }

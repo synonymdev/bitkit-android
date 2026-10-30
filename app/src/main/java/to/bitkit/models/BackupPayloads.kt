@@ -87,3 +87,15 @@ data class WidgetsBackupV1(
     val createdAt: Long,
     val widgets: WidgetsData,
 )
+
+/**
+ * The Arkade wallet's unilateral exit data, as the SDK exports it, kept so a wallet restored on another device can
+ * still exit on-chain while the Arkade operators are unreachable.
+ */
+@Serializable
+data class ArkadeExitBackupV1(
+    val version: Int = 1,
+    val createdAt: Long,
+    val network: String,
+    val exitState: String,
+)

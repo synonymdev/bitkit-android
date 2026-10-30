@@ -19,8 +19,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -62,6 +64,7 @@ import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.ActivityBackupV1
+import to.bitkit.models.ArkadeExitBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BlocktankBackupV1
@@ -135,6 +138,7 @@ class BackupRepo @Inject constructor(
     private val keychain: Keychain,
     private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val lightningRepo: Provider<LightningRepo>,
+    private val arkadeRepo: ArkadeRepo,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val lightningService: LightningService,
@@ -433,6 +437,20 @@ class BackupRepo @Inject constructor(
         // payment and sync traffic does not re-upload the whole metadata envelope.
         dataListenerJobs.add(observeBackupChanges(activityRepo.activityTagsChanged, BackupCategory.METADATA))
 
+        // ARKADE_EXIT - back up once Arkade is ready, which replays when observing starts after it connected,
+        // and again whenever Arkade announces its unilateral exit data changed
+        dataListenerJobs.add(
+            scope.launch {
+                merge(
+                    arkadeRepo.state.map { it.isReady }.distinctUntilChanged().filter { it },
+                    arkadeRepo.exitStateChanged,
+                ).collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.ARKADE_EXIT)
+                }
+            }
+        )
+
         // LIGHTNING_CONNECTIONS - Only display sync timestamp, ldk-node manages its own backups
         @OptIn(FlowPreview::class)
         val lightningConnectionsJob = scope.launch {
@@ -579,6 +597,7 @@ class BackupRepo @Inject constructor(
             val upload = when (category) {
                 BackupCategory.WALLET -> uploadWalletBackup()
                 BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup()
+                BackupCategory.ARKADE_EXIT -> uploadArkadeExitBackup()
                 else -> runSuspendCatching {
                     vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
                 }
@@ -615,6 +634,15 @@ class BackupRepo @Inject constructor(
                 }
             }
         }
+    }
+
+    /** Nothing to back up until Arkade connects, which marks [BackupCategory.ARKADE_EXIT] required again. */
+    private suspend fun uploadArkadeExitBackup(): Result<Unit> = runSuspendCatching {
+        val backup = arkadeRepo.exitBackup().getOrThrow() ?: return@runSuspendCatching
+        vssBackupClient.putObject(
+            key = BackupCategory.ARKADE_EXIT.name,
+            data = json.encodeToString(backup).toByteArray(),
+        ).getOrThrow()
     }
 
     suspend fun persistWalletBackup(): Result<Unit> =
@@ -750,6 +778,10 @@ class BackupRepo @Inject constructor(
 
         BackupCategory.LIGHTNING_CONNECTIONS -> throw NotImplementedError("LIGHTNING backup is managed by ldk-node")
         BackupCategory.USDT_RECOVERY -> throw UsdtException.BackupUnavailable()
+        BackupCategory.ARKADE_EXIT -> {
+            val backup = checkNotNull(arkadeRepo.exitBackup().getOrThrow()) { "Arkade is not connected" }
+            json.encodeToString(backup).toByteArray()
+        }
     }
 
     private suspend fun getMetadataBackupDataBytes(): ByteArray = withContext(ioDispatcher) {
@@ -945,6 +977,12 @@ class BackupRepo @Inject constructor(
                 }
                 // SETTINGS is optional; preserving explicit local corrections is required.
                 connectionSession.replay()
+                // Before the slower categories, so the exit data is staged before Arkade connects and syncs.
+                performRestore(BackupCategory.ARKADE_EXIT) { dataBytes ->
+                    val parsed = json.decodeFromString<ArkadeExitBackupV1>(String(dataBytes))
+                    arkadeRepo.restoreExitBackup(parsed, backupWalletIndex()).getOrThrow()
+                    parsed.createdAt
+                }
                 val retainedWalletBackup = keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
                 if (retainedWalletBackup.isNullOrEmpty()) {
                     var didRestoreWalletBackup = false
