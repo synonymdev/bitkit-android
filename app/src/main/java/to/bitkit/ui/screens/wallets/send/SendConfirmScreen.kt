@@ -368,13 +368,8 @@ private fun ContentRunning(
     val isHardwareFeeLoading = uiState.hardwareWalletId != null && uiState.onchainFeeUi.isLoading
 
     val accentColor = when {
-        preparingRequest != null -> if (preparingRequest.acceptedPaymentEndpointIdentifiers.toSet() ==
-            setOf(MethodId.UsdtArbitrum.rawValue)
-        ) {
+        preparingRequest?.acceptedPaymentEndpointIdentifiers?.toSet() == setOf(MethodId.UsdtArbitrum.rawValue) ->
             Colors.Usdt
-        } else {
-            Colors.White64
-        }
         uiState.payMethod == SendMethod.LIGHTNING -> Colors.Purple
         else -> Colors.Brand
     }
