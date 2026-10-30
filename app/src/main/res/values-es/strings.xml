@@ -251,6 +251,7 @@
     <string name="notification__service__stop">Detener App</string>
     <string name="onboarding__connection_saved">Guardado. Reintenta para continuar la restauración.</string>
     <string name="onboarding__connection_settings">Ajustes de conexión</string>
+    <string name="onboarding__restore_incomplete_text">Tu billetera y tu saldo están de vuelta, pero Bitkit no pudo restaurar: %1$s.</string>
     <string name="onboarding__tos_checkbox">Condiciones de uso</string>
     <string name="onboarding__tos_checkbox_value">Al continuar, declaras que has leído y aceptas los términos de uso.</string>
     <string name="onboarding__pp_checkbox">Política de privacidad</string>

@@ -1,0 +1,29 @@
+{
+  "settings": {
+    "hideBalanceOnOpen": false,
+    "isDevModeEnabled": true,
+    "displayUnit": "modern",
+    "enableAutoReadClipboard": false,
+    "rgsServerUrl": "https://rgs.blocktank.to/snapshot",
+    "defaultTransactionSpeed": "normal",
+    "backupVerified": true,
+    "quickPayDailyLimitMultiplier": 5,
+    "selectedAddressType": "nativeSegwit",
+    "selectedCurrency": "USD",
+    "electrumServer": "tcp://192.168.1.10:60001",
+    "showWidgets": true,
+    "hideBalance": false,
+    "enableSendAmountWarning": false,
+    "usdtPreference": "undecided",
+    "addressTypesToMonitor": "nativeSegwit,taproot",
+    "enableSwipeToHideBalance": true,
+    "coinSelectAuto": true,
+    "coinSelectPreference": "BranchAndBound",
+    "notificationsGranted": false,
+    "isQuickPayEnabled": false,
+    "quickPayAmount": 5,
+    "primaryDisplay": "Bitcoin"
+  },
+  "createdAt": 1793351855000,
+  "version": 1
+}

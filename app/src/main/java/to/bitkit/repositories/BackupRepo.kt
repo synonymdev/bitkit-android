@@ -71,6 +71,8 @@ import to.bitkit.models.Toast
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.models.WidgetsBackupV1
+import to.bitkit.models.decodeBackup
+import to.bitkit.models.decodeSettingsBackup
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
@@ -846,10 +848,14 @@ class BackupRepo @Inject constructor(
         return json.encodeToString(payload).toByteArray()
     }
 
+    /**
+     * Restores every backup category. Only WALLET is fatal; the result holds the other categories that were
+     * found but could not be restored, so the caller can report an incomplete restore.
+     */
     suspend fun performFullRestoreFromLatestBackup(
         onCacheRestored: suspend () -> Unit = {},
         connectionSession: WalletConnectionRecovery.Session? = null,
-    ): Result<Unit> = withContext(ioDispatcher) {
+    ): Result<Set<BackupCategory>> = withContext(ioDispatcher) {
         if (connectionSession == null) {
             return@withContext runSuspendCatching {
                 connectionRecovery.withCurrentWallet {
@@ -858,7 +864,9 @@ class BackupRepo @Inject constructor(
             }
         }
         if (isUsdtRestorePending() && !keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
-            return@withContext restoreUsdtRecoveryAfterLegacyMigration(connectionSession)
+            return@withContext restoreUsdtRecoveryAfterLegacyMigration(
+                connectionSession
+            ).map { emptySet<BackupCategory>() }
         }
         Logger.debug("Full restore starting", context = TAG)
 
@@ -866,6 +874,7 @@ class BackupRepo @Inject constructor(
 
         // Mutated only by the sequential restore steps below, inside this single coroutine.
         val categoriesNeedingRewrite = mutableSetOf<BackupCategory>()
+        val failedCategories = mutableSetOf<BackupCategory>()
 
         val result = try {
             runSuspendCatching {
@@ -875,17 +884,18 @@ class BackupRepo @Inject constructor(
                 }
                 connectionSession.replay()
                 restoreUsdtRecovery()
-                performRestore(BackupCategory.METADATA) { dataBytes ->
+                performRestore(BackupCategory.METADATA, failedCategories) { dataBytes ->
                     val restored = restoreMetadataBackup(dataBytes, onCacheRestored)
                     if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.METADATA
+                    if (!restored.complete) failedCategories += BackupCategory.METADATA
                     restored.createdAt
                 }
-                performRestore(BackupCategory.SETTINGS) { dataBytes ->
-                    val parsed = json.decodeFromString<SettingsBackupV1>(String(dataBytes))
+                performRestore(BackupCategory.SETTINGS, failedCategories) { dataBytes ->
+                    val parsed = decodeSettingsBackup(String(dataBytes))
                     connectionSession.restoreSettings(parsed)
                     parsed.createdAt
                 }
-                performRestore(BackupCategory.WIDGETS) { dataBytes ->
+                performRestore(BackupCategory.WIDGETS, failedCategories) { dataBytes ->
                     val parsed = json.decodeFromString<WidgetsBackupV1>(String(dataBytes))
                     widgetsStore.restoreFromBackup(parsed)
                     parsed.createdAt
@@ -909,18 +919,23 @@ class BackupRepo @Inject constructor(
                     }
                     Logger.info("Restore success for: '${BackupCategory.WALLET}'", context = TAG)
                 }
-                performRestore(BackupCategory.BLOCKTANK) { dataBytes ->
-                    val parsed = json.decodeFromString<BlocktankBackupV1>(String(dataBytes))
+                performRestore(BackupCategory.BLOCKTANK, failedCategories) { dataBytes ->
+                    val parsed = decodeBackup<BlocktankBackupV1>(String(dataBytes))
                     blocktankRepo.restoreFromBackup(parsed)
                     parsed.createdAt
                 }
-                performRestore(BackupCategory.ACTIVITY) { dataBytes ->
+                performRestore(BackupCategory.ACTIVITY, failedCategories) { dataBytes ->
                     val restored = restoreActivityBackup(dataBytes)
                     if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.ACTIVITY
                     restored.createdAt
                 }
 
-                Logger.info("Full restore success", context = TAG)
+                if (failedCategories.isEmpty()) {
+                    Logger.info("Full restore success", context = TAG)
+                } else {
+                    Logger.warn("Full restore incomplete, failed: '${failedCategories.joinToString()}'", context = TAG)
+                }
+                failedCategories.toSet()
             }.onSuccess {
                 settingsStore.update { it.copy(backupVerified = true) }
             }.onFailure { e ->
@@ -995,7 +1010,7 @@ class BackupRepo @Inject constructor(
             String(dataBytes),
             mapOf("tagMetadata" to preActivityMetadataRepo::migrateBackupPreActivityMetadataJson),
         )
-        val parsed = json.decodeFromString<MetadataBackupV1>(migration.json)
+        val parsed = decodeBackup<MetadataBackupV1>(migration.json)
         val cleanCache = parsed.cache.resetBip21() // Force address rotation
         cacheStore.update { cleanCache }
         Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
@@ -1003,10 +1018,11 @@ class BackupRepo @Inject constructor(
         val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
             .onFailure { Logger.warn("Failed to restore pre-activity metadata", it, context = TAG) }
             .isSuccess
-        pubkyRepo.restoreSessionBackupState(parsed.pubkySession)
+        val sessionRestored = pubkyRepo.restoreSessionBackupState(parsed.pubkySession)
             .onFailure {
                 Logger.warn("Failed to restore pubky session backup state", it, context = TAG)
             }
+            .isSuccess
         pubkyRepo.restoreContactProfileOverrides(parsed.pubkyContactProfileOverrides)
             .onFailure {
                 Logger.warn("Failed to restore pubky contact profile overrides", it, context = TAG)
@@ -1019,7 +1035,11 @@ class BackupRepo @Inject constructor(
         Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
         Logger.debug("Restored ${parsed.hwWalletNames.orEmpty().size} hardware wallet names", TAG)
 
-        return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)
+        return RestoredCoreBackup(
+            createdAt = parsed.createdAt,
+            needsRewrite = migration.changed && persisted,
+            complete = sessionRestored,
+        )
     }
 
     private suspend fun restoreActivityBackup(dataBytes: ByteArray): RestoredCoreBackup {
@@ -1030,7 +1050,7 @@ class BackupRepo @Inject constructor(
                 "activityTags" to activityRepo::migrateBackupActivityTagsJson,
             ),
         )
-        val parsed = json.decodeFromString<ActivityBackupV1>(migration.json)
+        val parsed = decodeBackup<ActivityBackupV1>(migration.json)
         val persisted = activityRepo.restoreFromBackup(parsed)
             .onFailure { Logger.warn("Skipped activity backup rewrite after a failed restore", context = TAG) }
             .isSuccess
@@ -1217,6 +1237,7 @@ class BackupRepo @Inject constructor(
 
     private suspend fun performRestore(
         category: BackupCategory,
+        failedCategories: MutableSet<BackupCategory>? = null,
         restoreAction: suspend (dataBytes: ByteArray) -> Long,
     ): Result<Unit> = runSuspendCatching {
         var createdAtTimestamp = currentTimeMillis()
@@ -1241,6 +1262,7 @@ class BackupRepo @Inject constructor(
     }.onFailure {
         // Only WALLET is fatal to a full restore, so without this every other category fails silently.
         Logger.warn("Failed to restore: '$category'", it, context = TAG)
+        failedCategories?.add(category)
     }
 
     companion object {
@@ -1295,10 +1317,12 @@ private data class CoreFieldMigration(
  * @param createdAt the restored envelope's timestamp, used as the category's synced marker.
  * @param needsRewrite whether the envelope was migrated **and** Core persisted the result, meaning its VSS
  * backup can safely be rewritten with current entries.
+ * @param complete false when part of the envelope, such as the Pubky profile session, failed to restore.
  */
 private data class RestoredCoreBackup(
     val createdAt: Long,
     val needsRewrite: Boolean,
+    val complete: Boolean = true,
 )
 
 internal fun Throwable.isTemporaryBackupFailure(): Boolean = isPaykitTemporarilyUnavailable() || when (this) {
