@@ -784,7 +784,7 @@
     <string name="usdt__from_address">Adreça d\'origen</string>
     <string name="usdt__hide_details">Amagar detalls</string>
     <string name="usdt__intro_decline">No, gràcies</string>
-    <string name="usdt__intro_description">Bitcoin de cor. Dòlars quan els necessitis. Activa USDT (Tether) per enviar i rebre dòlars digitals amb Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin de cor. Dòlars quan els necessitis. Activa USDT (Tether) per enviar i rebre dòlars digitals ràpidament amb Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DÒLARS?&lt;/accent&gt;\nTU DECIDEIXES</string>
     <string name="usdt__intro_title">Novetat: USDT</string>
     <string name="usdt__maximum_total">Càrrec total màx.</string>
