@@ -10,6 +10,7 @@ import com.synonym.paykit.AllowanceSelectionInput
 import com.synonym.paykit.PaymentAttemptDecision
 import com.synonym.paykit.PaymentAttemptRecord
 import com.synonym.paykit.PaymentExecutionChecks
+import com.synonym.paykit.PaymentExecutionMode
 import com.synonym.paykit.PaymentExecutionStatus
 import com.synonym.paykit.PaymentOccurrence
 import com.synonym.paykit.PaymentOutcome
@@ -129,6 +130,10 @@ class PaykitAllowancePayer @Inject constructor(
         }.getOrDefault(false)
         return PaymentOutcome.SUCCEEDED.takeIf { hasProof }
     }
+
+    /** True once the node can list its payments, so a payment missing from the list is one it never sent. */
+    suspend fun canListLightningPayments(): Boolean =
+        runSuspendCatching { lightningRepo.listPaymentsOrNull() }.getOrNull() != null
 
     /** The node's status for an outbound payment, or null when the node does not know it (or is not running). */
     suspend fun lightningPaymentStatus(paymentHash: String): PaymentStatus? =
@@ -280,6 +285,8 @@ class PaykitAllowanceExecutor @Inject constructor(
             // No ledger means nothing was ever admitted, so there is nothing to recover.
             paykitSdkService.allowanceAccountingState() ?: return@runSuspendCatching
             val state = ensureReconciled(identity)
+            // The ledger keeps every attempt, while the journal is trimmed and an iOS backup carries no totals.
+            updateLocalState(identity) { it.withLedgerAutoPaid(state.history) }
             // One read of the journal per pass: each attempt below is settled from this snapshot.
             val journal = localState(identity).journal.associateBy { it.attemptId }
             for (attempt in state.history.occurrences.flatMap { it.attempts }) {
@@ -290,8 +297,12 @@ class PaykitAllowanceExecutor @Inject constructor(
                     }
                     PaymentExecutionStatus.SUBMITTED, PaymentExecutionStatus.UNKNOWN -> {
                         val entry = journal[attempt.attemptId]
-                        val outcome = entry?.let { journalOutcome(it) }
-                            ?: PaymentOutcome.UNKNOWN.takeIf { attempt.status == PaymentExecutionStatus.SUBMITTED }
+                        val outcome = if (entry != null && awaitsNode(entry)) {
+                            null
+                        } else {
+                            entry?.let { journalOutcome(it) }
+                                ?: PaymentOutcome.UNKNOWN.takeIf { attempt.status == PaymentExecutionStatus.SUBMITTED }
+                        }
                         outcome?.let { record(attempt.attemptId, it, identity) }
                         // One that paid nothing gives the payee's list back, as a live failure does.
                         if (outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) {
@@ -369,8 +380,18 @@ class PaykitAllowanceExecutor @Inject constructor(
     }
 
     private suspend fun journalOutcome(entry: JournalEntry): PaymentOutcome? = when (entry.stage) {
-        // The journal is written before the node call, so no payment left this wallet.
-        Stage.PREPARED, Stage.SUBMITTED, Stage.FAILED -> PaymentOutcome.FAILED
+        Stage.FAILED -> PaymentOutcome.FAILED
+        // The live journal is written before the node call, but a restored snapshot may predate the send,
+        // so a node that knows the payment decides.
+        Stage.PREPARED, Stage.SUBMITTED -> if (awaitsNode(entry)) {
+            null
+        } else {
+            when (entry.paymentHash?.let { payer.lightningPaymentStatus(it) }) {
+                PaymentStatus.SUCCEEDED -> PaymentOutcome.SUCCEEDED
+                PaymentStatus.PENDING -> null
+                PaymentStatus.FAILED, null -> PaymentOutcome.FAILED
+            }
+        }
         Stage.SUCCEEDED -> PaymentOutcome.SUCCEEDED
         Stage.SENDING, Stage.SENT, Stage.UNKNOWN -> {
             val paymentHash = entry.paymentHash
@@ -385,6 +406,12 @@ class PaykitAllowanceExecutor @Inject constructor(
             }
         }
     }
+
+    // Before the node runs (a restore starts Pubky first) its empty list would read as never sent.
+    private suspend fun awaitsNode(entry: JournalEntry): Boolean =
+        (entry.stage == Stage.PREPARED || entry.stage == Stage.SUBMITTED) &&
+            entry.paymentHash != null &&
+            !payer.canListLightningPayments()
 
     private suspend fun record(attemptId: String, outcome: PaymentOutcome, identity: String) {
         paykitSdkService.recordPaymentOutcome(PaymentOutcomeReport(attemptId, outcome))
@@ -409,7 +436,11 @@ class PaykitAllowanceExecutor @Inject constructor(
             val updated = state.copy(
                 journal = state.journal.map { if (it.attemptId == attemptId) it.copy(stage = stage) else it },
             )
-            if (current?.isPaidAutomaticallyBy(stage) == true) updated.withAutoPaid(current) else updated
+            if (current?.isPaidAutomaticallyBy(stage) == true) {
+                updated.withAutoPaid(current.requestId, current.allowanceId, current.amountSats)
+            } else {
+                updated
+            }
         }
         val entry = before ?: return null
         if (entry.isPaidAutomaticallyBy(stage)) {
@@ -707,10 +738,12 @@ class PaykitAllowanceExecutor @Inject constructor(
      * Reports a user-approved payment of an incoming request to the shared ledger before it leaves the wallet.
      * Fails with [PaykitAllowanceError.PaymentAlreadyRecorded] when another live attempt exists for the request, so
      * the same request is never paid twice. Any other problem leaves the payment unreported and returns null.
+     * A Lightning payment passes its [paymentHash], so a backup taken before the send still lets the node settle it.
      */
     suspend fun beginManualPayment(
         request: PaykitPaymentRequest,
         paymentEndpointIdentifier: String,
+        paymentHash: String? = null,
     ): Result<String?> = withContext(ioDispatcher) {
         val identity = activeIdentity
         val amountSats = request.allowanceSats()
@@ -727,7 +760,8 @@ class PaykitAllowanceExecutor @Inject constructor(
                 request,
                 amountSats,
                 paymentEndpointIdentifier,
-                identity
+                paymentHash,
+                identity,
             )
         }
         val error = result.exceptionOrNull() ?: return@withContext result
@@ -740,6 +774,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         request: PaykitPaymentRequest,
         amountSats: ULong,
         paymentEndpointIdentifier: String,
+        paymentHash: String?,
         identity: String,
     ): String? {
         ensureReconciled(identity)
@@ -759,7 +794,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         // Recovery leaves the attempt alone until finishManualPayment reports its outcome.
         liveAttemptIds.add(prepared.attemptId)
         val attemptId = runSuspendCatching {
-            beginManualAttempt(request, amountSats, paymentEndpointIdentifier, prepared, identity)
+            beginManualAttempt(request, amountSats, paymentEndpointIdentifier, paymentHash, prepared, identity)
         }
         if (attemptId.getOrNull() == null) liveAttemptIds.remove(prepared.attemptId)
         // Nothing was sent yet, so a failed journal write releases the attempt instead of blocking a retry.
@@ -774,6 +809,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         request: PaykitPaymentRequest,
         amountSats: ULong,
         paymentEndpointIdentifier: String,
+        paymentHash: String?,
         prepared: PaymentAttemptRecord,
         identity: String,
     ): String? {
@@ -785,6 +821,7 @@ class PaykitAllowanceExecutor @Inject constructor(
                 allowanceId = null,
                 amountSats = amountSats,
                 paymentEndpointIdentifier = paymentEndpointIdentifier,
+                paymentHash = paymentHash?.lowercase(),
                 stage = Stage.PREPARED,
                 createdAtMillis = clock.now().toEpochMilliseconds(),
             ),
@@ -946,15 +983,43 @@ private fun PaykitPaymentRequest.scope() = PaymentRequestScope(counterparty, pay
 private fun JournalEntry.isPaidAutomaticallyBy(stage: Stage): Boolean =
     isAutomatic && this.stage != Stage.SUCCEEDED && stage == Stage.SUCCEEDED
 
-private fun PaykitAllowanceLocalState.withAutoPaid(entry: JournalEntry): PaykitAllowanceLocalState {
+private fun PaykitAllowanceLocalState.withAutoPaid(
+    requestId: PaykitPaymentRequestId,
+    allowanceId: String?,
+    amountSats: ULong,
+): PaykitAllowanceLocalState {
+    // Both the journal and the ledger report a payment; whichever comes first counts it.
+    if (isAutoPaid(requestId)) return this
     // Allowance ids are unique per contact only, so payments count toward the contact's own allowance.
-    val key = PaykitAllowance.key(entry.requestId.counterparty, entry.allowanceId)
-    val total = (autoPaidSatsByAllowance[key] ?: 0uL).safe() + entry.amountSats.safe()
+    val key = PaykitAllowance.key(requestId.counterparty, allowanceId)
+    val total = (autoPaidSatsByAllowance[key] ?: 0uL).safe() + amountSats.safe()
     return copy(
         autoPaidSatsByAllowance = autoPaidSatsByAllowance + (key to total),
-        autoPaidRequestIds = autoPaidRequestIds + entry.requestId,
+        autoPaidRequestIds = autoPaidRequestIds + requestId,
     )
 }
+
+private fun PaykitAllowanceLocalState.isAutoPaid(requestId: PaykitPaymentRequestId) = autoPaidRequestIds.any {
+    it.paymentRequestId == requestId.paymentRequestId &&
+        PubkyPublicKeyFormat.matches(it.counterparty, requestId.counterparty)
+}
+
+private fun PaykitAllowanceLocalState.withLedgerAutoPaid(
+    history: AllowanceAccountingHistory,
+): PaykitAllowanceLocalState =
+    history.occurrences.filter { it.key.billingPeriod == null }.fold(this) { state, occurrence ->
+        val scope = occurrence.key.request
+        val requestId = PaykitPaymentRequestId(scope.paymentRequestId, scope.counterparty)
+        val paid = occurrence.attempts.firstOrNull {
+            it.mode == PaymentExecutionMode.AUTOMATIC && it.status == PaymentExecutionStatus.SUCCEEDED
+        }
+        val amountSats = paid?.amount?.value()?.let(PaykitAllowance::satsFromBitcoinAmount)
+        if (paid == null || amountSats == null) {
+            state
+        } else {
+            state.withAutoPaid(requestId, paid.allowanceId, amountSats)
+        }
+    }
 
 /**
  * Allowances pay only bitcoin-denominated requests; null for any other request. A conversion offered for other rails,

@@ -868,6 +868,10 @@ class PrivatePaykitRepo @Inject constructor(
                             .mapNotNull { (publicKey, contactState) ->
                                 contactState.consumedPrivatePaymentListVersion?.let { publicKey to it }
                             }.toMap(),
+                        consumedPrivatePaymentListOwners = ensureState().contacts
+                            .mapNotNull { (publicKey, contactState) ->
+                                contactState.consumedPrivatePaymentListOwner?.let { publicKey to it }
+                            }.toMap(),
                     )
                 )
                 PrivatePaykitBackupSnapshot(state, exported.version)
@@ -887,9 +891,13 @@ class PrivatePaykitRepo @Inject constructor(
                 if (backup == null) {
                     paykitSdkService.clearState()
                 } else {
-                    requireNotNull(decoded).consumedPrivatePaymentListVersions.forEach { (publicKey, versions) ->
-                        ensureState().contacts.getOrPut(publicKey) { ContactState() }
-                            .consumedPrivatePaymentListVersion = versions
+                    val restored = requireNotNull(decoded)
+                    restored.consumedPrivatePaymentListVersions.forEach { (publicKey, versions) ->
+                        ensureState().contacts.getOrPut(publicKey) { ContactState() }.apply {
+                            consumedPrivatePaymentListVersion = versions
+                            // The owner lets a restored allowance attempt still give back the list it consumed.
+                            consumedPrivatePaymentListOwner = restored.consumedPrivatePaymentListOwners[publicKey]
+                        }
                     }
                 }
                 persistState(preserveCleanupMarkers = false)
