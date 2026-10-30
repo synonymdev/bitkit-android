@@ -1237,7 +1237,7 @@
     <string name="usdt__from_address">From address</string>
     <string name="usdt__hide_details">Hide details</string>
     <string name="usdt__intro_decline">No Thanks</string>
-    <string name="usdt__intro_description">Bitcoin at heart. Dollars when you need them. Enable USDT (Tether) to send and receive digital dollars with Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin at heart. Dollars when you need them. Enable USDT (Tether) to quickly send and receive digital dollars with Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nYOUR CALL</string>
     <string name="usdt__intro_title">New: USDT</string>
     <string name="usdt__maximum_total">Max total debit</string>
