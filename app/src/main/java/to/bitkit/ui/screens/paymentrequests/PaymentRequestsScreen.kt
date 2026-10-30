@@ -208,9 +208,9 @@ fun PaymentRequestsScreen(
     val receipts by appViewModel.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()
     val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
-    val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
     val dismissingRequestIds by appViewModel.rejectingPaymentRequestIds.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
 
     PaymentRequestsContent(
         requests = (pending + history).distinctBy { it.id }.toImmutableList(),
@@ -221,7 +221,9 @@ fun PaymentRequestsScreen(
         dismissingRequestIds = dismissingRequestIds.toImmutableSet(),
         autoPaidRequestIds = autoPaidRequestIds,
         onBack = onBack,
-        onRequestPayment = if (targets.isNotEmpty()) onRequestPayment else onAddContact,
+        onRequestPayment = {
+            scope.launch { if (appViewModel.canRequestPayment()) onRequestPayment() else onAddContact() }
+        },
         onPay = appViewModel::openIncomingPaymentRequest,
         onDismiss = appViewModel::dismissIncomingPaymentRequest,
         onDetails = onDetails,
