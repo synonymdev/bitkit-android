@@ -1101,7 +1101,13 @@ class BackupRepo @Inject constructor(
         parsed.paykitPaymentState?.let {
             // Validate every proof before writing a guard or replacing existing payment state.
             it.pendingProofs.forEach { proof -> proof.restored() }
-            val allowances = it.allowances.orEmpty().mapValues { (_, state) -> state.restored() }
+            // A ledger revision floor only holds next to the ledger it was read from.
+            val hasLedger = parsed.paykitSdkBackupState != null
+            val allowances = it.allowances.orEmpty().mapValues { (_, state) ->
+                state.restored().let { restored ->
+                    if (hasLedger) restored else restored.copy(ledgerRevisionFloor = null)
+                }
+            }
             val walletIndex = backupWalletIndex()
             it.activeOnchainAttempt?.let { wire ->
                 validateActiveProof(wire, it.pendingProofs)
