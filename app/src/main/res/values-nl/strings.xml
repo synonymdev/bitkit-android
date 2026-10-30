@@ -1348,8 +1348,10 @@
     <string name="profile__pay_contacts_error_wallet">Wallet wordt nog gestart. Probeer het zo opnieuw.</string>
     <string name="profile__pay_contacts_headline">Laat uw\ncontacten\n&lt;accent&gt;u betalen&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Contacten betalen</string>
+    <string name="profile__private_payments_toggle">Privébetalingen met contacten</string>
     <string name="profile__pubky_copied">pubky gekopieerd naar klembord</string>
     <string name="profile__public_key">Publieke sleutel</string>
+    <string name="profile__public_payments_toggle">Openbare betalingen</string>
     <string name="profile__restore_nav_title">Profiel herstellen</string>
     <string name="profile__session_expired">Uw profielsessie is verlopen. Verbind opnieuw om uw profiel te herstellen.</string>
     <string name="profile__sign_out">Ontkoppelen</string>
@@ -1394,7 +1396,6 @@
     <string name="settings__es__server_error_certificate">Het certificaat van deze server wordt niet vertrouwd. Gebruik een server met een vertrouwd certificaat, of maak verbinding met de TCP-poort.</string>
     <string name="settings__es__server_error_network">Deze server zit op een ander Bitcoin-netwerk. Kies een server voor het netwerk dat Bitkit gebruikt.</string>
     <string name="settings__es__server_error_protocol">Beveiligde verbinding mislukt. Controleer of het protocol (TCP of TLS) overeenkomt met de serverpoort.</string>
-    <string name="settings__general__enable_contact_payments">Betalingen met contacten inschakelen</string>
     <string name="settings__hardware_wallets__add_button">Hardwarewallet toevoegen</string>
     <string name="settings__hardware_wallets__name_label">Naam</string>
     <string name="settings__hardware_wallets__nav_title">Hardwarewallets</string>

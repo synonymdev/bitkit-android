@@ -74,18 +74,25 @@ class PubkyAuthManifestTest {
         )
         val allUrls = signupUrls + authUrls + unrelatedUrls
 
-        assertRoutes(packageManager, application.packageName, allUrls, null)
+        assertRoutes(packageManager, application.packageName, allUrls, null, "initial defaults")
         packageManager.setComponentEnabledSetting(
             signupAlias,
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
             PackageManager.DONT_KILL_APP,
         )
-        assertRoutes(packageManager, application.packageName, signupUrls + authUrls.last(), signupAlias)
+        assertRoutes(
+            packageManager,
+            application.packageName,
+            signupUrls + authUrls.last(),
+            signupAlias,
+            "signup enabled",
+        )
         assertRoutes(
             packageManager,
             application.packageName,
             authUrls.dropLast(1) + unrelatedUrls,
             null,
+            "signup enabled",
         )
 
         packageManager.setComponentEnabledSetting(
@@ -98,15 +105,15 @@ class PubkyAuthManifestTest {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
             PackageManager.DONT_KILL_APP,
         )
-        assertRoutes(packageManager, application.packageName, authUrls, authAlias)
-        assertRoutes(packageManager, application.packageName, signupUrls + unrelatedUrls, null)
+        assertRoutes(packageManager, application.packageName, authUrls, authAlias, "authorization enabled")
+        assertRoutes(packageManager, application.packageName, signupUrls + unrelatedUrls, null, "authorization enabled")
 
         packageManager.setComponentEnabledSetting(
             authAlias,
             PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
             PackageManager.DONT_KILL_APP,
         )
-        assertRoutes(packageManager, application.packageName, allUrls, null)
+        assertRoutes(packageManager, application.packageName, allUrls, null, "both explicitly disabled")
     }
 
     private fun assertRoutes(
@@ -114,19 +121,50 @@ class PubkyAuthManifestTest {
         packageName: String,
         urls: List<String>,
         alias: ComponentName?,
+        phase: String,
     ) {
         urls.forEach {
             val intent = Intent(Intent.ACTION_VIEW, it.toUri())
                 .addCategory(Intent.CATEGORY_BROWSABLE)
                 .setPackage(packageName)
             val resolved = packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-            if (alias == null) {
-                assertTrue(resolved.isEmpty(), it)
-            } else {
-                val activity = resolved.single().activityInfo
-                assertEquals(alias.className, activity.name, it)
-                assertEquals("to.bitkit.ui.MainActivity", activity.targetActivity)
-                assertTrue(activity.exported)
+            fun diagnostics() = buildString {
+                append("phase=$phase url=$it package=$packageName expected=${alias?.className}")
+                listOf("to.bitkit.ui.MainActivityPubkySignup", "to.bitkit.ui.MainActivityPubkyAuth").forEach { name ->
+                    val component = ComponentName(packageName, name)
+                    append("; alias=$name override=${packageManager.getComponentEnabledSetting(component)}")
+                    runCatching {
+                        packageManager.getActivityInfo(
+                            component,
+                            PackageManager.ComponentInfoFlags.of(PackageManager.MATCH_DISABLED_COMPONENTS.toLong()),
+                        )
+                    }.onSuccess { info ->
+                        append(" enabled=${info.enabled} exported=${info.exported} target=${info.targetActivity}")
+                    }.onFailure { error ->
+                        append(" activityInfoError=${error.javaClass.simpleName}")
+                    }
+                }
+                resolved.forEach { result ->
+                    val info = result.activityInfo
+                    append("; resolved=${info.packageName}/${info.name} target=${info.targetActivity}")
+                    append(" enabled=${info.enabled} exported=${info.exported} match=${result.match}")
+                }
+            }
+            try {
+                if (alias == null) {
+                    assertTrue(resolved.isEmpty(), it)
+                } else {
+                    assertEquals(1, resolved.size, it)
+                    val activity = resolved.single().activityInfo
+                    assertEquals(alias.className, activity.name, it)
+                    assertEquals("to.bitkit.ui.MainActivity", activity.targetActivity)
+                    assertTrue(activity.exported)
+                }
+            } catch (error: AssertionError) {
+                val message = runCatching { diagnostics() }.getOrElse { diagnosticError ->
+                    "phase=$phase url=$it diagnosticsUnavailable=${diagnosticError.javaClass.simpleName}"
+                }
+                throw AssertionError(message, error)
             }
         }
     }

@@ -1333,8 +1333,10 @@
     <string name="profile__pay_contacts_error_wallet">Το πορτοφόλι ξεκινά ακόμα. Δοκίμασε ξανά σε λίγο.</string>
     <string name="profile__pay_contacts_headline">Άφησε τις\nεπαφές σου\n&lt;accent&gt;να σε πληρώνουν&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Πληρωμή επαφών</string>
+    <string name="profile__private_payments_toggle">Ιδιωτικές πληρωμές επαφών</string>
     <string name="profile__pubky_copied">Το pubky αντιγράφηκε στο πρόχειρο</string>
     <string name="profile__public_key">Δημόσιο κλειδί</string>
+    <string name="profile__public_payments_toggle">Δημόσιες πληρωμές</string>
     <string name="profile__restore_nav_title">Επαναφορά προφίλ</string>
     <string name="profile__session_expired">Η συνεδρία του προφίλ σου έληξε. Σύνδεσε ξανά για να επαναφέρεις το προφίλ σου.</string>
     <string name="profile__sign_out">Αποσύνδεση</string>
@@ -1388,7 +1390,6 @@
     <string name="settings__es__server_error_certificate">Το πιστοποιητικό αυτού του διακομιστή δεν είναι αξιόπιστο. Χρησιμοποίησε διακομιστή με αξιόπιστο πιστοποιητικό ή σύνδεσου στη θύρα TCP του.</string>
     <string name="settings__es__server_error_network">Αυτός ο διακομιστής είναι σε διαφορετικό δίκτυο Bitcoin. Επίλεξε διακομιστή για το δίκτυο που χρησιμοποιεί το Bitkit.</string>
     <string name="settings__es__server_error_protocol">Η ασφαλής σύνδεση απέτυχε. Έλεγξε ότι το πρωτόκολλο (TCP ή TLS) αντιστοιχεί στη θύρα του διακομιστή.</string>
-    <string name="settings__general__enable_contact_payments">Ενεργοποίηση πληρωμών με επαφές</string>
     <string name="settings__hardware_wallets__add_button">Προσθήκη πορτοφολιού υλικού</string>
     <string name="settings__hardware_wallets__name_label">Όνομα</string>
     <string name="settings__hardware_wallets__nav_title">Πορτοφόλια υλικού</string>
