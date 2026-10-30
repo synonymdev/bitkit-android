@@ -242,6 +242,7 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.pushNotification
+import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
@@ -8142,6 +8143,11 @@ class AppViewModel @Inject constructor(
 
     fun showPaymentRequests() {
         showSheet(Sheet.PaymentRequests)
+        viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
+    }
+
+    fun showPaymentRequestRecipient() {
+        showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient))
         viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
     }
 

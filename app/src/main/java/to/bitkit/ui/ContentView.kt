@@ -938,9 +938,7 @@ private fun RootNavHost(
                 SubscriptionsScreen(
                     appViewModel = appViewModel,
                     onBack = { navController.popBackStack() },
-                    onRequestPayment = {
-                        appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient))
-                    },
+                    onRequestPayment = appViewModel::showPaymentRequestRecipient,
                     onAddContact = {
                         when {
                             isAuthenticated -> navController.navigateTo(Routes.Contacts(showAddContactSheet = true))
