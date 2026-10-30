@@ -15,8 +15,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Local Allowance state kept per identity: USD labels, the grouping of one grant across a contact's links, and the
- * execution journal that restart recovery reads. The SDK ledger stays authoritative for admission.
+ * Local Allowance state kept per identity: USD labels, the grouping of one grant across a contact's links, the
+ * execution journal that restart recovery reads, and the checks automatic payments apply alongside the SDK ledger.
  */
 @Serializable
 data class PaykitAllowanceLocalState(
@@ -32,7 +32,22 @@ data class PaykitAllowanceLocalState(
     val autoPaidSatsByAllowance: Map<String, ULong> = emptyMap(),
     /** Requests paid automatically, kept apart from the journal for the "Auto-paid" tag. */
     val autoPaidRequestIds: Set<PaykitPaymentRequestId> = emptySet(),
+    /** The highest ledger revision this wallet has read; automatic payments stop while the ledger is below it. */
+    val ledgerRevisionFloor: ULong? = null,
+    /** Automatic payments admitted by this wallet, counted against each monthly limit next to the ledger's own. */
+    val automaticSpends: List<AutomaticSpend> = emptyList(),
+    /** [PaykitAllowance.key]s of allowances seen ended or declined, which never pay automatically again. */
+    val endedAllowanceIds: Set<String> = emptySet(),
 ) {
+    @Serializable
+    data class AutomaticSpend(
+        val attemptId: String,
+        val counterparty: String,
+        val allowanceId: String,
+        val amountSats: ULong,
+        val admittedAtMillis: Long,
+    )
+
     @Serializable
     data class Group(
         val id: String,
@@ -61,6 +76,13 @@ data class PaykitAllowanceLocalState(
         /** The payee's private payment list this attempt consumed, given back if the payment fails. */
         val paymentListVersion: ULong? = null,
         val previousPaymentListVersion: ULong? = null,
+    )
+
+    /** Keeps the higher floor, every spend and every ended allowance of both states, so a restore never lowers them. */
+    fun withChecksFrom(other: PaykitAllowanceLocalState) = copy(
+        ledgerRevisionFloor = listOfNotNull(ledgerRevisionFloor, other.ledgerRevisionFloor).maxOrNull(),
+        automaticSpends = (automaticSpends + other.automaticSpends).distinctBy { it.attemptId },
+        endedAllowanceIds = endedAllowanceIds + other.endedAllowanceIds,
     )
 
     /** Allowance ids are unique per contact only, so a group matches on its contact as well. */
@@ -112,11 +134,16 @@ class PaykitAllowanceStore @Inject constructor(
         return storeJson.decodeFromString<Stored>(value).statesByIdentity
     }
 
-    /** Replaces the allowance state of each identity in [states], before recovery reads it. */
+    /**
+     * Replaces the allowance state of each identity in [states], before recovery reads it. The automatic payment checks
+     * merge with any already stored, so a restore never weakens them.
+     */
     suspend fun restoreBackup(states: Map<String, PaykitAllowanceLocalState>) {
         if (states.isEmpty()) return
         val stored = loadAll()
-        val restored = states.mapKeys { (identity, _) -> storageKey(identity) }
+        val restored = states
+            .mapKeys { (identity, _) -> storageKey(identity) }
+            .mapValues { (key, state) -> stored.statesByIdentity[key]?.let(state::withChecksFrom) ?: state }
         keychain.upsertString(KEY, storeJson.encodeToString(stored.copy(stored.statesByIdentity + restored)))
         _backupStateVersion.update { it + 1 }
     }

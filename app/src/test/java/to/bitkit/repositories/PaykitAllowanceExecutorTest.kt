@@ -409,6 +409,95 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a ledger older than one already read keeps the request manual`() = test {
+        sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
+        accountingState = fixtures.accountingState(revision = 4uL)
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verifyNoInteractions(payer)
+        assertEquals(5uL, sut.localState(identity).ledgerRevisionFloor)
+    }
+
+    @Test
+    fun `a ledger that goes behind this wallet during admission keeps the request manual`() = test {
+        sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
+        whenever(sdk.allowanceAccountingState())
+            .thenReturn(fixtures.accountingState(revision = 5uL), fixtures.accountingState(revision = 3uL))
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verifyNoInteractions(payer)
+    }
+
+    @Test
+    fun `a missing ledger after one was read keeps the request manual`() = test {
+        sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
+        accountingState = null
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        assertTrue(reconciliations.isEmpty())
+        verifyNoInteractions(payer)
+    }
+
+    @Test
+    fun `an automatic payment raises the ledger floor`() = test {
+        accountingState = fixtures.accountingState(revision = 7uL)
+
+        sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(7uL, sut.localState(identity).ledgerRevisionFloor)
+    }
+
+    @Test
+    fun `local spending above the ledger's keeps the request manual`() = test {
+        val spend = PaykitAllowanceLocalState.AutomaticSpend(
+            attemptId = "local-1",
+            counterparty = fixtures.counterpartyKey,
+            allowanceId = ALLOWANCE_ID,
+            amountSats = 49_500uL,
+            admittedAtMillis = Instant.parse("2026-09-20T10:00:00Z").toEpochMilliseconds(),
+        )
+        sut.updateLocalState(identity) { it.copy(automaticSpends = listOf(spend)) }
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verifyNoInteractions(payer)
+    }
+
+    @Test
+    fun `an automatic payment counts locally until it fails`() = test {
+        sut.activate(identity)
+
+        sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+        val spend = sut.localState(identity).automaticSpends.single()
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
+
+        assertEquals(AUTOMATIC_ATTEMPT_ID, spend.attemptId)
+        assertEquals(1_000uL, spend.amountSats)
+        assertTrue(sut.localState(identity).automaticSpends.isEmpty())
+    }
+
+    @Test
+    fun `an allowance seen ended never pays automatically again`() = test {
+        sut.rememberEndedAllowances(identity, listOf(fixtures.allowance(state = AllowanceLifecycleState.ENDED)))
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verifyNoInteractions(payer)
+    }
+
+    @Test
     fun `another contact's payments under the same allowance id never fill this contact's cap`() = test {
         collectEvents()
         val otherScope = PaymentAccountingScope(

@@ -60,4 +60,33 @@ class PaykitAllowanceStoreTest : BaseUnitTest() {
         assertEquals(before + 1, sut.backupStateVersion.value)
         assertEquals(2, sut.backupSnapshot().size)
     }
+
+    @Test
+    fun `restore never lowers the automatic payment checks already stored`() = test {
+        val spend = PaykitAllowanceLocalState.AutomaticSpend("attempt-1", "contact", "allowance-1", 1_000uL, 1L)
+        val restoredSpend = spend.copy(attemptId = "attempt-2")
+        sut.save(
+            identity,
+            PaykitAllowanceLocalState(
+                ledgerRevisionFloor = 9uL,
+                automaticSpends = listOf(spend),
+                endedAllowanceIds = setOf("contact/allowance-1"),
+            ),
+        )
+
+        sut.restoreBackup(
+            mapOf(
+                identity to PaykitAllowanceLocalState(
+                    ledgerRevisionFloor = 4uL,
+                    automaticSpends = listOf(restoredSpend),
+                    endedAllowanceIds = setOf("contact/allowance-2"),
+                ),
+            ),
+        )
+
+        val restored = sut.load(identity)
+        assertEquals(9uL, restored.ledgerRevisionFloor)
+        assertEquals(setOf(spend, restoredSpend), restored.automaticSpends.toSet())
+        assertEquals(setOf("contact/allowance-1", "contact/allowance-2"), restored.endedAllowanceIds)
+    }
 }

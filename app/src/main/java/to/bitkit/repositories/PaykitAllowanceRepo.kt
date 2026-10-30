@@ -211,6 +211,7 @@ class PaykitAllowanceRepo @Inject constructor(
         whileUpdating {
             refreshMutex.withLock {
                 val listing = listAllowances()
+                listing.onSuccess { executor.rememberEndedAllowances(identity, it) }
                 if (activeIdentity == identity) {
                     publish(listing.getOrDefault(_allowances.value), executor.localState(identity))
                 }
@@ -411,6 +412,8 @@ class PaykitAllowanceRepo @Inject constructor(
             val entry = entry(entryId) ?: throw PaykitAllowanceError.Unavailable
             val endable = entry.allowances.filter { it.canEnd }
             if (endable.isEmpty()) throw PaykitAllowanceError.Unavailable
+            val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+            executor.rememberEnding(identity, endable)
             for (allowance in endable) {
                 paykitSdkService.endAllowance(allowance.counterparty, allowance.allowanceId)
                 sendQueuedMessages(allowance.counterparty)
