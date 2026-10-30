@@ -1350,8 +1350,10 @@
     <string name="profile__pay_contacts_error_wallet">A carteira ainda está iniciando. Tente novamente em instantes.</string>
     <string name="profile__pay_contacts_headline">Deixe seus\ncontatos\n&lt;accent&gt;pagarem você&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar Contatos</string>
+    <string name="profile__private_payments_toggle">Pagamentos privados com contatos</string>
     <string name="profile__pubky_copied">pubky copiada para a área de transferência</string>
     <string name="profile__public_key">Chave Pública</string>
+    <string name="profile__public_payments_toggle">Pagamentos públicos</string>
     <string name="profile__restore_nav_title">Restaurar Perfil</string>
     <string name="profile__session_expired">A sessão do seu perfil expirou. Reconecte para restaurar seu perfil.</string>
     <string name="profile__sign_out">Desconectar</string>
@@ -1396,7 +1398,6 @@
     <string name="settings__es__server_error_certificate">O certificado deste servidor não é confiável. Use um servidor com um certificado confiável ou conecte-se à porta TCP dele.</string>
     <string name="settings__es__server_error_network">Este servidor está em uma rede Bitcoin diferente. Escolha um servidor para a rede que a Bitkit está usando.</string>
     <string name="settings__es__server_error_protocol">Falha na conexão segura. Verifique se o protocolo (TCP ou TLS) corresponde à porta do servidor.</string>
-    <string name="settings__general__enable_contact_payments">Ativar pagamentos com contatos</string>
     <string name="settings__hardware_wallets__add_button">Adicionar Carteira de Hardware</string>
     <string name="settings__hardware_wallets__name_label">Nome</string>
     <string name="settings__hardware_wallets__nav_title">Carteiras de Hardware</string>
