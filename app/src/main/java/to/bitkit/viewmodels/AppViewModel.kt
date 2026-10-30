@@ -6187,7 +6187,10 @@ class AppViewModel @Inject constructor(
     ): Result<String?> {
         if (request == null) return Result.success(null)
         val endpointIdentifier = paymentProofPreparation(contactPaymentContext).endpointIdentifier
-        return paykitAllowanceRepo.beginManualPayment(request, endpointIdentifier)
+        val paymentHash = _sendUiState.value.decodedInvoice
+            ?.takeIf { _sendUiState.value.payMethod == SendMethod.LIGHTNING }
+            ?.paymentHash?.toHex()
+        return paykitAllowanceRepo.beginManualPayment(request, endpointIdentifier, paymentHash)
             .recoverCatching {
                 if (it is PaykitAllowanceError.PaymentAlreadyRecorded) throw it
                 Logger.warn("Failed to report a manual payment to the allowance ledger", it, context = TAG)

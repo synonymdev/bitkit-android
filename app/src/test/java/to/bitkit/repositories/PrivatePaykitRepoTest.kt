@@ -4363,6 +4363,22 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verifyBlocking(paykitSdkService) { retainRecoveryBackup(backup) }
     }
 
+    @Test
+    fun `a restored payment list can still be given back by the attempt that consumed it`() = test {
+        val context = PrivatePaykitPaymentContext(emptyMap(), 7uL)
+        whenever(paykitSdkService.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(paykitSdkService.exportBackupState(Priority.Interactive)).thenReturn(PaykitSdkBackupExport("sdk", 0))
+        sut.consumePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a").getOrThrow()
+
+        val snapshot = sut.backupSnapshot().getOrThrow().state
+        sut.restoreBackup(snapshot).getOrThrow()
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-b").getOrThrow()
+        assertEquals(7uL, cacheData.value.contacts[CONTACT_KEY]?.consumedPrivatePaymentListVersion)
+
+        sut.releasePrivatePaymentList(CONTACT_KEY, context, owner = "attempt-a").getOrThrow()
+        assertNull(cacheData.value.contacts[CONTACT_KEY]?.consumedPrivatePaymentListVersion)
+    }
+
     private fun stubContactPreparationPriorities() {
         for (priority in listOf(Priority.Background, Priority.Interactive)) {
             whenever { paykitSdkService.ensureLinkWithPeer(any(), any(), eq(priority)) }
