@@ -932,11 +932,25 @@ private fun RootNavHost(
         composableWithDefaultTransitions<Routes.Subscriptions> { backStackEntry ->
             PaykitRouteGuard(settingsViewModel, navController) {
                 val route = backStackEntry.toRoute<Routes.Subscriptions>()
+                val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+                val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+                val scope = rememberCoroutineScope()
                 SubscriptionsScreen(
                     appViewModel = appViewModel,
                     onBack = { navController.popBackStack() },
                     onRequestPayment = {
                         appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient))
+                    },
+                    onAddContact = {
+                        when {
+                            isAuthenticated -> navController.navigateTo(Routes.Contacts(showAddContactSheet = true))
+                            else -> scope.launch {
+                                navController.navigateToProfile(
+                                    settingsViewModel.pubkyIdentityExists,
+                                    hasSeenProfileIntro,
+                                )
+                            }
+                        }
                     },
                     onCreateSubscription = appViewModel::showSubscriptionCreator,
                     onDetails = {

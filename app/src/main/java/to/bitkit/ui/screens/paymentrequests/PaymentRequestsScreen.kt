@@ -13,11 +13,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -201,6 +198,7 @@ fun PaymentRequestsScreen(
     appViewModel: AppViewModel,
     onBack: () -> Unit,
     onRequestPayment: () -> Unit,
+    onAddContact: () -> Unit,
     onDetails: (PaykitPaymentRequestId) -> Unit,
     showsNavigationBar: Boolean = true,
     topPadding: Dp = 0.dp,
@@ -222,9 +220,8 @@ fun PaymentRequestsScreen(
         subscriptions = subscriptions.toImmutableList(),
         dismissingRequestIds = dismissingRequestIds.toImmutableSet(),
         autoPaidRequestIds = autoPaidRequestIds,
-        canRequestPayment = targets.isNotEmpty(),
         onBack = onBack,
-        onRequestPayment = onRequestPayment,
+        onRequestPayment = if (targets.isNotEmpty()) onRequestPayment else onAddContact,
         onPay = appViewModel::openIncomingPaymentRequest,
         onDismiss = appViewModel::dismissIncomingPaymentRequest,
         onDetails = onDetails,
@@ -242,7 +239,6 @@ internal fun PaymentRequestsContent(
     contacts: ImmutableList<PubkyProfile>,
     subscriptions: ImmutableList<PaykitSubscription>,
     dismissingRequestIds: ImmutableSet<PaykitPaymentRequestId>,
-    canRequestPayment: Boolean,
     onBack: () -> Unit,
     onRequestPayment: () -> Unit,
     onPay: (PaykitPaymentRequestId) -> Unit,
@@ -255,9 +251,6 @@ internal fun PaymentRequestsContent(
     val sections = paymentRequestSections(requests, pending, Clock.System.now())
     val density = LocalDensity.current
     var footerHeight by remember { mutableStateOf(0.dp) }
-    // Without a footer nothing else clears the system bars, and a stale measurement must not linger.
-    val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomInset = if (canRequestPayment) footerHeight else navigationBarInset
 
     Box(
         modifier = modifier
@@ -277,7 +270,7 @@ internal fun PaymentRequestsContent(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(top = topPadding, bottom = bottomInset)
+                        .padding(top = topPadding, bottom = footerHeight)
                         .padding(horizontal = 16.dp),
                 ) {
                     FillHeight()
@@ -305,7 +298,7 @@ internal fun PaymentRequestsContent(
                 LazyColumn(
                     contentPadding = PaddingValues(
                         top = topPadding + 24.dp,
-                        bottom = bottomInset + 16.dp,
+                        bottom = footerHeight + 16.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
@@ -364,24 +357,22 @@ internal fun PaymentRequestsContent(
             }
         }
 
-        if (canRequestPayment) {
-            Column(
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .onSizeChanged { footerHeight = with(density) { it.height.toDp() } }
+                .navigationBarsPadding()
+        ) {
+            VerticalSpacer(16.dp)
+            PrimaryButton(
+                text = stringResource(R.string.wallet__payment_request_request_payment),
+                onClick = onRequestPayment,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onSizeChanged { footerHeight = with(density) { it.height.toDp() } }
-                    .navigationBarsPadding()
-            ) {
-                VerticalSpacer(16.dp)
-                PrimaryButton(
-                    text = stringResource(R.string.wallet__payment_request_request_payment),
-                    onClick = onRequestPayment,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .testTag("PaymentRequestCreate")
-                )
-                VerticalSpacer(16.dp)
-            }
+                    .padding(horizontal = 16.dp)
+                    .testTag("PaymentRequestCreate")
+            )
+            VerticalSpacer(16.dp)
         }
     }
 }
@@ -815,7 +806,6 @@ private fun PaymentRequestsPreview() {
             contacts = persistentListOf(),
             subscriptions = persistentListOf(),
             dismissingRequestIds = persistentSetOf(),
-            canRequestPayment = true,
             onBack = {},
             onRequestPayment = {},
             onPay = {},
