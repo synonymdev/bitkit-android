@@ -1375,36 +1375,46 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `deleteProfileWithSessionRetry should refresh session and retry delete`() = test {
-        val expiredSession = "expired_session"
-        val newSession = "new_session"
+    fun `profile deletion does not replay after an uncertain response`() = test {
         val secretKey = "local_secret"
-        authenticateForTesting(publicKey = VALID_SELF_KEY, secret = expiredSession)
-        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(expiredSession, newSession)
+        authenticateForTesting(publicKey = VALID_SELF_KEY, secret = "test_session")
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
-        whenever(pubkyService.deletePaykitProfile()).thenAnswer { throw TestAppError("Expired") }.thenReturn(Unit)
-        whenever(pubkyService.signIn(secretKey)).thenReturn(Unit)
         whenever(pubkyService.publicKeyFromSecret(secretKey)).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        val uncertainResponse = TestAppError("Connection closed after profile deletion")
+        whenever(pubkyService.deletePaykitProfile()).thenAnswer { throw uncertainResponse }.thenReturn(Unit)
 
-        val result = sut.deleteProfileWithSessionRetry()
+        val result = sut.deleteProfile()
 
-        assertTrue(result.isSuccess)
-        verifyBlocking(pubkyService, times(2)) { deletePaykitProfile() }
+        assertSame(uncertainResponse, result.exceptionOrNull())
+        verify(pubkyService).deletePaykitProfile()
+        verify(pubkyService, never()).signIn(any())
+        verify(pubkyService, never()).signOut()
     }
 
     @Test
-    fun `deleteProfileWithSessionRetry should return failure when session cannot refresh`() = test {
-        val expiredSession = "expired_session"
-        authenticateForTesting(publicKey = VALID_SELF_KEY, secret = expiredSession)
-        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(expiredSession)
-        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
-        whenever(pubkyService.deletePaykitProfile()).thenAnswer { throw TestAppError("Expired") }
+    fun `failed profile deletion does not restore an identity after sign out`() = test {
+        val secretKey = "local_secret"
+        authenticateForTesting(publicKey = VALID_SELF_KEY, secret = "test_session")
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+        whenever(pubkyService.publicKeyFromSecret(secretKey)).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        val deletionStarted = CompletableDeferred<Unit>()
+        val finishDeletion = CompletableDeferred<Unit>()
+        val uncertainResponse = TestAppError("Connection closed after profile deletion")
+        whenever(pubkyService.deletePaykitProfile()).doSuspendableAnswer {
+            deletionStarted.complete(Unit)
+            withContext(NonCancellable) { finishDeletion.await() }
+            throw uncertainResponse
+        }
+        val deletion = async { sut.deleteProfile() }
+        deletionStarted.await()
+        sut.signOut().getOrThrow()
+        finishDeletion.complete(Unit)
 
-        val result = sut.deleteProfileWithSessionRetry()
-
-        assertTrue(result.isFailure)
-        verifyBlocking(pubkyService) { deletePaykitProfile() }
-        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        assertSame(uncertainResponse, deletion.await().exceptionOrNull())
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.isAuthenticated.value)
+        verify(pubkyService, never()).signIn(any())
+        verify(pubkyService).deletePaykitProfile()
     }
 
     @Test
@@ -3563,31 +3573,6 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `refreshSessionIfPossible should refresh session when local secret key exists`() = test {
-        val secretKey = "local_secret"
-        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
-        whenever(pubkyService.signIn(secretKey)).thenReturn(Unit)
-        whenever(pubkyService.publicKeyFromSecret(secretKey)).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
-
-        val result = sut.refreshSessionIfPossible()
-
-        assertEquals(true, result.getOrNull())
-        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
-        assertTrue(sut.isAuthenticated.value)
-    }
-
-    @Test
-    fun `refreshSessionIfPossible should return false when local secret key is missing`() = test {
-        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
-
-        val result = sut.refreshSessionIfPossible()
-
-        assertEquals(false, result.getOrNull())
-        assertNull(sut.publicKey.value)
-        assertFalse(sut.isAuthenticated.value)
-    }
-
-    @Test
     fun `restoreSessionBackupState should derive local secret key for local seed backups`() = test {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
         whenever(pubkyService.deriveSecretKey("test mnemonic")).thenReturn("derived_secret")
@@ -4490,7 +4475,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a contact edit started before the session of its identity is refreshed still saves`() = test {
+    fun `a contact edit started before the session of its identity is restored still saves`() = test {
         val store = stubGatedPubkyStore()
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
@@ -4498,7 +4483,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
         val signIn = checkNotNull(sut.currentSignIn())
 
-        assertEquals(true, sut.refreshSessionIfPossible().getOrNull())
+        sut.initialize().getOrThrow()
         val result = sut.updateContact(signIn, VALID_CONTACT_KEY_A, "Alice", "", null, emptyList(), listOf("Friend"))
 
         assertTrue(result.isSuccess)
