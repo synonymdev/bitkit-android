@@ -105,7 +105,7 @@ Keep these artifacts at each boundary:
 | --- | --- | --- |
 | Combined claim | `PubkyAuthWatchOnlyConsent`, `PubkyAuthPaykitAccess`, `PubkyAuthAuthorize`, and `PubkyAuthOK` snapshots | Setup completion for the seller identity, with no spending key |
 | Marketplace grant | Authorization screen with the single `/pub/app.locks` row from `locks.app`, `PubkyAuthAuthorize`, and `PubkyAuthOK` snapshots | `bitkit_seller.marketplace_grant` and a non-null `bitkit_seller.setup_completed_at` |
-| Contact payments | `ContactPaymentsToggle` snapshots from both wallets | Public App Registry entries for both wallet identities |
+| Private contact payments | `PrivateContactPaymentsToggle` snapshots from both wallets | Public App Registry entries for both wallet identities |
 | Linked buyer | `Contact_<seller-public-key>` snapshot | Seller and buyer peer-link state |
 | Incoming request | `PaymentRequestsSheet` and `PaymentRequestRow-<payment-request-id>` snapshots showing seller, amount, and note when present | Delivery record and exact Payment Request id |
 | Payment approval | `PaymentRequestPay-<payment-request-id>`, `ReviewAmount`, and `ReviewContactRecipient` snapshots | Derived regtest address and expected amount |

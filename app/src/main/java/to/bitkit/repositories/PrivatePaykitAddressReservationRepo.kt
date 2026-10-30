@@ -10,26 +10,40 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import to.bitkit.data.CacheStore
 import to.bitkit.data.PrivatePaykitReservationData
 import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.PrivatePaykitStoredAssignmentData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.toHex
+import to.bitkit.models.BackupCategory
+import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.addressTypeFromAddress
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toSettingsString
+import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
 sealed class PrivatePaykitAddressReservationError(message: String) : AppError(message) {
     data object AddressReservationFailed : PrivatePaykitAddressReservationError(
-        "Unable to reserve private Paykit address",
+        "Unable to reserve Paykit address",
+    )
+
+    data object PublicAddressRestorePending : PrivatePaykitAddressReservationError(
+        "Public address restore is incomplete",
     )
 }
 
@@ -40,12 +54,15 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
+    private val cacheStore: CacheStore,
+    private val keychain: Keychain,
 ) {
     companion object {
         private const val TAG = "PrivatePaykitAddressReservationRepo"
     }
 
     private val mutex = Mutex()
+    private val allocationMutex = Mutex()
 
     @Volatile
     internal var attributionVersion = 0L
@@ -59,49 +76,130 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
 
+    /** Returns true when a captured metadata source must be recovered before restore can continue. */
+    internal suspend fun preparePublicAddressRestore(): Boolean = withContext(ioDispatcher) {
+        allocationMutex.withLock {
+            when (val pending = loadPublicAddressRestore()) {
+                is PendingPublicAddressRestore.Source -> return@withLock true
+                is PendingPublicAddressRestore.Address -> {
+                    quarantinePublicAddress(pending.address)
+                    markPublicAddressBackupRequired()
+                }
+                PendingPublicAddressRestore.Reading -> return@withLock false
+                null -> Unit
+            }
+            mutex.withLock {
+                // Block address admission until the metadata read has been resolved.
+                savePublicAddressRestore(PendingPublicAddressRestore.Reading)
+            }
+            false
+        }
+    }
+
+    internal suspend fun capturePublicAddressRestoreSource(dataBytes: ByteArray) = withContext(ioDispatcher) {
+        allocationMutex.withLock {
+            val fingerprint = MessageDigest.getInstance("SHA-256").digest(dataBytes).toHex()
+            when (val pending = loadPublicAddressRestore()) {
+                PendingPublicAddressRestore.Reading -> {
+                    // Bind retries to these bytes before interpreting any address they contain.
+                    savePublicAddressRestore(PendingPublicAddressRestore.Source(fingerprint))
+                }
+                is PendingPublicAddressRestore.Source -> check(pending.fingerprint == fingerprint) {
+                    "Public address recovery requires the captured metadata source"
+                }
+                else -> throw PrivatePaykitAddressReservationError.PublicAddressRestorePending
+            }
+        }
+    }
+
+    internal suspend fun restorePublicAddress(address: String) = withContext(ioDispatcher) {
+        allocationMutex.withLock {
+            check(loadPublicAddressRestore() is PendingPublicAddressRestore.Source) {
+                "Public address restore source was not captured"
+            }
+            if (address.isNotBlank()) savePublicAddressRestore(PendingPublicAddressRestore.Address(address))
+            quarantinePublicAddress(address)
+            if (address.isNotBlank()) markPublicAddressBackupRequired()
+            keychain.delete(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name)
+        }
+    }
+
+    internal suspend fun finishPublicAddressRestoreWithoutMetadata() = withContext(ioDispatcher) {
+        allocationMutex.withLock {
+            check(loadPublicAddressRestore() == PendingPublicAddressRestore.Reading) {
+                "Public address recovery must complete before clearing its guard"
+            }
+            keychain.delete(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name)
+        }
+    }
+
     suspend fun backupSnapshot(): Result<Map<String, Int>?> = withContext(ioDispatcher) {
-        runCatching {
-            val snapshot = locked { highestReservedReceiveIndexByAddressType(it) }
+        runSuspendCatching {
+            ensurePublicAddressRestoreComplete()
+            quarantineLegacyPublicAddress()
+            val snapshot = locked { reservationCeilings(it) }
             snapshot.takeIf { it.isNotEmpty() }
         }
     }
 
-    suspend fun restoreBackup(highestReservedReceiveIndexByAddressType: Map<String, Int>?): Result<Unit> =
+    suspend fun quarantinedPublicAddressesSnapshot(): Set<String> = withContext(ioDispatcher) {
+        ensurePublicAddressRestoreComplete()
+        quarantineLegacyPublicAddress()
+        locked { it.quarantinedPublicAddresses }
+    }
+
+    suspend fun restoreBackup(
+        highestReservedReceiveIndexByAddressType: Map<String, Int>?,
+        quarantinedPublicAddresses: Set<String> = emptySet(),
+    ): Result<Unit> =
         withContext(ioDispatcher) {
-            runCatching {
-                locked {
-                    val restored = highestReservedReceiveIndexByAddressType
-                        ?.filterValues { it >= 0 }
-                        .orEmpty()
-                    val next = PrivatePaykitReservationData(
-                        reservedReceiveIndexesByAddressType = emptyMap(),
-                        contactAssignments = emptyMap(),
-                        contactAssignmentHistory = emptyMap(),
-                        restoredReservedReceiveIndexCeilingsByAddressType = restored,
-                    )
-                    ledger = next
-                    persist(next)
+            allocationMutex.withLock {
+                runSuspendCatching {
+                    ensurePublicAddressRestoreComplete()
+                    quarantineLegacyPublicAddress()
+                    locked { current ->
+                        val restored = highestReservedReceiveIndexByAddressType
+                            ?.filterValues { it >= 0 }
+                            .orEmpty()
+                        val previous = reservationCeilings(current)
+                        val ceilings = (restored.keys + previous.keys).associateWith {
+                            maxOf(restored[it] ?: -1, previous[it] ?: -1)
+                        }
+                        val next = PrivatePaykitReservationData(
+                            restoredReservedReceiveIndexCeilingsByAddressType = ceilings,
+                            quarantinedPublicAddresses = current.quarantinedPublicAddresses +
+                                quarantinedPublicAddresses,
+                        )
+                        persist(next)
+                        ledger = next
+                    }
+                    notifyBackupStateChanged()
                 }
-                notifyBackupStateChanged()
             }.onFailure {
-                Logger.error("Failed to restore private Paykit reservations", it, context = TAG)
+                Logger.error("Failed to restore Paykit reservations", it, context = TAG)
             }
         }
 
     suspend fun currentOrRotatedAddress(
         publicKey: String,
     ): Result<String> = withContext(ioDispatcher) {
-        runSuspendCatching {
-            val assignmentKey = normalizedPublicKey(publicKey)
-            val current = locked { it.contactAssignments[assignmentKey] }
-            if (current != null && isAddressTypeMonitored(current.addressType)) {
-                val address = resolvedAddress(current).getOrThrow()
-                if (!isReservedAddressUsed(address)) return@runSuspendCatching address
-            } else if (current != null) {
-                clearCurrentAssignment(assignmentKey)
-            }
+        allocationMutex.withLock {
+            runSuspendCatching {
+                ensurePublicAddressRestoreComplete()
+                quarantineLegacyPublicAddress()
+                val assignmentKey = normalizedPublicKey(publicKey)
+                val current = locked { it.contactAssignments[assignmentKey] }
+                if (current != null && isAddressTypeMonitored(current.addressType)) {
+                    val address = resolvedAddress(current).getOrThrow()
+                    if (!isQuarantinedPublicAddress(address) && !isReservedAddressUsed(address)) {
+                        return@runSuspendCatching address
+                    }
+                } else if (current != null) {
+                    clearCurrentAssignment(assignmentKey)
+                }
 
-            allocateAddress(assignmentKey).getOrThrow()
+                allocateAddress(assignmentKey, isPublic = false).getOrThrow()
+            }
         }.onFailure {
             Logger.warn(
                 "Failed to get private Paykit address for '${redacted(publicKey)}'",
@@ -111,18 +209,56 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         }
     }
 
+    suspend fun currentOrRotatedPublicAddress(publicKey: String): Result<String> = withContext(ioDispatcher) {
+        allocationMutex.withLock {
+            runSuspendCatching {
+                ensurePublicAddressRestoreComplete()
+                quarantineLegacyPublicAddress()
+                val assignmentKey = normalizedPublicKey(publicKey)
+                val current = locked { it.publicAssignments[assignmentKey] }
+                if (current != null && isAddressTypeMonitored(current.addressType)) {
+                    val address = resolvedAddress(current).getOrThrow()
+                    if (!isReservedAddressUsed(address)) return@runSuspendCatching address
+                }
+                allocateAddress(assignmentKey, isPublic = true).getOrThrow()
+            }
+        }
+    }
+
+    suspend fun needsPublicAddressRotation(publicKey: String): Result<Boolean> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            ensurePublicAddressRestoreComplete()
+            val current = locked { it.publicAssignments[normalizedPublicKey(publicKey)] }
+                ?: return@runSuspendCatching false
+            !isAddressTypeMonitored(current.addressType) || isReservedAddressUsed(resolvedAddress(current).getOrThrow())
+        }
+    }
+
+    /** Keeps the read-only match stable through acknowledgement; the callback must not re-enter reservations. */
+    internal suspend fun withPublicAddressMatch(
+        publicKey: String,
+        address: String,
+        acknowledge: suspend (Boolean) -> Unit,
+    ) = withContext(ioDispatcher) {
+        locked {
+            val matches = !keychain.exists(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name) &&
+                address.isNotBlank() &&
+                it.publicAssignments[normalizedPublicKey(publicKey)]?.address == address
+            acknowledge(matches)
+        }
+    }
+
     suspend fun nextReusableReceiveAddress(): Result<String> =
         nextReusableReceiveAddress(selectedAddressType())
 
     suspend fun nextReusableReceiveAddress(addressType: AddressType): Result<String> =
         withContext(ioDispatcher) {
-            runCatching {
-                prepareReusableReceive(addressType).getOrThrow()
-                val addressInfo = lightningRepo.newAddressInfoForType(addressType).getOrThrow()
-                if (isUnavailableForReusableReceive(addressInfo.index, addressType.toSettingsString())) {
-                    throw PrivatePaykitAddressReservationError.AddressReservationFailed
+            allocationMutex.withLock {
+                runSuspendCatching {
+                    ensurePublicAddressRestoreComplete()
+                    quarantineLegacyPublicAddress()
+                    nextAvailableAddress(addressType).address
                 }
-                addressInfo.address
             }.onFailure {
                 Logger.error("Failed to create non-reserved receive address", it, context = TAG)
             }
@@ -130,20 +266,28 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     suspend fun reconcileReservedIndexesWithLdk(): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
-            locked { highestReservedReceiveIndexByAddressType(it) }.forEach { (addressTypeKey, highestReserved) ->
+            locked { reservationCeilings(it) }.forEach { (addressTypeKey, highestReserved) ->
                 val addressType = addressTypeKey.toAddressType() ?: return@forEach
                 if (!isAddressTypeMonitored(addressTypeKey)) return@forEach
                 reconcileAddressTypeWithLdk(addressType, highestReserved).getOrThrow()
             }
         }.onFailure {
-            Logger.warn("Failed to reconcile private Paykit address reservations", it, context = TAG)
+            Logger.warn("Failed to reconcile Paykit address reservations", it, context = TAG)
         }
     }
 
     suspend fun isUnavailableForReusableReceive(address: String): Boolean = withContext(ioDispatcher) {
-        if (address.isBlank()) return@withContext false
-        val addressType = address.addressTypeFromAddress()?.toAddressType() ?: return@withContext false
-        isUnavailableForReusableReceive(address, addressType)
+        allocationMutex.withLock {
+            ensurePublicAddressRestoreComplete()
+            quarantineLegacyPublicAddress()
+            if (address.isBlank()) return@withLock false
+            if (isQuarantinedPublicAddress(address)) return@withLock true
+            if (locked { current -> current.publicAssignments.values.any { it.address == address } }) {
+                return@withLock true
+            }
+            val addressType = address.addressTypeFromAddress()?.toAddressType() ?: return@withLock false
+            isUnavailableForReusableReceive(address, addressType)
+        }
     }
 
     suspend fun contactPublicKeyForReservedAddress(address: String): String? = withContext(ioDispatcher) {
@@ -176,9 +320,16 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     suspend fun contactsWithUsedReservedAddresses(): List<String> = withContext(ioDispatcher) {
         val assignments = locked { it.contactAssignments.map { entry -> entry.key to entry.value } }
-        assignments.mapNotNull { (publicKey, assignment) ->
+        val addresses = assignments.mapNotNull { (publicKey, assignment) ->
             val address = resolvedAddress(assignment).getOrNull() ?: return@mapNotNull null
-            val isUsed = runSuspendCatching { isReservedAddressUsed(address) }
+            publicKey to address
+        }
+        if (addresses.isEmpty()) return@withContext emptyList()
+        val coreUsage = coreService.getAddressUsage(addresses.map { it.second })
+        addresses.mapNotNull { (publicKey, address) ->
+            val isUsed = runSuspendCatching {
+                coreUsage.getValue(address).getOrThrow() || hasAddressBalance(address)
+            }
                 .onFailure {
                     Logger.warn(
                         "Failed to check private Paykit address usage for " +
@@ -194,6 +345,10 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     private suspend fun isReservedAddressUsed(address: String): Boolean {
         if (coreService.isAddressUsed(address)) return true
+        return hasAddressBalance(address)
+    }
+
+    private suspend fun hasAddressBalance(address: String): Boolean {
         if (!lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) return false
         return lightningRepo.getAddressBalance(address).getOrDefault(0u) > 0u
     }
@@ -248,16 +403,16 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         }
     }
 
-    private suspend fun allocateAddress(assignmentKey: String): Result<String> = withContext(ioDispatcher) {
+    private suspend fun allocateAddress(
+        assignmentKey: String,
+        isPublic: Boolean,
+    ): Result<String> = withContext(ioDispatcher) {
         runSuspendCatching {
             val addressType = selectedAddressType()
             val addressTypeKey = addressType.toSettingsString()
 
-            prepareReusableReceive(addressType).getOrThrow()
-            val addressInfo = lightningRepo.newAddressInfoForType(addressType).getOrThrow()
-            if (isUnavailableForReusableReceive(addressInfo.index, addressTypeKey)) {
-                throw PrivatePaykitAddressReservationError.AddressReservationFailed
-            }
+            val ordinaryAddress = if (isPublic) cacheStore.data.first().onchainAddress else null
+            val addressInfo = nextAvailableAddress(addressType, ordinaryAddress)
             val assignment = PrivatePaykitStoredAssignmentData(
                 addressType = addressTypeKey,
                 receiveIndex = addressInfo.index,
@@ -270,16 +425,114 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
                 val next = current.copy(
                     reservedReceiveIndexesByAddressType = current.reservedReceiveIndexesByAddressType +
                         (addressTypeKey to reserved),
-                    contactAssignments = current.contactAssignments + (assignmentKey to assignment),
-                    contactAssignmentHistory = current.contactAssignmentHistory + (assignmentKey to history),
+                    publicAssignments = if (isPublic) {
+                        current.publicAssignments + (assignmentKey to assignment)
+                    } else {
+                        current.publicAssignments
+                    },
+                    contactAssignments = if (isPublic) {
+                        current.contactAssignments
+                    } else {
+                        current.contactAssignments + (assignmentKey to assignment)
+                    },
+                    contactAssignmentHistory = if (isPublic) {
+                        current.contactAssignmentHistory
+                    } else {
+                        current.contactAssignmentHistory + (assignmentKey to history)
+                    },
                 )
-                ledger = next
                 persist(next)
+                ledger = next
             }
             notifyBackupStateChanged()
             addressInfo.address
         }
     }
+
+    private fun ensurePublicAddressRestoreComplete() {
+        if (keychain.exists(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name)) {
+            throw PrivatePaykitAddressReservationError.PublicAddressRestorePending
+        }
+    }
+
+    private fun loadPublicAddressRestore(): PendingPublicAddressRestore? {
+        val stored = keychain.loadString(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name) ?: return null
+        // Strict decoding keeps unknown or malformed recovery obligations from being discarded.
+        return Json.decodeFromString<PendingPublicAddressRestore>(stored).also {
+            when (it) {
+                is PendingPublicAddressRestore.Source -> check(it.fingerprint.matches(Regex("[0-9a-f]{64}")))
+                is PendingPublicAddressRestore.Address -> check(it.address.isNotBlank())
+                PendingPublicAddressRestore.Reading -> Unit
+            }
+        }
+    }
+
+    private suspend fun savePublicAddressRestore(pending: PendingPublicAddressRestore) {
+        keychain.upsertString(Keychain.Key.PAYKIT_PENDING_PUBLIC_ADDRESS_RESTORE.name, Json.encodeToString(pending))
+    }
+
+    private suspend fun markPublicAddressBackupRequired() {
+        cacheStore.update { cache ->
+            val statuses = cache.backupStatuses.toMutableMap()
+            for (category in listOf(BackupCategory.WALLET, BackupCategory.METADATA)) {
+                val status = statuses[category] ?: BackupItemStatus()
+                statuses[category] = status.copy(required = maxOf(status.required, status.synced) + 1)
+            }
+            cache.copy(backupStatuses = statuses)
+        }
+    }
+
+    private suspend fun quarantineLegacyPublicAddress() {
+        if (!settingsStore.data.first().legacyPublicAddressQuarantinePending) return
+        val address = cacheStore.data.first().onchainAddress
+        quarantinePublicAddress(address)
+        settingsStore.update { it.copy(legacyPublicAddressQuarantinePending = false) }
+    }
+
+    suspend fun quarantinePublicAddress(address: String) = withContext(ioDispatcher) {
+        if (address.isBlank()) return@withContext
+        locked { current ->
+            val next = current.copy(quarantinedPublicAddresses = current.quarantinedPublicAddresses + address)
+            persist(next)
+            ledger = next
+        }
+        notifyBackupStateChanged()
+    }
+
+    private suspend fun nextAvailableAddress(
+        addressType: AddressType,
+        ordinaryAddress: String? = null,
+    ): AddressDerivationInfo {
+        prepareReusableReceive(addressType).getOrThrow()
+        val addressTypeKey = addressType.toSettingsString()
+        var previousIndex = -1
+        while (true) {
+            val candidate = lightningRepo.newAddressInfoForType(addressType).getOrThrow()
+            if (candidate.index <= previousIndex || isUnavailableForReusableReceive(candidate.index, addressTypeKey)) {
+                throw PrivatePaykitAddressReservationError.AddressReservationFailed
+            }
+            previousIndex = candidate.index
+            val quarantined = isQuarantinedPublicAddress(candidate.address)
+            if (!quarantined && candidate.address != ordinaryAddress) return candidate
+            if (quarantined) {
+                locked { current ->
+                    val reserved = current.reservedReceiveIndexesByAddressType[addressTypeKey].orEmpty() +
+                        candidate.index
+                    val next = current.copy(
+                        reservedReceiveIndexesByAddressType = current.reservedReceiveIndexesByAddressType +
+                            (addressTypeKey to reserved),
+                    )
+                    persist(next)
+                    ledger = next
+                }
+                notifyBackupStateChanged()
+            }
+            lightningRepo.revealReceiveAddresses(candidate.index, addressType).getOrThrow()
+        }
+    }
+
+    private suspend fun isQuarantinedPublicAddress(address: String): Boolean =
+        locked { address in it.quarantinedPublicAddresses }
 
     private suspend fun selectedAddressType(): AddressType {
         val settings = settingsStore.data.first()
@@ -300,7 +553,7 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
     private suspend fun prepareReusableReceive(addressType: AddressType): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             val addressTypeKey = addressType.toSettingsString()
-            val highestReserved = locked { highestReservedReceiveIndexByAddressType(it)[addressTypeKey] }
+            val highestReserved = locked { reservationCeilings(it)[addressTypeKey] }
                 ?: return@runCatching
             reconcileAddressTypeWithLdk(addressType, highestReserved).getOrThrow()
         }
@@ -318,7 +571,7 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
                     addressType = addressTypeKey,
                     receiveIndex = receiveIndex,
                 ),
-            ).getOrNull()
+            ).getOrThrow()
             reservedAddress == address
         }
     }
@@ -356,7 +609,7 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         reservationStore.update { data }
     }
 
-    private fun highestReservedReceiveIndexByAddressType(
+    private fun reservationCeilings(
         ledger: PrivatePaykitReservationData,
     ): Map<String, Int> {
         val reserved = ledger.reservedReceiveIndexesByAddressType
@@ -387,4 +640,19 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         PubkyPublicKeyFormat.redacted(publicKey)
 
     private fun PrivatePaykitStoredAssignmentData.assignmentKey(): String = "$addressType:$receiveIndex"
+}
+
+@Serializable
+private sealed interface PendingPublicAddressRestore {
+    @Serializable
+    @SerialName("reading")
+    data object Reading : PendingPublicAddressRestore
+
+    @Serializable
+    @SerialName("source")
+    data class Source(val fingerprint: String) : PendingPublicAddressRestore
+
+    @Serializable
+    @SerialName("address")
+    data class Address(val address: String) : PendingPublicAddressRestore
 }

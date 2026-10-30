@@ -1367,8 +1367,10 @@
     <string name="profile__pay_contacts_error_wallet">Peněženka se stále spouští. Zkuste to za chvíli znovu.</string>
     <string name="profile__pay_contacts_headline">Nechte své\nkontakty\n&lt;accent&gt;platit vám&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Platby kontaktům</string>
+    <string name="profile__private_payments_toggle">Soukromé platby s kontakty</string>
     <string name="profile__pubky_copied">pubky zkopírován do schránky</string>
     <string name="profile__public_key">Veřejný klíč</string>
+    <string name="profile__public_payments_toggle">Veřejné platby</string>
     <string name="profile__restore_nav_title">Obnovit profil</string>
     <string name="profile__session_expired">Platnost relace vašeho profilu vypršela. Pro obnovení profilu se prosím znovu připojte.</string>
     <string name="profile__sign_out">Odpojit</string>
@@ -1414,7 +1416,6 @@
     <string name="settings__es__server_error_certificate">Certifikát tohoto serveru není důvěryhodný. Použijte server s důvěryhodným certifikátem, nebo se připojte k jeho TCP portu.</string>
     <string name="settings__es__server_error_network">Tento server je v jiné síti Bitcoin. Vyberte server pro síť, kterou Bitkit používá.</string>
     <string name="settings__es__server_error_protocol">Zabezpečené připojení se nezdařilo. Zkontrolujte, zda protokol (TCP nebo TLS) odpovídá portu serveru.</string>
-    <string name="settings__general__enable_contact_payments">Povolit platby s kontakty</string>
     <string name="settings__hardware_wallets__add_button">Přidat hardwarovou peněženku</string>
     <string name="settings__hardware_wallets__name_label">Název</string>
     <string name="settings__hardware_wallets__nav_title">Hardwarové peněženky</string>

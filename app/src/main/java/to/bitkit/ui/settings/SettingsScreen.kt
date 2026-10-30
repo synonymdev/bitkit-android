@@ -96,6 +96,7 @@ fun SettingsScreen(
     val isPubkyAuthenticated by settings.isPubkyAuthenticated.collectAsStateWithLifecycle()
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
     val contactPaymentsEnabled by settings.contactPaymentsEnabled.collectAsStateWithLifecycle()
+    val publicPaymentsEnabled by settings.publicPaymentsEnabled.collectAsStateWithLifecycle()
     val isUpdatingContactPayments by settings.isUpdatingContactPayments.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { settings.refreshUsdtAvailability() }
     val canDisableUsdt by settings.canDisableUsdt.collectAsStateWithLifecycle()
@@ -140,6 +141,7 @@ fun SettingsScreen(
             isPubkyAuthenticated = isPubkyAuthenticated,
             isPaykitEnabled = isPaykitEnabled,
             contactPaymentsEnabled = contactPaymentsEnabled,
+            publicPaymentsEnabled = publicPaymentsEnabled,
             isUpdatingContactPayments = isUpdatingContactPayments,
             hardwareWalletCount = hardwareWallets.size,
             isUsdtEnabled = isUsdtEnabled,
@@ -177,6 +179,7 @@ fun SettingsScreen(
                 SettingsEvent.ContactPaymentsClick -> {
                     settings.setContactPaymentsEnabled(!contactPaymentsEnabled)
                 }
+                SettingsEvent.PublicPaymentsClick -> settings.setPublicPaymentsEnabled(!publicPaymentsEnabled)
                 SettingsEvent.UsdtClick -> settings.setUsdtEnabled(!isUsdtEnabled)
                 SettingsEvent.QuickPayClick -> navController.navigateToQuickPaySettings(quickPayIntroSeen)
                 SettingsEvent.BgPaymentsClick -> {
@@ -392,13 +395,22 @@ private fun GeneralTabContent(
 
         if (state.isPaykitEnabled && state.isPubkyAuthenticated) {
             SettingsSwitchRow(
-                title = stringResource(R.string.settings__general__enable_contact_payments),
+                title = stringResource(R.string.profile__private_payments_toggle),
                 isChecked = state.contactPaymentsEnabled,
                 icon = { SettingsIcon(R.drawable.ic_coins) },
                 onClick = { onEvent(SettingsEvent.ContactPaymentsClick) },
                 enabled = !state.isUpdatingContactPayments,
-                switchTestTag = "ContactPaymentsToggle",
+                switchTestTag = "PrivateContactPaymentsToggle",
                 modifier = Modifier.testTag("ContactPaymentsSettings")
+            )
+            SettingsSwitchRow(
+                title = stringResource(R.string.profile__public_payments_toggle),
+                isChecked = state.publicPaymentsEnabled,
+                icon = { SettingsIcon(R.drawable.ic_coins) },
+                onClick = { onEvent(SettingsEvent.PublicPaymentsClick) },
+                enabled = !state.isUpdatingContactPayments,
+                switchTestTag = "PublicPaymentsToggle",
+                modifier = Modifier.testTag("PublicPaymentsSettings")
             )
         }
 
@@ -701,6 +713,7 @@ sealed interface SettingsEvent {
     data object TagsClick : SettingsEvent
     data object TransactionSpeedClick : SettingsEvent
     data object ContactPaymentsClick : SettingsEvent
+    data object PublicPaymentsClick : SettingsEvent
     data object UsdtClick : SettingsEvent
     data object QuickPayClick : SettingsEvent
     data object BgPaymentsClick : SettingsEvent
@@ -749,6 +762,7 @@ data class GeneralTabState(
     val isPubkyAuthenticated: Boolean = false,
     val isPaykitEnabled: Boolean = false,
     val contactPaymentsEnabled: Boolean = false,
+    val publicPaymentsEnabled: Boolean = false,
     val isUpdatingContactPayments: Boolean = false,
     val hardwareWalletCount: Int = 0,
     val isUsdtEnabled: Boolean = false,

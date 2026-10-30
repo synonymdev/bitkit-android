@@ -1365,8 +1365,10 @@
     <string name="profile__pay_contacts_error_wallet">La cartera encara s\'està iniciant. Torna-ho a provar d\'aquí a un moment.</string>
     <string name="profile__pay_contacts_headline">Deixa que els\nteus contactes\n&lt;accent&gt;et paguin&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar contactes</string>
+    <string name="profile__private_payments_toggle">Pagaments privats amb contactes</string>
     <string name="profile__pubky_copied">pubky copiat al porta-retalls</string>
     <string name="profile__public_key">Clau pública</string>
+    <string name="profile__public_payments_toggle">Pagaments públics</string>
     <string name="profile__restore_nav_title">Restaurar perfil</string>
     <string name="profile__session_expired">La sessió del teu perfil ha caducat. Torna a connectar-te per restaurar el teu perfil.</string>
     <string name="profile__sign_out">Desconnectar</string>
@@ -1412,7 +1414,6 @@
     <string name="settings__es__server_error_certificate">El certificat d\'aquest servidor no és de confiança. Utilitza un servidor amb un certificat de confiança o connecta\'t al seu port TCP.</string>
     <string name="settings__es__server_error_network">Aquest servidor és d\'una xarxa Bitcoin diferent. Tria un servidor per a la xarxa que utilitza Bitkit.</string>
     <string name="settings__es__server_error_protocol">Ha fallat la connexió segura. Comprova que el protocol (TCP o TLS) coincideix amb el port del servidor.</string>
-    <string name="settings__general__enable_contact_payments">Activar pagaments amb contactes</string>
     <string name="settings__hardware_wallets__add_button">Afegir cartera de maquinari</string>
     <string name="settings__hardware_wallets__name_label">Nom</string>
     <string name="settings__hardware_wallets__nav_title">Carteres de maquinari</string>
