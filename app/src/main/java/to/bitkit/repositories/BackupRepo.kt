@@ -897,7 +897,7 @@ class BackupRepo @Inject constructor(
                 }
                 performRestore(BackupCategory.WIDGETS, failedCategories) { dataBytes ->
                     val parsed = json.decodeFromString<WidgetsBackupV1>(String(dataBytes))
-                    widgetsStore.restoreFromBackup(parsed)
+                    widgetsStore.restoreFromBackup(parsed).getOrThrow()
                     parsed.createdAt
                 }
                 // SETTINGS is optional; preserving explicit local corrections is required.

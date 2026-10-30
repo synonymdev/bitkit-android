@@ -77,6 +77,7 @@ import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.models.WidgetsBackupV1
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
@@ -1638,10 +1639,13 @@ class BackupRepoTest : BaseUnitTest() {
             .thenReturn(Result.failure(BackupRepoTestError("pubky")))
         stubRestoreEnvelope(BackupCategory.BLOCKTANK, iosFixture("blocktank"))
         whenever { blocktankRepo.restoreFromBackup(any()) }.thenReturn(Result.failure(BackupRepoTestError("core")))
+        val widgetsEnvelope = json.encodeToString(WidgetsBackupV1(createdAt = 1, widgets = WidgetsData()))
+        stubRestoreEnvelope(BackupCategory.WIDGETS, widgetsEnvelope)
+        whenever { widgetsStore.restoreFromBackup(any()) }.thenReturn(Result.failure(BackupRepoTestError("disk")))
 
         val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
 
-        assertEquals(setOf(BackupCategory.METADATA, BackupCategory.BLOCKTANK), failed)
+        assertEquals(setOf(BackupCategory.METADATA, BackupCategory.WIDGETS, BackupCategory.BLOCKTANK), failed)
     }
 
     @Test
