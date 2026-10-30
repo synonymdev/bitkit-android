@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import android.content.Context
 import com.synonym.bitkitcore.UsdtException
+import com.synonym.paykit.PaykitException
 import com.synonym.vssclient.VssException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -1296,11 +1297,15 @@ private data class RestoredCoreBackup(
     val needsRewrite: Boolean,
 )
 
-internal fun Throwable.isTemporaryBackupFailure(): Boolean = isPaykitTemporarilyUnavailable() || when (this) {
-    is VssException.ConnectionException,
-    is VssException.NetworkException,
-    is VssException.StoreException,
-    is VssException.PutException,
-    -> true
-    else -> false
-}
+internal fun Throwable.isTemporaryBackupFailure(): Boolean = isPaykitTemporarilyUnavailable() ||
+    // Only backup capture may retry this admission rejection; profile mutations must reconcile separately.
+    generateSequence(this) { it.cause }.any {
+        it is PaykitException.Storage && it.code == "profile_removal_in_progress"
+    } || when (this) {
+        is VssException.ConnectionException,
+        is VssException.NetworkException,
+        is VssException.StoreException,
+        is VssException.PutException,
+        -> true
+        else -> false
+    }

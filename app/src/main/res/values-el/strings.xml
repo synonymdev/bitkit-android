@@ -383,9 +383,13 @@
     <string name="profile__add_tag">Προσθήκη ετικέτας</string>
     <string name="profile__auth_approval_details">Λεπτομέρειες</string>
     <string name="profile__auth_approval_ok">ΟΚ</string>
+    <string name="profile__cleanup_pending">Η εκκαθάριση του προφίλ δεν ολοκληρώθηκε. Αποσυνδεθείτε τοπικά για να καταργήσετε την πρόσβαση αυτής της συσκευής χωρίς νέα προσπάθεια απομακρυσμένης διαγραφής.</string>
     <string name="profile__create_nav_title">Δημιουργία προφίλ</string>
+    <string name="profile__delete_review_description">Ορισμένες αλλαγές ενδέχεται να έχουν ολοκληρωθεί. Ελέγξτε την τρέχουσα κατάσταση πριν επιβεβαιώσετε ξανά ή αποσυνδεθείτε τοπικά.</string>
+    <string name="profile__disconnect_local_description">Αφαιρέστε την πρόσβαση αυτής της συσκευής και ολοκληρώστε την τοπική εκκαθάριση. Αυτό δεν κάνει άλλες αλλαγές στο προφίλ, τις συνδρομές ή την πρόσβασή σας στον διακομιστή.</string>
     <string name="profile__nav_title">Προφίλ</string>
     <string name="profile__retry_load">Προσπαθήστε Ξανά</string>
+    <string name="profile__review_removal">Έλεγχος</string>
     <string name="profile__suggestions">Προτάσεις</string>
     <string name="security__backup_button">Αντίγραφο ασφαλείας</string>
     <string name="security__backup_funds">Τώρα που έχεις κεφάλαια στο πορτοφόλι σου, ήρθε η ώρα να δημιουργήσεις αντίγραφο ασφαλείας των χρημάτων σου!</string>
@@ -1349,6 +1353,7 @@
     <string name="profile__unlink_error_title">Αδυναμία αποσύνδεσης pubky</string>
     <string name="profile__unlink_pubky">Αποσύνδεση pubky</string>
     <string name="profile__unlink_success">Το pubky αποσυνδέθηκε</string>
+    <string name="profile__wallet_recovery_pending">Πρέπει να ολοκληρωθεί η ανάκτηση του πορτοφολιού πριν αποσυνδεθεί αυτό το προφίλ. Ελέγξτε την ανάκτηση πορτοφολιού στις Ρυθμίσεις.</string>
     <string name="profile__your_name">Το όνομά σου</string>
     <string name="profile__your_pubky">Το pubky σου</string>
     <string name="pubky_auth__already_signed_in">Είσαι ήδη συνδεδεμένος</string>

@@ -390,10 +390,14 @@
     <string name="profile__add_link_note">Nota: qualsiasi link aggiunto sarà visibile pubblicamente.</string>
     <string name="profile__add_tag">Aggiungi Tag</string>
     <string name="profile__auth_approval_details">Dettagli</string>
+    <string name="profile__cleanup_pending">La pulizia del profilo è incompleta. Disconnettiti localmente per rimuovere l’accesso di questo dispositivo senza ritentare l’eliminazione remota.</string>
     <string name="profile__create_nav_title">Crea Profilo</string>
+    <string name="profile__delete_review_description">Alcune modifiche potrebbero essere state completate. Verifica lo stato attuale prima di confermare di nuovo, oppure disconnettiti localmente.</string>
+    <string name="profile__disconnect_local_description">Rimuovi l’accesso di questo dispositivo e completa la pulizia locale. Questa operazione non apporta ulteriori modifiche al profilo, agli abbonamenti o all’accesso sul server.</string>
     <string name="profile__edit_nav_title">Modifica Profilo</string>
     <string name="profile__nav_title">Profilo</string>
     <string name="profile__retry_load">Riprova</string>
+    <string name="profile__review_removal">Verifica</string>
     <string name="profile__suggestions">Consigli</string>
     <string name="profile__suggestions_to_add">Suggerimenti Da Aggiungere</string>
     <string name="profile__unlink_confirm">Sì, Scollega</string>
@@ -1359,6 +1363,7 @@
     <string name="profile__sign_out_description">Questo disconnetterà il tuo profilo Pubky da Bitkit. Puoi ricollegarlo in qualsiasi momento.</string>
     <string name="profile__sign_out_title">Disconnetti Profilo</string>
     <string name="profile__source_lost">Questo pubky non è più disponibile in Pubky Ring. Il tuo profilo è stato disconnesso.</string>
+    <string name="profile__wallet_recovery_pending">Devi completare il recupero del portafoglio prima di disconnettere questo profilo. Controlla il recupero del portafoglio nelle Impostazioni.</string>
     <string name="profile__your_pubky">Il Tuo Pubky</string>
     <string name="pubky_auth__already_signed_in">Accesso già effettuato</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

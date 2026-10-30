@@ -406,10 +406,14 @@
     <string name="profile__auth_approval_details">Подробности</string>
     <string name="profile__auth_approval_ok">Ок</string>
     <string name="profile__auth_approval_title">Авторизовать</string>
+    <string name="profile__cleanup_pending">Очистка профиля не завершена. Отключитесь локально, чтобы убрать доступ этого устройства без повторной попытки удалённого удаления.</string>
     <string name="profile__create_nav_title">Создать Профиль</string>
+    <string name="profile__delete_review_description">Некоторые изменения могли быть выполнены. Проверьте текущее состояние перед повторным подтверждением или отключитесь локально.</string>
+    <string name="profile__disconnect_local_description">Удалите доступ этого устройства и завершите локальную очистку. Это не вносит дополнительных изменений в ваш профиль, подписки или доступ на сервере.</string>
     <string name="profile__edit_nav_title">Редактировать Профиль</string>
     <string name="profile__nav_title">Профиль</string>
     <string name="profile__retry_load">Попробовать снова</string>
+    <string name="profile__review_removal">Проверить</string>
     <string name="profile__suggestions">Рекомендации</string>
     <string name="profile__suggestions_to_add">Рекомендации для добавления</string>
     <string name="profile__unlink_confirm">Да, Отвязать</string>
@@ -1374,6 +1378,7 @@
     <string name="profile__sign_out_description">Ваш профиль Pubky будет отключён от Bitkit. Вы можете переподключиться в любое время.</string>
     <string name="profile__sign_out_title">Отключить Профиль</string>
     <string name="profile__source_lost">Этот pubky больше не доступен в Pubky Ring. Ваш профиль отключён.</string>
+    <string name="profile__wallet_recovery_pending">Перед отключением этого профиля необходимо завершить восстановление кошелька. Проверьте восстановление кошелька в Настройках.</string>
     <string name="profile__your_pubky">Ваш Pubky</string>
     <string name="pubky_auth__already_signed_in">Вход уже выполнен</string>
     <string name="pubky_auth__homeserver">Домашний сервер</string>

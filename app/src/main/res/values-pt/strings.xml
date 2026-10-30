@@ -353,9 +353,13 @@
     <string name="other__update_title">Atualizar\n&lt;accent&gt;Bitkit&lt;/accent&gt;</string>
     <string name="profile__add_tag">Adicionar Tag</string>
     <string name="profile__auth_approval_details">Detalhes</string>
+    <string name="profile__cleanup_pending">A limpeza do perfil está incompleta. Desligue-se localmente para remover o acesso deste dispositivo sem voltar a tentar a eliminação remota.</string>
     <string name="profile__create_nav_title">Criar Perfil</string>
+    <string name="profile__delete_review_description">Algumas alterações poderão ter sido concluídas. Reveja o estado atual antes de confirmar novamente ou desligue-se localmente.</string>
+    <string name="profile__disconnect_local_description">Remove o acesso deste dispositivo e conclui a limpeza local. Isto não faz mais alterações ao teu perfil, às subscrições ou ao acesso no servidor.</string>
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Tente novamente</string>
+    <string name="profile__review_removal">Rever</string>
     <string name="profile__suggestions">Sugestões</string>
     <string name="other__update_text">Atualize a Bitkit para obter novos recursos e correções de bugs!</string>
     <string name="other__update_button">Atualizar</string>
@@ -1342,6 +1346,7 @@
     <string name="profile__unlink_error_title">Não foi possível desassociar o pubky</string>
     <string name="profile__unlink_pubky">Desassociar pubky</string>
     <string name="profile__unlink_success">Pubky desassociado</string>
+    <string name="profile__wallet_recovery_pending">É necessário concluir a recuperação da carteira antes de desligar este perfil. Consulte a recuperação da carteira nas Definições.</string>
     <string name="profile__your_name">O seu nome</string>
     <string name="profile__your_pubky">O seu pubky</string>
     <string name="pubky_auth__already_signed_in">Sessão já iniciada</string>

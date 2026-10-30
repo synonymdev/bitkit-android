@@ -15,6 +15,8 @@ import to.bitkit.data.paykitDisabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.services.PaykitSdkOperationLock.Priority
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,27 +29,70 @@ class ContactPaymentSettingsRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val sharingMutex = Mutex()
+    private val removalPending = AtomicBoolean(false)
+    private val wipePending = AtomicBoolean(false)
+    private val sharingEpoch = AtomicLong(0)
+
+    internal suspend fun <T> withProfileRemoval(operation: suspend () -> T): T {
+        check(!wipePending.get()) { "Wallet wipe is in progress" }
+        val epoch = sharingEpoch.get()
+        check(removalPending.compareAndSet(false, true)) { "Profile removal is already in progress" }
+        sharingEpoch.incrementAndGet()
+        try {
+            return sharingMutex.withLock {
+                check(!wipePending.get() && sharingEpoch.get() == epoch + 1) { "Profile sharing state changed" }
+                operation()
+            }
+        } finally {
+            removalPending.set(false)
+        }
+    }
+
+    /** Close sharing admission first, revoke repository removal, then drain sharing before taking the SDK barrier. */
+    internal suspend fun <T> withWalletWipe(
+        admitRepository: suspend (suspend () -> T) -> T,
+        operation: suspend () -> T,
+    ): T {
+        check(wipePending.compareAndSet(false, true)) { "Wallet wipe is already in progress" }
+        sharingEpoch.incrementAndGet()
+        try {
+            return admitRepository { sharingMutex.withLock { operation() } }
+        } finally {
+            wipePending.set(false)
+        }
+    }
+
+    private suspend fun changeSharing(operation: suspend () -> Result<Unit>): Result<Unit> = runSuspendCatching {
+        val epoch = sharingEpoch.get()
+        check(!removalPending.get() && !wipePending.get()) { "Profile removal is in progress" }
+        sharingMutex.withLock {
+            check(
+                !removalPending.get() && !wipePending.get() && epoch == sharingEpoch.get()
+            ) { "Profile sharing state changed" }
+            operation().getOrThrow()
+        }
+    }
 
     val isEnabled: Flow<Boolean> = settingsStore.data.map { it.areContactPaymentsEnabled() }
 
     suspend fun setEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
-        sharingMutex.withLock {
+        changeSharing {
             val contacts = pubkyRepo.contacts.value.map { it.publicKey }
             if (isEnabled) enable(contacts) else disable(contacts)
         }
     }
 
     suspend fun reconcilePendingEndpoints(reconcile: suspend () -> Unit) = withContext(ioDispatcher) {
-        if (!sharingMutex.tryLock()) return@withContext
+        if (removalPending.get() || wipePending.get() || !sharingMutex.tryLock()) return@withContext
         try {
-            reconcile()
+            if (!removalPending.get() && !wipePending.get()) reconcile()
         } finally {
             sharingMutex.unlock()
         }
     }
 
     suspend fun disablePaykit(): Result<Unit> = withContext(ioDispatcher) {
-        sharingMutex.withLock {
+        changeSharing {
             runSuspendCatching {
                 val previous = settingsStore.data.first()
                 val hadPublicState = previous.hasPublicPaykitPublicationState()

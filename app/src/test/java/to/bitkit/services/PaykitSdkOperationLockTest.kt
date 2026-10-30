@@ -3,11 +3,16 @@ package to.bitkit.services
 import com.synonym.paykit.PaykitException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Test
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import kotlin.coroutines.cancellation.CancellationException
@@ -18,6 +23,182 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PaykitSdkOperationLockTest {
+    @Test
+    fun `admitted outer mutex holder cannot enqueue behind a wipe draining that mutex`() = runTest {
+        val admitted = CompletableDeferred<Unit>()
+        val continueAcquire = CompletableDeferred<Unit>()
+        val outerMutex = Mutex()
+        var firstCheck = true
+        val lock = PaykitSdkOperationLock {
+            if (firstCheck) {
+                firstCheck = false
+                admitted.complete(Unit)
+                continueAcquire.await()
+            }
+        }
+        val oldOperation = async {
+            outerMutex.withLock {
+                assertFailsWith<PaykitException.Storage> { lock.withLock { error("stale operation executed") } }
+            }
+        }
+        admitted.await()
+        val wipe = async {
+            lock.withWalletWipe {
+                continueAcquire.complete(Unit)
+                outerMutex.withLock { }
+            }
+        }
+        withTimeout(1_000) {
+            oldOperation.await()
+            wipe.await()
+        }
+    }
+
+    @Test
+    fun `queued foreign work cannot resume after a complete removal`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val release = CompletableDeferred<Unit>()
+        val active = launch { lock.withLock { release.await() } }
+        runCurrent()
+        val removal = launch { lock.withProfileRemoval({ true }) {} }
+        runCurrent()
+        var mutations = 0
+        val queued = async {
+            assertFailsWith<PaykitException.Storage> { lock.withLock { mutations++ } }
+        }
+        runCurrent()
+        release.complete(Unit)
+        active.join()
+        removal.join()
+        queued.await()
+        assertEquals(0, mutations)
+        lock.withLock { mutations++ }
+        assertEquals(1, mutations)
+    }
+
+    @Test
+    fun `profile removal drains preceding work and excludes foreign mutations until finalization`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val release = CompletableDeferred<Unit>()
+        val finishRemoval = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        lateinit var oldRemoval: PaykitSdkOperationLock.ProfileRemoval
+        val preceding = launch {
+            lock.withLock {
+                release.await()
+                events += "preceding"
+            }
+        }
+        runCurrent()
+        val removal = launch {
+            lock.withProfileRemoval({ true }) { owner ->
+                oldRemoval = owner
+                lock.withLock { events += "owned" }
+                assertFailsWith<IllegalStateException> { lock.withProfileRemoval({ true }) {} }
+                assertFailsWith<IllegalStateException> { lock.withWalletWipe {} }
+                finishRemoval.await()
+                events += "finalized"
+            }
+        }
+        runCurrent()
+        assertTrue(events.isEmpty())
+        release.complete(Unit)
+        preceding.join()
+        runCurrent()
+        assertEquals(listOf("preceding", "owned"), events)
+        assertFailsWith<PaykitException.Storage> { lock.withLock { events += "foreign" } }
+        assertFailsWith<PaykitException.Storage> { lock.withProfileRemoval({ true }) {} }
+        assertEquals("public", lock.withoutLock { "public" })
+        assertEquals("handle", lock.withPublicReadInitialization { "handle" })
+        finishRemoval.complete(Unit)
+        removal.join()
+        assertFailsWith<PaykitException.Storage> { withContext(oldRemoval) { lock.withLock {} } }
+        lock.withLock { events += "fresh" }
+        assertEquals(listOf("preceding", "owned", "finalized", "fresh"), events)
+    }
+
+    @Test
+    fun `wipe revokes profile removal and drains local finalization before taking SDK barrier`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val releaseCleanup = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        val removal = launch {
+            lock.withProfileRemoval({ true }) {
+                try {
+                    lock.withLock { events += "native" }
+                    CompletableDeferred<Unit>().await()
+                } finally {
+                    withContext(NonCancellable) {
+                        events += "cleanup started"
+                        releaseCleanup.await()
+                        assertFailsWith<CancellationException> { lock.checkProfileRemoval() }
+                        events += "cleanup drained"
+                    }
+                }
+            }
+        }
+        runCurrent()
+        val wipe = launch { lock.withWalletWipe { lock.withLock { events += "wipe" } } }
+        runCurrent()
+        assertEquals(listOf("native", "cleanup started"), events)
+        assertFalse(wipe.isCompleted)
+        assertFailsWith<PaykitException.Storage> { lock.withLock {} }
+        releaseCleanup.complete(Unit)
+        removal.join()
+        wipe.join()
+        assertEquals(listOf("native", "cleanup started", "cleanup drained", "wipe"), events)
+        lock.withLock {}
+    }
+
+    @Test
+    fun `changed owner rejects the next mutation after a suspended read`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val read = CompletableDeferred<Unit>()
+        var current = true
+        var mutations = 0
+        val removal = async {
+            assertFailsWith<PaykitException.Storage> {
+                lock.withProfileRemoval({ current }) {
+                    lock.withLock {
+                        read.await()
+                        lock.checkProfileRemoval()
+                        mutations++
+                    }
+                }
+            }
+        }
+        runCurrent()
+        current = false
+        read.complete(Unit)
+        assertEquals("profile_removal_obsolete", removal.await().code)
+        assertEquals(0, mutations)
+        lock.withLock {}
+    }
+
+    @Test
+    fun `replacing coroutine Job cannot admit a cancelled removal mutation`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val release = CompletableDeferred<Unit>()
+        var rejected = false
+        val removal = launch {
+            lock.withProfileRemoval({ true }) {
+                withContext(NonCancellable) {
+                    release.await()
+                    assertFailsWith<CancellationException> { lock.withLock { error("cancelled mutation ran") } }
+                    rejected = true
+                }
+            }
+        }
+        runCurrent()
+        removal.cancel()
+        assertFalse(removal.isCompleted)
+        assertFailsWith<PaykitException.Storage> { lock.withLock {} }
+        release.complete(Unit)
+        removal.join()
+        assertTrue(rejected)
+        lock.withLock {}
+    }
+
     @Test
     fun `interactive work overtakes only queued publication with bounded fairness`() = runTest {
         val lock = PaykitSdkOperationLock()

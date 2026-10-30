@@ -22,6 +22,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.async.ServiceQueue
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.keychain.Keychain
@@ -83,6 +84,84 @@ class WalletConnectionRecoveryTest : BaseUnitTest() {
     fun tearDown() = runBlocking { settings.reset() }
 
     private fun instance(store: SettingsStore = settings) = WalletConnectionRecovery(keychain, db, binding, store)
+
+    @Test
+    fun `receipt work can complete while restoration holds the ordinary operation lock`() = test {
+        sut.withOperation(sut.captureOwner()) {
+            sut.withReceiptOperation { receipt ->
+                receipt.requireCurrent()
+                assertEquals("committed", receipt.commitReceiptState { "committed" })
+            }
+        }
+    }
+
+    @Test
+    fun `receipt scope rejects escaped writes and recursive replacement`() = test {
+        lateinit var escaped: WalletConnectionRecovery.Session
+        sut.withReceiptOperation {
+            escaped = it
+            assertFailsWith<IllegalStateException> { sut.withIdentityChange { error("must not replace") } }
+        }
+        assertFailsWith<CancellationException> { escaped.commitReceiptState { error("must not write") } }
+    }
+
+    @Test
+    fun `cancelled original receipt cannot write through the Core replacement job`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val attempted = CompletableDeferred<Boolean>()
+        var committed = false
+        val operation = launch {
+            sut.withReceiptOperation { receipt ->
+                ServiceQueue.CORE.background {
+                    entered.complete(Unit)
+                    release.await()
+                    val failure = runCatching { receipt.commitReceiptState { committed = true } }.exceptionOrNull()
+                    attempted.complete(failure is CancellationException)
+                }
+            }
+        }
+        entered.await()
+        operation.cancel()
+        runCurrent()
+        assertFalse(operation.isCompleted, "Admission must outlive the Core worker")
+        release.complete(Unit)
+        assertTrue(attempted.await())
+        operation.join()
+        assertFalse(committed)
+    }
+
+    @Test
+    fun `same seed replacement drains the actual Core receipt before any credential cleanup`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val attempted = CompletableDeferred<Boolean>()
+        var committed = false
+        val operation = launch {
+            sut.withReceiptOperation { receipt ->
+                ServiceQueue.CORE.background {
+                    entered.complete(Unit)
+                    release.await()
+                    val failure = runCatching { receipt.commitReceiptState { committed = true } }.exceptionOrNull()
+                    attempted.complete(failure is CancellationException)
+                }
+            }
+        }
+        entered.await()
+        var replaced = false
+        val replacement = launch { sut.withIdentityChange { replaced = true } }
+        runCurrent()
+        assertFalse(replaced)
+        assertFalse(operation.isCompleted)
+        release.complete(Unit)
+        assertTrue(attempted.await())
+        operation.join()
+        replacement.join()
+        assertTrue(replaced)
+        assertFalse(committed)
+        sut.withReceiptOperation { it.commitReceiptState { committed = true } }
+        assertTrue(committed)
+    }
 
     @Test
     fun `queued wallet generation is revoked during same seed replacement`() = test {

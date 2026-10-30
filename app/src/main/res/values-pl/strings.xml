@@ -375,10 +375,14 @@
     <string name="profile__auth_approval_authorize">Autoryzuj</string>
     <string name="profile__auth_approval_details">Szczegóły</string>
     <string name="profile__auth_approval_title">Autoryzuj</string>
+    <string name="profile__cleanup_pending">Czyszczenie profilu nie zostało ukończone. Odłącz się lokalnie, aby usunąć dostęp tego urządzenia bez ponawiania zdalnego usuwania.</string>
     <string name="profile__create_nav_title">Utwórz profil</string>
+    <string name="profile__delete_review_description">Niektóre zmiany mogły zostać ukończone. Sprawdź bieżący stan przed ponownym potwierdzeniem lub odłącz się lokalnie.</string>
+    <string name="profile__disconnect_local_description">Usuń dostęp tego urządzenia i zakończ lokalne czyszczenie. Nie wprowadzi to dalszych zmian w profilu, subskrypcjach ani dostępie na serwerze.</string>
     <string name="profile__edit_nav_title">Edytuj profil</string>
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Spróbuj ponownie</string>
+    <string name="profile__review_removal">Sprawdź</string>
     <string name="profile__suggestions">Sugestie</string>
     <string name="profile__suggestions_to_add">Sugestie do dodania</string>
     <string name="profile__unlink_confirm">Tak, odłącz</string>
@@ -1357,6 +1361,7 @@
     <string name="profile__sign_out_description">Spowoduje to odłączenie Twojego profilu Pubky od Bitkit. Możesz połączyć się ponownie w dowolnym momencie.</string>
     <string name="profile__sign_out_title">Odłącz profil</string>
     <string name="profile__source_lost">Ten pubky nie jest już dostępny w Pubky Ring. Twój profil został odłączony.</string>
+    <string name="profile__wallet_recovery_pending">Przed odłączeniem tego profilu należy ukończyć odzyskiwanie portfela. Sprawdź odzyskiwanie portfela w Ustawieniach.</string>
     <string name="profile__your_pubky">Twój pubky</string>
     <string name="pubky_auth__already_signed_in">Już zalogowano</string>
     <string name="pubky_auth__homeserver">Serwer domowy</string>

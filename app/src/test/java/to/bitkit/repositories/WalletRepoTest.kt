@@ -62,6 +62,7 @@ import java.util.ArrayDeque
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -1717,6 +1718,19 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertTrue(sut.walletState.value.walletExists)
+    }
+
+    @Test
+    fun `canceled wipe refreshes acknowledged credential erasure without claiming completion`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sut.setWalletExistsState()
+        assertTrue(sut.walletState.value.walletExists)
+        whenever(wipeWalletUseCase.invoke(any(), any(), any())).thenAnswer {
+            whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(false)
+            throw CancellationException("Canceled after credential erasure")
+        }
+        assertFailsWith<CancellationException> { sut.wipeWallet() }
+        assertFalse(sut.walletState.value.walletExists)
     }
 
     @Test

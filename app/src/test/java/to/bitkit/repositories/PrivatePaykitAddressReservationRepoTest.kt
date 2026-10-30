@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.AddressType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -25,6 +26,7 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
+import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -66,6 +68,39 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
             coreService = coreService,
             lightningRepo = lightningRepo,
         )
+    }
+
+    @Test
+    fun `failed reservation persistence cannot expose the unacknowledged address on retry`() = test {
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(
+            Result.success(AddressDerivationInfo(address = PRIVATE_ADDRESS, index = 1)),
+        )
+        whenever(reservationStore.update(any())).doSuspendableAnswer { throw IOException("Reservation write refused") }
+        whenever(coreService.isAddressUsed(PRIVATE_ADDRESS)).thenReturn(false)
+        whenever(lightningRepo.getAddressBalance(PRIVATE_ADDRESS)).thenReturn(Result.success(0u))
+
+        assertTrue(sut.currentOrRotatedAddress(CONTACT_KEY).exceptionOrNull() is IOException)
+        assertTrue(sut.currentOrRotatedAddress(CONTACT_KEY).isFailure)
+        assertTrue(reservationData.value.contactAssignments.isEmpty())
+    }
+
+    @Test
+    fun `lost reservation write acknowledgement reloads committed state without allocating again`() = test {
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(
+            Result.success(AddressDerivationInfo(address = PRIVATE_ADDRESS, index = 1)),
+        )
+        whenever(coreService.isAddressUsed(PRIVATE_ADDRESS)).thenReturn(false)
+        whenever(lightningRepo.getAddressBalance(PRIVATE_ADDRESS)).thenReturn(Result.success(0u))
+        whenever(reservationStore.update(any())).doSuspendableAnswer {
+            val transform = it.getArgument<(PrivatePaykitReservationData) -> PrivatePaykitReservationData>(0)
+            reservationData.value = transform(reservationData.value)
+            throw CancellationException("Committed write lost its acknowledgement")
+        }
+        assertFailsWith<CancellationException> { sut.currentOrRotatedAddress(CONTACT_KEY) }
+        assertEquals(PRIVATE_ADDRESS, sut.currentOrRotatedAddress(CONTACT_KEY).getOrThrow())
+        assertEquals(mapOf("nativeSegwit" to 1), sut.backupSnapshot().getOrThrow())
+        assertTrue(sut.backupStateVersion.value > 0)
+        verify(lightningRepo).newAddressInfoForType(AddressType.P2WPKH)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

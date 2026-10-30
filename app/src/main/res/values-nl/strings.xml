@@ -388,10 +388,14 @@
     <string name="profile__add_link_label_placeholder">Bijvoorbeeld \'Website\'</string>
     <string name="profile__add_link_note">Let op: Iedere link die u toevoegt is openbaar beschikbaar.</string>
     <string name="profile__add_tag">Tag toevoegen</string>
+    <string name="profile__cleanup_pending">Het opschonen van het profiel is niet voltooid. Verbreek lokaal de verbinding om de toegang van dit apparaat te verwijderen zonder de verwijdering op afstand opnieuw te proberen.</string>
     <string name="profile__create_nav_title">Profiel aanmaken</string>
+    <string name="profile__delete_review_description">Sommige wijzigingen zijn mogelijk voltooid. Controleer de huidige status voordat je opnieuw bevestigt, of verbreek lokaal de verbinding.</string>
+    <string name="profile__disconnect_local_description">Verwijder de toegang van dit apparaat en voltooi de lokale opschoning. Dit brengt geen verdere wijzigingen aan in je profiel, abonnementen of toegang op de server.</string>
     <string name="profile__edit_nav_title">Profiel Bewerken</string>
     <string name="profile__nav_title">Profiel</string>
     <string name="profile__retry_load">Probeer opnieuw</string>
+    <string name="profile__review_removal">Controleren</string>
     <string name="profile__suggestions">Suggesties</string>
     <string name="profile__suggestions_to_add">Suggesties Om Toe Te Voegen</string>
     <string name="profile__unlink_confirm">Ja, ontkoppelen</string>
@@ -1356,6 +1360,7 @@
     <string name="profile__sign_out_description">Hiermee wordt uw Pubky-profiel ontkoppeld van Bitkit. U kunt op elk moment opnieuw verbinden.</string>
     <string name="profile__sign_out_title">Profiel ontkoppelen</string>
     <string name="profile__source_lost">Deze pubky is niet meer beschikbaar in Pubky Ring. Uw profiel is ontkoppeld.</string>
+    <string name="profile__wallet_recovery_pending">Het wallet-herstel moet worden voltooid voordat dit profiel kan worden losgekoppeld. Controleer het wallet-herstel in Instellingen.</string>
     <string name="profile__your_pubky">Uw pubky</string>
     <string name="pubky_auth__already_signed_in">Al ingelogd</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

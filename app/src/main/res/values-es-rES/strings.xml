@@ -391,10 +391,14 @@
     <string name="profile__add_link_note">Nota: Cualquier enlace que añada será públicamente visible.</string>
     <string name="profile__add_tag">Añadir etiqueta</string>
     <string name="profile__auth_approval_details">Detalles</string>
+    <string name="profile__cleanup_pending">La limpieza del perfil está incompleta. Desconéctate localmente para retirar el acceso de este dispositivo sin volver a intentar la eliminación remota.</string>
     <string name="profile__create_nav_title">Crear perfil</string>
+    <string name="profile__delete_review_description">Es posible que algunos cambios se hayan completado. Revisa el estado actual antes de confirmar de nuevo o desconéctate localmente.</string>
+    <string name="profile__disconnect_local_description">Elimina el acceso de este dispositivo y finaliza la limpieza local. Esto no realiza más cambios en tu perfil, tus suscripciones ni tu acceso en el servidor.</string>
     <string name="profile__edit_nav_title">Editar Perfil</string>
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Inténtelo de nuevo</string>
+    <string name="profile__review_removal">Revisar</string>
     <string name="profile__suggestions">Sugerencias</string>
     <string name="profile__suggestions_to_add">Sugerencias para añadir</string>
     <string name="profile__unlink_confirm">Sí, desvincular</string>
@@ -1354,6 +1358,7 @@
     <string name="profile__sign_out_description">Esto desconectará tu perfil de Pubky de Bitkit. Puedes volver a conectarlo en cualquier momento.</string>
     <string name="profile__sign_out_title">Desconectar perfil</string>
     <string name="profile__source_lost">Este pubky ya no está disponible en Pubky Ring. Tu perfil se ha desconectado.</string>
+    <string name="profile__wallet_recovery_pending">Debes completar la recuperación de la cartera antes de desconectar este perfil. Revisa la recuperación de la cartera en Ajustes.</string>
     <string name="profile__your_pubky">Tu pubky</string>
     <string name="pubky_auth__already_signed_in">Ya has iniciado sesión</string>
     <string name="pubky_auth__homeserver">Servidor principal</string>

@@ -12,6 +12,6 @@
     <action>Verify failure options are shown and no success notification or onboarding navigation occurs</action>
     <action>Wait through the network timeout and verify the app starts no second contact cleanup, profile deletion or sign-in</action>
     <action>Cancel the failure dialog and verify no mutation is retried</action>
-    <action>Restart the app without choosing Retry and verify it does not automatically repeat the deletion</action>
+    <action>Restart the app without choosing Review and verify it shows pending local cleanup without automatically repeating deletion or restoring authentication</action>
   </actions>
 </journey>

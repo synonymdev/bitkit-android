@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
@@ -10,6 +11,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -68,6 +71,92 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
+    }
+
+    @Test
+    fun `wipe revokes repository removal before draining the sharing mutex`() = test {
+        val sut = createSut()
+        val repository = PubkyIdentityOperations()
+        val entered = CompletableDeferred<Unit>()
+        val cleanup = CompletableDeferred<Unit>()
+        val finishCleanup = CompletableDeferred<Unit>()
+        val removing = launch {
+            sut.withProfileRemoval {
+                repository.remove {
+                    entered.complete(Unit)
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        withContext(NonCancellable) {
+                            cleanup.complete(Unit)
+                            finishCleanup.await()
+                        }
+                    }
+                }
+            }
+        }
+        entered.await()
+        var reachedSdk = false
+        val wiping = async {
+            sut.withWalletWipe(repository::wipe) { reachedSdk = true }
+        }
+        cleanup.await()
+        assertFalse(reachedSdk)
+        assertTrue(sut.setEnabled(true).isFailure)
+        finishCleanup.complete(Unit)
+        withTimeout(1_000) {
+            wiping.await()
+            removing.join()
+        }
+        assertTrue(reachedSdk)
+        assertTrue(sut.setEnabled(false).isSuccess)
+    }
+
+    @Test
+    fun `removal drains sharing rollback and rejects queued changes`() = test {
+        val publication = CompletableDeferred<Unit>()
+        val enteredRemoval = CompletableDeferred<Unit>()
+        val finishRemoval = CompletableDeferred<Unit>()
+        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = true)).doSuspendableAnswer {
+            publication.await()
+            Result.failure(IllegalStateException("Uncertain publication"))
+        }
+        val sut = createSut()
+        val enabling = async { sut.setEnabled(true) }
+        runCurrent()
+        val queued = async { sut.setEnabled(false) }
+        runCurrent()
+        val removing = async {
+            sut.withProfileRemoval {
+                assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+                enteredRemoval.complete(Unit)
+                finishRemoval.await()
+            }
+        }
+        runCurrent()
+        assertFalse(enteredRemoval.isCompleted)
+        assertTrue(sut.disablePaykit().isFailure)
+        publication.complete(Unit)
+        runCurrent()
+        assertTrue(enabling.await().isFailure)
+        assertTrue(queued.await().isFailure)
+        assertTrue(enteredRemoval.isCompleted)
+        var reconciled = false
+        sut.reconcilePendingEndpoints { reconciled = true }
+        assertFalse(reconciled)
+        finishRemoval.complete(Unit)
+        removing.await()
+        assertTrue(sut.setEnabled(false).isSuccess)
+    }
+
+    @Test
+    fun `cancelled removal reservation releases sharing admission`() = test {
+        val sut = createSut()
+        val removal = launch { sut.withProfileRemoval { awaitCancellation() } }
+        runCurrent()
+        assertTrue(sut.setEnabled(true).isFailure)
+        removal.cancelAndJoin()
+        assertTrue(sut.setEnabled(true).isSuccess)
     }
 
     @Test

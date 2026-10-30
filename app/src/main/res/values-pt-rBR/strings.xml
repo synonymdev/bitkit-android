@@ -395,10 +395,14 @@
     <string name="profile__auth_approval_authorize">Autorizar</string>
     <string name="profile__auth_approval_details">Detalhes</string>
     <string name="profile__auth_approval_title">Autorizar</string>
+    <string name="profile__cleanup_pending">A limpeza do perfil está incompleta. Desconecte-se localmente para remover o acesso deste dispositivo sem tentar novamente a exclusão remota.</string>
     <string name="profile__create_nav_title">Criar Perfil</string>
+    <string name="profile__delete_review_description">Algumas alterações podem ter sido concluídas. Revise o estado atual antes de confirmar novamente ou desconecte-se localmente.</string>
+    <string name="profile__disconnect_local_description">Remova o acesso deste dispositivo e conclua a limpeza local. Isso não faz outras alterações no seu perfil, nas assinaturas ou no acesso no servidor.</string>
     <string name="profile__edit_nav_title">Editar perfil</string>
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Tente novamente</string>
+    <string name="profile__review_removal">Revisar</string>
     <string name="profile__suggestions">Sugestões</string>
     <string name="profile__suggestions_to_add">Sugestões Para Adicionar</string>
     <string name="profile__unlink_confirm">Sim, Desvincular</string>
@@ -1359,6 +1363,7 @@
     <string name="profile__sign_out_description">Isso desconectará seu perfil Pubky da Bitkit. Você pode reconectar a qualquer momento.</string>
     <string name="profile__sign_out_title">Desconectar Perfil</string>
     <string name="profile__source_lost">Esta pubky não está mais disponível no Pubky Ring. Seu perfil foi desconectado.</string>
+    <string name="profile__wallet_recovery_pending">É necessário concluir a recuperação da carteira antes de desconectar este perfil. Confira a recuperação da carteira nas Configurações.</string>
     <string name="profile__your_pubky">Sua Pubky</string>
     <string name="pubky_auth__already_signed_in">Já conectado</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

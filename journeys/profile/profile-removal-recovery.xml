@@ -1,0 +1,26 @@
+<journey name="profile removal recovery">
+  <description>
+    Use a disposable authenticated profile and controlled homeserver/operation/storage faults.
+    These fault gates are outside the standard Capabilities; no live funds or wallet wipe is needed.
+    Keep a redacted operation counter. Recreate the fixture separately for each failure checkpoint.
+    Local Disconnect does not assert remote deletion. Conditional contact deletion across devices is
+    not proved by local ownership, and requires the separate native CAS fixture.
+  </description>
+  <actions>
+    <action>Open Edit Profile, request deletion and verify preparation opens a confirmation without a mutation</action>
+    <action>Confirm once, lose a mutation acknowledgement and verify failure feedback without success or automatic replay</action>
+    <action>Tap Review and verify only read-only reconciliation runs before a new confirmation appears</action>
+    <action>In separate fixtures, edit the profile or change or add a contact after the failure and verify Review rejects the changed targets without a mutation</action>
+    <action>Review unchanged remaining records, then recreate a record that was observed absent and verify a later Review cannot add it back to this attempt</action>
+    <action>Cancel that confirmation and verify the mutation count does not increase</action>
+    <action>Choose Disconnect from the failure options and verify a separate local-only confirmation appears</action>
+    <action>Cancel local Disconnect and verify neither local cleanup nor remote mutation runs</action>
+    <action>Confirm local Disconnect while credential erasure is unavailable and verify recovery remains pending without clearing consumed-payment-list safety state</action>
+    <action>Restore local storage, restart after credential erasure but before local completion and open Profile</action>
+    <action>Verify pending cleanup and Disconnect remain visible with no stored identity, no authenticated activation and no automatic remote mutation</action>
+    <action>Background and foreground the app, then reconnect the test device network; verify cleanup guidance remains available without an expired-session or reconnect-profile error</action>
+    <action>Confirm local Disconnect and verify all required local cleanup finishes before leaving Profile</action>
+    <action>In a fresh fixture, replace the sign-in before an old confirmation or completion is delivered and verify it cannot act on or navigate away from the replacement</action>
+    <action>Open ordinary receive and verify address accounting remains available while profile cleanup is pending</action>
+  </actions>
+</journey>

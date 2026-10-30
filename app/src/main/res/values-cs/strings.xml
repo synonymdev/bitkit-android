@@ -394,10 +394,14 @@
     <string name="profile__auth_approval_authorize">Autorizovat</string>
     <string name="profile__auth_approval_details">Podrobnosti</string>
     <string name="profile__auth_approval_title">Autorizovat</string>
+    <string name="profile__cleanup_pending">Vyčištění profilu není dokončeno. Odpojte se místně a odeberte přístup tohoto zařízení bez dalšího pokusu o vzdálené smazání.</string>
     <string name="profile__create_nav_title">Vytvořit profil</string>
+    <string name="profile__delete_review_description">Některé změny již mohly být dokončeny. Před dalším potvrzením zkontrolujte aktuální stav nebo se odpojte místně.</string>
+    <string name="profile__disconnect_local_description">Odeberte přístup tohoto zařízení a dokončete místní vyčištění. Tím se neprovedou žádné další změny vašeho profilu, předplatných ani přístupu na serveru.</string>
     <string name="profile__edit_nav_title">Upravit profil</string>
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Zkusit znovu</string>
+    <string name="profile__review_removal">Zkontrolovat</string>
     <string name="profile__suggestions">Návrhy</string>
     <string name="profile__unlink_confirm">Ano, zrušit propojení</string>
     <string name="profile__unlink_confirm_description">Tímto smažete svá data Paykit a zrušíte propojení tohoto pubky s Bitkitem. V Pubky Ring zůstane k dispozici.</string>
@@ -1359,6 +1363,7 @@
     <string name="profile__sign_out_title">Odpojit profil</string>
     <string name="profile__source_lost">Tento pubky již není v Pubky Ring k dispozici. Váš profil byl odpojen.</string>
     <string name="profile__suggestions_to_add">Návrhy k přidání</string>
+    <string name="profile__wallet_recovery_pending">Před odpojením tohoto profilu je nutné dokončit obnovu peněženky. Zkontrolujte obnovu peněženky v Nastavení.</string>
     <string name="profile__your_pubky">Váš pubky</string>
     <string name="pubky_auth__already_signed_in">Již přihlášeno</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

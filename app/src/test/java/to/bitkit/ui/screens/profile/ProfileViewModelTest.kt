@@ -1,11 +1,10 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
-import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
@@ -22,13 +21,16 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
-import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyProfileOwner
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySignIn
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -37,7 +39,7 @@ import kotlin.test.assertTrue
 class ProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
-    private val privatePaykitRepo: PrivatePaykitRepo = mock()
+    private val fixture = ProfileRemovalUiFixture(pubkyRepo)
 
     @Test
     fun `saved public profile is shown without enabling edits while restoration waits`() = test {
@@ -233,57 +235,6 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `disconnect finishes private cleanup after the screen is closed`() = test {
-        val sut = createSut()
-        val forget = CompletableDeferred<Result<Boolean>>()
-        whenever(pubkyRepo.forgetUnrestoredIdentity()).doSuspendableAnswer { forget.await() }
-        advanceUntilIdle()
-
-        sut.signOut()
-        advanceUntilIdle()
-        sut.viewModelScope.cancel()
-        forget.complete(Result.success(true))
-        advanceUntilIdle()
-
-        verify(privatePaykitRepo).closeAndClear()
-        verify(pubkyRepo, never()).signOut()
-    }
-
-    @Test
-    fun `disconnect forgets unrestored identity without remote cleanup`() = test {
-        val sut = createSut()
-        whenever(pubkyRepo.forgetUnrestoredIdentity()).thenReturn(Result.success(true))
-        whenever(privatePaykitRepo.removePublishedEndpointsForCleanup(any()))
-            .thenReturn(Result.failure(AppError("No session")))
-        advanceUntilIdle()
-
-        sut.effects.test {
-            sut.signOut()
-            advanceUntilIdle()
-            assertEquals(ProfileEffect.SignedOut, awaitItem())
-        }
-
-        assertFalse(sut.uiState.value.isSigningOut)
-        verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any())
-        verify(pubkyRepo, never()).signOut()
-        verify(privatePaykitRepo).closeAndClear()
-    }
-
-    @Test
-    fun `failed local disconnect preserves private state`() = test {
-        val sut = createSut()
-        whenever(pubkyRepo.forgetUnrestoredIdentity()).thenReturn(Result.failure(AppError("Storage failed")))
-        advanceUntilIdle()
-
-        sut.signOut()
-        advanceUntilIdle()
-
-        assertFalse(sut.uiState.value.isSigningOut)
-        verify(privatePaykitRepo, never()).closeAndClear()
-        verify(pubkyRepo, never()).signOut()
-    }
-
-    @Test
     fun `profile retry stays loading until session and profile are available`() = test {
         val sut = createSut()
         advanceUntilIdle()
@@ -332,52 +283,6 @@ class ProfileViewModelTest : BaseUnitTest() {
 
         assertNull(sut.uiState.value.profile)
         verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
-    }
-
-    @Test
-    fun `signOut marks profile recovery before signing out`() = test {
-        whenever(pubkyRepo.signOut()).thenReturn(Result.success(Unit))
-        val sut = createSut()
-        advanceUntilIdle()
-
-        sut.effects.test {
-            sut.signOut()
-            advanceUntilIdle()
-
-            assertEquals(ProfileEffect.SignedOut, awaitItem())
-        }
-        inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
-            verify(pubkyRepo).signOut()
-            verify(privatePaykitRepo).closeAndClear()
-        }
-    }
-
-    @Test
-    fun `signOut stops when private cleanup fails`() = test {
-        val sut = createSut()
-        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
-            .thenReturn(Result.failure(ProfileTestAppError("cleanup failed")))
-        advanceUntilIdle()
-
-        sut.signOut()
-        advanceUntilIdle()
-
-        assertFalse(sut.uiState.value.isSigningOut)
-        verify(pubkyRepo, never()).signOut()
-        verify(privatePaykitRepo, never()).closeAndClear()
-    }
-
-    @Test
-    fun `signOut preserves local Paykit state when Pubky sign out fails`() = test {
-        val sut = createSut()
-        whenever(pubkyRepo.signOut()).thenReturn(Result.failure(ProfileTestAppError("sign out failed")))
-        advanceUntilIdle()
-
-        sut.signOut()
-        advanceUntilIdle()
-
-        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test
@@ -503,8 +408,243 @@ class ProfileViewModelTest : BaseUnitTest() {
         }
     }
 
+    @Test
+    fun `unknown wallet recovery cannot prepare profile disconnect`() = test {
+        val sut = createSut(
+            publicKey = null,
+            recoveryPending = MutableStateFlow(true),
+            recoveryCanDisconnect = MutableStateFlow(false),
+        )
+        sut.uiState.test {
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.recoveryPending)
+            assertFalse(sut.uiState.value.recoveryCanDisconnect)
+            sut.showSignOutConfirmation()
+            advanceUntilIdle()
+            assertFalse(sut.uiState.value.showSignOutDialog)
+            assertFalse(sut.uiState.value.isSigningOut)
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkyRepo, never()).signOutForProfileRemoval()
+    }
+
+    @Test
+    fun `pending restart without credentials shows local recovery without authentication`() = test {
+        val pending = MutableStateFlow<Boolean?>(null)
+        fixture.current = PubkyProfileOwner(null, 4)
+        val sut = createSut(publicKey = null, recoveryPending = pending)
+        val id = UUID.randomUUID().toString()
+        fixture.store.withAccess(id) { fixture.store.begin(id) }
+        advanceUntilIdle()
+        verify(pubkyRepo, never()).restoreSessionIfNeeded()
+        verify(pubkyRepo, never()).loadProfile()
+        sut.uiState.test {
+            awaitItem()
+            pending.value = true
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.recoveryPending)
+            assertFalse(sut.uiState.value.isLoading)
+            assertFalse(sut.uiState.value.canEdit)
+            sut.showSignOutConfirmation()
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.localDisconnect)
+            assertTrue(sut.uiState.value.showSignOutDialog)
+            sut.effects.test {
+                sut.signOut()
+                advanceUntilIdle()
+                assertIs<ProfileEffect.SignedOut>(awaitItem())
+            }
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(pubkyRepo, never()).signOutForProfileRemoval()
+        verify(fixture.privateRepo, never()).removePublishedEndpointsForProfileRemoval()
+        assertNull(fixture.store.pendingAttempt())
+    }
+
+    @Test
+    fun `existing profile screen can finish its ended profile cleanup locally`() = test {
+        val pending = MutableStateFlow<Boolean?>(false)
+        val sut = createSut(recoveryPending = pending)
+        advanceUntilIdle()
+        sut.uiState.test {
+            awaitItem()
+            val id = UUID.randomUUID().toString()
+            fixture.store.withAccess(id) { fixture.store.begin(id) }
+            fixture.current = fixture.ended
+            pending.value = true
+            advanceUntilIdle()
+            sut.showSignOutConfirmation()
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.showSignOutDialog)
+            assertTrue(sut.uiState.value.localDisconnect)
+            sut.signOut()
+            advanceUntilIdle()
+            assertNull(fixture.store.pendingAttempt())
+            verify(pubkyRepo, never()).signOutForProfileRemoval()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `sign out waits for confirmation and delayed effect is bound to ended owner`() = test {
+        val sut = createSut(createProfile())
+        advanceUntilIdle()
+        sut.signOut()
+        advanceUntilIdle()
+        verify(pubkyRepo, never()).signOutForProfileRemoval()
+        sut.showSignOutConfirmation()
+        advanceUntilIdle()
+        sut.effects.test {
+            sut.signOut()
+            sut.signOut()
+            advanceUntilIdle()
+            val effect = assertIs<ProfileEffect.SignedOut>(awaitItem())
+            assertTrue(sut.isRemovalCurrent(effect))
+            fixture.current = PubkyProfileOwner(PubkySignIn("replacement", 3), 3)
+            assertFalse(sut.isRemovalCurrent(effect))
+            expectNoEvents()
+        }
+        verify(pubkyRepo, times(1)).signOutForProfileRemoval()
+    }
+
+    @Test
+    fun `uncertain sign out offers local confirmation without replaying revocation`() = test {
+        val sut = createSut(createProfile())
+        whenever(pubkyRepo.signOutForProfileRemoval()).thenAnswer { throw ProfileTestAppError("lost response") }
+        advanceUntilIdle()
+        sut.showSignOutConfirmation()
+        advanceUntilIdle()
+        sut.effects.test {
+            sut.signOut()
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertNotNull(fixture.store.pendingAttempt())
+        sut.showSignOutConfirmation()
+        advanceUntilIdle()
+        sut.effects.test {
+            sut.signOut()
+            advanceUntilIdle()
+            assertIs<ProfileEffect.SignedOut>(awaitItem())
+        }
+        verify(pubkyRepo, times(1)).signOutForProfileRemoval()
+        verify(fixture.privateRepo, times(1)).removePublishedEndpointsForProfileRemoval()
+    }
+
+    @Test
+    fun `private completion failure is consumed and never reports signed out`() = test {
+        val sut = createSut(createProfile())
+        whenever(fixture.privateRepo.finishProfileRemoval(fixture.pause))
+            .thenReturn(Result.failure(ProfileTestAppError("storage unavailable")))
+        advanceUntilIdle()
+        sut.showSignOutConfirmation()
+        advanceUntilIdle()
+        sut.effects.test {
+            sut.signOut()
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertNotNull(fixture.store.pendingAttempt())
+    }
+
+    @Test
+    fun `confirmation cannot sign out a replacement of the same identity`() = test {
+        val sut = createSut(createProfile())
+        advanceUntilIdle()
+        sut.showSignOutConfirmation()
+        advanceUntilIdle()
+        fixture.current = PubkyProfileOwner(PubkySignIn("pubkyalice", 3), 3)
+        sut.signOut()
+        advanceUntilIdle()
+        verify(pubkyRepo, never()).signOutForProfileRemoval()
+        verify(fixture.privateRepo, never()).finishProfileRemoval(any())
+    }
+
+    @Test
+    fun `unrelated control emission never recaptures a replacement owner`() = test {
+        val sut = createSut(createProfile())
+        advanceUntilIdle()
+        sut.uiState.test {
+            awaitItem()
+            fixture.current = PubkyProfileOwner(PubkySignIn("pubkyalice", 3), 3)
+            sut.showAddTagSheet()
+            advanceUntilIdle()
+            assertEquals(fixture.original, sut.uiState.value.owner)
+            sut.showSignOutConfirmation()
+            advanceUntilIdle()
+            assertFalse(sut.uiState.value.showSignOutDialog)
+            sut.signOut()
+            verify(pubkyRepo, never()).signOutForProfileRemoval()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `initial restoration binds once and later same-key sessions cannot replace its owner`() = test {
+        fixture.current = PubkyProfileOwner(null, fixture.original.storedRevision)
+        val profileFlow = MutableStateFlow<PubkyProfile?>(null)
+        val sut = createSut(profileFlow = profileFlow, publicKey = null)
+        advanceUntilIdle()
+        sut.uiState.test {
+            awaitItem()
+            fixture.current = fixture.original
+            profileFlow.value = createProfile()
+            advanceUntilIdle()
+            assertEquals(fixture.original, sut.uiState.value.owner)
+            fixture.current = PubkyProfileOwner(PubkySignIn("pubkyalice", 3), 3)
+            sut.showAddTagSheet()
+            advanceUntilIdle()
+            assertEquals(fixture.original, sut.uiState.value.owner)
+            sut.showSignOutConfirmation()
+            advanceUntilIdle()
+            assertFalse(sut.uiState.value.showSignOutDialog)
+            sut.signOut()
+            verify(pubkyRepo, never()).signOutForProfileRemoval()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `cancelled local completion retains its owner through a later admission failure`() = test {
+        val sut = createSut(createProfile())
+        org.mockito.kotlin.doAnswer {
+            fixture.current = fixture.ended
+            throw CancellationException("Cancelled after acknowledged credential removal")
+        }.whenever(pubkyRepo).finishProfileRemovalLocally()
+        advanceUntilIdle()
+        sut.showSignOutConfirmation()
+        advanceUntilIdle()
+        sut.effects.test {
+            sut.signOut()
+            advanceUntilIdle()
+            expectNoEvents()
+            assertNotNull(fixture.store.pendingAttempt())
+            verify(fixture.privateRepo, never()).finishProfileRemoval(any())
+            sut.showSignOutConfirmation()
+            advanceUntilIdle()
+            fixture.admissionFailure = IllegalStateException("Temporarily busy")
+            sut.signOut()
+            advanceUntilIdle()
+            expectNoEvents()
+            assertNotNull(fixture.store.pendingAttempt())
+            fixture.admissionFailure = null
+            org.mockito.kotlin.doAnswer { fixture.current = fixture.ended }.whenever(
+                pubkyRepo
+            ).finishProfileRemovalLocally()
+            sut.showSignOutConfirmation()
+            advanceUntilIdle()
+            sut.signOut()
+            advanceUntilIdle()
+            assertIs<ProfileEffect.SignedOut>(awaitItem())
+            assertNull(fixture.store.pendingAttempt())
+        }
+        verify(pubkyRepo, times(1)).signOutForProfileRemoval()
+    }
+
     private fun createSut(
         profile: PubkyProfile? = null,
+        recoveryPending: MutableStateFlow<Boolean?> = MutableStateFlow(false),
+        recoveryCanDisconnect: MutableStateFlow<Boolean> = MutableStateFlow(true),
         profileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(profile),
         readOnlyProfileFlow: MutableStateFlow<PubkyProfile?> = MutableStateFlow(null),
         publicKey: String? = "pubkyalice",
@@ -517,7 +657,9 @@ class ProfileViewModelTest : BaseUnitTest() {
         onRestore: suspend () -> Boolean = { false },
     ): ProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
-        whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
+        fixture.setup()
+        whenever(pubkyRepo.profileRecoveryPending).thenReturn(recoveryPending)
+        whenever(pubkyRepo.profileRecoveryCanDisconnect).thenReturn(recoveryCanDisconnect)
         whenever(pubkyRepo.profile).thenReturn(profileFlow)
         whenever(pubkyRepo.readOnlyProfile).thenReturn(readOnlyProfileFlow)
         whenever(pubkyRepo.publicKey).thenReturn(publicKeyFlow)
@@ -526,16 +668,12 @@ class ProfileViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.cachedProfile).thenReturn(MutableStateFlow(cachedProfile))
         whenever { pubkyRepo.restoreSessionIfNeeded() }.doSuspendableAnswer { onRestore() }
         whenever { pubkyRepo.loadProfile() }.thenAnswer { onLoadProfile() }
-        whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.saveProfile(any(), any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
-            .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
 
         return ProfileViewModel(
             context = context,
             pubkyRepo = pubkyRepo,
-            privatePaykitRepo = privatePaykitRepo,
+            removalCoordinator = fixture.coordinator,
         )
     }
 

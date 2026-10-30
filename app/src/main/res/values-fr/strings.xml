@@ -375,10 +375,14 @@
     <string name="profile__auth_approval_authorize">Autoriser</string>
     <string name="profile__auth_approval_details">Détails</string>
     <string name="profile__auth_approval_title">Autoriser</string>
+    <string name="profile__cleanup_pending">Le nettoyage du profil est incomplet. Déconnectez-vous localement pour retirer l’accès de cet appareil sans réessayer la suppression à distance.</string>
     <string name="profile__create_nav_title">Créer un profil</string>
+    <string name="profile__delete_review_description">Certaines modifications ont peut-être été effectuées. Vérifiez l’état actuel avant de confirmer à nouveau, ou déconnectez-vous localement.</string>
+    <string name="profile__disconnect_local_description">Retirez l’accès de cet appareil et terminez le nettoyage local. Cela n’apporte aucune autre modification à votre profil, à vos abonnements ou à votre accès sur le serveur.</string>
     <string name="profile__edit_nav_title">Modifier le profil</string>
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Réessayer</string>
+    <string name="profile__review_removal">Vérifier</string>
     <string name="profile__suggestions_to_add">Suggestions à ajouter</string>
     <string name="profile__unlink_confirm">Oui, dissocier</string>
     <string name="profile__unlink_confirm_description">Cela supprimera vos données Paykit et dissociera ce pubky de Bitkit. Il restera disponible dans Pubky Ring.</string>
@@ -1355,6 +1359,7 @@
     <string name="profile__sign_out_title">Déconnecter le profil</string>
     <string name="profile__source_lost">Ce pubky n\'est plus disponible dans Pubky Ring. Votre profil a été déconnecté.</string>
     <string name="profile__suggestions">Suggestions</string>
+    <string name="profile__wallet_recovery_pending">La récupération du portefeuille doit être terminée avant de déconnecter ce profil. Consultez la récupération du portefeuille dans les Paramètres.</string>
     <string name="profile__your_pubky">Votre pubky</string>
     <string name="pubky_auth__already_signed_in">Déjà connecté</string>
     <string name="pubky_auth__homeserver">Serveur domestique</string>

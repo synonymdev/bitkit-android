@@ -15,6 +15,7 @@ import com.synonym.paykit.OutboundPrivateSendReport
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PrivateMessageSchedulingSnapshot
+import com.synonym.paykit.PrivatePaymentListAcknowledgement
 import com.synonym.paykit.PrivatePaymentListDeliveryFailure
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
@@ -32,6 +33,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -62,9 +64,11 @@ import to.bitkit.CurrentActivity
 import to.bitkit.data.PrivatePaykitCacheData
 import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.PrivatePaykitContactCacheData
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.UsdtPreference
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
@@ -72,13 +76,17 @@ import to.bitkit.models.PaykitUsdt
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
+import to.bitkit.services.PaykitProfileDeletionSnapshot
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkBackupExport
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.usecases.ProfileRemovalCoordinator
+import to.bitkit.usecases.ProfileRemovalFailure
 import to.bitkit.utils.AppError
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -106,6 +114,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     private val paykitSdkService = mock<PaykitSdkService>()
     private val pubkyService = mock<PubkyService>()
+    private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
     private val cacheStore = mock<PrivatePaykitCacheStore>()
     private val settingsStore = mock<SettingsStore>()
     private val addressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
@@ -204,6 +213,180 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     fun tearDown() {
         PublicPaykitRepo.lightningRouteHintsValidator = null
         App.currentActivity = null
+    }
+
+    private var deletionPause: PrivatePaykitRepo.ProfileDeletionPause? = null
+
+    private suspend fun beginProfileDeletion() {
+        deletionPause = sut.beginProfileDeletion()
+    }
+
+    private suspend fun endProfileDeletion() {
+        deletionPause?.let { sut.endProfileDeletion(it) }
+        deletionPause = null
+    }
+
+    @Test
+    fun `recovery admission rejects a cold attribution result after pending begins`() = test {
+        val old = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to PrivatePaykitContactCacheData(receivedInvoicePaymentHashes = listOf("old-hash"))
+            )
+        )
+        val ready = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                ready.complete(Unit)
+                release.await()
+                emit(old)
+            }
+        )
+        val reading = async { sut.contactPublicKeyForPrivateInvoicePaymentHash("old-hash") }
+        ready.await()
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        release.complete(Unit)
+        assertNull(reading.await())
+        assertEquals(id, profileRemovalStore.pendingAttempt())
+    }
+
+    @Test
+    fun `recovery admission prevents an old cold cache read overwriting completed local teardown`() = test {
+        val old = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to PrivatePaykitContactCacheData(receivedInvoicePaymentHashes = listOf("old-hash"))
+            )
+        )
+        val ready = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                ready.complete(Unit)
+                release.await()
+                emit(old)
+            }
+        )
+        val reading = async { sut.contactPublicKeyForPrivateInvoicePaymentHash("old-hash") }
+        ready.await()
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) {
+            profileRemovalStore.begin(id)
+            sut.withProfileDeletionPaused { pause -> sut.finishProfileRemoval(pause).getOrThrow() }
+            profileRemovalStore.complete(id)
+        }
+        release.complete(Unit)
+        assertNull(reading.await())
+        assertNull(sut.contactPublicKeyForPrivateInvoicePaymentHash("old-hash"))
+        assertTrue(cacheData.value.contacts.isEmpty())
+    }
+
+    @Test
+    fun `profile removal recovery leaves ordinary incoming payment attribution optional`() = test {
+        assertNull(sut.contactPublicKeyForPrivateInvoicePaymentHash("ordinary-payment"))
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        assertNull(sut.contactPublicKeyForPrivateInvoicePaymentHash("ordinary-payment"))
+    }
+
+    @Test
+    fun `pending removal prevents a complete backup before touching authenticated identity`() = test {
+        whenever(paykitSdkService.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(pubkyService.currentPublicKey()).thenReturn(null)
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        clearInvocations(pubkyService, paykitSdkService)
+        assertTrue(sut.backupSnapshot().isFailure)
+        verify(pubkyService, never()).currentPublicKey()
+        verify(paykitSdkService, never()).exportBackupState(any())
+    }
+
+    @Test
+    fun `pending removal prevents destructive cache clearing while credentials may survive`() = test {
+        val id = UUID.randomUUID().toString()
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to PrivatePaykitContactCacheData(consumedPrivatePaymentListVersion = 7uL)
+            )
+        )
+        val original = cacheData.value
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        assertTrue(sut.closeAndClear().isFailure)
+        assertTrue(sut.restoreBackup(null).isFailure)
+        assertEquals(original, cacheData.value)
+        verify(paykitSdkService, never()).clearState()
+        verify(addressReservationRepo, never()).clearContactAssignments(any(), anyOrNull())
+    }
+
+    @Test
+    fun `pending removal survives process recreation and ending a temporary pause`() = test {
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        val restarted = createSut()
+        runCurrent()
+        assertTrue(restarted.isProfileDeletionInProgress.value)
+        val pause = restarted.beginProfileDeletion()
+        restarted.endProfileDeletion(pause)
+        assertTrue(restarted.isProfileDeletionInProgress.value)
+        profileRemovalStore.withAccess(id) { profileRemovalStore.complete(id) }
+        runCurrent()
+        assertFalse(restarted.isProfileDeletionInProgress.value)
+    }
+
+    @Test
+    fun `cancellation while returning a deletion pause cannot retain it`() = test {
+        val returns = ArrayDeque<Runnable>()
+        val caller = object : kotlinx.coroutines.CoroutineDispatcher() {
+            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+                returns.addLast(block)
+            }
+        }
+        var entered = false
+        val removal = launch(caller) { sut.withProfileDeletionPaused { entered = true } }
+        returns.removeFirst().run()
+        runCurrent()
+        assertTrue(sut.isProfileDeletionInProgress.value)
+        removal.cancel()
+        while (returns.isNotEmpty()) {
+            returns.removeFirst().run()
+            runCurrent()
+        }
+        assertTrue(removal.isCompleted)
+        assertFalse(entered)
+        assertFalse(sut.isProfileDeletionInProgress.value)
+    }
+
+    @Test
+    fun `ending one removal pause cannot unpause another owner`() = test {
+        val first = sut.beginProfileDeletion()
+        val second = sut.beginProfileDeletion()
+        sut.endProfileDeletion(first)
+        assertTrue(sut.isProfileDeletionInProgress.value)
+        sut.endProfileDeletion(first)
+        assertTrue(sut.isProfileDeletionInProgress.value)
+        sut.endProfileDeletion(second)
+        assertFalse(sut.isProfileDeletionInProgress.value)
+    }
+
+    @Test
+    fun `profile removal finalization is local and rejects an ended pause`() = test {
+        val pause = sut.beginProfileDeletion()
+        val id = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(id) {
+            profileRemovalStore.begin(id)
+            assertTrue(sut.finishProfileRemoval(pause).isSuccess)
+            profileRemovalStore.complete(id)
+        }
+        val beforeCompletion = sut.backupStateVersion.value
+        sut.notifyProfileRemovalCompleted(pause)
+        assertEquals(beforeCompletion + 1, sut.backupStateVersion.value)
+        verify(paykitSdkService, never()).clearState()
+        sut.endProfileDeletion(pause)
+        clearInvocations(cacheStore)
+        assertTrue(sut.finishProfileRemoval(pause).isFailure)
+        assertFailsWith<IllegalStateException> { sut.notifyProfileRemovalCompleted(pause) }
+        assertEquals(beforeCompletion + 1, sut.backupStateVersion.value)
+        verify(cacheStore, never()).reset()
     }
 
     @Test
@@ -1175,7 +1358,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                     "identity" -> whenever(paykitSdkService.identityStatus()).thenReturn(
                         IdentityStatus(OTHER_CONTACT_KEY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE),
                     )
-                    "deletion" -> sut.beginProfileDeletion()
+                    "deletion" -> beginProfileDeletion()
                 }
                 completion.complete(Unit)
                 runCurrent()
@@ -1192,7 +1375,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             } finally {
                 completion.complete(Unit)
                 sut.closeAndClear()
-                sut.endProfileDeletion()
+                endProfileDeletion()
                 whenever(paykitSdkService.identityStatus()).thenReturn(
                     IdentityStatus(OWN_KEY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE),
                 )
@@ -1571,7 +1754,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         }
         sut.refreshSavedContactEndpoints(CONTACT_KEY, listOf(CONTACT_KEY)).getOrThrow()
         runCurrent()
-        sut.beginProfileDeletion()
+        beginProfileDeletion()
         clearInvocations(paykitSdkService)
         completion.complete(Unit)
         advanceTimeBy(120_000)
@@ -1785,7 +1968,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.setContactPreparationActive(false)
         completion.complete(Unit)
         runCurrent()
-        sut.beginProfileDeletion()
+        beginProfileDeletion()
         clearInvocations(paykitSdkService)
 
         sut.setContactPreparationActive(true)
@@ -1822,7 +2005,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.scheduleSavedContactPreparation(listOf(OTHER_CONTACT_KEY)).getOrThrow()
         advanceTimeBy(2_000)
         runCurrent()
-        sut.beginProfileDeletion()
+        beginProfileDeletion()
         clearInvocations(paykitSdkService)
 
         sut.setContactPreparationActive(true)
@@ -2018,8 +2201,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val old = async { sut.prepareSavedContacts(listOf(CONTACT_KEY)) }
         runCurrent()
         assertEquals(1, advances)
-        sut.beginProfileDeletion()
-        sut.endProfileDeletion()
+        beginProfileDeletion()
+        endProfileDeletion()
         val current = async { sut.prepareSavedContacts(listOf(CONTACT_KEY)) }
         try {
             runCurrent()
@@ -2538,6 +2721,227 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `profile removal requires a matching acknowledgement for every original clear`() = test {
+        val validClear = PrivatePaymentListSyncChange(CONTACT_KEY, 17uL, null)
+        val validAck = PrivatePaymentListAcknowledgement(CONTACT_KEY, 17uL)
+        val reports = listOf(
+            null,
+            privateListDeliveryReport(),
+            privateListDeliveryReport().copy(cleared = listOf(validClear)),
+            privateListDeliveryReport().copy(acknowledged = listOf(validAck)),
+            privateListDeliveryReport().copy(
+                cleared = listOf(validClear),
+                acknowledged = listOf(PrivatePaymentListAcknowledgement(OTHER_CONTACT_KEY, 17uL)),
+            ),
+            privateListDeliveryReport().copy(
+                cleared = listOf(validClear),
+                acknowledged = listOf(PrivatePaymentListAcknowledgement(CONTACT_KEY, 18uL)),
+            ),
+            privateListDeliveryReport().copy(
+                cleared = listOf(validClear.copy(outboundMessageId = null)),
+                acknowledged = listOf(validAck),
+            ),
+            privateListDeliveryReport().copy(
+                cleared = listOf(validClear.copy(error = mock())),
+                acknowledged = listOf(validAck),
+            ),
+            privateListDeliveryReport(failedToQueue = listOf(validClear)).copy(
+                cleared = listOf(validClear),
+                acknowledged = listOf(validAck),
+            ),
+            privateListDeliveryReport(
+                failedToDeliver = listOf(PrivatePaymentListDeliveryFailure(CONTACT_KEY, null, null, mock())),
+            ).copy(cleared = listOf(validClear), acknowledged = listOf(validAck)),
+            privateListDeliveryReport().copy(
+                cleared = listOf(validClear, validClear.copy(outboundMessageId = 18uL)),
+                acknowledged = listOf(validAck),
+            ),
+        )
+        for ((index, report) in reports.withIndex()) {
+            cacheData.value = PrivatePaykitCacheData(contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
+            sut = createSut()
+            whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY))).thenReturn(report)
+
+            val result = sut.removePublishedEndpointsForProfileRemoval()
+
+            assertTrue(result.isFailure, "Withdrawal report $index must remain unacknowledged")
+            assertTrue(cacheData.value.cleanupPending)
+            assertTrue(cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList)
+        }
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any())
+    }
+
+    @Test
+    fun `profile removal accepts only the exact clear receipt without a registry sync`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact().copy(
+                    consumedPrivatePaymentListVersion = 88uL,
+                    consumedPrivatePaymentListOwner = CONTACT_KEY,
+                )
+            )
+        )
+        sut = createSut()
+        whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY))).thenReturn(
+            privateListDeliveryReport().copy(
+                cleared = listOf(PrivatePaymentListSyncChange(CONTACT_KEY, 17uL, null)),
+                acknowledged = listOf(PrivatePaymentListAcknowledgement(CONTACT_KEY, 17uL)),
+            ),
+        )
+
+        whenever(paykitSdkService.pendingOutboundPrivateCounterparties()).thenReturn(listOf(CONTACT_KEY))
+
+        sut.removePublishedEndpointsForProfileRemoval().getOrThrow()
+
+        assertTrue(cacheData.value.cleanupPending)
+        val retained = cacheData.value.contacts.getValue(CONTACT_KEY)
+        assertFalse(retained.hasPublishedPrivatePaymentList)
+        assertEquals(88uL, retained.consumedPrivatePaymentListVersion)
+        assertEquals(CONTACT_KEY, retained.consumedPrivatePaymentListOwner)
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any())
+        verify(paykitSdkService, times(1)).clearPrivatePaymentLists(listOf(CONTACT_KEY))
+    }
+
+    @Test
+    fun `profile removal cannot infer an empty cleanup scope from invalid stored keys`() = test {
+        val invalid = "not-a-pubky"
+        cacheData.value = PrivatePaykitCacheData(contacts = mapOf(invalid to cachedPublishedContact()))
+        sut = createSut()
+
+        assertTrue(sut.removePublishedEndpointsForProfileRemoval().isFailure)
+
+        assertTrue(cacheData.value.contacts.getValue(invalid).hasPublishedPrivatePaymentList)
+        assertTrue(cacheData.value.cleanupPending)
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(any(), anyOrNull())
+    }
+
+    @Test
+    fun `profile removal retains all intended targets when the report acknowledges only one`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(CONTACT_KEY to cachedPublishedContact(), OTHER_CONTACT_KEY to cachedPublishedContact()),
+        )
+        sut = createSut()
+        whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY, OTHER_CONTACT_KEY))).thenReturn(
+            privateListDeliveryReport().copy(
+                cleared = listOf(PrivatePaymentListSyncChange(CONTACT_KEY, 17uL, null)),
+                acknowledged = listOf(PrivatePaymentListAcknowledgement(CONTACT_KEY, 17uL)),
+            ),
+        )
+
+        assertTrue(sut.removePublishedEndpointsForProfileRemoval().isFailure)
+
+        assertTrue(cacheData.value.contacts.values.all { it.hasPublishedPrivatePaymentList })
+        assertTrue(cacheData.value.cleanupPending)
+        verify(paykitSdkService, never()).processOutboundPrivateMessages(any(), any())
+    }
+
+    @Test
+    fun `profile removal refuses an unreadable linked counterparty instead of treating scope as empty`() = test {
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer("invalid-key", LinkedPeerState.LINKED)))
+
+        assertTrue(sut.removePublishedEndpointsForProfileRemoval().isFailure)
+
+        assertTrue(cacheData.value.cleanupPending)
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(any(), anyOrNull())
+    }
+
+    @Test
+    fun `profile removal accepts an explicitly empty withdrawal scope`() = test {
+        sut.removePublishedEndpointsForProfileRemoval().getOrThrow()
+
+        assertTrue(cacheData.value.cleanupPending)
+        verify(paykitSdkService, never()).clearPrivatePaymentLists(any(), anyOrNull())
+        verify(publicPaykitRepo, never()).syncPaykitApp()
+    }
+
+    @Test
+    fun `review preserves acknowledged withdrawal after profile deletion fails with private sharing disabled`() = test {
+        reviewAfterAcknowledgedWithdrawal(failPublicWithdrawal = false)
+    }
+
+    @Test
+    fun `review preserves acknowledged withdrawal when public withdrawal disables sharing then fails`() = test {
+        reviewAfterAcknowledgedWithdrawal(failPublicWithdrawal = true)
+    }
+
+    private suspend fun reviewAfterAcknowledgedWithdrawal(failPublicWithdrawal: Boolean) {
+        val owner = PubkyProfileOwner(PubkySignIn(OWN_KEY, 1), 1)
+        val ended = PubkyProfileOwner(null, 2)
+        var current = owner
+        var privatePaymentsEnabled = true
+        var failOnce = true
+        val deletion = PubkyProfileDeletion(
+            owner,
+            1,
+            PaykitProfileDeletionSnapshot(OWN_KEY, "revision", listOf(contactRecord(CONTACT_KEY))),
+        )
+        val pubky = mock<PubkyRepo>()
+        val sharing = mock<ContactPaymentSettingsRepo>()
+        whenever(pubky.profileOwner()).thenAnswer { current }
+        whenever(pubky.isProfileOwnerCurrent(any())).thenAnswer { it.getArgument<PubkyProfileOwner>(0) === current }
+        whenever(pubky.prepareProfileDeletion(owner)).thenReturn(Result.success(deletion))
+        whenever(sharing.withProfileRemoval<PubkyProfileOwner>(any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> PubkyProfileOwner>(0).invoke()
+        }
+        whenever(pubky.performProfileRemoval(any(), any(), any())).doSuspendableAnswer {
+            val admittedOwner = it.getArgument<PubkyProfileOwner>(0)
+            val attempt = it.getArgument<String>(1)
+            val operation = it.getArgument<suspend () -> Unit>(2)
+            runSuspendCatching {
+                check(admittedOwner === current)
+                profileRemovalStore.withAccess(attempt) { operation() }
+                current
+            }
+        }
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY))).thenAnswer {
+            if (!privatePaymentsEnabled) {
+                null
+            } else {
+                privateListDeliveryReport().copy(
+                    cleared = listOf(PrivatePaymentListSyncChange(CONTACT_KEY, 17uL, null)),
+                    acknowledged = listOf(PrivatePaymentListAcknowledgement(CONTACT_KEY, 17uL)),
+                )
+            }
+        }
+        whenever(pubky.removeBitkitPaymentEndpoints()).doSuspendableAnswer {
+            privatePaymentsEnabled = false
+            if (failPublicWithdrawal && failOnce) {
+                failOnce = false
+                Result.failure<Unit>(IllegalStateException("public withdrawal response lost"))
+            } else {
+                Result.success(Unit)
+            }
+        }
+        whenever(pubky.deleteProfile(deletion)).doSuspendableAnswer {
+            if (failOnce) {
+                failOnce = false
+                Result.failure<Unit>(IllegalStateException("profile deletion response lost"))
+            } else {
+                Result.success(Unit)
+            }
+        }
+        whenever(pubky.finishProfileRemovalLocally()).thenAnswer { current = ended }
+        val coordinator = ProfileRemovalCoordinator(pubky, sut, sharing, profileRemovalStore)
+        val original = coordinator.prepareDeletion(owner).getOrThrow()
+        val failure = assertIs<ProfileRemovalFailure>(coordinator.remove(original).exceptionOrNull())
+        assertTrue(failure.canReview)
+        assertFalse(privatePaymentsEnabled)
+        assertEquals(original.attemptId, profileRemovalStore.pendingAttempt())
+
+        val reviewed = coordinator.reviewAgain(failure).getOrThrow()
+        verify(paykitSdkService, times(1)).clearPrivatePaymentLists(listOf(CONTACT_KEY))
+        assertEquals(original.attemptId, reviewed.attemptId)
+        assertEquals(ended, coordinator.remove(reviewed).getOrThrow())
+        assertNull(profileRemovalStore.pendingAttempt())
+        verify(paykitSdkService, times(1)).clearPrivatePaymentLists(listOf(CONTACT_KEY))
+        verify(pubky, times(2)).prepareProfileDeletion(owner)
+        verify(pubky, times(1)).signOutForProfileRemoval()
+    }
+
+    @Test
     fun `profile deletion withdraws private lists without an intermediate registry sync`() = test {
         cacheData.value = PrivatePaykitCacheData(contacts = mapOf(CONTACT_KEY to cachedPublishedContact()))
         sut = createSut()
@@ -2976,7 +3380,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             publicPaykitLightningEnabled = false,
             publicPaykitUsdtEnabled = false,
         )
-        sut.beginProfileDeletion()
+        beginProfileDeletion()
         sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY, OTHER_CONTACT_KEY)).getOrThrow()
         runCurrent()
         verify(paykitSdkService, never()).ensureLinkWithPeer(any(), any(), any())
@@ -2985,7 +3389,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(paykitSdkService, never()).clearPrivatePaymentLists(any(), anyOrNull())
         verify(addressReservationRepo).removeContactAssignments(setOf(CONTACT_KEY, OTHER_CONTACT_KEY))
 
-        sut.endProfileDeletion()
+        endProfileDeletion()
         sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
         runCurrent()
         verify(paykitSdkService).ensureLinkWithPeer(CONTACT_KEY)
@@ -2995,7 +3399,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `deferred private Lightning refresh survives cleanup and failed publication`() = test {
         preparePrivateLightningContact()
-        sut.beginProfileDeletion()
+        beginProfileDeletion()
         clearInvocations(paykitSdkService, pubkyService)
         sut.refreshKnownSavedContactEndpoints("channel ready", forceRefreshLightning = true).getOrThrow()
         verifyNoInteractions(paykitSdkService, pubkyService)
@@ -3003,7 +3407,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.clearPrivatePaymentLists(any(), anyOrNull()))
             .thenAnswer { throw AppError("cleanup unavailable") }
         assertTrue(sut.removePublishedEndpointsForCleanup("profile deletion").isFailure)
-        sut.endProfileDeletion()
+        endProfileDeletion()
         settingsData.update { it.copy(sharesPrivatePaykitEndpoints = false) }
         sut.refreshKnownSavedContactEndpoints("foreground").getOrThrow()
         runCurrent()
@@ -3125,14 +3529,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.scheduleSavedContactPreparation(emptyList()).getOrThrow()
         runCurrent()
         var isCurrent = true
-        sut.beginProfileDeletion()
+        beginProfileDeletion()
         sut.refreshKnownSavedContactEndpoints(
             "channel ready",
             forceRefreshLightning = true,
             isStillCurrent = { isCurrent },
         ).getOrThrow()
         isCurrent = false
-        sut.endProfileDeletion()
+        endProfileDeletion()
         sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
         runCurrent()
 
@@ -3193,7 +3597,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(coreService.decode(PRIVATE_BOLT11))
             .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
         sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true).getOrThrow()
-        sut.beginProfileDeletion()
+        beginProfileDeletion()
         clearInvocations(paykitSdkService)
 
         sut.handleReceivedPayment("090909").getOrThrow()
@@ -3201,7 +3605,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(CONTACT_KEY, sut.contactPublicKeyForPrivateInvoicePaymentHash("090909"))
         assertEquals(listOf("090909"), cacheData.value.contacts.getValue(CONTACT_KEY).receivedInvoicePaymentHashes)
         verifyNoInteractions(paykitSdkService)
-        sut.endProfileDeletion()
+        endProfileDeletion()
         sut.refreshKnownSavedContactEndpoints("deletion ended").getOrThrow()
         runCurrent()
         verify(paykitSdkService).syncPrivatePaymentListsWithReservations(any(), eq(false))
@@ -3219,14 +3623,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(addressReservationRepo.contactsWithUsedReservedAddresses()).thenReturn(listOf(CONTACT_KEY))
         whenever(addressReservationRepo.currentContactPublicKeyForReservedAddress(PRIVATE_ADDRESS))
             .thenReturn(CONTACT_KEY)
-        sut.beginProfileDeletion()
+        beginProfileDeletion()
         clearInvocations(paykitSdkService)
 
         sut.handleOnchainActivity().getOrThrow()
         sut.handleOnchainActivity(listOf(PRIVATE_ADDRESS)).getOrThrow()
 
         verifyNoInteractions(paykitSdkService)
-        sut.endProfileDeletion()
+        endProfileDeletion()
         sut.refreshKnownSavedContactEndpoints("deletion ended").getOrThrow()
         runCurrent()
         verify(paykitSdkService).syncPrivatePaymentListsWithReservations(any(), eq(false))
@@ -3260,8 +3664,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val rotation = async { sut.handleOnchainActivity() }
         runCurrent()
         assertTrue(identityStarted.isCompleted)
-        sut.beginProfileDeletion()
-        sut.endProfileDeletion()
+        beginProfileDeletion()
+        endProfileDeletion()
         resumeIdentity.complete(Unit)
         rotation.await().getOrThrow()
         verify(paykitSdkService, never()).syncPrivatePaymentListsWithReservations(any(), any())
@@ -3289,7 +3693,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.scheduleSavedContactPreparation(listOf(CONTACT_KEY)).getOrThrow()
         runCurrent()
         assertTrue(settingsStarted.isCompleted)
-        sut.beginProfileDeletion()
+        beginProfileDeletion()
         sut.removePublishedEndpointsForCleanup("profile deletion").getOrThrow()
         assertFalse(cacheData.value.cleanupPending)
         clearInvocations(paykitSdkService)
@@ -3298,7 +3702,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.awaitContactPreparation()
 
         verifyNoInteractions(paykitSdkService)
-        sut.endProfileDeletion()
+        endProfileDeletion()
         sut.closeAndClear()
     }
 
@@ -4277,6 +4681,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         usdtRepo = usdtRepo,
         coreService = coreService,
         clock = clock,
+        profileRemovalStore = profileRemovalStore,
     ).also { it.setContactPreparationActive(true) }
 
     private fun resolution(
@@ -4345,6 +4750,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 error = null,
             )
         },
+        acknowledged = emptyList(),
         failedToQueue = failedToQueue,
         failedToDeliver = failedToDeliver,
     )
@@ -4362,6 +4768,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         cleared = updates
             .filter { it.reservations.isEmpty() }
             .map { privateListSyncChange(it.counterparty) },
+        acknowledged = emptyList(),
         failedToQueue = emptyList(),
         failedToDeliver = emptyList(),
     )

@@ -383,9 +383,13 @@
     <string name="profile__add_tag">إضافة علامة</string>
     <string name="profile__auth_approval_details">التفاصيل</string>
     <string name="profile__auth_approval_ok">حسنًا</string>
+    <string name="profile__cleanup_pending">لم يكتمل تنظيف الملف الشخصي. افصل الاتصال محليًا لإزالة وصول هذا الجهاز دون إعادة محاولة الحذف عن بُعد.</string>
     <string name="profile__create_nav_title">إنشاء ملف شخصي</string>
+    <string name="profile__delete_review_description">قد تكون بعض التغييرات قد اكتملت. راجع الحالة الحالية قبل التأكيد مجددًا، أو افصل الاتصال محليًا.</string>
+    <string name="profile__disconnect_local_description">أزل وصول هذا الجهاز وأكمل التنظيف المحلي. لا يُجري هذا أي تغييرات إضافية على ملفك الشخصي أو اشتراكاتك أو صلاحيات وصولك على الخادم.</string>
     <string name="profile__nav_title">الملف الشخصي</string>
     <string name="profile__retry_load">حاول مرة أخرى</string>
+    <string name="profile__review_removal">مراجعة</string>
     <string name="profile__suggestions">اقتراحات</string>
     <string name="security__backup_button">نسخ احتياطي</string>
     <string name="security__backup_funds">الآن بعد أن لديك بعض الأموال في محفظتك، حان وقت عمل نسخة احتياطية!</string>
@@ -1343,6 +1347,7 @@
     <string name="profile__unlink_error_title">تعذر إلغاء ربط الـ pubky</string>
     <string name="profile__unlink_pubky">إلغاء ربط الـ pubky</string>
     <string name="profile__unlink_success">تم إلغاء ربط الـ pubky</string>
+    <string name="profile__wallet_recovery_pending">يجب إكمال استرداد المحفظة قبل فصل هذا الملف الشخصي. راجع استرداد المحفظة في الإعدادات.</string>
     <string name="profile__your_name">اسمك</string>
     <string name="profile__your_pubky">Pubky الخاص بك</string>
     <string name="pubky_auth__already_signed_in">تم تسجيل الدخول بالفعل</string>

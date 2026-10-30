@@ -389,10 +389,14 @@
     <string name="profile__add_link_note">Nota: Qualsevol enllaç que afegiu serà visible públicament.</string>
     <string name="profile__add_tag">Afegeix etiqueta</string>
     <string name="profile__auth_approval_details">Detalls</string>
+    <string name="profile__cleanup_pending">La neteja del perfil és incompleta. Desconnecta localment per eliminar l’accés d’aquest dispositiu sense tornar a intentar la supressió remota.</string>
     <string name="profile__create_nav_title">Crear perfil</string>
+    <string name="profile__delete_review_description">És possible que alguns canvis s’hagin completat. Revisa l’estat actual abans de tornar a confirmar, o desconnecta localment.</string>
+    <string name="profile__disconnect_local_description">Elimina l’accés d’aquest dispositiu i acaba la neteja local. Això no fa cap altre canvi al perfil, les subscripcions ni l’accés al servidor.</string>
     <string name="profile__edit_nav_title">Editar perfil</string>
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Torna a intentar</string>
+    <string name="profile__review_removal">Revisa</string>
     <string name="profile__suggestions">Suggeriments</string>
     <string name="profile__unlink_confirm">Sí, desvincula</string>
     <string name="profile__unlink_confirm_description">Això eliminarà les teves dades de Paykit i desvincularà aquest pubky de Bitkit. Continuarà disponible a Pubky Ring.</string>
@@ -1357,6 +1361,7 @@
     <string name="profile__sign_out_title">Desconnectar el perfil</string>
     <string name="profile__source_lost">Aquest pubky ja no està disponible a Pubky Ring. El teu perfil s\'ha desconnectat.</string>
     <string name="profile__suggestions_to_add">Suggeriments per afegir</string>
+    <string name="profile__wallet_recovery_pending">Cal completar la recuperació de la cartera abans de desconnectar aquest perfil. Consulta la recuperació de la cartera a Configuració.</string>
     <string name="profile__your_pubky">El teu pubky</string>
     <string name="pubky_auth__already_signed_in">Ja has iniciat sessió</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

@@ -144,6 +144,7 @@ class ActivityRepoTest : BaseUnitTest() {
     fun setUp() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(coreService.activity).thenReturn(mock())
+        mockPaymentImport()
         whenever(clock.now()).thenReturn(Clock.System.now())
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
@@ -217,18 +218,27 @@ class ActivityRepoTest : BaseUnitTest() {
         )
     }
 
+    private val importedPaymentLists = mutableListOf<List<PaymentDetails>>()
+
+    private fun mockPaymentImport() {
+        whenever {
+            coreService.activity.syncLdkNodePaymentsToActivities(any(), eq(false), any())
+        }.doSuspendableAnswer { invocation ->
+            val fetch = invocation.getArgument<suspend () -> List<PaymentDetails>>(0)
+            val payments = fetch()
+            val channels = invocation.getArgument<suspend (List<PaymentDetails>) -> Map<String, String>>(2)
+            channels(payments)
+            importedPaymentLists.add(payments)
+            Unit
+        }
+    }
+
     private fun setupSyncActivitiesMocks(
         cacheData: AppCacheData,
     ) {
         whenever(cacheStore.data).thenReturn(flowOf(cacheData))
         whenever { lightningRepo.getPayments() }.thenReturn(Result.success(emptyList()))
-        whenever {
-            coreService.activity.syncLdkNodePaymentsToActivities(
-                any(),
-                eq(false),
-                any()
-            )
-        }.thenReturn(Unit)
+        mockPaymentImport()
         whenever { transferRepo.syncTransferStates() }.thenReturn(Result.success(Unit))
         whenever { coreService.activity.allPossibleTags() }.thenReturn(emptyList())
     }
@@ -337,7 +347,7 @@ class ActivityRepoTest : BaseUnitTest() {
         assertTrue(fresh.none { it.isCompleted })
         paymentResponse.complete(Result.success(newPayments))
         assertTrue(fresh.awaitAll().all { it.isSuccess })
-        verify(coreService.activity).syncLdkNodePaymentsToActivities(eq(newPayments), eq(false), any())
+        assertEquals(newPayments, importedPaymentLists.last())
         verify(lightningRepo, times(2)).getPayments()
         assertFalse(sut.isSyncingLdkNodePayments.value)
     }
@@ -366,11 +376,7 @@ class ActivityRepoTest : BaseUnitTest() {
             assertTrue(fresh.await().isSuccess)
             if (cancelOwner) assertTrue(owner.isCancelled) else assertTrue(owner.await().isFailure)
             verify(lightningRepo, times(2 * (index + 1))).getPayments()
-            verify(coreService.activity, times(index + 1)).syncLdkNodePaymentsToActivities(
-                eq(payments),
-                eq(false),
-                any(),
-            )
+            assertEquals(index + 1, importedPaymentLists.count { it == payments })
             assertFalse(sut.isSyncingLdkNodePayments.value)
         }
     }
@@ -382,13 +388,7 @@ class ActivityRepoTest : BaseUnitTest() {
         whenever {
             coreService.activity.getActivity(any<String>(), eq(WalletScope.default))
         }.thenReturn(null)
-        whenever {
-            coreService.activity.syncLdkNodePaymentsToActivities(
-                any<List<PaymentDetails>>(),
-                any<Boolean>(),
-                any<Map<String, String>>()
-            )
-        }.thenReturn(Unit)
+        mockPaymentImport()
         whenever { transferRepo.syncTransferStates() }.thenReturn(Result.success(Unit))
         whenever { coreService.activity.allPossibleTags() }.thenReturn(emptyList())
 

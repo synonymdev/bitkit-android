@@ -43,13 +43,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
+import to.bitkit.data.ProfileRemovalPending
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.data.PubkyImageCacheEpoch
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.hasPaykitState
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.data.paykitDisabled
 import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.di.IoDispatcher
@@ -68,6 +68,7 @@ import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.services.PaykitProfileDeletionSnapshot
 import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitReadTimeoutError
 import to.bitkit.services.PubkyService
@@ -102,6 +103,18 @@ sealed class PubkyContactError(message: String) : AppError(message) {
  */
 class PubkySignIn internal constructor(val publicKey: String, internal val generation: Long)
 
+/** One displayed identity, including a saved identity whose session could not be restored. */
+class PubkyProfileOwner internal constructor(
+    internal val signIn: PubkySignIn?,
+    internal val storedRevision: Long,
+)
+
+internal class PubkyProfileDeletion(
+    val owner: PubkyProfileOwner,
+    val profileWriteRevision: Long,
+    val snapshot: PaykitProfileDeletionSnapshot,
+)
+
 private fun Throwable.hasCause(error: AppError): Boolean =
     generateSequence(this) { it.cause }.any { it == error }
 
@@ -120,6 +133,9 @@ enum class PubkyIdentityReadiness {
 
     /** An identity is saved, or could not be checked, but its session could not be restored yet. */
     Unavailable,
+
+    /** An interrupted local removal must be completed without activating saved credentials. */
+    RecoveryRequired,
 }
 
 @OptIn(ExperimentalTime::class)
@@ -135,6 +151,7 @@ class PubkyRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val httpClient: HttpClient,
     private val clock: Clock,
+    private val profileRemovalStore: ProfileRemovalStore,
 ) {
     companion object {
         private const val TAG = "PubkyRepo"
@@ -165,6 +182,7 @@ class PubkyRepo @Inject constructor(
     private val scope = appScope(ioDispatcher, TAG)
     private val serviceInitializeMutex = Mutex()
     private val initializeMutex = Mutex()
+    private val identityOperations = PubkyIdentityOperations(::requireNoPendingRemoval)
     private val deferredRestoreMutex = Mutex()
     private var deferredRestoreGeneration: Long? = null
     private val completedRestoreVersion = AtomicLong()
@@ -251,12 +269,24 @@ class PubkyRepo @Inject constructor(
     val isAuthenticated: StateFlow<Boolean> = _publicKey.map { it != null }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
+    val profileRecoveryPending: StateFlow<Boolean?> = profileRemovalStore.pending
+        .map<Boolean, Boolean?> { it }
+        .stateIn(scope, SharingStarted.Eagerly, null)
+
+    val profileRecoveryCanDisconnect: StateFlow<Boolean> = profileRemovalStore.localDisconnectAvailable
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
+    suspend fun requiresProfileRecovery(): Boolean = withContext(ioDispatcher) {
+        runSuspendCatching { profileRemovalStore.requireNoPending() }.isFailure
+    }
+
     val identityExists: StateFlow<Boolean?> = combine(
         _publicKey,
         _backupStateVersion,
         _identityRefreshVersion,
-    ) { _, _, _ ->
-        runSuspendCatching { hasIdentity() }
+        profileRemovalStore.pending,
+    ) { _, _, _, pending ->
+        pending || runSuspendCatching { hasIdentity() }
             .onFailure { Logger.warn("Failed to check saved identity", it, context = TAG) }
             .getOrDefault(true)
     }.stateIn(scope, SharingStarted.Eagerly, null)
@@ -343,6 +373,61 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    private suspend fun requireNoPendingRemoval() {
+        runSuspendCatching { profileRemovalStore.requireNoPending() }.exceptionOrNull()?.let { failure ->
+            // Retained credentials must not activate while local teardown is unresolved or unreadable.
+            _isRestoringSession.value = false
+            _sessionRestorationFailed.update { false }
+            runSuspendCatching { pubkyService.preparePublicProfileRecovery() }
+                .onFailure { Logger.warn("Failed to prepare public profile access", it, context = TAG) }
+            throw if (failure is ProfileRemovalPending) failure else ProfileRemovalPending(failure)
+        }
+    }
+
+    private suspend fun <T> identityTransition(operation: suspend () -> Result<T>): Result<T> =
+        runSuspendCatching { identityOperations.transition { operation().getOrThrow() } }
+
+    fun profileOwner(): PubkyProfileOwner {
+        val revision = storedIdentityRevision.get()
+        return PubkyProfileOwner(currentSignIn(), revision)
+    }
+
+    fun isProfileOwnerCurrent(owner: PubkyProfileOwner): Boolean =
+        owner.storedRevision == storedIdentityRevision.get() &&
+            (owner.signIn?.let(::isCurrent) ?: (currentSignIn() == null))
+
+    /** Reserve the original identity through native work, local completion and cancellation cleanup. */
+    internal suspend fun performProfileRemoval(
+        owner: PubkyProfileOwner,
+        operation: suspend () -> Unit,
+    ): Result<PubkyProfileOwner> = runSuspendCatching {
+        identityOperations.remove {
+            check(isProfileOwnerCurrent(owner)) { "The profile identity changed" }
+            pubkyService.withProfileRemoval({ isProfileOwnerCurrent(owner) }, operation)
+            profileOwner()
+        }
+    }
+
+    /** UUID access is granted only after the repository has admitted the captured owner. */
+    internal suspend fun performProfileRemoval(
+        owner: PubkyProfileOwner,
+        attemptId: String,
+        operation: suspend () -> Unit,
+    ): Result<PubkyProfileOwner> = runSuspendCatching {
+        identityOperations.remove {
+            check(isProfileOwnerCurrent(owner)) { "The profile identity changed" }
+            profileRemovalStore.withAccess(attemptId) {
+                pubkyService.preparePublicProfileRecovery()
+                pubkyService.withProfileRemoval({ isProfileOwnerCurrent(owner) }, operation)
+            }
+            profileOwner()
+        }
+    }
+
+    /** Close session admission before the native wipe barrier, retaining admitted rollback/local tails. */
+    internal suspend fun <T> withWalletWipeAdmission(operation: suspend () -> T): T =
+        identityOperations.wipe(operation)
+
     // region Initialization
 
     suspend fun awaitInitialization() = withContext(ioDispatcher) {
@@ -350,7 +435,10 @@ class PubkyRepo @Inject constructor(
     }
 
     suspend fun republishIdentityIfNeeded(): Result<Unit> = withContext(ioDispatcher) {
-        runSuspendCatching { pubkyService.republishIdentityIfNeeded(publicKey.value) }
+        runSuspendCatching {
+            profileRemovalStore.requireNoPending()
+            pubkyService.republishIdentityIfNeeded(publicKey.value)
+        }
     }
 
     suspend fun initialize() = initializeForRevision()
@@ -373,7 +461,10 @@ class PubkyRepo @Inject constructor(
         job.start()
     }
 
-    private suspend fun initializeForRevision(
+    private suspend fun initializeForRevision(expectedRevision: Long? = null): Result<Unit> =
+        identityTransition { initializeForRevisionAdmitted(expectedRevision) }
+
+    private suspend fun initializeForRevisionAdmitted(
         expectedRevision: Long? = null,
     ): Result<Unit> = withContext(ioDispatcher) {
         val (restored, revision) = initializeMutex.withLock {
@@ -393,7 +484,15 @@ class PubkyRepo @Inject constructor(
         checkAdoptedSource()
     }
 
-    suspend fun restoreSessionIfNeeded() = withContext(ioDispatcher) {
+    suspend fun restoreSessionIfNeeded(): Boolean = try {
+        identityOperations.transition { restoreSessionIfNeededAdmitted() }
+    } catch (_: PubkyIdentityBusy) {
+        false
+    } catch (_: ProfileRemovalPending) {
+        false
+    }
+
+    private suspend fun restoreSessionIfNeededAdmitted() = withContext(ioDispatcher) {
         awaitInitialization()
         val restored = restoreSession()
         if (restored) {
@@ -430,6 +529,7 @@ class PubkyRepo @Inject constructor(
      */
     suspend fun awaitIdentityReady(): PubkyIdentityReadiness = withContext(ioDispatcher) {
         awaitInitialization()
+        if (requiresProfileRecovery()) return@withContext PubkyIdentityReadiness.RecoveryRequired
         if (_publicKey.value != null) return@withContext PubkyIdentityReadiness.Ready
         scope.async {
             val restored = restoreSession()
@@ -451,7 +551,15 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private suspend fun restoreSession(expectedGeneration: Long? = null): Boolean {
+    private suspend fun restoreSession(expectedGeneration: Long? = null): Boolean = try {
+        identityOperations.transition { restoreSessionAdmitted(expectedGeneration) }
+    } catch (_: PubkyIdentityBusy) {
+        false
+    } catch (_: ProfileRemovalPending) {
+        false
+    }
+
+    private suspend fun restoreSessionAdmitted(expectedGeneration: Long?): Boolean {
         val version = completedRestoreVersion.get()
         return initializeMutex.withLock {
             if (expectedGeneration != null &&
@@ -630,7 +738,10 @@ class PubkyRepo @Inject constructor(
         _adoptedSourceLost.update { false }
     }
 
-    suspend fun checkAdoptedSource(): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun checkAdoptedSource(): Result<Unit> =
+        identityTransition { checkAdoptedSourceAdmitted() }
+
+    private suspend fun checkAdoptedSourceAdmitted(): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (initializationReady.isCompleted) checkAdoptedSourcePresent()
         }.onFailure { Logger.warn("Failed to check adopted ring identity", it, context = TAG) }
@@ -668,6 +779,12 @@ class PubkyRepo @Inject constructor(
      * installs the adopted session, so an adoption that fails at sign-in ends it too.
      */
     suspend fun adoptRingIdentity(
+        pubky: String,
+        knownProfile: () -> PubkyProfile? = { null },
+    ): Result<Boolean> =
+        identityTransition { adoptRingIdentityAdmitted(pubky, knownProfile) }
+
+    private suspend fun adoptRingIdentityAdmitted(
         pubky: String,
         knownProfile: () -> PubkyProfile? = { null },
     ): Result<Boolean> = withContext(ioDispatcher) {
@@ -936,6 +1053,15 @@ class PubkyRepo @Inject constructor(
         links: List<PubkyProfileLink>,
         tags: List<String>,
         avatarBytes: ByteArray?,
+    ): Result<Unit> =
+        identityTransition { createIdentityAdmitted(name, bio, links, tags, avatarBytes) }
+
+    private suspend fun createIdentityAdmitted(
+        name: String,
+        bio: String,
+        links: List<PubkyProfileLink>,
+        tags: List<String>,
+        avatarBytes: ByteArray?,
     ): Result<Unit> {
         val result = initializeMutex.withLock {
             if (settingsStore.isPubkyProfileSetupPending.first() && _publicKey.value != null) {
@@ -1083,6 +1209,15 @@ class PubkyRepo @Inject constructor(
         links: List<PubkyProfileLink>,
         tags: List<String>,
         imageUrl: String?,
+    ): Result<Unit> =
+        identityTransition { saveProfileAdmitted(name, bio, links, tags, imageUrl) }
+
+    private suspend fun saveProfileAdmitted(
+        name: String,
+        bio: String,
+        links: List<PubkyProfileLink>,
+        tags: List<String>,
+        imageUrl: String?,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
             requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
@@ -1105,29 +1240,45 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    suspend fun checkProfileDeletionAllowed(): Result<Unit> = runSuspendCatching {
-        withContext(ioDispatcher) { pubkyService.checkProfileDeletionAllowed() }
-    }.recoverCatching {
-        generateSequence(it) { error -> error.cause }
-            .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
-            .firstOrNull()?.let { error -> throw error }
-        if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
-        throw it
-    }
-
-    suspend fun deleteProfile(): Result<Unit> = runSuspendCatching {
-        withContext(ioDispatcher) {
-            requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
-                "No session available"
+    internal suspend fun prepareProfileDeletion(owner: PubkyProfileOwner): Result<PubkyProfileDeletion> =
+        runSuspendCatching {
+            check(isProfileOwnerCurrent(owner)) { "Profile removal identity changed" }
+            val signIn = requireNotNull(owner.signIn) { "Profile identity is not available" }
+            val revision = profileWriteGeneration.get()
+            val snapshot = pubkyService.captureProfileDeletion(signIn.publicKey) { isProfileOwnerCurrent(owner) }
+            check(isProfileOwnerCurrent(owner) && revision == profileWriteGeneration.get()) {
+                "Profile changed; review it before removing it"
             }
-            checkProfileDeletionAllowed().getOrThrow()
-            clearSessionContactProfiles()
-            deleteAllContacts()
-            pubkyService.deletePaykitProfile()
-            profileWriteGeneration.incrementAndGet()
+            PubkyProfileDeletion(owner, revision, snapshot)
+        }.recoverCatching {
+            generateSequence(it) { error -> error.cause }
+                .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
+                .firstOrNull()?.let { error -> throw error }
+            if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
+            throw it
         }
-        settingsStore.update { it.paykitDisabled(markPublicCleanupPending = it.hasPaykitState()) }
-        signOut().getOrThrow()
+
+    internal suspend fun validateProfileDeletion(deletion: PubkyProfileDeletion) {
+        identityOperations.requireRemoval()
+        check(isProfileOwnerCurrent(deletion.owner) && deletion.profileWriteRevision == profileWriteGeneration.get()) {
+            "Profile changed; review it before removing it"
+        }
+        runSuspendCatching { pubkyService.validateProfileDeletion(deletion.snapshot) }.recoverCatching {
+            generateSequence(it) { error -> error.cause }
+                .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
+                .firstOrNull()?.let { error -> throw error }
+            if (it.hasCause(PubkyContactError.ActiveSubscription)) throw PubkyContactError.ActiveSubscription
+            throw it
+        }.getOrThrow()
+    }
+
+    internal suspend fun deleteProfile(deletion: PubkyProfileDeletion): Result<Unit> = runSuspendCatching<Unit> {
+        identityOperations.requireRemoval()
+        check(isProfileOwnerCurrent(deletion.owner)) { "Profile removal identity changed" }
+        clearSessionContactProfiles()
+        deleteContacts(deletion.snapshot.contacts)
+        pubkyService.deletePaykitProfile(deletion.snapshot)
+        profileWriteGeneration.incrementAndGet()
     }.recoverCatching {
         generateSequence(it) { error -> error.cause }
             .filterIsInstance<PubkyContactError.ActiveProfileSubscriptions>()
@@ -1136,8 +1287,7 @@ class PubkyRepo @Inject constructor(
         throw it
     }
 
-    private suspend fun deleteAllContacts() {
-        val records = pubkyService.contactRecords()
+    private suspend fun deleteContacts(records: List<ContactRecord>) {
         if (records.isEmpty()) return
         val keys = records.map { it.publicKey.ensurePubkyPrefix() }.toSet()
         val removedKeys = pubkyService.removeContactsForProfile(records.map { it.publicKey })
@@ -1578,8 +1728,9 @@ class PubkyRepo @Inject constructor(
     // region Auth approval
 
     suspend fun hasSecretKey(): Boolean = runSuspendCatching {
-        val publicKey = _publicKey.value ?: return@runSuspendCatching false
-        managedSecretKeyFor(publicKey) != null
+        val owner = profileOwner()
+        if (owner.signIn == null) return@runSuspendCatching false
+        activeSecretKeyHex(owner, clearInvalidKey = false) != null
     }.getOrDefault(false)
 
     suspend fun hasStoredSecretKey(): Boolean = withContext(ioDispatcher) {
@@ -1656,7 +1807,10 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    suspend fun approveSignupAuth(request: PubkyAuthRequest): Result<Unit> = initializeMutex.withLock {
+    suspend fun approveSignupAuth(request: PubkyAuthRequest): Result<Unit> =
+        identityTransition { approveSignupAuthAdmitted(request) }
+
+    private suspend fun approveSignupAuthAdmitted(request: PubkyAuthRequest): Result<Unit> = initializeMutex.withLock {
         runSuspendCatching {
             withContext(ioDispatcher) {
                 require(request.isSignup) { "Not a Pubky signup request" }
@@ -1717,6 +1871,13 @@ class PubkyRepo @Inject constructor(
         authUrl: String,
         expectedCapabilities: String,
         approvedClientId: String,
+    ): Result<Unit> =
+        identityTransition { approveAuthAdmitted(authUrl, expectedCapabilities, approvedClientId) }
+
+    private suspend fun approveAuthAdmitted(
+        authUrl: String,
+        expectedCapabilities: String,
+        approvedClientId: String,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
             val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
@@ -1727,6 +1888,13 @@ class PubkyRepo @Inject constructor(
     }
 
     suspend fun approveAuthWithCompanionClaim(
+        authUrl: String,
+        approvedClientId: String,
+        unsignedPayload: ByteArray,
+    ): Result<Unit> =
+        identityTransition { approveAuthWithCompanionClaimAdmitted(authUrl, approvedClientId, unsignedPayload) }
+
+    private suspend fun approveAuthWithCompanionClaimAdmitted(
         authUrl: String,
         approvedClientId: String,
         unsignedPayload: ByteArray,
@@ -1772,7 +1940,12 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    suspend fun restoreSessionBackupState(backup: PubkySessionBackupV1?): Result<Unit> = runSuspendCatching {
+    suspend fun restoreSessionBackupState(backup: PubkySessionBackupV1?): Result<Unit> =
+        identityTransition { restoreSessionBackupStateAdmitted(backup) }
+
+    private suspend fun restoreSessionBackupStateAdmitted(
+        backup: PubkySessionBackupV1?,
+    ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
             ensureServiceInitialized()
 
@@ -1827,44 +2000,50 @@ class PubkyRepo @Inject constructor(
 
     // region Sign out
 
-    suspend fun signOut(): Result<Unit> = withContext(NonCancellable + ioDispatcher) {
-        initializeMutex.withLock {
-            val hadPaykitState = settingsStore.data.first().hasPaykitState()
-            val endpointCleanupResult = removeBitkitPaymentEndpoints()
-                .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
+    /** Remote acknowledgement only. Local safety state is retained until strict credential teardown. */
+    internal suspend fun signOutForProfileRemoval() {
+        identityOperations.requireRemoval()
+        pubkyService.signOut()
+    }
 
-            val result = runSuspendCatching {
-                pubkyService.signOut()
-            }.onFailure { Logger.error("Failed to revoke Pubky session during sign out", it, context = TAG) }
+    /** No native initialization or remote mutation; callers retain admission through private completion. */
+    internal suspend fun finishProfileRemovalLocally() {
+        identityOperations.requireRemoval()
+        pubkyService.forgetLocalProfileAccess()
+        clearProfileMetadataAfterCredentialTeardown()
+    }
 
-            if (result.isFailure) {
-                if (hadPaykitState) {
-                    runSuspendCatching {
-                        settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
-                    }.onFailure {
-                        Logger.warn("Failed to mark Paykit state for reconciliation", it, context = TAG)
-                    }
-                }
-                return@withLock result
+    internal suspend fun notifyProfileRemovalCompleted() {
+        identityOperations.requireRemoval()
+        notifyBackupStateChanged()
+    }
+
+    /** The wallet wipe has acknowledged keychain deletion and still owns both teardown barriers. */
+    internal suspend fun finishProfileWipeLocally() {
+        identityOperations.requireWipe()
+        pubkyService.requireWalletWipe()
+        clearProfileMetadataAfterCredentialTeardown()
+    }
+
+    private suspend fun clearProfileMetadataAfterCredentialTeardown() {
+        withContext(NonCancellable + ioDispatcher) {
+            try {
+                // End asynchronous profile/contact writers before resetting their durable cache.
+                clearAuthenticatedState(clearCachedProfile = false)
+                invalidateReadOnlyProfile()
+                evictPubkyImages()
+                profileWriteGeneration.incrementAndGet()
+                clearPublicPaykitSharingState(publicPaykitCleanupPending = false)
+                pubkyStore.reset()
+            } finally {
+                notifyBackupStateChanged()
             }
-
-            clearLocalState(publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState)
-            result
         }
     }
 
-    suspend fun forgetUnrestoredIdentity(): Result<Boolean> = withContext(NonCancellable + ioDispatcher) {
-        initializeMutex.withLock {
-            if (_publicKey.value != null) return@withLock Result.success(false)
-            runSuspendCatching {
-                pubkyService.forgetSessionAccess()
-                clearLocalState()
-                true
-            }.onFailure { Logger.error("Failed to forget unrestored Pubky identity", it, context = TAG) }
-        }
-    }
+    suspend fun wipeLocalState() = identityOperations.transition { wipeLocalStateAdmitted() }
 
-    suspend fun wipeLocalState() = initializeMutex.withLock {
+    private suspend fun wipeLocalStateAdmitted() = initializeMutex.withLock {
         runSuspendCatching {
             withContext(ioDispatcher) { pubkyService.forgetSessionAccess() }
         }.onFailure {
@@ -2114,33 +2293,37 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private suspend fun managedSecretKeyFor(publicKey: String): String? = withContext(ioDispatcher) {
+    private suspend fun managedSecretKeyFor(publicKey: String, clearInvalidKey: Boolean): String? {
         val bareKey = publicKey.removePrefix(PUBKY_PREFIX)
         val secretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
-            ?: return@withContext bareKey
-                .takeIf {
-                    keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ==
-                        "${SharedPubkyContract.RING_SOURCE_PREFIX}$bareKey"
-                }
-                ?.let { sharedPubkyClient.ringCredential(it).getOrNull() }
+            ?: return matchingRingSecretKey(bareKey)
 
-        val derivedPublicKey = runCatching {
+        val derivedPublicKey = runSuspendCatching {
             pubkyService.publicKeyFromSecret(secretKeyHex).ensurePubkyPrefix()
         }.onFailure {
             Logger.warn("Ignoring invalid managed secret key for '${redacted(publicKey)}'", it, context = TAG)
         }.getOrNull()
 
         if (derivedPublicKey == publicKey) {
-            return@withContext secretKeyHex
+            return secretKeyHex
         }
 
         if (derivedPublicKey != null) {
             Logger.warn("Ignoring stale managed secret key for '${redacted(publicKey)}'", context = TAG)
         }
+        if (!clearInvalidKey) return matchingRingSecretKey(bareKey)
+        storedIdentityRevision.incrementAndGet()
         runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
             .onSuccess { notifyBackupStateChanged() }
-        null
+        return matchingRingSecretKey(bareKey)
     }
+
+    private suspend fun matchingRingSecretKey(bareKey: String): String? = bareKey
+        .takeIf {
+            keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) ==
+                "${SharedPubkyContract.RING_SOURCE_PREFIX}$bareKey"
+        }
+        ?.let { sharedPubkyClient.ringCredential(it).getOrNull() }
 
     private suspend fun adoptedRingPubky(): String? =
         runCatching { keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name) }.getOrNull()
@@ -2154,10 +2337,19 @@ class PubkyRepo @Inject constructor(
             .getOrNull()
     }
 
-    private suspend fun activeSecretKeyHex(): String? {
-        val publicKey = _publicKey.value ?: return keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
-        return managedSecretKeyFor(publicKey)
-    }
+    private suspend fun activeSecretKeyHex(
+        owner: PubkyProfileOwner = profileOwner(),
+        clearInvalidKey: Boolean = true,
+    ): String? =
+        withContext(ioDispatcher) {
+            // Keep the read/derive/delete decision with the identity that supplied its public key.
+            initializeMutex.withLock {
+                if (!isProfileOwnerCurrent(owner)) return@withLock null
+                val publicKey = owner.signIn?.publicKey
+                    ?: return@withLock keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+                managedSecretKeyFor(publicKey, clearInvalidKey)
+            }
+        }
 
     private suspend fun deriveLocalSecretKeyFromWalletSeed(): String = withContext(ioDispatcher) {
         val mnemonic = requireNotNull(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)) {

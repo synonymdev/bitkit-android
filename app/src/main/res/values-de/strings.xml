@@ -375,10 +375,14 @@
     <string name="profile__add_tag">Tag hinzufügen</string>
     <string name="profile__auth_approval_authorize">Autorisieren Sie</string>
     <string name="profile__auth_approval_title">Autorisieren Sie</string>
+    <string name="profile__cleanup_pending">Die Profilbereinigung ist unvollständig. Trenne die Verbindung lokal, um den Zugriff dieses Geräts zu entfernen, ohne die entfernte Löschung erneut zu versuchen.</string>
     <string name="profile__create_nav_title">Profil erstellen</string>
+    <string name="profile__delete_review_description">Einige Änderungen wurden möglicherweise abgeschlossen. Prüfe den aktuellen Stand vor einer erneuten Bestätigung oder trenne die Verbindung lokal.</string>
+    <string name="profile__disconnect_local_description">Entferne den Zugriff dieses Geräts und schließe die lokale Bereinigung ab. Dadurch werden keine weiteren Änderungen an deinem Profil, deinen Abonnements oder deinem Zugriff auf dem Server vorgenommen.</string>
     <string name="profile__edit_nav_title">Profil bearbeiten</string>
     <string name="profile__nav_title">Profil</string>
     <string name="profile__retry_load">Erneut versuchen</string>
+    <string name="profile__review_removal">Prüfen</string>
     <string name="profile__suggestions">Vorschläge</string>
     <string name="profile__unlink_confirm">Ja, aufheben</string>
     <string name="profile__unlink_confirm_description">Dadurch werden deine Paykit-Daten gelöscht und die Verknüpfung dieses pubky mit Bitkit aufgehoben. In Pubky Ring bleibt er weiterhin verfügbar.</string>
@@ -1357,6 +1361,7 @@
     <string name="profile__sign_out_title">Profil trennen</string>
     <string name="profile__source_lost">Dieser pubky ist in Pubky Ring nicht mehr verfügbar. Dein Profil wurde getrennt.</string>
     <string name="profile__suggestions_to_add">Vorschläge zum Hinzufügen</string>
+    <string name="profile__wallet_recovery_pending">Bevor dieses Profil getrennt werden kann, muss die Wallet-Wiederherstellung abgeschlossen werden. Prüfe die Wallet-Wiederherstellung in den Einstellungen.</string>
     <string name="profile__your_pubky">Dein Pubky</string>
     <string name="pubky_auth__already_signed_in">Bereits angemeldet</string>
     <string name="pubky_auth__homeserver">Homeserver</string>

@@ -1,0 +1,23 @@
+<journey name="profile fixed-term local disconnect">
+  <description>
+    Use a disposable authenticated identity with an accepted future fixed-term subscription and no
+    pending irreversible payment. Run separately as payer and payee, then repeat with a disposable
+    identity adopted from Pubky Ring for Unlink parity. Provision each fixture without live funds.
+    A controlled homeserver and independent authenticated peer must observe the original profile,
+    subscription, contacts, endpoints and session grant before and after the flow. Record app and
+    SDK revisions. The fixture and remote mutation journal are beyond standard runner capabilities.
+    To test late refusal, hold the original Delete/Unlink confirmation, then accept the subscription
+    independently before confirming; do not alter the app's eligibility result or cancellation policy.
+    A real post-marker failure belongs to the separate profile-removal-recovery journey.
+  </description>
+  <actions>
+    <action>Open the fixed-term subscription and verify End subscription is unavailable</action>
+    <action>Open Edit Profile and request Delete Profile, or Unlink pubky for a Ring identity; verify subscription refusal and truthful expiry guidance without remote mutation</action>
+    <action>Verify the separate Disconnect choice (id "ProfileLocalDisconnect") is visible and explains that this action only removes this device’s access and makes no further changes to the profile, subscriptions or access on the server</action>
+    <action>Choose Disconnect and verify a fresh local-only confirmation; cancel it and verify the original profile remains connected with no pending cleanup or remote mutation</action>
+    <action>Choose Disconnect again and confirm (id "ProfileLocalDisconnectConfirm"); verify profile onboarding appears only after required local cleanup completes, without claiming remote deletion</action>
+    <action>Using the independent peer and homeserver journal, verify that the original profile, subscription, contacts, endpoints and grant remain unchanged and no remote cleanup or cancellation was sent</action>
+    <action>Close and relaunch Bitkit; open Profile and verify onboarding remains visible with no restored credentials or automatic publication</action>
+    <action>For the Ring fixture, open Pubky Ring and verify the original identity and profile remain available</action>
+  </actions>
+</journey>
