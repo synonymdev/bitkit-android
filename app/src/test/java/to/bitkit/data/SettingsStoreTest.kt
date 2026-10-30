@@ -141,4 +141,27 @@ class SettingsStoreTest : BaseUnitTest() {
             assertFalse(PaykitFeatureFlags.areAllowancesEnabled(true, false, default))
         }
     }
+
+    @Test
+    fun `restoring legacy or explicit public settings requires a new opt in and preserves private sharing`() = test {
+        for (independentSharing in listOf(false, true)) {
+            val backup = SettingsBackupV1(
+                createdAt = 0L,
+                settings = SettingsData(
+                    hasIndependentPaykitSharing = independentSharing,
+                    hasConfirmedPublicPaykitEndpoints = true,
+                    sharesPublicPaykitEndpoints = true,
+                    sharesPrivatePaykitEndpoints = true,
+                ),
+            )
+            sut.restoreFromBackup(backup).getOrThrow()
+            val restored = sut.data.first()
+            assertFalse(restored.sharesPublicPaykitEndpoints)
+            assertFalse(restored.hasConfirmedPublicPaykitEndpoints)
+            assertTrue(restored.sharesPrivatePaykitEndpoints)
+            assertTrue(restored.publicPaykitCleanupPending)
+            assertEquals(!independentSharing, restored.legacyPublicAddressQuarantinePending)
+            assertTrue(restored.hasIndependentPaykitSharing)
+        }
+    }
 }
