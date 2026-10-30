@@ -73,6 +73,16 @@ class ArkadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `stays ready when the first refresh after connecting fails`() = test {
+        whenever { arkadeService.balance() }.thenThrow(RuntimeException("timed out"))
+        val sut = createSut()
+
+        sut.start(0)
+
+        assertTrue(sut.state.value.isReady)
+    }
+
+    @Test
     fun `marks a deposit boarded once its boarding settles`() = test {
         whenever { arkadeService.history() }.thenReturn(
             listOf(

@@ -9,6 +9,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -40,6 +41,7 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Lightning without channels, through Arkade (Ark Labs) and Arkade Intents. Savings to Spending boards on-chain
@@ -55,6 +57,9 @@ class ArkadeRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "ArkadeRepo"
+
+        /** Waits between attempts to connect the Arkade wallet when the operator or chain source is slow. */
+        private val START_RETRY_DELAYS = listOf(10.seconds, 30.seconds, 60.seconds)
         private const val MSATS_PER_SAT = 1_000uL
         private const val OUTCOME_CLAIMED = "claimed"
         private const val OUTCOME_PAID = "paid"
@@ -86,27 +91,37 @@ class ArkadeRepo @Inject constructor(
 
     suspend fun start(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         if (!arkadeService.isSupported) return@withContext Result.success(Unit)
-        runSuspendCatching {
-            if (eventsJob == null) eventsJob = scope.launch { arkadeService.events.collect { onEvent(it) } }
-            val restoreFile = File(Env.arkadeExitRestorePath(walletIndex))
-            val backup = restoreFile.takeIf { it.exists() }?.readText()
-            val startedMarker = File(Env.arkadeStartedMarkerPath(walletIndex))
-            arkadeService.connect(walletIndex, restore = !startedMarker.exists(), backup = backup)
-            startedMarker.apply { parentFile?.mkdirs() }.writeText(nowMillis().toString())
-            if (backup != null) {
-                restoreFile.delete()
-                Logger.info("Imported Arkade wallet data from backup", context = TAG)
-            }
-            _exitStateChanged.emit(Unit)
-            refresh()
-            syncActivities()
-            lightningAddress().onFailure {
-                Logger.warn("Failed to get the Arkade Lightning address", it, context = TAG)
-            }
-            Unit
-        }.onFailure {
-            Logger.error("Failed to start Arkade wallet", it, context = TAG)
+        if (eventsJob == null) eventsJob = scope.launch { arkadeService.events.collect { onEvent(it) } }
+        var result = connect(walletIndex)
+        for (delayAfterFailure in START_RETRY_DELAYS) {
+            if (result.isSuccess) break
+            delay(delayAfterFailure)
+            result = connect(walletIndex)
         }
+        result.onFailure { Logger.error("Failed to start Arkade wallet", it, context = TAG) }
+            .onSuccess { onConnected() }
+    }
+
+    private suspend fun connect(walletIndex: Int): Result<Unit> = runSuspendCatching {
+        val restoreFile = File(Env.arkadeExitRestorePath(walletIndex))
+        val backup = restoreFile.takeIf { it.exists() }?.readText()
+        val startedMarker = File(Env.arkadeStartedMarkerPath(walletIndex))
+        arkadeService.connect(walletIndex, restore = !startedMarker.exists(), backup = backup)
+        startedMarker.apply { parentFile?.mkdirs() }.writeText(nowMillis().toString())
+        if (backup != null) {
+            restoreFile.delete()
+            Logger.info("Imported Arkade wallet data from backup", context = TAG)
+        }
+    }.onFailure { Logger.warn("Failed to connect the Arkade wallet", it, context = TAG) }
+
+    // A connected wallet is ready even when its first refresh times out; the next event or refresh catches up.
+    private suspend fun onConnected() {
+        _state.update { it.copy(isReady = true) }
+        _exitStateChanged.emit(Unit)
+        refreshState()
+        runSuspendCatching { syncActivities() }
+            .onFailure { Logger.warn("Failed to sync Arkade activities", it, context = TAG) }
+        lightningAddress().onFailure { Logger.warn("Failed to get the Arkade Lightning address", it, context = TAG) }
     }
 
     suspend fun stop() = withContext(bgDispatcher) {
