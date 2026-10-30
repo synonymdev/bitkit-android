@@ -23,8 +23,11 @@ import to.bitkit.models.TransferType
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.SparkRepo
+import to.bitkit.repositories.SparkState
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.idleSparkRepo
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -34,6 +37,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     private val transferRepo: TransferRepo = mock()
     private val settingsStore: SettingsStore = mock()
     private val hwWalletRepo: HwWalletRepo = mock()
+    private val sparkRepo: SparkRepo = idleSparkRepo()
 
     private lateinit var sut: DeriveBalanceStateUseCase
 
@@ -60,7 +64,23 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             transferRepo = transferRepo,
             settingsStore = settingsStore,
             hwWalletRepo = hwWalletRepo,
+            sparkRepo = sparkRepo,
         )
+    }
+
+    @Test
+    fun `should add Spark balance to spending and pending deposits to transfer`() = test {
+        newBalanceDetails()
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(sparkRepo.state).thenReturn(
+            MutableStateFlow(SparkState(isReady = true, balanceSats = 30_000uL, pendingDepositSats = 20_000uL)),
+        )
+
+        val balanceState = sut().getOrThrow()
+
+        assertEquals(80_000uL, balanceState.totalLightningSats)
+        assertEquals(30_000uL, balanceState.maxSendLightningSats)
+        assertEquals(20_000uL, balanceState.balanceInTransferToSpending)
     }
 
     @Test

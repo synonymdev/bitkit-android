@@ -19,8 +19,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -67,6 +69,7 @@ import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.SettingsBackupV1
+import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.models.Toast
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
@@ -133,6 +136,7 @@ class BackupRepo @Inject constructor(
     private val keychain: Keychain,
     private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val lightningRepo: Provider<LightningRepo>,
+    private val sparkRepo: SparkRepo,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val lightningService: LightningService,
@@ -431,6 +435,20 @@ class BackupRepo @Inject constructor(
         // payment and sync traffic does not re-upload the whole metadata envelope.
         dataListenerJobs.add(observeBackupChanges(activityRepo.activityTagsChanged, BackupCategory.METADATA))
 
+        // SPARK_EXIT - back up once Spark is ready, which replays when observing starts after it connected,
+        // and again whenever Spark announces its unilateral exit data changed
+        dataListenerJobs.add(
+            scope.launch {
+                merge(
+                    sparkRepo.state.map { it.isReady }.distinctUntilChanged().filter { it },
+                    sparkRepo.exitStateChanged,
+                ).collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.SPARK_EXIT)
+                }
+            }
+        )
+
         // LIGHTNING_CONNECTIONS - Only display sync timestamp, ldk-node manages its own backups
         @OptIn(FlowPreview::class)
         val lightningConnectionsJob = scope.launch {
@@ -569,6 +587,7 @@ class BackupRepo @Inject constructor(
             val upload = when (category) {
                 BackupCategory.WALLET -> uploadWalletBackup()
                 BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup()
+                BackupCategory.SPARK_EXIT -> uploadSparkExitBackup()
                 else -> runSuspendCatching {
                     vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
                 }
@@ -595,6 +614,15 @@ class BackupRepo @Inject constructor(
                 }
             }
         }
+    }
+
+    /** Nothing to back up until Spark connects, which marks [BackupCategory.SPARK_EXIT] required again. */
+    private suspend fun uploadSparkExitBackup(): Result<Unit> = runSuspendCatching {
+        val backup = sparkRepo.exitBackup().getOrThrow() ?: return@runSuspendCatching
+        vssBackupClient.putObject(
+            key = BackupCategory.SPARK_EXIT.name,
+            data = json.encodeToString(backup).toByteArray(),
+        ).getOrThrow()
     }
 
     suspend fun persistWalletBackup(): Result<Unit> =
@@ -730,6 +758,10 @@ class BackupRepo @Inject constructor(
 
         BackupCategory.LIGHTNING_CONNECTIONS -> throw NotImplementedError("LIGHTNING backup is managed by ldk-node")
         BackupCategory.USDT_RECOVERY -> throw UsdtException.BackupUnavailable()
+        BackupCategory.SPARK_EXIT -> {
+            val backup = checkNotNull(sparkRepo.exitBackup().getOrThrow()) { "Spark is not connected" }
+            json.encodeToString(backup).toByteArray()
+        }
     }
 
     private suspend fun getMetadataBackupDataBytes(): ByteArray = withContext(ioDispatcher) {
@@ -892,6 +924,12 @@ class BackupRepo @Inject constructor(
                 }
                 // SETTINGS is optional; preserving explicit local corrections is required.
                 connectionSession.replay()
+                // Before the slower categories, so the exit data is staged before Spark connects and syncs.
+                performRestore(BackupCategory.SPARK_EXIT) { dataBytes ->
+                    val parsed = json.decodeFromString<SparkExitBackupV1>(String(dataBytes))
+                    sparkRepo.restoreExitBackup(parsed, backupWalletIndex()).getOrThrow()
+                    parsed.createdAt
+                }
                 val retainedWalletBackup = keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
                 if (retainedWalletBackup.isNullOrEmpty()) {
                     var didRestoreWalletBackup = false

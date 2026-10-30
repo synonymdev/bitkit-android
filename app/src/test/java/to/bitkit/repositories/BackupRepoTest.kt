@@ -33,6 +33,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -70,6 +71,7 @@ import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitUsdtStateBackup
+import to.bitkit.models.SparkExitBackupV1
 import to.bitkit.models.TransportType
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
@@ -125,6 +127,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val paykitAllowanceStore = mock<PaykitAllowanceStore>()
     private val keychain = mock<Keychain>()
     private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
+    private val sparkRepo = mock<SparkRepo>()
     private val vssStoreIdProvider = mock<to.bitkit.data.backup.VssStoreIdProvider>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val lightningService = mock<LightningService>()
@@ -202,6 +205,11 @@ class BackupRepoTest : BaseUnitTest() {
         }.thenReturn(Result.success(Unit))
 
         whenever { vssBackupClient.listKeys() }.thenReturn(Result.success(emptyList()))
+        whenever { sparkRepo.exitBackup() }.thenReturn(Result.success(null))
+        whenever { sparkRepo.restoreExitBackup(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever(sparkRepo.exitStateChanged).thenReturn(MutableSharedFlow())
+        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState()))
+
         sut = createSut()
     }
 
@@ -233,6 +241,54 @@ class BackupRepoTest : BaseUnitTest() {
                 release.countDown()
             }
         }
+    }
+
+    @Test
+    fun `spark exit backup uploads the exported state and restores it before the wallet`() = test {
+        val backup = SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "{\"pedigrees\":[]}")
+        whenever(sparkRepo.exitBackup()).thenReturn(Result.success(backup))
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        val data = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), data.capture())
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name)).thenReturn(
+            Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = data.firstValue, version = 1))
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(sparkRepo).restoreExitBackup(backup, 0)
+            verify(vssBackupClient).getObject(BackupCategory.WALLET.name)
+        }
+    }
+
+    @Test
+    fun `spark exit backup uploads when Spark was ready before observing started`() = test {
+        val statuses = MutableStateFlow(mapOf(BackupCategory.SPARK_EXIT to BackupItemStatus(synced = 1, required = 1)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState(isSupported = true, isReady = true)))
+        val backup = SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "state")
+        whenever(sparkRepo.exitBackup()).thenReturn(Result.success(backup))
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(6_000)
+            runCurrent()
+
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `spark exit backup uploads nothing while Spark is not connected`() = test {
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
     }
 
     @Test
@@ -2239,6 +2295,7 @@ class BackupRepoTest : BaseUnitTest() {
         keychain = keychain,
         onchainSendAttemptStore = onchainSendAttemptStore,
         lightningRepo = Provider { lightningRepo },
+        sparkRepo = sparkRepo,
         vssStoreIdProvider = vssStoreIdProvider,
         preActivityMetadataRepo = preActivityMetadataRepo,
         lightningService = lightningService,

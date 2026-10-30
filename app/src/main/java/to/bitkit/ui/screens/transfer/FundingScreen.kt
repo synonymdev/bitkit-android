@@ -31,6 +31,9 @@ import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun FundingScreen(
+    canFundWithSpark: Boolean = false,
+    onTransfer: () -> Unit = {},
+    onFund: () -> Unit = {},
     onManual: () -> Unit = {},
     onBackClick: () -> Unit = {},
 ) {
@@ -48,11 +51,35 @@ fun FundingScreen(
         )
         VerticalSpacer(8.dp)
         BodyM(
-            text = stringResource(R.string.lightning__transfer_unavailable__text),
+            text = stringResource(
+                if (canFundWithSpark) {
+                    R.string.lightning__funding__text
+                } else {
+                    R.string.lightning__transfer_unavailable__text
+                }
+            ),
             color = Colors.White64,
             modifier = Modifier.padding(horizontal = 16.dp),
         )
-        VerticalSpacer(32.dp)
+        VerticalSpacer(24.dp)
+        // Spark keeps Spending fundable from savings or another wallet without a channel.
+        if (canFundWithSpark) {
+            FundingOption(
+                R.string.lightning__funding__button1,
+                R.drawable.ic_transfer,
+                20.dp,
+                "FundTransfer",
+                onTransfer
+            )
+            FundingOption(
+                R.string.lightning__funding__button2,
+                R.drawable.ic_qr_purple,
+                13.75.dp,
+                "FundReceive",
+                onFund
+            )
+        }
+        VerticalSpacer(8.dp)
         RectangleButton(
             label = stringResource(R.string.lightning__funding_advanced__button2),
             icon = R.drawable.ic_pencil_full,
@@ -64,14 +91,18 @@ fun FundingScreen(
                 .padding(horizontal = 16.dp)
                 .testTag("FundManual")
         )
-        UnavailableOption(R.string.lightning__funding__button1, R.drawable.ic_transfer, 20.dp, "FundTransfer")
-        UnavailableOption(
+        if (!canFundWithSpark) {
+            FundingOption(R.string.lightning__funding__button1, R.drawable.ic_transfer, 20.dp, "FundTransfer")
+        }
+        FundingOption(
             R.string.lightning__funding__button_hw,
             R.drawable.ic_device_tablet_speaker,
             16.25.dp,
             "FundHardware"
         )
-        UnavailableOption(R.string.lightning__funding__button2, R.drawable.ic_qr_purple, 13.75.dp, "FundReceive")
+        if (!canFundWithSpark) {
+            FundingOption(R.string.lightning__funding__button2, R.drawable.ic_qr_purple, 13.75.dp, "FundReceive")
+        }
         FillHeight()
         SecondaryButton(
             text = stringResource(R.string.common__learn_more),
@@ -87,11 +118,12 @@ fun FundingScreen(
 }
 
 @Composable
-private fun UnavailableOption(
+private fun FundingOption(
     @StringRes label: Int,
     @DrawableRes icon: Int,
     iconSize: Dp,
     testTag: String,
+    onClick: (() -> Unit)? = null,
 ) {
     VerticalSpacer(8.dp)
     RectangleButton(
@@ -99,8 +131,8 @@ private fun UnavailableOption(
         icon = icon,
         iconTint = Colors.Purple,
         iconSize = iconSize,
-        enabled = false,
-        onClick = {},
+        enabled = onClick != null,
+        onClick = { onClick?.invoke() },
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
@@ -113,5 +145,13 @@ private fun UnavailableOption(
 private fun Preview() {
     AppThemeSurface {
         FundingScreen()
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewSpark() {
+    AppThemeSurface {
+        FundingScreen(canFundWithSpark = true)
     }
 }

@@ -86,7 +86,9 @@ fun SavingsConfirmScreen(
 
     val channels = selectedChannels ?: openChannels
 
-    val amount = channels.sumOf { it.amountOnClose }
+    val sparkState by wallet.sparkState.collectAsStateWithLifecycle()
+    val channelsAmount = channels.sumOf { it.amountOnClose }
+    val amount = channelsAmount + sparkState.balanceSats
 
     val swapState by transfer.savingsSwapState.collectAsStateWithLifecycle()
 
@@ -96,8 +98,8 @@ fun SavingsConfirmScreen(
     }
 
     // Present the swap fee before the user commits. Recomputed when the amount changes.
-    LaunchedEffect(amount) {
-        if (amount > 0uL) transfer.loadSavingsSwapQuote(amount)
+    LaunchedEffect(channelsAmount) {
+        if (channelsAmount > 0uL) transfer.loadSavingsSwapQuote(channelsAmount)
     }
 
     Box {

@@ -84,6 +84,7 @@ fun ReceiveSheet(
     }
     var editInvoiceSourceTab by remember { mutableStateOf(ReceiveTab.SAVINGS) }
     val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
+    val sparkState by wallet.sparkState.collectAsStateWithLifecycle()
     val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     val paymentRequestContacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     var paymentRequestDraft by remember {
@@ -148,6 +149,7 @@ fun ReceiveSheet(
                         onUsdtSelected = onUsdtSelected,
                         walletState = walletState,
                         lightningState = lightningState,
+                        canReceiveWithSpark = sparkState.isReady,
                         onClickReceiveCjit = { navController.navigateTo(ReceiveRoute.TransferUnavailable) },
                         onClickEditInvoice = {
                             editInvoiceSourceTab = it

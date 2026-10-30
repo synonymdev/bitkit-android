@@ -38,6 +38,12 @@ class EditInvoiceVM @Inject constructor(
         amountSats: ULong,
     ) {
         viewModelScope.launch {
+            if (walletRepo.canReceiveWithSpark()) {
+                editInvoiceEffect(
+                    EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.None)
+                )
+                return@launch
+            }
             _isLoading.update { true }
             val inboundCapacitySats = walletRepo.inboundLiquiditySats()
             val action = ReceiveLiquidityDecision.additionalLiquidityAction(

@@ -36,6 +36,7 @@ import to.bitkit.ext.toUserMessage
 import to.bitkit.models.Toast
 import to.bitkit.models.TransferType
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
@@ -59,6 +60,7 @@ class TransferViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val transferRepo: TransferRepo,
     private val boltzService: BoltzService,
+    private val sparkRepo: SparkRepo,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -200,6 +202,7 @@ class TransferViewModel @Inject constructor(
     fun startSavingsSwap() {
         if (savingsSwapJob?.isActive == true || _savingsSwapResult.value != null) return
         savingsSwapJob = viewModelScope.launch {
+            withdrawSparkToSavings()
             val result = executeSavingsSwap()
             _savingsSwapResult.update { result }
         }
@@ -302,10 +305,27 @@ class TransferViewModel @Inject constructor(
     private fun resolveSavingsTransferMode(): SavingsTransferMode =
         if (_savingsSwapState.value.quote != null) SavingsTransferMode.SWAP else SavingsTransferMode.CLOSE
 
-    /** Closes the channels selected earlier, pending closure */
-    suspend fun closeSelectedChannels() = closeChannels(channelsToClose)
+    /** Whether Transfer to Savings closes channels, rather than only withdrawing Spark's balance. */
+    fun hasChannelsToClose(): Boolean = channelsToClose.isNotEmpty()
+
+    /** Withdraws Spark's balance, then closes the channels selected earlier, pending closure */
+    suspend fun closeSelectedChannels(): List<ChannelDetails> {
+        withdrawSparkToSavings()
+        return closeChannels(channelsToClose)
+    }
+
+    private suspend fun withdrawSparkToSavings() {
+        val balance = sparkRepo.state.value.balanceSats
+        if (balance == 0uL) return
+        val address = lightningRepo.newAddress().getOrElse {
+            Logger.error("Failed to get address for Spark withdrawal", it, context = TAG)
+            return
+        }
+        sparkRepo.withdrawAll(address).onFailure { ToastEventBus.send(it) }
+    }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
+        if (channels.isEmpty()) return emptyList()
         lightningRepo.awaitPeerConnected()
         val channelsFailedToClose = coroutineScope {
             channels.map { channel ->
