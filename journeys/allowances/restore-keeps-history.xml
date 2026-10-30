@@ -1,0 +1,25 @@
+<journey name="Restore Keeps History">
+  <description>
+    A payer restored from its recovery phrase keeps its allowance history: the allowances list, the
+    "Paid automatically" total and the "Auto-paid" tag come back from the wallet backup. Reset And
+    Restore wipes the keychain, where the allowance state lives, so a restore on the same instance
+    reads it back from the backup; no second install is needed. Requires the Active allowance from
+    set-and-accept.xml and the payer's notification permission granted. The journey wipes the payer
+    half way through, so do not run it against a wallet whose funds matter.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on both instances with the $5 a payment, $50 a month allowance from set-and-accept.xml Active, and the payer's notification permission granted</action>
+    <action>On the payer instance, open the menu, navigate to Settings, then the "Security" tab (testTag "Tab-security"), then tap "Back Up Your Money" (testTag "BackupWallet"), continue past the intro (testTag "BackupIntroViewContinue"), tap to reveal the phrase (testTag "TapToReveal") and record the phrase from the word grid (testTag "SeedContainer")</action>
+    <action>On the payee instance, open the drawer menu, tap Subscriptions, tap the Payments tab (testTag "Tab-payments") and send the payer a one-time Payment Request for $2 with the note "Restore"</action>
+    <action>Switch to the payer instance, with Bitkit in the foreground, and verify a "Payment Executed" notification with the text "Auto-pay sent $2.00 to &lt;payee&gt;" is posted, reading it back with `adb shell dumpsys notification --noredact`</action>
+    <action>On the payer instance, open the drawer menu, tap Subscriptions and tap the Allowances tab (testTag "Tab-allowances"), then tap the payee's row (testTag "AllowanceRow-&lt;entryId&gt;") and record PAID AUTOMATICALLY (testTag "AllowancePaidSoFar")</action>
+    <action>Open Settings, then the "Security" tab, then "Data Backups" (testTag "BackupSettings"), and wait on the list (testTag "BackupScrollView") until the "Boosts &amp; Transfers" row reports a backup made after the payment — that row carries no testTag, so read its text</action>
+    <action>Open Settings, then the "Security" tab, then "Reset And Restore" (testTag "ResetAndRestore"), tap "Reset Wallet" (testTag "restore_reset_button") and confirm in the dialog (testTag "restore_reset_dialog")</action>
+    <action>On the onboarding screen tap "Restore" (testTag "RestoreWallet"), enter the recorded words into the word inputs (testTag "Word-0" onwards) and tap Restore (testTag "RestoreButton")</action>
+    <action>Wait for the restore to finish and tap "Get Started" (testTag "GetStartedButton")</action>
+    <action>Open the drawer menu, tap Subscriptions and tap the Allowances tab</action>
+    <action>Verify the payee's row (testTag "AllowanceRow-&lt;entryId&gt;") is listed as Active</action>
+    <action>Tap the payee's row and verify PAID AUTOMATICALLY (testTag "AllowancePaidSoFar") shows the total recorded before the reset, converted at the current rate</action>
+    <action>Close the sheet, tap the Payments tab and verify the "Restore" row (testTag "PaymentRequestRow-&lt;paymentRequestId&gt;") is listed with a subtitle ending in "· Auto-paid"</action>
+  </actions>
+</journey>

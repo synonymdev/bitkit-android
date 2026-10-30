@@ -7,10 +7,12 @@
     <action>On the payer, verify the Payment Request confirmation screen (id "PaymentRequestConfirm") shows 1,000 sats and Savings is selected</action>
     <action>Leave the confirmation open for 30 seconds</action>
     <action>Verify the amount remains 1,000 sats and payment authorization has not started</action>
+    <action>On the requester, send the payer a second on-chain-only Bitcoin Payment Request for 2,000 sats</action>
+    <action>Verify the first confirmation still shows 1,000 sats and is not replaced by the second request</action>
     <action>Swipe to pay using the control with id "GRAB", complete any sending-warning confirmation, and wait on PIN entry for 30 seconds without authorizing</action>
     <action>Cancel PIN entry, then close the send sheet without paying</action>
     <action>Verify Activity contains no outgoing payment for this request</action>
-    <action>On the requester, send the payer a second on-chain-only Bitcoin Payment Request for 2,000 sats</action>
+    <action>Leave the payer unlocked and in the foreground while ordinary Payment Request synchronization resumes; do not require the next request to arrive immediately when review closes</action>
     <action>On the payer, verify the second request becomes visible without restarting the app</action>
     <action>Close the second request without paying, then reopen the first request from the pending-request list</action>
     <action>Verify the confirmation still shows the original 1,000 sats</action>

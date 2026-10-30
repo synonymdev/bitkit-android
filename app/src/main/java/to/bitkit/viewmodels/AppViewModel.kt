@@ -44,6 +44,7 @@ import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -72,6 +73,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -94,7 +96,6 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.data.keychain.hasPendingWalletRestore
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.domain.commands.NotifyChannelReady
@@ -208,6 +209,7 @@ import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
+import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyIdentityReadiness
@@ -308,6 +310,7 @@ class AppViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
+    private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
     private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
     private val paykitAllowanceRepo: PaykitAllowanceRepo,
@@ -358,7 +361,10 @@ class AppViewModel @Inject constructor(
 
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
-    private fun setSendEffect(effect: SendEffect, canPresent: () -> Boolean = { true }) = viewModelScope.launch {
+    private fun setSendEffect(
+        effect: SendEffect,
+        canPresent: suspend () -> Boolean = { true },
+    ) = viewModelScope.launch {
         if (canPresent()) _sendEffect.emit(effect)
     }
 
@@ -369,7 +375,7 @@ class AppViewModel @Inject constructor(
     val mainScreenEffect = _mainScreenEffect.asSharedFlow()
     private fun mainScreenEffect(
         effect: MainScreenEffect,
-        canPresent: () -> Boolean = { true }
+        canPresent: suspend () -> Boolean = { true },
     ) = viewModelScope.launch {
         if (canPresent()) _mainScreenEffect.emit(effect)
     }
@@ -884,7 +890,11 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { pubkyRepo.checkAdoptedSource() }
     }
 
-    private suspend fun refreshPublicPaykitEndpointsIfEnabled(forceRefreshLightning: Boolean = false) {
+    private suspend fun refreshPublicPaykitEndpointsIfEnabled(
+        forceRefreshLightning: Boolean = false,
+        canPublish: (() -> Boolean)? = null,
+    ) {
+        if (canPublish != null && !canPublish()) return
         val signIn = pubkyRepo.currentSignIn()
         val restorationGuard = if (forceRefreshLightning && signIn == null) pubkyRepo.savedIdentityGuard() else null
         val settings = settingsStore.data.first()
@@ -896,9 +906,7 @@ class AppViewModel @Inject constructor(
 
         pubkyRepo.isRestoringSession.first { !it }
         val restoredSignIn = signIn ?: pubkyRepo.currentSignIn()
-        val admission = publicPaykitPublicationAdmission(restoredSignIn)
-        val onchainAddress = walletRepo.walletState.value.onchainAddress
-        if (onchainAddress.isBlank() && !lightningRepo.canReceive()) return
+        val admission = canPublish ?: publicPaykitPublicationAdmission(restoredSignIn)
 
         publicPaykitRepo.syncCurrentPublishedEndpoints(
             canPublish = admission,
@@ -973,7 +981,11 @@ class AppViewModel @Inject constructor(
             refreshPrivateOnlyPaykitApp("contact sync", onlyIfNeeded = !identityChanged)
             if (!state.contactsLoaded || !synchronizeSavedPaykitContacts(state.contactKeys, isStillCurrent)) return
             if (isPaymentRequestPollingStopped.value) return
-            val result = refreshIncomingPaykitPaymentRequests(forceFresh = true, onlyWhileActive = true)
+            val result = refreshIncomingPaykitPaymentRequests(
+                forceFresh = true,
+                refreshPriority = Priority.Background,
+                onlyWhileActive = true,
+            )
             if (!isPaymentRequestPollingStopped.value) refreshPaymentRequestTargets(force = true)
             result
         } finally {
@@ -1054,7 +1066,11 @@ class AppViewModel @Inject constructor(
             isStillCurrent = isStillCurrent,
         )
         if (isPaymentRequestPollingStopped.value) return
-        refreshIncomingPaykitPaymentRequests(forceFresh = true, onlyWhileActive = true)
+        refreshIncomingPaykitPaymentRequests(
+            forceFresh = true,
+            refreshPriority = Priority.Background,
+            onlyWhileActive = true,
+        )
         if (!isPaymentRequestPollingStopped.value) refreshPaymentRequestTargets(force = true)
     }
 
@@ -1163,6 +1179,7 @@ class AppViewModel @Inject constructor(
         mode: PaykitPaymentRequestRefreshMode = PaykitPaymentRequestRefreshMode.FULL,
         forceFresh: Boolean = false,
         messagePriority: Priority = Priority.Background,
+        refreshPriority: Priority? = null,
         onlyWhileActive: Boolean = false,
         reconcileProofs: Boolean = mode == PaykitPaymentRequestRefreshMode.FULL,
     ): Result<Unit> {
@@ -1195,7 +1212,9 @@ class AppViewModel @Inject constructor(
         // held from presentation until the allowances are refreshed too.
         val releaseCoverage = paykitAllowanceRepo.beginCoverageUpdate()
         val result = try {
-            val refreshed = if (forceFresh) {
+            val refreshed = if (forceFresh && refreshPriority != null) {
+                paykitPaymentRequestRepo.refreshAfterStateChange(mode, refreshPriority)
+            } else if (forceFresh) {
                 paykitPaymentRequestRepo.refreshAfterStateChange(mode)
             } else {
                 paykitPaymentRequestRepo.refresh(mode, messagePriority)
@@ -1581,6 +1600,7 @@ class AppViewModel @Inject constructor(
                     refreshIncomingPaykitPaymentRequests(
                         PaykitPaymentRequestRefreshMode.STORED,
                         forceFresh = true,
+                        refreshPriority = Priority.Background,
                         onlyWhileActive = true,
                         reconcileProofs = true,
                     )
@@ -2241,10 +2261,14 @@ class AppViewModel @Inject constructor(
             ?.cancel()
         synchronized(deferredScanLock) {
             if (targetsRequest(deferredScan?.contactPaymentContext)) {
+                val admission = deferredScan?.admission
                 deferredScan = null
+                admission?.cancel()
             }
             if (targetsRequest(scanAfterPubkyAuth?.contactPaymentContext)) {
+                val admission = scanAfterPubkyAuth?.admission
                 scanAfterPubkyAuth = null
+                admission?.cancel()
             }
         }
         val shouldHideRequestSendSheet = if (requestId != null) {
@@ -2272,16 +2296,22 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun refreshPrivateOnlyPaykitApp(reason: String, onlyIfNeeded: Boolean = false) {
+        val signIn = pubkyRepo.currentSignIn() ?: return
+        val isStillCurrent = publicPaykitPublicationAdmission(signIn)
         val settings = settingsStore.data.first()
-        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
+        if (!isStillCurrent()) return
         if (!settings.sharesPrivatePaykitEndpoints || settings.sharesPublicPaykitEndpoints) return
-        val identity = pubkyRepo.publicKey.value ?: return
+        val identity = signIn.publicKey
         if (onlyIfNeeded && PubkyPublicKeyFormat.matches(privatePaykitAppRegistrationIdentity, identity)) return
         privatePaykitAppRegistrationIdentity = null
 
-        publicPaykitRepo.syncPaykitApp()
+        val canSync: suspend () -> Boolean = {
+            val current = settingsStore.data.first()
+            isStillCurrent() && current.sharesPrivatePaykitEndpoints && !current.sharesPublicPaykitEndpoints
+        }
+        publicPaykitRepo.syncPaykitApp(canSync = canSync)
             .onSuccess {
-                if (PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, identity)) {
+                if (canSync()) {
                     privatePaykitAppRegistrationIdentity = identity
                 }
             }
@@ -2291,29 +2321,30 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun retryPendingPaykitEndpointRemoval(contactKeys: Collection<String>, reason: String) {
-        if (privatePaykitRepo.isProfileDeletionInProgress.value) return
+        val signIn = pubkyRepo.currentSignIn()
+        val isStillCurrent = publicPaykitPublicationAdmission(signIn)
+        if (!isStillCurrent()) return
         contactPaymentSettingsRepo.reconcilePendingEndpoints {
-            privatePaykitRepo.retryPendingEndpointRemoval(contactKeys)
+            privatePaykitRepo.retryPendingEndpointRemoval(contactKeys, isStillCurrent)
                 .onFailure {
                     Logger.warn("Failed to retry private Paykit endpoint removal for '$reason'", it, context = TAG)
                 }
 
             val settings = settingsStore.data.first()
-            if (privatePaykitRepo.isProfileDeletionInProgress.value) return@reconcilePendingEndpoints
+            if (!isStillCurrent()) return@reconcilePendingEndpoints
             if (settings.publicPaykitCleanupPending ||
                 settings.sharesPublicPaykitEndpoints && publicPaykitRepo.hasPendingLightningRefresh
             ) {
                 val reconciliationResult = if (settings.sharesPublicPaykitEndpoints) {
-                    publicPaykitRepo.syncCurrentPublishedEndpoints(canPublish = publicPaykitPublicationAdmission())
+                    publicPaykitRepo.syncCurrentPublishedEndpoints(canPublish = isStillCurrent)
                 } else {
-                    publicPaykitRepo.syncPublishedEndpoints(publish = false)
+                    publicPaykitRepo.syncPublishedEndpoints(
+                        publish = false,
+                        appSyncPriority = Priority.Ordered,
+                        isStillCurrent = isStillCurrent,
+                    )
                 }
                 reconciliationResult
-                    .onSuccess {
-                        if (!settings.sharesPublicPaykitEndpoints) {
-                            settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
-                        }
-                    }
                     .onFailure {
                         Logger.warn("Failed to reconcile public Paykit state for '$reason'", it, context = TAG)
                     }
@@ -2324,6 +2355,7 @@ class AppViewModel @Inject constructor(
     private fun handleLdkEvent(update: NodeEventUpdate) {
         val event = update.event
         if (!walletRepo.walletExists()) return
+        val publicPaykitAdmission = publicPaykitPublicationAdmission()
         Logger.debug("LDK-node event received in $TAG: ${jsonLogOf(event)}", context = TAG)
 
         val receiveSheetToClose = receiveSheetContext?.takeIf { context ->
@@ -2343,9 +2375,16 @@ class AppViewModel @Inject constructor(
                     is Event.ChannelClosed -> handleChannelClosed(event)
                     is Event.ChannelPending -> handleChannelPending()
                     is Event.ChannelReady -> handleChannelReady(event)
-                    is Event.OnchainTransactionConfirmed -> handleOnchainTransactionConfirmed(event)
+                    is Event.OnchainTransactionConfirmed -> handleOnchainTransactionConfirmed(
+                        event,
+                        publicPaykitAdmission,
+                    )
                     is Event.OnchainTransactionEvicted -> handleOnchainTransactionEvicted(event)
-                    is Event.OnchainTransactionReceived -> handleOnchainTransactionReceived(event, receiveSheetToClose)
+                    is Event.OnchainTransactionReceived -> handleOnchainTransactionReceived(
+                        event,
+                        receiveSheetToClose,
+                        publicPaykitAdmission,
+                    )
                     is Event.OnchainTransactionReorged -> handleOnchainTransactionReorged(event)
                     is Event.OnchainTransactionReplaced -> handleOnchainTransactionReplaced(event)
                     is Event.PaymentClaimable -> Unit
@@ -2357,7 +2396,7 @@ class AppViewModel @Inject constructor(
                     is Event.ProbeSuccessful -> Unit
                     is Event.SpliceFailed -> Unit
                     is Event.SplicePending -> Unit
-                    is Event.SyncCompleted -> handleSyncCompleted(event)
+                    is Event.SyncCompleted -> handleSyncCompleted(event, publicPaykitAdmission)
                     is Event.SyncProgress -> Unit
                 }
             }.onFailure { e ->
@@ -2445,7 +2484,10 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun handleSyncCompleted(event: Event.SyncCompleted) {
+    private suspend fun handleSyncCompleted(event: Event.SyncCompleted, canPublish: () -> Boolean) {
+        val onActivitiesSynced: suspend () -> Unit = {
+            viewModelScope.launch { refreshPublicPaykitAddressAfterActivitySync(canPublish) }
+        }
         if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen(event.syncedBlockHeight)
 
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
@@ -2460,12 +2502,12 @@ class AppViewModel @Inject constructor(
                 settingsStore.update { it.copy(pendingRestoreAddressTypePrune = false) }
                 delay(POST_RESTORE_PRUNE_DELAY_MS)
                 lightningRepo.pruneEmptyAddressTypesAfterRestore()
-                walletRepo.debounceSyncByEvent()
+                walletRepo.debounceSyncByEvent(onActivitiesSynced)
             }
 
             !isShowingLoading && !needsPostMigrationSync && !isCompletingMigration -> {
                 retryPendingMigrationData()
-                walletRepo.debounceSyncByEvent()
+                walletRepo.debounceSyncByEvent(onActivitiesSynced)
             }
             else -> Unit
         }
@@ -2662,9 +2704,13 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private suspend fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
+    private suspend fun handleOnchainTransactionConfirmed(
+        event: Event.OnchainTransactionConfirmed,
+        canPublish: () -> Boolean,
+    ) {
         activityRepo.handleOnchainTransactionConfirmed(event.txid, event.details)
         notifyPaymentReceived(event)
+        schedulePublicPaykitRefreshAfterActivitySync(canPublish)
     }
 
     private suspend fun handleOnchainTransactionEvicted(event: Event.OnchainTransactionEvicted) {
@@ -2675,6 +2721,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handleOnchainTransactionReceived(
         event: Event.OnchainTransactionReceived,
         receiveSheetToClose: ReceiveSheetContext?,
+        canPublish: () -> Boolean,
     ) {
         closeSettledReceiveSheet(receiveSheetToClose)
         val addresses = event.details.outputs.mapNotNull { it.scriptpubkeyAddress }
@@ -2683,6 +2730,29 @@ class AppViewModel @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to rotate private Paykit address for '${event.txid}'", it, context = TAG)
             }
+        schedulePublicPaykitRefreshAfterActivitySync(canPublish)
+    }
+
+    private suspend fun schedulePublicPaykitRefreshAfterActivitySync(canPublish: () -> Boolean) {
+        if (!canPublish() || !isPaykitEnabled.value || !settingsStore.data.first().sharesPublicPaykitEndpoints) return
+        walletRepo.debounceSyncByEvent {
+            viewModelScope.launch { refreshPublicPaykitAddressAfterActivitySync(canPublish) }
+        }
+    }
+
+    private suspend fun refreshPublicPaykitAddressAfterActivitySync(canPublish: () -> Boolean) {
+        if (!canPublish() || !isPaykitEnabled.value) return
+        val settings = settingsStore.data.first()
+        if (!settings.sharesPublicPaykitEndpoints) return
+        val signIn = pubkyRepo.currentSignIn() ?: return
+        if (!settings.publicPaykitCleanupPending && !publicPaykitRepo.hasPendingLightningRefresh) {
+            if (!PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) return
+            val needsRotation = privatePaykitAddressReservationRepo.needsPublicAddressRotation(signIn.publicKey)
+                .onFailure { Logger.warn("Failed to check public Paykit address rotation", it, context = TAG) }
+                .getOrDefault(false)
+            if (!needsRotation) return
+        }
+        refreshPublicPaykitEndpointsIfEnabled(canPublish = canPublish)
     }
 
     private suspend fun handleOnchainTransactionReorged(event: Event.OnchainTransactionReorged) {
@@ -3021,9 +3091,15 @@ class AppViewModel @Inject constructor(
                         SendEvent.SpeedAndFee -> {
                             if (_sendUiState.value.isRetainedHardwarePayment) return@collect
                             if (_sendUiState.value.onchainFeeUi.estimates.isEmpty()) {
-                                viewModelScope.launch {
-                                    refreshOnchainFeeUi()
-                                    setSendEffect(SendEffect.NavigateToFee)
+                                val generation = sendStateGeneration
+                                val walletGeneration = connectionRecovery.currentGeneration()
+                                launchOnchainFeeRefresh(generation, walletGeneration) {
+                                    refreshOnchainFeeUi(walletGeneration)
+                                    val refreshJob = currentCoroutineContext().job
+                                    setSendEffect(SendEffect.NavigateToFee) {
+                                        refreshJob.isActive && generation == sendStateGeneration &&
+                                            connectionRecovery.isCurrentGeneration(walletGeneration)
+                                    }.join()
                                 }
                             } else {
                                 setSendEffect(SendEffect.NavigateToFee)
@@ -3394,12 +3470,16 @@ class AppViewModel @Inject constructor(
         allowPubkyAuth: Boolean = isMainScanner,
         suppressQuickPay: Boolean = false,
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
+        receiptAdmission: Deferred<Boolean>? = null,
     ): Job? {
-        if (!canPrepareSend(walletGeneration)) return null
+        if (!connectionRecovery.isCurrentGeneration(walletGeneration)) return null
         if (contactPaymentContext == null &&
             isUsdtPaymentInput(data.trim()) && hasActiveUsdtSend()
         ) {
             return null
+        }
+        val admission = receiptAdmission ?: viewModelScope.async(start = CoroutineStart.LAZY) {
+            isWalletReadyForSend(walletGeneration)
         }
         val previousPreparation = paymentRequestPreparation.value?.takeUnless {
             it.request.id == contactPaymentContext?.incomingPaymentRequest?.id
@@ -3413,9 +3493,24 @@ class AppViewModel @Inject constructor(
             allowPubkyAuth = allowPubkyAuth,
             suppressQuickPay = suppressQuickPay,
             walletGeneration = walletGeneration,
+            admission = admission,
         )
+        if (receiptAdmission == null) {
+            admission.invokeOnCompletion {
+                viewModelScope.launch {
+                    if (admission.isCancelled || !admission.await()) {
+                        synchronized(deferredScanLock) {
+                            if (deferredScan?.admission === admission) deferredScan = null
+                            if (scanAfterPubkyAuth?.admission === admission) scanAfterPubkyAuth = null
+                        }
+                        flushDeferredScan()
+                    }
+                }
+            }
+        }
         if (!_isAuthenticated.value) {
             enqueueDeferredScan(deferrable)
+            admission.start()
             return null
         }
 
@@ -3428,21 +3523,25 @@ class AppViewModel @Inject constructor(
             (scheduled.contactPaymentContext == contactPaymentContext || contactPaymentContext == null)
         if (isSameActiveScan) {
             Logger.info("Skipping duplicate scan from '${source.label}': '$scanId'", context = TAG)
+            if (receiptAdmission == null) admission.cancel()
             return null
         }
 
         if (scheduled?.job?.isActive == true && scheduled.mustComplete) {
             enqueueDeferredScan(deferrable)
+            admission.start()
             return null
         }
 
         if (isPubkyAuthSheetShownOrPending() && !deferrable.isPubkyAuth) {
             enqueueDeferredScan(deferrable)
+            admission.start()
             return null
         }
 
         val previousJob = scheduled?.job
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            if (!admission.await() || !canPrepareSend(walletGeneration)) return@launch
             clearPaymentRequestPreparation(previousPreparation)
             scanMutex.withLock {
                 try {
@@ -3475,6 +3574,7 @@ class AppViewModel @Inject constructor(
 
         scheduledScan = nextScheduledScan
         nextJob.invokeOnCompletion {
+            admission.cancel()
             if (scheduledScan === nextScheduledScan) scheduledScan = null
             if (nextJob.isCancelled) return@invokeOnCompletion clearCancelledContactContext(contactPaymentContext)
             viewModelScope.launch {
@@ -3623,7 +3723,10 @@ class AppViewModel @Inject constructor(
             if (queued?.walletGeneration == scan.walletGeneration &&
                 queued?.data?.removeLightningSchemes() == normalized
             ) {
-                deferredScan = queued.mergeDuplicate(scan, scanId)
+                val merged = queued.mergeDuplicate(scan, scanId)
+                deferredScan = merged
+                if (merged.admission !== queued.admission) queued.admission.cancel()
+                if (merged.admission !== scan.admission) scan.admission.cancel()
                 return
             }
             if (!scan.isPubkyAuth && (queued?.isPubkyAuth == true || scanAfterPubkyAuth != null)) {
@@ -3631,10 +3734,14 @@ class AppViewModel @Inject constructor(
                 if (followUp?.walletGeneration == scan.walletGeneration &&
                     followUp?.data?.removeLightningSchemes() == normalized
                 ) {
-                    scanAfterPubkyAuth = followUp.mergeDuplicate(scan, scanId)
+                    val merged = followUp.mergeDuplicate(scan, scanId)
+                    scanAfterPubkyAuth = merged
+                    if (merged.admission !== followUp.admission) followUp.admission.cancel()
+                    if (merged.admission !== scan.admission) scan.admission.cancel()
                     return
                 }
                 scanAfterPubkyAuth = scan
+                followUp?.admission?.cancel()
                 Logger.info("Queuing '${scan.source.label}' scan after a sign-in link: '$scanId'", context = TAG)
                 return
             }
@@ -3652,6 +3759,7 @@ class AppViewModel @Inject constructor(
                 )
             }
             deferredScan = scan
+            queued?.admission?.cancel()
         }
         Logger.info("Queuing '${scan.source.label}' scan for deferred handling: '$scanId'", context = TAG)
     }
@@ -3704,6 +3812,7 @@ class AppViewModel @Inject constructor(
             allowPubkyAuth = pending.allowPubkyAuth,
             suppressQuickPay = pending.suppressQuickPay,
             walletGeneration = pending.walletGeneration,
+            receiptAdmission = pending.admission,
         )
     }
 
@@ -3821,8 +3930,9 @@ class AppViewModel @Inject constructor(
         walletGeneration: Long?,
     ) {
         requestUsdtEnable(onCancel = { cancelUsdtContactPayment(payment) }) {
-            val currentPayment = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
-            if (canPrepareSend(walletGeneration) && currentPayment == payment) {
+            if (canPrepareSend(walletGeneration) &&
+                synchronized(contactPaymentContextLock) { activeContactPaymentContext } == payment
+            ) {
                 openPaykitEndpoints(payment, fromMainScanner, walletGeneration)
             }
         }
@@ -4063,7 +4173,7 @@ class AppViewModel @Inject constructor(
 
     fun setTransactionSpeed(speed: TransactionSpeed) {
         if (_sendUiState.value.isRetainedHardwarePayment) return
-        onchainSendRefreshJob?.cancel()
+        cancelOnchainSendRefresh()
         val previous = _sendUiState.value
         _sendUiState.update {
             it.copy(
@@ -4075,7 +4185,9 @@ class AppViewModel @Inject constructor(
         if (!reviewPaykitMethodChange(previous)) {
             setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
         }
-        viewModelScope.launch {
+        val generation = sendStateGeneration
+        val walletGeneration = connectionRecovery.currentGeneration()
+        refreshOnchainSendIfNeeded(walletGeneration) {
             val shouldResetUtxos = when (settingsStore.data.first().coinSelectAuto) {
                 true -> {
                     val currentSatsPerVByte = previous.feeRates?.getSatsPerVByteFor(previous.speed)
@@ -4089,8 +4201,10 @@ class AppViewModel @Inject constructor(
                 previous.amount > 0uL &&
                 previous.amount == previous.hardwareAvailableSats
             val hardwareAvailableSats = previous.hardwareWalletId?.let { walletId ->
-                hardwareMaxSpendable(walletId, previous.address, speed)
+                hardwareMaxSpendable(walletId, previous.address, speed, walletGeneration)
             } ?: previous.hardwareAvailableSats
+            requireCurrentPaymentPreparation(walletGeneration)
+            if (generation != sendStateGeneration) return@refreshOnchainSendIfNeeded
             _sendUiState.update {
                 it.copy(
                     amount = if (wasHardwareMax) hardwareAvailableSats else it.amount,
@@ -4099,7 +4213,6 @@ class AppViewModel @Inject constructor(
                 )
             }
             updateCanSwitchWallet()
-            refreshOnchainSendIfNeeded() ?: updateOnchainFeeUi { it.copy(isLoading = false) }
         }
     }
 
@@ -4143,7 +4256,7 @@ class AppViewModel @Inject constructor(
                 return
             }
             ++sendStateGeneration
-            onchainSendRefreshJob?.cancel()
+            cancelOnchainSendRefresh()
             _sendUiState.update { it.copy(paykitRateUnavailable = true) }
             if (canReviewInPlace) {
                 paykitPaymentTerms = null
@@ -4153,12 +4266,12 @@ class AppViewModel @Inject constructor(
             return
         } catch (_: PaykitAmountError) {
             ++sendStateGeneration
-            onchainSendRefreshJob?.cancel()
+            cancelOnchainSendRefresh()
             _sendUiState.update { it.copy(paykitRateUnavailable = false) }
             return
         }
         val generation = ++sendStateGeneration
-        onchainSendRefreshJob?.cancel()
+        cancelOnchainSendRefresh()
         _sendUiState.update {
             it.copy(
                 isFundingSourceLoading = nextSource is SendFundingSource.Hardware,
@@ -4485,6 +4598,7 @@ class AppViewModel @Inject constructor(
                 rate = FeeRate.fromSpeed(state.speed),
                 sats = miningFeeSats.toLong(),
                 isLoading = false,
+                requiresRefresh = false,
             )
         }
         return true
@@ -4516,11 +4630,19 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
+        val generation = sendStateGeneration
+        val walletGeneration = connectionRecovery.currentGeneration()
         _sendUiState.update {
             it.copy(selectedUtxos = utxos.toImmutableList())
         }
-        refreshOnchainFeeUi()
-        setSendEffect(SendEffect.NavigateToConfirm)
+        launchOnchainFeeRefresh(generation, walletGeneration) {
+            refreshOnchainFeeUi(walletGeneration)
+            val refreshJob = currentCoroutineContext().job
+            setSendEffect(SendEffect.NavigateToConfirm) {
+                refreshJob.isActive && generation == sendStateGeneration &&
+                    connectionRecovery.isCurrentGeneration(walletGeneration)
+            }.join()
+        }?.join()
     }
 
     private suspend fun validateAmount(
@@ -4777,7 +4899,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun handleUsdtPaymentInput(input: String, walletGeneration: Long?) {
+    private suspend fun handleUsdtPaymentInput(input: String, walletGeneration: Long?) {
         if (!canPrepareSend(walletGeneration)) return
         val request = if (Env.isUsdtEnabled && activeHardwareWalletId == null && !usdtRepo.isSendPresented) {
             parseUsdtPaymentRequest(input).getOrNull()
@@ -5640,7 +5762,7 @@ class AppViewModel @Inject constructor(
         showSheet(Sheet.LnurlAuth(domain = data.domain, lnurl = data.uri, k1 = data.k1))
     }
 
-    private fun navigateToSendRoute(
+    private suspend fun navigateToSendRoute(
         fromMainScanner: Boolean,
         route: SendRoute,
         effect: SendEffect,
@@ -5807,7 +5929,7 @@ class AppViewModel @Inject constructor(
 
     private fun onSwipeToPay() {
         Logger.debug("Swipe to pay event, checking send confirmation conditions", context = TAG)
-        if (!_sendUiState.value.isAmountInputValid) return
+        if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareFeeReady) return
         viewModelScope.launch {
             if (!prepareCoinSelection()) return@launch
             val amount = _sendUiState.value.amount
@@ -6065,7 +6187,10 @@ class AppViewModel @Inject constructor(
     ): Result<String?> {
         if (request == null) return Result.success(null)
         val endpointIdentifier = paymentProofPreparation(contactPaymentContext).endpointIdentifier
-        return paykitAllowanceRepo.beginManualPayment(request, endpointIdentifier)
+        val paymentHash = _sendUiState.value.decodedInvoice
+            ?.takeIf { _sendUiState.value.payMethod == SendMethod.LIGHTNING }
+            ?.paymentHash?.toHex()
+        return paykitAllowanceRepo.beginManualPayment(request, endpointIdentifier, paymentHash)
             .recoverCatching {
                 if (it is PaykitAllowanceError.PaymentAlreadyRecorded) throw it
                 Logger.warn("Failed to report a manual payment to the allowance ledger", it, context = TAG)
@@ -6946,29 +7071,41 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun cancelOnchainSendRefresh() {
+        val job = onchainSendRefreshJob
+        onchainSendRefreshJob = null
+        job?.cancel()
+    }
+
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded(
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
+        prepare: (suspend () -> Unit)? = null,
     ): Job? {
-        if (!canPrepareSend(walletGeneration)) return null
         val generation = sendStateGeneration
         val currentState = _sendUiState.value
-        if (currentState.isRetainedHardwarePayment) return null
-        if (currentState.payMethod != SendMethod.ONCHAIN ||
-            currentState.amount == 0uL ||
-            currentState.address.isEmpty()
+        if (prepare == null && (
+                currentState.payMethod != SendMethod.ONCHAIN ||
+                    currentState.amount == 0uL || currentState.address.isEmpty()
+                )
         ) {
             return null
         }
 
-        updateOnchainFeeUi { it.copy(isLoading = true) }
-        onchainSendRefreshJob?.cancel()
-        val job = viewModelScope.launch(bgDispatcher, start = CoroutineStart.LAZY) {
+        return launchOnchainFeeRefresh(generation, walletGeneration) {
+            prepare?.invoke()
             requireCurrentPaymentPreparation(walletGeneration)
-            if (generation != sendStateGeneration) return@launch
+            if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
+            val currentState = _sendUiState.value
+            if (currentState.payMethod != SendMethod.ONCHAIN ||
+                currentState.amount == 0uL || currentState.address.isEmpty()
+            ) {
+                updateOnchainFeeUi { it.copy(isLoading = false) }
+                return@launchOnchainFeeRefresh
+            }
             val settings = settingsStore.data.first()
             requireCurrentPaymentPreparation(walletGeneration)
-            if (generation != sendStateGeneration) return@launch
+            if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
             // preselect utxos for deterministic fee estimation
             if (
                 currentState.hardwareWalletId == null &&
@@ -6991,11 +7128,42 @@ class AppViewModel @Inject constructor(
                     }
             }
             requireCurrentPaymentPreparation(walletGeneration)
-            if (generation != sendStateGeneration) return@launch
+            if (generation != sendStateGeneration) return@launchOnchainFeeRefresh
             refreshOnchainFeeUi(walletGeneration)
         }
+    }
+
+    private fun launchOnchainFeeRefresh(
+        generation: Long,
+        walletGeneration: Long?,
+        refresh: suspend () -> Unit,
+    ): Job? {
+        if (generation != sendStateGeneration || !connectionRecovery.isCurrentGeneration(walletGeneration) ||
+            _sendUiState.value.isRetainedHardwarePayment
+        ) {
+            return null
+        }
+        updateOnchainFeeUi { it.copy(isLoading = true) }
+        cancelOnchainSendRefresh()
+        val job = viewModelScope.launch(bgDispatcher, start = CoroutineStart.LAZY) { refresh() }
         onchainSendRefreshJob = job
-        job.invokeOnCompletion {
+        job.invokeOnCompletion { cause ->
+            if (cause != null) {
+                _sendUiState.update {
+                    if (onchainSendRefreshJob !== job || generation != sendStateGeneration ||
+                        !connectionRecovery.isCurrentGeneration(walletGeneration) || it.isRetainedHardwarePayment
+                    ) {
+                        it
+                    } else {
+                        it.copy(
+                            onchainFeeUi = OnchainFeeUi(
+                                rate = FeeRate.fromSpeed(it.speed),
+                                requiresRefresh = true,
+                            ),
+                        )
+                    }
+                }
+            }
             if (onchainSendRefreshJob === job) onchainSendRefreshJob = null
         }
         job.start()
@@ -7195,16 +7363,25 @@ class AppViewModel @Inject constructor(
         if (!canPrepareSend(walletGeneration)) throw CancellationException("Payment preparation owner changed")
     }
 
-    private fun canPrepareSend(walletGeneration: Long?): Boolean {
+    private suspend fun canPrepareSend(walletGeneration: Long?): Boolean {
+        val generation = sendStateGeneration
+        val preparation = paymentRequestPreparation.value
+        val payment = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        return isWalletReadyForSend(walletGeneration) &&
+            generation == sendStateGeneration && preparation === paymentRequestPreparation.value &&
+            synchronized(contactPaymentContextLock) { activeContactPaymentContext } == payment
+    }
+
+    private suspend fun isWalletReadyForSend(walletGeneration: Long?): Boolean {
+        currentCoroutineContext().ensureActive()
         if (!connectionRecovery.isCurrentGeneration(walletGeneration)) return false
-        return try {
-            !keychain.hasPendingWalletRestore()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Throwable) {
-            Logger.warn("Unable to read required wallet recovery before payment entry", error, context = TAG)
-            false
-        }
+        val pending = runSuspendCatching { backupRepo.hasPendingWalletRestore() }
+            .onFailure {
+                Logger.warn("Unable to read required wallet recovery before payment entry", it, context = TAG)
+            }
+            .getOrDefault(true)
+        currentCoroutineContext().ensureActive()
+        return !pending && connectionRecovery.isCurrentGeneration(walletGeneration)
     }
     // endregion
 
@@ -7348,14 +7525,13 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun showSheet(sheetType: Sheet, canPresent: () -> Boolean = { true }) {
-        if (!canPresent()) return
-        timedSheetManager.cancelPendingCheck()
-        if (sheetType !== paymentRequestPreparation.value?.sheet) clearPaymentRequestPreparation()
+    fun showSheet(sheetType: Sheet, canPresent: suspend () -> Boolean = { true }) {
         val previousJob = sheetTransitionJob
         transitionSheet = sheetType
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             if (!canPresent()) return@launch
+            timedSheetManager.cancelPendingCheck()
+            if (sheetType !== paymentRequestPreparation.value?.sheet) clearPaymentRequestPreparation()
             receiveSheetContext = null
             if (_currentSheet.value != null && !replacesSubscriptionReview(sheetType)) {
                 val replacesTimedSheet = _currentSheet.value is Sheet.TimedSheet
@@ -7619,7 +7795,11 @@ class AppViewModel @Inject constructor(
 
     private fun onConfirmPay() {
         Logger.debug("Payment checks confirmed, proceeding…", context = TAG)
-        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive) return
+        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive ||
+            !_sendUiState.value.isHardwareFeeReady
+        ) {
+            return
+        }
 
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) {
@@ -8194,15 +8374,15 @@ class AppViewModel @Inject constructor(
         tags: ImmutableList<String>,
     ) {
         val walletGeneration = connectionRecovery.currentGeneration()
-        if (!canPrepareSend(walletGeneration)) return
+        if (!connectionRecovery.isCurrentGeneration(walletGeneration)) return
         if (!_isRetryingInitialSubscriptionPayment.compareAndSet(false, true)) {
             toast(PaykitPaymentRequestError.OperationInProgress)
             return
         }
-        clearActiveContactPaymentContext()
         viewModelScope.launch {
             try {
                 if (!canPrepareSend(walletGeneration)) return@launch
+                clearActiveContactPaymentContext()
                 refreshIncomingPaykitPaymentRequests(forceFresh = true)
                 if (!canPrepareSend(walletGeneration)) return@launch
                 val request = paykitPaymentRequestRepo.pendingRequest(id) ?: run {
@@ -8676,6 +8856,7 @@ private data class DeferredScan(
     val allowPubkyAuth: Boolean,
     val suppressQuickPay: Boolean,
     val walletGeneration: Long?,
+    val admission: Deferred<Boolean>,
 ) {
     val isPubkyAuth: Boolean get() = allowPubkyAuth && PubkyAuthRequest.isProtocolUrl(data)
 }
@@ -8746,6 +8927,9 @@ data class SendUiState(
             it > 0u && !paykitUsesUsdt && payMethod == SendMethod.LIGHTNING && lnurl == null
         }
 
+    val isHardwareFeeReady: Boolean
+        get() = hardwareWalletId == null || (!onchainFeeUi.isLoading && !onchainFeeUi.requiresRefresh)
+
     val isAmountEditable: Boolean
         get() = !isPaymentRequest && fixedLightningAmount == null
 
@@ -8760,6 +8944,7 @@ data class OnchainFeeUi(
     val sats: Long? = null,
     val estimates: ImmutableMap<FeeRate, Long> = persistentMapOf(),
     val isLoading: Boolean = false,
+    val requiresRefresh: Boolean = false,
 )
 
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
