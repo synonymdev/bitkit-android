@@ -9,14 +9,13 @@
     default stack with the marketplace, payment-requests and lnurl-pay profiles; the provider running against
     bitkit-docker's LND and funded; adb reverse for 6286, 6287, 6288, 15411, 15412, 60001, 23735, 23000 and 23010.
     The wallet has a spending balance from an LNURL channel with bitkit-docker's LND and an empty savings balance,
-    a Pubky profile on the local homeserver, and the provider's pubky saved as a contact.
+    a Pubky profile on the local homeserver, and both the provider's and the fixture-issuer's pubkys saved as contacts.
     The contact is bitkit-docker's fixture-issuer, which publishes only a btc-regtest-p2wpkh endpoint.
   </description>
   <actions>
     <action>Verify the savings balance (tag "ActivitySavings") shows 0 and the spending balance (tag "ActivitySpending") is above 25 000</action>
-    <action>Tap Send (tag "Send"), then Enter Manually (tag "RecipientManual")</action>
-    <action>Type the fixture-issuer's pubky (from bitkit-docker's fixture-issuer /health) and tap Continue (tag "AddressContinue")</action>
-    <action>Verify the Add Contact screen is visible and tap Pay (tag "AddContactPay")</action>
+    <action>Tap Send (tag "Send"), then Contact (tag "RecipientContact")</action>
+    <action>Verify the contact list shows both the fixture-issuer and the provider, and tap the fixture-issuer (tag "SendContact_" followed by its pubky)</action>
     <action>Verify the amount screen (tag "send_amount_screen") offers SPENDING as the source</action>
     <action>Enter 20000 and tap Continue (tag "ContinueAmount")</action>
     <action>Verify the Confirm screen (tag "SendConfirm") is visible, then tap Show Details (tag "SendConfirmToggleDetails")</action>
