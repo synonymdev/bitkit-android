@@ -435,6 +435,17 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recovery leaves a ledger behind the floor unwritten`() = test {
+        sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
+        accountingState = fixtures.accountingState(revision = 4uL, requiresReconciliation = true)
+
+        sut.recover(identity)
+
+        assertTrue(reconciliations.isEmpty())
+        assertEquals(5uL, sut.localState(identity).ledgerRevisionFloor)
+    }
+
+    @Test
     fun `a missing ledger after one was read keeps the request manual`() = test {
         sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
         accountingState = null
