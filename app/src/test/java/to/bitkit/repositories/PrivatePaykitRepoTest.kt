@@ -196,6 +196,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever { paymentRequestRepo.refreshEligibleTarget(any()) }
             .thenReturn(Result.success(PaykitPaymentRequestTargetCheck(null, isComplete = true)))
         whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever(coreService.getAddressUsage(any())).doSuspendableAnswer {
+            it.getArgument<Collection<String>>(0).associateWith { address ->
+                Result.success(coreService.isAddressUsed(address))
+            }
+        }
 
         PublicPaykitRepo.lightningRouteHintsValidator = { true }
         App.currentActivity = CurrentActivity().also { it.onActivityStarted(mock<Activity>()) }
@@ -4257,6 +4262,32 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val request = paymentRequest(listOf(MethodId.P2wpkh.rawValue))
         assertEquals(PublicPaykitPaymentResult.NotOpened, sut.beginPaymentRequest(request).getOrThrow())
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `private endpoint candidates use one batch and reject failed address checks`() = test {
+        whenever {
+            paykitSdkService.prepareAndResolvePrivatePaymentRequest(CONTACT_KEY, "request-id", null)
+        }.thenReturn(
+            resolution(
+                resolvedEndpoint(MethodId.P2wpkh, PRIVATE_ADDRESS),
+                resolvedEndpoint(MethodId.P2tr, OTHER_PRIVATE_ADDRESS),
+                version = null,
+            ),
+        )
+        val request = paymentRequest(listOf(MethodId.P2wpkh.rawValue, MethodId.P2tr.rawValue))
+        for (firstUsage in listOf(Result.success(true), Result.failure(AppError("Usage unavailable")))) {
+            doSuspendableAnswer {
+                mapOf(PRIVATE_ADDRESS to firstUsage, OTHER_PRIVATE_ADDRESS to Result.success(false))
+            }.whenever(coreService).getAddressUsage(listOf(PRIVATE_ADDRESS, OTHER_PRIVATE_ADDRESS))
+
+            val result = assertIs<PublicPaykitPaymentResult.Opened>(sut.beginPaymentRequest(request).getOrThrow())
+
+            assertEquals(listOf(OTHER_PRIVATE_ADDRESS), result.endpoints.map { it.value })
+        }
+        verify(coreService, times(2)).getAddressUsage(listOf(PRIVATE_ADDRESS, OTHER_PRIVATE_ADDRESS))
+        verify(coreService, never()).isAddressUsed(any())
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 

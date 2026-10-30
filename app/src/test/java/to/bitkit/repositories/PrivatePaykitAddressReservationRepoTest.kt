@@ -1,6 +1,8 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.TransactionDetails
+import com.synonym.bitkitcore.TxOutput
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -10,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
+import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
@@ -17,6 +20,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.async.ServiceQueue
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.PrivatePaykitReservationData
@@ -505,12 +509,68 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
                 ),
             ),
         )
-        whenever(coreService.isAddressUsed(PRIVATE_ADDRESS)).thenReturn(false)
+        whenever(coreService.getAddressUsage(listOf(PRIVATE_ADDRESS)))
+            .thenReturn(mapOf(PRIVATE_ADDRESS to Result.success(false)))
         whenever(lightningRepo.getAddressBalance(PRIVATE_ADDRESS)).thenReturn(Result.success(100_000u))
 
         val result = sut.contactsWithUsedReservedAddresses()
 
         assertEquals(listOf(CONTACT_KEY), result)
+    }
+
+    @Test
+    fun `contact usage checks share transaction history and preserve activity and ldk matches`() = test {
+        val addresses = listOf("activity-address", "secondary-address", "unused-address", "ldk-address")
+        val keys = addresses.indices.map { "contact-$it" }
+        reservationData.value = PrivatePaykitReservationData(
+            contactAssignments = keys.zip(addresses).mapIndexed { index, (key, address) ->
+                key to PrivatePaykitStoredAssignmentData("nativeSegwit", index, address)
+            }.toMap(),
+        )
+        whenever(coreService.isAddressUsed(any())).thenCallRealMethod()
+        whenever(coreService.getAddressUsage(any())).thenCallRealMethod()
+        whenever(lightningRepo.getAddressBalance(any())).thenReturn(Result.success(0u))
+        whenever(lightningRepo.getAddressBalance("ldk-address")).thenReturn(Result.success(1u))
+        val binding = Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt")
+        val activityUsage = binding.getMethod("isAddressUsed", String::class.java)
+        val transactionHistory = binding.getMethod("getAllTransactionDetails")
+        val details = TransactionDetails(
+            "wallet0",
+            "batch-payment",
+            2,
+            emptyList(),
+            listOf("receive-address", "secondary-address").map { address ->
+                mock<TxOutput> { on { scriptpubkeyAddress }.thenReturn(address) }
+            },
+        )
+        var historyReads = 0
+        var historyUnavailable = false
+        var transactions = listOf(details)
+        ServiceQueue.CORE.background {
+            mockStatic(binding).use { native ->
+                addresses.forEach { address ->
+                    native.`when`<Boolean> { activityUsage.invoke(null, address) }
+                        .thenReturn(address == "activity-address")
+                }
+                native.`when`<List<TransactionDetails>> { transactionHistory.invoke(null) }.thenAnswer {
+                    historyReads++
+                    check(!historyUnavailable) { "Transaction history unavailable" }
+                    transactions
+                }
+
+                assertEquals(listOf(keys[0], keys[1], keys[3]), sut.contactsWithUsedReservedAddresses())
+                assertEquals(1, historyReads)
+                transactions = emptyList()
+                assertEquals(listOf(keys[0], keys[3]), sut.contactsWithUsedReservedAddresses())
+                assertEquals(2, historyReads)
+                historyUnavailable = true
+                assertEquals(listOf(keys[0]), sut.contactsWithUsedReservedAddresses())
+                assertEquals(3, historyReads)
+            }
+        }
+        verify(lightningRepo, never()).getAddressBalance("activity-address")
+        verify(lightningRepo, times(1)).getAddressBalance("secondary-address")
+        verify(lightningRepo, times(2)).getAddressBalance("ldk-address")
     }
 
     @Test

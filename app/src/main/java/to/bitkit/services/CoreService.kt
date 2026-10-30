@@ -183,6 +183,28 @@ class CoreService @Inject constructor(
         }
     }
 
+    /** Checks each address using activity matches and at most one stored transaction history read. */
+    suspend fun getAddressUsage(addresses: Collection<String>): Map<String, Result<Boolean>> =
+        ServiceQueue.CORE.background {
+            val activityUsage = addresses.distinct().associateWith { address ->
+                runSuspendCatching { com.synonym.bitkitcore.isAddressUsed(address = address) }
+            }
+            val unusedAddresses = activityUsage.filterValues { it.getOrNull() == false }.keys
+            if (unusedAddresses.isEmpty()) return@background activityUsage
+
+            val usedOutputAddresses = runSuspendCatching { usedTransactionOutputAddresses(unusedAddresses) }
+            activityUsage.mapValues { (address, usage) ->
+                if (usage.getOrNull() == false) usedOutputAddresses.map { address in it } else usage
+            }
+        }
+
+    private fun usedTransactionOutputAddresses(addresses: Set<String>): Set<String> =
+        getAllTransactionDetails().asSequence()
+            .flatMap { it.outputs.asSequence() }
+            .mapNotNull { it.scriptpubkeyAddress }
+            .filter { it in addresses }
+            .toSet()
+
     suspend fun decode(input: String): Scanner = ServiceQueue.CORE.background {
         com.synonym.bitkitcore.decode(input)
     }

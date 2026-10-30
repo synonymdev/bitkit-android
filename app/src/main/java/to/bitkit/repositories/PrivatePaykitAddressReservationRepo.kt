@@ -320,9 +320,16 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     suspend fun contactsWithUsedReservedAddresses(): List<String> = withContext(ioDispatcher) {
         val assignments = locked { it.contactAssignments.map { entry -> entry.key to entry.value } }
-        assignments.mapNotNull { (publicKey, assignment) ->
+        val addresses = assignments.mapNotNull { (publicKey, assignment) ->
             val address = resolvedAddress(assignment).getOrNull() ?: return@mapNotNull null
-            val isUsed = runSuspendCatching { isReservedAddressUsed(address) }
+            publicKey to address
+        }
+        if (addresses.isEmpty()) return@withContext emptyList()
+        val coreUsage = coreService.getAddressUsage(addresses.map { it.second })
+        addresses.mapNotNull { (publicKey, address) ->
+            val isUsed = runSuspendCatching {
+                coreUsage.getValue(address).getOrThrow() || hasAddressBalance(address)
+            }
                 .onFailure {
                     Logger.warn(
                         "Failed to check private Paykit address usage for " +
@@ -338,6 +345,10 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     private suspend fun isReservedAddressUsed(address: String): Boolean {
         if (coreService.isAddressUsed(address)) return true
+        return hasAddressBalance(address)
+    }
+
+    private suspend fun hasAddressBalance(address: String): Boolean {
         if (!lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) return false
         return lightningRepo.getAddressBalance(address).getOrDefault(0u) > 0u
     }

@@ -2247,6 +2247,8 @@ class PrivatePaykitRepo @Inject constructor(
         allowUsedOnchainAddress: Boolean,
     ): List<Endpoint> {
         val payable = publicPaykitRepo.payableEndpoints(endpoints)
+        val onchainAddresses = payable.filter { it.methodId.isOnchain && !allowUsedOnchainAddress }.map { it.value }
+        val addressUsage = if (onchainAddresses.isEmpty()) emptyMap() else coreService.getAddressUsage(onchainAddresses)
         val attemptedHashes = attemptedOutboundBolt11PaymentHashes()
         val staleLightningHashes = mutableSetOf<String>()
         val reusable = payable.filter { endpoint ->
@@ -2272,7 +2274,7 @@ class PrivatePaykitRepo @Inject constructor(
                     }
                 }
                 endpoint.methodId.isOnchain && !allowUsedOnchainAddress -> {
-                    val isUsed = runSuspendCatching { coreService.isAddressUsed(endpoint.value) }
+                    val isUsed = runSuspendCatching { addressUsage.getValue(endpoint.value).getOrThrow() }
                         .onFailure {
                             Logger.warn(
                                 "Failed to check private Paykit endpoint usage for '${redacted(publicKey)}'",
