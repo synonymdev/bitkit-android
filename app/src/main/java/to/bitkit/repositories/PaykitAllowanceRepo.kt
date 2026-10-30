@@ -73,6 +73,7 @@ sealed class PaykitAllowanceError(message: String) : AppError(message) {
     data object Unavailable : PaykitAllowanceError("The allowance is unavailable")
     data object PaymentAlreadyRecorded : PaykitAllowanceError("A payment for this request is already in progress")
     data object PaymentListPending : PaykitAllowanceError("The payee has not published a new payment list yet")
+    data object LedgerBehind : PaykitAllowanceError("The allowance ledger is behind one this wallet has read")
 }
 
 /**

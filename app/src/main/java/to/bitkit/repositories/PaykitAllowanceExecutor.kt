@@ -266,13 +266,13 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     /**
      * False when [ledger] is older than one this wallet has read, or missing after one was read; otherwise raises the
-     * floor to it.
+     * floor to it. A floor that cannot be saved throws, so nothing acts on that ledger.
      */
     private suspend fun acceptsLedger(ledger: AllowanceAccountingState?, identity: String): Boolean {
         val floor = localState(identity).ledgerRevisionFloor
         if (ledger == null) return floor == null
         if (floor != null && ledger.revision <= floor) return ledger.revision == floor
-        updateLocalState(identity) { state ->
+        updateLocalStateDurably(identity) { state ->
             state.copy(ledgerRevisionFloor = maxOf(state.ledgerRevisionFloor ?: 0uL, ledger.revision))
         }
         return true
@@ -284,10 +284,12 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     /**
      * Brings the SDK ledger to a reconciled state. A wallet with no ledger attests an empty history: it has never paid
-     * through an Allowance. After a restore, outcomes come from the journal and the node.
+     * through an Allowance. After a restore, outcomes come from the journal and the node. Fails with
+     * [PaykitAllowanceError.LedgerBehind], writing nothing, when the ledger is behind one this wallet has read.
      */
     suspend fun ensureReconciled(identity: String): AllowanceAccountingState = withContext(ioDispatcher) {
         val current = paykitSdkService.allowanceAccountingState()
+        if (!acceptsLedger(current, identity)) throw PaykitAllowanceError.LedgerBehind
         if (current != null && !current.requiresReconciliation) return@withContext current
 
         val history = current?.history ?: AllowanceAccountingHistory(emptyList(), emptyList(), emptyList())
@@ -304,6 +306,7 @@ class PaykitAllowanceExecutor @Inject constructor(
             ),
         )
         Logger.info("Reconciled Paykit allowance accounting with '${outcomes.size}' verified outcomes", context = TAG)
+        if (!acceptsLedger(reconciled, identity)) throw PaykitAllowanceError.LedgerBehind
         reconciled
     }
 
@@ -319,14 +322,17 @@ class PaykitAllowanceExecutor @Inject constructor(
     private suspend fun recoverOpenAttempts(identity: String) {
         runSuspendCatching {
             // No ledger means nothing was ever admitted, so there is nothing to recover.
-            val current = paykitSdkService.allowanceAccountingState() ?: return@runSuspendCatching
-            // A ledger behind this wallet stays as it is until it catches up; recovery would write over it.
-            if (!acceptsLedger(current, identity)) {
-                Logger.info("Skipped allowance recovery: the ledger is behind this wallet", context = TAG)
-                return@runSuspendCatching
-            }
+            paykitSdkService.allowanceAccountingState() ?: return@runSuspendCatching
             val state = ensureReconciled(identity)
-            if (!acceptsLedger(state, identity)) return@runSuspendCatching
+            // A failed attempt paid nothing, so it stops counting, also when the journal no longer holds it.
+            val failedIds = state.history.occurrences.flatMap { it.attempts }
+                .filter { it.status == PaymentExecutionStatus.FAILED }
+                .mapTo(mutableSetOf()) { it.attemptId }
+            if (localState(identity).automaticSpends.any { it.attemptId in failedIds }) {
+                updateLocalState(identity) { local ->
+                    local.copy(automaticSpends = local.automaticSpends.filterNot { it.attemptId in failedIds })
+                }
+            }
             // The ledger keeps every attempt, while the journal is trimmed and an iOS backup carries no totals.
             updateLocalState(identity) { it.withLedgerAutoPaid(state.history) }
             // One read of the journal per pass: each attempt below is settled from this snapshot.
@@ -360,16 +366,7 @@ class PaykitAllowanceExecutor @Inject constructor(
     }
 
     private suspend fun syncSettledJournal(attemptId: String, stage: Stage, identity: String) {
-        val current = localState(identity).journal.firstOrNull { it.attemptId == attemptId }
-        if (current == null) {
-            // The journal is trimmed, but a failed attempt's spend must not keep counting.
-            if (stage == Stage.FAILED && localState(identity).automaticSpends.any { it.attemptId == attemptId }) {
-                updateLocalState(identity) { state ->
-                    state.copy(automaticSpends = state.automaticSpends.filterNot { it.attemptId == attemptId })
-                }
-            }
-            return
-        }
+        val current = localState(identity).journal.firstOrNull { it.attemptId == attemptId } ?: return
         if (current.stage == Stage.SUCCEEDED) return
         if (current.stage == Stage.FAILED) {
             // A failed automatic attempt still holding its list could not save the cleared claim; give it back now.
@@ -543,12 +540,7 @@ class PaykitAllowanceExecutor @Inject constructor(
 
         try {
             runSuspendCatching {
-                val isLedgerCurrent = acceptsLedger(paykitSdkService.allowanceAccountingState(), identity) &&
-                    acceptsLedger(ensureReconciled(identity), identity)
-                if (!isLedgerCurrent) {
-                    Logger.info("Kept an incoming request manual: the ledger is behind this wallet", context = TAG)
-                    return@runSuspendCatching PaykitAllowanceAutoPayResult.MANUAL
-                }
+                ensureReconciled(identity)
                 // Survive a cancelled caller: stopping after the acceptance would leave the request unpaid.
                 withContext(NonCancellable) { admitAndPay(request, allowances, identity) }
             }.getOrElse {
@@ -711,17 +703,16 @@ class PaykitAllowanceExecutor @Inject constructor(
             throw it
         }
 
+        // Begin fetches nothing, so pull the link first: an End or a cancellation must be seen before the handoff.
+        runSuspendCatching {
+            paykitSdkService.receivePrivateMessages(request.counterparty)
+        }.onFailure { Logger.warn("Failed to receive private messages before an allowance payment", it, context = TAG) }
         // An End saved while this attempt was admitted stops it before the handoff.
         if (PaykitAllowance.key(request.counterparty, prepared.allowanceId) in localState(identity).endedAllowanceIds) {
             Logger.info("Kept an incoming request manual: its allowance has ended", context = TAG)
             record(prepared.attemptId, PaymentOutcome.FAILED, identity)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
-
-        // Begin fetches nothing, so pull the link first: an End or a cancellation must be seen before the handoff.
-        runSuspendCatching {
-            paykitSdkService.receivePrivateMessages(request.counterparty)
-        }.onFailure { Logger.warn("Failed to receive private messages before an allowance payment", it, context = TAG) }
         val handoff = runSuspendCatching {
             paykitSdkService.beginPaymentExecution(
                 attemptId = prepared.attemptId,

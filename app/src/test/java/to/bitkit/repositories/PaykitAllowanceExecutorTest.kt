@@ -447,6 +447,18 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a floor that cannot be saved keeps the request manual`() = test {
+        accountingState = fixtures.accountingState(revision = 7uL)
+        failSave = { it.contains("\"ledgerRevisionFloor\":7") }
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verifyNoInteractions(payer)
+    }
+
+    @Test
     fun `an automatic payment raises the ledger floor`() = test {
         accountingState = fixtures.accountingState(revision = 7uL)
 
@@ -651,6 +663,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
     @Test
     fun `unsaved journal stops the attempt before anything is consumed`() = test {
+        sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 1uL) }
         failSave = { true }
 
         val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
