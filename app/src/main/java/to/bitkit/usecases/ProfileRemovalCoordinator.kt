@@ -24,6 +24,7 @@ class ProfileRemovalConfirmation internal constructor(
     internal val deletion: PubkyProfileDeletion?,
     internal val localOnly: Boolean,
     internal val reviewCeiling: AtomicReference<PubkyProfileDeletion?> = AtomicReference(deletion),
+    internal val privateWithdrawalAcknowledged: Boolean = false,
 ) {
     internal val used = AtomicBoolean(false)
     internal val failure = AtomicReference<ProfileRemovalFailure?>(null)
@@ -95,7 +96,8 @@ class ProfileRemovalCoordinator @Inject constructor(
             previous.attemptId,
             deletion,
             previous.localOnly,
-            previous.reviewCeiling
+            previous.reviewCeiling,
+            privateWithdrawalAcknowledged = true,
         )
     }
 
@@ -128,7 +130,7 @@ class ProfileRemovalCoordinator @Inject constructor(
         sharingRepo.withProfileRemoval {
             pubkyRepo.performProfileRemoval(confirmation.owner, confirmation.attemptId) {
                 var localCompletionStarted = false
-                var privateWithdrawalAcknowledged = false
+                var privateWithdrawalAcknowledged = confirmation.privateWithdrawalAcknowledged
                 var removalMayHaveStarted = removalStore.pendingAttempt() != null
                 try {
                     check(confirmation.deletion == null || confirmation.reviewCeiling.get() === confirmation.deletion) {
@@ -139,8 +141,10 @@ class ProfileRemovalCoordinator @Inject constructor(
                         removalMayHaveStarted = true
                         removalStore.begin(confirmation.attemptId)
                         if (!confirmation.localOnly) {
-                            privatePaykitRepo.removePublishedEndpointsForProfileRemoval().getOrThrow()
-                            privateWithdrawalAcknowledged = true
+                            if (!privateWithdrawalAcknowledged) {
+                                privatePaykitRepo.removePublishedEndpointsForProfileRemoval().getOrThrow()
+                                privateWithdrawalAcknowledged = true
+                            }
                             pubkyRepo.removeBitkitPaymentEndpoints().getOrThrow()
                             confirmation.deletion?.let { pubkyRepo.deleteProfile(it).getOrThrow() }
                             pubkyRepo.signOutForProfileRemoval()

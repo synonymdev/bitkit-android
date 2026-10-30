@@ -349,6 +349,26 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `successive confirmed reviews retain the original private withdrawal acknowledgement`() = test {
+        val firstFailure = failRemoval(deletion)
+        val second = sut.reviewAgain(firstFailure).getOrThrow()
+        val secondFailure = assertIs<ProfileRemovalFailure>(sut.remove(second).exceptionOrNull())
+        assertTrue(secondFailure.canReview)
+        assertEquals(firstFailure.confirmation.attemptId, second.attemptId)
+
+        val third = sut.reviewAgain(secondFailure).getOrThrow()
+        whenever(pubky.deleteProfile(deletion)).thenReturn(Result.success(Unit))
+
+        assertSame(ended, sut.remove(third).getOrThrow())
+        assertEquals(second.attemptId, third.attemptId)
+        verify(privateRepo, times(1)).removePublishedEndpointsForProfileRemoval()
+        verify(pubky, times(3)).prepareProfileDeletion(original)
+        verify(pubky, times(3)).deleteProfile(deletion)
+        verify(pubky, times(1)).signOutForProfileRemoval()
+        assertNull(store.pendingAttempt())
+    }
+
+    @Test
     fun `review rejects a later profile revision instead of replacing original intent`() = test {
         val failure = failRemoval(deletion)
         whenever(pubky.prepareProfileDeletion(original)).thenReturn(

@@ -68,6 +68,7 @@ import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.UsdtPreference
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
@@ -75,12 +76,15 @@ import to.bitkit.models.PaykitUsdt
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitPreparedPrivateContactPayment
 import to.bitkit.services.PaykitPrivateContactPaymentResolution
+import to.bitkit.services.PaykitProfileDeletionSnapshot
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkBackupExport
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.usecases.ProfileRemovalCoordinator
+import to.bitkit.usecases.ProfileRemovalFailure
 import to.bitkit.utils.AppError
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -2850,6 +2854,91 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(cacheData.value.cleanupPending)
         verify(paykitSdkService, never()).clearPrivatePaymentLists(any(), anyOrNull())
         verify(publicPaykitRepo, never()).syncPaykitApp()
+    }
+
+    @Test
+    fun `review preserves acknowledged withdrawal after profile deletion fails with private sharing disabled`() = test {
+        reviewAfterAcknowledgedWithdrawal(failPublicWithdrawal = false)
+    }
+
+    @Test
+    fun `review preserves acknowledged withdrawal when public withdrawal disables sharing then fails`() = test {
+        reviewAfterAcknowledgedWithdrawal(failPublicWithdrawal = true)
+    }
+
+    private suspend fun reviewAfterAcknowledgedWithdrawal(failPublicWithdrawal: Boolean) {
+        val owner = PubkyProfileOwner(PubkySignIn(OWN_KEY, 1), 1)
+        val ended = PubkyProfileOwner(null, 2)
+        var current = owner
+        var privatePaymentsEnabled = true
+        var failOnce = true
+        val deletion = PubkyProfileDeletion(
+            owner,
+            1,
+            PaykitProfileDeletionSnapshot(OWN_KEY, "revision", listOf(contactRecord(CONTACT_KEY))),
+        )
+        val pubky = mock<PubkyRepo>()
+        val sharing = mock<ContactPaymentSettingsRepo>()
+        whenever(pubky.profileOwner()).thenAnswer { current }
+        whenever(pubky.isProfileOwnerCurrent(any())).thenAnswer { it.getArgument<PubkyProfileOwner>(0) === current }
+        whenever(pubky.prepareProfileDeletion(owner)).thenReturn(Result.success(deletion))
+        whenever(sharing.withProfileRemoval<PubkyProfileOwner>(any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> PubkyProfileOwner>(0).invoke()
+        }
+        whenever(pubky.performProfileRemoval(any(), any(), any())).doSuspendableAnswer {
+            val admittedOwner = it.getArgument<PubkyProfileOwner>(0)
+            val attempt = it.getArgument<String>(1)
+            val operation = it.getArgument<suspend () -> Unit>(2)
+            runSuspendCatching {
+                check(admittedOwner === current)
+                profileRemovalStore.withAccess(attempt) { operation() }
+                current
+            }
+        }
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        whenever(paykitSdkService.clearPrivatePaymentLists(listOf(CONTACT_KEY))).thenAnswer {
+            if (!privatePaymentsEnabled) {
+                null
+            } else {
+                privateListDeliveryReport().copy(
+                    cleared = listOf(PrivatePaymentListSyncChange(CONTACT_KEY, 17uL, null)),
+                    acknowledged = listOf(PrivatePaymentListAcknowledgement(CONTACT_KEY, 17uL)),
+                )
+            }
+        }
+        whenever(pubky.removeBitkitPaymentEndpoints()).doSuspendableAnswer {
+            privatePaymentsEnabled = false
+            if (failPublicWithdrawal && failOnce) {
+                failOnce = false
+                Result.failure<Unit>(IllegalStateException("public withdrawal response lost"))
+            } else {
+                Result.success(Unit)
+            }
+        }
+        whenever(pubky.deleteProfile(deletion)).doSuspendableAnswer {
+            if (failOnce) {
+                failOnce = false
+                Result.failure<Unit>(IllegalStateException("profile deletion response lost"))
+            } else {
+                Result.success(Unit)
+            }
+        }
+        whenever(pubky.finishProfileRemovalLocally()).thenAnswer { current = ended }
+        val coordinator = ProfileRemovalCoordinator(pubky, sut, sharing, profileRemovalStore)
+        val original = coordinator.prepareDeletion(owner).getOrThrow()
+        val failure = assertIs<ProfileRemovalFailure>(coordinator.remove(original).exceptionOrNull())
+        assertTrue(failure.canReview)
+        assertFalse(privatePaymentsEnabled)
+        assertEquals(original.attemptId, profileRemovalStore.pendingAttempt())
+
+        val reviewed = coordinator.reviewAgain(failure).getOrThrow()
+        verify(paykitSdkService, times(1)).clearPrivatePaymentLists(listOf(CONTACT_KEY))
+        assertEquals(original.attemptId, reviewed.attemptId)
+        assertEquals(ended, coordinator.remove(reviewed).getOrThrow())
+        assertNull(profileRemovalStore.pendingAttempt())
+        verify(paykitSdkService, times(1)).clearPrivatePaymentLists(listOf(CONTACT_KEY))
+        verify(pubky, times(2)).prepareProfileDeletion(owner)
+        verify(pubky, times(1)).signOutForProfileRemoval()
     }
 
     @Test
