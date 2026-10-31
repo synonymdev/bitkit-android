@@ -904,6 +904,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private fun stubSettingsStore() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
+        whenever(settingsStore.areAllowancesEnabled).thenReturn(flowOf(true))
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsData.value = transform(settingsData.value)

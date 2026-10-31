@@ -1,0 +1,16 @@
+<journey name="Allowances Turned Off">
+  <description>
+    Allowances can be turned off from Dev Settings. With them off the Subscriptions screen shows only
+    the Overview and Payments tabs, and a request covered by an Active allowance is not paid
+    automatically: it opens as an ordinary Payment Request. Turning them back on shows the tab again.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on both instances with an Active allowance, per set-and-accept.xml</action>
+    <action>On the payer instance, turn dev mode on by tapping the app version in Settings, Support five times, open Dev Settings and turn "Enable Allowances" off (identifier "AllowancesToggle")</action>
+    <action>Open the drawer menu, tap Subscriptions and verify only the Overview and Payments tabs show, with no Allowances tab (identifier "Tab-allowances")</action>
+    <action>On the payee instance, send the payer a one-time Payment Request for $2 with the note "AllowancesOff"</action>
+    <action>On the payer instance, verify it is not paid: no "Payment Executed" notification, and the request opens as an ordinary Payment Request sheet, also listed under the bell (identifier "PaymentRequestsBell")</action>
+    <action>Dismiss that request</action>
+    <action>Turn "Enable Allowances" back on in Dev Settings, open Subscriptions and verify the Allowances tab shows the payee's Active row</action>
+  </actions>
+</journey>

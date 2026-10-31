@@ -1382,13 +1382,16 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    /** [admit] runs under the SDK lock right before the acceptance, after any wait for the lock, and may refuse it. */
     suspend fun acceptPaymentRequestAutomatically(
         scope: PaymentRequestScope,
         selection: AllowanceSelectionInput,
         checks: PaymentExecutionChecks,
+        admit: suspend () -> Unit = {},
     ): AllowanceAssociationRecord {
         isSetup.await()
         return operationLock.withLock {
+            admit()
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.acceptPaymentRequestAutomatically(scope, selection, checks) }
             }
