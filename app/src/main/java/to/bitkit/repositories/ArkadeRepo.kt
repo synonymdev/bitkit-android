@@ -389,12 +389,13 @@ class ArkadeRepo @Inject constructor(
                     txType = PaymentType.RECEIVED,
                     status = PaymentState.SUCCEEDED,
                     value = entry.amount.toULong(),
-                    invoice = "",
+                    // No invoice reaches the wallet: the payer paid the LNURL server's. The activity store needs one.
+                    invoice = _state.value.lightningAddress ?: id,
                     timestamp = (entry.createdAt / 1000).toULong(),
                     fee = 0uL,
                     message = "",
                 )
-                activityRepo.get().upsertActivity(Activity.Lightning(activity))
+                activityRepo.get().upsertActivity(Activity.Lightning(activity)).getOrNull() ?: return@forEach
                 Logger.info("Recorded Arkade receive '$id' of '${entry.amount}' sats", context = TAG)
                 _nodeEvents.emit(Event.PaymentReceived(id, id, entry.amount.toULong() * MSATS_PER_SAT, emptyList()))
             }

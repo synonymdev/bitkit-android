@@ -127,6 +127,7 @@ class ArkadeRepoTest : BaseUnitTest() {
         verify(activityRepo).upsertActivity(activity.capture())
         val received = assertIs<Activity.Lightning>(activity.firstValue).v1
         assertEquals(3_980uL, received.value)
+        assertTrue(received.invoice.isNotEmpty())
     }
 
     @Test
