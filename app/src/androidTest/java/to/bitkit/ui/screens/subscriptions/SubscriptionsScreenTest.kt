@@ -2,6 +2,7 @@
 
 package to.bitkit.ui.screens.subscriptions
 
+import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
@@ -151,5 +152,55 @@ class SubscriptionsScreenTest {
 
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertIsDisplayed().performClick()
         assertTrue(requestedPayment)
+    }
+
+    @Test
+    fun hiddenAllowancesLeaveOverviewAndPaymentsTabs() {
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SubscriptionsContent(
+                    subscriptions = persistentListOf(),
+                    contacts = persistentListOf(),
+                    acceptedAt = { null },
+                    now = Instant.parse("2027-01-15T08:00:00Z"),
+                    onBack = {},
+                    initialTab = SubscriptionTab.Payments,
+                    pendingPaymentRequestCount = 0,
+                    showAllowances = false,
+                    onSubscription = {},
+                    onCreateSubscription = {},
+                    paymentsContent = { Text("Payments content") },
+                )
+            }
+        }
+
+        composeTestRule.onAllNodesWithText("Allowances").assertCountEquals(0)
+        composeTestRule.onNodeWithText("Overview").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Payments content").assertIsDisplayed()
+    }
+
+    @Test
+    fun hiddenAllowancesTabFallsBackToOverview() {
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SubscriptionsContent(
+                    subscriptions = persistentListOf(),
+                    contacts = persistentListOf(),
+                    acceptedAt = { null },
+                    now = Instant.parse("2027-01-15T08:00:00Z"),
+                    onBack = {},
+                    initialTab = SubscriptionTab.Allowances,
+                    pendingPaymentRequestCount = 0,
+                    showAllowances = false,
+                    onSubscription = {},
+                    onCreateSubscription = {},
+                    paymentsContent = {},
+                )
+            }
+        }
+
+        composeTestRule.onAllNodesWithText("Allowances").assertCountEquals(0)
+        composeTestRule.onNodeWithText("At the moment, you don’t have any active subscriptions from any providers.")
+            .assertIsDisplayed()
     }
 }

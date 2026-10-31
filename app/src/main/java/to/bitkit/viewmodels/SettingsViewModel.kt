@@ -244,6 +244,13 @@ class SettingsViewModel @Inject constructor(
     val isPaykitStateLoaded = settingsStore.isPaykitEnabled.map { true }
         .asStateFlow(initialValue = false)
 
+    val areAllowancesEnabled = settingsStore.areAllowancesEnabled
+        .asStateFlow(initialValue = PaykitFeatureFlags.areAllowancesEnabledByDefault)
+
+    fun setAreAllowancesEnabled(value: Boolean) {
+        viewModelScope.launch { settingsStore.setAreAllowancesEnabled(value) }
+    }
+
     val subscriptionClockOffsetDays = settingsStore.subscriptionClockOffsetDays
         .map { SubscriptionClockOffset.clampedOffsetDays(it) }
         .asStateFlow(initialValue = 0)

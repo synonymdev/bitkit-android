@@ -929,21 +929,34 @@ class AppViewModel @Inject constructor(
                 pubkyRepo.publicKey,
                 pubkyRepo.contacts,
                 pubkyRepo.contactsLoadVersion,
-                settingsStore.isPaykitEnabled.map { PaykitFeatureFlags.isUiEnabled(it) },
+                combine(
+                    settingsStore.isPaykitEnabled.map { PaykitFeatureFlags.isUiEnabled(it) },
+                    settingsStore.areAllowancesEnabled,
+                ) { isPaykitEnabled, areAllowancesEnabled -> isPaykitEnabled to areAllowancesEnabled },
                 privatePaykitRepo.isProfileDeletionInProgress,
-            ) { publicKey, contacts, contactsLoadVersion, isPaykitEnabled, deleting ->
+            ) { publicKey, contacts, contactsLoadVersion, (isPaykitEnabled, areAllowancesEnabled), deleting ->
                 PaykitContactSyncState(
                     publicKey = publicKey,
                     contactKeys = contacts.map { it.publicKey }.toSet(),
                     contactsLoaded = contactsLoadVersion > 0L,
                     isPaykitEnabled = isPaykitEnabled,
+                    areAllowancesEnabled = areAllowancesEnabled,
                 ).takeUnless { deleting }
             }
                 .distinctUntilChanged()
                 .filterNotNull()
                 .collect(::synchronizePaykitContacts)
         }
+        // The sync above collects sequentially, so turning allowances off in Dev Settings stops them here at once.
+        viewModelScope.launch {
+            settingsStore.areAllowancesEnabled
+                .distinctUntilChanged()
+                .filter { !it }
+                .collect { paykitAllowanceRepo.pause() }
+        }
     }
+
+    private suspend fun areAllowancesEnabled() = settingsStore.areAllowancesEnabled.first()
 
     private suspend fun synchronizePaykitContacts(state: PaykitContactSyncState) {
         if (!state.isPaykitEnabled || state.publicKey == null) {
@@ -978,7 +991,9 @@ class AppViewModel @Inject constructor(
         isPaymentRequestIdentityActivating = true
         val requestRefresh = try {
             paykitPaymentRequestRepo.activate(state.publicKey)
-            paykitAllowanceRepo.activate(state.publicKey)
+            if (state.areAllowancesEnabled) paykitAllowanceRepo.activate(state.publicKey)
+            // Allowances may have turned off while this activated, before the activation took effect.
+            if (!state.areAllowancesEnabled || !areAllowancesEnabled()) paykitAllowanceRepo.pause(state.publicKey)
             if (!pubkyRepo.isCurrent(signIn)) return
             paymentRequestIdentity = state.publicKey
             refreshPrivateOnlyPaykitApp("contact sync", onlyIfNeeded = !identityChanged)
@@ -1253,6 +1268,7 @@ class AppViewModel @Inject constructor(
 
     /** Automatic payments hold background Paykit work back like a manual payment submission does. */
     private suspend fun processAllowanceRequests(): Boolean {
+        if (!areAllowancesEnabled()) return false
         val finishSubmission = beginPaymentSubmission()
         return try {
             // A request whose manual sheet is open or being prepared is the user's to pay, never the allowance's.
@@ -9034,6 +9050,7 @@ private data class PaykitContactSyncState(
     val contactKeys: Set<String>,
     val contactsLoaded: Boolean,
     val isPaykitEnabled: Boolean,
+    val areAllowancesEnabled: Boolean,
 )
 
 sealed class SendEffect {
