@@ -99,27 +99,31 @@ class ArkadeRepo @Inject constructor(
             result = connect(walletIndex)
         }
         result.onFailure { Logger.error("Failed to start Arkade wallet", it, context = TAG) }
-            .onSuccess { onConnected() }
+            .onSuccess { isFirstStart -> onConnected(isFirstStart) }
+            .map { }
     }
 
-    private suspend fun connect(walletIndex: Int): Result<Unit> = runSuspendCatching {
+    /** Connects the wallet; true on the install's first start, which scans the operator for the wallet's funds. */
+    private suspend fun connect(walletIndex: Int): Result<Boolean> = runSuspendCatching {
         val restoreFile = File(Env.arkadeExitRestorePath(walletIndex))
         val backup = restoreFile.takeIf { it.exists() }?.readText()
         val startedMarker = File(Env.arkadeStartedMarkerPath(walletIndex))
-        arkadeService.connect(walletIndex, restore = !startedMarker.exists(), backup = backup)
+        val isFirstStart = !startedMarker.exists()
+        arkadeService.connect(walletIndex, restore = isFirstStart, backup = backup)
         startedMarker.apply { parentFile?.mkdirs() }.writeText(nowMillis().toString())
         if (backup != null) {
             restoreFile.delete()
             Logger.info("Imported Arkade wallet data from backup", context = TAG)
         }
+        isFirstStart
     }.onFailure { Logger.warn("Failed to connect the Arkade wallet", it, context = TAG) }
 
     // A connected wallet is ready even when its first refresh times out; the next event or refresh catches up.
-    private suspend fun onConnected() {
+    private suspend fun onConnected(isFirstStart: Boolean) {
         _state.update { it.copy(isReady = true) }
         _exitStateChanged.emit(Unit)
         refreshState()
-        runSuspendCatching { syncActivities() }
+        runSuspendCatching { syncActivities(recordsReceives = !isFirstStart) }
             .onFailure { Logger.warn("Failed to sync Arkade activities", it, context = TAG) }
         lightningAddress().onFailure { Logger.warn("Failed to get the Arkade Lightning address", it, context = TAG) }
     }
@@ -346,10 +350,14 @@ class ArkadeRepo @Inject constructor(
         .onFailure { Logger.warn("Failed to list Arkade swaps", it, context = TAG) }
         .getOrDefault(emptyList())
 
-    private suspend fun syncActivities() {
+    /**
+     * The history watch reports only what arrives while the wallet runs, so [recordsReceives] records what arrived
+     * while it was off. A restored wallet's first start skips it: its swap records come with the wallet data backup,
+     * imported on the next start, and until then a swap's claim would pass for a payment of its own.
+     */
+    private suspend fun syncActivities(recordsReceives: Boolean) {
         listSwaps().forEach { recordSwap(it) }
-        // The history watch reports only what arrives while the wallet runs, so record what arrived while it was off.
-        recordReceives(arkadeService.history())
+        if (recordsReceives) recordReceives(arkadeService.history())
     }
 
     private suspend fun onEvent(event: ArkadeEvent) {

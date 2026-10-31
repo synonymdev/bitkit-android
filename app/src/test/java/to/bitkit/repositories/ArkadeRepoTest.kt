@@ -107,7 +107,7 @@ class ArkadeRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `records a payment that arrived while the wallet was off`() = test {
+    fun `records a payment that arrived while the wallet was off, after the first start`() = test {
         whenever { arkadeService.history() }.thenReturn(
             listOf(
                 ArkadeHistoryEntry(
@@ -120,6 +120,9 @@ class ArkadeRepoTest : BaseUnitTest() {
                 )
             ),
         )
+
+        createSut().start(0)
+        verify(activityRepo, never()).upsertActivity(any())
 
         createSut().start(0)
 
