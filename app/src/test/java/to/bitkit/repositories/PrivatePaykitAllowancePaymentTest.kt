@@ -13,6 +13,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -68,6 +69,11 @@ class PrivatePaykitAllowancePaymentTest : BaseUnitTest(StandardTestDispatcher())
         whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(NOW_SECONDS))
         whenever(publicPaykitRepo.payableEndpoints(any())).thenAnswer { it.getArgument<List<Endpoint>>(0) }
         whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(coreService.getAddressUsage(any())).doSuspendableAnswer {
+            it.getArgument<Collection<String>>(0).associateWith { address ->
+                Result.success(coreService.isAddressUsed(address))
+            }
+        }
         PublicPaykitRepo.lightningRouteHintsValidator = { true }
 
         sut = PrivatePaykitRepo(

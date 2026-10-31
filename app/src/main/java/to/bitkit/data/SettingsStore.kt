@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
@@ -18,6 +19,7 @@ import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
@@ -32,6 +34,7 @@ import javax.inject.Singleton
 private val Context.settingsDataStore: DataStore<SettingsData> by dataStore(
     fileName = "settings.json",
     serializer = SettingsSerializer,
+    produceMigrations = { listOf(PaykitSharingMigration) },
 )
 
 private val Context.localSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -48,6 +51,12 @@ class SettingsStore @Inject constructor(
 
     val data: Flow<SettingsData> = store.data
     val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: true }
+
+    /** Only the Dev Settings switch stores a value, and it counts only while dev mode is on. */
+    val areAllowancesEnabled: Flow<Boolean> = combine(
+        store.data.map { it.isDevModeEnabled },
+        localStore.data.map { it[ALLOWANCES_ENABLED_KEY] },
+    ) { isDevModeEnabled, override -> PaykitFeatureFlags.areAllowancesEnabled(isDevModeEnabled, override) }
     val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
         it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
     }
@@ -63,6 +72,7 @@ class SettingsStore @Inject constructor(
                 .copy(ignoresSwitchUnitToast = false, ignoresHideBalanceToast = false)
                 .withDefaultPaykitPaymentMethods()
                 .withRequiredNativeSegwitMonitoring()
+                .withPublicSharingDisabledForRestore()
             store.updateData { current ->
                 // The received-sheet hold is armed before the backup is read, so it has to survive the
                 // settings the backup brings with it - otherwise the replayed history raises sheets.
@@ -114,6 +124,10 @@ class SettingsStore @Inject constructor(
         localStore.edit { it[PAYKIT_ENABLED_KEY] = value }
     }
 
+    suspend fun setAreAllowancesEnabled(value: Boolean) {
+        localStore.edit { it[ALLOWANCES_ENABLED_KEY] = value }
+    }
+
     internal suspend fun isPaykitUiResetDone() = localStore.data.first()[PaykitUiResetMigration.MIGRATED_KEY] == true
 
     suspend fun setPubkyProfileSetupPending(value: Boolean) {
@@ -146,7 +160,7 @@ class SettingsStore @Inject constructor(
     }
 
     suspend fun reset() {
-        store.updateData { SettingsData() }
+        store.updateData { SettingsData(hasIndependentPaykitSharing = true) }
         localStore.edit {
             it.clear()
             it[PaykitUiResetMigration.MIGRATED_KEY] = true
@@ -159,6 +173,7 @@ class SettingsStore @Inject constructor(
         private const val TAG = "SettingsStore"
         private const val MAX_LAST_USED_TAGS = 10
         internal val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
+        private val ALLOWANCES_ENABLED_KEY = booleanPreferencesKey("allowances_enabled")
         private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
         private val SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY = intPreferencesKey("subscription_clock_offset_days")
     }
@@ -182,6 +197,14 @@ internal object PaykitUiResetMigration : DataMigration<Preferences> {
     override suspend fun cleanUp() = Unit
 }
 
+internal object PaykitSharingMigration : DataMigration<SettingsData> {
+    override suspend fun shouldMigrate(currentData: SettingsData) = !currentData.hasIndependentPaykitSharing
+
+    override suspend fun migrate(currentData: SettingsData) = currentData.withIndependentPaykitSharing()
+
+    override suspend fun cleanUp() = Unit
+}
+
 @Serializable
 data class SettingsData(
     val primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
@@ -195,6 +218,8 @@ data class SettingsData(
     val hasSeenProfileIntro: Boolean = false,
     val hasSeenContactsIntro: Boolean = false,
     val hasConfirmedPublicPaykitEndpoints: Boolean = false,
+    val hasIndependentPaykitSharing: Boolean = false,
+    val legacyPublicAddressQuarantinePending: Boolean = false,
     val sharesPublicPaykitEndpoints: Boolean = false,
     val sharesPrivatePaykitEndpoints: Boolean = false,
     val publicPaykitCleanupPending: Boolean = false,
@@ -277,7 +302,28 @@ fun SettingsData.resetPin() = this.copy(
 )
 
 fun SettingsData.areContactPaymentsEnabled(): Boolean =
-    sharesPublicPaykitEndpoints || sharesPrivatePaykitEndpoints
+    sharesPrivatePaykitEndpoints
+
+fun SettingsData.withIndependentPaykitSharing(): SettingsData {
+    if (hasIndependentPaykitSharing) return this
+    val hadPublicState = hasPublicPaykitPublicationState()
+    return copy(
+        hasIndependentPaykitSharing = true,
+        hasConfirmedPublicPaykitEndpoints = false,
+        sharesPublicPaykitEndpoints = false,
+        publicPaykitCleanupPending = publicPaykitCleanupPending || hadPublicState,
+        legacyPublicAddressQuarantinePending = legacyPublicAddressQuarantinePending || hadPublicState,
+    )
+}
+
+fun SettingsData.withPublicSharingDisabledForRestore(): SettingsData {
+    val migrated = withIndependentPaykitSharing()
+    return migrated.copy(
+        hasConfirmedPublicPaykitEndpoints = false,
+        sharesPublicPaykitEndpoints = false,
+        publicPaykitCleanupPending = migrated.publicPaykitCleanupPending || hasPublicPaykitPublicationState(),
+    )
+}
 
 fun SettingsData.withDefaultPaykitPaymentMethods() = copy(
     publicPaykitLightningEnabled = true,

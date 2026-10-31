@@ -5,6 +5,7 @@ import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -73,8 +74,11 @@ class SettingsViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
+        whenever(settingsStore.areAllowancesEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.isPubkyProfileSetupPending).thenReturn(MutableStateFlow(false))
         whenever(contactPaymentSettingsRepo.isEnabled).thenReturn(contactPaymentsEnabled)
+        whenever(contactPaymentSettingsRepo.isPublicEnabled).thenReturn(MutableStateFlow(false))
+        whenever { contactPaymentSettingsRepo.setPublicEnabled(any()) }.thenReturn(Result.success(Unit))
         whenever { contactPaymentSettingsRepo.setEnabled(any()) }.thenReturn(Result.success(Unit))
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
@@ -90,8 +94,8 @@ class SettingsViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive) }
             .thenReturn(Result.success(Unit))
-        whenever { publicPaykitRepo.syncPaykitApp(anyOrNull()) }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
+        whenever { publicPaykitRepo.syncPaykitApp(anyOrNull(), canSync = anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>(), anyOrNull()) }
             .thenReturn(Result.success(Unit))
         val sharingRepo = ContactPaymentSettingsRepo(
             settingsStore,
@@ -248,6 +252,16 @@ class SettingsViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(contactPaymentSettingsRepo).setEnabled(true)
+        assertFalse(sut.isUpdatingContactPayments.value)
+    }
+
+    @Test
+    fun `public payment switch delegates only to public opt in`() = test {
+        sut.setPublicPaymentsEnabled(true)
+        advanceUntilIdle()
+
+        verify(contactPaymentSettingsRepo).setPublicEnabled(true)
+        verify(contactPaymentSettingsRepo, never()).setEnabled(any())
         assertFalse(sut.isUpdatingContactPayments.value)
     }
 

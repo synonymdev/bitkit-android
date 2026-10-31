@@ -1,0 +1,16 @@
+<journey name="Request Payment Without Contacts">
+  <description>
+    The Request Payment button on the Subscriptions Payments tab shows even without contacts. With no
+    saved contacts it opens Add Contact instead of the request flow; with saved contacts it opens the
+    recipient picker, which says when none of them can receive a request. Requires a fresh wallet with Paykit UI enabled, a Pubky profile, no contacts at the start, and a second identity with a private Paykit connection to add as a contact.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled, a signed-in Pubky profile and no contacts</action>
+    <action>Open the drawer menu and tap Subscriptions, then tap the Payments tab</action>
+    <action>Verify the empty state shows NO PAYMENT HISTORY and Request Payment (testTag "PaymentRequestCreate") at the bottom</action>
+    <action>Tap Request Payment</action>
+    <action>Verify the Contacts screen opens with the Add Contact sheet shown</action>
+    <action>Add a saved contact that can receive payment requests, return to Subscriptions and tap the Payments tab</action>
+    <action>Tap Request Payment and verify the recipient picker opens and lists the contact once eligibility loads</action>
+  </actions>
+</journey>

@@ -11,6 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.test.BaseUnitTest
@@ -116,5 +117,51 @@ class SettingsStoreTest : BaseUnitTest() {
         sut.setIsPaykitEnabled(false)
 
         assertFalse(SettingsStore(context).isPaykitEnabled.first())
+    }
+
+    @Test
+    fun `allowances follow the dev settings switch only while dev mode is on`() = test {
+        assertEquals(PaykitFeatureFlags.areAllowancesEnabledByDefault, sut.areAllowancesEnabled.first())
+
+        sut.update { it.copy(isDevModeEnabled = true) }
+        sut.setAreAllowancesEnabled(false)
+        assertFalse(SettingsStore(context).areAllowancesEnabled.first())
+
+        sut.update { it.copy(isDevModeEnabled = false) }
+        assertEquals(PaykitFeatureFlags.areAllowancesEnabledByDefault, sut.areAllowancesEnabled.first())
+    }
+
+    @Test
+    fun `allowances need dev mode and the flag to differ from the default`() {
+        for (default in listOf(true, false)) {
+            assertEquals(default, PaykitFeatureFlags.areAllowancesEnabled(false, null, default))
+            assertEquals(default, PaykitFeatureFlags.areAllowancesEnabled(false, !default, default))
+            assertEquals(default, PaykitFeatureFlags.areAllowancesEnabled(true, null, default))
+            assertTrue(PaykitFeatureFlags.areAllowancesEnabled(true, true, default))
+            assertFalse(PaykitFeatureFlags.areAllowancesEnabled(true, false, default))
+        }
+    }
+
+    @Test
+    fun `restoring legacy or explicit public settings requires a new opt in and preserves private sharing`() = test {
+        for (independentSharing in listOf(false, true)) {
+            val backup = SettingsBackupV1(
+                createdAt = 0L,
+                settings = SettingsData(
+                    hasIndependentPaykitSharing = independentSharing,
+                    hasConfirmedPublicPaykitEndpoints = true,
+                    sharesPublicPaykitEndpoints = true,
+                    sharesPrivatePaykitEndpoints = true,
+                ),
+            )
+            sut.restoreFromBackup(backup).getOrThrow()
+            val restored = sut.data.first()
+            assertFalse(restored.sharesPublicPaykitEndpoints)
+            assertFalse(restored.hasConfirmedPublicPaykitEndpoints)
+            assertTrue(restored.sharesPrivatePaykitEndpoints)
+            assertTrue(restored.publicPaykitCleanupPending)
+            assertEquals(!independentSharing, restored.legacyPublicAddressQuarantinePending)
+            assertTrue(restored.hasIndependentPaykitSharing)
+        }
     }
 }

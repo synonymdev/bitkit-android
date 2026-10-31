@@ -875,6 +875,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     @Test
     fun `running node recovers attempts left open for it`() = test {
         sut.activate(identity)
+        whenever(executor.activeIdentity).thenReturn(identity)
         clearInvocations(executor)
 
         nodeReady()
