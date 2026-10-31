@@ -33,7 +33,10 @@ class PaykitAllowanceStateBackupTest {
             "billingPeriodStartsAt":null}],
             "presentedProposalIds":["proposal-1"],"unannouncedOfferIds":["pubky${"y".repeat(52)}/allowance-2"],
             "notifiedRequestIds":["request-2"],
-            "lastTrustedTime":"2026-10-27T01:00:00.000Z"}
+            "lastTrustedTime":"2026-10-27T01:00:00.000Z","ledgerRevisionFloor":12,
+            "automaticSpends":[{"attemptId":"attempt-1","counterparty":"pubky${"y".repeat(52)}",
+            "allowanceId":"allowance-1","amountSats":1000,"admittedAt":"2026-10-27T01:00:00.000Z"}],
+            "endedAllowanceIds":["pubky${"y".repeat(52)}/allowance-3"]}
         """.trimIndent().replace("\n", "")
     }
 
@@ -131,5 +134,16 @@ class PaykitAllowanceStateBackupTest {
         lastTrustedTimeMillis = CREATED_AT_MILLIS,
         autoPaidSatsByAllowance = mapOf("${REQUEST_ID.counterparty}/allowance-1" to 1_000uL),
         autoPaidRequestIds = setOf(REQUEST_ID),
+        ledgerRevisionFloor = 12uL,
+        automaticSpends = listOf(
+            PaykitAllowanceLocalState.AutomaticSpend(
+                attemptId = "attempt-1",
+                counterparty = REQUEST_ID.counterparty,
+                allowanceId = "allowance-1",
+                amountSats = 1_000uL,
+                admittedAtMillis = CREATED_AT_MILLIS,
+            ),
+        ),
+        endedAllowanceIds = setOf("${REQUEST_ID.counterparty}/allowance-3"),
     )
 }

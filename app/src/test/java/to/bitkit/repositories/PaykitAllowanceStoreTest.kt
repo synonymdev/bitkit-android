@@ -8,6 +8,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -59,5 +60,47 @@ class PaykitAllowanceStoreTest : BaseUnitTest() {
         assertEquals(setOf("kept"), sut.load(other).notifiedRequestIds)
         assertEquals(before + 1, sut.backupStateVersion.value)
         assertEquals(2, sut.backupSnapshot().size)
+    }
+
+    @Test
+    fun `state saved before the automatic payment checks still loads`() = test {
+        val key = PubkyPublicKeyFormat.normalized(identity) ?: identity
+        stored = """{"statesByIdentity":{"$key":{"notifiedRequestIds":["request-1"]}}}"""
+
+        val state = sut.load(identity)
+
+        assertEquals(setOf("request-1"), state.notifiedRequestIds)
+        assertEquals(null, state.ledgerRevisionFloor)
+        assertEquals(emptyList(), state.automaticSpends)
+        assertEquals(emptySet(), state.endedAllowanceIds)
+    }
+
+    @Test
+    fun `restore never lowers the automatic payment checks already stored`() = test {
+        val spend = PaykitAllowanceLocalState.AutomaticSpend("attempt-1", "contact", "allowance-1", 1_000uL, 1L)
+        val restoredSpend = spend.copy(attemptId = "attempt-2")
+        sut.save(
+            identity,
+            PaykitAllowanceLocalState(
+                ledgerRevisionFloor = 9uL,
+                automaticSpends = listOf(spend),
+                endedAllowanceIds = setOf("contact/allowance-1"),
+            ),
+        )
+
+        sut.restoreBackup(
+            mapOf(
+                identity to PaykitAllowanceLocalState(
+                    ledgerRevisionFloor = 4uL,
+                    automaticSpends = listOf(restoredSpend),
+                    endedAllowanceIds = setOf("contact/allowance-2"),
+                ),
+            ),
+        )
+
+        val restored = sut.load(identity)
+        assertEquals(9uL, restored.ledgerRevisionFloor)
+        assertEquals(setOf(spend, restoredSpend), restored.automaticSpends.toSet())
+        assertEquals(setOf("contact/allowance-1", "contact/allowance-2"), restored.endedAllowanceIds)
     }
 }

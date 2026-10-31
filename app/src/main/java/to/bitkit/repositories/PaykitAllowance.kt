@@ -279,13 +279,28 @@ object PaykitAllowanceCapacity {
             .fold(0uL) { total, attempt -> total.safe() + attempt.amountSats.safe() }
     }
 
-    fun fits(amountSats: ULong, allowance: PaykitAllowance, attempts: List<Attempt>, now: Instant): Boolean {
+    /** Spending counts the higher of the ledger's [attempts] and this wallet's own [localAttempts]. */
+    fun fits(
+        amountSats: ULong,
+        allowance: PaykitAllowance,
+        attempts: List<Attempt>,
+        now: Instant,
+        localAttempts: List<Attempt> = emptyList(),
+    ): Boolean {
         val perPaymentMax = allowance.perPaymentMaxSats ?: return false
         if (amountSats > perPaymentMax) return false
         val monthlyLimit = allowance.monthlyLimitSats ?: return false
         val anchor = allowance.monthlyAnchor ?: return false
-        val used = usedSats(allowance.counterparty, allowance.allowanceId, attempts, anchor, now)
+        val used = maxOf(
+            usedSats(allowance.counterparty, allowance.allowanceId, attempts, anchor, now),
+            usedSats(allowance.counterparty, allowance.allowanceId, localAttempts, anchor, now),
+        )
         return used.safe() + amountSats.safe() <= monthlyLimit
+    }
+
+    fun attempts(spends: List<PaykitAllowanceLocalState.AutomaticSpend>): List<Attempt> = spends.map {
+        val admittedAt = Instant.fromEpochMilliseconds(it.admittedAtMillis)
+        Attempt(it.counterparty, it.allowanceId, it.amountSats, admittedAt, isLive = true)
     }
 
     fun attempts(history: AllowanceAccountingHistory): List<Attempt> = history.occurrences

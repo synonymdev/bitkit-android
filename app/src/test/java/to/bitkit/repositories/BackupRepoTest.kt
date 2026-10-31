@@ -712,6 +712,46 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restore without Paykit state drops the ledger floor`() = test {
+        val identity = "pubky" + "z".repeat(52)
+        val allowances = PaykitAllowanceStateBackup(ledgerRevisionFloor = 5uL, endedAllowanceIds = setOf("ended"))
+        stubWalletBackup(
+            paykitSdkBackupState = null,
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = emptyMap(),
+                pendingProofs = emptyList(),
+                allowances = mapOf(identity to allowances),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        val captor = argumentCaptor<Map<String, PaykitAllowanceLocalState>>()
+        verify(paykitAllowanceStore).restoreBackup(captor.capture())
+        val restored = captor.firstValue.getValue(identity)
+        assertNull(restored.ledgerRevisionFloor)
+        assertEquals(setOf("ended"), restored.endedAllowanceIds)
+    }
+
+    @Test
+    fun `restore with Paykit state keeps the ledger floor`() = test {
+        val identity = "pubky" + "z".repeat(52)
+        val allowances = PaykitAllowanceStateBackup(ledgerRevisionFloor = 5uL)
+        stubWalletBackup(
+            paykitSdkBackupState = "saved-sdk-state",
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = emptyMap(),
+                pendingProofs = emptyList(),
+                allowances = mapOf(identity to allowances),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        verify(paykitAllowanceStore).restoreBackup(mapOf(identity to allowances.restored()))
+    }
+
+    @Test
     fun `restored accepted Shop reconciles after proof and private state`() = test {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/candidate-fee-rates-golden.json")).readBytes()
         val state = requireNotNull(json.decodeFromString<WalletBackupV1>(bytes.decodeToString()).paykitPaymentState)

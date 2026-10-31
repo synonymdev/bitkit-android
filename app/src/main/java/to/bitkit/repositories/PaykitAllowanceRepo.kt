@@ -73,6 +73,7 @@ sealed class PaykitAllowanceError(message: String) : AppError(message) {
     data object Unavailable : PaykitAllowanceError("The allowance is unavailable")
     data object PaymentAlreadyRecorded : PaykitAllowanceError("A payment for this request is already in progress")
     data object PaymentListPending : PaykitAllowanceError("The payee has not published a new payment list yet")
+    data object LedgerBehind : PaykitAllowanceError("The allowance ledger is behind one this wallet has read")
 }
 
 /**
@@ -226,6 +227,7 @@ class PaykitAllowanceRepo @Inject constructor(
         whileUpdating {
             refreshMutex.withLock {
                 val listing = listAllowances()
+                listing.onSuccess { executor.rememberEndedAllowances(identity, it) }
                 if (activeIdentity == identity) {
                     publish(listing.getOrDefault(_allowances.value), executor.localState(identity))
                 }
@@ -426,6 +428,8 @@ class PaykitAllowanceRepo @Inject constructor(
             val entry = entry(entryId) ?: throw PaykitAllowanceError.Unavailable
             val endable = entry.allowances.filter { it.canEnd }
             if (endable.isEmpty()) throw PaykitAllowanceError.Unavailable
+            val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+            executor.rememberEnding(identity, endable)
             for (allowance in endable) {
                 paykitSdkService.endAllowance(allowance.counterparty, allowance.allowanceId)
                 sendQueuedMessages(allowance.counterparty)
