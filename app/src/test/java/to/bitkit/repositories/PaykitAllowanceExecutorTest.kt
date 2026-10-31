@@ -488,7 +488,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verifyNoInteractions(payer)
         assertEquals(5uL, sut.localState(identity).ledgerRevisionFloor)
     }
@@ -502,7 +502,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verifyNoInteractions(payer)
     }
 
@@ -537,7 +537,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verifyNoInteractions(payer)
     }
 
@@ -564,7 +564,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verifyNoInteractions(payer)
     }
 
@@ -612,7 +612,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verifyNoInteractions(payer)
     }
 
