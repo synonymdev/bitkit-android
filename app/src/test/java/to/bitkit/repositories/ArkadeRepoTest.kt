@@ -107,6 +107,46 @@ class ArkadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `records a payment that arrived while the wallet was off`() = test {
+        whenever { arkadeService.history() }.thenReturn(
+            listOf(
+                ArkadeHistoryEntry(
+                    "k",
+                    arkTxid = "ark",
+                    type = "RECEIVED",
+                    amount = 3_980,
+                    settled = true,
+                    createdAt = 1,
+                )
+            ),
+        )
+
+        createSut().start(0)
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        val received = assertIs<Activity.Lightning>(activity.firstValue).v1
+        assertEquals(3_980uL, received.value)
+    }
+
+    @Test
+    fun `lists a claimed receive at what reached the wallet`() = test {
+        val sut = createSut()
+        sut.start(0)
+
+        sut.nodeEvents.test {
+            arkadeEvents.emit(ArkadeEvent.Swap(swap(direction = "receive", outcome = "claimed")))
+            awaitItem()
+        }
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        val received = assertIs<Activity.Lightning>(activity.firstValue).v1
+        assertEquals(995uL, received.value)
+        assertEquals(0uL, received.fee)
+    }
+
+    @Test
     fun `lists a broadcast deposit as pending until the wallet lists it`() = test {
         val sut = createSut()
 

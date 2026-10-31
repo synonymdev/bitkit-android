@@ -348,6 +348,8 @@ class ArkadeRepo @Inject constructor(
 
     private suspend fun syncActivities() {
         listSwaps().forEach { recordSwap(it) }
+        // The history watch reports only what arrives while the wallet runs, so record what arrived while it was off.
+        recordReceives(arkadeService.history())
     }
 
     private suspend fun onEvent(event: ArkadeEvent) {
@@ -372,6 +374,10 @@ class ArkadeRepo @Inject constructor(
     // or a payment straight to the Arkade address. Boarding and swap claims show up through their own records.
     private suspend fun onHistory(entries: List<ArkadeHistoryEntry>) {
         refresh()
+        recordReceives(entries)
+    }
+
+    private suspend fun recordReceives(entries: List<ArkadeHistoryEntry>) {
         val swapClaims = listSwaps().filter { it.isReceive }.mapNotNull { it.takeSat }.toSet()
         entries.filter { it.type == HISTORY_RECEIVED && it.boardingTxid == null && it.arkTxid != null }
             .filterNot { it.amount in swapClaims }
@@ -410,7 +416,8 @@ class ArkadeRepo @Inject constructor(
             value = (swap.takeSat ?: 0L).toULong(),
             invoice = swap.bolt11.orEmpty(),
             timestamp = (swap.updatedAt ?: swap.createdAt ?: (nowMillis() / 1000)).toULong(),
-            fee = (swap.feeSat ?: 0L).toULong(),
+            // A receive's solver fee is already out of `takeSat`; the row adds the fee to the value.
+            fee = if (swap.isSend) (swap.feeSat ?: 0L).toULong() else 0uL,
             message = "",
             contact = existing?.contact,
             seenAt = existing?.seenAt,
