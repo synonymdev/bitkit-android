@@ -39,6 +39,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.of
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.BackupCategory
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
@@ -486,12 +487,12 @@ class WalletViewModel @Inject constructor(
                         connectionSession = connectionSession,
                     )
                         .getOrThrow()
-                    pubkyRepo.initialize()
+                        .also { pubkyRepo.initialize() }
                 } else {
                     restoreFromMostRecentBackup(connectionSession)
                 }
-            }.onSuccess {
-                _restoreState.update { RestoreState.Completed }
+            }.onSuccess { failedCategories ->
+                _restoreState.update { RestoreState.Completed(failedCategories) }
             }.onFailure {
                 Logger.error("Restore from backup failed", it, context = TAG)
                 ToastEventBus.send(it)
@@ -504,7 +505,9 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    private suspend fun restoreFromMostRecentBackup(connectionSession: WalletConnectionRecovery.Session) {
+    private suspend fun restoreFromMostRecentBackup(
+        connectionSession: WalletConnectionRecovery.Session,
+    ): Set<BackupCategory> {
         val (rnTimestamp, vssTimestamp) = coroutineScope {
             val rn = async { migrationService.getRNRemoteBackupTimestamp() }
             val vss = async { backupRepo.getLatestBackupTime() }
@@ -517,7 +520,7 @@ class WalletViewModel @Inject constructor(
             else -> rnTimestamp >= vssTimestamp
         }
 
-        if (shouldRestoreRN) {
+        val failedCategories = if (shouldRestoreRN) {
             restoreFromRNRemoteBackup(connectionSession)
         } else {
             backupRepo.performFullRestoreFromLatestBackup(
@@ -528,27 +531,30 @@ class WalletViewModel @Inject constructor(
         }
 
         pubkyRepo.initialize()
+        return failedCategories
     }
 
-    private suspend fun restoreFromRNRemoteBackup(connectionSession: WalletConnectionRecovery.Session) {
+    private suspend fun restoreFromRNRemoteBackup(
+        connectionSession: WalletConnectionRecovery.Session,
+    ): Set<BackupCategory> {
         val legacyRestore = runSuspendCatching {
             migrationService.restoreFromRNRemoteBackup()
             walletRepo.loadFromCache()
         }
         if (legacyRestore.isSuccess) {
             backupRepo.restoreUsdtRecoveryAfterLegacyMigration(connectionSession).getOrThrow()
-        } else {
-            Logger.warn(
-                "RN remote backup restore failed, falling back to VSS",
-                legacyRestore.exceptionOrNull(),
-                context = TAG,
-            )
-            backupRepo.performFullRestoreFromLatestBackup(
-                onCacheRestored = walletRepo::loadFromCache,
-                connectionSession = connectionSession,
-            )
-                .getOrThrow()
+            return emptySet()
         }
+        Logger.warn(
+            "RN remote backup restore failed, falling back to VSS",
+            legacyRestore.exceptionOrNull(),
+            context = TAG,
+        )
+        return backupRepo.performFullRestoreFromLatestBackup(
+            onCacheRestored = walletRepo::loadFromCache,
+            connectionSession = connectionSession,
+        )
+            .getOrThrow()
     }
 
     fun onRestoreContinue() {
@@ -1083,7 +1089,9 @@ sealed interface RestoreState {
 
     data class Retry(val count: Int) : RestoreState
     data class BackupFailed(val count: Int, val hasPendingWalletRestore: Boolean = true) : RestoreState
-    data object Completed : RestoreState
+
+    /** @param failedCategories backup categories that were found but could not be restored. */
+    data class Completed(val failedCategories: Set<BackupCategory> = emptySet()) : RestoreState
     data object Settled : RestoreState
 
     fun retryCount() = when (this) {

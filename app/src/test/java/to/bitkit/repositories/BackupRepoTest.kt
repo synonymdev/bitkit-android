@@ -78,12 +78,15 @@ import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.PaykitUsdtStateBackup
+import to.bitkit.models.PubkySessionBackupKind
+import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.TransportType
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.models.WidgetsBackupV1
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
@@ -2165,6 +2168,41 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `iOS metadata backup restores the Pubky profile session`() = test {
+        stubWalletBackup()
+        val envelope = iosFixture("metadata")
+        stubMetadataRestore(
+            envelope = envelope,
+            migratedMetadataJson = json.parseToJsonElement(envelope).jsonObject["tagMetadata"].toString(),
+        )
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(emptySet(), failed)
+        verifyBlocking(pubkyRepo) { restoreSessionBackupState(PubkySessionBackupV1(PubkySessionBackupKind.LocalSeed)) }
+        val metadataCaptor = argumentCaptor<List<PreActivityMetadata>>()
+        verifyBlocking(preActivityMetadataRepo) { upsertPreActivityMetadata(metadataCaptor.capture()) }
+        assertEquals(2, metadataCaptor.firstValue.size)
+    }
+
+    @Test
+    fun `full restore reports the categories it could not restore`() = test {
+        stubWalletBackup()
+        stubMetadataRestore(envelope = iosFixture("metadata"))
+        whenever { pubkyRepo.restoreSessionBackupState(anyOrNull()) }
+            .thenReturn(Result.failure(BackupRepoTestError("pubky")))
+        stubRestoreEnvelope(BackupCategory.BLOCKTANK, iosFixture("blocktank"))
+        whenever { blocktankRepo.restoreFromBackup(any()) }.thenReturn(Result.failure(BackupRepoTestError("core")))
+        val widgetsEnvelope = json.encodeToString(WidgetsBackupV1(createdAt = 1, widgets = WidgetsData()))
+        stubRestoreEnvelope(BackupCategory.WIDGETS, widgetsEnvelope)
+        whenever { widgetsStore.restoreFromBackup(any()) }.thenReturn(Result.failure(BackupRepoTestError("disk")))
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(setOf(BackupCategory.METADATA, BackupCategory.WIDGETS, BackupCategory.BLOCKTANK), failed)
+    }
+
+    @Test
     fun `migrated backups are rewritten to vss after restore`() = test {
         stubWalletBackup()
         stubActivityRestore()
@@ -2531,7 +2569,7 @@ class BackupRepoTest : BaseUnitTest() {
 
         val result = sut.performFullRestoreFromLatestBackup()
 
-        assertTrue(result.isSuccess)
+        assertEquals(setOf(BackupCategory.ACTIVITY), result.getOrThrow())
         // Rewriting here would replace the legacy backup with whatever Core happens to hold.
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
     }
@@ -2545,8 +2583,8 @@ class BackupRepoTest : BaseUnitTest() {
 
         val result = sut.performFullRestoreFromLatestBackup()
 
-        // Only WALLET is fatal, so the restore still reports success overall.
-        assertTrue(result.isSuccess)
+        // Only WALLET is fatal, so the restore still succeeds and reports the category.
+        assertEquals(setOf(BackupCategory.ACTIVITY), result.getOrThrow())
         // The legacy slice stays unmigrated and no longer decodes, so nothing of this category is applied.
         verifyBlocking(activityRepo, never()) { restoreFromBackup(any()) }
         // Nothing was restored, so the stored backup must not be replaced.
@@ -2760,6 +2798,9 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { pubkyRepo.snapshotSessionBackupState() }.thenReturn(Result.success(null))
         whenever { pubkyRepo.snapshotContactProfileOverrides() }.thenReturn(Result.success(null))
     }
+
+    private fun iosFixture(name: String) =
+        requireNotNull(javaClass.getResourceAsStream("/ios-backup/$name.json")).bufferedReader().readText()
 
     private fun stubRestoreEnvelope(category: BackupCategory, envelope: String) {
         whenever { vssBackupClient.getObject(category.name) }.thenReturn(

@@ -269,6 +269,7 @@
     <string name="onboarding__restore_failed_header">Bestedingssaldo &lt;accent&gt;fout&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit heeft je spaargeld hersteld, maar kon je huidige bestedingssaldo (Lightning-status) en wallet-gegevens niet herstellen.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Herstel&lt;/accent&gt;\nje wallet</string>
+    <string name="onboarding__restore_incomplete_text">Je wallet en saldo zijn terug, maar Bitkit kon het volgende niet herstellen: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">De checksum van de herstelzin lijkt onjuist te zijn. Controleer je herstelzin nogmaals.</string>
     <string name="onboarding__restore_no_backup_button">Doorgaan zonder backup</string>
     <string name="onboarding__restore_no_backup_warn">Als je eerder een Lightning-backup had, wordt deze overschreven en verloren. Dit kan leiden tot verlies van geld.</string>

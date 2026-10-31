@@ -43,7 +43,8 @@ data class MetadataBackupV1(
 
 @Serializable
 data class PubkySessionBackupV1(
-    val kind: PubkySessionBackupKind,
+    /** Null when bitkit-ios wrote a kind it no longer restores, which it then encodes as `{}`. */
+    val kind: PubkySessionBackupKind? = null,
 )
 
 @Serializable

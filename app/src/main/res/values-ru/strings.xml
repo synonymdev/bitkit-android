@@ -282,6 +282,7 @@
     <string name="onboarding__restore_failed_header">Ошибка Баланса &lt;accent&gt;Расходов&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit восстановил ваши сбережения, но не смог восстановить ваш текущий Баланс Расходов (состояние Lightning) и данные кошелька.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Восстановить&lt;/accent&gt;\nваш кошелёк</string>
+    <string name="onboarding__restore_incomplete_text">Ваш кошелёк и баланс восстановлены, но Bitkit не удалось восстановить: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Контрольная сумма фразы восстановления некорректна. Пожалуйста, дважды проверьте вашу фразу восстановления.</string>
     <string name="onboarding__restore_no_backup_button">Продолжить Без Резервной Копии</string>
     <string name="onboarding__restore_no_backup_warn">Если у вас ранее была резервная копия Lightning, она будет перезаписана и утрачена. Это может привести к потере средств.</string>
