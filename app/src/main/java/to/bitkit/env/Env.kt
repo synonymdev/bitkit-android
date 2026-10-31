@@ -39,6 +39,11 @@ internal object Env {
     const val e2eHomegateUrl = BuildConfig.E2E_HOMEGATE_URL
     val e2eHomeserverPubky = BuildConfig.E2E_HOMESERVER_PUBKY.takeIf { isLocalE2eBackend && it.isNotBlank() }
     val network = Network.valueOf(BuildConfig.NETWORK)
+
+    /** The solver key of a local Arkade regtest stack (ArkLabsHQ/arkade-regtest); set, it turns Arkade on. */
+    val arkadeRegtestSolverPubkey = BuildConfig.ARKADE_REGTEST_SOLVER_PUBKEY
+        .takeIf { network == Network.REGTEST && it.isNotBlank() }
+    const val arkadeRegtestHost = BuildConfig.ARKADE_REGTEST_HOST
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL
     const val walletSyncTimeoutSecs = 10_uL

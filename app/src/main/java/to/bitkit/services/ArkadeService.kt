@@ -2,6 +2,7 @@ package to.bitkit.services
 
 import com.synonym.bitkitcore.ArkadeEventListener
 import com.synonym.bitkitcore.ArkadeNetwork
+import com.synonym.bitkitcore.ArkadeRegtestEndpoints
 import com.synonym.bitkitcore.ArkadeStartParams
 import com.synonym.bitkitcore.arkadeBalance
 import com.synonym.bitkitcore.arkadeExportState
@@ -55,9 +56,6 @@ class ArkadeService @Inject constructor(
 ) {
     companion object {
         private const val TAG = "ArkadeService"
-
-        /** The network name core reports in [ArkadeInfo.network] and backups record. */
-        private const val NETWORK_NAME = "bitcoin"
     }
 
     private val mutex = Mutex()
@@ -79,14 +77,35 @@ class ArkadeService @Inject constructor(
     }
 
     /**
-     * Arkade runs on mainnet against Ark Labs' operator; bitkit-core has no Lightning swap client or LNURL server on
-     * mutinynet, so other networks keep their channel paths.
+     * Arkade runs on mainnet against Ark Labs' operator, and in dev builds against a local regtest stack when its
+     * solver key is set; bitkit-core has no Lightning swap client or LNURL server on mutinynet, so other networks keep
+     * their channel paths.
      */
-    val isSupported: Boolean get() = Env.network == Network.BITCOIN
+    val isSupported: Boolean get() = arkadeNetwork != null
 
     val isConnected: Boolean get() = info != null
 
-    val networkName: String? get() = if (isSupported) NETWORK_NAME else null
+    /** The network name core reports in [ArkadeInfo.network] and backups record. */
+    val networkName: String? get() = arkadeNetwork?.let { Env.network.name.lowercase() }
+
+    private val arkadeNetwork: ArkadeNetwork? by lazy {
+        when {
+            Env.network == Network.BITCOIN -> ArkadeNetwork.Bitcoin
+            else -> Env.arkadeRegtestSolverPubkey?.let { solver ->
+                val host = Env.arkadeRegtestHost
+                ArkadeNetwork.Regtest(
+                    ArkadeRegtestEndpoints(
+                        arkServerUrl = "http://$host:7070",
+                        esploraUrl = "http://$host:3000/api",
+                        lnurlUrl = "http://$host:9090",
+                        delegateUrl = "http://$host:7012",
+                        solverPubkey = solver,
+                        solverRelays = listOf("ws://$host:7777"),
+                    )
+                )
+            }
+        }
+    }
 
     /**
      * Starts the wallet in [walletIndex]'s storage: [restore] scans the operator for the wallet's past outputs and
@@ -95,7 +114,7 @@ class ArkadeService @Inject constructor(
      */
     suspend fun connect(walletIndex: Int, restore: Boolean, backup: String?): ArkadeInfo = mutex.withLock {
         info?.let { return@withLock it }
-        if (!isSupported) throw ArkadeError.Unsupported()
+        val network = arkadeNetwork ?: throw ArkadeError.Unsupported()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
         if (!isListening) {
@@ -107,14 +126,14 @@ class ArkadeService @Inject constructor(
             dataDir = path,
             mnemonic = mnemonic,
             passphrase = passphrase,
-            network = ArkadeNetwork.BITCOIN,
+            network = network,
             restore = restore,
             backup = backup,
         )
         val started = arkadeStart(params).toApp()
         dataDir = path
         info = started
-        Logger.info("Connected Arkade wallet on '$NETWORK_NAME'", context = TAG)
+        Logger.info("Connected Arkade wallet on '$networkName'", context = TAG)
         started
     }
 
