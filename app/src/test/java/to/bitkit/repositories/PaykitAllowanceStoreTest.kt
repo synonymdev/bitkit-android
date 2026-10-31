@@ -47,6 +47,15 @@ class PaykitAllowanceStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a save never replaces state this build cannot read`() = test {
+        stored = "{\"statesByIdentity\":{\"other\":{\"journal\":[{\"stage\":\"from-a-newer-build\"}]}}}"
+        val unreadable = stored
+
+        assertFailsWith<SerializationException> { sut.save(identity, PaykitAllowanceLocalState()) }
+        assertEquals(unreadable, stored)
+    }
+
+    @Test
     fun `restore replaces each restored identity's state`() = test {
         val other = PaykitAllowanceFixtures.counterpartyKey
         sut.save(identity, PaykitAllowanceLocalState(notifiedRequestIds = setOf("old")))

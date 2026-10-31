@@ -1445,6 +1445,9 @@
     <string name="subscriptions__allowances">Mesadas</string>
     <string name="subscriptions__allowances_empty_description">Pode definir limites de gastos para pagar automaticamente pedidos de pagamento de contactos de confiança.</string>
     <string name="subscriptions__allowances_empty_headline">Configure\n&lt;accent&gt;mesadas&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Os registos das suas mesadas são mais antigos do que outros que esta carteira já usou. Os pedidos vão pedir a sua aprovação até retomar.</string>
+    <string name="subscriptions__allowances_paused_resume">Retomar</string>
+    <string name="subscriptions__allowances_paused_title">Pagamentos automáticos em pausa</string>
     <string name="subscriptions__cancel_subscription">Cancelar subscrição</string>
     <string name="subscriptions__choose_recipient">Escolher destinatário</string>
     <string name="subscriptions__content_too_long">Encurte o nome ou a descrição da subscrição e tente novamente.</string>

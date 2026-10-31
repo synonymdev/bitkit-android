@@ -494,6 +494,31 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `resuming takes the ledger read now while this wallet's own spending still counts`() = test {
+        sut.activate(identity)
+        val spend = PaykitAllowanceLocalState.AutomaticSpend(
+            attemptId = "local-1",
+            counterparty = fixtures.counterpartyKey,
+            allowanceId = ALLOWANCE_ID,
+            amountSats = 49_500uL,
+            admittedAtMillis = fixtures.now.toEpochMilliseconds(),
+        )
+        sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL, automaticSpends = listOf(spend)) }
+        accountingState = fixtures.accountingState(revision = 4uL)
+
+        val pausedBefore = sut.isLedgerBehind(identity)
+        sut.acceptCurrentLedger(identity)
+        val overLimit = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+        sut.updateLocalState(identity) { it.copy(automaticSpends = emptyList()) }
+        val underLimit = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertTrue(pausedBefore)
+        assertFalse(sut.isLedgerBehind(identity))
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, overLimit)
+        assertEquals(PaykitAllowanceAutoPayResult.STARTED, underLimit)
+    }
+
+    @Test
     fun `a ledger that goes behind this wallet during admission keeps the request manual`() = test {
         sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
         whenever(sdk.allowanceAccountingState())
@@ -603,6 +628,77 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         sut.recover(identity)
 
         assertTrue(sut.localState(identity).automaticSpends.isEmpty())
+    }
+
+    @Test
+    fun `spending the ledger lacks adds to the ledger's own`() = test {
+        val spend = PaykitAllowanceLocalState.AutomaticSpend(
+            attemptId = "local-1",
+            counterparty = fixtures.counterpartyKey,
+            allowanceId = ALLOWANCE_ID,
+            amountSats = 25_000uL,
+            admittedAtMillis = fixtures.now.toEpochMilliseconds(),
+        )
+        sut.updateLocalState(identity) { it.copy(automaticSpends = listOf(spend)) }
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(
+                fixtures.occurrence(
+                    "other-install",
+                    listOf(
+                        fixtures.attemptRecord(
+                            "other-1",
+                            amount = "0.00025",
+                            status = PaymentExecutionStatus.SUCCEEDED,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `a request this wallet already paid never pays automatically again`() = test {
+        val request = fixtures.paymentRequest()
+        seedJournal(journalEntry(AUTOMATIC_ATTEMPT_ID, request, Stage.SENT, PAYMENT_HASH))
+
+        val result = sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+        verifyNoInteractions(payer)
+    }
+
+    @Test
+    fun `recovery keeps a sent attempt the ledger still holds as prepared`() = test {
+        val request = fixtures.paymentRequest()
+        val spend = PaykitAllowanceLocalState.AutomaticSpend(
+            attemptId = AUTOMATIC_ATTEMPT_ID,
+            counterparty = fixtures.counterpartyKey,
+            allowanceId = ALLOWANCE_ID,
+            amountSats = 1_000uL,
+            admittedAtMillis = fixtures.now.toEpochMilliseconds(),
+        )
+        seedJournal(journalEntry(AUTOMATIC_ATTEMPT_ID, request, Stage.SENT, PAYMENT_HASH))
+        sut.updateLocalState(identity) { it.copy(automaticSpends = listOf(spend)) }
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(
+                fixtures.occurrence(
+                    request.paymentRequestId,
+                    listOf(fixtures.attemptRecord(AUTOMATIC_ATTEMPT_ID, status = PaymentExecutionStatus.PREPARED)),
+                ),
+            ),
+        )
+
+        sut.recover(identity)
+
+        verify(sdk, never()).recordPaymentOutcome(any())
+        assertEquals(listOf(spend), sut.localState(identity).automaticSpends)
+        assertEquals(Stage.SENT, sut.localState(identity).journal.single().stage)
     }
 
     @Test

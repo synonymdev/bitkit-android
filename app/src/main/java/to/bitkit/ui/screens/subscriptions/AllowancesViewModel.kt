@@ -110,13 +110,15 @@ class AllowancesViewModel @Inject constructor(
         contactChoices,
         isWorking,
         authorization,
-    ) { allowances, contacts, isWorking, authorization ->
+        allowanceRepo.isAutomaticPaymentPaused,
+    ) { allowances, contacts, isWorking, authorization, isPaused ->
         AllowancesUiState(
             isLoaded = true,
             allowances = allowances,
             contacts = contacts,
             isWorking = isWorking,
             authorization = authorization,
+            isAutomaticPaymentPaused = isPaused,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -158,6 +160,8 @@ class AllowancesViewModel @Inject constructor(
     fun end(entryId: String, onSuccess: () -> Unit) = authorizeThen(isGated = isAllower(entryId)) {
         runAction(onSuccess) { allowanceRepo.end(entryId) }
     }
+
+    fun resumeAutomaticPayments() = runAction(onSuccess = {}) { allowanceRepo.resumeAutomaticPayments() }
 
     fun onAuthorized() {
         val action = authorizedAction ?: return
@@ -342,6 +346,7 @@ data class AllowancesUiState(
     val contacts: ImmutableList<PubkyProfile> = persistentListOf(),
     val isWorking: Boolean = false,
     val authorization: AllowanceAuthorization? = null,
+    val isAutomaticPaymentPaused: Boolean = false,
 )
 
 /** A pending PIN or biometric check before a gated allowance action. */

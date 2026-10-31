@@ -78,6 +78,7 @@ class AllowancesViewModelTest : BaseUnitTest() {
         whenever(allowanceRepo.entries).thenReturn(entries)
         whenever(settingsStore.data).thenReturn(settings)
         whenever(allowanceRepo.autoPaidSats).thenReturn(autoPaidSats)
+        whenever(allowanceRepo.isAutomaticPaymentPaused).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever(paymentRequestRepo.eligibleTargets).thenReturn(targets)
         whenever(paymentRequestRepo.paymentRequestHistory)

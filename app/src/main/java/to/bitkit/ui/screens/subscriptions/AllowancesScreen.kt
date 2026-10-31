@@ -43,12 +43,15 @@ import to.bitkit.models.USD_SYMBOL
 import to.bitkit.repositories.PaykitAllowance
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
@@ -76,6 +79,7 @@ fun AllowancesScreen(
         topPadding = topPadding,
         onClickAdd = onClickAdd,
         onClickAllowance = onClickAllowance,
+        onClickResume = viewModel::resumeAutomaticPayments,
         modifier = modifier
     )
 }
@@ -87,6 +91,7 @@ private fun AllowancesContent(
     onClickAdd: () -> Unit,
     onClickAllowance: (AllowanceUi) -> Unit,
     modifier: Modifier = Modifier,
+    onClickResume: () -> Unit = {},
 ) {
     val density = LocalDensity.current
     var footerHeight by remember { mutableStateOf(0.dp) }
@@ -109,6 +114,11 @@ private fun AllowancesContent(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
+                if (uiState.isAutomaticPaymentPaused) {
+                    item(key = "paused") {
+                        AutomaticPaymentsPaused(isWorking = uiState.isWorking, onClickResume = onClickResume)
+                    }
+                }
                 items(uiState.allowances, key = { it.id }) { allowance ->
                     AllowanceRow(
                         allowance = allowance,
@@ -161,6 +171,30 @@ private fun AllowancesEmptyState(modifier: Modifier = Modifier) {
         )
         VerticalSpacer(8.dp)
         BodyM(text = stringResource(R.string.subscriptions__allowances_empty_description), color = Colors.White64)
+    }
+}
+
+@Composable
+private fun AutomaticPaymentsPaused(isWorking: Boolean, onClickResume: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Colors.Gray6)
+            .padding(16.dp)
+            .testTag("AllowancesPaused")
+    ) {
+        BodyMSB(text = stringResource(R.string.subscriptions__allowances_paused_title))
+        VerticalSpacer(4.dp)
+        BodyS(text = stringResource(R.string.subscriptions__allowances_paused_description), color = Colors.White64)
+        VerticalSpacer(16.dp)
+        SecondaryButton(
+            text = stringResource(R.string.subscriptions__allowances_paused_resume),
+            onClick = onClickResume,
+            isLoading = isWorking,
+            size = ButtonSize.Small,
+            testTag = "AllowancesResume",
+        )
     }
 }
 
@@ -263,6 +297,7 @@ private fun Preview2() {
         AllowancesContent(
             uiState = AllowancesUiState(
                 isLoaded = true,
+                isAutomaticPaymentPaused = true,
                 allowances = persistentListOf(
                     previewAllowance(),
                     previewAllowance(id = "allowance-2", name = "Mia").copy(

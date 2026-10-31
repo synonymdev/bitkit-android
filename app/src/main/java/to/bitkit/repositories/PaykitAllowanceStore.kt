@@ -140,7 +140,8 @@ class PaykitAllowanceStore @Inject constructor(
      */
     suspend fun restoreBackup(states: Map<String, PaykitAllowanceLocalState>) {
         if (states.isEmpty()) return
-        val stored = loadAll()
+        // A restore brings back a journal, so it may replace state this build cannot read.
+        val stored = runCatching { loadAll() }.getOrDefault(Stored())
         val restored = states
             .mapKeys { (identity, _) -> storageKey(identity) }
             .mapValues { (key, state) -> stored.statesByIdentity[key]?.let(state::withChecksFrom) ?: state }
@@ -150,13 +151,10 @@ class PaykitAllowanceStore @Inject constructor(
 
     private fun PaykitAllowanceLocalState.withoutWatermark() = copy(lastTrustedTimeMillis = null)
 
+    // Throws on state this build cannot read, so no save replaces every identity's journal with one.
     private fun loadAll(): Stored {
         val value = keychain.loadString(KEY) ?: return Stored()
-        return runCatching { storeJson.decodeFromString<Stored>(value) }
-            .getOrElse {
-                Logger.warn("Discarded corrupt Paykit allowance state", it, context = TAG)
-                Stored()
-            }
+        return storeJson.decodeFromString<Stored>(value)
     }
 
     private fun storageKey(identity: String): String = PubkyPublicKeyFormat.normalized(identity) ?: identity

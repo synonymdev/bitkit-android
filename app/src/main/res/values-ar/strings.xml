@@ -1445,6 +1445,9 @@
     <string name="subscriptions__allowances">الميزانيات</string>
     <string name="subscriptions__allowances_empty_description">يمكنك تعيين حدود للإنفاق لتلبية طلبات الدفع من جهات الاتصال الموثوقة تلقائيًا.</string>
     <string name="subscriptions__allowances_empty_headline">أعدّ\n&lt;accent&gt;الميزانيات&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">سجلات الميزانيات لديك أقدم من سجلات استخدمتها هذه المحفظة من قبل. ستطلب الطلبات موافقتك حتى تستأنف.</string>
+    <string name="subscriptions__allowances_paused_resume">استئناف</string>
+    <string name="subscriptions__allowances_paused_title">تم إيقاف الدفعات التلقائية مؤقتًا</string>
     <string name="subscriptions__cancel_subscription">إلغاء الاشتراك</string>
     <string name="subscriptions__choose_recipient">اختر المستلم</string>
     <string name="subscriptions__content_too_long">اختصر اسم الاشتراك أو وصفه وحاول مرة أخرى.</string>

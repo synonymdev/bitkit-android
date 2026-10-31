@@ -135,6 +135,11 @@ class PaykitAllowanceRepo @Inject constructor(
     /** Sats paid automatically per entry id, for "Paid so far". */
     val autoPaidSats: StateFlow<Map<String, ULong>> = _autoPaidSats.asStateFlow()
 
+    private val _isAutomaticPaymentPaused = MutableStateFlow(false)
+
+    /** True while the allowance ledger is behind one this wallet has read, until [resumeAutomaticPayments]. */
+    val isAutomaticPaymentPaused: StateFlow<Boolean> = _isAutomaticPaymentPaused.asStateFlow()
+
     val events: SharedFlow<PaykitAllowanceEvent> = executor.events
 
     private val _offersToAnnounce = MutableStateFlow<List<PaykitAllowanceEntry>>(emptyList())
@@ -219,6 +224,7 @@ class PaykitAllowanceRepo @Inject constructor(
         manualRequestSignatures.clear()
         _offersToAnnounce.update { emptyList() }
         announcedOfferKeys.clear()
+        _isAutomaticPaymentPaused.update { false }
         publish(emptyList(), PaykitAllowanceLocalState())
     }
 
@@ -228,7 +234,9 @@ class PaykitAllowanceRepo @Inject constructor(
             refreshMutex.withLock {
                 val listing = listAllowances()
                 listing.onSuccess { executor.rememberEndedAllowances(identity, it) }
+                val isPaused = executor.isLedgerBehind(identity)
                 if (activeIdentity == identity) {
+                    _isAutomaticPaymentPaused.update { isPaused }
                     publish(listing.getOrDefault(_allowances.value), executor.localState(identity))
                 }
                 listing.map {}
@@ -421,6 +429,17 @@ class PaykitAllowanceRepo @Inject constructor(
 
     suspend fun reject(entryId: String): Result<Unit> = respond(entry(entryId)) {
         paykitSdkService.rejectAllowance(it.counterparty, it.allowanceId)
+    }
+
+    /** Resumes automatic payments from the ledger read now; see [PaykitAllowanceExecutor.acceptCurrentLedger]. */
+    suspend fun resumeAutomaticPayments(): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+            executor.acceptCurrentLedger(identity)
+            executor.recover(identity)
+            refresh()
+            Unit
+        }
     }
 
     suspend fun end(entryId: String): Result<Unit> = withContext(ioDispatcher) {
