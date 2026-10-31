@@ -782,7 +782,7 @@
     <string name="usdt__from_address">Van adres</string>
     <string name="usdt__hide_details">Details verbergen</string>
     <string name="usdt__intro_decline">Nee, bedankt</string>
-    <string name="usdt__intro_description">Bitcoin in hart en nieren. Dollars wanneer u ze nodig heeft. Schakel USDT (Tether) in om digitale dollars te verzenden en ontvangen met Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin in hart en nieren. Dollars wanneer u ze nodig heeft. Schakel USDT (Tether) in om snel digitale dollars te verzenden en ontvangen met Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLLARS?&lt;/accent&gt;\nU BESLIST</string>
     <string name="usdt__intro_title">Nieuw: USDT</string>
     <string name="usdt__maximum_total">Max. afschrijving</string>

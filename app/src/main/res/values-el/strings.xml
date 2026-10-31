@@ -768,7 +768,7 @@
     <string name="usdt__from_address">Από διεύθυνση</string>
     <string name="usdt__hide_details">Απόκρυψη λεπτομερειών</string>
     <string name="usdt__intro_decline">Όχι, ευχαριστώ</string>
-    <string name="usdt__intro_description">Bitcoin στην καρδιά. Δολάρια όταν τα χρειάζεσαι. Ενεργοποίησε το USDT (Tether) για να στέλνεις και να λαμβάνεις ψηφιακά δολάρια με το Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin στην καρδιά. Δολάρια όταν τα χρειάζεσαι. Ενεργοποίησε το USDT (Tether) για να στέλνεις και να λαμβάνεις γρήγορα ψηφιακά δολάρια με το Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;ΔΟΛΑΡΙΑ;&lt;/accent&gt;\nΔΙΚΗ ΣΟΥ ΕΠΙΛΟΓΗ</string>
     <string name="usdt__intro_title">Νέο: USDT</string>
     <string name="usdt__maximum_total">Μέγ. συνολική χρέωση</string>

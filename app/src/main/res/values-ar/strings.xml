@@ -767,7 +767,7 @@
     <string name="usdt__from_address">من العنوان</string>
     <string name="usdt__hide_details">إخفاء التفاصيل</string>
     <string name="usdt__intro_decline">لا، شكرًا</string>
-    <string name="usdt__intro_description">Bitcoin في الصميم. ودولارات عندما تحتاجها. فعّل USDT (Tether) لإرسال الدولارات الرقمية واستلامها باستخدام Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin في الصميم. ودولارات عندما تحتاجها. فعّل USDT (Tether) لإرسال الدولارات الرقمية واستلامها بسرعة باستخدام Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;دولارات؟&lt;/accent&gt;\nالقرار لك</string>
     <string name="usdt__intro_title">جديد: USDT</string>
     <string name="usdt__maximum_total">أقصى خصم إجمالي</string>

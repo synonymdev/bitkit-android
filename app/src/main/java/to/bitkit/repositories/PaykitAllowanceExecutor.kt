@@ -194,7 +194,26 @@ class PaykitAllowanceExecutor @Inject constructor(
         this.accountingAmount = accountingAmount
     }
 
-    fun activate(identity: String?) = run { activeIdentity = identity }
+    /** False while allowances are off: no new automatic payment starts, but sent ones still settle. */
+    @Volatile
+    private var isAdmitting = true
+
+    fun activate(identity: String?) {
+        activeIdentity = identity
+        isAdmitting = true
+    }
+
+    fun stopAdmitting() = run { isAdmitting = false }
+
+    /** Stops new automatic payments for [identity] and settles the ones already sent, or left open by a kill. */
+    suspend fun pause(identity: String) {
+        stopAdmitting()
+        if (activeIdentity == identity) return
+        activeIdentity = identity
+        recover(identity)
+    }
+
+    private fun admits(activation: String?) = isAdmitting && activeIdentity == activation
 
     // region Local state
 
@@ -537,11 +556,12 @@ class PaykitAllowanceExecutor @Inject constructor(
             return@withContext PaykitAllowanceAutoPayResult.NOT_COVERED
         }
 
+        val activation = activeIdentity
         try {
             runSuspendCatching {
                 ensureReconciled(identity)
                 // Survive a cancelled caller: stopping after the acceptance would leave the request unpaid.
-                withContext(NonCancellable) { admitAndPay(request, allowances, identity) }
+                withContext(NonCancellable) { admitAndPay(request, allowances, identity, activation) }
             }.getOrElse {
                 Logger.warn("Kept an incoming request on the manual flow after an allowance error", it, context = TAG)
                 PaykitAllowanceAutoPayResult.MANUAL
@@ -556,6 +576,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         request: PaykitPaymentRequest,
         allowances: List<PaykitAllowance>,
         identity: String,
+        activation: String?,
     ): PaykitAllowanceAutoPayResult {
         val amountSats = request.allowanceSats()
         if (amountSats == null) {
@@ -622,8 +643,15 @@ class PaykitAllowanceExecutor @Inject constructor(
             return PaykitAllowanceAutoPayResult.MANUAL
         }
 
+        if (!admits(activation)) {
+            Logger.info("Kept an incoming request manual: allowances turned off before acceptance", context = TAG)
+            return PaykitAllowanceAutoPayResult.DEFERRED
+        }
+
         val endpointIdentifier = payment.endpoint.methodId.rawValue
         val association = payer.acceptOnThisInstall(request) {
+            // Allowances may have turned off while the acceptance waited; failing here drops its intent.
+            if (!admits(activation)) throw PaykitAllowanceError.Unavailable
             // Every identity-wide execution step needs this app to own the request's execution claim first.
             paykitSdkService.claimPaymentRequestForExecution(request.counterparty, request.paymentRequestId)
             paykitSdkService.acceptPaymentRequestAutomatically(
@@ -634,6 +662,8 @@ class PaykitAllowanceExecutor @Inject constructor(
                     trustedTime = selectionTime,
                 ),
                 checks = checks(request, endpointIdentifier, selectionTime),
+                // The claim and the acceptance can wait for the SDK lock, so check again under it.
+                admit = { if (!admits(activation)) throw PaykitAllowanceError.Unavailable },
             )
         }.getOrThrow()
         sendQueuedMessages(request)

@@ -783,7 +783,7 @@
     <string name="usdt__from_address">Origen</string>
     <string name="usdt__hide_details">Ocultar detalles</string>
     <string name="usdt__intro_decline">No, gracias</string>
-    <string name="usdt__intro_description">Bitcoin en esencia. Dólares cuando los necesite. Active USDT (Tether) para enviar y recibir dólares digitales con Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin en esencia. Dólares cuando los necesite. Active USDT (Tether) para enviar y recibir dólares digitales rápidamente con Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;¿DÓLARES?&lt;/accent&gt;\nUSTED DECIDE</string>
     <string name="usdt__intro_title">Nuevo: USDT</string>
     <string name="usdt__maximum_total">Cargo total máx.</string>

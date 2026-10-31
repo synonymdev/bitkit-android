@@ -8,6 +8,10 @@ The restore journey checks that a payer restored from its recovery phrase keeps 
 
 ## Setup
 
+Allowances are on by default and can be turned off from Dev Settings ("Enable Allowances"). With them
+off the Allowances tab is hidden and every request opens as an ordinary Payment Request;
+`allowances-turned-off.xml` covers it.
+
 Run Bitkit against regtest with Paykit UI enabled on two instances that have each other saved as
 contacts and linked over Paykit, exactly as for
 [`../subscriptions/README.md`](../subscriptions/README.md). One instance plays the payer (the one

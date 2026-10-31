@@ -168,7 +168,7 @@ class PaykitAllowanceRepo @Inject constructor(
                 .filter { it }
                 .collect {
                     // Attempts recovery left open while the node could not list payments are settled now.
-                    activeIdentity?.let { identity -> executor.recover(identity) }
+                    executor.activeIdentity?.let { identity -> executor.recover(identity) }
                     executor.settleOpenLightningAttempts()
                 }
         }
@@ -199,8 +199,23 @@ class PaykitAllowanceRepo @Inject constructor(
     }
 
     fun deactivate() {
-        activeIdentity = null
         executor.activate(null)
+        clear()
+    }
+
+    /**
+     * Hides allowances and stops new automatic payments, while payments already sent still settle. [identity] lets
+     * the executor settle attempts left open before allowances were turned off; null keeps its current one.
+     */
+    suspend fun pause(identity: String? = null) {
+        executor.stopAdmitting()
+        clear()
+        val normalizedIdentity = identity?.let(PubkyPublicKeyFormat::normalized) ?: return
+        withContext(ioDispatcher) { executor.pause(normalizedIdentity) }
+    }
+
+    private fun clear() {
+        activeIdentity = null
         manualRequestSignatures.clear()
         _offersToAnnounce.update { emptyList() }
         announcedOfferKeys.clear()

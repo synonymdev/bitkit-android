@@ -5,6 +5,7 @@ import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -73,6 +74,7 @@ class SettingsViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
+        whenever(settingsStore.areAllowancesEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.isPubkyProfileSetupPending).thenReturn(MutableStateFlow(false))
         whenever(contactPaymentSettingsRepo.isEnabled).thenReturn(contactPaymentsEnabled)
         whenever(contactPaymentSettingsRepo.isPublicEnabled).thenReturn(MutableStateFlow(false))
