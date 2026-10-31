@@ -30,6 +30,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.usecases.ProfileRemovalConfirmation
 import to.bitkit.usecases.ProfileRemovalCoordinator
 import to.bitkit.usecases.ProfileRemovalFailure
+import to.bitkit.usecases.ProfileRemovalLocalOnly
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -180,6 +181,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun dismissDeleteDialog() {
         preparationRevision++
+        removalCoordinator.discard(removalConfirmation)
         removalConfirmation = null
         _uiState.update {
             it.copy(
@@ -200,6 +202,7 @@ class EditProfileViewModel @Inject constructor(
         try {
             prepare().onSuccess { confirmation ->
                 if (revision != preparationRevision || !removalCoordinator.isCurrent(confirmation.owner)) {
+                    removalCoordinator.discard(confirmation)
                     return@onSuccess
                 }
                 removalConfirmation = confirmation
@@ -285,6 +288,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun dismissDeleteFailureDialog() {
         preparationRevision++
+        removalCoordinator.discard(removalConfirmation)
         removalConfirmation = null
         _uiState.update { it.copy(showDeleteFailureDialog = false) }
     }
@@ -357,6 +361,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     private suspend fun showRemovalError(error: Throwable) {
+        if (error is ProfileRemovalLocalOnly) _uiState.update { it.copy(canDisconnectLocally = true) }
         if (error is PubkyContactError.ActiveProfileSubscriptions || error == PubkyContactError.ActiveSubscription) {
             _uiState.update { it.copy(canDisconnectLocally = true) }
             ToastEventBus.send(
@@ -380,6 +385,11 @@ class EditProfileViewModel @Inject constructor(
 
     fun isRemovalCurrent(effect: EditProfileEffect.RemovalCompleted): Boolean =
         removalCoordinator.isCurrent(effect.owner)
+
+    override fun onCleared() {
+        removalCoordinator.discard(removalConfirmation)
+        super.onCleared()
+    }
 }
 
 @Stable

@@ -1,10 +1,20 @@
 # Profile
 
+`public-private-sharing.xml` verifies independent sharing controls, public opt-in and preference persistence. Use an unfunded local test identity. Public payment details can identify the profile even when the public Bitcoin address is separate from ordinary Receive; turning sharing off cannot erase copies others already obtained.
+
+For remote-state checks, inspect the profile's public Bitcoin endpoint and a linked contact's private list. Public, ordinary Receive and contact-specific Bitcoin addresses must differ. With only private sharing enabled, public endpoints must be absent and the App Registry private capability must remain enabled, including with zero contacts. Disabling private sharing must withdraw private lists without removing opted-in public endpoints; disabling public sharing must remove public endpoints without withdrawing private lists. These inspections need remote storage access beyond the UI journey. USDT account identifiers are unchanged; Bitcoin address separation is not a claim of anonymity or per-contact USDT addresses.
+
+Upgrade a pre-split wallet with the combined sharing preference enabled. Private sharing must retain its preference, public sharing must start off, and old public endpoints must be queued for removal. Fail that removal and verify it remains pending until recovery. Known previously public receive addresses must not be offered by ordinary Receive or private sharing. The app did not record every historical public address, so this cannot establish exclusion of unknown earlier addresses or undo their exposure.
+
+Hold publication, change sharing or identity, then release it. New work must stop after opt-out or loss of the original session; admitted writes must finish before cleanup. Fail public enable and disable separately: enable must restore prior public consent, disable must stay off, and failed cleanup must remain pending without changing private consent. Retain public reservations after failed or uncertain publication, disabling, profile cleanup and restart. Restore a backup containing reserved-index ceilings and legacy address exclusions, and verify new Receive, private and public addresses exclude the old reserved addresses. Older backups and seed-only restoration cannot reconstruct reservation metadata they never contained. Controlled failures, operation gates and backup restoration are manual checks, not UI journey capabilities.
+
+Android restores metadata before sharing settings. It conservatively quarantines the last cached Receive address before discarding that cache, because the later settings backup may identify it as a legacy public address. Public sharing stays off after every backup restore until explicitly enabled again.
+
 `delete-profile.xml` verifies visible progress and completion when deleting a disposable profile. Use a test identity that may be deleted.
 
 `unlink-ring-pubky.xml` verifies that a pubky adopted from Pubky Ring shows "Unlink pubky" instead of "Delete Profile" in Edit Profile, returns to profile onboarding after unlinking, and stays available in Pubky Ring. It needs Pubky Ring (`to.pubky.ring`) on the same emulator or device, signed with the same key as the Bitkit build (`app/debug.keystore` for a dev build), which is not a listed capability. Use a disposable Ring identity; a profile created in Bitkit keeps "Delete Profile", covered by `delete-profile.xml`.
 
-During profile deletion, automatic contact refresh, request intake and endpoint publication must not start new work. Already admitted operations and explicit deletion cleanup still finish. Once destructive cleanup has begun, its durable pending state keeps authenticated work paused even after a failure or restart. Only an explicit local Disconnect may finish the interrupted local cleanup; it does not claim that the remote profile was deleted. A failure before that durable checkpoint may resume normal work for the unchanged identity. Verifying SDK admission and a controlled cleanup failure requires operation gates beyond the journey runner capabilities; this remains a manual check rather than a timed deletion guarantee.
+During profile deletion, automatic contact refresh, request intake and endpoint publication must not start new work. Already admitted operations and explicit deletion cleanup still finish. Once destructive cleanup has begun, its durable pending state keeps authenticated work paused even after a failure or restart. After restart, only an explicit local Disconnect may finish interrupted local cleanup; it does not claim that the remote profile was deleted. While the original live logout is still retained, an unknown grant-revocation outcome may instead be retried after a fresh confirmation, as described below. A failure before that durable checkpoint may resume normal work for the unchanged identity. Verifying SDK admission and a controlled cleanup failure requires operation gates beyond the journey runner capabilities; this remains a manual check rather than a timed deletion guarantee.
 
 Contact-link retention after deletion is platform-specific. Android cancels a scan awaiting a signed-in contacts refresh when deletion signs out; it does not retry that scan as the iOS retained-link flow does. This change does not alter that cancellation behavior.
 
@@ -14,7 +24,7 @@ Hold invoice preparation or the final identity lookup before publication, begin 
 
 Delayed or failed session restoration requires network fault injection, which is not a journey-runner capability; see the PR manual checks.
 
-Hold initial session restoration with public contact payments enabled, turn contact payments off, then release restoration. No automatic endpoint preparation or publication may resume, and pending cleanup must remain available. Repeat with publication waiting for SDK admission. If a write was already admitted, let it finish and verify it cannot clear the cleanup requested by disabling sharing. These checks require restoration and SDK-operation gates beyond the journey runner capabilities.
+Hold initial session restoration with public payments enabled, turn public payments off, then release restoration. No automatic endpoint preparation or publication may resume, and pending cleanup must remain available. Private contact payments remain unchanged. Repeat with publication waiting for SDK admission. If a write was already admitted, let it finish and verify it cannot clear the cleanup requested by disabling sharing. These checks require restoration and SDK-operation gates beyond the journey runner capabilities.
 
 Hold endpoint preparation before publication admission, or queue a public publication behind SDK work. Begin deletion, complete endpoint removal while session revocation remains held, then release the queued preparation/publication. The removed endpoints must stay absent. Separately, let a publication enter its SDK write before deletion: cleanup must wait for it and remove its endpoints afterward, even if its caller is cancelled. This requires controlled operation gates beyond the journey runner capabilities.
 
@@ -36,7 +46,7 @@ With an imported grant that cannot be restored and Ring unavailable, Disconnect 
 
 Profile deletion withdraws private payment lists before removing the profile and performs App Registry reconciliation during final public cleanup. An intermediate registry update is deferred; the existing private cleanup marker stays pending until deletion succeeds or normal cleanup retry completes. Public endpoint removal, capability checks, session revocation and uncertain-write safety waits remain required.
 
-For controlled fault testing, interrupt deletion after private withdrawal but before profile removal, then restart with the same identity. Verify cleanup remains pending and authenticated automatic work does not resume. Review reads the original identity again and requires a new confirmation; Disconnect only completes local cleanup and leaves remote state uncertain. Also hold a private withdrawal undelivered: it must remain pending, not be acknowledged by the deferred registry step. Check that disabling private sharing outside a pending removal still reconciles the registry. Local Disconnect does not make a registry mutation. These checks require operation gates and network fault injection beyond the journey runner capabilities.
+For controlled fault testing, interrupt deletion after private withdrawal but before profile removal, while the process remains alive. Verify cleanup remains pending and authenticated automatic work does not resume. Review reads the original identity again and requires a new confirmation; after restart, only local Disconnect is available and remote state remains uncertain. Also hold a private withdrawal undelivered: it must remain pending, not be acknowledged by the deferred registry step. Check that disabling private sharing outside a pending removal still reconciles the registry. Local Disconnect does not make a registry mutation. These checks require operation gates and network fault injection beyond the journey runner capabilities.
 
 ## Interrupted removal and local recovery
 
@@ -69,3 +79,33 @@ protection; that native conditional-mutation work remains separate.
 `create-profile.xml` records the name-only saving interval and checks the saved name after reopening and relaunching. Use a fresh unfunded identity per run and record the exact app/SDK revisions and network. With controlled network fault injection, block direct UDP while keeping the configured HTTP relays and homeserver reachable; saving should still complete. Reject the required profile write separately and verify saving reports failure instead of navigating to Pay Contacts. Fault injection is a manual check beyond journey-runner capabilities.
 
 On Android, the restart check waits for the full profile (`ProfileViewName`). A matching `ProfileCachedName` during loading does not complete that check. Record an unfinished load separately from a loaded profile with a missing or incorrect name.
+
+For the sharing-disabled deletion variant of `delete-profile.xml`, first save a disposable contact
+and establish its private link, turn Pay Contacts off, and let sharing cleanup finish. Keep the saved
+contact. Profile deletion must still obtain a private-list withdrawal acknowledgement for retained
+linked peers before removing the profile. A disabled App Registry flag alone is not an acknowledgement.
+Ordinary background cleanup while sharing is disabled remains unchanged. Record the app revision and
+actual homeserver/private-link responses; a service mock is not completion evidence for this variant.
+
+## Original-grant logout retry
+
+Use a disposable live profile with a homeserver advertising the existing grant-proof-logout protocol.
+Reject its logout once before server acceptance, after endpoint withdrawal and profile deletion have
+been acknowledged. The app must retain local credentials and pending recovery. It must make no
+further logout request when the dialog closes, the app resumes, or Retry opens a new confirmation.
+Cancel that confirmation and verify the request count stays unchanged. Confirm a fresh Retry and
+verify it uses the original grant and signer, without repeating acknowledged endpoint withdrawal,
+profile deletion or contact reads. Same-grant bearer refresh may occur; a replacement grant or
+identity must never be used by this intent.
+
+Separately, discard the logout response after the server commits. The app must retain uncertainty
+until another explicitly confirmed attempt from the same live handle acknowledges the original
+grant. If the native acknowledgement was retained but cancellation or local storage failure hid
+completion, offer only local completion and send no further logout. Replace the identity while a
+logout is held and verify replacement waits for cancellation to drain; an old dialog cannot erase
+the replacement credentials. Restart with pending removal and verify the app cannot reconstruct
+remote authority from the saved UUID or credentials.
+
+Record the exact app and released SDK revisions, redacted grant/operation counters, server commit
+observation, and local marker transitions. These fault cases need controlled network boundaries;
+component tests and the ordinary journey runner do not establish an authenticated app pass.

@@ -88,8 +88,14 @@ class ProfileViewModel @Inject constructor(
         pubkyRepo.profileRecoveryPending,
         _localDisconnect,
         pubkyRepo.profileRecoveryCanDisconnect,
-    ) { controls, pending, localOnly, canDisconnect ->
-        controls.copy(recoveryPending = pending, localDisconnect = localOnly, recoveryCanDisconnect = canDisconnect)
+        removalCoordinator.retryOwner,
+    ) { controls, pending, localOnly, canDisconnect, retryOwner ->
+        controls.copy(
+            recoveryPending = pending,
+            localDisconnect = localOnly,
+            recoveryCanDisconnect = canDisconnect,
+            recoveryCanRetry = removalCoordinator.canRetry(retryOwner),
+        )
     }
 
     init {
@@ -152,7 +158,7 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    fun showSignOutConfirmation() {
+    fun showSignOutConfirmation(remoteRetry: Boolean = false) {
         if (_isSigningOut.value) return
         val state = uiState.value
         if (state.recoveryPending && !state.recoveryCanDisconnect) return
@@ -166,13 +172,16 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val failure = removalFailure
-                val result = if (failure != null) {
+                val result = if (remoteRetry) {
+                    removalCoordinator.prepareRemoteRetry(owner)
+                } else if (failure != null) {
                     removalCoordinator.prepareLocalDisconnect(failure)
                 } else {
                     removalCoordinator.prepareSignOut(owner)
                 }
                 result.onSuccess { confirmation ->
                     if (revision != preparationRevision || !removalCoordinator.isCurrent(confirmation.owner)) {
+                        removalCoordinator.discard(confirmation)
                         return@onSuccess
                     }
                     removalConfirmation = confirmation
@@ -187,6 +196,7 @@ class ProfileViewModel @Inject constructor(
 
     fun dismissSignOutDialog() {
         preparationRevision++
+        removalCoordinator.discard(removalConfirmation)
         removalConfirmation = null
         _showSignOutDialog.value = false
     }
@@ -283,6 +293,7 @@ class ProfileViewModel @Inject constructor(
             isLoading = controls.recoveryPending == null || (controls.recoveryPending == false && isLoading),
             recoveryPending = controls.recoveryPending == true,
             recoveryCanDisconnect = controls.recoveryCanDisconnect,
+            recoveryCanRetry = controls.recoveryCanRetry && removalCoordinator.canRetry(displayedOwner),
             localDisconnect = controls.localDisconnect,
             owner = displayedOwner,
             showSignOutDialog = controls.showSignOutDialog,
@@ -325,6 +336,11 @@ class ProfileViewModel @Inject constructor(
             }
         }
     }
+
+    override fun onCleared() {
+        removalCoordinator.discard(removalConfirmation)
+        super.onCleared()
+    }
 }
 
 @Stable
@@ -335,6 +351,7 @@ data class ProfileUiState(
     val canEdit: Boolean = false,
     val recoveryPending: Boolean = false,
     val recoveryCanDisconnect: Boolean = false,
+    val recoveryCanRetry: Boolean = false,
     val localDisconnect: Boolean = false,
     val owner: PubkyProfileOwner? = null,
     val isLoading: Boolean = true,
@@ -347,6 +364,7 @@ data class ProfileUiState(
 private data class ProfileControls(
     val recoveryPending: Boolean? = null,
     val recoveryCanDisconnect: Boolean = false,
+    val recoveryCanRetry: Boolean = false,
     val localDisconnect: Boolean = false,
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,

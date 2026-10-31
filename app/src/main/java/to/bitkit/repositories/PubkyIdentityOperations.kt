@@ -9,7 +9,10 @@ import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
 /** Admission covers local completion and rollback as well as the native session change. */
-internal class PubkyIdentityOperations(private val beforeTransition: suspend () -> Unit = {}) {
+internal class PubkyIdentityOperations(
+    private val beforeTransition: suspend () -> Unit = {},
+    private val beforeWipeDrain: () -> Unit = {},
+) {
     private val lock = Any()
     private val active = mutableSetOf<Operation>()
     private var removal: Operation? = null
@@ -66,6 +69,7 @@ internal class PubkyIdentityOperations(private val beforeTransition: suspend () 
         // Revoke and drain before the SDK barrier; no monitor or session mutex is held while awaiting cleanup.
         cancelled?.cancel()
         try {
+            beforeWipeDrain()
             draining.forEach { it.drained.await() }
             val operation = synchronized(lock) {
                 Operation(this).also {

@@ -165,7 +165,11 @@ class PaykitAllowanceRepo @Inject constructor(
                 .map { it.nodeLifecycleState.isRunning() }
                 .distinctUntilChanged()
                 .filter { it }
-                .collect { executor.settleOpenLightningAttempts() }
+                .collect {
+                    // Attempts recovery left open while the node could not list payments are settled now.
+                    activeIdentity?.let { identity -> executor.recover(identity) }
+                    executor.settleOpenLightningAttempts()
+                }
         }
     }
 
@@ -583,8 +587,11 @@ class PaykitAllowanceRepo @Inject constructor(
      * Reports a manual payment of a request to the allowance ledger; returns the attempt id or null when no ledger
      * applies. Fails with [PaykitAllowanceError.PaymentAlreadyRecorded] while another attempt for the request is live.
      */
-    suspend fun beginManualPayment(request: PaykitPaymentRequest, paymentEndpointIdentifier: String): Result<String?> =
-        executor.beginManualPayment(request, paymentEndpointIdentifier)
+    suspend fun beginManualPayment(
+        request: PaykitPaymentRequest,
+        paymentEndpointIdentifier: String,
+        paymentHash: String?,
+    ): Result<String?> = executor.beginManualPayment(request, paymentEndpointIdentifier, paymentHash)
 
     suspend fun manualLightningPaymentSent(attemptId: String, paymentHash: String) =
         executor.manualLightningPaymentSent(attemptId, paymentHash)

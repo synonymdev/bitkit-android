@@ -1,5 +1,9 @@
 package to.bitkit.repositories
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -80,6 +84,11 @@ class PaykitAllowanceStore @Inject constructor(
         val statesByIdentity: Map<String, PaykitAllowanceLocalState> = emptyMap(),
     )
 
+    private val _backupStateVersion = MutableStateFlow(0L)
+
+    /** Moves when backed-up state changes; a new trusted-time watermark alone does not ask for a backup. */
+    val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
+
     fun load(identity: String): PaykitAllowanceLocalState =
         runCatching { loadAll().statesByIdentity[storageKey(identity)] }
             .onFailure { Logger.warn("Failed to load Paykit allowance state", it, context = TAG) }
@@ -88,9 +97,31 @@ class PaykitAllowanceStore @Inject constructor(
 
     suspend fun save(identity: String, state: PaykitAllowanceLocalState) {
         val stored = loadAll()
+        val previous = stored.statesByIdentity[storageKey(identity)]
         val updated = stored.copy(statesByIdentity = stored.statesByIdentity + (storageKey(identity) to state))
         keychain.upsertString(KEY, storeJson.encodeToString(updated))
+        if (previous?.withoutWatermark() != state.withoutWatermark()) _backupStateVersion.update { it + 1 }
     }
+
+    /**
+     * Every identity's allowance state, for the wallet backup. Throws when the stored state cannot be read, so a backup
+     * never replaces a recoverable one with nothing.
+     */
+    fun backupSnapshot(): Map<String, PaykitAllowanceLocalState> {
+        val value = keychain.loadString(KEY) ?: return emptyMap()
+        return storeJson.decodeFromString<Stored>(value).statesByIdentity
+    }
+
+    /** Replaces the allowance state of each identity in [states], before recovery reads it. */
+    suspend fun restoreBackup(states: Map<String, PaykitAllowanceLocalState>) {
+        if (states.isEmpty()) return
+        val stored = loadAll()
+        val restored = states.mapKeys { (identity, _) -> storageKey(identity) }
+        keychain.upsertString(KEY, storeJson.encodeToString(stored.copy(stored.statesByIdentity + restored)))
+        _backupStateVersion.update { it + 1 }
+    }
+
+    private fun PaykitAllowanceLocalState.withoutWatermark() = copy(lastTrustedTimeMillis = null)
 
     private fun loadAll(): Stored {
         val value = keychain.loadString(KEY) ?: return Stored()

@@ -5,6 +5,9 @@
     Record the sequence so progress can be checked even when deletion completes quickly.
     Start with zero contacts and record the deletion time without a fixed latency target.
     Repeat with 62 imported contacts, once after preparation settles and once immediately after import.
+    Separately repeat with a saved linked contact after turning Pay Contacts off and waiting for
+    sharing cleanup to finish. Deletion must still withdraw any retained private lists, require
+    their acknowledgement, and reach onboarding without turning sharing back on.
     Measure confirmation to onboarding and check logs for any uncertain-write safety wait.
     During deletion, check the indicator on Delete Profile. Save stays disabled with its label visible.
     Cleanup may still wait for admitted operations and remote safety checks; no fixed duration is expected.

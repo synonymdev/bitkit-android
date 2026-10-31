@@ -425,7 +425,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             assertFalse(sut.uiState.value.isSigningOut)
             cancelAndIgnoreRemainingEvents()
         }
-        verify(pubkyRepo, never()).signOutForProfileRemoval()
+        verify(pubkyRepo, never()).executeProfileLogout(any())
     }
 
     @Test
@@ -456,8 +456,8 @@ class ProfileViewModelTest : BaseUnitTest() {
             }
             cancelAndIgnoreRemainingEvents()
         }
-        verify(pubkyRepo, never()).signOutForProfileRemoval()
-        verify(fixture.privateRepo, never()).removePublishedEndpointsForProfileRemoval()
+        verify(pubkyRepo, never()).executeProfileLogout(any())
+        verify(fixture.privateRepo, never()).removePublishedEndpointsForProfileRemoval(any())
         assertNull(fixture.store.pendingAttempt())
     }
 
@@ -480,7 +480,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             sut.signOut()
             advanceUntilIdle()
             assertNull(fixture.store.pendingAttempt())
-            verify(pubkyRepo, never()).signOutForProfileRemoval()
+            verify(pubkyRepo, never()).executeProfileLogout(any())
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -491,7 +491,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         sut.signOut()
         advanceUntilIdle()
-        verify(pubkyRepo, never()).signOutForProfileRemoval()
+        verify(pubkyRepo, never()).executeProfileLogout(any())
         sut.showSignOutConfirmation()
         advanceUntilIdle()
         sut.effects.test {
@@ -504,13 +504,13 @@ class ProfileViewModelTest : BaseUnitTest() {
             assertFalse(sut.isRemovalCurrent(effect))
             expectNoEvents()
         }
-        verify(pubkyRepo, times(1)).signOutForProfileRemoval()
+        verify(pubkyRepo, times(1)).executeProfileLogout(any())
     }
 
     @Test
     fun `uncertain sign out offers local confirmation without replaying revocation`() = test {
         val sut = createSut(createProfile())
-        whenever(pubkyRepo.signOutForProfileRemoval()).thenAnswer { throw ProfileTestAppError("lost response") }
+        whenever(pubkyRepo.executeProfileLogout(any())).thenAnswer { throw ProfileTestAppError("lost response") }
         advanceUntilIdle()
         sut.showSignOutConfirmation()
         advanceUntilIdle()
@@ -527,8 +527,8 @@ class ProfileViewModelTest : BaseUnitTest() {
             advanceUntilIdle()
             assertIs<ProfileEffect.SignedOut>(awaitItem())
         }
-        verify(pubkyRepo, times(1)).signOutForProfileRemoval()
-        verify(fixture.privateRepo, times(1)).removePublishedEndpointsForProfileRemoval()
+        verify(pubkyRepo, times(1)).executeProfileLogout(any())
+        verify(fixture.privateRepo, times(1)).removePublishedEndpointsForProfileRemoval(any())
     }
 
     @Test
@@ -556,7 +556,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         fixture.current = PubkyProfileOwner(PubkySignIn("pubkyalice", 3), 3)
         sut.signOut()
         advanceUntilIdle()
-        verify(pubkyRepo, never()).signOutForProfileRemoval()
+        verify(pubkyRepo, never()).executeProfileLogout(any())
         verify(fixture.privateRepo, never()).finishProfileRemoval(any())
     }
 
@@ -574,7 +574,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             advanceUntilIdle()
             assertFalse(sut.uiState.value.showSignOutDialog)
             sut.signOut()
-            verify(pubkyRepo, never()).signOutForProfileRemoval()
+            verify(pubkyRepo, never()).executeProfileLogout(any())
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -599,7 +599,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             advanceUntilIdle()
             assertFalse(sut.uiState.value.showSignOutDialog)
             sut.signOut()
-            verify(pubkyRepo, never()).signOutForProfileRemoval()
+            verify(pubkyRepo, never()).executeProfileLogout(any())
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -638,7 +638,7 @@ class ProfileViewModelTest : BaseUnitTest() {
             assertIs<ProfileEffect.SignedOut>(awaitItem())
             assertNull(fixture.store.pendingAttempt())
         }
-        verify(pubkyRepo, times(1)).signOutForProfileRemoval()
+        verify(pubkyRepo, times(1)).executeProfileLogout(any())
     }
 
     private fun createSut(

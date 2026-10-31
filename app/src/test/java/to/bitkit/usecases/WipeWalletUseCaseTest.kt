@@ -345,6 +345,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             settingsStore,
             coreService,
             lightningRepo,
+            cacheStore,
+            keychain,
         )
         val contact = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(

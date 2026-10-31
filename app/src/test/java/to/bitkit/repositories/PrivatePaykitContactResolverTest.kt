@@ -82,7 +82,15 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
         )) {
             val store = mock<PrivatePaykitReservationStore>()
             whenever(store.data).thenReturn(MutableStateFlow(ledger))
-            val reservations = PrivatePaykitAddressReservationRepo(testDispatcher, store, mock(), mock(), mock())
+            val reservations = PrivatePaykitAddressReservationRepo(
+                testDispatcher,
+                store,
+                mock(),
+                mock(),
+                mock(),
+                mock(),
+                mock()
+            )
             val resolver = PrivatePaykitContactResolver(
                 testDispatcher,
                 cacheStore,
@@ -109,7 +117,15 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
         val storage = DataStoreFactory.create(PrivatePaykitReservationSerializer, scope = storageScope) { file }
         val store = mock<PrivatePaykitReservationStore>()
         whenever(store.data).thenReturn(storage.data)
-        val reservations = PrivatePaykitAddressReservationRepo(testDispatcher, store, mock(), mock(), mock())
+        val reservations = PrivatePaykitAddressReservationRepo(
+            testDispatcher,
+            store,
+            mock(),
+            mock(),
+            mock(),
+            mock(),
+            mock()
+        )
         val resolver = PrivatePaykitContactResolver(
             testDispatcher,
             cacheStore,

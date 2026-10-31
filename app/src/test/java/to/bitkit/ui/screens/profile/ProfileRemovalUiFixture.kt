@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.profile
 
+import com.synonym.paykit.PubkyGrantLogout
+import com.synonym.paykit.PubkyGrantLogoutReceipt
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
@@ -13,6 +15,7 @@ import to.bitkit.repositories.PubkyProfileOwner
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
 import to.bitkit.services.PaykitProfileDeletionSnapshot
+import to.bitkit.services.PaykitProfileLogout
 import to.bitkit.usecases.ProfileRemovalCoordinator
 
 /** Real orchestration and durable marker, with controllable local/native repository boundaries. */
@@ -33,6 +36,14 @@ internal class ProfileRemovalUiFixture(val pubky: PubkyRepo) {
         whenever(pubky.profileOwner()).thenAnswer { current }
         whenever(pubky.isProfileOwnerCurrent(any())).thenAnswer { it.getArgument<PubkyProfileOwner>(0) == current }
         whenever { pubky.prepareProfileDeletion(original) }.thenReturn(Result.success(deletion))
+        val binding = PubkyGrantLogoutReceipt("pubkyalice", "homeserver", "original-grant", "bitkit")
+        whenever { pubky.captureProfileLogout(original) }.doSuspendableAnswer {
+            val native = mock<PubkyGrantLogout> { on { binding() }.thenReturn(binding) }
+            Result.success(PaykitProfileLogout(native, mock()) { current == original })
+        }
+        whenever { pubky.executeProfileLogout(any()) }.thenAnswer {
+            it.getArgument<PaykitProfileLogout>(0).retainAcknowledgement(binding)
+        }
         whenever { sharing.withProfileRemoval<PubkyProfileOwner>(any()) }.doSuspendableAnswer {
             it.getArgument<suspend () -> PubkyProfileOwner>(0).invoke()
         }
@@ -50,10 +61,23 @@ internal class ProfileRemovalUiFixture(val pubky: PubkyRepo) {
         whenever { privateRepo.withProfileDeletionPaused<Unit>(any()) }.doSuspendableAnswer {
             it.getArgument<suspend (PrivatePaykitRepo.ProfileDeletionPause) -> Unit>(0).invoke(pause)
         }
-        whenever { privateRepo.removePublishedEndpointsForProfileRemoval() }.thenReturn(Result.success(Unit))
-        whenever { pubky.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
-        whenever { pubky.deleteProfile(deletion) }.thenReturn(Result.success(Unit))
+        whenever { privateRepo.removePublishedEndpointsForProfileRemoval(any()) }.thenAnswer {
+            it.getArgument<() -> Unit>(0).invoke()
+            Result.success(Unit)
+        }
+        whenever { pubky.removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any()) }.thenAnswer {
+            it.getArgument<() -> Unit>(2).invoke()
+            it.getArgument<() -> Unit>(3).invoke()
+            Result.success(Unit)
+        }
+        whenever { pubky.deleteProfile(any(), any()) }.thenAnswer {
+            it.getArgument<() -> Unit>(1).invoke()
+            Result.success(Unit)
+        }
         whenever { pubky.finishProfileRemovalLocally() }.thenAnswer { current = ended }
+        whenever { pubky.finishProfileRemovalLocally(any(), any()) }.doSuspendableAnswer {
+            pubky.finishProfileRemovalLocally()
+        }
         whenever { privateRepo.finishProfileRemoval(pause) }.thenReturn(Result.success(Unit))
     }
 }

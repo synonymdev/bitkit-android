@@ -20,6 +20,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -869,6 +870,16 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
 
         verify(activityRepo).setContact(eq(fixtures.counterpartyKey), eq(TXID), any(), any())
         assertEquals(mapOf(entryKey to 1_000uL), sut.autoPaidSats.value)
+    }
+
+    @Test
+    fun `running node recovers attempts left open for it`() = test {
+        sut.activate(identity)
+        clearInvocations(executor)
+
+        nodeReady()
+
+        verify(executor).recover(identity)
     }
 
     @Test

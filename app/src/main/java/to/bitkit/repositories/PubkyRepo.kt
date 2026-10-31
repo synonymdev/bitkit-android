@@ -69,6 +69,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PaykitProfileDeletionSnapshot
+import to.bitkit.services.PaykitProfileLogout
 import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitReadTimeoutError
 import to.bitkit.services.PubkyService
@@ -182,7 +183,8 @@ class PubkyRepo @Inject constructor(
     private val scope = appScope(ioDispatcher, TAG)
     private val serviceInitializeMutex = Mutex()
     private val initializeMutex = Mutex()
-    private val identityOperations = PubkyIdentityOperations(::requireNoPendingRemoval)
+    private val identityOperations =
+        PubkyIdentityOperations(::requireNoPendingRemoval, pubkyService::revokeProfileLogout)
     private val deferredRestoreMutex = Mutex()
     private var deferredRestoreGeneration: Long? = null
     private val completedRestoreVersion = AtomicLong()
@@ -427,6 +429,22 @@ class PubkyRepo @Inject constructor(
     /** Close session admission before the native wipe barrier, retaining admitted rollback/local tails. */
     internal suspend fun <T> withWalletWipeAdmission(operation: suspend () -> T): T =
         identityOperations.wipe(operation)
+
+    internal suspend fun captureProfileLogout(owner: PubkyProfileOwner): Result<PaykitProfileLogout> =
+        runSuspendCatching {
+            var captured: PaykitProfileLogout? = null
+            try {
+                performProfileRemoval(owner) {
+                    val publicKey = checkNotNull(owner.signIn).publicKey
+                    captured = pubkyService.captureProfileLogout(publicKey) { isProfileOwnerCurrent(owner) }
+                }.getOrThrow()
+                check(isProfileOwnerCurrent(owner)) { "The profile identity changed" }
+                checkNotNull(captured)
+            } catch (error: Throwable) {
+                captured?.revoke()
+                throw error
+            }
+        }
 
     // region Initialization
 
@@ -913,6 +931,21 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    internal suspend fun removeBitkitPaymentEndpointsForRemoval(
+        endpointsAcknowledged: Boolean,
+        appAcknowledged: Boolean,
+        onEndpointsAcknowledged: () -> Unit,
+        onAppAcknowledged: () -> Unit,
+    ): Result<Unit> = runSuspendCatching {
+        identityOperations.requireRemoval()
+        pubkyService.removeBitkitPaymentEndpointsForRemoval(
+            endpointsAcknowledged,
+            appAcknowledged,
+            onEndpointsAcknowledged,
+            onAppAcknowledged,
+        )
+    }
+
     suspend fun currentPublicKey(): Result<String?> = withContext(ioDispatcher) {
         runSuspendCatching {
             pubkyService.currentPublicKey()?.ensurePubkyPrefix()
@@ -1272,12 +1305,15 @@ class PubkyRepo @Inject constructor(
         }.getOrThrow()
     }
 
-    internal suspend fun deleteProfile(deletion: PubkyProfileDeletion): Result<Unit> = runSuspendCatching<Unit> {
+    internal suspend fun deleteProfile(
+        deletion: PubkyProfileDeletion,
+        onAcknowledged: () -> Unit = {},
+    ): Result<Unit> = runSuspendCatching<Unit> {
         identityOperations.requireRemoval()
         check(isProfileOwnerCurrent(deletion.owner)) { "Profile removal identity changed" }
         clearSessionContactProfiles()
         deleteContacts(deletion.snapshot.contacts)
-        pubkyService.deletePaykitProfile(deletion.snapshot)
+        pubkyService.deletePaykitProfile(deletion.snapshot, onAcknowledged)
         profileWriteGeneration.incrementAndGet()
     }.recoverCatching {
         generateSequence(it) { error -> error.cause }
@@ -2000,16 +2036,26 @@ class PubkyRepo @Inject constructor(
 
     // region Sign out
 
-    /** Remote acknowledgement only. Local safety state is retained until strict credential teardown. */
-    internal suspend fun signOutForProfileRemoval() {
+    internal suspend fun validateProfileLogout(logout: PaykitProfileLogout) {
         identityOperations.requireRemoval()
-        pubkyService.signOut()
+        pubkyService.validateProfileLogout(logout)
+    }
+
+    internal suspend fun executeProfileLogout(logout: PaykitProfileLogout) {
+        identityOperations.requireRemoval()
+        pubkyService.executeProfileLogout(logout)
     }
 
     /** No native initialization or remote mutation; callers retain admission through private completion. */
     internal suspend fun finishProfileRemovalLocally() {
         identityOperations.requireRemoval()
         pubkyService.forgetLocalProfileAccess()
+        clearProfileMetadataAfterCredentialTeardown()
+    }
+
+    internal suspend fun finishProfileRemovalLocally(logout: PaykitProfileLogout, localOnly: Boolean) {
+        identityOperations.requireRemoval()
+        pubkyService.eraseProfileLogoutCredentials(logout, localOnly)
         clearProfileMetadataAfterCredentialTeardown()
     }
 
@@ -2368,6 +2414,7 @@ class PubkyRepo @Inject constructor(
     }
 
     private fun startSignIn(publicKey: String, restoringStoredIdentity: Boolean = false) {
+        pubkyService.revokeProfileLogout()
         // First, so the sign-in it replaces has ended before the key is published, even when it is the same identity.
         signInGeneration.incrementAndGet()
         if (!restoringStoredIdentity) storedIdentityRevision.incrementAndGet()
@@ -2390,6 +2437,7 @@ class PubkyRepo @Inject constructor(
         clearRestorationFailure: Boolean = true,
         preserveStoredIdentity: Boolean = false,
     ) = withContext(ioDispatcher) {
+        pubkyService.revokeProfileLogout()
         // First, so work of the ending sign-in stops before the store reset below, and cannot write after it.
         signInGeneration.incrementAndGet()
         if (!preserveStoredIdentity) storedIdentityRevision.incrementAndGet()

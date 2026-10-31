@@ -14,6 +14,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -67,7 +68,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertTrue(sut.uiState.value.canDisconnectLocally)
             assertNull(fixture.store.pendingAttempt())
             verify(fixture.privateRepo, never()).withProfileDeletionPaused<Unit>(any())
-            verify(pubkyRepo, never()).deleteProfile(any())
+            verify(pubkyRepo, never()).deleteProfile(any(), any())
             sut.showLocalDisconnectConfirmation()
             advanceUntilIdle()
             assertTrue(sut.uiState.value.showDeleteDialog)
@@ -94,7 +95,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.canDisconnectLocally)
         assertNull(fixture.store.pendingAttempt())
         verify(fixture.privateRepo, never()).withProfileDeletionPaused<Unit>(any())
-        verify(pubkyRepo, never()).deleteProfile(any())
+        verify(pubkyRepo, never()).deleteProfile(any(), any())
     }
 
     @Test
@@ -125,10 +126,10 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertIs<EditProfileEffect.RemovalCompleted>(awaitItem())
         }
         verify(pubkyRepo, times(1)).prepareProfileDeletion(fixture.original)
-        verify(pubkyRepo, never()).deleteProfile(any())
-        verify(pubkyRepo, never()).removeBitkitPaymentEndpoints()
-        verify(pubkyRepo, never()).signOutForProfileRemoval()
-        verify(fixture.privateRepo, never()).removePublishedEndpointsForProfileRemoval()
+        verify(pubkyRepo, never()).deleteProfile(any(), any())
+        verify(pubkyRepo, never()).removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())
+        verify(pubkyRepo, never()).executeProfileLogout(any())
+        verify(fixture.privateRepo, never()).removePublishedEndpointsForProfileRemoval(any())
         assertNull(fixture.store.pendingAttempt())
     }
 
@@ -164,14 +165,14 @@ class EditProfileViewModelTest : BaseUnitTest() {
         assertNull(fixture.store.pendingAttempt())
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         assertTrue(sut.uiState.value.canDisconnectLocally)
-        verify(fixture.privateRepo, never()).removePublishedEndpointsForProfileRemoval()
-        verify(pubkyRepo, never()).deleteProfile(any())
+        verify(fixture.privateRepo, never()).removePublishedEndpointsForProfileRemoval(any())
+        verify(pubkyRepo, never()).deleteProfile(any(), any())
     }
 
     @Test
     fun `late subscription rejection retains durable removal and explicit review`() = test {
         val sut = createSut()
-        whenever(pubkyRepo.deleteProfile(fixture.deletion))
+        whenever(pubkyRepo.deleteProfile(eq(fixture.deletion), any()))
             .thenReturn(Result.failure(PubkyContactError.ActiveSubscription))
         advanceUntilIdle()
         sut.showDeleteConfirmation()
@@ -180,11 +181,11 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertNotNull(fixture.store.pendingAttempt())
         assertTrue(sut.uiState.value.showDeleteFailureDialog)
-        verify(pubkyRepo, never()).signOutForProfileRemoval()
+        verify(pubkyRepo, never()).executeProfileLogout(any())
         sut.retryDeleteProfile()
         advanceUntilIdle()
         assertTrue(sut.uiState.value.showDeleteDialog)
-        verify(pubkyRepo, times(1)).deleteProfile(fixture.deletion)
+        verify(pubkyRepo, times(1)).deleteProfile(eq(fixture.deletion), any())
     }
 
     @Test
@@ -193,7 +194,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         sut.deleteProfile()
         advanceUntilIdle()
-        verify(pubkyRepo, never()).deleteProfile(any())
+        verify(pubkyRepo, never()).deleteProfile(any(), any())
         sut.showDeleteConfirmation()
         advanceUntilIdle()
         assertTrue(sut.uiState.value.showDeleteDialog)
@@ -207,7 +208,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertFalse(sut.isRemovalCurrent(effect))
             expectNoEvents()
         }
-        verify(pubkyRepo, times(1)).deleteProfile(fixture.deletion)
+        verify(pubkyRepo, times(1)).deleteProfile(eq(fixture.deletion), any())
         assertNull(fixture.store.pendingAttempt())
     }
 
@@ -229,7 +230,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
     @Test
     fun `uncertain deletion review reads state and requires fresh confirmation`() = test {
         val sut = createSut()
-        whenever(pubkyRepo.deleteProfile(fixture.deletion)).thenReturn(Result.failure(TestAppError("lost response")))
+        whenever(
+            pubkyRepo.deleteProfile(eq(fixture.deletion), any())
+        ).thenReturn(Result.failure(TestAppError("lost response")))
         advanceUntilIdle()
         sut.showDeleteConfirmation()
         advanceUntilIdle()
@@ -241,18 +244,20 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertTrue(sut.uiState.value.showDeleteDialog)
         verify(pubkyRepo, times(2)).prepareProfileDeletion(fixture.original)
-        verify(pubkyRepo, times(1)).deleteProfile(fixture.deletion)
+        verify(pubkyRepo, times(1)).deleteProfile(eq(fixture.deletion), any())
         sut.dismissDeleteDialog()
         assertTrue(sut.uiState.value.showDeleteFailureDialog)
         sut.deleteProfile()
         advanceUntilIdle()
-        verify(pubkyRepo, times(1)).deleteProfile(fixture.deletion)
+        verify(pubkyRepo, times(1)).deleteProfile(eq(fixture.deletion), any())
     }
 
     @Test
     fun `failure disconnect asks again and never replays remote cleanup`() = test {
         val sut = createSut()
-        whenever(pubkyRepo.deleteProfile(fixture.deletion)).thenReturn(Result.failure(TestAppError("lost response")))
+        whenever(
+            pubkyRepo.deleteProfile(eq(fixture.deletion), any())
+        ).thenReturn(Result.failure(TestAppError("lost response")))
         advanceUntilIdle()
         sut.showDeleteConfirmation()
         advanceUntilIdle()
@@ -271,16 +276,16 @@ class EditProfileViewModelTest : BaseUnitTest() {
             }
             assertEquals("Pubky unlinked", expectMostRecentItem().title)
         }
-        verify(pubkyRepo, times(1)).deleteProfile(fixture.deletion)
-        verify(pubkyRepo, never()).signOutForProfileRemoval()
-        verify(fixture.privateRepo, times(1)).removePublishedEndpointsForProfileRemoval()
+        verify(pubkyRepo, times(1)).deleteProfile(eq(fixture.deletion), any())
+        verify(pubkyRepo, never()).executeProfileLogout(any())
+        verify(fixture.privateRepo, times(1)).removePublishedEndpointsForProfileRemoval(any())
         assertNull(fixture.store.pendingAttempt())
     }
 
     @Test
     fun `failed private cleanup retains marker and stops profile deletion`() = test {
         val sut = createSut()
-        whenever(fixture.privateRepo.removePublishedEndpointsForProfileRemoval())
+        whenever(fixture.privateRepo.removePublishedEndpointsForProfileRemoval(any()))
             .thenReturn(Result.failure(TestAppError("pending cleanup")))
         advanceUntilIdle()
         sut.showDeleteConfirmation()
@@ -292,7 +297,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         assertTrue(sut.uiState.value.showDeleteFailureDialog)
         assertNotNull(fixture.store.pendingAttempt())
-        verify(pubkyRepo, never()).deleteProfile(any())
+        verify(pubkyRepo, never()).deleteProfile(any(), any())
         verify(fixture.privateRepo, never()).finishProfileRemoval(any())
     }
 
@@ -325,7 +330,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
     fun `cancelled screen preserves pending removal without success`() = test {
         val sut = createSut()
         val cleanup = CompletableDeferred<Result<Unit>>()
-        whenever(fixture.privateRepo.removePublishedEndpointsForProfileRemoval())
+        whenever(fixture.privateRepo.removePublishedEndpointsForProfileRemoval(any()))
             .doSuspendableAnswer { cleanup.await() }
         advanceUntilIdle()
         sut.showDeleteConfirmation()
@@ -342,7 +347,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertFalse(sut.uiState.value.isBusy)
         assertNotNull(fixture.store.pendingAttempt())
-        verify(pubkyRepo, never()).deleteProfile(any())
+        verify(pubkyRepo, never()).deleteProfile(any(), any())
         verify(fixture.privateRepo, never()).finishProfileRemoval(any())
     }
 
@@ -355,7 +360,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertFalse(sut.uiState.value.showDeleteDialog)
         verify(pubkyRepo, never()).prepareProfileDeletion(any())
-        verify(pubkyRepo, never()).deleteProfile(any())
+        verify(pubkyRepo, never()).deleteProfile(any(), any())
     }
 
     @Test
@@ -372,7 +377,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertFalse(sut.uiState.value.showDeleteDialog)
         sut.deleteProfile()
-        verify(pubkyRepo, never()).deleteProfile(any())
+        verify(pubkyRepo, never()).deleteProfile(any(), any())
     }
 
     @Test
@@ -419,7 +424,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.showDeleteConfirmation()
         advanceUntilIdle()
         verify(pubkyRepo, times(1)).saveProfile(any(), any(), any(), any(), any())
-        verify(pubkyRepo, never()).deleteProfile(any())
+        verify(pubkyRepo, never()).deleteProfile(any(), any())
         verify(pubkyRepo, never()).prepareProfileDeletion(any())
         assertFalse(sut.uiState.value.showDeleteDialog)
 
@@ -457,7 +462,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
     @Test
     fun `dismissed failure flow cannot reopen after a delayed review`() = test {
         val sut = createSut()
-        whenever(pubkyRepo.deleteProfile(fixture.deletion)).thenReturn(Result.failure(TestAppError("lost response")))
+        whenever(
+            pubkyRepo.deleteProfile(eq(fixture.deletion), any())
+        ).thenReturn(Result.failure(TestAppError("lost response")))
         advanceUntilIdle()
         sut.showDeleteConfirmation()
         advanceUntilIdle()
@@ -472,13 +479,13 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertFalse(sut.uiState.value.showDeleteDialog)
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        verify(pubkyRepo, times(1)).deleteProfile(fixture.deletion)
+        verify(pubkyRepo, times(1)).deleteProfile(eq(fixture.deletion), any())
     }
 
     @Test
     fun `early local-only failure offers disconnect without remote review`() = test {
         val sut = createSut()
-        whenever(pubkyRepo.deleteProfile(fixture.deletion))
+        whenever(pubkyRepo.deleteProfile(eq(fixture.deletion), any()))
             .thenReturn(Result.failure(TestAppError("Unknown response")))
         advanceUntilIdle()
         sut.showDeleteConfirmation()
@@ -494,7 +501,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertTrue(sut.uiState.value.showDeleteFailureDialog)
         assertFalse(sut.uiState.value.canReviewRemoval)
-        verify(pubkyRepo, times(1)).deleteProfile(fixture.deletion)
+        verify(pubkyRepo, times(1)).deleteProfile(eq(fixture.deletion), any())
     }
 
     @Test
@@ -531,7 +538,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertIs<EditProfileEffect.RemovalCompleted>(awaitItem())
             assertNull(fixture.store.pendingAttempt())
         }
-        verify(pubkyRepo, times(1)).signOutForProfileRemoval()
+        verify(pubkyRepo, times(1)).executeProfileLogout(any())
     }
 
     private fun createSut(

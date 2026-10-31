@@ -1,6 +1,8 @@
 package to.bitkit.services
 
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PubkyGrantLogout
+import com.synonym.paykit.PubkyGrantLogoutReceipt
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -14,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.Test
+import org.mockito.kotlin.mock
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
@@ -23,6 +26,30 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PaykitSdkOperationLockTest {
+    @Test
+    fun `key replacement inside remote cleanup prevents later native work but admits local completion`() = runTest {
+        val binding = PubkyGrantLogoutReceipt("identity", "homeserver", "original", "bitkit")
+        val native = mock<PubkyGrantLogout> { on { binding() }.thenReturn(binding) }
+        val logout = PaykitProfileLogout(native, mock()) { true }
+        val lock = PaykitSdkOperationLock()
+        var localCompletions = 0
+        lock.withProfileRemoval({ true }) {
+            withContext(logout) {
+                lock.withLock {
+                    // A provider key replacement can occur while preparing a native operation.
+                    logout.revoke()
+                    assertFailsWith<IllegalStateException> { lock.checkProfileRemoval() }
+                    assertFailsWith<IllegalStateException> { lock.requireProfileRemoval() }
+                }
+                assertFailsWith<IllegalStateException> {
+                    lock.withLock { error("revoked remote work ran") }
+                }
+            }
+            lock.withLock { localCompletions++ }
+        }
+        assertEquals(1, localCompletions)
+    }
+
     @Test
     fun `admitted outer mutex holder cannot enqueue behind a wipe draining that mutex`() = runTest {
         val admitted = CompletableDeferred<Unit>()

@@ -4,6 +4,7 @@ Cover the Paykit allowance lifecycle between two Bitkit instances: the payer set
 contact, the payee's wallet accepts it by itself, requests within the limits are paid without asking, a request above a
 limit falls back to the normal Payment Request sheet, and either side ends it. The restart journey
 pins the one rule that must never break: a payment interrupted mid-flight is never paid twice.
+The restore journey checks that a payer restored from its recovery phrase keeps its allowance history.
 
 ## Setup
 

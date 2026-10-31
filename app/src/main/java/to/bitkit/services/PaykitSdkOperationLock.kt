@@ -54,6 +54,7 @@ internal class PaykitSdkOperationLock(
         if (!allowPublicReadInitialization) {
             checkRecoveryAccess()
             checkProfileRemoval(removal)
+            currentCoroutineContext()[PaykitProfileLogout]?.requireCurrent()
         }
         acquire(priority, admittedGeneration)
         return try {
@@ -62,6 +63,7 @@ internal class PaykitSdkOperationLock(
             if (!allowPublicReadInitialization) {
                 checkRecoveryAccess()
                 checkProfileRemoval(removal)
+                currentCoroutineContext()[PaykitProfileLogout]?.requireCurrent()
                 if (synchronized(stateLock) { removalGeneration != profileRemovalGeneration }) {
                     throw removalError()
                 }
@@ -119,12 +121,21 @@ internal class PaykitSdkOperationLock(
         check(removal != null) { "Profile removal admission is required" }
         checkRecoveryAccess()
         checkProfileRemoval(removal)
+        currentCoroutineContext()[PaykitProfileLogout]?.requireCurrent()
+    }
+
+    /** Disabled sharing still needs an acknowledged withdrawal during this exact removal. */
+    internal suspend fun ownsProfileRemoval(): Boolean {
+        if (currentCoroutineContext()[ProfileRemoval] == null) return false
+        requireProfileRemoval()
+        return true
     }
 
     suspend fun checkProfileRemoval() {
         if (!ownsWipe()) {
             checkRecoveryAccess()
             checkProfileRemoval(currentCoroutineContext()[ProfileRemoval])
+            currentCoroutineContext()[PaykitProfileLogout]?.requireCurrent()
         }
     }
 

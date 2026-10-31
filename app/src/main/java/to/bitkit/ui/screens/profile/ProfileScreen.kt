@@ -108,6 +108,7 @@ fun ProfileScreen(
         onDismissAddTagSheet = { viewModel.dismissAddTagSheet() },
         onSaveTag = { viewModel.addTag(it) },
         onDismissCopiedPopup = { viewModel.dismissCopiedPopup() },
+        onClickRemoteRetry = { viewModel.showSignOutConfirmation(remoteRetry = true) },
     )
 }
 
@@ -127,6 +128,7 @@ internal fun ProfileContent(
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
     onDismissCopiedPopup: () -> Unit,
+    onClickRemoteRetry: () -> Unit = {},
 ) {
     BackHandler(enabled = uiState.isSigningOut) {}
 
@@ -156,6 +158,15 @@ internal fun ProfileContent(
             )
             if (uiState.recoveryCanDisconnect) {
                 VerticalSpacer(24.dp)
+                if (uiState.recoveryCanRetry) {
+                    PrimaryButton(
+                        text = stringResource(R.string.common__retry),
+                        onClick = onClickRemoteRetry,
+                        enabled = !uiState.isSigningOut,
+                        modifier = Modifier.testTag("ProfileRecoveryRetry"),
+                    )
+                    VerticalSpacer(16.dp)
+                }
                 PrimaryButton(
                     text = stringResource(R.string.profile__sign_out),
                     onClick = onClickSignOut,

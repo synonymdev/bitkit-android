@@ -21,6 +21,7 @@ data class WalletBackupV1(
     val createdAt: Long,
     val transfers: List<TransferEntity>,
     val privatePaykitHighestReservedReceiveIndexByAddressType: Map<String, Int>? = null,
+    val publicPaykitLegacyAddresses: List<String>? = null,
     val paykitSdkBackupState: String? = null,
     val watchOnlyAccounts: List<WatchOnlyAccountRecord>? = null,
     val watchOnlyAccountAllocationState: WatchOnlyAccountAllocationState? = null,

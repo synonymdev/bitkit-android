@@ -463,7 +463,7 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
         whenever(store.data).thenReturn(ledger)
         val lightning = mock<LightningRepo>()
         receiptReservations = PrivatePaykitAddressReservationRepo(
-            testDispatcher, store, settingsStore, coreService, lightning,
+            testDispatcher, store, settingsStore, coreService, lightning, cacheStore, mock(),
         )
         whenever(
             lightning.addressInfoForType(any(), any())
@@ -504,7 +504,7 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
             Result.success(AddressDerivationInfo(address, 9000)),
         )
         receiptReservations = PrivatePaykitAddressReservationRepo(
-            testDispatcher, store, settingsStore, coreService, derivation,
+            testDispatcher, store, settingsStore, coreService, derivation, cacheStore, mock(),
         )
         whenever(privateCacheStore.data).thenReturn(flowOf(PrivatePaykitCacheData(receiptSourceReadable = false)))
         whenever(lightningService.addressInfosForType(any(), any(), any(), any(), any())).thenReturn(emptyList())
@@ -533,7 +533,7 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
             ledger.value = transform(ledger.value)
         }
         receiptReservations = PrivatePaykitAddressReservationRepo(
-            testDispatcher, store, settingsStore, coreService, mock(),
+            testDispatcher, store, settingsStore, coreService, mock(), cacheStore, mock(),
         )
         val entered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()

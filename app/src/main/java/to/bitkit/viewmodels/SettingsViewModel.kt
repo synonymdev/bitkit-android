@@ -256,24 +256,35 @@ class SettingsViewModel @Inject constructor(
 
     val contactPaymentsEnabled = contactPaymentSettingsRepo.isEnabled
         .asStateFlow(initialValue = false)
+    val publicPaymentsEnabled = contactPaymentSettingsRepo.isPublicEnabled
+        .asStateFlow(initialValue = false)
 
     private val _isUpdatingContactPayments = MutableStateFlow(false)
     val isUpdatingContactPayments = _isUpdatingContactPayments.asStateFlow()
 
-    fun setContactPaymentsEnabled(value: Boolean) {
-        if (_isUpdatingContactPayments.value) return
+    fun setPublicPaymentsEnabled(value: Boolean) = updatePaymentSharing {
+        contactPaymentSettingsRepo.setPublicEnabled(value)
+    }
 
+    fun setContactPaymentsEnabled(value: Boolean) = updatePaymentSharing {
+        contactPaymentSettingsRepo.setEnabled(value)
+    }
+
+    private fun updatePaymentSharing(update: suspend () -> Result<Unit>) {
+        if (_isUpdatingContactPayments.value) return
         viewModelScope.launch {
             _isUpdatingContactPayments.update { true }
-            contactPaymentSettingsRepo.setEnabled(value)
-                .onFailure {
+            try {
+                update().onFailure {
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.common__error),
                         description = contactPaymentSyncErrorMessage(it),
                     )
                 }
-            _isUpdatingContactPayments.update { false }
+            } finally {
+                _isUpdatingContactPayments.update { false }
+            }
         }
     }
 

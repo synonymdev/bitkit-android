@@ -15,6 +15,8 @@ import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.ProfileSource
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkyAuthDetails
+import com.synonym.paykit.PubkyGrantLogout
+import com.synonym.paykit.PubkyGrantLogoutReceipt
 import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicationStatus
 import io.ktor.client.HttpClient
@@ -89,6 +91,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PaykitProfileDeletionSnapshot
+import to.bitkit.services.PaykitProfileLogout
 import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyRingAuthTimeoutError
@@ -400,6 +403,28 @@ class PubkyRepoTest : BaseUnitTest() {
             keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name)
             keychain.delete(Keychain.Key.SHARED_PUBKY_SOURCE.name)
         }
+        whenever { pubkyService.captureProfileLogout(any(), any()) }.doSuspendableAnswer {
+            val binding = PubkyGrantLogoutReceipt(it.getArgument(0), "homeserver", "original-grant", "bitkit")
+            val native = mock<PubkyGrantLogout> { on { binding() }.thenReturn(binding) }
+            PaykitProfileLogout(native, mock(), isOriginalLifecycle = it.getArgument(1))
+        }
+        whenever { pubkyService.executeProfileLogout(any()) }.doSuspendableAnswer {
+            val logout = it.getArgument<PaykitProfileLogout>(0)
+            logout.retainAcknowledgement(logout.binding)
+        }
+        whenever { pubkyService.eraseProfileLogoutCredentials(any(), any()) }.doSuspendableAnswer {
+            pubkyService.forgetLocalProfileAccess()
+        }
+        whenever { pubkyService.removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any()) }
+            .doSuspendableAnswer {
+                pubkyService.removeBitkitPaymentEndpoints()
+                it.getArgument<() -> Unit>(2).invoke()
+                it.getArgument<() -> Unit>(3).invoke()
+            }
+        whenever { pubkyService.deletePaykitProfile(any(), any()) }.doSuspendableAnswer {
+            pubkyService.deletePaykitProfile(it.getArgument<PaykitProfileDeletionSnapshot>(0))
+            it.getArgument<() -> Unit>(1).invoke()
+        }
         sut = createSut()
     }
 
@@ -430,7 +455,10 @@ class PubkyRepoTest : BaseUnitTest() {
             it.getArgument<suspend (PrivatePaykitRepo.ProfileDeletionPause) -> Unit>(0)
                 .invoke(PrivatePaykitRepo.ProfileDeletionPause())
         }
-        whenever { privateRepo.removePublishedEndpointsForCleanup(any(), eq(true)) }.thenReturn(Result.success(Unit))
+        whenever { privateRepo.removePublishedEndpointsForProfileRemoval(any()) }.thenAnswer {
+            it.getArgument<() -> Unit>(0).invoke()
+            Result.success(Unit)
+        }
         whenever { privateRepo.finishProfileRemoval(any()) }.thenReturn(Result.success(Unit))
         return ProfileRemovalCoordinator(this, privateRepo, sharing, profileRemovalStore)
     }
@@ -1910,7 +1938,7 @@ class PubkyRepoTest : BaseUnitTest() {
             sharesPrivatePaykitEndpoints = true,
         )
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
-        whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Sign out failed") }
+        whenever(pubkyService.executeProfileLogout(any())).thenAnswer { throw TestAppError("Sign out failed") }
 
         val result = sut.deleteProfile()
 
@@ -2022,7 +2050,7 @@ class PubkyRepoTest : BaseUnitTest() {
             sharesPublicPaykitEndpoints = true,
             sharesPrivatePaykitEndpoints = true,
         )
-        whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
+        whenever(pubkyService.executeProfileLogout(any())).thenAnswer { throw TestAppError("Server error") }
 
         val result = sut.signOut()
 
@@ -2040,7 +2068,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val revocationStarted = CompletableDeferred<Unit>()
         val finishRevocation = CompletableDeferred<Unit>()
         authenticateForTesting()
-        whenever(pubkyService.signOut()).doSuspendableAnswer {
+        whenever(pubkyService.executeProfileLogout(any())).doSuspendableAnswer {
             revocationStarted.complete(Unit)
             finishRevocation.await()
         }

@@ -70,6 +70,30 @@ class PubkyService @Inject constructor(
         paykitSdkService.forgetLocalProfileAccess()
     }
 
+    internal suspend fun captureProfileLogout(publicKey: String, isOwnerCurrent: () -> Boolean): PaykitProfileLogout {
+        var captured: PaykitProfileLogout? = null
+        return try {
+            ServiceQueue.CORE.background {
+                paykitSdkService.captureProfileLogout(publicKey, isOwnerCurrent).also { captured = it }
+            }
+        } catch (error: Throwable) {
+            // Queue cancellation can hide the successful native capture from its original caller.
+            captured?.revoke()
+            throw error
+        }
+    }
+
+    internal suspend fun executeProfileLogout(logout: PaykitProfileLogout) =
+        ServiceQueue.CORE.background { paykitSdkService.executeProfileLogout(logout) }
+
+    internal suspend fun validateProfileLogout(logout: PaykitProfileLogout) =
+        ServiceQueue.CORE.background { paykitSdkService.validateProfileLogout(logout) }
+
+    internal suspend fun eraseProfileLogoutCredentials(logout: PaykitProfileLogout, localOnly: Boolean) =
+        ServiceQueue.CORE.background { paykitSdkService.eraseProfileLogoutCredentials(logout, localOnly) }
+
+    internal fun revokeProfileLogout() = paykitSdkService.revokeProfileLogout()
+
     internal suspend fun requireWalletWipe() = paykitSdkService.requireWalletWipe()
 
     suspend fun clearSessionAccess() = ServiceQueue.CORE.background {
@@ -87,6 +111,32 @@ class PubkyService @Inject constructor(
         val cleanupError = endpointError ?: appError
         if (endpointError != null && appError != null) endpointError.addSuppressed(appError)
         cleanupError?.let { throw it }
+    }
+
+    internal suspend fun removeBitkitPaymentEndpointsForRemoval(
+        endpointsAcknowledged: Boolean,
+        appAcknowledged: Boolean,
+        onEndpointsAcknowledged: () -> Unit,
+        onAppAcknowledged: () -> Unit,
+    ): Unit = ServiceQueue.CORE.background {
+        val endpointError = runSuspendCatching {
+            if (!endpointsAcknowledged) {
+                val report = paykitSdkService.syncPublicEndpoints(emptyList(), onEndpointsAcknowledged) { true }
+                check(report != null && report.failed.isEmpty()) { "Failed to remove Paykit payment endpoints" }
+            }
+        }.exceptionOrNull()
+        val appError = runSuspendCatching {
+            if (!appAcknowledged) {
+                paykitSdkService.syncPaykitApp(
+                    privatePaymentsEnabled = false,
+                    priority = PaykitSdkOperationLock.Priority.Ordered,
+                    canSync = { true },
+                    onAcknowledged = onAppAcknowledged,
+                )
+            }
+        }.exceptionOrNull()
+        if (endpointError != null && appError != null) endpointError.addSuppressed(appError)
+        (endpointError ?: appError)?.let { throw it }
     }
 
     // endregion
@@ -233,8 +283,14 @@ class PubkyService @Inject constructor(
             paykitSdkService.validateProfileDeletion(snapshot)
         }
 
-    internal suspend fun deletePaykitProfile(snapshot: PaykitProfileDeletionSnapshot) = ServiceQueue.CORE.background {
-        paykitSdkService.deletePaykitProfile(snapshot)
+    internal suspend fun deletePaykitProfile(snapshot: PaykitProfileDeletionSnapshot) =
+        deletePaykitProfile(snapshot) {}
+
+    internal suspend fun deletePaykitProfile(
+        snapshot: PaykitProfileDeletionSnapshot,
+        onAcknowledged: () -> Unit,
+    ) = ServiceQueue.CORE.background {
+        paykitSdkService.deletePaykitProfile(snapshot, onAcknowledged)
     }
 
     suspend fun deletePaykitProfile() = ServiceQueue.CORE.background {
