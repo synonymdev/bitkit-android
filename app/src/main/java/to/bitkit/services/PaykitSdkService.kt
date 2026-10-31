@@ -470,7 +470,14 @@ class PaykitSdkService @Inject constructor(
         operationLock.withLock {
             logout.requireOriginalCredentials()
             withContext(NonCancellable) {
-                keychain.eraseProfileCredentials(logout.credentials, logout::requireOriginalCredentials)
+                if (localOnly) {
+                    keychain.eraseProfileCredentialsAfterLocalConfirmation(
+                        logout.credentials,
+                        logout::requireOriginalCredentials,
+                    )
+                } else {
+                    keychain.eraseProfileCredentials(logout.credentials, logout::requireOriginalCredentials)
+                }
                 logout.credentialsErased.set(true)
                 sessionProvider.clearLiveSessionAccess()
                 resetRuntime()

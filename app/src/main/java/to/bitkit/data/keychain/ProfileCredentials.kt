@@ -8,7 +8,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import to.bitkit.utils.AppError
 import java.security.MessageDigest
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /** A local erase target; it conveys neither remote authority nor acknowledged logout. */
 internal class ProfileCredentials internal constructor(
@@ -16,25 +16,35 @@ internal class ProfileCredentials internal constructor(
     internal val walletIndex: Long,
     private val values: Map<Preferences.Key<String>, ByteArray?>,
 ) {
-    private val current = AtomicBoolean(true)
+    private enum class Invalidation { UNREADABLE, CHANGED }
+
+    private val invalidation = AtomicReference<Invalidation?>(null)
 
     internal fun requireCurrent() {
-        if (!current.get()) throw ProfileCredentialsChanged()
+        if (invalidation.get() != null) throw ProfileCredentialsChanged()
+    }
+
+    internal fun requireLocalErase() {
+        if (invalidation.get() == Invalidation.CHANGED) throw ProfileCredentialsChanged()
     }
 
     internal fun invalidate() {
-        current.set(false)
+        invalidation.set(Invalidation.CHANGED)
     }
 
-    internal fun matches(current: Map<Preferences.Key<String>, ByteArray?>): Boolean =
-        values.keys == current.keys && values.all { (key, expected) ->
-            val actual = current[key]
-            if (expected == null || actual == null) {
-                expected == null && actual == null
-            } else {
-                MessageDigest.isEqual(expected, actual)
-            }
+    internal fun markUnreadable() {
+        invalidation.compareAndSet(null, Invalidation.UNREADABLE)
+    }
+
+    internal fun matches(key: Preferences.Key<String>, actual: ByteArray?): Boolean {
+        if (!values.containsKey(key)) return false
+        val expected = values[key]
+        return if (expected == null || actual == null) {
+            expected == null && actual == null
+        } else {
+            MessageDigest.isEqual(expected, actual)
         }
+    }
 }
 
 /** The caller retains identity admission across capture or erase, including the durable commit. */
@@ -52,52 +62,88 @@ internal class ProfileCredentialStore(
         return ProfileCredentials(this, index, values)
     }
 
-    suspend fun erase(target: ProfileCredentials, requireCurrent: () -> Unit) {
-        requireCurrent()
+    suspend fun erase(target: ProfileCredentials, requireCurrent: () -> Unit) =
+        erase(target, requireCurrent, localOnly = false)
+
+    /** A fresh local confirmation can recheck unreadable original bytes without restoring remote permission. */
+    suspend fun eraseAfterLocalConfirmation(target: ProfileCredentials, requireCurrent: () -> Unit) =
+        erase(target, requireCurrent, localOnly = true)
+
+    private suspend fun erase(target: ProfileCredentials, requireCurrent: () -> Unit, localOnly: Boolean) {
+        validateAdmission(target, requireCurrent)
         if (target.store !== this) throw ProfileCredentialsChanged()
-        target.requireCurrent()
-        var validated = false
+        if (localOnly) target.requireLocalErase() else target.requireCurrent()
+        var validationStarted = false
         try {
             store.edit { preferences ->
-                validateOwnedCredentials(target, requireCurrent) {
-                    read(preferences, target.walletIndex)
+                validationStarted = true
+                validateOwnedCredentials(target, requireCurrent, localOnly) {
+                    preferences
                 }
                 keys(target.walletIndex).forEach(preferences::remove)
-                validated = true
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            if (!validated) target.invalidate()
+            if (!validationStarted) target.markUnreadable()
             throw e
         }
     }
 
     /** Read-only admission check before using the captured grant for remote cleanup. */
     suspend fun validate(target: ProfileCredentials, requireCurrent: () -> Unit) {
-        requireCurrent()
+        validateAdmission(target, requireCurrent)
         if (target.store !== this) throw ProfileCredentialsChanged()
-        validateOwnedCredentials(target, requireCurrent) { read(store.data.first(), target.walletIndex) }
+        validateOwnedCredentials(target, requireCurrent) { store.data.first() }
     }
 
     private suspend fun validateOwnedCredentials(
         target: ProfileCredentials,
         requireCurrent: () -> Unit,
-        values: suspend () -> Map<Preferences.Key<String>, ByteArray?>,
+        localOnly: Boolean = false,
+        values: suspend () -> Preferences,
     ) {
-        target.requireCurrent()
+        if (localOnly) target.requireLocalErase() else target.requireCurrent()
+        validateAdmission(target, requireCurrent)
+        validateWallet(target)
+        val preferences = readOwnedState(target, values)
+        keys(target.walletIndex).forEach { key ->
+            val actual = readOwnedState(target) { preferences[key]?.let(decrypt) }
+            if (!target.matches(key, actual)) {
+                target.invalidate()
+                throw ProfileCredentialsChanged()
+            }
+        }
+        validateAdmission(target, requireCurrent)
+        validateWallet(target)
+        if (localOnly) target.requireLocalErase() else target.requireCurrent()
+    }
+
+    private suspend fun validateWallet(target: ProfileCredentials) {
+        if (readOwnedState(target) { walletIndex() } != target.walletIndex) {
+            target.invalidate()
+            throw ProfileCredentialsChanged()
+        }
+    }
+
+    private fun validateAdmission(target: ProfileCredentials, requireCurrent: () -> Unit) {
         try {
             requireCurrent()
-            if (walletIndex() != target.walletIndex || !target.matches(values())) throw ProfileCredentialsChanged()
-            requireCurrent()
-            if (walletIndex() != target.walletIndex) throw ProfileCredentialsChanged()
-            target.requireCurrent()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             target.invalidate()
             throw e
         }
+    }
+
+    private suspend fun <T> readOwnedState(target: ProfileCredentials, read: suspend () -> T): T = try {
+        read()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        target.markUnreadable()
+        throw e
     }
 
     private fun read(preferences: Preferences, index: Long): Map<Preferences.Key<String>, ByteArray?> =

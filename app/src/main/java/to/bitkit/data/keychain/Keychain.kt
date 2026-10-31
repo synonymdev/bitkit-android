@@ -59,6 +59,11 @@ class Keychain @Inject constructor(
     internal suspend fun eraseProfileCredentials(target: ProfileCredentials, requireCurrent: () -> Unit) =
         profileCredentials.erase(target, requireCurrent)
 
+    internal suspend fun eraseProfileCredentialsAfterLocalConfirmation(
+        target: ProfileCredentials,
+        requireCurrent: () -> Unit,
+    ) = profileCredentials.eraseAfterLocalConfirmation(target, requireCurrent)
+
     internal suspend fun validateProfileCredentials(target: ProfileCredentials, requireCurrent: () -> Unit) =
         profileCredentials.validate(target, requireCurrent)
 

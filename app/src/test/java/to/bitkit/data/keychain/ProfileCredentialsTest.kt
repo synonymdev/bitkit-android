@@ -58,6 +58,156 @@ class ProfileCredentialsTest {
     )
 
     @Test
+    fun `local confirmation can recover an unavailable read without restoring ordinary permission`() = runTest {
+        val backing = InMemoryDataStore<Preferences>(initial())
+        var unavailable = false
+        val store = object : DataStore<Preferences> {
+            override val data = backing.data.map {
+                if (unavailable) throw IOException("Read unavailable")
+                it
+            }
+            override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences {
+                if (unavailable) throw IOException("Read unavailable")
+                return backing.updateData(transform)
+            }
+        }
+        val credentials = credentials(store)
+        val target = credentials.capture(::requireCurrent)
+        unavailable = true
+        assertFailsWith<IOException> { credentials.validate(target, ::requireCurrent) }
+        assertFailsWith<IOException> { credentials.eraseAfterLocalConfirmation(target, ::requireCurrent) }
+        assertEquals(initial(), backing.data.first())
+        unavailable = false
+        assertFailsWith<ProfileCredentialsChanged> { credentials.erase(target, ::requireCurrent) }
+        credentials.eraseAfterLocalConfirmation(target, ::requireCurrent)
+        assertEquals(
+            mutablePreferencesOf(mnemonic to "unchanged-wallet", otherWallet to "other-wallet-session").asMap(),
+            backing.data.first().asMap(),
+        )
+        assertFailsWith<ProfileCredentialsChanged> { credentials.validate(target, ::requireCurrent) }
+    }
+
+    @Test
+    fun `local confirmation compares original values again after decryption recovers`() = runTest {
+        val store = InMemoryDataStore<Preferences>(initial())
+        val credentials = credentials(store)
+        val target = credentials.capture(::requireCurrent)
+        store.edit { it[secret] = "unreadable" }
+        assertFailsWith<IOException> { credentials.validate(target, ::requireCurrent) }
+        assertFailsWith<IOException> { credentials.eraseAfterLocalConfirmation(target, ::requireCurrent) }
+        assertEquals("first:session", store.data.first()[session])
+        store.updateData { initial() }
+        credentials.eraseAfterLocalConfirmation(target, ::requireCurrent)
+        assertFalse(store.data.first().contains(secret))
+        assertEquals("unchanged-wallet", store.data.first()[mnemonic])
+        assertFailsWith<ProfileCredentialsChanged> { credentials.validate(target, ::requireCurrent) }
+    }
+
+    @Test
+    fun `local recovery rejects changed or absent entries and never accepts their restoration`() = runTest {
+        listOf(session, secret, sharedSource).forEach { key ->
+            listOf("replacement", null).forEach { replacement ->
+                val store = InMemoryDataStore<Preferences>(initial())
+                val credentials = credentials(store)
+                val target = credentials.capture(::requireCurrent)
+                store.edit { it[sharedSource] = "unreadable" }
+                assertFailsWith<IOException> { credentials.validate(target, ::requireCurrent) }
+                store.updateData { initial() }
+                store.edit {
+                    if (replacement == null) it.remove(key) else it[key] = replacement
+                }
+                val changed = store.data.first()
+                assertFailsWith<ProfileCredentialsChanged> {
+                    credentials.eraseAfterLocalConfirmation(target, ::requireCurrent)
+                }
+                assertEquals(changed, store.data.first())
+                store.updateData { initial() }
+                assertFailsWith<ProfileCredentialsChanged> {
+                    credentials.eraseAfterLocalConfirmation(target, ::requireCurrent)
+                }
+                assertEquals(initial(), store.data.first())
+            }
+        }
+    }
+
+    @Test
+    fun `local recovery cannot adopt an added originally absent key`() = runTest {
+        val original = initial().also { it.remove(secret) }
+        val store = InMemoryDataStore<Preferences>(original)
+        val credentials = credentials(store)
+        val target = credentials.capture(::requireCurrent)
+        store.edit { it[sharedSource] = "unreadable" }
+        assertFailsWith<IOException> { credentials.validate(target, ::requireCurrent) }
+        store.updateData { original }
+        store.edit { it[secret] = "new-key" }
+        val changed = store.data.first()
+        assertFailsWith<ProfileCredentialsChanged> {
+            credentials.eraseAfterLocalConfirmation(target, ::requireCurrent)
+        }
+        assertEquals(changed, store.data.first())
+        store.updateData { original }
+        assertFailsWith<ProfileCredentialsChanged> {
+            credentials.eraseAfterLocalConfirmation(target, ::requireCurrent)
+        }
+    }
+
+    @Test
+    fun `an observed mismatch remains terminal even when another entry is unreadable`() = runTest {
+        val store = InMemoryDataStore<Preferences>(initial())
+        val credentials = credentials(store)
+        val target = credentials.capture(::requireCurrent)
+        store.edit {
+            it[session] = "replacement"
+            it[secret] = "unreadable"
+        }
+        assertFailsWith<ProfileCredentialsChanged> { credentials.validate(target, ::requireCurrent) }
+        store.updateData { initial() }
+        assertFailsWith<ProfileCredentialsChanged> {
+            credentials.eraseAfterLocalConfirmation(target, ::requireCurrent)
+        }
+        assertEquals(initial(), store.data.first())
+    }
+
+    @Test
+    fun `local recovery rejects store wallet and ended lifecycle even when original bytes return`() = runTest {
+        listOf("wallet", "lifecycle", "store").forEach { changed ->
+            walletIndex = 0
+            admitted = true
+            val store = InMemoryDataStore<Preferences>(initial())
+            val credentials = credentials(store)
+            val target = credentials.capture(::requireCurrent)
+            store.edit { it[sharedSource] = "unreadable" }
+            assertFailsWith<IOException> { credentials.validate(target, ::requireCurrent) }
+            store.updateData { initial() }
+            when (changed) {
+                "wallet" -> {
+                    walletIndex = 1
+                    assertFailsWith<ProfileCredentialsChanged> {
+                        credentials.eraseAfterLocalConfirmation(target, ::requireCurrent)
+                    }
+                    walletIndex = 0
+                }
+                "lifecycle" -> {
+                    admitted = false
+                    assertFailsWith<IllegalStateException> {
+                        credentials.eraseAfterLocalConfirmation(target, ::requireCurrent)
+                    }
+                    admitted = true
+                }
+                "store" -> assertFailsWith<ProfileCredentialsChanged> {
+                    credentials(store).eraseAfterLocalConfirmation(target, ::requireCurrent)
+                }
+            }
+            if (changed != "store") {
+                assertFailsWith<ProfileCredentialsChanged> {
+                    credentials.eraseAfterLocalConfirmation(target, ::requireCurrent)
+                }
+            }
+            assertEquals(initial(), store.data.first())
+        }
+    }
+
+    @Test
     fun `validation rejects changed absent or unreadable captured entries without writing`() = runTest {
         listOf(session, secret, sharedSource).forEach { changed ->
             listOf("replacement", null, "unreadable").forEach { replacement ->

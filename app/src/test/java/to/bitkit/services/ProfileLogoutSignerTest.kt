@@ -5,6 +5,7 @@ import com.synonym.paykit.PubkyGrantLogoutReceipt
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -81,7 +82,8 @@ class ProfileLogoutSignerTest {
         assertTrue(logout.credentialsErased.get())
         verify(native, never()).prepareAttempt()
         verify(shared, times(3)).readCredential(owner)
-        verify(keychain).eraseProfileCredentials(any(), any())
+        verify(keychain).eraseProfileCredentialsAfterLocalConfirmation(eq(logout.credentials), any())
+        verify(keychain, never()).eraseProfileCredentials(any(), any())
     }
 
     @Test

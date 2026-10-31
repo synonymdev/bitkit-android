@@ -1,6 +1,9 @@
 package to.bitkit.usecases
 
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.mutablePreferencesOf
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PubkyGrantLogout
 import com.synonym.paykit.PubkyGrantLogoutReceipt
@@ -9,6 +12,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import org.junit.Before
 import org.junit.Test
@@ -24,6 +28,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.ProfileRemovalState
 import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.ReceiptAssociationsUnavailable
+import to.bitkit.data.keychain.ProfileCredentialStore
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -34,6 +39,7 @@ import to.bitkit.repositories.PubkySignIn
 import to.bitkit.services.PaykitProfileDeletionSnapshot
 import to.bitkit.services.PaykitProfileLogout
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import java.io.IOException
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -60,6 +66,82 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
     private val sut by lazy { ProfileRemovalCoordinator(pubky, privateRepo, sharing, store) }
     private val logouts = mutableListOf<PaykitProfileLogout>()
     private val binding = PubkyGrantLogoutReceipt("identity", "homeserver", "original-grant", "bitkit")
+
+    @Test
+    fun `retired credential read requires fresh local confirmation and preserves the original attempt`() = test {
+        val secret = stringPreferencesKey("PUBKY_SECRET_KEY_0")
+        val localStore = InMemoryDataStore<Preferences>(mutablePreferencesOf(secret to "original"))
+        var unreadable = false
+        val credentials = ProfileCredentialStore(localStore, { 0L }) {
+            if (unreadable) throw IOException("Keystore unavailable")
+            it.toByteArray()
+        }
+        val target = credentials.capture {}
+        val native = mock<PubkyGrantLogout> { on { binding() } doReturn binding }
+        val logout = PaykitProfileLogout(native, target) { current === original }
+        doReturn(Result.success(logout)).whenever(pubky).captureProfileLogout(original)
+        doSuspendableAnswer {
+            assertNotNull(store.pendingAttempt())
+            unreadable = true
+            try {
+                credentials.validate(target, logout::requireCurrent)
+            } finally {
+                logout.revoke()
+            }
+        }.whenever(pubky).executeProfileLogout(logout)
+        doSuspendableAnswer {
+            credentials.eraseAfterLocalConfirmation(target, logout::requireOriginalCredentials)
+            current = ended
+        }.whenever(pubky).finishProfileRemovalLocally(logout, true)
+        val originalConfirmation = sut.prepareDeletion(original).getOrThrow()
+        val failure = assertIs<ProfileRemovalFailure>(sut.remove(originalConfirmation).exceptionOrNull())
+        val pending = assertNotNull(store.pendingAttempt())
+        assertFalse(failure.canReview)
+        assertFalse(sut.canRetry(original))
+        unreadable = false
+        val cancelled = sut.prepareLocalDisconnect(failure).getOrThrow()
+        sut.discard(cancelled)
+        assertEquals("original", localStore.data.first()[secret])
+        assertEquals(pending, store.pendingAttempt())
+        verify(privateRepo, never()).finishProfileRemoval(any())
+
+        val fresh = sut.prepareSignOut(original).getOrThrow()
+        assertTrue(fresh.localOnly)
+        assertEquals(pending, fresh.attemptId)
+        assertSame(originalConfirmation.intent, fresh.intent)
+        assertSame(ended, sut.remove(fresh).getOrThrow())
+        assertTrue(sut.remove(fresh).isFailure)
+        assertNull(localStore.data.first()[secret])
+        assertNull(store.pendingAttempt())
+        assertFalse(logout.isCurrent())
+        verify(pubky, times(1)).executeProfileLogout(logout)
+        verify(privateRepo, times(1)).removePublishedEndpointsForProfileRemoval(any())
+        verify(pubky, never()).finishProfileRemovalLocally()
+    }
+
+    @Test
+    fun `review waits for original outer removal drainage`() = test {
+        val draining = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        doSuspendableAnswer {
+            try {
+                it.getArgument<suspend () -> PubkyProfileOwner>(0).invoke()
+            } finally {
+                draining.complete(Unit)
+                release.await()
+            }
+        }.whenever(sharing).withProfileRemoval<PubkyProfileOwner>(any())
+        doSuspendableAnswer { throw IOException("response lost") }.whenever(pubky).executeProfileLogout(any())
+        val confirmation = sut.prepareDeletion(original).getOrThrow()
+        val removal = async { sut.remove(confirmation) }
+        draining.await()
+        val failure = assertNotNull(sut.failureFor(confirmation))
+        assertFalse(failure.canReview)
+        assertTrue(sut.reviewAgain(failure).isFailure)
+        release.complete(Unit)
+        assertTrue(removal.await().isFailure)
+        assertTrue(failure.canReview)
+    }
 
     @Test
     fun `changed captured access after admission drain prevents even the first cleanup stage`() = test {
@@ -134,6 +216,51 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `confirmed sign out resumes endpoint cleanup without repeating acknowledged private withdrawal`() = test {
+        var attempts = 0
+        whenever(pubky.removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                Result.failure<Unit>(IOException("public endpoint cleanup unavailable"))
+            } else {
+                it.getArgument<() -> Unit>(2).invoke()
+                it.getArgument<() -> Unit>(3).invoke()
+                Result.success(Unit)
+            }
+        }
+        val first = sut.prepareSignOut(original).getOrThrow()
+        assertIs<ProfileRemovalFailure>(sut.remove(first).exceptionOrNull())
+        assertEquals(first.attemptId, store.pendingAttempt())
+        assertTrue(sut.canRetry(original))
+        verify(pubky, never()).executeProfileLogout(any())
+
+        val canceled = sut.prepareRemoteRetry(original).getOrThrow()
+        sut.discard(canceled)
+        assertEquals(1, attempts)
+        val retry = sut.prepareRemoteRetry(original).getOrThrow()
+        assertEquals(first.attemptId, retry.attemptId)
+        assertSame(ended, sut.remove(retry).getOrThrow())
+        verify(privateRepo, times(1)).removePublishedEndpointsForProfileRemoval(any())
+        verify(pubky, times(1)).captureProfileLogout(original)
+        verify(pubky, times(1)).executeProfileLogout(logouts.single())
+        verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>(), any())
+        assertNull(store.pendingAttempt())
+    }
+
+    @Test
+    fun `sign out cannot retry remote cleanup without the original private withdrawal acknowledgement`() = test {
+        doReturn(Result.failure<Unit>(IOException("withdrawal unknown")))
+            .whenever(privateRepo).removePublishedEndpointsForProfileRemoval(any())
+        val confirmation = sut.prepareSignOut(original).getOrThrow()
+        assertIs<ProfileRemovalFailure>(sut.remove(confirmation).exceptionOrNull())
+        assertEquals(confirmation.attemptId, store.pendingAttempt())
+        assertFalse(sut.canRetry(original))
+        assertTrue(sut.prepareRemoteRetry(original).isFailure)
+        verify(pubky, never()).removeBitkitPaymentEndpointsForRemoval(any(), any(), any(), any())
+        verify(pubky, never()).executeProfileLogout(any())
+    }
+
+    @Test
     fun `acknowledged logout hidden by cancellation allows only local completion`() = test {
         whenever { pubky.executeProfileLogout(any()) }.doSuspendableAnswer {
             it.getArgument<PaykitProfileLogout>(0).retainAcknowledgement(binding)
@@ -162,6 +289,7 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
         assertTrue(sut.canRetry(original))
         logouts.single().revoke()
         assertFalse(sut.canRetry(original))
+        assertFalse(assertNotNull(sut.failureFor(confirmation)).canReview)
         assertTrue(sut.prepareRemoteRetry(original).isFailure)
 
         val restarted = ProfileRemovalCoordinator(pubky, privateRepo, sharing, store)
@@ -693,6 +821,8 @@ class ProfileRemovalCoordinatorTest : BaseUnitTest() {
         val confirmation = sut.prepareDeletion(original).getOrThrow()
         assertTrue(sut.remove(confirmation).isFailure)
         assertEquals(confirmation.attemptId, store.pendingAttempt())
+        assertFalse(sut.canRetry(original))
+        assertTrue(sut.prepareRemoteRetry(original).isFailure)
         verify(pubky, never()).deleteProfile(any<PubkyProfileDeletion>(), any())
         verify(pubky, never()).executeProfileLogout(any())
         verify(privateRepo, never()).finishProfileRemoval(any())

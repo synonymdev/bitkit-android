@@ -60,6 +60,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -114,6 +115,7 @@ import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.test.InMemoryDataStore
 import to.bitkit.test.forEachCase
 import to.bitkit.utils.AppError
+import java.io.IOException
 import java.time.Instant
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
@@ -130,6 +132,97 @@ import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PaykitSdkServiceTest {
+    @Test
+    fun `fresh local cleanup after failed credential read erases only the original bundle`() = runTest {
+        val session = stringPreferencesKey("PAYKIT_SESSION_0")
+        val secret = stringPreferencesKey("PUBKY_SECRET_KEY_0")
+        val sharedSource = stringPreferencesKey("SHARED_PUBKY_SOURCE_0")
+        val wallet = stringPreferencesKey("MNEMONIC_0")
+        val store = InMemoryDataStore<Preferences>(
+            mutablePreferencesOf(
+                session to "session",
+                secret to "original",
+                sharedSource to "ring",
+                wallet to "wallet",
+            ),
+        )
+        var refuseRead = false
+        val credentials = ProfileCredentialStore(store, { 0L }) {
+            if (refuseRead) throw IOException("Credential read unavailable")
+            it.toByteArray()
+        }
+        val target = credentials.capture {}
+        val keychain = mock<Keychain>()
+        whenever(keychain.validateProfileCredentials(org.mockito.kotlin.eq(target), any())).doSuspendableAnswer {
+            credentials.validate(target, it.getArgument(1))
+        }
+        whenever(
+            keychain.eraseProfileCredentialsAfterLocalConfirmation(org.mockito.kotlin.eq(target), any())
+        ).doSuspendableAnswer {
+            credentials.eraseAfterLocalConfirmation(target, it.getArgument(1))
+        }
+        val receipt = PubkyGrantLogoutReceipt(RING_PUBKY, "homeserver", "original-grant", "bitkit")
+        val native = mock<PubkyGrantLogout> { on { binding() }.thenReturn(receipt) }
+        val logout = PaykitProfileLogout(native, target) { true }
+        val service = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() }
+
+        refuseRead = true
+        service.withProfileRemoval({ true }) {
+            assertFailsWith<IOException> { service.executeProfileLogout(logout) }
+        }
+        assertFalse(logout.isCurrent())
+        verify(native, never()).prepareAttempt()
+        assertFalse(logout.credentialsErased.get())
+        refuseRead = false
+        service.withProfileRemoval({ true }) {
+            service.eraseProfileLogoutCredentials(logout, localOnly = true)
+        }
+        assertEquals(mutablePreferencesOf(wallet to "wallet").asMap(), store.data.first().asMap())
+        assertTrue(logout.credentialsErased.get())
+        assertFalse(logout.isCurrent())
+        assertFailsWith<ProfileCredentialsChanged> { credentials.validate(target) {} }
+        verify(native, never()).prepareAttempt()
+    }
+
+    @Test
+    fun `local confirmed erase drains durable commit before cancellation and wallet wipe`() = runTest {
+        val receipt = PubkyGrantLogoutReceipt(RING_PUBKY, "homeserver", "original-grant", "bitkit")
+        val native = mock<PubkyGrantLogout> { on { binding() }.thenReturn(receipt) }
+        val logout = PaykitProfileLogout(native, mock()) { true }
+        logout.revoke()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var committed = false
+        val keychain = mock<Keychain>()
+        whenever(keychain.eraseProfileCredentialsAfterLocalConfirmation(any(), any())).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            it.getArgument<() -> Unit>(1).invoke()
+            committed = true
+        }
+        val service = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() }
+        val removal = launch {
+            service.withProfileRemoval({ true }) { service.eraseProfileLogoutCredentials(logout, localOnly = true) }
+        }
+        entered.await()
+        removal.cancel()
+        val wipe = async {
+            service.withWalletWipe {
+                assertTrue(committed)
+                assertTrue(logout.credentialsErased.get())
+            }
+        }
+        runCurrent()
+        assertFalse(removal.isCompleted)
+        assertFalse(wipe.isCompleted)
+        assertFalse(logout.credentialsErased.get())
+        release.complete(Unit)
+        removal.join()
+        wipe.await()
+        verify(native, never()).prepareAttempt()
+        verify(keychain, never()).eraseProfileCredentials(any(), any())
+    }
+
     @Test
     fun `changed original credentials between native reads prevent profile deletion`() = runTest {
         val secret = stringPreferencesKey("PUBKY_SECRET_KEY_0")
@@ -274,7 +367,7 @@ class PaykitSdkServiceTest {
         assertIs<IllegalStateException>(execution.await().exceptionOrNull())
         verify(attempt, never()).execute()
         service.withProfileRemoval({ true }) { service.eraseProfileLogoutCredentials(logout, localOnly = true) }
-        verify(keychain).eraseProfileCredentials(org.mockito.kotlin.eq(logout.credentials), any())
+        verify(keychain).eraseProfileCredentialsAfterLocalConfirmation(org.mockito.kotlin.eq(logout.credentials), any())
         assertTrue(logout.credentialsErased.get())
     }
 

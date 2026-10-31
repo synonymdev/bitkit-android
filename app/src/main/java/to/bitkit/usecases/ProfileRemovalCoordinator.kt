@@ -48,6 +48,7 @@ internal class ProfileRemovalIntent(
     val owner: PubkyProfileOwner,
     val attemptId: String,
     val logout: PaykitProfileLogout,
+    val deletingProfile: Boolean,
 ) {
     val confirmation = AtomicReference<ProfileRemovalConfirmation?>(null)
     val started = AtomicBoolean(false)
@@ -58,6 +59,9 @@ internal class ProfileRemovalIntent(
     val logoutStarted = AtomicBoolean(false)
     val executing = AtomicBoolean(false)
     val retryReady = AtomicBoolean(false)
+
+    val canRetryRemoteWork: Boolean
+        get() = logoutStarted.get() || (!deletingProfile && privateWithdrawal.get())
 }
 
 class ProfileRemovalFailure internal constructor(
@@ -68,8 +72,13 @@ class ProfileRemovalFailure internal constructor(
     private val privateWithdrawalAcknowledged: Boolean,
 ) : AppError("Profile removal did not finish. Review its state or disconnect locally.", cause) {
     internal val canReview: Boolean
-        get() = confirmation.deletion != null && !localCompletionStarted && privateWithdrawalAcknowledged &&
-            confirmation.intent?.logout?.reconcileAcknowledgement() != true
+        get() {
+            val intent = confirmation.intent ?: return false
+            return confirmation.deletion != null && !localCompletionStarted && privateWithdrawalAcknowledged &&
+                intent.logout.isCurrent() && !intent.executing.get() &&
+                (!intent.logoutStarted.get() || intent.retryReady.get()) &&
+                !intent.logout.reconcileAcknowledgement()
+        }
 }
 
 internal class ProfileRemovalLocalOnly(cause: Throwable) :
@@ -93,7 +102,7 @@ class ProfileRemovalCoordinator @Inject constructor(
         val deletion = pubkyRepo.prepareProfileDeletion(owner).getOrThrow()
         removalStore.requireNoPending()
         check(pubkyRepo.isProfileOwnerCurrent(owner)) { "The profile identity changed" }
-        val intent = captureIntent(owner)
+        val intent = captureIntent(owner, deletingProfile = true)
         ProfileRemovalConfirmation(owner, intent.attemptId, deletion, localOnly = false, intent = intent)
     }
 
@@ -125,7 +134,10 @@ class ProfileRemovalCoordinator @Inject constructor(
         }
     }
 
-    private suspend fun captureIntent(owner: PubkyProfileOwner): ProfileRemovalIntent {
+    private suspend fun captureIntent(
+        owner: PubkyProfileOwner,
+        deletingProfile: Boolean = false,
+    ): ProfileRemovalIntent {
         retainedIntent.get()?.takeUnless { it.logout.isCurrent() }?.let {
             retainedIntent.compareAndSet(it, null)
         }
@@ -133,7 +145,7 @@ class ProfileRemovalCoordinator @Inject constructor(
         return try {
             check(isCurrent(owner)) { "The profile identity changed" }
             removalStore.requireNoPending()
-            ProfileRemovalIntent(owner, UUID.randomUUID().toString(), logout).also {
+            ProfileRemovalIntent(owner, UUID.randomUUID().toString(), logout, deletingProfile).also {
                 check(retainedIntent.compareAndSet(null, it)) { "A profile removal confirmation is already active" }
             }
         } catch (error: Throwable) {
@@ -144,7 +156,7 @@ class ProfileRemovalCoordinator @Inject constructor(
 
     fun canRetry(owner: PubkyProfileOwner?): Boolean {
         val intent = retainedIntent.get() ?: return false
-        return owner != null && isCurrent(owner) && isCurrent(intent.owner) && intent.logoutStarted.get() &&
+        return owner != null && isCurrent(owner) && isCurrent(intent.owner) && intent.canRetryRemoteWork &&
             intent.retryReady.get() && !intent.executing.get() &&
             intent.logout.isCurrent() && !intent.logout.reconcileAcknowledgement()
     }
@@ -364,7 +376,7 @@ class ProfileRemovalCoordinator @Inject constructor(
                     it.executing.set(false)
                     if (!it.started.get() && retainedIntent.compareAndSet(it, null)) it.logout.revoke()
                     it.retryReady.set(
-                        confirmation.failure.get() != null && it.logoutStarted.get() &&
+                        confirmation.failure.get() != null && it.canRetryRemoteWork &&
                             it.logout.isCurrent() && !it.logout.reconcileAcknowledgement()
                     )
                 }
