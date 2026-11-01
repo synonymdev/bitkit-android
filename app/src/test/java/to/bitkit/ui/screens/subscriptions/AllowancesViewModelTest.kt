@@ -231,6 +231,22 @@ class AllowancesViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `resuming automatic payments asks for the pin first when payments require it`() = test {
+        settings.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true, isBiometricEnabled = true)
+        whenever(allowanceRepo.resumeAutomaticPayments()).thenReturn(Result.success(Unit))
+
+        sut.resumeAutomaticPayments()
+
+        assertEquals(AllowanceAuthorization(useBiometrics = true), loadedState().authorization)
+        verify(allowanceRepo, never()).resumeAutomaticPayments()
+
+        sut.onAuthorized()
+
+        verify(allowanceRepo).resumeAutomaticPayments()
+        assertNull(loadedState().authorization)
+    }
+
+    @Test
     fun `a cancelled check ends nothing`() = test {
         settings.value = SettingsData(isPinEnabled = true, isPinForPaymentsEnabled = true)
         entries.value = listOf(entry())

@@ -161,7 +161,9 @@ class AllowancesViewModel @Inject constructor(
         runAction(onSuccess) { allowanceRepo.end(entryId) }
     }
 
-    fun resumeAutomaticPayments() = runAction(onSuccess = {}) { allowanceRepo.resumeAutomaticPayments() }
+    fun resumeAutomaticPayments() = authorizeThen(isGated = true) {
+        runAction(onSuccess = {}) { allowanceRepo.resumeAutomaticPayments() }
+    }
 
     fun onAuthorized() {
         val action = authorizedAction ?: return
