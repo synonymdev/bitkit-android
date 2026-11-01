@@ -1359,8 +1359,7 @@ class PaykitSdkService @Inject constructor(
     ): AllowanceRecord {
         isSetup.await()
         return operationLock.withLock(Priority.Interactive) {
-            withStateRevisionTracking { handle ->
-                admit()
+            withStateRevisionTracking(beforeOperation = admit) { handle ->
                 completeSdkCall { handle.acceptAllowance(counterparty, allowanceId, expectedProposalStreamItemId) }
             }
         }
