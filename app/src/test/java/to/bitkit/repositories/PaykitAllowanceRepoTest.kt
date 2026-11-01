@@ -355,6 +355,58 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `same identity activation keeps a queued manual acceptance valid`() = test {
+        records = listOf(receivedAsk())
+        val waiting = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var accepted = 0
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            waiting.complete(Unit)
+            release.await()
+            it.getArgument<suspend () -> Unit>(3).invoke()
+            accepted += 1
+            records.single()
+        }
+        sut.activate(identity)
+        val accepting = async { sut.accept(entryKey) }
+        waiting.await()
+
+        sut.activate(identity)
+        release.complete(Unit)
+
+        assertTrue(accepting.await().isSuccess)
+        assertEquals(1, accepted)
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any(), any())
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
+    }
+
+    @Test
+    fun `same identity activation keeps a queued offer acceptance valid`() = test {
+        records = listOf(receivedProposal())
+        val waiting = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var accepted = 0
+        whenever(sdk.acceptAllowance(any(), any(), any(), any())).doSuspendableAnswer {
+            waiting.complete(Unit)
+            release.await()
+            it.getArgument<suspend () -> Unit>(3).invoke()
+            accepted += 1
+            records.single()
+        }
+        sut.activate(identity)
+        val accepting = async { sut.acceptOffersFromAllowers() }
+        waiting.await()
+
+        sut.activate(identity)
+        release.complete(Unit)
+
+        assertEquals(listOf(fixtures.counterpartyKey), accepting.await().map { it.counterparty })
+        assertEquals(1, accepted)
+        verify(sdk, times(1)).acceptAllowance(any(), any(), any(), any())
+        verify(sdk).processOutboundPrivateMessages(fixtures.counterpartyKey)
+    }
+
+    @Test
     fun `paused repository does not accept a queued offer`() = test {
         for (reactivate in listOf(false, true)) {
             records = listOf(receivedProposal())
