@@ -78,6 +78,9 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         whenever(executor.events).thenReturn(executorEvents)
         whenever(executor.localState(any())).thenAnswer { localState }
         whenever(executor.isLedgerBehind(any())).thenReturn(false)
+        whenever(executor.rememberEnding(any(), any(), any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(2).invoke()
+        }
         whenever(executor.updateLocalState(any(), any())).doSuspendableAnswer {
             val change = it.getArgument<(PaykitAllowanceLocalState) -> PaykitAllowanceLocalState>(1)
             localState = change(localState)

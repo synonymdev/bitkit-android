@@ -448,11 +448,10 @@ class PaykitAllowanceRepo @Inject constructor(
             val endable = entry.allowances.filter { it.canEnd }
             if (endable.isEmpty()) throw PaykitAllowanceError.Unavailable
             val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
-            executor.rememberEnding(identity, endable)
-            for (allowance in endable) {
-                paykitSdkService.endAllowance(allowance.counterparty, allowance.allowanceId)
-                sendQueuedMessages(allowance.counterparty)
+            executor.rememberEnding(identity, endable) {
+                endable.forEach { paykitSdkService.endAllowance(it.counterparty, it.allowanceId) }
             }
+            endable.forEach { sendQueuedMessages(it.counterparty) }
             refresh()
             Unit
         }

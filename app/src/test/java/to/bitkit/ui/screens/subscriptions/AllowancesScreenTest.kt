@@ -6,6 +6,9 @@ import android.app.Application
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -62,6 +65,7 @@ class AllowancesScreenTest {
     private val currencyRepo: CurrencyRepo = mock()
     private val settingsStore: SettingsStore = mock()
 
+    private var isHostShown by mutableStateOf(true)
     private lateinit var viewModel: AllowancesViewModel
 
     @Before
@@ -98,13 +102,15 @@ class AllowancesScreenTest {
         composeRule.setContent {
             AppThemeSurface {
                 CompositionLocalProvider(LocalAppViewModel provides app) {
-                    AllowanceAuthorizationHost(viewModel = viewModel) {
-                        AllowancesScreen(
-                            topPadding = 0.dp,
-                            onClickAdd = {},
-                            onClickAllowance = {},
-                            viewModel = viewModel,
-                        )
+                    if (isHostShown) {
+                        AllowanceAuthorizationHost(viewModel = viewModel) {
+                            AllowancesScreen(
+                                topPadding = 0.dp,
+                                onClickAdd = {},
+                                onClickAllowance = {},
+                                viewModel = viewModel,
+                            )
+                        }
                     }
                 }
             }
@@ -130,6 +136,20 @@ class AllowancesScreenTest {
         composeRule.onNodeWithTag("N1").assertExists()
 
         composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+
+        composeRule.onNodeWithTag("N1").assertDoesNotExist()
+        verifyBlocking(allowanceRepo, never()) { resumeAutomaticPayments() }
+        click("AllowancesResume")
+        composeRule.onNodeWithTag("N1").assertExists()
+    }
+
+    @Test
+    fun `leaving the screen drops a pending pin check`() {
+        click("AllowancesResume")
+        composeRule.onNodeWithTag("N1").assertExists()
+
+        composeRule.runOnIdle { isHostShown = false }
+        composeRule.runOnIdle { isHostShown = true }
 
         composeRule.onNodeWithTag("N1").assertDoesNotExist()
         verifyBlocking(allowanceRepo, never()) { resumeAutomaticPayments() }

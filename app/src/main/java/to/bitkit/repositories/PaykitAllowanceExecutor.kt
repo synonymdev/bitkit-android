@@ -175,6 +175,9 @@ class PaykitAllowanceExecutor @Inject constructor(
     private var accountingAmount: (String, String) -> AccountingAmount = ::AccountingAmount
     private val stateMutex = Mutex()
     private val settleMutex = Mutex()
+
+    /** Held from an automatic payment's ended check to its handoff, and from saving an End to the SDK's End. */
+    private val handoffMutex = Mutex()
     private val inFlightRequestIds = ConcurrentHashMap.newKeySet<PaykitPaymentRequestId>()
     private val liveAttemptIds = ConcurrentHashMap.newKeySet<String>()
     private val _events = MutableSharedFlow<PaykitAllowanceEvent>(extraBufferCapacity = 16)
@@ -277,10 +280,16 @@ class PaykitAllowanceExecutor @Inject constructor(
         updateLocalState(identity) { it.copy(endedAllowanceIds = it.endedAllowanceIds + ended) }
     }
 
-    /** Like [rememberEndedAllowances], before the End is sent; a failed save throws, so the End is not sent. */
-    suspend fun rememberEnding(identity: String, allowances: List<PaykitAllowance>) {
-        updateLocalStateDurably(identity) { state ->
-            state.copy(endedAllowanceIds = state.endedAllowanceIds + allowances.map { it.key })
+    /**
+     * Like [rememberEndedAllowances], then [send] hands the End to the SDK, while no automatic payment sits between its
+     * ended check and its handoff. A failed save throws, so the End is not sent.
+     */
+    suspend fun rememberEnding(identity: String, allowances: List<PaykitAllowance>, send: suspend () -> Unit) {
+        handoffMutex.withLock {
+            updateLocalStateDurably(identity) { state ->
+                state.copy(endedAllowanceIds = state.endedAllowanceIds + allowances.map { it.key })
+            }
+            send()
         }
     }
 
@@ -762,21 +771,24 @@ class PaykitAllowanceExecutor @Inject constructor(
         runSuspendCatching {
             paykitSdkService.receivePrivateMessages(request.counterparty)
         }.onFailure { Logger.warn("Failed to receive private messages before an allowance payment", it, context = TAG) }
-        // An End saved while this attempt was admitted stops it before the handoff.
-        if (PaykitAllowance.key(request.counterparty, prepared.allowanceId) in localState(identity).endedAllowanceIds) {
-            Logger.info("Kept an incoming request manual: its allowance has ended", context = TAG)
-            record(prepared.attemptId, PaymentOutcome.FAILED, identity)
-            return PaykitAllowanceAutoPayResult.MANUAL
-        }
-        val handoff = runSuspendCatching {
-            paykitSdkService.beginPaymentExecution(
-                attemptId = prepared.attemptId,
-                checks = checks(request, endpointIdentifier, trustedTime(identity)),
-            )
-        }.getOrElse {
-            // Nothing was sent, so the reservation is released instead of blocking the manual payment.
-            record(prepared.attemptId, PaymentOutcome.FAILED, identity)
-            throw it
+        // An End saved while this attempt was admitted stops it; one saved later reaches the SDK after this handoff.
+        val allowanceKey = PaykitAllowance.key(request.counterparty, prepared.allowanceId)
+        val handoff = handoffMutex.withLock {
+            if (allowanceKey in localState(identity).endedAllowanceIds) {
+                Logger.info("Kept an incoming request manual: its allowance has ended", context = TAG)
+                record(prepared.attemptId, PaymentOutcome.FAILED, identity)
+                return PaykitAllowanceAutoPayResult.MANUAL
+            }
+            runSuspendCatching {
+                paykitSdkService.beginPaymentExecution(
+                    attemptId = prepared.attemptId,
+                    checks = checks(request, endpointIdentifier, trustedTime(identity)),
+                )
+            }.getOrElse {
+                // Nothing was sent, so the reservation is released instead of blocking the manual payment.
+                record(prepared.attemptId, PaymentOutcome.FAILED, identity)
+                throw it
+            }
         }
         val submitted = (handoff as? PaymentAttemptDecision.Ready)?.attempt
         if (submitted == null) {

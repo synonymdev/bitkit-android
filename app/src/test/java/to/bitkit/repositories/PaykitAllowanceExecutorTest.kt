@@ -25,8 +25,11 @@ import com.synonym.paykit.PaymentOutcomeReport
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestScope
 import com.synonym.paykit.PrivateStreamIntakeReport
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -710,6 +713,35 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verifyNoInteractions(payer)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `an end saved during a handoff reaches the sdk after it`() = test {
+        val handoffStarted = CompletableDeferred<Unit>()
+        val handoffReleased = CompletableDeferred<Unit>()
+        val submitted = PaymentAttemptDecision.Ready(
+            fixtures.attemptRecord(AUTOMATIC_ATTEMPT_ID, status = PaymentExecutionStatus.SUBMITTED),
+        )
+        whenever(sdk.beginPaymentExecution(any(), any())).doSuspendableAnswer {
+            handoffStarted.complete(Unit)
+            handoffReleased.await()
+            submitted
+        }
+        var isEndSent = false
+        val payment = launch { sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity) }
+        handoffStarted.await()
+
+        val end = launch { sut.rememberEnding(identity, listOf(fixtures.allowance())) { isEndSent = true } }
+        runCurrent()
+
+        assertFalse(isEndSent)
+        assertTrue(sut.localState(identity).endedAllowanceIds.isEmpty())
+        handoffReleased.complete(Unit)
+        payment.join()
+        end.join()
+        assertTrue(isEndSent)
+        assertEquals(setOf(fixtures.allowance().key), sut.localState(identity).endedAllowanceIds)
     }
 
     @Test
