@@ -803,7 +803,7 @@
     <string name="usdt__from_address">С адреса</string>
     <string name="usdt__hide_details">Скрыть детали</string>
     <string name="usdt__intro_decline">Нет, Спасибо</string>
-    <string name="usdt__intro_description">Биткоин в душе. Доллары, когда они нужны. Включите USDT (Tether), чтобы отправлять и получать цифровые доллары в Bitkit.</string>
+    <string name="usdt__intro_description">Биткоин в душе. Доллары, когда они нужны. Включите USDT (Tether), чтобы быстро отправлять и получать цифровые доллары в Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;ДОЛЛАРЫ?&lt;/accent&gt;\nРЕШАТЬ ВАМ</string>
     <string name="usdt__intro_title">Новинка: USDT</string>
     <string name="usdt__maximum_total">Макс. списание</string>
