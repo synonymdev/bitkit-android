@@ -10,10 +10,12 @@ import com.synonym.paykit.OutboundPrivateSendReport
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -116,6 +118,54 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     // region Entries
+
+    @Test
+    fun `pause revokes an activation queued on the dispatcher`() = test {
+        val queued = PaykitAllowanceRepo(
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            paykitSdkService = sdk,
+            executor = executor,
+            lightningRepo = lightningRepo,
+            activityRepo = activityRepo,
+            clock = clock,
+        )
+        val activation = async(start = CoroutineStart.UNDISPATCHED) { queued.activate(identity) }
+
+        queued.pause()
+        activation.await()
+
+        verify(executor, never()).activate(identity)
+    }
+
+    @Test
+    fun `pause revokes activation while its caller admission is suspended`() = test {
+        val admissionStarted = CompletableDeferred<Unit>()
+        val finishAdmission = CompletableDeferred<Unit>()
+        val activation = async {
+            sut.activate(identity) {
+                admissionStarted.complete(Unit)
+                finishAdmission.await()
+                true
+            }
+        }
+        admissionStarted.await()
+        sut.pause()
+        finishAdmission.complete(Unit)
+        activation.await()
+
+        verify(executor, never()).activate(identity)
+        sut.activate(identity)
+        verify(executor).activate(identity)
+    }
+
+    @Test
+    fun `rejected activation does not recover or refresh allowances`() = test {
+        sut.activate(identity) { false }
+
+        verify(executor, never()).activate(identity)
+        verify(executor, never()).recover(any())
+        verify(sdk, never()).listAllowances(any())
+    }
 
     @Test
     fun `entries list one grant per contact with the grant's limits`() = test {
