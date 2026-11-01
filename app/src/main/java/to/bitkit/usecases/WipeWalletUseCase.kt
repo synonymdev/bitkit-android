@@ -65,16 +65,24 @@ class WipeWalletUseCase @Inject constructor(
         walletIndex: Int = 0,
         resetWalletState: () -> Unit,
         onSuccess: () -> Unit,
+        expectedPendingAttemptId: String? = null,
     ): Result<Unit> {
         if (!wipeMutex.tryLock()) return Result.failure(WipeAlreadyInProgress())
-        backupRepo.setWiping(true)
-        lightningRepo.setWiping(true)
+        var wipeAdmitted = false
         var credentialsMayBeErased = false
         val result = try {
             runSuspendCatching {
-                connectionRecovery.withIdentityChange {
+                connectionRecovery.withIdentityChange(isStillNeeded = {
+                    expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
+                    backupRepo.setWiping(true)
+                    lightningRepo.setWiping(true)
+                    wipeAdmitted = true
+                    true
+                }) {
+                    expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
                     contactPaymentSettingsRepo.get().withWalletWipe(pubkyRepo::withWalletWipeAdmission) {
                         paykitSdkService.withWalletWipe {
+                            expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
                             val pending = profileRemovalStore.pendingAttempt()
                             val attemptId = pending ?: UUID.randomUUID().toString()
                             profileRemovalStore.withAccess(attemptId, ProfileRemovalScope.WALLET_WIPE) {
@@ -96,13 +104,15 @@ class WipeWalletUseCase @Inject constructor(
                 if (error != null && credentialsMayBeErased) Result.failure(WipeIncomplete(error)) else outcome
             }
         } finally {
-            lightningRepo.setWiping(false)
-            backupRepo.setWiping(false)
+            if (wipeAdmitted) {
+                lightningRepo.setWiping(false)
+                backupRepo.setWiping(false)
+            }
             wipeMutex.unlock()
         }
         return result.onFailure {
             Logger.error("Failed to wipe wallet", it, context = TAG)
-            if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+            if (wipeAdmitted && lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
                 backupRepo.startObservingBackups()
             }
         }
@@ -124,8 +134,8 @@ class WipeWalletUseCase @Inject constructor(
         onCredentialWipe: () -> Unit,
     ): Result<Unit> {
         lightningRepo.wipeStorage(walletIndex).onFailure { return Result.failure(it) }
-        step("clear post-migration sync flag") { migrationService.setNeedsPostMigrationSync(false) }
-        step("clear migration data") { migrationService.cleanupAfterMigration() }
+        migrationService.setNeedsPostMigrationSync(false)
+        migrationService.cleanupAfterMigration()
         onCredentialWipe()
         usdtRepo.wipe { keychain.wipe() }.getOrThrow()
         paykitUsdtPaymentRepo.resetForWipe()
@@ -134,16 +144,16 @@ class WipeWalletUseCase @Inject constructor(
         privatePaykitRepo.get().finishProfileRemoval(pause).getOrElse { return Result.failure(it) }
         pubkyRepo.finishProfileWipeLocally()
         step("delete FCM token") { firebaseMessaging.deleteToken() }
-        step("wipe core data") { coreService.wipeData() }
-        step("clear database") { db.clearAllTables() }
+        coreService.wipeData().getOrThrow()
+        db.clearAllTables()
         settingsStore.reset()
-        step("reset cache") { cacheStore.reset() }
-        step("clear watch-only accounts") { watchOnlyAccountRepo.clear() }
-        step("reset widgets") { widgetsStore.reset() }
+        cacheStore.reset()
+        watchOnlyAccountRepo.clear()
+        widgetsStore.reset()
         blocktankRepo.resetState()
         activityRepo.resetState()
         hwWalletRepo.resetState()
-        step("mark migration checked") { migrationService.markMigrationChecked() }
+        migrationService.markMigrationChecked()
         return Result.success(Unit)
     }
 

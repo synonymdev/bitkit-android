@@ -1,17 +1,23 @@
 package to.bitkit.usecases
 
 import androidx.datastore.core.DataStoreFactory
+import androidx.datastore.core.Serializer
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -22,6 +28,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
+import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -34,12 +42,17 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.PrivatePaykitReservationData
 import to.bitkit.data.PrivatePaykitReservationSerializer
 import to.bitkit.data.PrivatePaykitReservationStore
+import to.bitkit.data.ProfileRemovalPending
+import to.bitkit.data.ProfileRemovalScope
+import to.bitkit.data.ProfileRemovalSerializer
+import to.bitkit.data.ProfileRemovalState
 import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.PubkyImageCacheEpoch
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletResetRecovery
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.sharedpubky.SharedPubkyClient
@@ -64,6 +77,8 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import java.io.IOException
+import java.io.OutputStream
 import java.util.UUID
 import javax.inject.Provider
 import kotlin.test.assertEquals
@@ -132,6 +147,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             it.getArgument<suspend () -> Unit>(0).invoke()
         }
         whenever { lightningRepo.stop() }.thenReturn(Result.success(Unit))
+        whenever { coreService.wipeData() }.thenReturn(Result.success(Unit))
         whenever { usdtRepo.wipe(any()) }.doSuspendableAnswer {
             it.getArgument<suspend () -> Unit>(0).invoke()
             Result.success(Unit)
@@ -152,6 +168,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         pubkyRepo: PubkyRepo = this.pubkyRepo,
         sharingRepo: ContactPaymentSettingsRepo = contactPaymentSettingsRepo,
         reservations: PrivatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
+        removalStore: ProfileRemovalStore = profileRemovalStore,
+        sdk: PaykitSdkService = paykitSdkService,
     ) = WipeWalletUseCase(
         backupRepo = backupRepo,
         keychain = keychain,
@@ -172,8 +190,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         privatePaykitAddressReservationRepo = reservations,
         firebaseMessaging = firebaseMessaging,
         migrationService = migrationService,
-        paykitSdkService = paykitSdkService,
-        profileRemovalStore = profileRemovalStore,
+        paykitSdkService = sdk,
+        profileRemovalStore = removalStore,
         contactPaymentSettingsRepo = Provider { sharingRepo },
         connectionRecovery = connectionRecovery,
     )
@@ -413,6 +431,19 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(keychain).wipe()
         verify(privatePaykitRepo).finishProfileRemoval(profilePause)
         verify(privatePaykitAddressReservationRepo).clear()
+        assertNotNull(profileRemovalStore.pendingAttempt())
+        assertFalse(onWipeCalled)
+        assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `core cleanup refusal retains wipe marker and blocks success`() = test {
+        whenever { coreService.wipeData() }.thenReturn(Result.failure(IllegalStateException("core unavailable")))
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+        assertTrue(result.isFailure)
         assertNotNull(profileRemovalStore.pendingAttempt())
         assertFalse(onWipeCalled)
         assertFalse(onSetWalletExistsStateCalled)
@@ -714,61 +745,204 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     }
 
     @Test
-    fun `invoke should mark migration checked when migration data clear fails`() = runTest {
-        whenever { migrationService.cleanupAfterMigration() }.thenThrow(RuntimeException("clear failed"))
-
-        val result = sut.invoke(
-            resetWalletState = { onWipeCalled = true },
-            onSuccess = { onSetWalletExistsStateCalled = true },
-        )
-
-        assertTrue(result.isSuccess)
-        verify(migrationService).markMigrationChecked()
-        assertTrue(onSetWalletExistsStateCalled)
-    }
-
-    @Test
-    fun `invoke should clear post-migration sync flag even when migration data clear fails`() = runTest {
-        whenever { migrationService.cleanupAfterMigration() }.thenThrow(RuntimeException("clear failed"))
-
-        val result = sut.invoke(
-            resetWalletState = { onWipeCalled = true },
-            onSuccess = { onSetWalletExistsStateCalled = true },
-        )
-
-        assertTrue(result.isSuccess)
+    fun `migration cleanup failure keeps the wipe pending without erasing credentials`() = runTest {
+        whenever { migrationService.cleanupAfterMigration() }.thenThrow(IllegalStateException("clear failed"))
+        val result = sut.invoke(resetWalletState = {}, onSuccess = { onWipeCalled = true })
+        assertTrue(result.isFailure)
+        assertNotNull(profileRemovalStore.pendingAttempt())
         verify(migrationService).setNeedsPostMigrationSync(false)
-        verify(migrationService).markMigrationChecked()
+        verify(migrationService, never()).markMigrationChecked()
+        verify(keychain, never()).wipe()
+        assertFalse(onWipeCalled)
     }
 
     @Test
-    fun `invoke should clear migration data and finish when post-migration sync flag clear fails`() = runTest {
-        whenever { migrationService.setNeedsPostMigrationSync(false) }.thenThrow(RuntimeException("flag failed"))
-
-        val result = sut.invoke(
-            resetWalletState = { onWipeCalled = true },
-            onSuccess = { onSetWalletExistsStateCalled = true },
-        )
-
-        assertTrue(result.isSuccess)
-        verify(migrationService).cleanupAfterMigration()
-        verify(migrationService).markMigrationChecked()
-        assertTrue(onSetWalletExistsStateCalled)
+    fun `migration flag refusal keeps the wipe pending without clearing migration data`() = runTest {
+        whenever { migrationService.setNeedsPostMigrationSync(false) }.thenThrow(IllegalStateException("flag failed"))
+        val result = sut.invoke(resetWalletState = {}, onSuccess = { onWipeCalled = true })
+        assertTrue(result.isFailure)
+        assertNotNull(profileRemovalStore.pendingAttempt())
+        verify(migrationService, never()).cleanupAfterMigration()
+        verify(migrationService, never()).markMigrationChecked()
+        verify(keychain, never()).wipe()
+        assertFalse(onWipeCalled)
     }
 
     @Test
-    fun `invoke should complete the wipe when database clear fails`() = runTest {
-        whenever(db.clearAllTables()).thenThrow(RuntimeException("DB clear failed"))
-
-        val result = sut.invoke(
-            resetWalletState = { onWipeCalled = true },
-            onSuccess = { onSetWalletExistsStateCalled = true },
-        )
-
-        assertTrue(result.isSuccess)
-        verify(settingsStore).reset()
+    fun `database refusal retains the same attempt for confirmed local retry`() = runTest {
+        whenever(db.clearAllTables()).thenThrow(IllegalStateException("DB clear failed"))
+        val first = sut.invoke(resetWalletState = {}, onSuccess = { onWipeCalled = true })
+        assertTrue(first.isFailure)
+        val attempt = assertNotNull(profileRemovalStore.pendingAttempt())
         verify(keychain).wipe()
+        verify(settingsStore, never()).reset()
+        assertFalse(onWipeCalled)
+        doAnswer { Unit }.whenever(db).clearAllTables()
+        clearInvocations(pubkyRepo, privatePaykitRepo)
+        val retry = sut.invoke(
+            resetWalletState = {},
+            onSuccess = { onWipeCalled = true },
+            expectedPendingAttemptId = attempt,
+        )
+        assertTrue(retry.isSuccess)
+        assertNull(profileRemovalStore.pendingAttempt())
+        assertTrue(onWipeCalled)
+        verify(pubkyRepo, never()).removeBitkitPaymentEndpoints()
+        verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any())
+    }
+
+    private fun localWipe(removalStore: ProfileRemovalStore) = createSut(
+        removalStore = removalStore,
+        sdk = PaykitSdkService(
+            mock(),
+            keychain,
+            mock(),
+            settingsStore = mock(),
+            profileRemovalStore = removalStore,
+        ) { mock() },
+    )
+
+    @Test
+    fun `post-credential refusal survives durable restart and finishes only after a fresh local retry`() = test {
+        val file = folder.newFile("wipe-restart.json").also { it.delete() }
+        val owner = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val original = ProfileRemovalStore(DataStoreFactory.create(ProfileRemovalSerializer, scope = owner) { file })
+        var credentialsPresent = true
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenAnswer { credentialsPresent }
+        whenever { keychain.wipe() }.doSuspendableAnswer { credentialsPresent = false }
+        var refuseLocalMetadata = true
+        whenever { pubkyRepo.finishProfileWipeLocally() }.doSuspendableAnswer {
+            if (refuseLocalMetadata) throw IOException("profile persistence refused")
+        }
+        val first = localWipe(original).invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+        assertIs<WipeIncomplete>(first.exceptionOrNull())
+        val id = assertNotNull(original.pendingAttempt())
+        assertFalse(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name))
+        assertFalse(onWipeCalled)
+        assertFalse(onSetWalletExistsStateCalled)
+        requireNotNull(owner.coroutineContext[Job]).cancelAndJoin()
+
+        val restarted = ProfileRemovalStore(
+            DataStoreFactory.create(ProfileRemovalSerializer, scope = backgroundScope) { file }
+        )
+        val recoveredWipe = localWipe(restarted)
+        assertEquals(WalletResetRecovery.Pending(id), restarted.walletResetRecovery.first())
+        assertFailsWith<ProfileRemovalPending> { restarted.requireWalletAvailable() }
+        clearInvocations(pubkyRepo, privatePaykitRepo, keychain)
+        // Restart/observation itself cannot replay cleanup or reconstruct absent credentials.
+        verify(keychain, never()).wipe()
+        val refusedRetry = recoveredWipe.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+            expectedPendingAttemptId = id,
+        )
+        assertIs<WipeIncomplete>(refusedRetry.exceptionOrNull())
+        assertEquals(id, restarted.pendingAttempt())
+        assertFalse(onWipeCalled)
+        assertFalse(onSetWalletExistsStateCalled)
+
+        refuseLocalMetadata = false
+        val completed = recoveredWipe.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+            expectedPendingAttemptId = id,
+        )
+        assertTrue(completed.isSuccess)
+        assertNull(restarted.pendingAttempt())
+        restarted.requireWalletAvailable()
+        assertEquals(WalletResetRecovery.Clear, restarted.walletResetRecovery.first())
         assertTrue(onWipeCalled)
         assertTrue(onSetWalletExistsStateCalled)
+        verify(pubkyRepo, never()).removeBitkitPaymentEndpoints()
+        verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any())
+        verify(privatePaykitRepo, never()).closeAndClear()
+    }
+
+    @Test
+    fun `final completion write refusal keeps the durable marker until a confirmed restart retry`() = test {
+        val file = folder.newFile("wipe-completion.json").also { it.delete() }
+        var refuseCompletion = true
+        val serializer = object : Serializer<ProfileRemovalState> by ProfileRemovalSerializer {
+            override suspend fun writeTo(t: ProfileRemovalState, output: OutputStream) {
+                if (refuseCompletion && t.attemptId == null) throw IOException("completion write refused")
+                ProfileRemovalSerializer.writeTo(t, output)
+            }
+        }
+        val owner = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val original = ProfileRemovalStore(DataStoreFactory.create(serializer, scope = owner) { file })
+        val result = localWipe(original).invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+        assertIs<WipeIncomplete>(result.exceptionOrNull())
+        verify(keychain).wipe()
+        verify(settingsStore).reset()
+        verify(migrationService).markMigrationChecked()
+        val id = assertNotNull(original.pendingAttempt())
+        assertFalse(onWipeCalled)
+        assertFalse(onSetWalletExistsStateCalled)
+        requireNotNull(owner.coroutineContext[Job]).cancelAndJoin()
+
+        val restarted = ProfileRemovalStore(DataStoreFactory.create(serializer, scope = backgroundScope) { file })
+        assertEquals(WalletResetRecovery.Pending(id), restarted.walletResetRecovery.first())
+        assertFailsWith<ProfileRemovalPending> { restarted.requireWalletAvailable() }
+        clearInvocations(pubkyRepo, privatePaykitRepo)
+        refuseCompletion = false
+        assertTrue(
+            localWipe(restarted).invoke(
+                resetWalletState = { onWipeCalled = true },
+                onSuccess = { onSetWalletExistsStateCalled = true },
+                expectedPendingAttemptId = id,
+            ).isSuccess
+        )
+        assertNull(restarted.pendingAttempt())
+        restarted.requireWalletAvailable()
+        assertTrue(onWipeCalled)
+        assertTrue(onSetWalletExistsStateCalled)
+        verify(pubkyRepo, never()).removeBitkitPaymentEndpoints()
+        verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any())
+    }
+
+    @Test
+    fun `confirmed stale reset attempt cannot erase the current wallet`() = runTest {
+        val current = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(current, ProfileRemovalScope.WALLET_WIPE) { profileRemovalStore.begin(current) }
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val active = async {
+            connectionRecovery.withCurrentWallet {
+                entered.complete(Unit)
+                release.await()
+            }
+        }
+        entered.await()
+        val result = sut.invoke(
+            resetWalletState = {},
+            onSuccess = {},
+            expectedPendingAttemptId = UUID.randomUUID().toString(),
+        )
+        assertTrue(active.isActive)
+        release.complete(Unit)
+        active.await()
+        verify(backupRepo, never()).setWiping(any())
+        verify(lightningRepo, never()).setWiping(any())
+        assertTrue(result.isFailure)
+        assertEquals(current, profileRemovalStore.pendingAttempt())
+        verify(lightningRepo, never()).stop()
+        verify(keychain, never()).wipe()
+        verify(coreService, never()).wipeData()
+    }
+
+    @Test
+    fun `profile-only removal cannot be resumed as a wallet reset`() = runTest {
+        val current = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(current) { profileRemovalStore.begin(current) }
+        val result = sut.invoke(resetWalletState = {}, onSuccess = {}, expectedPendingAttemptId = current)
+        assertTrue(result.isFailure)
+        verify(keychain, never()).wipe()
+        assertEquals(current, profileRemovalStore.pendingAttempt())
     }
 }

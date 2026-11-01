@@ -91,6 +91,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | - | - |
 | RecoveryMnemonicScreen.kt | `n/a` |
 | RecoveryModeScreen.kt | `n/a` |
+| WalletResetRecoveryScreen.kt | `todo` |
 
 ## ui/screens/scanner
 

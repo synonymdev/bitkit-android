@@ -474,6 +474,8 @@
     <string name="security__reset_dialog_desc">Είσαι σίγουρος ότι θέλεις να επαναφέρεις το πορτοφόλι Bitkit; Έχεις αντίγραφο ασφαλείας της φράσης ανάκτησης και των δεδομένων του πορτοφολιού;</string>
     <string name="security__reset_dialog_title">Επαναφορά Bitkit;</string>
     <string name="security__reset_graph_confirm">Ναι, Επαναφορά</string>
+    <string name="security__reset_pending_text">Η προηγούμενη επαναφορά του πορτοφολιού δεν ολοκληρώθηκε. Ολοκλήρωσέ την πριν δημιουργήσεις ή ανακτήσεις πορτοφόλι. Φύλαξε με ασφάλεια τη φράση ανάκτησης και το αντίγραφο ασφαλείας.</string>
+    <string name="security__reset_read_error">Δεν ήταν δυνατή η ανάγνωση της κατάστασης ανάκτησης του πορτοφολιού. Δοκίμασε ξανά πριν συνεχίσεις.</string>
     <string name="security__reset_text">Δημιούργησε πρώτα αντίγραφο ασφαλείας του πορτοφολιού για να αποφύγεις την απώλεια κεφαλαίων και δεδομένων πορτοφολιού. Η επαναφορά θα αντικαταστήσει την τρέχουσα ρύθμιση του Bitkit.</string>
     <string name="security__reset_title">Επαναφορά και ανάκτηση</string>
     <string name="security__success_bio">Ρύθμισες επιτυχώς κωδικό PIN και {biometricsName} για να βελτιώσεις την ασφάλεια του πορτοφολιού.</string>

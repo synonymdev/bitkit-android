@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.data.WalletResetRecovery
 import to.bitkit.test.annotations.ComposeUi
 
 @ComposeUi
@@ -20,6 +21,7 @@ class RootDestinationTest {
         isShowingMigrationLoading: Boolean = false,
         walletExists: Boolean = true,
         isRecoveryMode: Boolean = false,
+        walletResetRecovery: WalletResetRecovery = WalletResetRecovery.Clear,
     ) {
         composeTestRule.setContent {
             RootDestination(
@@ -27,6 +29,8 @@ class RootDestinationTest {
                 isShowingMigrationLoading = isShowingMigrationLoading,
                 walletExists = walletExists,
                 isRecoveryMode = isRecoveryMode,
+                walletResetRecovery = walletResetRecovery,
+                resetRecovery = { Text(text = "reset", modifier = Modifier.testTag(TAG_RESET)) },
                 criticalUpdate = { Text(text = "critical", modifier = Modifier.testTag(TAG_CRITICAL)) },
                 migrationLoading = { Text(text = "migration", modifier = Modifier.testTag(TAG_MIGRATION)) },
                 onboarding = { Text(text = "onboarding", modifier = Modifier.testTag(TAG_ONBOARDING)) },
@@ -37,9 +41,27 @@ class RootDestinationTest {
 
     private fun assertOnly(tag: String) {
         composeTestRule.onNodeWithTag(tag).assertExists()
-        listOf(TAG_CRITICAL, TAG_MIGRATION, TAG_ONBOARDING, TAG_WALLET)
+        listOf(TAG_CRITICAL, TAG_MIGRATION, TAG_ONBOARDING, TAG_WALLET, TAG_RESET)
             .filterNot { it == tag }
             .forEach { composeTestRule.onNodeWithTag(it).assertDoesNotExist() }
+    }
+
+    @Test
+    fun pendingResetPrecedesOnboardingAndRecoveryMode() {
+        setContent(walletExists = false, isRecoveryMode = true, walletResetRecovery = WalletResetRecovery.Pending("test"))
+        assertOnly(TAG_RESET)
+    }
+
+    @Test
+    fun unreadableResetStateBlocksOrdinaryWallet() {
+        setContent(walletResetRecovery = WalletResetRecovery.Unavailable)
+        assertOnly(TAG_RESET)
+    }
+
+    @Test
+    fun loadingResetStateBlocksOnboarding() {
+        setContent(walletExists = false, walletResetRecovery = WalletResetRecovery.Loading)
+        assertOnly(TAG_RESET)
     }
 
     @Test
@@ -110,3 +132,5 @@ private const val TAG_CRITICAL = "TestCriticalUpdate"
 private const val TAG_MIGRATION = "TestMigrationLoading"
 private const val TAG_ONBOARDING = "TestOnboarding"
 private const val TAG_WALLET = "TestWallet"
+
+private const val TAG_RESET = "TestWalletReset"

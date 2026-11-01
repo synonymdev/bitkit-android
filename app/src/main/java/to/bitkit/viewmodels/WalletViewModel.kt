@@ -34,6 +34,7 @@ import to.bitkit.R
 import to.bitkit.data.ConnectionRecoveryOwnerChanged
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
+import to.bitkit.data.WalletResetRecovery
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
@@ -99,6 +100,8 @@ class WalletViewModel @Inject constructor(
 
     val lightningState = lightningRepo.lightningState
     val walletState = walletRepo.walletState
+    private val _isFinishingWalletReset = MutableStateFlow(false)
+    val isFinishingWalletReset = _isFinishingWalletReset.asStateFlow()
     val balanceState = walletRepo.balanceState
 
     @Volatile
@@ -365,6 +368,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun checkAndPerformRNMigration() = viewModelScope.launch(bgDispatcher) {
+        if (walletRepo.checkWalletAvailable().isFailure) return@launch
         val isChecked = migrationService.isMigrationChecked()
         if (isChecked) {
             loadCacheIfWalletExists()
@@ -388,10 +392,12 @@ class WalletViewModel @Inject constructor(
         runSuspendCatching {
             connectionRecovery.withIdentityChange(
                 isStillNeeded = {
+                    walletRepo.checkWalletAvailable().getOrThrow()
                     !migrationService.isMigrationChecked() &&
                         !migrationService.hasNativeWalletData() && migrationService.hasRNWalletData()
                 },
             ) {
+                walletRepo.checkWalletAvailable().getOrThrow()
                 migrationService.setShowingMigrationLoading(true)
                 Logger.info("RN wallet data found, starting migration...", context = TAG)
                 migrationService.migrateFromReactNative()
@@ -412,6 +418,7 @@ class WalletViewModel @Inject constructor(
                 migrationService.setShowingMigrationLoading(false)
             }
         }.onFailure {
+            if (walletRepo.checkWalletAvailable().isFailure) return@onFailure
             Logger.error("RN migration failed", it, context = TAG)
             migrationService.markMigrationChecked()
             migrationService.setShowingMigrationLoading(false)
@@ -432,6 +439,7 @@ class WalletViewModel @Inject constructor(
     private fun collectStates() = viewModelScope.launch {
         walletState.collect {
             walletExists = it.walletExists
+            if (it.walletResetRecovery != WalletResetRecovery.Clear) return@collect
             if (!it.walletExists) {
                 appliedConnection = null
                 _connectionStartupError.update { null }
@@ -678,6 +686,7 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             isStarting = true
             try {
+                if (walletRepo.checkWalletAvailable().isFailure) return@launch
                 if (!isNetworkConnected()) {
                     Logger.warn("Network offline, skipping wallet start", context = TAG)
                     pendingWalletStart = true
@@ -997,7 +1006,22 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun refreshWalletResetRecovery() = walletRepo.refreshWalletResetRecovery()
+
+    fun finishPendingWalletReset(attemptId: String) = viewModelScope.launch {
+        if (!_isFinishingWalletReset.compareAndSet(false, true)) return@launch
+        try {
+            walletRepo.wipeWallet(expectedPendingAttemptId = attemptId).onFailure { ToastEventBus.send(it) }
+        } finally {
+            _isFinishingWalletReset.update { false }
+        }
+    }
+
     suspend fun createWallet(bip39Passphrase: String?) {
+        walletRepo.checkWalletAvailable().getOrElse {
+            ToastEventBus.send(it)
+            return
+        }
         setInitNodeLifecycleState()
         walletRepo.createWallet(bip39Passphrase)
             .onSuccess {
@@ -1013,6 +1037,10 @@ class WalletViewModel @Inject constructor(
     }
 
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?) {
+        walletRepo.checkWalletAvailable().getOrElse {
+            ToastEventBus.send(it)
+            return
+        }
         setInitNodeLifecycleState()
         _restoreState.update { RestoreState.InProgress.Wallet }
         // The node starts and syncs long before the backup is read, so ordinary uploads are held from

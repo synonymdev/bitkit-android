@@ -40,6 +40,43 @@ class ProfileRemovalStoreTest {
     val folder = TemporaryFolder()
 
     @Test
+    fun `wallet reset admission distinguishes profile cleanup and survives datastore restart`() = runTest {
+        val file = folder.newFile("wallet-reset").also { it.delete() }
+        val owner = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val store = ProfileRemovalStore(DataStoreFactory.create(ProfileRemovalSerializer, scope = owner) { file })
+        val id = UUID.randomUUID().toString()
+        store.withAccess(id) { store.begin(id) }
+        assertEquals(WalletResetRecovery.Clear, store.walletResetRecovery.first())
+        store.requireWalletAvailable()
+        store.withAccess(id, ProfileRemovalScope.WALLET_WIPE) { store.begin(id) }
+        requireNotNull(owner.coroutineContext[Job]).cancelAndJoin()
+        val restarted = ProfileRemovalStore(
+            DataStoreFactory.create(ProfileRemovalSerializer, scope = backgroundScope) { file }
+        )
+        assertEquals(WalletResetRecovery.Pending(id), restarted.walletResetRecovery.first())
+        assertFailsWith<ProfileRemovalPending> { restarted.requireWalletAvailable() }
+        restarted.requirePendingWalletReset(id)
+    }
+
+    @Test
+    fun `unreadable reset admission remains unavailable until an explicit read succeeds`() = runTest {
+        var readable = false
+        val store = ProfileRemovalStore(object : DataStore<ProfileRemovalState> {
+            override val data = flow {
+                if (!readable) throw IOException("read refused")
+                emit(ProfileRemovalState())
+            }
+            override suspend fun updateData(transform: suspend (ProfileRemovalState) -> ProfileRemovalState) =
+                error("Read retry cannot mutate recovery state")
+        })
+        assertEquals(WalletResetRecovery.Unavailable, store.walletResetRecovery.first())
+        assertFailsWith<IOException> { store.requireWalletAvailable() }
+        readable = true
+        store.refreshWalletResetRecovery()
+        assertEquals(WalletResetRecovery.Clear, store.walletResetRecovery.first())
+    }
+
+    @Test
     fun `pending profile permits a complete local receipt snapshot but pending wipe does not`() = runTest {
         val store = ProfileRemovalStore.inMemoryForTesting()
         val id = UUID.randomUUID().toString()

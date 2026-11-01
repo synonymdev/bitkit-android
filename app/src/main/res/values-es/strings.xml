@@ -470,6 +470,8 @@
     <string name="security__bio_confirm">Confirma {biometricsName}</string>
     <string name="security__bio_use">Utilizar {biometricsName}</string>
     <string name="security__bio_phone_settings">Ajustes del teléfono</string>
+    <string name="security__reset_pending_text">El restablecimiento anterior de la billetera no se completó. Complétalo antes de crear o restaurar una billetera. Guarda tu frase de recuperación y la copia de seguridad en un lugar seguro.</string>
+    <string name="security__reset_read_error">No se pudo leer el estado de recuperación de la billetera. Reinténtalo antes de continuar.</string>
     <string name="security__success_title">Cartera asegurada</string>
     <string name="security__success_bio">Has configurado correctamente un código PIN y {biometricsName} para mejorar la seguridad de tu monedero.</string>
     <string name="security__success_no_bio">Ha configurado correctamente un código PIN para mejorar la seguridad de su monedero.</string>

@@ -489,6 +489,8 @@
     <string name="security__reset_dialog_desc">Estàs segur que vols restablir la teva cartera Bitkit? Tens una còpia de seguretat de la teva frase de recuperació i les dades de la cartera?</string>
     <string name="security__reset_dialog_title">Reiniciar Bitkit?</string>
     <string name="security__reset_graph_confirm">Sí, reinicia</string>
+    <string name="security__reset_pending_text">El restabliment anterior de la cartera no es va completar. Completa el restabliment abans de crear o restaurar una cartera. Desa en un lloc segur la frase de recuperació i la còpia de seguretat.</string>
+    <string name="security__reset_read_error">No es pot llegir l’estat de recuperació de la cartera. Torna-ho a provar abans de continuar.</string>
     <string name="security__reset_text">Fes còpia de seguretat de la teva cartera primer per evitar la pèrdua dels teus fons i dades de la cartera. Restablir sobreescriurà la teva configuració actual de Bitkit.</string>
     <string name="security__reset_title">Restablir i restaurar</string>
     <string name="security__success_bio">Has configurat correctament un codi PIN i {biometricsName} per millorar la seguretat de la cartera.</string>

@@ -492,6 +492,8 @@
     <string name="security__reset_dialog_desc">¿Está seguro de que desea restablecer su monedero Bitkit? ¿Tiene una copia de seguridad de su frase de recuperación y de los datos de su monedero?</string>
     <string name="security__reset_dialog_title">¿Restablecer Bitkit a los parámetros iniciales?</string>
     <string name="security__reset_graph_confirm">Sí, restaurar</string>
+    <string name="security__reset_pending_text">El restablecimiento anterior de la billetera no se completó. Complétalo antes de crear o restaurar una billetera. Guarda tu frase de recuperación y la copia de seguridad en un lugar seguro.</string>
+    <string name="security__reset_read_error">No se pudo leer el estado de recuperación de la billetera. Reinténtalo antes de continuar.</string>
     <string name="security__reset_text">Haga primero una copia de seguridad de su monedero para evitar la pérdida de sus fondos y datos de monedero. Al restablecer sobrescribirá su configuración actual de Bitkit.</string>
     <string name="security__reset_title">Restablecer y restaurar</string>
     <string name="security__success_bio">Has configurado correctamente un código PIN y {biometricsName} para mejorar la seguridad del monedero.</string>

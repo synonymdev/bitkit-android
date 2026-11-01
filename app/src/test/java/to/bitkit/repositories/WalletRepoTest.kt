@@ -37,6 +37,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -47,6 +48,8 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.PrivatePaykitReservationData
 import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.PrivatePaykitStoredAssignmentData
+import to.bitkit.data.ProfileRemovalScope
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -66,6 +69,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import java.io.IOException
 import java.util.ArrayDeque
+import java.util.UUID
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
@@ -91,6 +95,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val connectionRecovery = connectionRecoveryFixture(settingsStore)
+    private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
 
     companion object Fixtures {
         const val ACTIVITY_TAG = "testTag"
@@ -189,7 +194,20 @@ class WalletRepoTest : BaseUnitTest() {
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
         connectionRecovery = connectionRecovery,
+        profileRemovalStore = profileRemovalStore,
     )
+
+    @Test
+    fun `incomplete wallet wipe rejects replacement seed before any write`() = test {
+        val attempt = UUID.randomUUID().toString()
+        profileRemovalStore.withAccess(attempt, ProfileRemovalScope.WALLET_WIPE) {
+            profileRemovalStore.begin(attempt)
+        }
+        val result = sut.restoreWallet("replacement-test-mnemonic", null)
+        assertTrue(result.isFailure)
+        verify(keychain, never()).saveString(eq(Keychain.Key.BIP39_MNEMONIC.name), any())
+        assertEquals(attempt, profileRemovalStore.pendingAttempt())
+    }
 
     private fun lightningInvoice(bolt11: String, isExpired: Boolean = false) = LightningInvoice(
         bolt11 = bolt11,
@@ -2063,18 +2081,18 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `wipeWallet should call use case`() = test {
-        whenever(wipeWalletUseCase.invoke(any(), any(), any())).thenReturn(Result.success(Unit))
+        whenever(wipeWalletUseCase.invoke(any(), any(), any(), isNull())).thenReturn(Result.success(Unit))
 
         val result = sut.wipeWallet()
 
         assertTrue(result.isSuccess)
-        verify(wipeWalletUseCase).invoke(any(), any(), any())
+        verify(wipeWalletUseCase).invoke(any(), any(), any(), isNull())
     }
 
     @Test
     fun `wipeWallet re-reads wallet existence when the wipe is incomplete`() = test {
         whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
-        whenever(wipeWalletUseCase.invoke(any(), any(), any())).thenReturn(Result.failure(WipeIncomplete()))
+        whenever(wipeWalletUseCase.invoke(any(), any(), any(), isNull())).thenReturn(Result.failure(WipeIncomplete()))
 
         val result = sut.wipeWallet()
 
@@ -2087,7 +2105,7 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
         sut.setWalletExistsState()
         assertTrue(sut.walletState.value.walletExists)
-        whenever(wipeWalletUseCase.invoke(any(), any(), any())).thenAnswer {
+        whenever(wipeWalletUseCase.invoke(any(), any(), any(), isNull())).thenAnswer {
             whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(false)
             throw CancellationException("Canceled after credential erasure")
         }
@@ -2097,7 +2115,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `wipeWallet should return failure when use case fails`() = test {
-        whenever(wipeWalletUseCase.invoke(any(), any(), any())).thenReturn(Result.failure(error))
+        whenever(wipeWalletUseCase.invoke(any(), any(), any(), isNull())).thenReturn(Result.failure(error))
 
         val result = sut.wipeWallet()
 

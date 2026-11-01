@@ -489,6 +489,8 @@
     <string name="security__reset_dialog_desc">Weet je zeker dat je je Bitkit-wallet wilt resetten? Heb je een backup van je herstelzin en wallet-gegevens?</string>
     <string name="security__reset_dialog_title">Bitkit resetten?</string>
     <string name="security__reset_graph_confirm">Ja, resetten</string>
+    <string name="security__reset_pending_text">De vorige walletreset is niet voltooid. Voltooi de reset voordat je een wallet aanmaakt of herstelt. Bewaar je herstelzin en walletback-up veilig.</string>
+    <string name="security__reset_read_error">De herstelstatus van de wallet kon niet worden gelezen. Probeer het opnieuw voordat je doorgaat.</string>
     <string name="security__reset_text">Maak eerst een back-up van je wallet om verlies van je geld en wallet-gegevens te voorkomen. Resetten overschrijft je huidige Bitkit-configuratie.</string>
     <string name="security__reset_title">Resetten en herstellen</string>
     <string name="security__success_bio">Je hebt succesvol een pincode en {biometricsName} ingesteld om de wallet-beveiliging te verbeteren.</string>

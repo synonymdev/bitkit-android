@@ -491,6 +491,8 @@
     <string name="security__reset_dialog_desc">Sei sicuro di voler resettare il tuo Wallet Bitkit? Hai un backup della recovery phrase e dei dati del wallet?</string>
     <string name="security__reset_dialog_title">Resettare Bitkit?</string>
     <string name="security__reset_graph_confirm">Sì, resetta</string>
+    <string name="security__reset_pending_text">Il ripristino precedente del portafoglio non è terminato. Completalo prima di creare o recuperare un portafoglio. Conserva al sicuro la frase di recupero e il backup del portafoglio.</string>
+    <string name="security__reset_read_error">Impossibile leggere lo stato di recupero del portafoglio. Riprova prima di continuare.</string>
     <string name="security__reset_text">Esegui prima un backup del wallet per evitare la perdita dei fondi e dei dati del wallet. Il reset sovrascriverà l\'attuale configurazione di Bitkit.</string>
     <string name="security__reset_title">Reset e Ripristino</string>
     <string name="security__success_bio">Hai impostato con successo un codice PIN e{biometricsName} per migliorare la sicurezza del portafoglio.</string>

@@ -96,6 +96,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun setUp() = runBlocking {
         whenever(context.getString(any())).thenReturn("")
         whenever(walletRepo.walletState).thenReturn(walletState)
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
         whenever(walletRepo.refreshReceiveState()).thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
@@ -126,6 +127,17 @@ class WalletViewModelTest : BaseUnitTest() {
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
         )
+    }
+
+    @Test
+    fun `failed reset admission blocks restore preparation and replacement seed`() = test {
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("reset pending")))
+        sut.restoreWallet("replacement", null)
+        sut.createWallet(null)
+        verify(walletRepo, never()).restoreWallet(any(), anyOrNull())
+        verify(walletRepo, never()).createWallet(anyOrNull())
+        verify(backupRepo, never()).setRestorePending(true)
+        verify(lightningRepo, never()).setInitNodeLifecycleState()
     }
 
     @Test

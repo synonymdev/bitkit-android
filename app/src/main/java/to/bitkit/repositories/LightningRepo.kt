@@ -62,6 +62,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
@@ -131,6 +132,7 @@ class LightningRepo @Inject constructor(
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val urlValidator: UrlValidator,
     private val electrumProbeService: ElectrumProbeService,
+    private val profileRemovalStore: ProfileRemovalStore,
 ) : OnchainReleasing {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -365,6 +367,8 @@ class LightningRepo @Inject constructor(
 
         val result = lifecycleMutex.withLock {
             if (isWiping) return@withLock Result.failure(WipeInProgressError())
+            runSuspendCatching { profileRemovalStore.requireWalletAvailable() }
+                .exceptionOrNull()?.let { return@withLock Result.failure(it) }
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
                 return@withLock skipStartForRunningNode(

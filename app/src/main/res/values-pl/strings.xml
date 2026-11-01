@@ -477,6 +477,8 @@
     <string name="security__bio_ask">Kod PIN ustawiony. Czy chcesz używać {biometricsName} zamiast twojego PIN-u?</string>
     <string name="security__bio_use">Użyj {biometricsName}</string>
     <string name="security__bio_phone_settings">Ustawienia telefonu</string>
+    <string name="security__reset_pending_text">Poprzednie resetowanie portfela nie zostało ukończone. Dokończ je przed utworzeniem lub przywróceniem portfela. Przechowuj frazę odzyskiwania i kopię zapasową portfela w bezpiecznym miejscu.</string>
+    <string name="security__reset_read_error">Nie udało się odczytać stanu odzyskiwania portfela. Spróbuj ponownie przed kontynuowaniem.</string>
     <string name="security__success_title">Portfel zabezpieczony</string>
     <string name="security__success_bio">Pomyślnie ustawiono kod PIN i {biometricsName}, aby zwiększyć bezpieczeństwo portfela.</string>
     <string name="security__success_no_bio">Skutecznie ustawiono kod PIN zwiększając bezpieczeństwo portfela.</string>

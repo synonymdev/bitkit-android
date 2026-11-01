@@ -85,7 +85,31 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
         it?.attemptId != null && it.scope == ProfileRemovalScope.PROFILE
     }
 
+    val walletResetRecovery: Flow<WalletResetRecovery> = observedState.map {
+        when {
+            it == null -> WalletResetRecovery.Unavailable
+            it.attemptId == null || it.scope == ProfileRemovalScope.PROFILE -> WalletResetRecovery.Clear
+            else -> WalletResetRecovery.Pending(it.attemptId)
+        }
+    }
+
+    fun refreshWalletResetRecovery() = observationRevision.update { it + 1 }
+
+    internal suspend fun requirePendingWalletReset(attemptId: String) {
+        val state = store.data.first()
+        if (state.attemptId != attemptId || state.scope == ProfileRemovalScope.PROFILE) {
+            throw ProfileRemovalPending()
+        }
+    }
+
     internal suspend fun pendingAttempt(): String? = store.data.first().attemptId
+
+    internal suspend fun requireWalletAvailable() {
+        val state = store.data.first()
+        if (state.attemptId != null && state.scope != ProfileRemovalScope.PROFILE) {
+            throw ProfileRemovalPending()
+        }
+    }
 
     internal suspend fun requireNoPending() {
         if (pendingAttempt() != null) throw ProfileRemovalPending()
@@ -208,6 +232,13 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
         companion object Key : CoroutineContext.Key<Access>
         val active = AtomicBoolean(true)
     }
+}
+
+sealed interface WalletResetRecovery {
+    data object Loading : WalletResetRecovery
+    data object Unavailable : WalletResetRecovery
+    data object Clear : WalletResetRecovery
+    data class Pending(val attemptId: String) : WalletResetRecovery
 }
 
 @Serializable

@@ -789,6 +789,8 @@
     <string name="security__reset_graph_error">Could not reset the network graph. Please try again.</string>
     <string name="security__reset_graph_success_description">Bitkit will restart in a few seconds to download a fresh network graph.</string>
     <string name="security__reset_graph_success_title">Network Graph Reset</string>
+    <string name="security__reset_pending_text">The previous wallet reset did not finish. Complete the reset before creating or restoring a wallet. Keep your recovery phrase and wallet backup safe.</string>
+    <string name="security__reset_read_error">Wallet recovery state could not be read. Retry before continuing.</string>
     <string name="security__reset_text">Back up your wallet first to avoid loss of your funds and wallet data. Resetting will overwrite your current Bitkit setup.</string>
     <string name="security__reset_title">Reset And Restore</string>
     <string name="security__success_bio">You have successfully set up a PIN code and {biometricsName} to improve wallet security.</string>

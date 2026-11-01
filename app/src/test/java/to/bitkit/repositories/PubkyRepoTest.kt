@@ -3051,6 +3051,39 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `reconnect skips expected missing profile until local setup completes`() = test {
+        sut.awaitInitialization()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")
+        whenever(pubkyService.importSession("restored_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).thenAnswer {
+            throw PaykitException.Transport("transport_error", "offline")
+        }
+        assertTrue(sut.restoreSessionIfNeeded())
+        val originalSignIn = assertNotNull(sut.currentSignIn())
+        profileSetupPending.value = true
+        clearInvocations(pubkyService)
+
+        repeat(3) {
+            assertFalse(sut.restoreSessionIfNeeded())
+            yield()
+            advanceUntilIdle()
+        }
+
+        assertTrue(sut.isCurrent(originalSignIn))
+        verify(pubkyService, never()).resolveContactProfile(VALID_SELF_KEY, true)
+        verify(pubkyService, never()).importSession(any())
+        profileSetupPending.value = false
+        doSuspendableAnswer {
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile(name = "Completed"))
+        }.whenever(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+        assertFalse(sut.restoreSessionIfNeeded())
+        yield()
+        advanceUntilIdle()
+        assertEquals("Completed", sut.profile.value?.name)
+        verify(pubkyService).resolveContactProfile(VALID_SELF_KEY, true)
+    }
+
+    @Test
     fun `active identity retries its missing profile on reconnect without delaying wallet maintenance`() = test {
         sut.awaitInitialization()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("restored_session")

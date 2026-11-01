@@ -27,8 +27,10 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.WordCount
 import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
+import to.bitkit.data.WalletResetRecovery
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -75,10 +77,13 @@ class WalletRepo @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val profileRemovalStore: ProfileRemovalStore,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
-    private val _walletState = MutableStateFlow(WalletState(walletExists = walletExists()))
+    private val _walletState = MutableStateFlow(
+        WalletState(walletExists = walletExists(), walletResetRecovery = WalletResetRecovery.Loading)
+    )
     val walletState = _walletState.asStateFlow()
 
     private val _balanceState = MutableStateFlow(BalanceState())
@@ -94,6 +99,11 @@ class WalletRepo @Inject constructor(
     private var committedReceiveBip21 = ""
 
     init {
+        repoScope.launch {
+            profileRemovalStore.walletResetRecovery.collect { recovery ->
+                _walletState.update { it.copy(walletResetRecovery = recovery) }
+            }
+        }
         repoScope.launch {
             lightningRepo.nodeEventUpdates.collect { update ->
                 if (!walletExists()) return@collect
@@ -629,9 +639,13 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun createWallet(bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
-        lightningRepo.setRecoveryMode(enabled = false)
         runSuspendCatching {
-            connectionRecovery.withIdentityChange {
+            connectionRecovery.withIdentityChange(isStillNeeded = {
+                profileRemovalStore.requireWalletAvailable()
+                true
+            }) {
+                profileRemovalStore.requireWalletAvailable()
+                lightningRepo.setRecoveryMode(enabled = false)
                 val mnemonic = generateEntropyMnemonic()
                 keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
                 if (bip39Passphrase != null) {
@@ -651,9 +665,13 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
-        lightningRepo.setRecoveryMode(enabled = false)
         runSuspendCatching {
-            connectionRecovery.withIdentityChange {
+            connectionRecovery.withIdentityChange(isStillNeeded = {
+                profileRemovalStore.requireWalletAvailable()
+                true
+            }) {
+                profileRemovalStore.requireWalletAvailable()
+                lightningRepo.setRecoveryMode(enabled = false)
                 keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
                 if (bip39Passphrase != null) {
                     keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
@@ -671,18 +689,26 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun wipeWallet(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
-        try {
-            wipeWalletUseCase(
-                walletIndex = walletIndex,
-                resetWalletState = ::resetState,
-                onSuccess = {},
-            )
-        } finally {
-            runCatching { setWalletExistsState() }
-                .onFailure { Logger.warn("Failed to refresh wallet existence after wipe", it, context = TAG) }
-        }
+    suspend fun checkWalletAvailable(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching { profileRemovalStore.requireWalletAvailable() }
     }
+
+    fun refreshWalletResetRecovery() = profileRemovalStore.refreshWalletResetRecovery()
+
+    suspend fun wipeWallet(walletIndex: Int = 0, expectedPendingAttemptId: String? = null): Result<Unit> =
+        withContext(bgDispatcher) {
+            try {
+                wipeWalletUseCase(
+                    walletIndex = walletIndex,
+                    resetWalletState = ::resetState,
+                    onSuccess = {},
+                    expectedPendingAttemptId = expectedPendingAttemptId,
+                )
+            } finally {
+                runCatching { setWalletExistsState() }
+                    .onFailure { Logger.warn("Failed to refresh wallet existence after wipe", it, context = TAG) }
+            }
+        }
 
     fun resetState() {
         _walletState.update { WalletState() }
@@ -1045,6 +1071,7 @@ data class WalletState(
     val bip21Description: String = "",
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val walletExists: Boolean = false,
+    val walletResetRecovery: WalletResetRecovery = WalletResetRecovery.Clear,
 )
 
 enum class SyncSource { AUTO, MANUAL }

@@ -474,6 +474,8 @@
     <string name="security__reset_dialog_desc">هل أنت متأكد من رغبتك في إعادة تعيين محفظة Bitkit؟ هل لديك نسخة احتياطية من عبارة الاسترداد وبيانات المحفظة؟</string>
     <string name="security__reset_dialog_title">إعادة تعيين Bitkit؟</string>
     <string name="security__reset_graph_confirm">نعم، أعد التعيين</string>
+    <string name="security__reset_pending_text">لم تكتمل إعادة ضبط المحفظة السابقة. أكمل إعادة الضبط قبل إنشاء محفظة أو استعادتها. احتفظ بعبارة الاسترداد والنسخة الاحتياطية للمحفظة في مكان آمن.</string>
+    <string name="security__reset_read_error">تعذرت قراءة حالة استرداد المحفظة. أعد المحاولة قبل المتابعة.</string>
     <string name="security__reset_text">انسخ محفظتك احتياطيًا أولاً لتجنب فقدان أموالك وبيانات محفظتك. ستؤدي إعادة التعيين إلى الكتابة فوق إعداد Bitkit الحالي.</string>
     <string name="security__reset_title">إعادة التعيين والاستعادة</string>
     <string name="security__success_bio">لقد أعددت رمز PIN و {biometricsName} بنجاح لتحسين أمان المحفظة.</string>

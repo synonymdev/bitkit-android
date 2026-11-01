@@ -496,6 +496,8 @@
     <string name="security__reset_dialog_desc">Você tem certeza de que deseja redefinir sua Bitkit? Você tem um backup de sua frase de recuperação e dos dados da carteira?</string>
     <string name="security__reset_dialog_title">Redefinir Bitkit?</string>
     <string name="security__reset_graph_confirm">Sim, Redefinir</string>
+    <string name="security__reset_pending_text">A redefinição anterior da carteira não foi concluída. Conclua-a antes de criar ou restaurar uma carteira. Guarde a frase de recuperação e o backup da carteira em um local seguro.</string>
+    <string name="security__reset_read_error">Não foi possível ler o estado de recuperação da carteira. Tente novamente antes de continuar.</string>
     <string name="security__reset_text">Faça o backup da sua carteira primeiro para evitar a perda de fundos e dados da carteira. A redefinição substituirá a configuração atual da Bitkit.</string>
     <string name="security__reset_title">Redefinir e Restaurar</string>
     <string name="security__success_bio">Você configurou com sucesso um código PIN e {biometricsName} para melhorar a segurança da sua carteira.</string>

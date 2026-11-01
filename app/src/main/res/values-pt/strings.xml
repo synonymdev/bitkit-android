@@ -455,6 +455,8 @@
     <string name="security__bio_ask">PIN configurado. Você gostaria de usar {biometricsName} em vez de seu código PIN?</string>
     <string name="security__bio_use">Usar {biometricsName}</string>
     <string name="security__bio_phone_settings">Configurações do Telefone</string>
+    <string name="security__reset_pending_text">A reposição anterior da carteira não foi concluída. Conclui-a antes de criar ou restaurar uma carteira. Guarda a frase de recuperação e a cópia de segurança num local seguro.</string>
+    <string name="security__reset_read_error">Não foi possível ler o estado de recuperação da carteira. Tenta novamente antes de continuar.</string>
     <string name="security__success_title">Carteira Protegida</string>
     <string name="security__success_bio">Você configurou com sucesso um código PIN e {biometricsName} para melhorar a segurança da sua carteira.</string>
     <string name="security__success_no_bio">Você configurou com êxito um código PIN para aumentar a segurança da sua carteira.</string>

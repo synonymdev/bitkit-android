@@ -474,6 +474,8 @@
     <string name="security__bio_ask">PIN-Code gesetzt. Möchtest du {biometricsName} anstelle deines PIN-Codes verwenden?</string>
     <string name="security__bio_use">Verwende {biometricsName}</string>
     <string name="security__bio_phone_settings">Telefoneinstellungen</string>
+    <string name="security__reset_pending_text">Das vorherige Zurücksetzen der Wallet wurde nicht abgeschlossen. Schließe es ab, bevor du eine Wallet erstellst oder wiederherstellst. Bewahre deine Wiederherstellungsphrase und dein Wallet-Backup sicher auf.</string>
+    <string name="security__reset_read_error">Der Wiederherstellungsstatus der Wallet konnte nicht gelesen werden. Versuche es erneut, bevor du fortfährst.</string>
     <string name="security__success_title">Wallet gesichert</string>
     <string name="security__success_bio">Du hast erfolgreich einen PIN-Code und {biometricsName} eingerichtet, um die Sicherheit deines Wallets zu verbessern.</string>
     <string name="security__success_no_bio">Du hast erfolgreich einen PIN-Code eingerichtet, um die Sicherheit deines Wallets zu verbessern.</string>

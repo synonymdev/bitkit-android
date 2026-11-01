@@ -474,6 +474,8 @@
     <string name="security__bio_ask">Code PIN défini. Vous souhaitez utiliser {biometricsName} au lieu de votre code PIN ?</string>
     <string name="security__bio_use">Utiliser {biometricsName}</string>
     <string name="security__bio_phone_settings">Réglages tél.</string>
+    <string name="security__reset_pending_text">La réinitialisation précédente du portefeuille est inachevée. Termine-la avant de créer ou restaurer un portefeuille. Conserve ta phrase de récupération et ta sauvegarde en lieu sûr.</string>
+    <string name="security__reset_read_error">Impossible de lire l’état de récupération du portefeuille. Réessaie avant de continuer.</string>
     <string name="security__success_title">Portefeuille sécurisé</string>
     <string name="security__success_bio">Vous avez configuré avec succès un code PIN et {biometricsName} pour améliorer la sécurité de votre portefeuille.</string>
     <string name="security__success_no_bio">Vous avez configuré avec succès un code PIN pour améliorer la sécurité de votre portefeuille.</string>
