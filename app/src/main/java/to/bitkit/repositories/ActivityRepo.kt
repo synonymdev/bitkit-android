@@ -1086,8 +1086,17 @@ class ActivityRepo @Inject constructor(
      * tags slice itself was applied, so a rejected tags slice cannot mark the metadata backup as changed.
      */
     suspend fun restoreFromBackup(payload: ActivityBackupV1): Result<Unit> = withContext(bgDispatcher) {
-        val activities = runSuspendCatching { coreService.activity.upsertList(payload.activities) }
-        val activityTags = runSuspendCatching { coreService.activity.upsertTags(payload.activityTags) }
+        val activities = runSuspendCatching {
+            val syncedTags = dropSyncedOnchainDuplicates(payload.activities)
+            coreService.activity.upsertList(payload.activities)
+            syncedTags
+        }
+        val activityTags = runSuspendCatching {
+            coreService.activity.upsertTags(payload.activityTags)
+            activities.getOrNull()?.forEach {
+                coreService.activity.appendTags(it.activityId, it.tags, it.walletId).getOrThrow()
+            }
+        }
         val closedChannels = runSuspendCatching {
             coreService.activity.upsertClosedChannelList(payload.closedChannels)
         }
@@ -1113,6 +1122,18 @@ class ActivityRepo @Inject constructor(
         )
         return@withContext Result.success(Unit)
     }
+
+    private suspend fun dropSyncedOnchainDuplicates(activities: List<Activity>): List<ActivityTags> =
+        activities.filterIsInstance<Activity.Onchain>().map { it.v1 }.mapNotNull { restored ->
+            val synced = coreService.activity.getOnchainActivityByTxId(restored.txId, restored.walletId)
+                ?.takeIf { it.id != restored.id && it.txType == restored.txType }
+                ?: return@mapNotNull null
+            val tags = coreService.activity.tags(synced.id, synced.walletId)
+            coreService.activity.delete(synced.id, synced.walletId)
+            Logger.debug("Replaced synced activity '${synced.id}' with restored '${restored.id}'", context = TAG)
+            ActivityTags(walletId = restored.walletId, activityId = restored.id, tags = tags)
+                .takeIf { tags.isNotEmpty() }
+        }
 
     suspend fun markAllUnseenActivitiesAsSeen(startedBefore: ULong? = null): Result<Unit> = withContext(bgDispatcher) {
         runCatching {

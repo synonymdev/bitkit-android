@@ -1296,6 +1296,35 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoreFromBackup replaces the synced row of a restored on-chain transaction`() = test {
+        val synced = createOnchainActivity(id = "ldk-payment-id", txId = "txid", feeRate = 1u).v1
+        val restored = createOnchainActivity(id = "txid", txId = "txid", feeRate = 3u)
+        whenever(coreService.activity.getOnchainActivityByTxId("txid", restored.v1.walletId)).thenReturn(synced)
+        whenever(coreService.activity.tags(synced.id, synced.walletId)).thenReturn(listOf("synced-tag"))
+        whenever(coreService.activity.delete(synced.id, synced.walletId)).thenReturn(true)
+        whenever(coreService.activity.appendTags(any(), any(), any())).thenReturn(Result.success(Unit))
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(restored)))
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity).delete(synced.id, synced.walletId)
+        verify(coreService.activity).upsertList(listOf(restored))
+        verify(coreService.activity).appendTags("txid", listOf("synced-tag"), restored.v1.walletId)
+    }
+
+    @Test
+    fun `restoreFromBackup keeps a synced row that already has the restored id`() = test {
+        val restored = createOnchainActivity(id = "ldk-payment-id", txId = "txid")
+        whenever(coreService.activity.getOnchainActivityByTxId("txid", restored.v1.walletId)).thenReturn(restored.v1)
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(restored)))
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity, never()).delete(any(), any())
+        verify(coreService.activity).upsertList(listOf(restored))
+    }
+
+    @Test
     fun `restoreFromBackup applies remaining slices when the tags slice fails`() = test {
         whenever(coreService.activity.upsertTags(any()))
             .thenThrow(RuntimeException("Failed to insert tag: FOREIGN KEY constraint failed"))
