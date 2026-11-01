@@ -1,9 +1,11 @@
 package to.bitkit.ui.screens.subscriptions
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,7 +56,9 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.screens.wallets.usdt.UsdtAuthentication
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -82,6 +87,52 @@ fun AllowancesScreen(
         onClickResume = viewModel::resumeAutomaticPayments,
         modifier = modifier
     )
+}
+
+/**
+ * Draws the payment check a gated allowance action on [viewModel] waits for over [content], such as Resume on the
+ * Allowances tab, and drops a check left open when [content] leaves.
+ */
+@Composable
+fun AllowanceAuthorizationHost(
+    viewModel: AllowancesViewModel,
+    content: @Composable () -> Unit,
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.onAuthorizationCancelled() }
+    }
+    Box {
+        content()
+        uiState.authorization?.let {
+            AllowanceAuthorizationOverlay(
+                authorization = it,
+                onCancel = viewModel::onAuthorizationCancelled,
+                onVerified = viewModel::onAuthorized,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun BoxScope.AllowanceAuthorizationOverlay(
+    authorization: AllowanceAuthorization,
+    onCancel: () -> Unit,
+    onVerified: () -> Unit,
+) {
+    BackHandler(onBack = onCancel)
+    Box(
+        modifier = Modifier
+            .matchParentSize()
+            .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
+    ) {
+        UsdtAuthentication(
+            useBiometrics = authorization.useBiometrics,
+            onCancel = onCancel,
+            onVerified = onVerified,
+            pinDescriptionRes = R.string.security__pin_allowance,
+        )
+    }
 }
 
 @Composable
