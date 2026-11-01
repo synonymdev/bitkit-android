@@ -29,6 +29,7 @@ import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyProfileOwner
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySignIn
+import to.bitkit.services.PaykitProfileLogout
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
@@ -250,6 +251,50 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.deleteProfile()
         advanceUntilIdle()
         verify(pubkyRepo, times(1)).deleteProfile(eq(fixture.deletion), any())
+    }
+
+    @Test
+    fun `failed review removes retired grant action and preserves local confirmation`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.deleteProfile(eq(fixture.deletion), any()))
+            .thenReturn(Result.failure(TestAppError("lost response")))
+        advanceUntilIdle()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        sut.deleteProfile()
+        advanceUntilIdle()
+        val attempt = assertNotNull(fixture.store.pendingAttempt())
+        assertTrue(sut.uiState.value.canReviewRemoval)
+
+        whenever(pubkyRepo.validateProfileLogout(any())).thenAnswer {
+            it.getArgument<PaykitProfileLogout>(0).revoke()
+            throw TestAppError("Original grant no longer active")
+        }
+        ToastEventBus.events.test {
+            sut.retryDeleteProfile()
+            advanceUntilIdle()
+            assertEquals(Toast.ToastType.ERROR, awaitItem().type)
+            expectNoEvents()
+        }
+
+        assertFalse(sut.uiState.value.canReviewRemoval)
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.showDeleteDialog)
+        assertEquals(attempt, fixture.store.pendingAttempt())
+        verify(pubkyRepo, times(1)).deleteProfile(eq(fixture.deletion), any())
+        verify(pubkyRepo, never()).executeProfileLogout(any())
+        verify(pubkyRepo, never()).finishProfileRemovalLocally()
+
+        sut.disconnectProfile()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.showDeleteDialog)
+        assertTrue(sut.uiState.value.isLocalDisconnect)
+        assertEquals(attempt, fixture.store.pendingAttempt())
+        sut.dismissDeleteDialog()
+        sut.deleteProfile()
+        advanceUntilIdle()
+        verify(pubkyRepo, never()).finishProfileRemovalLocally()
+        assertEquals(attempt, fixture.store.pendingAttempt())
     }
 
     @Test

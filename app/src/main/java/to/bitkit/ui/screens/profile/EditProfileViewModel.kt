@@ -215,6 +215,7 @@ class EditProfileViewModel @Inject constructor(
                 }
             }.onFailure { error ->
                 if (revision != preparationRevision || !removalCoordinator.isCurrent(owner)) return@onFailure
+                _uiState.update { it.copy(canReviewRemoval = removalFailure?.canReview == true) }
                 showRemovalError(error)
             }
         } finally {

@@ -10,6 +10,7 @@
     <action>Open Edit Profile, request deletion and verify preparation opens a confirmation without a mutation</action>
     <action>Confirm once, lose a mutation acknowledgement and verify failure feedback without success or automatic replay</action>
     <action>Tap Review and verify only read-only reconciliation runs before a new confirmation appears</action>
+    <action>In a separate failed-removal fixture, make the original credentials unreadable during Review and verify the failure dialog offers Disconnect instead of another Review, retains the pending attempt and performs no remote mutation</action>
     <action>In separate fixtures, edit the profile or change or add a contact after the failure and verify Review rejects the changed targets without a mutation</action>
     <action>Review unchanged remaining records, then recreate a record that was observed absent and verify a later Review cannot add it back to this attempt</action>
     <action>Cancel that confirmation and verify the mutation count does not increase</action>
