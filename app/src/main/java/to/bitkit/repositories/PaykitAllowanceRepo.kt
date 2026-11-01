@@ -189,7 +189,7 @@ class PaykitAllowanceRepo @Inject constructor(
         }
         withContext(ioDispatcher) {
             val identityChanged = activeIdentity != normalizedIdentity
-            activation = Activation(normalizedIdentity)
+            if (identityChanged) activation = Activation(normalizedIdentity)
             executor.activate(normalizedIdentity)
             if (identityChanged) {
                 manualRequestSignatures.clear()
