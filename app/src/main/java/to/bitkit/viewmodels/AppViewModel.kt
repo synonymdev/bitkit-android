@@ -991,7 +991,10 @@ class AppViewModel @Inject constructor(
         isPaymentRequestIdentityActivating = true
         val requestRefresh = try {
             paykitPaymentRequestRepo.activate(state.publicKey)
-            if (state.areAllowancesEnabled) paykitAllowanceRepo.activate(state.publicKey)
+            if (!isStillCurrent()) return
+            if (state.areAllowancesEnabled && areAllowancesEnabled()) {
+                paykitAllowanceRepo.activate(state.publicKey) { areAllowancesEnabled() && isStillCurrent() }
+            }
             // Allowances may have turned off while this activated, before the activation took effect.
             if (!state.areAllowancesEnabled || !areAllowancesEnabled()) paykitAllowanceRepo.pause(state.publicKey)
             if (!pubkyRepo.isCurrent(signIn)) return

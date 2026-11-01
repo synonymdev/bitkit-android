@@ -326,6 +326,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
     private val isRecoveryMode = MutableStateFlow(false)
     private val isPaykitEnabled = MutableStateFlow(false)
+    private val areAllowancesEnabled = MutableStateFlow(true)
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>()
     private val pubkyPublicKey = MutableStateFlow<String?>(null)
@@ -904,7 +905,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private fun stubSettingsStore() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
-        whenever(settingsStore.areAllowancesEnabled).thenReturn(flowOf(true))
+        whenever(settingsStore.areAllowancesEnabled).thenReturn(areAllowancesEnabled)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsData.value = transform(settingsData.value)
@@ -3272,6 +3273,57 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val (waitingToast, terminalToast) = toastCaptor.allValues
         assertNull(waitingToast.testTag)
         assertEquals("PaymentRequestUnavailableToast", terminalToast.testTag)
+    }
+
+    @Test
+    fun `contact activation cannot reopen allowances after switching off`() = test {
+        val activationStarted = CompletableDeferred<Unit>()
+        val finishActivation = CompletableDeferred<Unit>()
+        whenever(paykitPaymentRequestRepo.activate(testPublicKey)).doSuspendableAnswer {
+            activationStarted.complete(Unit)
+            finishActivation.await()
+        }
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        activationStarted.await()
+
+        areAllowancesEnabled.value = false
+        runCurrent()
+        verify(paykitAllowanceRepo).pause()
+        clearInvocations(paykitAllowanceRepo)
+
+        finishActivation.complete(Unit)
+        runCurrent()
+
+        verify(paykitAllowanceRepo, never()).activate(anyOrNull(), any())
+    }
+
+    @Test
+    fun `allowance admission rechecks deletion after the settings read`() = test {
+        val settingsReadStarted = CompletableDeferred<Unit>()
+        val finishSettingsRead = CompletableDeferred<Unit>()
+        var admitted: Boolean? = null
+        whenever { paykitAllowanceRepo.activate(anyOrNull(), any()) }.doSuspendableAnswer {
+            val admission = it.getArgument<suspend () -> Boolean>(1)
+            whenever(settingsStore.areAllowancesEnabled).thenReturn(
+                flow {
+                    settingsReadStarted.complete(Unit)
+                    finishSettingsRead.await()
+                    emit(true)
+                }
+            )
+            admitted = admission()
+        }
+        pubkyPublicKey.value = testPublicKey
+        isPaykitEnabled.value = true
+        pubkyContactsLoadVersion.value = 1L
+        runCurrent()
+        settingsReadStarted.await()
+        isProfileDeletionInProgress.value = true
+        finishSettingsRead.complete(Unit)
+        runCurrent()
+
+        assertEquals(false, admitted)
     }
 
     @Test
