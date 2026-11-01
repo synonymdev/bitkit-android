@@ -399,7 +399,11 @@ class PubkyRepo @Inject constructor(
             loadIdentityData()
         } else {
             currentSignIn()?.takeIf { _profile.value == null }?.let { signIn ->
-                scope.launch { loadProfile(signIn, onlyIfMissing = true) }
+                scope.launch {
+                    if (!settingsStore.isPubkyProfileSetupPending.first()) {
+                        loadProfile(signIn, onlyIfMissing = true)
+                    }
+                }
             }
         }
         restored

@@ -105,6 +105,8 @@ class PaykitAllowanceRepo @Inject constructor(
     private val scope = appScope(ioDispatcher, TAG)
     private val refreshMutex = Mutex()
     private val publishLock = Any()
+    private val activationLock = Any()
+    private var activationRevision = Any()
     private val isProcessingRequests = AtomicBoolean(false)
     private val isAcceptingOffers = AtomicBoolean(false)
     private val updates = MutableStateFlow(0)
@@ -181,16 +183,22 @@ class PaykitAllowanceRepo @Inject constructor(
 
     // region Lifecycle
 
-    suspend fun activate(identity: String?) {
+    suspend fun activate(identity: String?, canActivate: suspend () -> Boolean = { true }) {
         val normalizedIdentity = identity?.let(PubkyPublicKeyFormat::normalized)
         if (normalizedIdentity == null) {
             deactivate()
             return
         }
+        val revision = synchronized(activationLock) { activationRevision }
         withContext(ioDispatcher) {
-            val identityChanged = activeIdentity != normalizedIdentity
-            if (identityChanged) activation = Activation(normalizedIdentity)
-            executor.activate(normalizedIdentity)
+            if (!canActivate()) return@withContext
+            val identityChanged = synchronized(activationLock) {
+                if (activationRevision !== revision) return@withContext
+                val changed = activeIdentity != normalizedIdentity
+                if (changed) activation = Activation(normalizedIdentity)
+                executor.activate(normalizedIdentity)
+                changed
+            }
             if (identityChanged) {
                 manualRequestSignatures.clear()
                 _offersToAnnounce.update { emptyList() }
@@ -202,8 +210,11 @@ class PaykitAllowanceRepo @Inject constructor(
     }
 
     fun deactivate() {
-        executor.activate(null)
-        clear()
+        synchronized(activationLock) {
+            activationRevision = Any()
+            executor.activate(null)
+            clear()
+        }
     }
 
     /**
@@ -211,8 +222,11 @@ class PaykitAllowanceRepo @Inject constructor(
      * the executor settle attempts left open before allowances were turned off; null keeps its current one.
      */
     suspend fun pause(identity: String? = null) {
-        executor.stopAdmitting()
-        clear()
+        synchronized(activationLock) {
+            activationRevision = Any()
+            executor.stopAdmitting()
+            clear()
+        }
         val normalizedIdentity = identity?.let(PubkyPublicKeyFormat::normalized) ?: return
         withContext(ioDispatcher) { executor.pause(normalizedIdentity) }
     }

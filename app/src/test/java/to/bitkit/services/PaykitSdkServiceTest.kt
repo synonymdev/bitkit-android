@@ -1805,6 +1805,29 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `rejected allowance admission preserves cached backup and version`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.stateRevision()).thenReturn("state")
+        whenever(sdk.observedBackupStateRevision()).thenReturn(ObservedBackupStateRevision("state", "backup"))
+        whenever { sdk.backupStateRevision() }.thenReturn("backup")
+        whenever { sdk.processPendingPrivateMessages() }.thenReturn(emptyList())
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        service.processPendingPrivateMessages()
+        val originalVersion = service.backupStateVersion.value
+        val failure = AppError("Admission revoked")
+
+        val thrown = assertFailsWith<AppError> {
+            service.acceptAllowance(RING_PUBKY, "allowance", 1uL) { throw failure }
+        }
+
+        assertSame(failure, thrown)
+        verify(sdk, never()).acceptAllowance(any(), any(), any())
+        assertEquals(originalVersion, service.backupStateVersion.value)
+        service.processPendingPrivateMessages()
+        verify(sdk, times(1)).backupStateRevision()
+    }
+
+    @Test
     fun `cancelling active acceptance waits for its durable call and preserves backup notification`() = runTest {
         val sdk = mock<PaykitSdk>()
         val releaseAcceptance = CompletableDeferred<Unit>()
