@@ -98,6 +98,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     private val evaluatedTrustedTimes = mutableListOf<String>()
     private val selections = mutableListOf<AllowanceSelectionInput>()
     private val acceptedChecks = mutableListOf<PaymentExecutionChecks>()
+    private var beforeAcceptance: suspend () -> Unit = {}
     private val reservedAssociationRevisions = mutableListOf<ULong>()
     private val recordedOutcomes = mutableListOf<PaymentOutcomeReport>()
     private val reconciliations = mutableListOf<AllowanceAccountingReconciliation>()
@@ -145,7 +146,9 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             evaluatedTrustedTimes += it.getArgument<String>(1)
             candidates
         }
-        whenever(sdk.acceptPaymentRequestAutomatically(any(), any(), any())).doSuspendableAnswer {
+        whenever(sdk.acceptPaymentRequestAutomatically(any(), any(), any(), any())).doSuspendableAnswer {
+            beforeAcceptance()
+            it.getArgument<suspend () -> Unit>(3).invoke()
             val selection = it.getArgument<AllowanceSelectionInput>(1)
             selections += selection
             acceptedChecks += it.getArgument<PaymentExecutionChecks>(2)
@@ -263,7 +266,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         order.verify(payer).resolve(eq(request), eq(listOf(fixtures.lightningIdentifier)))
         order.verify(payer).acceptOnThisInstall<AllowanceAssociationRecord>(eq(request), any())
         order.verify(sdk).claimPaymentRequestForExecution(request.counterparty, request.paymentRequestId)
-        order.verify(sdk).acceptPaymentRequestAutomatically(any(), any(), any())
+        order.verify(sdk).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         order.verify(sdk).reserveAutomaticPayment(any(), any(), any())
         order.verify(sdk).receivePrivateMessages(request.counterparty)
         order.verify(sdk).beginPaymentExecution(eq(AUTOMATIC_ATTEMPT_ID), any())
@@ -334,7 +337,76 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.DEFERRED, result)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `allowances turned off before acceptance leave the request without acceptance`() = test {
+        sut.activate(identity)
+        whenever(payer.resolve(any(), any())).doSuspendableAnswer {
+            sut.activate(null)
+            Result.success(lightningPayment())
+        }
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.DEFERRED, result)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `allowances turned off while the acceptance waits leave the request without acceptance`() = test {
+        sut.activate(identity)
+        whenever(payer.acceptOnThisInstall<AllowanceAssociationRecord>(any(), any())).doSuspendableAnswer {
+            sut.stopAdmitting()
+            runCatching { it.getArgument<suspend () -> AllowanceAssociationRecord>(1).invoke() }
+        }
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        verify(sdk, never()).claimPaymentRequestForExecution(any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `allowances turned off while the claim waits leave the request without acceptance`() = test {
+        sut.activate(identity)
+        whenever(sdk.claimPaymentRequestForExecution(any(), any())).doSuspendableAnswer {
+            sut.stopAdmitting()
+            mock<PaymentRequestRecord>()
+        }
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        assertTrue(selections.isEmpty())
+        verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `allowances turned off while the acceptance waits for the SDK lock leave the request without acceptance`() =
+        test {
+            sut.activate(identity)
+            beforeAcceptance = { sut.stopAdmitting() }
+
+            val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+            assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+            assertTrue(selections.isEmpty())
+            verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
+        }
+
+    @Test
+    fun `a payment sent before allowances turned off still settles`() = test {
+        sut.activate(identity)
+        seedJournal(journalEntry("attempt-1", fixtures.paymentRequest(), Stage.SENT, paymentHash = PAYMENT_HASH))
+
+        sut.pause(identity)
+        sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = true)
+
+        assertEquals(listOf(Stage.SUCCEEDED), sut.localState(identity).journal.map { it.stage })
     }
 
     @Test
@@ -345,7 +417,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         verify(sdk).evaluateAllowanceCandidates(any(), any())
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verify(sdk, never()).reserveAutomaticPayment(any(), any(), any())
         verifyNoInteractions(payer)
     }
@@ -382,7 +454,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, first)
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, second)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verifyNoInteractions(payer)
         assertEquals(
             listOf<PaykitAllowanceEvent>(PaykitAllowanceEvent.LimitReached(fixtures.counterpartyKey, 1_000uL)),
@@ -402,7 +474,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, first)
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, second)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verify(sdk, never()).reserveAutomaticPayment(any(), any(), any())
         verifyNoInteractions(payer)
         assertEquals(listOf(limitReached), events)
@@ -447,7 +519,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verify(sdk, never()).reserveAutomaticPayment(any(), any(), any())
         verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
     }
@@ -757,7 +829,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
         verify(sdk, never()).reserveAutomaticPayment(any(), any(), any())
         verify(payer, never()).consumePaymentList(any(), any(), any())
     }
@@ -1394,7 +1466,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             "September's attempts must count; the offset would move the window a year ahead",
         )
         assertEquals(listOf(PaykitAllowanceTime.format(fixtures.now)), evaluatedTrustedTimes)
-        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
     }
 
     // endregion

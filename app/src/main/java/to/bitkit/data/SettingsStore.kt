@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
@@ -18,6 +19,7 @@ import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
@@ -49,6 +51,12 @@ class SettingsStore @Inject constructor(
 
     val data: Flow<SettingsData> = store.data
     val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: true }
+
+    /** Only the Dev Settings switch stores a value, and it counts only while dev mode is on. */
+    val areAllowancesEnabled: Flow<Boolean> = combine(
+        store.data.map { it.isDevModeEnabled },
+        localStore.data.map { it[ALLOWANCES_ENABLED_KEY] },
+    ) { isDevModeEnabled, override -> PaykitFeatureFlags.areAllowancesEnabled(isDevModeEnabled, override) }
     val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
         it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
     }
@@ -116,6 +124,10 @@ class SettingsStore @Inject constructor(
         localStore.edit { it[PAYKIT_ENABLED_KEY] = value }
     }
 
+    suspend fun setAreAllowancesEnabled(value: Boolean) {
+        localStore.edit { it[ALLOWANCES_ENABLED_KEY] = value }
+    }
+
     internal suspend fun isPaykitUiResetDone() = localStore.data.first()[PaykitUiResetMigration.MIGRATED_KEY] == true
 
     suspend fun setPubkyProfileSetupPending(value: Boolean) {
@@ -161,6 +173,7 @@ class SettingsStore @Inject constructor(
         private const val TAG = "SettingsStore"
         private const val MAX_LAST_USED_TAGS = 10
         internal val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
+        private val ALLOWANCES_ENABLED_KEY = booleanPreferencesKey("allowances_enabled")
         private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
         private val SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY = intPreferencesKey("subscription_clock_offset_days")
     }
