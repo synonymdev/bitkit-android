@@ -28,6 +28,7 @@ import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -1307,9 +1308,24 @@ class ActivityRepoTest : BaseUnitTest() {
         val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(restored)))
 
         assertTrue(result.isSuccess)
-        verify(coreService.activity).delete(synced.id, synced.walletId)
-        verify(coreService.activity).upsertList(listOf(restored))
-        verify(coreService.activity).appendTags("txid", listOf("synced-tag"), restored.v1.walletId)
+        inOrder(coreService.activity) {
+            verify(coreService.activity).upsertList(listOf(restored))
+            verify(coreService.activity).appendTags("txid", listOf("synced-tag"), synced.walletId)
+            verify(coreService.activity).delete(synced.id, synced.walletId)
+        }
+    }
+
+    @Test
+    fun `restoreFromBackup keeps the synced row when saving the restored rows fails`() = test {
+        val synced = createOnchainActivity(id = "ldk-payment-id", txId = "txid").v1
+        val restored = createOnchainActivity(id = "txid", txId = "txid")
+        whenever(coreService.activity.getOnchainActivityByTxId("txid", restored.v1.walletId)).thenReturn(synced)
+        whenever(coreService.activity.upsertList(any())).thenThrow(RuntimeException("upsert failed"))
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(restored)))
+
+        assertTrue(result.isFailure)
+        verify(coreService.activity, never()).delete(any(), any())
     }
 
     @Test

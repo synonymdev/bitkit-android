@@ -1084,26 +1084,26 @@ class ActivityRepo @Inject constructor(
      * [BackupRepo] from treating a partial restore as authoritative and rewriting a good backup with it.
      * Observers are notified whenever at least one slice was applied, and the tag signal only fires when the
      * tags slice itself was applied, so a rejected tags slice cannot mark the metadata backup as changed.
+     * A restored on-chain activity whose transaction the node sync already stored under another id (bitkit-ios keys
+     * sends by txid) replaces that row, which is deleted only after the restored one is saved and takes its tags.
      */
     suspend fun restoreFromBackup(payload: ActivityBackupV1): Result<Unit> = withContext(bgDispatcher) {
         val activities = runSuspendCatching {
-            val syncedTags = dropSyncedOnchainDuplicates(payload.activities)
+            val syncedDuplicates = findSyncedOnchainDuplicates(payload.activities)
             coreService.activity.upsertList(payload.activities)
-            syncedTags
+            syncedDuplicates
         }
-        val activityTags = runSuspendCatching {
-            coreService.activity.upsertTags(payload.activityTags)
-            activities.getOrNull()?.forEach {
-                coreService.activity.appendTags(it.activityId, it.tags, it.walletId).getOrThrow()
-            }
-        }
+        val activityTags = runSuspendCatching { coreService.activity.upsertTags(payload.activityTags) }
         val closedChannels = runSuspendCatching {
             coreService.activity.upsertClosedChannelList(payload.closedChannels)
         }
-        val results = listOf(
+        val results = listOfNotNull(
             "activities" to activities,
             "activityTags" to activityTags,
             "closedChannels" to closedChannels,
+            activities.getOrNull()?.let {
+                "syncedDuplicates" to runSuspendCatching { mergeSyncedOnchainDuplicates(it) }
+            },
         )
         val failures = results.mapNotNull { (slice, result) ->
             result.exceptionOrNull()?.also {
@@ -1123,17 +1123,23 @@ class ActivityRepo @Inject constructor(
         return@withContext Result.success(Unit)
     }
 
-    private suspend fun dropSyncedOnchainDuplicates(activities: List<Activity>): List<ActivityTags> =
-        activities.filterIsInstance<Activity.Onchain>().map { it.v1 }.mapNotNull { restored ->
-            val synced = coreService.activity.getOnchainActivityByTxId(restored.txId, restored.walletId)
+    private suspend fun findSyncedOnchainDuplicates(activities: List<Activity>): List<SyncedDuplicate> {
+        syncMutex.withLock { activeSync }?.let { withTimeoutOrNull(MS_SYNC_TIMEOUT) { it.await() } }
+        return activities.filterIsInstance<Activity.Onchain>().map { it.v1 }.mapNotNull { restored ->
+            coreService.activity.getOnchainActivityByTxId(restored.txId, restored.walletId)
                 ?.takeIf { it.id != restored.id && it.txType == restored.txType }
-                ?: return@mapNotNull null
-            val tags = coreService.activity.tags(synced.id, synced.walletId)
-            coreService.activity.delete(synced.id, synced.walletId)
-            Logger.debug("Replaced synced activity '${synced.id}' with restored '${restored.id}'", context = TAG)
-            ActivityTags(walletId = restored.walletId, activityId = restored.id, tags = tags)
-                .takeIf { tags.isNotEmpty() }
+                ?.let { SyncedDuplicate(synced = it, restoredId = restored.id) }
         }
+    }
+
+    private suspend fun mergeSyncedOnchainDuplicates(duplicates: List<SyncedDuplicate>) {
+        duplicates.forEach { (synced, restoredId) ->
+            val tags = coreService.activity.tags(synced.id, synced.walletId)
+            if (tags.isNotEmpty()) coreService.activity.appendTags(restoredId, tags, synced.walletId).getOrThrow()
+            coreService.activity.delete(synced.id, synced.walletId)
+            Logger.debug("Replaced synced activity '${synced.id}' with restored '$restoredId'", context = TAG)
+        }
+    }
 
     suspend fun markAllUnseenActivitiesAsSeen(startedBefore: ULong? = null): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
@@ -1210,3 +1216,5 @@ private fun OnchainActivity.toPreActivityMetadata(tags: List<String>): PreActivi
         createdAt = timestamp * SECONDS_TO_MILLIS,
     )
 }
+
+private data class SyncedDuplicate(val synced: OnchainActivity, val restoredId: String)
