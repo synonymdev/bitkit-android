@@ -138,6 +138,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
@@ -170,6 +171,8 @@ import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PaykitAllowanceEvent
+import to.bitkit.repositories.PaykitAllowanceExecutor
+import to.bitkit.repositories.PaykitAllowanceLocalState
 import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
@@ -3296,6 +3299,58 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         verify(paykitAllowanceRepo, never()).activate(anyOrNull(), any())
+    }
+
+    @Test
+    fun `off on during allowance admission activates the latest enabled state`() = test {
+        val sdk = mock<PaykitSdkService>()
+        val executor = mock<PaykitAllowanceExecutor>()
+        whenever(executor.events).thenReturn(MutableSharedFlow())
+        whenever(executor.localState(any())).thenReturn(PaykitAllowanceLocalState())
+        whenever(sdk.listAllowances(any())).thenReturn(emptyList())
+        val realAllowances = PaykitAllowanceRepo(
+            ioDispatcher = testDispatcher,
+            paykitSdkService = sdk,
+            executor = executor,
+            lightningRepo = lightningRepo,
+            activityRepo = activityRepo,
+            clock = Clock.System,
+        )
+        val activationStarted = CompletableDeferred<Unit>()
+        val finishActivation = CompletableDeferred<Unit>()
+        var holdNextAdmission = true
+        whenever { paykitAllowanceRepo.activate(anyOrNull(), any()) }.doSuspendableAnswer {
+            val identity = it.getArgument<String?>(0)
+            val admission = it.getArgument<suspend () -> Boolean>(1)
+            realAllowances.activate(identity) {
+                if (holdNextAdmission) {
+                    holdNextAdmission = false
+                    activationStarted.complete(Unit)
+                    finishActivation.await()
+                }
+                admission()
+            }
+        }
+        whenever { paykitAllowanceRepo.pause(anyOrNull()) }.doSuspendableAnswer {
+            realAllowances.pause(it.getArgument(0))
+        }
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        activationStarted.await()
+
+        areAllowancesEnabled.value = false
+        runCurrent()
+        verify(executor).stopAdmitting()
+        areAllowancesEnabled.value = true
+        runCurrent()
+        verify(executor, never()).activate(any())
+
+        finishActivation.complete(Unit)
+        runCurrent()
+
+        val identity = requireNotNull(PubkyPublicKeyFormat.normalized(testPublicKey))
+        verify(executor).activate(identity)
+        verify(executor).recover(identity)
     }
 
     @Test
