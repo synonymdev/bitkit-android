@@ -1,9 +1,11 @@
 package to.bitkit.ui.screens.subscriptions
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,14 +46,20 @@ import to.bitkit.models.USD_SYMBOL
 import to.bitkit.repositories.PaykitAllowance
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.screens.wallets.usdt.UsdtAuthentication
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -76,8 +85,56 @@ fun AllowancesScreen(
         topPadding = topPadding,
         onClickAdd = onClickAdd,
         onClickAllowance = onClickAllowance,
+        onClickResume = viewModel::resumeAutomaticPayments,
         modifier = modifier
     )
+}
+
+/**
+ * Draws the payment check a gated allowance action on [viewModel] waits for over [content], such as Resume on the
+ * Allowances tab, and drops a check left open when [content] leaves.
+ */
+@Composable
+fun AllowanceAuthorizationHost(
+    viewModel: AllowancesViewModel,
+    content: @Composable () -> Unit,
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.onAuthorizationCancelled() }
+    }
+    Box {
+        content()
+        uiState.authorization?.let {
+            AllowanceAuthorizationOverlay(
+                authorization = it,
+                onCancel = viewModel::onAuthorizationCancelled,
+                onVerified = viewModel::onAuthorized,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun BoxScope.AllowanceAuthorizationOverlay(
+    authorization: AllowanceAuthorization,
+    onCancel: () -> Unit,
+    onVerified: () -> Unit,
+) {
+    BackHandler(onBack = onCancel)
+    Box(
+        modifier = Modifier
+            .matchParentSize()
+            .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
+            .blockPointerInputPassthrough()
+    ) {
+        UsdtAuthentication(
+            useBiometrics = authorization.useBiometrics,
+            onCancel = onCancel,
+            onVerified = onVerified,
+            pinDescriptionRes = R.string.security__pin_allowance,
+        )
+    }
 }
 
 @Composable
@@ -87,6 +144,7 @@ private fun AllowancesContent(
     onClickAdd: () -> Unit,
     onClickAllowance: (AllowanceUi) -> Unit,
     modifier: Modifier = Modifier,
+    onClickResume: () -> Unit = {},
 ) {
     val density = LocalDensity.current
     var footerHeight by remember { mutableStateOf(0.dp) }
@@ -109,6 +167,11 @@ private fun AllowancesContent(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
+                if (uiState.isAutomaticPaymentPaused) {
+                    item(key = "paused") {
+                        AutomaticPaymentsPaused(isWorking = uiState.isWorking, onClickResume = onClickResume)
+                    }
+                }
                 items(uiState.allowances, key = { it.id }) { allowance ->
                     AllowanceRow(
                         allowance = allowance,
@@ -161,6 +224,30 @@ private fun AllowancesEmptyState(modifier: Modifier = Modifier) {
         )
         VerticalSpacer(8.dp)
         BodyM(text = stringResource(R.string.subscriptions__allowances_empty_description), color = Colors.White64)
+    }
+}
+
+@Composable
+private fun AutomaticPaymentsPaused(isWorking: Boolean, onClickResume: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Colors.Gray6)
+            .padding(16.dp)
+            .testTag("AllowancesPaused")
+    ) {
+        BodyMSB(text = stringResource(R.string.subscriptions__allowances_paused_title))
+        VerticalSpacer(4.dp)
+        BodyS(text = stringResource(R.string.subscriptions__allowances_paused_description), color = Colors.White64)
+        VerticalSpacer(16.dp)
+        SecondaryButton(
+            text = stringResource(R.string.subscriptions__allowances_paused_resume),
+            onClick = onClickResume,
+            isLoading = isWorking,
+            size = ButtonSize.Small,
+            testTag = "AllowancesResume",
+        )
     }
 }
 
@@ -263,6 +350,7 @@ private fun Preview2() {
         AllowancesContent(
             uiState = AllowancesUiState(
                 isLoaded = true,
+                isAutomaticPaymentPaused = true,
                 allowances = persistentListOf(
                     previewAllowance(),
                     previewAllowance(id = "allowance-2", name = "Mia").copy(

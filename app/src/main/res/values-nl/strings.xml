@@ -1457,6 +1457,9 @@
     <string name="subscriptions__allowances">Toelagen</string>
     <string name="subscriptions__allowances_empty_description">U kunt bestedingslimieten instellen om betaalverzoeken van vertrouwde contacten automatisch te voldoen.</string>
     <string name="subscriptions__allowances_empty_headline">Stel\n&lt;accent&gt;toelagen&lt;/accent&gt; in</string>
+    <string name="subscriptions__allowances_paused_description">Je toelagengegevens zijn ouder dan gegevens die deze wallet al heeft gebruikt. Verzoeken vragen om je goedkeuring tot je hervat.</string>
+    <string name="subscriptions__allowances_paused_resume">Hervatten</string>
+    <string name="subscriptions__allowances_paused_title">Automatische betalingen gepauzeerd</string>
     <string name="subscriptions__cancel_subscription">Abonnement opzeggen</string>
     <string name="subscriptions__choose_recipient">Ontvanger kiezen</string>
     <string name="subscriptions__content_too_long">Maak de naam of beschrijving van het abonnement korter en probeer het opnieuw.</string>

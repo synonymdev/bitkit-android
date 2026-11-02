@@ -73,6 +73,7 @@ sealed class PaykitAllowanceError(message: String) : AppError(message) {
     data object Unavailable : PaykitAllowanceError("The allowance is unavailable")
     data object PaymentAlreadyRecorded : PaykitAllowanceError("A payment for this request is already in progress")
     data object PaymentListPending : PaykitAllowanceError("The payee has not published a new payment list yet")
+    data object LedgerBehind : PaykitAllowanceError("The allowance ledger is behind one this wallet has read")
 }
 
 /**
@@ -133,6 +134,11 @@ class PaykitAllowanceRepo @Inject constructor(
 
     /** Sats paid automatically per entry id, for "Paid so far". */
     val autoPaidSats: StateFlow<Map<String, ULong>> = _autoPaidSats.asStateFlow()
+
+    private val _isAutomaticPaymentPaused = MutableStateFlow(false)
+
+    /** True while the allowance ledger is behind one this wallet has read, until [resumeAutomaticPayments]. */
+    val isAutomaticPaymentPaused: StateFlow<Boolean> = _isAutomaticPaymentPaused.asStateFlow()
 
     val events: SharedFlow<PaykitAllowanceEvent> = executor.events
 
@@ -218,6 +224,7 @@ class PaykitAllowanceRepo @Inject constructor(
         manualRequestSignatures.clear()
         _offersToAnnounce.update { emptyList() }
         announcedOfferKeys.clear()
+        _isAutomaticPaymentPaused.update { false }
         publish(emptyList(), PaykitAllowanceLocalState())
     }
 
@@ -226,7 +233,10 @@ class PaykitAllowanceRepo @Inject constructor(
         whileUpdating {
             refreshMutex.withLock {
                 val listing = listAllowances()
+                listing.onSuccess { executor.rememberEndedAllowances(identity, it) }
+                val isPaused = executor.isLedgerBehind(identity)
                 if (activeIdentity == identity) {
+                    _isAutomaticPaymentPaused.update { isPaused }
                     publish(listing.getOrDefault(_allowances.value), executor.localState(identity))
                 }
                 listing.map {}
@@ -421,15 +431,27 @@ class PaykitAllowanceRepo @Inject constructor(
         paykitSdkService.rejectAllowance(it.counterparty, it.allowanceId)
     }
 
+    /** Resumes automatic payments from the ledger read now; see [PaykitAllowanceExecutor.acceptCurrentLedger]. */
+    suspend fun resumeAutomaticPayments(): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+            executor.acceptCurrentLedger(identity)
+            executor.recover(identity)
+            refresh()
+            Unit
+        }
+    }
+
     suspend fun end(entryId: String): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val entry = entry(entryId) ?: throw PaykitAllowanceError.Unavailable
             val endable = entry.allowances.filter { it.canEnd }
             if (endable.isEmpty()) throw PaykitAllowanceError.Unavailable
-            for (allowance in endable) {
-                paykitSdkService.endAllowance(allowance.counterparty, allowance.allowanceId)
-                sendQueuedMessages(allowance.counterparty)
+            val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+            executor.rememberEnding(identity, endable) {
+                endable.forEach { paykitSdkService.endAllowance(it.counterparty, it.allowanceId) }
             }
+            endable.forEach { sendQueuedMessages(it.counterparty) }
             refresh()
             Unit
         }

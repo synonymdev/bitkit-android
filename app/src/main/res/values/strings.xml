@@ -1083,6 +1083,9 @@
     <string name="subscriptions__allowances">Allowances</string>
     <string name="subscriptions__allowances_empty_description">You can set spending limits to automatically fulfill payment requests from trusted peers.</string>
     <string name="subscriptions__allowances_empty_headline"><![CDATA[Set up\n<accent>allowances</accent>]]></string>
+    <string name="subscriptions__allowances_paused_description">Your allowance records are older than ones this wallet has already used. Requests ask for your approval until you resume.</string>
+    <string name="subscriptions__allowances_paused_resume">Resume</string>
+    <string name="subscriptions__allowances_paused_title">Automatic payments paused</string>
     <string name="subscriptions__cancel">Cancel</string>
     <string name="subscriptions__cancel_subscription">Cancel Subscription</string>
     <string name="subscriptions__choose_recipient">Choose Recipient</string>

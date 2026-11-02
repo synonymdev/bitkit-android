@@ -32,6 +32,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.SubscriptionClockOffset
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -290,6 +291,23 @@ class PaykitAllowanceTest : BaseUnitTest() {
     }
 
     @Test
+    fun `capacity counts the ledger's and this wallet's own payments together`() {
+        val ledger = listOf(fixtures.capacityAttempt(sats = 25_000uL, at = "2026-09-05T10:00:00Z", attemptId = "a"))
+        val local = listOf(fixtures.capacityAttempt(sats = 21_000uL, at = "2026-09-12T10:00:00Z", attemptId = "b"))
+
+        assertTrue(PaykitAllowanceCapacity.fits(4_000uL, fixtures.allowance(), ledger, fixtures.now, local))
+        assertFalse(PaykitAllowanceCapacity.fits(4_001uL, fixtures.allowance(), ledger, fixtures.now, local))
+    }
+
+    @Test
+    fun `capacity counts a payment both sides hold once`() {
+        val ledger = listOf(fixtures.capacityAttempt(sats = 45_000uL, at = "2026-09-05T10:00:00Z", attemptId = "a"))
+        val local = listOf(fixtures.capacityAttempt(sats = 45_000uL, at = "2026-09-05T10:00:00Z", attemptId = "a"))
+
+        assertTrue(PaykitAllowanceCapacity.fits(5_000uL, fixtures.allowance(), ledger, fixtures.now, local))
+    }
+
+    @Test
     fun `capacity rejects over the per payment maximum`() {
         val allowance = fixtures.allowance()
 
@@ -380,9 +398,9 @@ class PaykitAllowanceTest : BaseUnitTest() {
         val walletId = PaykitAllowanceFixtures.ALLOWANCE_ID
         assertEquals(
             listOf(
-                attempt(walletId, 10_000uL, "2026-09-02T10:00:00Z", isLive = false),
-                attempt(walletId, 10_000uL, "2026-09-03T10:00:00Z", isLive = true),
-                attempt(walletId, 2_000uL, "2026-09-05T10:00:00Z", isLive = true),
+                attempt("failed", walletId, 10_000uL, "2026-09-02T10:00:00Z", isLive = false),
+                attempt("paid", walletId, 10_000uL, "2026-09-03T10:00:00Z", isLive = true),
+                attempt("open", walletId, 2_000uL, "2026-09-05T10:00:00Z", isLive = true),
             ),
             attempts,
         )
@@ -518,7 +536,14 @@ class PaykitAllowanceTest : BaseUnitTest() {
 }
 
 /** Shared builders for the Allowance suites. */
-private fun attempt(allowanceId: String, sats: ULong, at: String, isLive: Boolean) = PaykitAllowanceCapacity.Attempt(
+private fun attempt(
+    attemptId: String,
+    allowanceId: String,
+    sats: ULong,
+    at: String,
+    isLive: Boolean,
+) = PaykitAllowanceCapacity.Attempt(
+    attemptId = attemptId,
     counterparty = PaykitAllowanceFixtures.counterpartyKey,
     allowanceId = allowanceId,
     amountSats = sats,
@@ -653,7 +678,8 @@ internal object PaykitAllowanceFixtures {
         sats: ULong,
         at: String,
         isLive: Boolean = true,
-    ) = PaykitAllowanceCapacity.Attempt(counterparty, allowanceId, sats, Instant.parse(at), isLive)
+        attemptId: String = UUID.randomUUID().toString(),
+    ) = PaykitAllowanceCapacity.Attempt(attemptId, counterparty, allowanceId, sats, Instant.parse(at), isLive)
 
     fun usedSats(attempts: List<PaykitAllowanceCapacity.Attempt>): ULong =
         PaykitAllowanceCapacity.usedSats(counterpartyKey, ALLOWANCE_ID, attempts, septemberAnchor, now)
