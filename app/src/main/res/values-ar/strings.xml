@@ -265,6 +265,7 @@
     <string name="onboarding__restore_failed_header">خطأ في رصيد &lt;accent&gt;الإنفاق&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">استعاد Bitkit مدخراتك، لكن فشل في استعادة رصيد الإنفاق الحالي (حالة Lightning) وبيانات المحفظة.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;استعادة&lt;/accent&gt;\nمحفظتك</string>
+    <string name="onboarding__restore_incomplete_text">تمت استعادة محفظتك ورصيدك، لكن Bitkit لم يتمكن من استعادة: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">يبدو أن المجموع الاختباري لعبارة الاسترداد غير صحيح. يرجى التحقق مرة أخرى من عبارة الاسترداد.</string>
     <string name="onboarding__restore_no_backup_button">المتابعة بدون نسخة احتياطية</string>
     <string name="onboarding__restore_no_backup_warn">إذا كان لديك نسخة احتياطية سابقة من Lightning، سيتم الكتابة عليها وفقدانها. قد يؤدي هذا إلى خسارة الأموال.</string>

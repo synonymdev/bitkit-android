@@ -272,6 +272,7 @@
     <string name="onboarding__restore_failed_header">&lt;accent&gt;Error en&lt;/accent&gt; saldo de gastos</string>
     <string name="onboarding__restore_failed_text">Bitkit restauró tus ahorros, pero no pudo recuperar tu saldo para gastar (estado Lightning) ni los datos de tu wallet.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Restaurar&lt;/accent&gt;\nsu billetera</string>
+    <string name="onboarding__restore_incomplete_text">Tu billetera y tu saldo están de vuelta, pero Bitkit no pudo restaurar: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">La suma de comprobación de la frase de recuperación parece ser incorrecta. Por favor, vuelva a comprobar su frase de recuperación.</string>
     <string name="onboarding__restore_no_backup_button">Proceder sin respaldar</string>
     <string name="onboarding__restore_no_backup_warn">Si anteriormente tenía una copia de seguridad Lightning, ésta se sobrescribirá y se perderá. Esto puede acarrear en pérdida de fondos.</string>

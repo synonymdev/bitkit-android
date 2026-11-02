@@ -253,6 +253,7 @@
     <string name="notification__service__stop">Arrêter l\'application</string>
     <string name="onboarding__connection_saved">Enregistré. Réessayez pour poursuivre la restauration.</string>
     <string name="onboarding__connection_settings">Paramètres de connexion</string>
+    <string name="onboarding__restore_incomplete_text">Votre portefeuille et votre solde sont de retour, mais Bitkit n\'a pas pu restaurer : %1$s.</string>
     <string name="onboarding__tos_header">Bitkit \n&lt;accent&gt;Conditions d\'utilisation&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Conditions d\'utilisation</string>
     <string name="onboarding__tos_checkbox_value">En continuant, vous déclarez avoir lu et accepté les conditions d\'utilisation.</string>

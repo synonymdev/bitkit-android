@@ -1,0 +1,119 @@
+{
+  "info": {
+    "version": 2,
+    "options": {
+      "maxChannelSizeSat": 1000000,
+      "minChannelSizeSat": 0,
+      "maxClientBalanceSat": 1000000,
+      "max0ConfClientBalanceSat": 100000,
+      "minExpiryWeeks": 2,
+      "maxExpiryWeeks": 52,
+      "minPaymentConfirmations": 1,
+      "minHighRiskPaymentConfirmations": 6
+    },
+    "versions": {
+      "btc": "0.0.0",
+      "ln2": "0.0.0",
+      "http": "0.0.0"
+    },
+    "nodes": [
+      {
+        "connectionStrings": [
+          "028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@127.0.0.1:9735"
+        ],
+        "alias": "LSP",
+        "pubkey": "028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc"
+      }
+    ],
+    "onchain": {
+      "network": {
+        "regtest": {}
+      },
+      "feeRates": {
+        "fast": 5,
+        "mid": 3,
+        "slow": 1
+      }
+    }
+  },
+  "orders": [
+    {
+      "channelExpiryWeeks": 6,
+      "channelExpiresAt": "2026-12-11T09:12:00.000Z",
+      "clientBalanceSat": 0,
+      "feeSat": 2100,
+      "zeroConf": true,
+      "channel": {
+        "state": {
+          "open": {}
+        },
+        "clientNodePubkey": "03d1b0b1b5ac0a5d3f3c7e3c6e9e2f9c8a3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f",
+        "announceChannel": false,
+        "lspNodePubkey": "028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc",
+        "fundingTx": {
+          "id": "a3f1c2d4e5b6a7980f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6e5f4a3b2",
+          "vout": 0
+        },
+        "shortChannelId": "103x1x0"
+      },
+      "lspBalanceSat": 500000,
+      "updatedAt": "2026-10-30T09:15:00.000Z",
+      "state2": {
+        "executed": {}
+      },
+      "state": {
+        "open": {}
+      },
+      "source": "bitkit-ios",
+      "lspNode": {
+        "connectionStrings": [
+          "028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@127.0.0.1:9735"
+        ],
+        "pubkey": "028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc",
+        "alias": "LSP"
+      },
+      "zeroReserve": true,
+      "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "serviceFeeSat": 1500,
+      "orderExpiresAt": "2026-10-31T09:12:00.000Z",
+      "networkFeeSat": 600,
+      "createdAt": "2026-10-30T09:12:00.000Z"
+    }
+  ],
+  "createdAt": 1793351855000,
+  "cjitEntries": [
+    {
+      "nodeId": "03d1b0b1b5ac0a5d3f3c7e3c6e9e2f9c8a3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f",
+      "state": {
+        "created": {}
+      },
+      "source": "bitkit-ios",
+      "invoice": {
+        "request": "lnbcrt20u1pnexample",
+        "state": {
+          "pending": {}
+        },
+        "expiresAt": "2026-10-31T09:12:00.000Z",
+        "updatedAt": "2026-10-30T09:12:00.000Z"
+      },
+      "couponCode": "",
+      "channelSizeSat": 100000,
+      "updatedAt": "2026-10-30T09:12:00.000Z",
+      "id": "b1d5f0b4-2e7c-4c8a-9a51-3f0e6c2d9a10",
+      "networkFeeSat": 500,
+      "lspNode": {
+        "connectionStrings": [
+          "028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@127.0.0.1:9735"
+        ],
+        "pubkey": "028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc",
+        "alias": "LSP"
+      },
+      "createdAt": "2026-10-30T09:12:00.000Z",
+      "serviceFeeSat": 1500,
+      "feeSat": 2000,
+      "expiresAt": "2026-10-31T09:12:00.000Z",
+      "channelExpiryWeeks": 6
+    }
+  ],
+  "version": 1
+}

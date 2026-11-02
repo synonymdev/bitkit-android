@@ -254,6 +254,7 @@
     <string name="notification__service__stop">App stoppen</string>
     <string name="onboarding__connection_saved">Gespeichert. Versuche es erneut, um die Wiederherstellung fortzusetzen.</string>
     <string name="onboarding__connection_settings">Verbindungseinstellungen</string>
+    <string name="onboarding__restore_incomplete_text">Deine Wallet und dein Guthaben sind zurück, aber Bitkit konnte Folgendes nicht wiederherstellen: %1$s.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;Nutzungs-bedingungen&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Nutzungsbedingungen</string>
     <string name="onboarding__tos_checkbox_value">Durch Fortfahren erklärst du, dass du die Nutzungsbedingungen gelesen und akzeptiert hast.</string>

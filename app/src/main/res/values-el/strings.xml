@@ -265,6 +265,7 @@
     <string name="onboarding__restore_failed_header">Σφάλμα υπολοίπου &lt;accent&gt;δαπανών&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Το Bitkit επανέφερε τις αποταμιεύσεις σου, αλλά απέτυχε να επαναφέρει το τρέχον υπόλοιπο δαπανών (κατάσταση Lightning) και τα δεδομένα πορτοφολιού.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Επαναφορά&lt;/accent&gt;\nτου πορτοφολιού σου</string>
+    <string name="onboarding__restore_incomplete_text">Το πορτοφόλι και το υπόλοιπό σας επανήλθαν, αλλά το Bitkit δεν μπόρεσε να επαναφέρει: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Το checksum της φράσης ανάκτησης φαίνεται να είναι λανθασμένο. Έλεγξε ξανά τη φράση ανάκτησης.</string>
     <string name="onboarding__restore_no_backup_button">Συνέχεια χωρίς αντίγραφο ασφαλείας</string>
     <string name="onboarding__restore_no_backup_warn">Αν είχες προηγουμένως αντίγραφο ασφαλείας lightning, θα αντικατασταθεί και θα χαθεί. Αυτό μπορεί να οδηγήσει σε απώλεια κεφαλαίων.</string>

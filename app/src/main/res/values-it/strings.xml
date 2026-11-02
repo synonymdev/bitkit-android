@@ -270,6 +270,7 @@
     <string name="onboarding__restore_failed_header">Conto di spesa &lt;accent&gt;errore&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit ha ripristinato i tuoi risparmi, ma non è riuscito a ripristinare il conto di spesa corrente (stato Lightning) e i dati del portafoglio.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Ripristina&lt;/accent&gt;\nil tuo portafoglio</string>
+    <string name="onboarding__restore_incomplete_text">Il tuo wallet e il tuo saldo sono tornati, ma Bitkit non è riuscito a ripristinare: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Il checksum della frase di recupero sembra non essere corretto. Ti preghiamo di ricontrollare la frase di recupero.</string>
     <string name="onboarding__restore_no_backup_button">Procedi Senza Backup</string>
     <string name="onboarding__restore_no_backup_warn">Se in precedenza possedevi un backup lightning, questo verrà sovrascritto e perso. Ciò potrebbe causare una perdita di fondi.</string>

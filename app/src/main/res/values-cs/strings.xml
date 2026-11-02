@@ -272,6 +272,7 @@
     <string name="onboarding__restore_failed_header">&lt;accent&gt;Chyba&lt;/accent&gt; disponibilního zůstatku</string>
     <string name="onboarding__restore_failed_text">Bitkit obnovil vaše úspory, ale neobnovil váš aktuální disponibilní zůstatek (stav lightning) a data peněženky.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Obnovte&lt;/accent&gt;svou peněženku</string>
+    <string name="onboarding__restore_incomplete_text">Vaše peněženka a zůstatek jsou zpět, ale Bitkit nedokázal obnovit: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Kontrolní součet pro frázi pro obnovení se zdá být nesprávný. Zkontrolujte prosím svou frázi pro obnovení.</string>
     <string name="onboarding__restore_no_backup_button">Pokračovat bez zálohy</string>
     <string name="onboarding__restore_no_backup_warn">Pokud jste dříve měli lightning zálohu, bude přepsána a ztracena. To by mohlo vést ke ztrátě finančních prostředků.</string>
