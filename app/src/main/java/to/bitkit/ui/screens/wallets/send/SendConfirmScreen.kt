@@ -878,12 +878,18 @@ private fun LightningDetails(
         }
 
         uiState.paykitSwapRoute?.let { route ->
-            val quote = route.quote ?: return@let
-            val provider = route.providerName?.takeIf { it.isNotBlank() }
-                ?: quote.providerPubky.ellipsisMiddle(PROVIDER_KEY_LENGTH)
+            val text = when {
+                route.serviceLeg != null -> stringResource(R.string.wallet__send_swap_route_spark)
+                route.quote != null -> stringResource(
+                    R.string.wallet__send_swap_route_provider,
+                    route.providerName?.takeIf { it.isNotBlank() }
+                        ?: route.quote.providerPubky.ellipsisMiddle(PROVIDER_KEY_LENGTH),
+                )
+                else -> return@let
+            }
             SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
                 BodySSB(
-                    text = stringResource(R.string.wallet__send_swap_route_provider, provider),
+                    text = text,
                     maxLines = 1,
                     modifier = Modifier.testTag("ReviewSwapRoute")
                 )

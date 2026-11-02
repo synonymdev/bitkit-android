@@ -32,6 +32,7 @@ import com.synonym.bitkitcore.PaykitRoute
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PubkySwapRouteQuote
 import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.ServiceRouteLeg
 import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.UsdtQuote
 import com.synonym.paykit.PaymentConversion
@@ -4553,11 +4554,15 @@ class AppViewModel @Inject constructor(
                 toast(AppError(paykitRoute.reason))
                 return false
             }
-            // No service legs are passed in yet, so the router cannot pick one.
             is PaykitRoute.Service -> {
-                Logger.error("Unexpected service route '${paykitRoute.leg.service}'", context = TAG)
-                toast(AppError(context.getString(R.string.common__error_body)))
-                return false
+                val leg = paykitRoute.leg
+                _sendUiState.update {
+                    it.copy(
+                        paykitSwapRoute = route.copy(quote = null, serviceLeg = leg),
+                        lightningFeeSats = (leg.debitSat - leg.deliveredSat).toLong(),
+                    )
+                }
+                return true
             }
             // Balances changed after the contact opened: the regular flow must reopen it.
             is PaykitRoute.Direct -> {
@@ -4570,6 +4575,7 @@ class AppViewModel @Inject constructor(
             it.copy(
                 paykitSwapRoute = route.copy(
                     quote = quote,
+                    serviceLeg = null,
                     providerName = pubkySwapsRouteRepo.providerContact(quote.providerPubky)?.name,
                 ),
                 lightningFeeSats = quote.totalFeeSat.toLong(),
@@ -6222,6 +6228,10 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        _sendUiState.value.paykitSwapRoute?.serviceLeg?.let {
+            proceedWithServiceRoutedPayment(it, contactPaymentContext, allowanceAttemptId)
+            return
+        }
         _sendUiState.value.paykitSwapRoute?.quote?.let {
             proceedWithSwapRoutedPayment(it, contactPaymentContext, allowanceAttemptId)
             return
@@ -6601,6 +6611,29 @@ class AppViewModel @Inject constructor(
                 isOnchain = true,
                 refusalReason = refusalReason,
             )
+        )
+    }
+
+    private suspend fun proceedWithServiceRoutedPayment(
+        leg: ServiceRouteLeg,
+        contactPaymentContext: ContactPaymentContext?,
+        allowanceAttemptId: String?,
+    ) {
+        val txid = pubkySwapsRouteRepo.payServiceLeg(leg).getOrElse {
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
+        finishManualAllowancePayment(allowanceAttemptId, succeeded = true, transactionId = txid)
+        Logger.info("Paid Paykit contact through '${leg.service}' in '$txid'", context = TAG)
+        onSendSuccess(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.ONCHAIN,
+                direction = NewTransactionSheetDirection.SENT,
+                paymentHashOrTxId = txid,
+                sats = leg.deliveredSat.toLong(),
+            ),
         )
     }
 
@@ -9051,12 +9084,16 @@ data class SendUiState(
             !initialSubscriptionPaymentNeedsConfirmation && !requiresAmountReview
 }
 
-/** A Paykit payment routed through a Pubky Swaps provider: the endpoint, the route once quoted, and its provider. */
+/**
+ * A Paykit payment routed through a Pubky Swaps provider or a service the wallet holds a balance on: the endpoint,
+ * the route once quoted (a provider's quote or a service leg), and the provider's name.
+ */
 @Stable
 data class PaykitSwapRouteUi(
     val endpoint: PaykitEndpoint,
     val quote: PubkySwapRouteQuote? = null,
     val providerName: String? = null,
+    val serviceLeg: ServiceRouteLeg? = null,
 )
 
 @Immutable

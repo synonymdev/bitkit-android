@@ -13,8 +13,10 @@ import breez_sdk_spark.SdkException
 import breez_sdk_spark.SendPaymentMethod
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.ServiceRouteLeg
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -63,6 +65,8 @@ class SparkRepo @Inject constructor(
     companion object {
         private const val TAG = "SparkRepo"
         private const val MSATS_PER_SAT = 1_000uL
+        const val ROUTE_SERVICE = "spark"
+        private const val ROUTE_ATOMICITY = "trusted"
     }
 
     private val scope = appScope(bgDispatcher, TAG)
@@ -185,6 +189,41 @@ class SparkRepo @Inject constructor(
             refresh()
         }.onFailure {
             Logger.error("Failed to withdraw from Spark", it, context = TAG)
+        }
+    }
+
+    /**
+     * A Paykit route that withdraws exactly [amountSats] to the contact's on-chain [endpoint] at medium speed, with
+     * Spark's fee on top, or null while Spark cannot send it. bitkit-core weighs it against the Pubky Swaps providers.
+     */
+    suspend fun withdrawalRouteLeg(endpoint: PaykitEndpoint, amountSats: ULong): Result<ServiceRouteLeg?> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                if (!canSend(amountSats)) return@runSuspendCatching null
+                val method = sparkService.prepareSend(endpoint.value, amountSats).paymentMethod
+                val quote = (method as SendPaymentMethod.BitcoinAddress).feeQuote
+                val debitSats = amountSats + quote.speedMedium.userFeeSat
+                if (quote.isEstimate || !canSend(debitSats)) return@runSuspendCatching null
+                ServiceRouteLeg(
+                    service = ROUTE_SERVICE,
+                    endpoint = endpoint,
+                    deliveredSat = amountSats,
+                    debitSat = debitSats,
+                    atomicity = ROUTE_ATOMICITY,
+                    validUntilUnix = quote.expiresAt,
+                )
+            }
+        }
+
+    /** Withdraws exactly [amountSats] to the on-chain [address] at medium speed and returns the withdrawal's txid. */
+    suspend fun withdraw(address: String, amountSats: ULong): Result<String> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val payment = sparkService.send(sparkService.prepareSend(address, amountSats))
+            Logger.info("Sent Spark withdrawal '${payment.id}' with status '${payment.status}'", context = TAG)
+            refresh()
+            (payment.details as? PaymentDetails.Withdraw)?.txId ?: payment.id
+        }.onFailure {
+            Logger.error("Failed to withdraw to a Paykit contact with Spark", it, context = TAG)
         }
     }
 

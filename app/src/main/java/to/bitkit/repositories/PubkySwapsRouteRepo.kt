@@ -39,6 +39,7 @@ class PubkySwapsRouteRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val pubkyRepo: PubkyRepo,
+    private val sparkRepo: SparkRepo,
 ) {
     companion object {
         private const val TAG = "PubkySwapsRouteRepo"
@@ -58,10 +59,10 @@ class PubkySwapsRouteRepo @Inject constructor(
         endpoints: List<PaykitEndpoint>,
         lightningSpendableSats: ULong,
         onchainSpendableSats: ULong,
-        serviceLegs: List<ServiceRouteLeg> = emptyList(),
     ): Result<PaykitRoute> = withSecrets { mnemonic, passphrase ->
         // Providers come from the user's own graph: every contact is asked for its swap offer.
         val candidates = pubkyRepo.contacts.value.map { it.publicKey } + Env.pubkySwapsProviders
+        val serviceLegs = serviceLegs(endpoints, amountSats)
         Logger.debug("Routing Paykit payment via '${candidates.map(PubkyPublicKeyFormat::redacted)}'", context = TAG)
         pubkySwapsRoutePaykitPayment(
             request = PaykitRouteRequest(
@@ -77,6 +78,20 @@ class PubkySwapsRouteRepo @Inject constructor(
             mnemonic = mnemonic,
             bip39Passphrase = passphrase,
         )
+    }
+
+    /** Legs through the services the wallet holds a balance on, which compete with the providers on fee. */
+    private suspend fun serviceLegs(endpoints: List<PaykitEndpoint>, amountSats: ULong): List<ServiceRouteLeg> =
+        endpoints.mapNotNull { endpoint ->
+            sparkRepo.withdrawalRouteLeg(endpoint, amountSats)
+                .onFailure { Logger.warn("No Spark route to '${endpoint.methodId}'", it, context = TAG) }
+                .getOrNull()
+        }
+
+    /** Runs a service leg the router picked and returns the txid that pays the contact. */
+    suspend fun payServiceLeg(leg: ServiceRouteLeg): Result<String> = when (leg.service) {
+        SparkRepo.ROUTE_SERVICE -> sparkRepo.withdraw(leg.endpoint.value, leg.deliveredSat)
+        else -> Result.failure(AppError("Unsupported route service '${leg.service}'"))
     }
 
     suspend fun commit(quoteId: String): Result<PubkySwapRoutePayment> = withSecrets { mnemonic, passphrase ->

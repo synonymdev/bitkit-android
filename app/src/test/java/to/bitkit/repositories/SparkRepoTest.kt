@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.BitcoinAddressDetails
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateResponse
 import breez_sdk_spark.Payment
@@ -7,17 +8,24 @@ import breez_sdk_spark.PaymentDetails
 import breez_sdk_spark.PaymentMethod
 import breez_sdk_spark.PaymentStatus
 import breez_sdk_spark.PaymentType
+import breez_sdk_spark.PrepareSendPaymentResponse
 import breez_sdk_spark.SdkEvent
+import breez_sdk_spark.SendOnchainFeeQuote
+import breez_sdk_spark.SendOnchainSpeedFeeQuote
+import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaykitEndpoint
+import com.synonym.bitkitcore.ServiceRouteLeg
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -122,6 +130,49 @@ class SparkRepoTest : BaseUnitTest() {
         verify(activityRepo).updateActivity(eq("arrival"), updated.capture(), any())
         assertTrue((updated.firstValue as Activity.Onchain).v1.isTransfer)
         assertEquals(listOf(SparkWithdrawal("withdrawal", 128uL, 1_470uL)), sut.state.value.withdrawals)
+    }
+
+    @Test
+    fun `quotes a withdrawal to a Paykit contact as a route leg`() = test {
+        val sut = readySpark(balanceSats = 50_000uL)
+
+        val leg = sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).getOrThrow()
+
+        assertEquals(
+            ServiceRouteLeg(
+                service = "spark",
+                endpoint = contactEndpoint,
+                deliveredSat = 20_000uL,
+                debitSat = 20_300uL,
+                atomicity = "trusted",
+                validUntilUnix = 1_900_000_000uL,
+            ),
+            leg,
+        )
+    }
+
+    @Test
+    fun `offers no route leg the balance cannot cover with its fee`() = test {
+        val sut = readySpark(balanceSats = 20_299uL)
+
+        assertEquals(null, sut.withdrawalRouteLeg(contactEndpoint, 20_000uL).getOrThrow())
+    }
+
+    private val contactEndpoint = PaykitEndpoint(methodId = "btc-regtest-p2wpkh", value = "bcrt1qcontact")
+
+    private suspend fun readySpark(balanceSats: ULong): SparkRepo {
+        whenever { sparkService.getInfo() }.thenReturn(GetInfoResponse("pubkey", balanceSats, emptyMap(), 0uL))
+        val speed = SendOnchainSpeedFeeQuote(userFeeSat = 300uL, l1BroadcastFeeSat = 200uL)
+        val prepared = mock<PrepareSendPaymentResponse>()
+        whenever(prepared.paymentMethod).thenReturn(
+            SendPaymentMethod.BitcoinAddress(
+                address = mock<BitcoinAddressDetails>(),
+                feeQuote = SendOnchainFeeQuote("quote", 1_900_000_000uL, speed, speed, speed, isEstimate = false),
+            ),
+        )
+        whenever { sparkService.prepareSend(eq("bcrt1qcontact"), eq(20_000uL), anyOrNull()) }.thenReturn(prepared)
+        whenever(sparkService.isConnected).thenReturn(true)
+        return createSut().also { it.start(0).getOrThrow() }
     }
 
     @Test
