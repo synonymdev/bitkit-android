@@ -12,7 +12,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.models.BackupCategory
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
@@ -27,7 +30,17 @@ import to.bitkit.ui.utils.withAccent
 fun WalletRestoreSuccessView(
     onContinue: () -> Unit,
     modifier: Modifier = Modifier,
+    failedCategories: ImmutableList<BackupCategory> = persistentListOf(),
 ) {
+    val text = if (failedCategories.isEmpty()) {
+        stringResource(R.string.onboarding__restore_success_text)
+    } else {
+        val categories = failedCategories.flatMap { it.restoredDataTitles() }
+            .map { stringResource(it) }
+            .joinToString(", ")
+        stringResource(R.string.onboarding__restore_incomplete_text, categories)
+    }
+
     ScreenColumn(
         modifier = modifier.padding(horizontal = 32.dp)
     ) {
@@ -38,7 +51,13 @@ fun WalletRestoreSuccessView(
                 stringResource(R.string.onboarding__restore_success_header).withAccent(accentColor = Colors.Green)
             )
             VerticalSpacer(8.dp)
-            BodyM(stringResource(R.string.onboarding__restore_success_text), color = Colors.White80)
+            BodyM(
+                text = text,
+                color = Colors.White80,
+                modifier = Modifier.testTag(
+                    if (failedCategories.isEmpty()) "RestoreSuccessText" else "RestoreIncompleteText"
+                )
+            )
         }
 
         FillHeight()
@@ -63,12 +82,33 @@ fun WalletRestoreSuccessView(
     }
 }
 
+private fun BackupCategory.restoredDataTitles(): List<Int> = when (this) {
+    BackupCategory.METADATA -> listOf(
+        R.string.settings__backup__category_profile,
+        R.string.settings__backup__category_contacts,
+        R.string.settings__backup__category_tags,
+    )
+
+    else -> listOf(title)
+}
+
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
         WalletRestoreSuccessView(
             onContinue = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewIncomplete() {
+    AppThemeSurface {
+        WalletRestoreSuccessView(
+            onContinue = {},
+            failedCategories = persistentListOf(BackupCategory.METADATA, BackupCategory.ACTIVITY),
         )
     }
 }

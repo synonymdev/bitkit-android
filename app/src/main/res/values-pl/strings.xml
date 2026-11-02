@@ -280,6 +280,7 @@
     <string name="notification__service__stop">Zatrzymaj aplikację</string>
     <string name="onboarding__connection_saved">Zapisano. Spróbuj ponownie, aby kontynuować przywracanie.</string>
     <string name="onboarding__connection_settings">Ustawienia połączenia</string>
+    <string name="onboarding__restore_incomplete_text">Twój portfel i saldo zostały przywrócone, ale Bitkit nie mógł przywrócić: %1$s.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;warunki użytkowania&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Warunki użytkowania</string>
     <string name="onboarding__tos_checkbox_value">Kontynuując, oświadczasz, że zapoznałeś się i akceptujesz warunki użytkowania.</string>
@@ -815,7 +816,7 @@
     <string name="usdt__from_address">Z adresu</string>
     <string name="usdt__hide_details">Ukryj szczegóły</string>
     <string name="usdt__intro_decline">Nie, dzięki</string>
-    <string name="usdt__intro_description">Bitcoin w sercu. Dolary, gdy ich potrzebujesz. Włącz USDT (Tether), aby wysyłać i otrzymywać cyfrowe dolary w Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin w sercu. Dolary, gdy ich potrzebujesz. Włącz USDT (Tether), aby szybko wysyłać i otrzymywać cyfrowe dolary w Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DOLARY?&lt;/accent&gt;\nTWÓJ WYBÓR</string>
     <string name="usdt__intro_title">Nowość: USDT</string>
     <string name="usdt__maximum_total">Maks. obciążenie</string>
@@ -1375,8 +1376,10 @@
     <string name="profile__pay_contacts_error_wallet">Portfel wciąż się uruchamia. Spróbuj ponownie za chwilę.</string>
     <string name="profile__pay_contacts_headline">Pozwól\nkontaktom\n&lt;accent&gt;płacić Ci&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Płać kontaktom</string>
+    <string name="profile__private_payments_toggle">Prywatne płatności z kontaktami</string>
     <string name="profile__pubky_copied">pubky skopiowany do schowka</string>
     <string name="profile__public_key">Klucz publiczny</string>
+    <string name="profile__public_payments_toggle">Płatności publiczne</string>
     <string name="profile__restore_nav_title">Przywróć profil</string>
     <string name="profile__session_expired">Sesja Twojego profilu wygasła. Połącz się ponownie, aby przywrócić profil.</string>
     <string name="profile__sign_out">Odłącz</string>
@@ -1421,7 +1424,6 @@
     <string name="settings__es__server_error_certificate">Certyfikat tego serwera nie jest zaufany. Użyj serwera z zaufanym certyfikatem lub połącz się z jego portem TCP.</string>
     <string name="settings__es__server_error_network">Ten serwer działa w innej sieci Bitcoin. Wybierz serwer dla sieci, której używa Bitkit.</string>
     <string name="settings__es__server_error_protocol">Nie udało się nawiązać bezpiecznego połączenia. Sprawdź, czy protokół (TCP lub TLS) odpowiada portowi serwera.</string>
-    <string name="settings__general__enable_contact_payments">Włącz płatności z kontaktami</string>
     <string name="settings__hardware_wallets__add_button">Dodaj portfel sprzętowy</string>
     <string name="settings__hardware_wallets__name_label">Nazwa</string>
     <string name="settings__hardware_wallets__nav_title">Portfele sprzętowe</string>
@@ -1484,6 +1486,9 @@
     <string name="subscriptions__allowances">Budżety</string>
     <string name="subscriptions__allowances_empty_description">Możesz ustawić limity wydatków, aby automatycznie realizować żądania płatności od zaufanych kontaktów.</string>
     <string name="subscriptions__allowances_empty_headline">Skonfiguruj\n&lt;accent&gt;budżety&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Dane Twoich budżetów są starsze niż te, których ten portfel już użył. Prośby będą czekać na Twoją zgodę, dopóki nie wznowisz.</string>
+    <string name="subscriptions__allowances_paused_resume">Wznów</string>
+    <string name="subscriptions__allowances_paused_title">Płatności automatyczne wstrzymane</string>
     <string name="subscriptions__cancel_subscription">Anuluj subskrypcję</string>
     <string name="subscriptions__choose_recipient">Wybierz odbiorcę</string>
     <string name="subscriptions__content_too_long">Skróć nazwę lub opis subskrypcji i spróbuj ponownie.</string>

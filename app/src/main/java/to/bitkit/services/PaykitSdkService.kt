@@ -832,19 +832,31 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun syncPaykitApp(privatePaymentsEnabled: Boolean) = syncPaykitApp(privatePaymentsEnabled, Priority.Ordered)
 
-    internal suspend fun syncPaykitApp(privatePaymentsEnabled: Boolean, priority: Priority) {
+    internal suspend fun syncPaykitApp(privatePaymentsEnabled: Boolean?, priority: Priority) {
+        syncPaykitApp(privatePaymentsEnabled, priority) { true }
+    }
+
+    internal suspend fun syncPaykitApp(
+        privatePaymentsEnabled: Boolean?,
+        priority: Priority,
+        canSync: suspend () -> Boolean,
+    ): Boolean {
         isSetup.await()
-        operationLock.withLock(priority) {
+        return operationLock.withLock(priority) {
             withStateRevisionTracking { handle ->
+                if (!canSync()) return@withStateRevisionTracking false
                 val capabilities = appCapabilities(completeSdkCall { handle.identityStatus() })
+                val privateSharing = privatePaymentsEnabled ?: settingsStore.data.first().sharesPrivatePaykitEndpoints
+                if (!canSync()) return@withStateRevisionTracking false
                 completeSdkCall {
                     handle.publishPaykitApp(
                         displayName = "Bitkit",
                         capabilities = capabilities.copy(
-                            privatePayments = capabilities.privatePayments && privatePaymentsEnabled
+                            privatePayments = capabilities.privatePayments && privateSharing
                         ),
                     )
                 }
+                true
             }
         }
     }
@@ -1370,13 +1382,16 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    /** [admit] runs under the SDK lock right before the acceptance, after any wait for the lock, and may refuse it. */
     suspend fun acceptPaymentRequestAutomatically(
         scope: PaymentRequestScope,
         selection: AllowanceSelectionInput,
         checks: PaymentExecutionChecks,
+        admit: suspend () -> Unit = {},
     ): AllowanceAssociationRecord {
         isSetup.await()
         return operationLock.withLock {
+            admit()
             withStateRevisionTracking { handle ->
                 completeSdkCall { handle.acceptPaymentRequestAutomatically(scope, selection, checks) }
             }

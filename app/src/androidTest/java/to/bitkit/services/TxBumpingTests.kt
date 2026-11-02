@@ -20,6 +20,7 @@ import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.annotations.CoreServiceIntegration
 import to.bitkit.test.annotations.DeviceIntegration
+import to.bitkit.test.awaitSpendableDeposits
 import javax.inject.Inject
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -128,15 +129,7 @@ class TxBumpingTests {
         coreService.blocktank.regtestMine(6u)
         println("Blocks mined successfully")
 
-        // Wait for blocks to be processed
-        println("Waiting 15 seconds for blocks to be processed")
-        delay(15_000)
-        println("Wait completed")
-
-        // Sync the wallet to see the new balance
-        println("Syncing wallet to update balances")
-        lightningService.sync()
-        println("Wallet sync complete")
+        lightningService.awaitSpendableDeposits(mapOf(fundingTxId to depositAmount))
 
         // Verify we have the expected balance
         val balances = lightningService.balances

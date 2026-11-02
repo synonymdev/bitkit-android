@@ -74,7 +74,7 @@ class LightningConnectionsViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             activityRepo.getClosedChannels(SortDirection.DESC)
                 .onSuccess { closedChannels ->
-                    val channels = lightningRepo.lightningState.value.channels
+                    val channels = lightningRepo.lastKnownChannels.value
                     val openChannels = channels.filterOpen()
                     val pendingConnections = channels.filterPending()
 
@@ -97,13 +97,18 @@ class LightningConnectionsViewModel @Inject constructor(
 
     private fun observeState() {
         viewModelScope.launch(bgDispatcher) {
-            combine(lightningRepo.lightningState, sparkRepo.state, ::Pair).collect { (lightningState, sparkState) ->
-                val channels = lightningState.channels
+            combine(
+                lightningRepo.lightningState,
+                lightningRepo.lastKnownChannels,
+                sparkRepo.state,
+            ) { lightningState, channels, sparkState ->
+                Triple(lightningState.nodeLifecycleState.isRunning(), channels, sparkState)
+            }.collect { (isNodeRunning, channels, sparkState) ->
                 val connectionText = context.getString(R.string.lightning__connection)
 
                 _uiState.update {
                     it.copy(
-                        isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
+                        isNodeRunning = isNodeRunning,
                         openChannels = channels.filterOpen().map { channel ->
                             channel.mapToUiModel(channels, connectionText)
                         }.reversed().toImmutableList(),

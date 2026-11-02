@@ -34,7 +34,9 @@ import kotlinx.coroutines.yield
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import to.bitkit.R
 import to.bitkit.async.appScope
 import to.bitkit.data.AppDb
@@ -74,6 +76,8 @@ import to.bitkit.models.Toast
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.models.WidgetsBackupV1
+import to.bitkit.models.decodeBackup
+import to.bitkit.models.decodeSettingsBackup
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
@@ -574,6 +578,14 @@ class BackupRepo @Inject constructor(
     }
 
     suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withContext(ioDispatcher) {
+        if (category == BackupCategory.WALLET || category == BackupCategory.METADATA) {
+            walletBackupMutex.withLock { performBackup(category) }
+        } else {
+            performBackup(category)
+        }
+    }
+
+    private suspend fun performBackup(category: BackupCategory): Result<Unit> {
         Logger.debug("Backup starting for: '$category'", context = TAG)
         var backupRequired = currentTimeMillis()
         runningBackups += category
@@ -592,11 +604,21 @@ class BackupRepo @Inject constructor(
                     vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
                 }
             }
-            upload
+            return upload
                 .onSuccess {
                     withContext(NonCancellable) {
                         cacheStore.updateBackupStatus(category) {
                             it.copy(running = false, synced = backupRequired)
+                        }
+                        if (category == BackupCategory.WALLET) {
+                            failedBackupRequired -= BackupCategory.METADATA
+                            cacheStore.updateBackupStatus(BackupCategory.METADATA) {
+                                if (it.isRequired) {
+                                    it.copy(required = maxOf(currentTimeMillis(), it.required + 1, it.synced + 1))
+                                } else {
+                                    it
+                                }
+                            }
                         }
                         runningBackups -= category
                         failedBackupRequired -= category
@@ -626,7 +648,9 @@ class BackupRepo @Inject constructor(
     }
 
     suspend fun persistWalletBackup(): Result<Unit> =
-        uploadWalletBackup().onFailure { markBackupRequired(BackupCategory.WALLET) }
+        withContext(ioDispatcher) {
+            walletBackupMutex.withLock { uploadWalletBackup() }
+        }.onFailure { markBackupRequired(BackupCategory.WALLET) }
 
     suspend fun persistUsdtRecoveryBackup(snapshot: String): Result<Unit> = runSuspendCatching {
         cacheStore.updateBackupStatus(BackupCategory.USDT_RECOVERY) {
@@ -661,13 +685,11 @@ class BackupRepo @Inject constructor(
 
     private suspend fun uploadWalletBackup(): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            walletBackupMutex.withLock {
-                if (shouldSkipBackup()) throw UsdtException.BackupUnavailable()
-                vssBackupClient.setup().getOrThrow()
-                val data = getWalletBackupDataBytes()
-                if (shouldSkipBackup()) throw UsdtException.BackupUnavailable()
-                vssBackupClient.putObject(key = BackupCategory.WALLET.name, data = data).getOrThrow()
-            }
+            if (shouldSkipBackup()) throw UsdtException.BackupUnavailable()
+            vssBackupClient.setup().getOrThrow()
+            val data = getWalletBackupDataBytes()
+            if (shouldSkipBackup()) throw UsdtException.BackupUnavailable()
+            vssBackupClient.putObject(key = BackupCategory.WALLET.name, data = data).getOrThrow()
         }.map { }
     }
 
@@ -765,6 +787,13 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun getMetadataBackupDataBytes(): ByteArray = withContext(ioDispatcher) {
+        check(!hasPendingWalletRestore()) { "Wallet backup restore is incomplete" }
+        val walletBackupRequired = cacheStore.data.first().backupStatuses[BackupCategory.WALLET]?.isRequired == true
+        if (walletBackupRequired) {
+            check(privatePaykitAddressReservationRepo.get().quarantinedPublicAddressesSnapshot().isEmpty()) {
+                "Public address exclusions must be backed up before replacing metadata"
+            }
+        }
         // These reads must not fall back to an empty list: this envelope is the only copy of the tags, so
         // uploading a partial payload would replace the stored ones. Failing here marks the backup failed
         // and leaves the previous upload intact until the retry succeeds.
@@ -850,6 +879,8 @@ class BackupRepo @Inject constructor(
             createdAt = currentTimeMillis(),
             transfers = transfers,
             privatePaykitHighestReservedReceiveIndexByAddressType = privateReservations,
+            publicPaykitLegacyAddresses = reservationRepo
+                .quarantinedPublicAddressesSnapshot().toList().takeIf { it.isNotEmpty() },
             paykitSdkBackupState = paykitSdkBackupState.state,
             watchOnlyAccounts = watchOnlyAccountSnapshot.accounts,
             watchOnlyAccountAllocationState = watchOnlyAccountSnapshot.allocationState,
@@ -878,10 +909,14 @@ class BackupRepo @Inject constructor(
         return json.encodeToString(payload).toByteArray()
     }
 
+    /**
+     * Restores every backup category. Only WALLET is fatal; the result holds the other categories that were
+     * found but could not be restored, so the caller can report an incomplete restore.
+     */
     suspend fun performFullRestoreFromLatestBackup(
         onCacheRestored: suspend () -> Unit = {},
         connectionSession: WalletConnectionRecovery.Session? = null,
-    ): Result<Unit> = withContext(ioDispatcher) {
+    ): Result<Set<BackupCategory>> = withContext(ioDispatcher) {
         if (connectionSession == null) {
             return@withContext runSuspendCatching {
                 connectionRecovery.withCurrentWallet {
@@ -890,7 +925,9 @@ class BackupRepo @Inject constructor(
             }
         }
         if (isUsdtRestorePending() && !keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
-            return@withContext restoreUsdtRecoveryAfterLegacyMigration(connectionSession)
+            return@withContext restoreUsdtRecoveryAfterLegacyMigration(
+                connectionSession,
+            ).map { emptySet<BackupCategory>() }
         }
         Logger.debug("Full restore starting", context = TAG)
 
@@ -898,28 +935,54 @@ class BackupRepo @Inject constructor(
 
         // Mutated only by the sequential restore steps below, inside this single coroutine.
         val categoriesNeedingRewrite = mutableSetOf<BackupCategory>()
+        val failedCategories = mutableSetOf<BackupCategory>()
 
         val result = try {
             runSuspendCatching {
-                // Block replacement backups even if downloading the wallet backup fails.
-                if (!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
-                    keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, "")
+                val addressReservations = privatePaykitAddressReservationRepo.get()
+                val requiresMetadata = walletBackupMutex.withLock {
+                    // Drain admitted uploads before arming the restore guards or importing metadata.
+                    if (!keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)) {
+                        keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, "")
+                    }
+                    if (!isUsdtRestorePending()) {
+                        keychain.upsertString(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name, "")
+                    }
+                    addressReservations.preparePublicAddressRestore()
                 }
                 connectionSession.replay()
-                restoreUsdtRecovery()
-                performRestore(BackupCategory.METADATA) { dataBytes ->
+                prepareUsdtRecoveryRestore()
+                var metadataReceived = false
+                val metadataResult = performRestore(BackupCategory.METADATA, failedCategories) { dataBytes ->
+                    metadataReceived = true
+                    runSuspendCatching {
+                        addressReservations.capturePublicAddressRestoreSource(dataBytes)
+                        val address = json.parseToJsonElement(String(dataBytes)).jsonObject["cache"]
+                            ?.jsonObject?.get("onchainAddress")?.jsonPrimitive?.contentOrNull.orEmpty()
+                        addressReservations.restorePublicAddress(address)
+                    }.getOrElse { throw PublicAddressRestoreFailed(it) }
                     val restored = restoreMetadataBackup(dataBytes, onCacheRestored)
                     if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.METADATA
+                    if (!restored.complete) failedCategories += BackupCategory.METADATA
                     restored.createdAt
                 }
-                performRestore(BackupCategory.SETTINGS) { dataBytes ->
-                    val parsed = json.decodeFromString<SettingsBackupV1>(String(dataBytes))
+                if (!metadataReceived) {
+                    if (requiresMetadata) {
+                        metadataResult.getOrThrow()
+                        throw PrivatePaykitAddressReservationError.PublicAddressRestorePending
+                    }
+                    addressReservations.finishPublicAddressRestoreWithoutMetadata()
+                }
+                metadataResult.onFailure { if (it is PublicAddressRestoreFailed) throw it }
+                restoreUsdtRecovery()
+                performRestore(BackupCategory.SETTINGS, failedCategories) { dataBytes ->
+                    val parsed = decodeSettingsBackup(String(dataBytes))
                     connectionSession.restoreSettings(parsed)
                     parsed.createdAt
                 }
-                performRestore(BackupCategory.WIDGETS) { dataBytes ->
+                performRestore(BackupCategory.WIDGETS, failedCategories) { dataBytes ->
                     val parsed = json.decodeFromString<WidgetsBackupV1>(String(dataBytes))
-                    widgetsStore.restoreFromBackup(parsed)
+                    widgetsStore.restoreFromBackup(parsed).getOrThrow()
                     parsed.createdAt
                 }
                 // SETTINGS is optional; preserving explicit local corrections is required.
@@ -942,23 +1005,26 @@ class BackupRepo @Inject constructor(
                     }
                 } else {
                     val createdAt = restoreWalletBackup(retainedWalletBackup.toByteArray())
-                    cacheStore.updateBackupStatus(BackupCategory.WALLET) {
-                        it.copy(running = false, synced = createdAt, required = createdAt)
-                    }
+                    updateRestoredBackupStatus(BackupCategory.WALLET, createdAt)
                     Logger.info("Restore success for: '${BackupCategory.WALLET}'", context = TAG)
                 }
-                performRestore(BackupCategory.BLOCKTANK) { dataBytes ->
-                    val parsed = json.decodeFromString<BlocktankBackupV1>(String(dataBytes))
-                    blocktankRepo.restoreFromBackup(parsed)
+                performRestore(BackupCategory.BLOCKTANK, failedCategories) { dataBytes ->
+                    val parsed = decodeBackup<BlocktankBackupV1>(String(dataBytes))
+                    blocktankRepo.restoreFromBackup(parsed).getOrThrow()
                     parsed.createdAt
                 }
-                performRestore(BackupCategory.ACTIVITY) { dataBytes ->
+                performRestore(BackupCategory.ACTIVITY, failedCategories) { dataBytes ->
                     val restored = restoreActivityBackup(dataBytes)
                     if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.ACTIVITY
                     restored.createdAt
                 }
 
-                Logger.info("Full restore success", context = TAG)
+                if (failedCategories.isEmpty()) {
+                    Logger.info("Full restore success", context = TAG)
+                } else {
+                    Logger.warn("Full restore incomplete, failed: '${failedCategories.joinToString()}'", context = TAG)
+                }
+                failedCategories.toSet()
             }.onSuccess {
                 settingsStore.update { it.copy(backupVerified = true) }
             }.onFailure { e ->
@@ -988,12 +1054,13 @@ class BackupRepo @Inject constructor(
                     keychain.upsertString(Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name, "")
                 }
                 connectionSession.replay()
+                prepareUsdtRecoveryRestore()
                 restoreUsdtRecovery(retainWallet = false)
             }
         }
     }
 
-    private suspend fun restoreUsdtRecovery(retainWallet: Boolean = true) {
+    private suspend fun prepareUsdtRecoveryRestore() {
         val recoveryKey = Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name
         if (!isUsdtRestorePending()) keychain.upsertString(recoveryKey, "")
         paykitUsdtPaymentRepo.get().pauseForRecoveryRestore()
@@ -1001,6 +1068,10 @@ class BackupRepo @Inject constructor(
         usdtBackupMutex.withLock { }
         walletBackupMutex.withLock { }
         vssBackupClient.setup().getOrThrow()
+    }
+
+    private suspend fun restoreUsdtRecovery(retainWallet: Boolean = true) {
+        val recoveryKey = Keychain.Key.USDT_PENDING_BACKUP_RESTORE.name
         val retained = keychain.loadString(recoveryKey)?.takeIf { it.isNotEmpty() }
             ?: keychain.loadString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)
         val legacyData = retained?.takeIf { it.isNotEmpty() }?.encodeToByteArray()
@@ -1033,22 +1104,25 @@ class BackupRepo @Inject constructor(
             String(dataBytes),
             mapOf("tagMetadata" to preActivityMetadataRepo::migrateBackupPreActivityMetadataJson),
         )
-        val parsed = json.decodeFromString<MetadataBackupV1>(migration.json)
+        val parsed = decodeBackup<MetadataBackupV1>(migration.json)
         val cleanCache = parsed.cache.resetBip21() // Force address rotation
-        cacheStore.update { cleanCache }
+        cacheStore.update { cleanCache.copy(backupStatuses = it.backupStatuses) }
         Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
         onCacheRestored()
         val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
             .onFailure { Logger.warn("Failed to restore pre-activity metadata", it, context = TAG) }
             .isSuccess
-        pubkyRepo.restoreSessionBackupState(parsed.pubkySession)
+        val sessionRestored = pubkyRepo.restoreSessionBackupState(parsed.pubkySession)
             .onFailure {
                 Logger.warn("Failed to restore pubky session backup state", it, context = TAG)
             }
-        pubkyRepo.restoreContactProfileOverrides(parsed.pubkyContactProfileOverrides)
+            .isSuccess
+        val overridesRestored = pubkyRepo.restoreContactProfileOverrides(parsed.pubkyContactProfileOverrides)
             .onFailure {
                 Logger.warn("Failed to restore pubky contact profile overrides", it, context = TAG)
             }
+            .isSuccess
+        val complete = persisted && sessionRestored && overridesRestored
         // App-owned, so it takes no part in the Core field migration above and never sets needsRewrite.
         // Restored names wait as pending ones until each wallet is paired again. Failing to store them
         // must not discard the rest of this envelope, which has already been applied by here.
@@ -1057,7 +1131,11 @@ class BackupRepo @Inject constructor(
         Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
         Logger.debug("Restored ${parsed.hwWalletNames.orEmpty().size} hardware wallet names", TAG)
 
-        return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)
+        return RestoredCoreBackup(
+            createdAt = parsed.createdAt,
+            needsRewrite = migration.changed && complete,
+            complete = complete,
+        )
     }
 
     private suspend fun restoreActivityBackup(dataBytes: ByteArray): RestoredCoreBackup {
@@ -1068,12 +1146,11 @@ class BackupRepo @Inject constructor(
                 "activityTags" to activityRepo::migrateBackupActivityTagsJson,
             ),
         )
-        val parsed = json.decodeFromString<ActivityBackupV1>(migration.json)
-        val persisted = activityRepo.restoreFromBackup(parsed)
-            .onFailure { Logger.warn("Skipped activity backup rewrite after a failed restore", context = TAG) }
-            .isSuccess
+        val parsed = decodeBackup<ActivityBackupV1>(migration.json)
+        // Failing here reports ACTIVITY as not restored and leaves its stored backup in place.
+        activityRepo.restoreFromBackup(parsed).getOrThrow()
 
-        return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)
+        return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed)
     }
 
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
@@ -1083,7 +1160,13 @@ class BackupRepo @Inject constructor(
         parsed.paykitPaymentState?.let {
             // Validate every proof before writing a guard or replacing existing payment state.
             it.pendingProofs.forEach { proof -> proof.restored() }
-            val allowances = it.allowances.orEmpty().mapValues { (_, state) -> state.restored() }
+            // A ledger revision floor only holds next to the ledger it was read from.
+            val hasLedger = parsed.paykitSdkBackupState != null
+            val allowances = it.allowances.orEmpty().mapValues { (_, state) ->
+                state.restored().let { restored ->
+                    if (hasLedger) restored else restored.copy(ledgerRevisionFloor = null)
+                }
+            }
             val walletIndex = backupWalletIndex()
             it.activeOnchainAttempt?.let { wire ->
                 validateActiveProof(wire, it.pendingProofs)
@@ -1114,11 +1197,12 @@ class BackupRepo @Inject constructor(
             parsed.watchOnlyAccountAllocationState,
         )
         lightningService.reconcileWatchOnlyAccounts()
-        if (!parsed.privatePaykitHighestReservedReceiveIndexByAddressType.isNullOrEmpty()) {
-            cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
-        }
         val addressReservationRepo = privatePaykitAddressReservationRepo.get()
-        addressReservationRepo.restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType).getOrThrow()
+        addressReservationRepo.restoreBackup(
+            parsed.privatePaykitHighestReservedReceiveIndexByAddressType,
+            parsed.publicPaykitLegacyAddresses.orEmpty().toSet(),
+        ).getOrThrow()
+        cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
         val privateRepo = privatePaykitRepo.get()
         privateRepo.restoreBackup(parsed.paykitSdkBackupState).getOrThrow()
         addressReservationRepo.reconcileReservedIndexesWithLdk().getOrThrow()
@@ -1255,6 +1339,7 @@ class BackupRepo @Inject constructor(
 
     private suspend fun performRestore(
         category: BackupCategory,
+        failedCategories: MutableSet<BackupCategory>? = null,
         restoreAction: suspend (dataBytes: ByteArray) -> Long,
     ): Result<Unit> = runSuspendCatching {
         var createdAtTimestamp = currentTimeMillis()
@@ -1273,12 +1358,21 @@ class BackupRepo @Inject constructor(
             }
             .getOrThrow()
 
-        cacheStore.updateBackupStatus(category) {
-            it.copy(running = false, synced = createdAtTimestamp, required = createdAtTimestamp)
-        }
+        updateRestoredBackupStatus(category, createdAtTimestamp)
     }.onFailure {
-        // Only WALLET is fatal to a full restore, so without this every other category fails silently.
+        // Full restore continues after optional category failures, so record them here.
         Logger.warn("Failed to restore: '$category'", it, context = TAG)
+        failedCategories?.add(category)
+    }
+
+    private suspend fun updateRestoredBackupStatus(category: BackupCategory, createdAt: Long) {
+        cacheStore.updateBackupStatus(category) {
+            if ((category == BackupCategory.WALLET || category == BackupCategory.METADATA) && it.isRequired) {
+                it.copy(running = false)
+            } else {
+                it.copy(running = false, synced = createdAt, required = createdAt)
+            }
+        }
     }
 
     companion object {
@@ -1315,6 +1409,11 @@ class BackupRepo @Inject constructor(
 
 internal class WalletBackupSnapshotChanged : AppError("Private payment state changed during wallet snapshot")
 
+private class PublicAddressRestoreFailed(cause: Throwable) : AppError(
+    "Failed to retain public address exclusion during restore",
+    cause,
+)
+
 /**
  * Result of handing a backup envelope's Core-owned fields to Core for migration.
  *
@@ -1333,10 +1432,13 @@ private data class CoreFieldMigration(
  * @param createdAt the restored envelope's timestamp, used as the category's synced marker.
  * @param needsRewrite whether the envelope was migrated **and** Core persisted the result, meaning its VSS
  * backup can safely be rewritten with current entries.
+ * @param complete false when part of the envelope, such as the Pubky profile session, failed to restore;
+ * such an envelope is never rewritten.
  */
 private data class RestoredCoreBackup(
     val createdAt: Long,
     val needsRewrite: Boolean,
+    val complete: Boolean = true,
 )
 
 internal fun Throwable.isTemporaryBackupFailure(): Boolean = isPaykitTemporarilyUnavailable() || when (this) {
