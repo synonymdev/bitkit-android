@@ -303,6 +303,8 @@ class ProfileRemovalStoreTest {
         )
         val recovered = try {
             assertNotNull(first.pendingAttempt()).also {
+                assertEquals(WalletResetRecovery.Unreadable(it), first.walletResetRecovery.first())
+                assertFailsWith<ProfileRemovalPending> { first.requireWalletAvailable() }
                 assertFailsWith<ProfileRemovalPending> { first.requireNoPending() }
                 assertFailsWith<IllegalStateException> { first.complete(it) }
             }
@@ -317,6 +319,8 @@ class ProfileRemovalStoreTest {
             ) { file }
         )
         assertEquals(recovered, second.pendingAttempt())
+        assertEquals(WalletResetRecovery.Unreadable(recovered), second.walletResetRecovery.first())
+        assertFailsWith<ProfileRemovalPending> { second.requireWalletAvailable() }
         assertFalse(second.localDisconnectAvailable.first())
         assertFailsWith<ProfileRemovalPending> { second.requireReceiptAccountingAccess() }
         assertFailsWith<IllegalStateException> { second.withAccess(recovered) { second.complete(recovered) } }

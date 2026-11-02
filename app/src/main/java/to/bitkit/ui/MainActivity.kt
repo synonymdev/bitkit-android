@@ -169,7 +169,7 @@ class MainActivity : FragmentActivity() {
                     walletExists = walletExists,
                     isRecoveryMode = isRecoveryMode,
                     walletResetRecovery = walletResetRecovery,
-                    resetRecovery = { WalletResetRecoveryScreen(walletViewModel) },
+                    resetRecovery = { WalletResetRecoveryScreen(walletViewModel, appViewModel, settingsViewModel) },
                     criticalUpdate = {
                         val lifecycle = LocalLifecycleOwner.current.lifecycle
                         DisposableEffect(lifecycle, walletExists, isRecoveryMode, notificationsGranted, keepActive) {

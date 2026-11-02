@@ -89,7 +89,8 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
         when {
             it == null -> WalletResetRecovery.Unavailable
             it.attemptId == null || it.scope == ProfileRemovalScope.PROFILE -> WalletResetRecovery.Clear
-            else -> WalletResetRecovery.Pending(it.attemptId)
+            it.scope == ProfileRemovalScope.WALLET_WIPE -> WalletResetRecovery.Pending(it.attemptId)
+            else -> WalletResetRecovery.Unreadable(it.attemptId)
         }
     }
 
@@ -239,6 +240,7 @@ sealed interface WalletResetRecovery {
     data object Unavailable : WalletResetRecovery
     data object Clear : WalletResetRecovery
     data class Pending(val attemptId: String) : WalletResetRecovery
+    data class Unreadable(val attemptId: String) : WalletResetRecovery
 }
 
 @Serializable

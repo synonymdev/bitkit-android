@@ -59,6 +59,12 @@ class RootDestinationTest {
     }
 
     @Test
+    fun corruptedResetStateDoesNotOpenWalletOrOnboarding() {
+        setContent(walletExists = false, isRecoveryMode = true, walletResetRecovery = WalletResetRecovery.Unreadable("test"))
+        assertOnly(TAG_RESET)
+    }
+
+    @Test
     fun loadingResetStateBlocksOnboarding() {
         setContent(walletExists = false, walletResetRecovery = WalletResetRecovery.Loading)
         assertOnly(TAG_RESET)

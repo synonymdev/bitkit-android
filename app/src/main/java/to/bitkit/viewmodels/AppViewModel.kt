@@ -61,6 +61,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -69,6 +70,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
@@ -576,6 +578,7 @@ class AppViewModel @Inject constructor(
     private var isCompletingRestoreHold = false
     private var addressValidationJob: Job? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
+    private val allowancePauseRevision = MutableStateFlow(0L)
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
         .map { PaykitFeatureFlags.isUiEnabled(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -934,15 +937,20 @@ class AppViewModel @Inject constructor(
                 combine(
                     settingsStore.isPaykitEnabled.map { PaykitFeatureFlags.isUiEnabled(it) },
                     settingsStore.areAllowancesEnabled,
-                ) { isPaykitEnabled, areAllowancesEnabled -> isPaykitEnabled to areAllowancesEnabled },
+                    allowancePauseRevision,
+                ) { isPaykitEnabled, areAllowancesEnabled, pauseRevision ->
+                    Triple(isPaykitEnabled, areAllowancesEnabled, pauseRevision)
+                },
                 privatePaykitRepo.isProfileDeletionInProgress,
-            ) { publicKey, contacts, contactsLoadVersion, (isPaykitEnabled, areAllowancesEnabled), deleting ->
+            ) { publicKey, contacts, contactsLoadVersion, allowanceSettings, deleting ->
+                val (isPaykitEnabled, areAllowancesEnabled, pauseRevision) = allowanceSettings
                 PaykitContactSyncState(
                     publicKey = publicKey,
                     contactKeys = contacts.map { it.publicKey }.toSet(),
                     contactsLoaded = contactsLoadVersion > 0L,
                     isPaykitEnabled = isPaykitEnabled,
                     areAllowancesEnabled = areAllowancesEnabled,
+                    allowancePauseRevision = pauseRevision,
                 ).takeUnless { deleting }
             }
                 .distinctUntilChanged()
@@ -954,7 +962,11 @@ class AppViewModel @Inject constructor(
             settingsStore.areAllowancesEnabled
                 .distinctUntilChanged()
                 .filter { !it }
-                .collect { paykitAllowanceRepo.pause() }
+                .collect {
+                    paykitAllowanceRepo.pause()
+                    // Off/on can coalesce while contact sync waits; revoked activation still needs a fresh sync.
+                    allowancePauseRevision.update { it + 1 }
+                }
         }
     }
 
@@ -1021,6 +1033,7 @@ class AppViewModel @Inject constructor(
 
     private fun isCurrentPaykitContactSync(state: PaykitContactSyncState, signIn: PubkySignIn): Boolean =
         pubkyRepo.isCurrent(signIn) && isPaykitEnabled.value && !privatePaykitRepo.isProfileDeletionInProgress.value &&
+            state.allowancePauseRevision == allowancePauseRevision.value &&
             (pubkyRepo.contactsLoadVersion.value > 0L) == state.contactsLoaded &&
             pubkyRepo.contacts.value.map { it.publicKey }.toSet() == state.contactKeys
 
@@ -7739,6 +7752,37 @@ class AppViewModel @Inject constructor(
         Logger.debug("Locked app on background", context = TAG)
     }
 
+    /** Cold recovery reads must not treat the ordinary UI's initial false as a loaded PIN policy. */
+    val recoveryPinRequired
+        get() = flow<Boolean?> {
+            emit(null)
+            settingsStore.data.collect { settings ->
+                emit(settings.isPinEnabled || keychain.loadString(Keychain.Key.PIN.name) != null)
+            }
+        }.catch { emit(null) }
+
+    /** Recovery authentication cannot erase a wallet whose cleanup state is unknown. */
+    @Synchronized
+    fun validateRecoveryPin(pin: String): Boolean = runCatching {
+        keychain.accessBlocking {
+            val stored = load(Keychain.Key.PIN.name)?.decodeToString() ?: return@accessBlocking false
+            val encodedAttempts = load(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)?.decodeToString()
+            val remaining = if (encodedAttempts == null) {
+                Env.PIN_ATTEMPTS
+            } else {
+                encodedAttempts.toIntOrNull() ?: return@accessBlocking false
+            }
+            if (remaining !in 1..Env.PIN_ATTEMPTS) return@accessBlocking false
+            val valid = stored == pin
+            val next = if (valid) Env.PIN_ATTEMPTS else remaining - 1
+            upsert(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, next.toString().toByteArray())
+            valid
+        }
+    }.getOrElse {
+        Logger.warn("Recovery authentication is unavailable", it, context = TAG)
+        false
+    }
+
     fun validatePin(pin: String): Boolean {
         val storedPin = keychain.loadString(Keychain.Key.PIN.name)
         val isValid = storedPin == pin
@@ -9080,6 +9124,7 @@ private data class PaykitContactSyncState(
     val contactsLoaded: Boolean,
     val isPaykitEnabled: Boolean,
     val areAllowancesEnabled: Boolean,
+    val allowancePauseRevision: Long,
 )
 
 sealed class SendEffect {

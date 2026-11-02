@@ -90,12 +90,14 @@ class WalletViewModelTest : BaseUnitTest() {
     private val walletState = MutableStateFlow(WalletState())
     private val balanceState = MutableStateFlow(BalanceState())
     private val isRecoveryMode = MutableStateFlow(false)
+    private val isWiping = MutableStateFlow(false)
     private val isOnline = MutableStateFlow(ConnectivityState.CONNECTED)
 
     @Before
     fun setUp() = runBlocking {
         whenever(context.getString(any())).thenReturn("")
         whenever(walletRepo.walletState).thenReturn(walletState)
+        whenever(backupRepo.isWiping).thenReturn(isWiping)
         whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
         whenever(walletRepo.refreshReceiveState()).thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
@@ -127,6 +129,14 @@ class WalletViewModelTest : BaseUnitTest() {
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
         )
+    }
+
+    @Test
+    fun `active wipe rejects a queued reset recovery action`() = test {
+        isWiping.value = true
+        sut.finishPendingWalletReset("original").join()
+        verify(walletRepo, never()).wipeWallet(any(), anyOrNull())
+        assertFalse(sut.isFinishingWalletReset.value)
     }
 
     @Test

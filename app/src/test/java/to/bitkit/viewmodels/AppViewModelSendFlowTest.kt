@@ -138,6 +138,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
@@ -170,6 +171,8 @@ import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PaykitAllowanceEvent
+import to.bitkit.repositories.PaykitAllowanceExecutor
+import to.bitkit.repositories.PaykitAllowanceLocalState
 import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
@@ -388,6 +391,93 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun tearDown() {
         sut.stopPaykitPaymentRequestPolling()
         App.currentActivity = null
+    }
+
+    @Test
+    fun `recovery PIN policy waits for durable settings before exposing disabled`() = test {
+        val loaded = CompletableDeferred<to.bitkit.data.SettingsData>()
+        whenever(settingsStore.data).thenReturn(kotlinx.coroutines.flow.flow { emit(loaded.await()) })
+        sut.recoveryPinRequired.test {
+            assertEquals(null, awaitItem())
+            runCurrent()
+            expectNoEvents()
+            loaded.complete(to.bitkit.data.SettingsData(isPinEnabled = true))
+            assertEquals(true, awaitItem())
+            awaitComplete()
+        }
+    }
+
+    @Test
+    fun `recovery requires an existing keychain PIN even when settings say disabled`() = test {
+        whenever(keychain.loadString(Keychain.Key.PIN.name)).thenReturn("test-pin")
+        sut.recoveryPinRequired.test {
+            assertEquals(null, awaitItem())
+            assertEquals(true, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `unreadable recovery PIN never becomes disabled`() = test {
+        whenever(keychain.loadString(Keychain.Key.PIN.name)).thenThrow(IllegalStateException("unreadable test PIN"))
+        sut.recoveryPinRequired.test {
+            assertEquals(null, awaitItem())
+            assertEquals(null, awaitItem())
+            awaitComplete()
+        }
+    }
+
+    @Test
+    fun `recovery PIN exhaustion stays bounded without automatic wipe`() = test {
+        val access = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Boolean>(any())).thenAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Boolean>(0).invoke(access)
+        }
+        whenever(access.load(Keychain.Key.PIN.name)).thenReturn("test-pin".toByteArray())
+        var attempts = "1"
+        whenever(access.load(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)).thenAnswer { attempts.toByteArray() }
+        org.mockito.kotlin.doAnswer {
+            attempts = it.getArgument<ByteArray>(1).decodeToString()
+            Unit
+        }.whenever(access).upsert(eq(Keychain.Key.PIN_ATTEMPTS_REMAINING.name), any())
+        sut.mainScreenEffect.test {
+            assertFalse(sut.validateRecoveryPin("wrong"))
+            assertEquals("0", attempts)
+            assertFalse(sut.validateRecoveryPin("test-pin"))
+            assertFalse(sut.validateRecoveryPin("wrong"))
+            runCurrent()
+            expectNoEvents()
+            verify(access, times(1)).upsert(eq(Keychain.Key.PIN_ATTEMPTS_REMAINING.name), any())
+        }
+    }
+
+    @Test
+    fun `recovery PIN requires acknowledged attempt persistence`() = test {
+        val access = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Boolean>(any())).thenAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Boolean>(0).invoke(access)
+        }
+        whenever(access.load(Keychain.Key.PIN.name)).thenReturn("test-pin".toByteArray())
+        whenever(access.load(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)).thenReturn("2".toByteArray())
+        org.mockito.kotlin.doThrow(IllegalStateException("test storage refused"))
+            .whenever(access).upsert(any(), any())
+        assertFalse(sut.validateRecoveryPin("test-pin"))
+        verify(access).upsert(eq(Keychain.Key.PIN_ATTEMPTS_REMAINING.name), any())
+    }
+
+    @Test
+    fun `recovery PIN rejects malformed accounting and accepts a persisted valid attempt`() = test {
+        val access = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Boolean>(any())).thenAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Boolean>(0).invoke(access)
+        }
+        whenever(access.load(Keychain.Key.PIN.name)).thenReturn("test-pin".toByteArray())
+        whenever(access.load(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)).thenReturn("broken".toByteArray())
+        assertFalse(sut.validateRecoveryPin("test-pin"))
+        verify(access, never()).upsert(any(), any())
+        whenever(access.load(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)).thenReturn("2".toByteArray())
+        assertTrue(sut.validateRecoveryPin("test-pin"))
+        verify(access).upsert(eq(Keychain.Key.PIN_ATTEMPTS_REMAINING.name), any())
     }
 
     @Test
@@ -3298,6 +3388,58 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         verify(paykitAllowanceRepo, never()).activate(anyOrNull(), any())
+    }
+
+    @Test
+    fun `off on during allowance admission activates the latest enabled state`() = test {
+        val sdk = mock<PaykitSdkService>()
+        val executor = mock<PaykitAllowanceExecutor>()
+        whenever(executor.events).thenReturn(MutableSharedFlow())
+        whenever(executor.localState(any())).thenReturn(PaykitAllowanceLocalState())
+        whenever(sdk.listAllowances(any())).thenReturn(emptyList())
+        val realAllowances = PaykitAllowanceRepo(
+            ioDispatcher = testDispatcher,
+            paykitSdkService = sdk,
+            executor = executor,
+            lightningRepo = lightningRepo,
+            activityRepo = activityRepo,
+            clock = Clock.System,
+        )
+        val activationStarted = CompletableDeferred<Unit>()
+        val finishActivation = CompletableDeferred<Unit>()
+        var holdNextAdmission = true
+        whenever { paykitAllowanceRepo.activate(anyOrNull(), any()) }.doSuspendableAnswer {
+            val identity = it.getArgument<String?>(0)
+            val admission = it.getArgument<suspend () -> Boolean>(1)
+            realAllowances.activate(identity) {
+                if (holdNextAdmission) {
+                    holdNextAdmission = false
+                    activationStarted.complete(Unit)
+                    finishActivation.await()
+                }
+                admission()
+            }
+        }
+        whenever { paykitAllowanceRepo.pause(anyOrNull()) }.doSuspendableAnswer {
+            realAllowances.pause(it.getArgument(0))
+        }
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        activationStarted.await()
+
+        areAllowancesEnabled.value = false
+        runCurrent()
+        verify(executor).stopAdmitting()
+        areAllowancesEnabled.value = true
+        runCurrent()
+        verify(executor, never()).activate(any())
+
+        finishActivation.complete(Unit)
+        runCurrent()
+
+        val identity = requireNotNull(PubkyPublicKeyFormat.normalized(testPublicKey))
+        verify(executor).activate(identity)
+        verify(executor).recover(identity)
     }
 
     @Test

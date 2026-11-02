@@ -1009,7 +1009,7 @@ class WalletViewModel @Inject constructor(
     fun refreshWalletResetRecovery() = walletRepo.refreshWalletResetRecovery()
 
     fun finishPendingWalletReset(attemptId: String) = viewModelScope.launch {
-        if (!_isFinishingWalletReset.compareAndSet(false, true)) return@launch
+        if (isWiping.value || !_isFinishingWalletReset.compareAndSet(false, true)) return@launch
         try {
             walletRepo.wipeWallet(expectedPendingAttemptId = attemptId).onFailure { ToastEventBus.send(it) }
         } finally {
