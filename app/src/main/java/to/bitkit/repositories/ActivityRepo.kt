@@ -1124,7 +1124,10 @@ class ActivityRepo @Inject constructor(
     }
 
     private suspend fun findSyncedOnchainDuplicates(activities: List<Activity>): List<SyncedDuplicate> {
-        syncMutex.withLock { activeSync }?.let { withTimeoutOrNull(MS_SYNC_TIMEOUT) { it.await() } }
+        // A sync still waiting for the node has stored nothing and later finds the restored rows by txid
+        if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+            syncMutex.withLock { activeSync }?.let { withTimeoutOrNull(MS_SYNC_TIMEOUT) { it.await() } }
+        }
         return activities.filterIsInstance<Activity.Onchain>().map { it.v1 }.mapNotNull { restored ->
             coreService.activity.getOnchainActivityByTxId(restored.txId, restored.walletId)
                 ?.takeIf { it.id != restored.id && it.txType == restored.txType }

@@ -18,6 +18,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
@@ -41,6 +42,7 @@ import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mock
 import to.bitkit.models.ActivityBackupV1
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.services.HwSnapshotResult
@@ -1313,6 +1315,41 @@ class ActivityRepoTest : BaseUnitTest() {
             verify(coreService.activity).appendTags("txid", listOf("synced-tag"), synced.walletId)
             verify(coreService.activity).delete(synced.id, synced.walletId)
         }
+    }
+
+    @Test
+    fun `restoreFromBackup does not wait for a sync blocked on node start`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val sync = async { sut.syncActivities() }
+        runCurrent()
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(createOnchainActivity())))
+
+        assertTrue(result.isSuccess)
+        assertEquals(0L, currentTime)
+        assertTrue(sync.isActive)
+        sync.cancel()
+    }
+
+    @Test
+    fun `restoreFromBackup waits for a sync while the node runs`() = test {
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val sync = async { sut.syncActivities() }
+        runCurrent()
+
+        val payload = backupPayload().copy(activities = listOf(createOnchainActivity()))
+        val restore = async { sut.restoreFromBackup(payload) }
+        runCurrent()
+
+        assertFalse(restore.isCompleted)
+        verify(coreService.activity, never()).upsertList(any())
+        response.complete(Result.success(emptyList()))
+        sync.await()
+        assertTrue(restore.await().isSuccess)
     }
 
     @Test
