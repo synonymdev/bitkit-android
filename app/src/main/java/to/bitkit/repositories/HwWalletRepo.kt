@@ -259,7 +259,8 @@ class HwWalletRepo @Inject constructor(
     private suspend fun transportDeviceId(walletId: String): String =
         requireNotNull(transportDeviceIdOrNull(walletId)) { "Unknown hardware wallet '$walletId'" }
 
-    suspend fun resetState() = withContext(ioDispatcher) {
+    /** Resets every vendor's state, failing when a hardware wallet credential is left behind. */
+    suspend fun resetState(): Result<Unit> = withContext(ioDispatcher) {
         watcherMutex.withLock {
             activeWatchers.toList().forEach { watcherId ->
                 trezorRepo.stopWatcher(watcherId)
@@ -275,8 +276,9 @@ class HwWalletRepo @Inject constructor(
             emittedReceivedTxIds.clear()
             _watcherData.update { emptyMap() }
         }
-        trezorRepo.resetState()
+        val trezorReset = trezorRepo.resetState()
         jadeRepo.resetState()
+        trezorReset
     }
 
     /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */

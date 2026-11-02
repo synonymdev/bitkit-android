@@ -103,6 +103,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             Result.success(Unit)
         }
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
+        whenever { hwWalletRepo.resetState() }.thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
@@ -342,6 +343,18 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         val result = sut.invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
 
         assertEquals(WipeStep.COMMIT, assertIs<WipeStepFailed>(result.exceptionOrNull()).step)
+        assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should keep the PIN and wipe-pending flag when a hardware wallet credential is kept`() = runTest {
+        whenever(hwWalletRepo.resetState()).thenReturn(Result.failure(IllegalStateException("credential file kept")))
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
+
+        assertEquals(WipeStep.HARDWARE_WALLET, assertIs<WipeStepFailed>(result.exceptionOrNull()).step)
+        verify(keychain, never()).delete(any())
+        verify(keychain, never()).deleteWipePending()
         assertFalse(onSetWalletExistsStateCalled)
     }
 

@@ -52,6 +52,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.async.appScope
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PendingNameUpdate
@@ -122,6 +123,9 @@ class TrezorRepo @Inject constructor(
         private val TRANSPORT_RESTORED_RECONNECT_DELAY = 2.seconds
         private val CONNECT_ATTEMPT_POLL_INTERVAL = 250.milliseconds
         private val CONNECT_ATTEMPT_MAX_WAIT = 28.seconds
+
+        /** Bounds the wait for a connect in flight during a reset; it covers a USB permission dialog left open. */
+        private val RESET_CONNECT_MAX_WAIT = 75.seconds
         private const val MAX_XPUB_FETCH_ATTEMPTS = 3
         private val XPUB_FETCH_RETRY_DELAY = 300.milliseconds
         private val TRANSIENT_FAILURE_MARKERS = listOf(
@@ -208,10 +212,34 @@ class TrezorRepo @Inject constructor(
         trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
     }
 
-    suspend fun resetState() = withContext(ioDispatcher) {
+    /**
+     * Resets all Trezor state, failing when a stored THP credential could not be deleted or a connect in flight, which
+     * could still save one, did not end.
+     */
+    suspend fun resetState(): Result<Unit> = withContext(ioDispatcher) {
+        // A connect in flight that reaches its PIN or pairing prompt after this point is answered at once, so the
+        // wait for it below ends now rather than when the prompt times out
+        trezorUiHandler.refusePinRequests()
+        trezorTransport.refusePairingCodeRequests()
+        try {
+            resetStateRefusingPrompts()
+        } finally {
+            trezorTransport.allowPairingCodeRequests()
+            trezorUiHandler.allowPinRequests()
+        }
+    }
+
+    private suspend fun resetStateRefusingPrompts(): Result<Unit> {
+        cancelPin()
+        cancelPairingCode()
         resetSetup()
         transportReconnectJob?.cancel()
         transportReconnectJob = null
+
+        // After a connect in flight has ended, so a device it saved is cleared too
+        val isConnectEnded = withTimeoutOrNull(RESET_CONNECT_MAX_WAIT) {
+            while (isConnectInProgress()) delay(CONNECT_ATTEMPT_POLL_INTERVAL)
+        } != null
 
         val knownDevices = (_state.value.knownDevices + hwWalletStore.loadKnownDevices(HwWalletVendor.TREZOR))
             .distinctBy { it.id }
@@ -221,11 +249,11 @@ class TrezorRepo @Inject constructor(
         }
 
         knownDevices.forEach { device ->
-            runCatching { trezorTransport.clearDeviceCredential(device.id) }
-                .onFailure { Logger.warn("Failed to clear transport credential for '${device.id}'", it, context = TAG) }
-            runCatching { trezorService.clearCredentials(device.id) }
+            runSuspendCatching { trezorService.clearCredentials(device.id) }
                 .onFailure { Logger.warn("Failed to clear Trezor credentials for '${device.id}'", it, context = TAG) }
         }
+        // Also removes the credential of a device that paired but never became known
+        val credentialsCleared = trezorTransport.clearAllDeviceCredentials()
 
         trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
         hwWalletStore.reset()
@@ -242,6 +270,7 @@ class TrezorRepo @Inject constructor(
                 error = null,
             )
         }
+        return credentialsCleared.mapCatching { check(isConnectEnded) { "Timed out waiting for a connect to end" } }
     }
 
     /**

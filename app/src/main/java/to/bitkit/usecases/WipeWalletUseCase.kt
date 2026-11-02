@@ -125,7 +125,8 @@ class WipeWalletUseCase @Inject constructor(
         step("reset widgets") { widgetsStore.reset() }
         blocktankRepo.resetState()
         activityRepo.resetState()
-        hwWalletRepo.resetState()
+        // A Trezor pairing credential left behind would outlive the wallet
+        requiredStep(WipeStep.HARDWARE_WALLET) { hwWalletRepo.resetState().getOrThrow() }
         resetWalletState()
         // The RN app's seed, passphrase and PIN must not outlive the wallet
         migrationService.removeLegacyAppData()
@@ -172,7 +173,7 @@ class WipeAlreadyInProgress : AppError("Wallet wipe already in progress")
 class WipeIncomplete : AppError("Wallet wipe did not complete, please reset again")
 
 /** The wipe steps that must succeed; [BEGIN] is establishing the durable wipe intent. */
-enum class WipeStep { BEGIN, STOP_NODE, LDK_STORAGE, KEYCHAIN, SETTINGS, PIN, COMMIT }
+enum class WipeStep { BEGIN, STOP_NODE, LDK_STORAGE, KEYCHAIN, SETTINGS, HARDWARE_WALLET, PIN, COMMIT }
 
 class WipeStepFailed(val step: WipeStep, cause: Throwable) : AppError("Failed wipe step '$step'", cause)
 

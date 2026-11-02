@@ -37,6 +37,8 @@ class TrezorUiHandler @Inject constructor() : TrezorUiCallback {
     @Volatile
     private var submittedPin: String = ""
 
+    private var pinRefusals = 0
+
     private val _needsPinEntry = MutableStateFlow(false)
     val needsPinEntry: StateFlow<Boolean> = _needsPinEntry
 
@@ -93,6 +95,10 @@ class TrezorUiHandler @Inject constructor() : TrezorUiCallback {
 
         val latch = CountDownLatch(1)
         synchronized(pinLock) {
+            if (pinRefusals > 0) {
+                Logger.info("Refused PIN entry", context = TAG)
+                return ""
+            }
             submittedPin = ""
             pinLatch = latch
             _needsPinEntry.update { true }
@@ -155,4 +161,16 @@ class TrezorUiHandler @Inject constructor() : TrezorUiCallback {
     }
 
     fun cancelPin() = run { submitPin("") }
+
+    /**
+     * Answers every PIN request with an empty PIN at once, showing none, until a matching [allowPinRequests], so a
+     * connect that reaches its PIN prompt during a wallet wipe ends now instead of waiting for an entry nobody makes.
+     */
+    fun refusePinRequests() {
+        synchronized(pinLock) { pinRefusals++ }
+    }
+
+    fun allowPinRequests() {
+        synchronized(pinLock) { pinRefusals = (pinRefusals - 1).coerceAtLeast(0) }
+    }
 }

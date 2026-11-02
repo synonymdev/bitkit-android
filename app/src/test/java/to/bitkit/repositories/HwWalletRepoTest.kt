@@ -1836,6 +1836,17 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `resetState fails when the Trezor reset keeps a credential, after resetting Jade`() = test {
+        whenever(trezorRepo.resetState()).thenReturn(Result.failure(IllegalStateException("credential file kept")))
+        val sut = createRepo()
+
+        val result = sut.resetState()
+
+        assertTrue(result.isFailure)
+        verify(jadeRepo).resetState()
+    }
+
+    @Test
     fun `resetState clears store and stops active watchers`() = test {
         storeData.value = HwWalletData(
             knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))

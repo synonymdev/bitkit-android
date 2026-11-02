@@ -15,10 +15,13 @@ import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.TrezorTransportWriteResult
 import com.synonym.bitkitcore.WalletSelection
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -27,7 +30,9 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -52,9 +57,12 @@ import to.bitkit.services.TrezorUiHandler
 import to.bitkit.services.TrezorWalletMode
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -74,6 +82,9 @@ class TrezorRepoTest : BaseUnitTest() {
         private const val TEST_SIGNATURE = "signature123"
         private const val TEST_ADDRESS = "bc1qtest"
         private const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
+        private const val PIN_ANSWER_WAIT_SECONDS = 5L
+        private const val PIN_ENTRY_POLLS = 500
+        private const val PIN_ENTRY_POLL_MS = 10L
 
         /** The address types the store keys account xpubs by. */
         private val ALL_ADDRESS_TYPE_KEYS = listOf("legacy", "nestedSegwit", "nativeSegwit", "taproot")
@@ -108,6 +119,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorTransport.disconnectDevice(any())).thenReturn(
             TrezorTransportWriteResult(success = true, error = "", errorCode = null)
         )
+        whenever(trezorTransport.clearAllDeviceCredentials()).thenReturn(Result.success(Unit))
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
         whenever(settingsStore.data).thenReturn(settingsData)
@@ -119,11 +131,11 @@ class TrezorRepoTest : BaseUnitTest() {
         stubAccountXpubFetch()
     }
 
-    private fun createSut(): TrezorRepo = TrezorRepo(
+    private fun createSut(uiHandler: TrezorUiHandler = trezorUiHandler): TrezorRepo = TrezorRepo(
         context = context,
         trezorService = trezorService,
         trezorTransport = trezorTransport,
-        trezorUiHandler = trezorUiHandler,
+        trezorUiHandler = uiHandler,
         hwWalletStore = hwWalletStore,
         settingsStore = settingsStore,
         clock = Clock.System,
@@ -187,6 +199,14 @@ class TrezorRepoTest : BaseUnitTest() {
             depth = 3u,
             rootFingerprint = 0u,
         )
+    }
+
+    private fun awaitPinEntry(uiHandler: TrezorUiHandler): Boolean {
+        repeat(PIN_ENTRY_POLLS) {
+            if (uiHandler.needsPinEntry.value) return true
+            Thread.sleep(PIN_ENTRY_POLL_MS)
+        }
+        return false
     }
 
     private fun stubAccountXpubFetch() {
@@ -1493,6 +1513,148 @@ class TrezorRepoTest : BaseUnitTest() {
     // region resetState
 
     @Test
+    fun `resetState releases a pending PIN entry of a connect in progress`() = test {
+        sut = createSut()
+
+        sut.resetState()
+
+        verify(trezorUiHandler).cancelPin()
+        verify(trezorService, never()).disconnect()
+    }
+
+    @Test
+    fun `resetState refuses the PIN prompt a connect reaches after the wipe began`() = test {
+        val uiHandler = TrezorUiHandler()
+        val connectStarted = CompletableDeferred<Unit>()
+        val promptReached = CompletableDeferred<Unit>()
+        val pinAnswers = mutableListOf<String?>()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).doSuspendableAnswer {
+            connectStarted.complete(Unit)
+            promptReached.await()
+            val answer = CompletableFuture.supplyAsync { uiHandler.onPinRequest() }
+            pinAnswers += runCatching { answer.get(PIN_ANSWER_WAIT_SECONDS, TimeUnit.SECONDS) }.getOrNull()
+            throw TrezorException.PinCancelled()
+        }
+        sut = createSut(uiHandler = uiHandler)
+        sut.initialize()
+        val connect = async { sut.connect(DEVICE_ID) }
+        connectStarted.await()
+
+        val reset = async { sut.resetState() }
+        runCurrent()
+        promptReached.complete(Unit)
+
+        assertTrue(connect.await().isFailure)
+        assertTrue(reset.await().isSuccess)
+        assertTrue(pinAnswers.isNotEmpty())
+        assertTrue(pinAnswers.all { it == "" }, "Every PIN prompt during the wipe is answered at once")
+        assertFalse(uiHandler.needsPinEntry.value)
+
+        val nextAnswer = CompletableFuture.supplyAsync { uiHandler.onPinRequest() }
+        assertTrue(awaitPinEntry(uiHandler), "PIN requests are shown again once the reset completed")
+        uiHandler.cancelPin()
+        assertEquals("", nextAnswer.get(PIN_ANSWER_WAIT_SECONDS, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun `resetState refuses PIN and pairing prompts until it completes`() = test {
+        sut = createSut()
+
+        sut.resetState()
+
+        inOrder(trezorTransport, trezorUiHandler, hwWalletStore) {
+            verify(trezorUiHandler).refusePinRequests()
+            verify(trezorTransport).refusePairingCodeRequests()
+            verify(trezorUiHandler).cancelPin()
+            verify(trezorTransport).cancelPairingCode()
+            verify(hwWalletStore).reset()
+            verify(trezorTransport).allowPairingCodeRequests()
+            verify(trezorUiHandler).allowPinRequests()
+        }
+    }
+
+    @Test
+    fun `resetState allows PIN and pairing requests again when it fails`() = test {
+        whenever(hwWalletStore.reset()).thenThrow(IllegalStateException("store unwritable"))
+        sut = createSut()
+
+        assertFailsWith<IllegalStateException> { sut.resetState() }
+
+        verify(trezorTransport).allowPairingCodeRequests()
+        verify(trezorUiHandler).allowPinRequests()
+    }
+
+    @Test
+    fun `resetState clears the credentials of devices that never became known`() = test {
+        sut = createSut()
+
+        sut.resetState()
+
+        verify(trezorTransport).clearAllDeviceCredentials()
+    }
+
+    @Test
+    fun `resetState fails but still resets the rest when a credential cannot be deleted`() = test {
+        whenever(trezorTransport.clearAllDeviceCredentials())
+            .thenReturn(Result.failure(IllegalStateException("credential file kept")))
+        sut = createSut()
+
+        val result = sut.resetState()
+
+        assertIs<IllegalStateException>(result.exceptionOrNull())
+        verify(hwWalletStore).reset()
+        verify(trezorTransport).allowPairingCodeRequests()
+        verify(trezorUiHandler).allowPinRequests()
+    }
+
+    @Test
+    fun `resetState clears credentials only once a connect in flight has ended`() = test {
+        val connectStarted = CompletableDeferred<Unit>()
+        val releaseConnect = CompletableDeferred<Unit>()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).doSuspendableAnswer {
+            connectStarted.complete(Unit)
+            releaseConnect.await()
+            throw TrezorException.PinCancelled()
+        }
+        sut = createSut()
+        sut.initialize()
+        val connect = async { sut.connect(DEVICE_ID) }
+        connectStarted.await()
+
+        val reset = async { sut.resetState() }
+        runCurrent()
+        verify(trezorTransport, never()).clearAllDeviceCredentials()
+
+        releaseConnect.complete(Unit)
+        assertTrue(connect.await().isFailure)
+        assertTrue(reset.await().isSuccess)
+        verify(trezorTransport).clearAllDeviceCredentials()
+    }
+
+    @Test
+    fun `resetState fails when a connect in flight does not end in time`() = test {
+        val connectStarted = CompletableDeferred<Unit>()
+        val releaseConnect = CompletableDeferred<Unit>()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).doSuspendableAnswer {
+            connectStarted.complete(Unit)
+            releaseConnect.await()
+            throw TrezorException.PinCancelled()
+        }
+        sut = createSut()
+        sut.initialize()
+        val connect = async { sut.connect(DEVICE_ID) }
+        connectStarted.await()
+
+        val result = sut.resetState()
+
+        assertTrue(result.isFailure)
+        verify(trezorTransport).clearAllDeviceCredentials()
+        verify(hwWalletStore).reset()
+        releaseConnect.complete(Unit)
+        connect.await()
+    }
+
+    @Test
     fun `resetState clears known devices and credentials`() = test {
         val knownDevice = mockKnownDevice()
         whenever(hwWalletStore.loadKnownDevices(HwWalletVendor.TREZOR)).thenReturn(listOf(knownDevice))
@@ -1504,7 +1666,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(sut.state.value.knownDevices.isEmpty())
         assertTrue(sut.state.value.nearbyDevices.isEmpty())
         assertNull(sut.state.value.connectedDevice())
-        verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
+        verify(trezorTransport).clearAllDeviceCredentials()
         verify(trezorService).clearCredentials(DEVICE_ID)
         verify(hwWalletStore).reset()
     }
