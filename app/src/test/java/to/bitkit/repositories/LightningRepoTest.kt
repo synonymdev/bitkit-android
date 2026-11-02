@@ -1453,6 +1453,20 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lastKnownChannels should keep channels when synced while stopped`() = test {
+        val channels = listOf(createChannelDetails().copy(channelId = "channel_1"))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(channels)
+        sut.syncState()
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+
+        sut.syncState()
+
+        assertEquals(channels, sut.lastKnownChannels.value)
+    }
+
+    @Test
     fun `lastKnownChannels should be empty after storage wipe`() = test {
         startNodeForTesting()
         whenever(lightningService.channels).thenReturn(listOf(createChannelDetails()))

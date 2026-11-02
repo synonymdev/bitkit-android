@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -2116,13 +2117,13 @@ class LightningRepo @Inject constructor(
     suspend fun refreshChannelsAndPeers(onRefreshed: () -> Unit = {}): Result<Unit> = withContext(bgDispatcher) {
         if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext Result.success(Unit)
         runCatching {
-            _lightningState.update {
+            val committed = _lightningState.updateAndGet {
                 it.copy(
                     peers = getPeers().orEmpty().toImmutableList(),
                     channels = getChannels().orEmpty().toImmutableList(),
                 )
             }
-            publishLastKnownChannels()
+            if (committed.nodeLifecycleState.isRunning()) publishLastKnownChannels()
             onRefreshed()
         }.onSuccess {
             refreshFailureLogged.set(false)
@@ -2134,7 +2135,7 @@ class LightningRepo @Inject constructor(
     }
 
     fun syncState() {
-        _lightningState.update {
+        val committed = _lightningState.updateAndGet {
             it.copy(
                 nodeId = getNodeId().orEmpty(),
                 nodeStatus = getStatus(),
@@ -2143,7 +2144,7 @@ class LightningRepo @Inject constructor(
                 balances = getBalances(),
             )
         }
-        publishLastKnownChannels()
+        if (committed.nodeLifecycleState.isRunning()) publishLastKnownChannels()
         if (_lightningState.value.nodeLifecycleState.isRunning()) scheduleOrdinaryFollowupRetry()
     }
 
