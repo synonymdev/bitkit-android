@@ -2353,6 +2353,10 @@ class LightningRepo @Inject constructor(
         return isRunning && (lightningService.canReceive() || arkadeRepo.canReceive())
     }
 
+    /** Whether Arkade can take Lightning receives, through its Lightning address when no amount is set. */
+    fun canReceiveWithArkade(): Boolean =
+        _lightningState.value.nodeLifecycleState.isRunning() && arkadeRepo.canReceive()
+
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,
         satsPerVByte: ULong,

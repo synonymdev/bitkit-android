@@ -10999,6 +10999,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `contact Lightning address keeps its onchain endpoint`() = test {
+        val lnurl = "lnurl1contact"
+        whenever(coreService.decode(lnurl)).thenReturn(
+            Scanner.LnurlPay(
+                LnurlPayData(lnurl, "https://example.com/callback", 1uL, 100_000uL, "[]", null, false, null),
+            ),
+        )
+        whenever(coreService.decode(REGTEST_ADDRESS)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 0u, null, null, null)),
+        )
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        sut.openContactPayment(
+            paymentRequest = lnurl,
+            publicKey = testPublicKey,
+            endpoints = listOf(
+                Endpoint(MethodId.Lnurl, lnurl, rawPayload = ""),
+                Endpoint(MethodId.P2wpkh, REGTEST_ADDRESS, rawPayload = ""),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(REGTEST_ADDRESS, sut.sendUiState.value.address)
+        assertTrue(sut.sendUiState.value.lnurl is LnurlParams.LnurlPay)
+    }
+
+    @Test
     fun `lightning send rejects an invoice amount different from the reviewed amount`() = test {
         val bolt11 = "lnbcrt1contactfixed"
         setActiveContactPaymentContext(testPublicKey)

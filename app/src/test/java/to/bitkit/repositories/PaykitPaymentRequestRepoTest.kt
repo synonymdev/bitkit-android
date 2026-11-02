@@ -2655,6 +2655,22 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `requests accept the Arkade Lightning address alongside bolt11`() = test {
+        val settings = SettingsData(publicPaykitLightningEnabled = true)
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+
+        whenever(lightningRepo.canReceiveWithArkade()).thenReturn(true)
+        val withArkade = sut.acceptedPaymentEndpointIdentifiers(settings)
+        assertTrue(MethodId.Lnurl.rawValue in withArkade)
+        assertTrue(MethodId.Bolt11.rawValue in withArkade)
+
+        whenever(lightningRepo.canReceiveWithArkade()).thenReturn(false)
+        val channelsOnly = sut.acceptedPaymentEndpointIdentifiers(settings)
+        assertFalse(MethodId.Lnurl.rawValue in channelsOnly)
+        assertTrue(MethodId.Bolt11.rawValue in channelsOnly)
+    }
+
+    @Test
     fun `proposal uses canonical terms and accepts available selected methods`() = test {
         val target =
             stubProposal(paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE, counterparty = COUNTERPARTY))

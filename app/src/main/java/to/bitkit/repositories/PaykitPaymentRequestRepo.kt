@@ -1736,6 +1736,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 MethodId.Bolt11.rawValue
             )
         }
+        if (lightningRepo.canReceiveWithArkade() && PublicPaykitRepo.isLightningPaymentOptionEnabled(settings)) {
+            add(MethodId.Lnurl.rawValue)
+        }
         if (PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) {
             addAll(MethodId.entries.filter { it.isOnchain }.map(MethodId::rawValue))
         }

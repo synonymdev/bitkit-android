@@ -4974,6 +4974,11 @@ class AppViewModel @Inject constructor(
     private fun requiresPaykitAssetSelection(payment: ContactPaymentContext): Boolean =
         payment.endpoints.isNotEmpty() && (
             payment.endpoints.any { it.methodId == MethodId.UsdtArbitrum } ||
+                // A bare LNURL payment request would drop the on-chain endpoint next to it.
+                (
+                    payment.endpoints.any { it.methodId == MethodId.Lnurl } &&
+                        payment.endpoints.any { it.methodId.isOnchain }
+                    ) ||
                 payment.incomingPaymentRequest?.let {
                     it.amount.asset != PaykitAsset.BTC || it.pricing.conversion != null
                 } == true

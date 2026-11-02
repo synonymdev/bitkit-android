@@ -1889,16 +1889,10 @@ class PrivatePaykitRepo @Inject constructor(
             }
 
             if (PublicPaykitRepo.isLightningPaymentOptionEnabled(settings) && lightningRepo.canReceive()) {
-                currentOrRotatedInvoice(
+                currentOrRotatedLightningEndpoint(
                     publicKey,
                     forceRefresh = forceRefreshLightning,
-                ).onSuccess { invoice ->
-                    endpoints += Endpoint(
-                        methodId = MethodId.Bolt11,
-                        value = invoice.bolt11,
-                        rawPayload = PublicPaykitRepo.serializePayload(invoice.bolt11),
-                    )
-                }.onFailure {
+                ).onSuccess { endpoints += it }.onFailure {
                     if (it !is PrivatePaykitError.RouteHintsUnavailable) throw it
                     Logger.warn(
                         "Failed to prepare private Paykit invoice for '${redacted(publicKey)}'",
@@ -1912,22 +1906,30 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    private suspend fun currentOrRotatedInvoice(
+    private suspend fun currentOrRotatedLightningEndpoint(
         publicKey: String,
         forceRefresh: Boolean = false,
-    ): Result<StoredInvoice> = withContext(serializedDispatcher) {
+    ): Result<Endpoint> = withContext(serializedDispatcher) {
         runSuspendCatching {
-            if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it }
+            if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it.endpoint() }
 
             val bolt11 = lightningRepo.createInvoice(
                 amountSats = null,
                 description = "",
                 expirySeconds = privateInvoiceExpiry.inWholeSeconds.toUInt(),
             ).getOrThrow()
-            if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it }
+            if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it.endpoint() }
 
-            val decoded = (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice
-                ?: throw PublicPaykitError.InvalidPayload
+            val scan = coreService.decode(bolt11)
+            // Arkade has no amountless invoice: it answers with its Lightning address instead.
+            if (scan is Scanner.LnurlPay) {
+                return@runSuspendCatching Endpoint(
+                    methodId = MethodId.Lnurl,
+                    value = bolt11,
+                    rawPayload = PublicPaykitRepo.serializePayload(bolt11),
+                )
+            }
+            val decoded = (scan as? Scanner.Lightning)?.invoice ?: throw PublicPaykitError.InvalidPayload
             if (!PublicPaykitRepo.hasLightningRouteHints(bolt11)) {
                 throw PrivatePaykitError.RouteHintsUnavailable
             }
@@ -1939,9 +1941,15 @@ class PrivatePaykitRepo @Inject constructor(
             )
             setLocalInvoice(publicKey, invoice)
             persistState()
-            invoice
+            invoice.endpoint()
         }
     }
+
+    private fun StoredInvoice.endpoint() = Endpoint(
+        methodId = MethodId.Bolt11,
+        value = bolt11,
+        rawPayload = PublicPaykitRepo.serializePayload(bolt11),
+    )
 
     private suspend fun reusablePrivateInvoice(
         publicKey: String,

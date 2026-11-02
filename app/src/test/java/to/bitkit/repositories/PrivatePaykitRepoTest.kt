@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import android.app.Activity
 import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.UsdtPaymentRequest
@@ -2206,6 +2207,38 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(MethodId.Bolt11.rawValue, reservation.identifier)
         assertEquals(PublicPaykitRepo.serializePayload(PRIVATE_BOLT11), reservation.payload)
         assertEquals("090909", reservation.attribution["payment_hash"])
+    }
+
+    @Test
+    fun `prepareSavedContacts publishes the Arkade Lightning address next to on-chain`() = test {
+        settingsData.value = SettingsData(
+            publicPaykitUsdtEnabled = false,
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = true,
+            publicPaykitOnchainEnabled = true,
+        )
+        val lnurl = "lnurl1arkade"
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.createInvoice(null, "", PRIVATE_BOLT11_EXPIRY_SECONDS))
+            .thenReturn(Result.success(lnurl))
+        whenever(coreService.decode(lnurl)).thenReturn(
+            Scanner.LnurlPay(LnurlPayData(lnurl, "https://example.com/callback", 1uL, 1_000uL, "[]", null, false, null))
+        )
+
+        val result = sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        val captor = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verifyBlocking(paykitSdkService) { syncPrivatePaymentListsWithReservations(captor.capture(), eq(false)) }
+        val reservations = captor.firstValue.single().reservations
+        assertEquals(
+            setOf(MethodId.P2wpkh.rawValue, MethodId.Lnurl.rawValue),
+            reservations.map { it.identifier }.toSet(),
+        )
+        val reservation = reservations.single { it.identifier == MethodId.Lnurl.rawValue }
+        assertEquals(PublicPaykitRepo.serializePayload(lnurl), reservation.payload)
+        assertNull(reservation.expiresAt)
+        assertNull(reservation.attribution["payment_hash"])
     }
 
     @Test
