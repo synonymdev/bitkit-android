@@ -482,7 +482,9 @@
     <string name="security__wipe_app">مسح التطبيق</string>
     <string name="security__wipe_blocked_text">لا يستطيع Bitkit التحقق من حالة الأمان الخاصة به، لذا تبقى محفظتك مقفلة. اضغط على «إعادة المحاولة» للتحقق مرة أخرى، أو صدّر السجلات لفريق الدعم.</string>
     <string name="security__wipe_blocked_title">المحفظة مقفلة</string>
+    <string name="security__wipe_clear_storage_text">إذا استمر حدوث ذلك، امسح تخزين Bitkit من إعدادات Android › التطبيقات › Bitkit › التخزين، ثم استعد محفظتك باستخدام عبارة الاسترداد.</string>
     <string name="security__wipe_failed_text">تعذر على Bitkit إكمال حذف بيانات محفظتك وسيحاول مرة أخرى. أبقِ Bitkit مفتوحًا، أو اضغط على «إعادة المحاولة».</string>
+    <string name="security__wipe_incomplete_text">تمت إعادة تعيين Bitkit، لكن تعذر حذف بعض بيانات محفظة USDT من هذا الجهاز.</string>
     <string name="security__wipe_not_started">تعذر بدء إعادة التعيين. لم يُحذف أي شيء.</string>
     <string name="security__wipe_running_text">يحذف Bitkit جميع بيانات المحفظة من هذا الجهاز. أبقِ Bitkit مفتوحًا حتى تنتهي العملية.</string>
     <string name="security__wipe_title">جارٍ إعادة تعيين Bitkit</string>

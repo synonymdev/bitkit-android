@@ -497,7 +497,9 @@
     <string name="security__wipe_app">Esborra l\'aplicació</string>
     <string name="security__wipe_blocked_text">Bitkit no pot verificar el seu estat de seguretat, així que la teva cartera continua bloquejada. Toca Reintentar per tornar-ho a comprovar, o exporta els registres per al suport.</string>
     <string name="security__wipe_blocked_title">Cartera bloquejada</string>
+    <string name="security__wipe_clear_storage_text">Si continua passant, esborra l\'emmagatzematge de Bitkit a Configuració d\'Android › Aplicacions › Bitkit › Emmagatzematge i després restaura el teu moneder amb la frase de recuperació.</string>
     <string name="security__wipe_failed_text">Bitkit no ha pogut acabar d\'esborrar les dades de la teva cartera i ho tornarà a intentar. Mantén Bitkit obert o toca Reintentar.</string>
+    <string name="security__wipe_incomplete_text">S\'ha restablert Bitkit, però no s\'han pogut eliminar algunes dades del moneder USDT d\'aquest dispositiu.</string>
     <string name="security__wipe_not_started">No s\'ha pogut iniciar el restabliment. No s\'ha eliminat res.</string>
     <string name="security__wipe_running_text">Bitkit està esborrant totes les dades de la cartera d\'aquest dispositiu. Mantén Bitkit obert fins que acabi.</string>
     <string name="security__wipe_title">Restablint Bitkit</string>

@@ -515,7 +515,9 @@
     <string name="security__wipe_app">Сбросить Приложение</string>
     <string name="security__wipe_blocked_text">Bitkit не может проверить состояние своей безопасности, поэтому ваш кошелёк остаётся заблокированным. Нажмите «Повторить», чтобы проверить снова, или экспортируйте логи для поддержки.</string>
     <string name="security__wipe_blocked_title">Кошелёк Заблокирован</string>
+    <string name="security__wipe_clear_storage_text">Если это повторяется, очистите хранилище Bitkit в настройках Android › Приложения › Bitkit › Хранилище, а затем восстановите кошелёк с помощью фразы восстановления.</string>
     <string name="security__wipe_failed_text">Bitkit не смог завершить удаление данных вашего кошелька и попробует снова. Не закрывайте Bitkit или нажмите «Повторить».</string>
+    <string name="security__wipe_incomplete_text">Bitkit сброшен, но некоторые данные кошелька USDT не удалось удалить с этого устройства.</string>
     <string name="security__wipe_not_started">Не удалось начать сброс. Ничего не было удалено.</string>
     <string name="security__wipe_running_text">Bitkit удаляет все данные кошелька с этого устройства. Не закрывайте Bitkit, пока процесс не завершится.</string>
     <string name="security__wipe_title">Сброс Bitkit</string>

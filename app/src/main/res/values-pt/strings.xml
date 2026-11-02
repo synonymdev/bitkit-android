@@ -472,7 +472,9 @@
     <string name="security__wipe_app">Limpar Aplicativo</string>
     <string name="security__wipe_blocked_text">A Bitkit não consegue verificar o seu estado de segurança, pelo que a sua carteira continua bloqueada. Toque em Tentar novamente para verificar outra vez, ou exporte os logs para o suporte.</string>
     <string name="security__wipe_blocked_title">Carteira bloqueada</string>
+    <string name="security__wipe_clear_storage_text">Se isto continuar a acontecer, limpe o armazenamento do Bitkit em Definições do Android › Aplicações › Bitkit › Armazenamento e depois restaure a sua carteira com a sua frase de recuperação.</string>
     <string name="security__wipe_failed_text">A Bitkit não conseguiu concluir a eliminação dos dados da sua carteira e vai tentar novamente. Mantenha a Bitkit aberta ou toque em Tentar novamente.</string>
+    <string name="security__wipe_incomplete_text">O Bitkit foi reposto, mas não foi possível eliminar alguns dados da carteira USDT deste dispositivo.</string>
     <string name="security__wipe_not_started">Não foi possível iniciar a redefinição. Nada foi eliminado.</string>
     <string name="security__wipe_running_text">A Bitkit está a eliminar todos os dados da carteira deste dispositivo. Mantenha a Bitkit aberta até terminar.</string>
     <string name="security__wipe_title">A redefinir a Bitkit</string>

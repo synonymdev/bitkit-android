@@ -32,6 +32,8 @@ class WipeGateViewModel @Inject constructor(
 
     fun onRetry() = wipeCoordinator.retry()
 
+    fun onReset() = wipeCoordinator.reset()
+
     fun zipLogsForSharing(onReady: (Uri) -> Unit) {
         viewModelScope.launch {
             logsRepo.zipLogsForSharing()
@@ -49,6 +51,7 @@ class WipeGateViewModel @Inject constructor(
     private fun WipeState.toUiState() = when (this) {
         is WipeState.Failed -> WipeGateUiState(mode = WipeGateMode.FAILED, failedStep = step?.name)
         is WipeState.Blocked -> WipeGateUiState(mode = WipeGateMode.BLOCKED)
+        WipeState.Checking -> WipeGateUiState(mode = WipeGateMode.CHECKING)
         WipeState.Idle, WipeState.Running -> WipeGateUiState(mode = WipeGateMode.RUNNING)
     }
 }
@@ -59,4 +62,4 @@ data class WipeGateUiState(
     val failedStep: String? = null,
 )
 
-enum class WipeGateMode { RUNNING, FAILED, BLOCKED }
+enum class WipeGateMode { CHECKING, RUNNING, FAILED, BLOCKED }

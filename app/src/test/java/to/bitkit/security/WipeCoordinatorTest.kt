@@ -9,6 +9,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -54,7 +55,6 @@ class WipeCoordinatorTest : BaseUnitTest() {
 
     private lateinit var sut: WipeCoordinator
 
-    /** Stands in for the wipe steps; the real ones delete the flag last when they succeed. */
     private var wipe: suspend () -> Result<Unit> = { completeWipe() }
 
     @Before
@@ -461,14 +461,14 @@ class WipeCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
-    fun `an exhausted counter raises the gate before launch returns`() = test {
+    fun `an exhausted counter keeps the gate up from launch until the wipe completes`() = test {
         store.pin = "1234"
         store.attempts = "0"
         val coordinator = newProcess(StandardTestDispatcher(testScheduler))
 
         coordinator.resumeAtLaunch()
 
-        assertEquals(WipeState.Running, coordinator.state.value)
+        assertEquals(WipeState.Checking, coordinator.state.value)
         verify(keychain, never()).saveWipePending(any())
 
         testScheduler.runCurrent()
@@ -499,5 +499,112 @@ class WipeCoordinatorTest : BaseUnitTest() {
 
         assertEquals(WipeState.Idle, sut.state.value)
         verify(walletRepo, times(1)).wipeWallet(any())
+    }
+
+    @Test
+    fun `launch reads only the wipe intent on the calling thread and checks the PIN attempts behind the gate`() =
+        test {
+            store.pin = "1234"
+            store.attempts = "8"
+            val coordinator = newProcess(StandardTestDispatcher(testScheduler))
+
+            coordinator.resumeAtLaunch()
+
+            assertEquals(WipeState.Checking, coordinator.state.value)
+            verify(keychain).loadWipePending()
+            verify(keychain, never()).exists(any())
+            verify(keychain, never()).loadString(any())
+
+            testScheduler.runCurrent()
+            assertEquals(WipeState.Idle, coordinator.state.value)
+            verify(walletRepo, never()).setWalletExistsState()
+        }
+
+    @Test
+    fun `retry while unlocked reads the wipe intent off the calling thread`() = test {
+        val coordinator = newProcess(StandardTestDispatcher(testScheduler))
+        store.wipePending = PENDING_RESET
+
+        coordinator.retry()
+
+        verify(keychain, never()).loadWipePending()
+        testScheduler.runCurrent()
+        verify(walletRepo).wipeWallet(any())
+    }
+
+    @Test
+    fun `an unexpected wipe error fails the attempt instead of leaving it running`() = test {
+        store.wipePending = PENDING_RESET
+        wipe = { throw IllegalStateException("unexpected") }
+
+        sut.resumeAtLaunch()
+
+        assertIs<WipeState.Failed>(sut.state.value)
+        wipe = { completeWipe() }
+        sut.retry()
+        assertEquals(WipeState.Idle, sut.state.value)
+    }
+
+    @Test
+    fun `a timeout inside the wipe fails the attempt instead of ending the retries`() = test {
+        store.wipePending = PENDING_RESET
+        wipe = { withTimeout(1.seconds) { awaitCancellation() } }
+
+        sut.resumeAtLaunch()
+        advanceBy(1)
+
+        assertIs<WipeState.Failed>(sut.state.value)
+        wipe = { completeWipe() }
+        advanceBy(5)
+        assertEquals(WipeState.Idle, sut.state.value)
+    }
+
+    @Test
+    fun `reset from a blocked gate wipes the wallet and lowers the gate only once it completes`() = test {
+        store.pin = "1234"
+        store.attempts = "8"
+        whenever(keychain.exists(PIN_KEY)).thenAnswer { throw IOException() }
+        sut.resumeAtLaunch()
+        assertIs<WipeState.Blocked>(sut.state.value)
+        wipe = { awaitCancellation() }
+
+        sut.reset()
+
+        assertEquals(WipeState.Running, sut.state.value)
+        assertTrue(store.wipePending.orEmpty().contains("userReset"))
+        verify(walletRepo).wipeWallet(any())
+    }
+
+    @Test
+    fun `reset with an unreadable intent tries to write one and fails without wiping`() = test {
+        val readError = KeychainError.FailedToLoad(InMemoryKeychain.WIPE_PENDING)
+        whenever(keychain.loadWipePending()).thenAnswer { throw readError }
+        sut.resumeAtLaunch()
+        assertIs<WipeState.Blocked>(sut.state.value)
+
+        sut.reset()
+
+        assertEquals(WipeStep.BEGIN, assertIs<WipeState.Failed>(sut.state.value).step)
+        verify(keychain).saveWipePending(any())
+        verify(walletRepo, never()).wipeWallet(any())
+    }
+
+    @Test
+    fun `reset does nothing while the app is unlocked`() = test {
+        sut.reset()
+
+        assertEquals(WipeState.Idle, sut.state.value)
+        verify(keychain, never()).saveWipePending(any())
+    }
+
+    @Test
+    fun `an unreadable wallet state raises the gate until it reads again`() = test {
+        sut.block(KeychainError.FailedToLoad("BIP39_MNEMONIC"))
+
+        assertIs<WipeState.Blocked>(sut.state.value)
+        advanceBy(5)
+        assertEquals(WipeState.Idle, sut.state.value)
+        verify(walletRepo).setWalletExistsState()
+        verify(walletRepo, never()).wipeWallet(any())
     }
 }

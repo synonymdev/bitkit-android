@@ -6,6 +6,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +34,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -69,17 +72,14 @@ class WipeCoordinator @Inject constructor(
     private val retryRequests = Channel<Unit>(Channel.CONFLATED)
 
     @Volatile
-    private var isForcedWipeRequested = false
-
-    @Volatile
-    private var isProcessLockedOut = false
+    private var forcedWipeReason: WipeReason? = null
 
     /**
-     * Raises the gate for a pending or unreadable intent, or for PIN attempts that were used up before the intent
-     * existed or cannot be read, before anything can show the wallet or start the node.
+     * Raises the gate before anything can show the wallet or start the node. Only the fixed-key wipe intent is read
+     * on the calling thread; the PIN attempts check, which opens the database, runs in the background behind the gate.
      */
     fun resumeAtLaunch() {
-        if (!raiseGate(readIntent()) && applyPinAttemptsState() == PinAttemptsState.NotExhausted) return
+        if (!raiseGate(readIntent())) _state.update { WipeState.Checking }
         launchAttempts()
     }
 
@@ -90,7 +90,7 @@ class WipeCoordinator @Inject constructor(
     suspend fun begin(reason: WipeReason): Result<Unit> {
         val isForced = reason == WipeReason.PIN_ATTEMPTS_EXCEEDED
         if (isForced) {
-            isForcedWipeRequested = true
+            forcedWipeReason = reason
             _state.update { if (it.isGateUp) it else WipeState.Running }
         } else if (_state.value.isGateUp) {
             launchAttempts()
@@ -110,23 +110,37 @@ class WipeCoordinator @Inject constructor(
         return result
     }
 
-    /** Locks this process without starting a wipe, for a PIN attempt that could not be recorded. */
-    fun lockOut(error: Throwable) {
-        isProcessLockedOut = true
-        _state.update { if (it.isGateUp) it else WipeState.Blocked(error) }
-    }
-
     /**
-     * Retries a failed wipe or re-reads an unreadable intent right away, and resumes a pending or unreadable intent
-     * that has no attempt running.
+     * Retries a failed wipe or re-reads an unreadable state right away, resumes an attempt that is no longer running,
+     * and raises the gate for a pending or unreadable intent found while the app is unlocked.
      */
     fun retry() {
         when (_state.value) {
             is WipeState.Failed, is WipeState.Blocked -> retryRequests.trySend(Unit)
-            WipeState.Running -> Unit
-            WipeState.Idle -> if (!raiseGate(readIntent())) return
+            WipeState.Running, WipeState.Checking -> Unit
+            WipeState.Idle -> {
+                scope.launch { if (raiseGate(readIntent())) launchAttempts() }
+                return
+            }
         }
         launchAttempts()
+    }
+
+    /**
+     * Starts over from a gate that cannot be passed, by wiping the wallet as Forgot PIN would. Only a wipe can lower
+     * the gate this way, so it keeps the app locked until the wipe completes.
+     */
+    fun reset() {
+        if (_state.value !is WipeState.Blocked && _state.value !is WipeState.Failed) return
+        Logger.warn("Resetting the wallet from the wipe gate", context = TAG)
+        forcedWipeReason = forcedWipeReason ?: WipeReason.USER_RESET
+        retry()
+    }
+
+    /** Locks the app behind the gate for a wallet state that could not be read, until a read succeeds. */
+    fun block(error: Throwable) {
+        _state.update { if (it == WipeState.Idle || it == WipeState.Checking) WipeState.Blocked(error) else it }
+        launchAttempts(isRetry = true)
     }
 
     fun readIntent(): WipeIntentState = runCatching { keychain.loadWipePending() }.fold(
@@ -147,59 +161,84 @@ class WipeCoordinator @Inject constructor(
         if (job?.isActive == true) return@synchronized
         job = scope.launch {
             retryRequests.tryReceive()
-            if (!isRetry && attempt()) return@launch
+            if (!isRetry && attemptOrFail()) return@launch
             for (wait in RETRY_DELAYS) {
                 withTimeoutOrNull(wait) { retryRequests.receive() }
-                if (attempt()) return@launch
+                if (attemptOrFail()) return@launch
             }
         }
     }
 
+    private suspend fun attemptOrFail(): Boolean = runCatching { attempt() }.getOrElse { error ->
+        // Only this scope's own cancellation ends the attempts; any other error, a timeout too, is a failed attempt
+        if (error is CancellationException) currentCoroutineContext().ensureActive()
+        Logger.error("Failed wallet wipe attempt", error, context = TAG)
+        _state.update { if (it is WipeState.Running) WipeState.Failed(null, error) else WipeState.Blocked(error) }
+        false
+    }
+
     private suspend fun attempt(): Boolean = when (val intent = readIntent()) {
         is WipeIntentState.Confirmed -> wipe(intent.reason)
+
+        // An intent that cannot be read may still be writable, and the wipe that follows clears the unreadable state
+        is WipeIntentState.Unknown if forcedWipeReason != null -> forcedWipe()
+
         is WipeIntentState.Unknown -> {
             Logger.warn("Failed to read wipe intent", intent.error, context = TAG)
             _state.update { WipeState.Blocked(intent.error) }
             false
         }
 
-        WipeIntentState.None if isForcedWipeRequested -> forcedWipe()
+        WipeIntentState.None if forcedWipeReason != null -> forcedWipe()
 
         // A launch that could not read the intent skipped the PIN attempts check, so it runs here instead
         WipeIntentState.None -> when (applyPinAttemptsState()) {
             PinAttemptsState.Exhausted -> forcedWipe()
             is PinAttemptsState.Unreadable -> false
-            PinAttemptsState.NotExhausted -> isProcessLockedOut || lowerGate()
+            PinAttemptsState.NotExhausted -> lowerGate()
         }
     }
 
-    private suspend fun forcedWipe(): Boolean = writeIntent(WipeReason.PIN_ATTEMPTS_EXCEEDED).fold(
-        onSuccess = { wipe(WipeReason.PIN_ATTEMPTS_EXCEEDED) },
-        onFailure = { error ->
-            Logger.error("Failed to write wipe intent", error, context = TAG)
-            _state.update { WipeState.Failed(WipeStep.BEGIN, error) }
-            false
-        },
-    )
+    private suspend fun forcedWipe(): Boolean {
+        val reason = forcedWipeReason ?: WipeReason.PIN_ATTEMPTS_EXCEEDED
+        _state.update { WipeState.Running }
+        return writeIntent(reason).fold(
+            onSuccess = { wipe(reason) },
+            onFailure = { error ->
+                Logger.error("Failed to write wipe intent", error, context = TAG)
+                _state.update { WipeState.Failed(WipeStep.BEGIN, error) }
+                false
+            },
+        )
+    }
 
-    private suspend fun lowerGate(): Boolean = runSuspendCatching { walletRepo.get().setWalletExistsState() }.fold(
-        onSuccess = {
-            _state.update { WipeState.Idle }
-            true
-        },
-        onFailure = { error ->
-            Logger.warn("Failed to read wallet state before lowering the wipe gate", error, context = TAG)
-            _state.update { WipeState.Blocked(error) }
-            false
-        },
-    )
+    private suspend fun lowerGate(): Boolean {
+        // The launch check ran before anything read the wallet, so only a gate raised later refreshes the wallet state
+        var wasChecking = false
+        _state.update {
+            wasChecking = it == WipeState.Checking
+            if (wasChecking) WipeState.Idle else it
+        }
+        if (wasChecking) return true
+        return runSuspendCatching { walletRepo.get().setWalletExistsState() }.fold(
+            onSuccess = {
+                _state.update { WipeState.Idle }
+                true
+            },
+            onFailure = { error ->
+                Logger.warn("Failed to read wallet state before lowering the wipe gate", error, context = TAG)
+                _state.update { WipeState.Blocked(error) }
+                false
+            },
+        )
+    }
 
     private suspend fun wipe(reason: WipeReason?): Boolean {
         _state.update { WipeState.Running }
         Logger.info("Running wallet wipe for reason '$reason'", context = TAG)
         val error = walletRepo.get().wipeWallet().exceptionOrNull()
         if (error == null || error is WipeIncomplete) {
-            complete(reason, warning = error)
+            complete(reason, isIncomplete = error != null)
             return true
         }
         val step = (error as? WipeStepFailed)?.step
@@ -208,13 +247,17 @@ class WipeCoordinator @Inject constructor(
         return false
     }
 
-    private suspend fun complete(reason: WipeReason?, warning: Throwable?) {
-        isForcedWipeRequested = false
-        isProcessLockedOut = false
+    private suspend fun complete(reason: WipeReason?, isIncomplete: Boolean) {
+        forcedWipeReason = null
         _state.update { WipeState.Idle }
         Logger.info("Completed wallet wipe for reason '$reason'", context = TAG)
         when {
-            warning != null -> ToastEventBus.send(warning)
+            isIncomplete -> ToastEventBus.send(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.security__wiped_title),
+                description = context.getString(R.string.security__wipe_incomplete_text),
+            )
+
             reason in ANNOUNCED_REASONS -> ToastEventBus.send(
                 type = Toast.ToastType.SUCCESS,
                 title = context.getString(R.string.security__wiped_title),
@@ -243,7 +286,7 @@ class WipeCoordinator @Inject constructor(
             PinAttemptsState.NotExhausted -> Unit
             PinAttemptsState.Exhausted -> {
                 Logger.warn("Promoting exhausted PIN attempts to a pending wipe", context = TAG)
-                isForcedWipeRequested = true
+                forcedWipeReason = WipeReason.PIN_ATTEMPTS_EXCEEDED
                 _state.update { WipeState.Running }
             }
 
@@ -280,6 +323,9 @@ sealed interface WipeState {
     val isGateUp: Boolean get() = this != Idle
 
     data object Idle : WipeState
+
+    /** The launch check of the PIN attempts has not finished yet. */
+    data object Checking : WipeState
     data object Running : WipeState
     data class Failed(val step: WipeStep?, val error: Throwable) : WipeState
     data class Blocked(val error: Throwable) : WipeState

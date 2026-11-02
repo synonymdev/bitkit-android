@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.yield
 import org.junit.Before
 import org.junit.Test
@@ -177,7 +178,15 @@ class PinVerifierTest : BaseUnitTest() {
         assertFalse(sut.canUseBiometrics.first())
 
         store.attempts = "3"
-        coordinator.lockOut(KeychainError.FailedToSave("attempts"))
+        coordinator.block(KeychainError.FailedToLoad("wallet"))
+        assertFalse(sut.canUseBiometrics.first())
+    }
+
+    @Test
+    fun `biometrics are disallowed while the attempts cannot be read`() = test {
+        whenever(keychain.pinAttemptsRemaining()).thenReturn(flow { throw IOException() })
+        sut = PinVerifier(testDispatcher, keychain, coordinator)
+
         assertFalse(sut.canUseBiometrics.first())
     }
 
@@ -192,25 +201,63 @@ class PinVerifierTest : BaseUnitTest() {
     }
 
     @Test
-    fun `unreadable PIN returns Unavailable and leaves the attempts unchanged`() = test {
+    fun `unreadable PIN returns Unavailable and still counts the attempt`() = test {
         store.attempts = "4"
         whenever(keychain.loadString(Keychain.Key.PIN.name)).thenAnswer { throw KeychainError.FailedToLoad("pin") }
 
         assertEquals(PinResult.Unavailable, sut.verify(PIN))
 
-        assertEquals("4", store.attempts)
+        assertEquals("3", store.attempts)
         assertFalse(coordinator.state.value.isGateUp)
     }
 
     @Test
-    fun `failed decrement write returns Unavailable and locks this process without a wipe`() = test {
+    fun `a failed attempt write returns Unavailable without comparing the PIN`() = test {
+        store.attempts = "4"
         store.beforeWrite = { throw IOException() }
 
+        assertEquals(PinResult.Unavailable, sut.verify(PIN))
+
+        assertEquals("4", store.attempts)
+        verify(keychain, never()).loadString(Keychain.Key.PIN.name)
+        assertFalse(coordinator.state.value.isGateUp)
+        verify(walletRepo, never()).wipeWallet(any())
+    }
+
+    @Test
+    fun `entries are checked again once attempt writes succeed`() = test {
+        var isWriteFailing = true
+        store.beforeWrite = { if (isWriteFailing) throw IOException() }
         assertEquals(PinResult.Unavailable, sut.verify(WRONG_PIN))
 
-        assertIs<WipeState.Blocked>(coordinator.state.value)
-        assertEquals(PinResult.LockedOut, sut.verify(PIN))
+        isWriteFailing = false
+
+        assertEquals(PinResult.Incorrect(attemptsRemaining = 7), sut.verify(WRONG_PIN))
+        assertEquals(PinResult.Correct, sut.verify(PIN))
+        assertEquals("8", store.attempts)
+    }
+
+    @Test
+    fun `an entry without a stored PIN neither counts nor starts a wipe`() = test {
+        store.pin = null
+        store.attempts = "1"
+
+        assertEquals(PinResult.Unavailable, sut.verify(WRONG_PIN))
+        store.attempts = "0"
+        assertEquals(PinResult.Unavailable, sut.verify(WRONG_PIN))
+
+        assertEquals("0", store.attempts)
         assertNull(store.wipePending)
         verify(walletRepo, never()).wipeWallet(any())
+    }
+
+    @Test
+    fun `an unreadable wipe intent raises the gate that explains the refusal`() = test {
+        whenever(keychain.loadWipePending()).thenAnswer { throw KeychainError.FailedToLoad("flag") }
+
+        assertEquals(PinResult.LockedOut, sut.verify(PIN))
+        testScheduler.runCurrent()
+
+        assertIs<WipeState.Blocked>(coordinator.state.value)
     }
 }

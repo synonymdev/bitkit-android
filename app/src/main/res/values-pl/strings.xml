@@ -494,7 +494,9 @@
     <string name="security__wipe_app">Wyczyść aplikację</string>
     <string name="security__wipe_blocked_text">Bitkit nie może zweryfikować swojego stanu bezpieczeństwa, więc Twój portfel pozostaje zablokowany. Stuknij Spróbuj ponownie, aby sprawdzić go jeszcze raz, lub wyeksportuj logi dla pomocy technicznej.</string>
     <string name="security__wipe_blocked_title">Portfel zablokowany</string>
+    <string name="security__wipe_clear_storage_text">Jeśli to się powtarza, wyczyść pamięć Bitkit w Ustawieniach Androida › Aplikacje › Bitkit › Pamięć, a następnie przywróć portfel za pomocą frazy odzyskiwania.</string>
     <string name="security__wipe_failed_text">Bitkit nie mógł dokończyć usuwania danych Twojego portfela i spróbuje ponownie. Nie zamykaj Bitkit lub stuknij Spróbuj ponownie.</string>
+    <string name="security__wipe_incomplete_text">Bitkit został zresetowany, ale nie udało się usunąć z tego urządzenia części danych portfela USDT.</string>
     <string name="security__wipe_not_started">Nie udało się rozpocząć resetowania. Nic nie zostało usunięte.</string>
     <string name="security__wipe_running_text">Bitkit usuwa wszystkie dane portfela z tego urządzenia. Nie zamykaj Bitkit, dopóki się nie zakończy.</string>
     <string name="security__wipe_title">Resetowanie Bitkit</string>

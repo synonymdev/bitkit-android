@@ -499,7 +499,9 @@
     <string name="security__wipe_app">Resetta App</string>
     <string name="security__wipe_blocked_text">Bitkit non riesce a verificare il suo stato di sicurezza, quindi il tuo wallet resta bloccato. Tocca Riprova per verificare di nuovo, oppure esporta i log per il supporto.</string>
     <string name="security__wipe_blocked_title">Wallet bloccato</string>
+    <string name="security__wipe_clear_storage_text">Se continua a succedere, cancella lo spazio di archiviazione di Bitkit in Impostazioni Android › App › Bitkit › Spazio di archiviazione, poi ripristina il tuo wallet con la frase di recupero.</string>
     <string name="security__wipe_failed_text">Bitkit non è riuscito a completare l\'eliminazione dei dati del tuo wallet e riproverà. Tieni Bitkit aperto, oppure tocca Riprova.</string>
+    <string name="security__wipe_incomplete_text">Bitkit è stato reimpostato, ma non è stato possibile eliminare alcuni dati del wallet USDT da questo dispositivo.</string>
     <string name="security__wipe_not_started">Non è stato possibile avviare il reset. Non è stato eliminato nulla.</string>
     <string name="security__wipe_running_text">Bitkit sta eliminando tutti i dati del wallet da questo dispositivo. Tieni Bitkit aperto finché non ha finito.</string>
     <string name="security__wipe_title">Reset di Bitkit in corso</string>

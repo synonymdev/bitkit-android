@@ -488,7 +488,9 @@
     <string name="security__wipe_app">Borrar App</string>
     <string name="security__wipe_blocked_text">Bitkit no puede verificar su estado de seguridad, por lo que su monedero sigue bloqueado. Vuelva a intentarlo para comprobarlo de nuevo, o exporte los registros para el soporte.</string>
     <string name="security__wipe_blocked_title">Monedero bloqueado</string>
+    <string name="security__wipe_clear_storage_text">Si esto sigue ocurriendo, borra el almacenamiento de Bitkit en Ajustes de Android › Aplicaciones › Bitkit › Almacenamiento y luego restaura tu billetera con tu frase de recuperación.</string>
     <string name="security__wipe_failed_text">Bitkit no pudo terminar de borrar los datos de su monedero y lo intentará de nuevo. Mantenga Bitkit abierto o vuelva a intentarlo.</string>
+    <string name="security__wipe_incomplete_text">Bitkit se ha restablecido, pero no se han podido eliminar algunos datos de la billetera USDT de este dispositivo.</string>
     <string name="security__wipe_not_started">No se pudo iniciar el restablecimiento. No se eliminó nada.</string>
     <string name="security__wipe_running_text">Bitkit está borrando todos los datos del monedero de este dispositivo. Mantenga Bitkit abierto hasta que termine.</string>
     <string name="security__wipe_title">Restableciendo Bitkit</string>

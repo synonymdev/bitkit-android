@@ -13,7 +13,7 @@
     <action>Verify the PIN pad is visible (testTag "PinPad")</action>
     <action>Enter a wrong PIN with the number pad keys (testTags "N0" to "N9") until the last-attempt message (testTag "LastAttempt") is visible</action>
     <action>Enter a wrong PIN once more</action>
-    <action>Verify the wipe gate is visible (testTag "WipeGate") and the PIN pad (testTag "PinPad") is not</action>
+    <action>Verify either the wipe gate (testTag "WipeGate") or wallet onboarding is visible, as a short wipe can finish first, and the PIN pad (testTag "PinPad") is not</action>
     <action>Run adb shell am force-stop to.bitkit.dev, then adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity</action>
     <action>Verify either the wipe gate (testTag "WipeGate") or wallet onboarding is visible, and the PIN pad (testTag "PinPad") is not</action>
     <action>Wait for the wipe to finish and verify wallet onboarding is visible</action>

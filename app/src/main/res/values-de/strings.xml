@@ -491,7 +491,9 @@
     <string name="security__wipe_app">App löschen</string>
     <string name="security__wipe_blocked_text">Bitkit kann seinen Sicherheitsstatus nicht überprüfen, daher bleibt dein Wallet gesperrt. Tippe auf Wiederholen, um es erneut zu prüfen, oder exportiere die Logs für den Support.</string>
     <string name="security__wipe_blocked_title">Wallet gesperrt</string>
+    <string name="security__wipe_clear_storage_text">Wenn das weiterhin passiert, lösche den Speicher von Bitkit unter Android-Einstellungen › Apps › Bitkit › Speicher und stelle deine Wallet dann mit deiner Wiederherstellungsphrase wieder her.</string>
     <string name="security__wipe_failed_text">Bitkit konnte das Löschen deiner Wallet-Daten nicht abschließen und versucht es erneut. Lass Bitkit geöffnet oder tippe auf Wiederholen.</string>
+    <string name="security__wipe_incomplete_text">Bitkit wurde zurückgesetzt, aber einige Daten der USDT-Wallet konnten nicht von diesem Gerät gelöscht werden.</string>
     <string name="security__wipe_not_started">Das Zurücksetzen konnte nicht gestartet werden. Es wurde nichts gelöscht.</string>
     <string name="security__wipe_running_text">Bitkit löscht alle Wallet-Daten von diesem Gerät. Lass Bitkit geöffnet, bis der Vorgang abgeschlossen ist.</string>
     <string name="security__wipe_title">Bitkit wird zurückgesetzt</string>

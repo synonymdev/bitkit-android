@@ -491,7 +491,9 @@
     <string name="security__wipe_app">Effacer l\'application</string>
     <string name="security__wipe_blocked_text">Bitkit ne peut pas vérifier son état de sécurité, votre portefeuille reste donc verrouillé. Touchez Réessayer pour vérifier à nouveau, ou exportez les logs pour le support.</string>
     <string name="security__wipe_blocked_title">Portefeuille verrouillé</string>
+    <string name="security__wipe_clear_storage_text">Si le problème persiste, effacez le stockage de Bitkit dans Paramètres Android › Applications › Bitkit › Stockage, puis restaurez votre portefeuille avec votre phrase de récupération.</string>
     <string name="security__wipe_failed_text">Bitkit n\'a pas pu terminer la suppression des données de votre portefeuille et va réessayer. Gardez Bitkit ouvert, ou touchez Réessayer.</string>
+    <string name="security__wipe_incomplete_text">Bitkit a été réinitialisé, mais certaines données du portefeuille USDT n\'ont pas pu être supprimées de cet appareil.</string>
     <string name="security__wipe_not_started">La réinitialisation n\'a pas pu démarrer. Rien n\'a été supprimé.</string>
     <string name="security__wipe_running_text">Bitkit supprime toutes les données du portefeuille de cet appareil. Gardez Bitkit ouvert jusqu\'à la fin.</string>
     <string name="security__wipe_title">Réinitialisation de Bitkit</string>

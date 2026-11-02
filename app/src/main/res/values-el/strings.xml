@@ -482,7 +482,9 @@
     <string name="security__wipe_app">Διαγραφή εφαρμογής</string>
     <string name="security__wipe_blocked_text">Το Bitkit δεν μπορεί να επαληθεύσει την κατάσταση ασφαλείας του, οπότε το πορτοφόλι σου παραμένει κλειδωμένο. Πάτησε Δοκιμάστε Ξανά για νέο έλεγχο ή κάνε εξαγωγή των αρχείων καταγραφής για την υποστήριξη.</string>
     <string name="security__wipe_blocked_title">Το πορτοφόλι κλειδώθηκε</string>
+    <string name="security__wipe_clear_storage_text">Αν αυτό συνεχίζει να συμβαίνει, διαγράψτε τον αποθηκευτικό χώρο του Bitkit στις Ρυθμίσεις Android › Εφαρμογές › Bitkit › Αποθηκευτικός χώρος και, στη συνέχεια, επαναφέρετε το πορτοφόλι σας με τη φράση ανάκτησης.</string>
     <string name="security__wipe_failed_text">Το Bitkit δεν μπόρεσε να ολοκληρώσει τη διαγραφή των δεδομένων του πορτοφολιού σου και θα προσπαθήσει ξανά. Κράτησε το Bitkit ανοιχτό ή πάτησε Δοκιμάστε Ξανά.</string>
+    <string name="security__wipe_incomplete_text">Έγινε επαναφορά του Bitkit, αλλά ορισμένα δεδομένα του πορτοφολιού USDT δεν ήταν δυνατό να διαγραφούν από αυτήν τη συσκευή.</string>
     <string name="security__wipe_not_started">Η επαναφορά δεν μπόρεσε να ξεκινήσει. Δεν διαγράφηκε τίποτα.</string>
     <string name="security__wipe_running_text">Το Bitkit διαγράφει όλα τα δεδομένα πορτοφολιού από αυτή τη συσκευή. Κράτησε το Bitkit ανοιχτό μέχρι να ολοκληρωθεί.</string>
     <string name="security__wipe_title">Επαναφορά του Bitkit</string>
