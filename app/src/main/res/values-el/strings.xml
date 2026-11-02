@@ -468,6 +468,7 @@
     <string name="security__reset_button_backup">Αντίγραφο ασφαλείας πρώτα</string>
     <string name="security__reset_button_reset">Επαναφορά πορτοφολιού</string>
     <string name="security__reset_confirm">Ναι, Επαναφορά</string>
+    <string name="security__reset_dialog_channel_migration">Τα κανάλια Lightning σου από την προηγούμενη εφαρμογή Bitkit δεν έχουν ολοκληρώσει ακόμη τη μεταφορά τους σε αυτό το πορτοφόλι. Τα δεδομένα τους παραμένουν σε αυτή τη συσκευή, αλλά μια επαναφορά τώρα μπορεί να δυσκολέψει την ανάκτηση αυτών των κεφαλαίων.</string>
     <string name="security__reset_dialog_desc">Είσαι σίγουρος ότι θέλεις να επαναφέρεις το πορτοφόλι Bitkit; Έχεις αντίγραφο ασφαλείας της φράσης ανάκτησης και των δεδομένων του πορτοφολιού;</string>
     <string name="security__reset_dialog_title">Επαναφορά Bitkit;</string>
     <string name="security__reset_graph_confirm">Ναι, Επαναφορά</string>

@@ -375,6 +375,17 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         assertTrue(onSetWalletExistsStateCalled)
     }
 
+    // A wipe left the legacy app's seed, passphrase and PIN decryptable on the device
+    @Test
+    fun `invoke should remove the legacy app data before clearing the wipe-pending flag`() = runTest {
+        assertTrue(sut.invoke(resetWalletState = {}, onSuccess = {}).isSuccess)
+
+        val inOrder = inOrder(migrationService, keychain)
+        inOrder.verify(migrationService).removeLegacyAppData()
+        inOrder.verify(migrationService).markMigrationChecked()
+        inOrder.verify(keychain).deleteWipePending()
+    }
+
     @Test
     fun `invoke should reach the commit step when Paykit setup outlives the wipe's wait for it`() = runTest {
         val sdk = mock<PaykitSdk>()

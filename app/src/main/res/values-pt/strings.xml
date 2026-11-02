@@ -464,6 +464,7 @@
     <string name="security__reset_graph_confirm">Sim, Resetar</string>
     <string name="security__reset_dialog_desc">Você tem certeza de que deseja redefinir sua Bitkit? Você tem um backup de sua frase de recuperação e dos dados da carteira?</string>
     <string name="security__reset_confirm">Sim, Redefinir</string>
+    <string name="security__reset_dialog_channel_migration">Os seus canais Lightning da app Bitkit anterior ainda não terminaram de ser transferidos para esta carteira. Os respetivos dados ficam neste dispositivo, mas redefinir agora pode tornar esses fundos mais difíceis de recuperar.</string>
     <string name="security__recovery">Recuperação</string>
     <string name="security__recovery_text">Você entrou no modo de recuperação da Bitkit. Aqui estão algumas ações a serem realizadas quando encontrar problemas que impedem o funcionamento completo do aplicativo. Reinicie o aplicativo para iniciar normalmente.</string>
     <string name="security__display_seed">Mostrar Seed</string>

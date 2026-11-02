@@ -490,6 +490,7 @@
     <string name="security__reset_button_backup">Fazer Backup Primeiro</string>
     <string name="security__reset_button_reset">Redefinir a Carteira</string>
     <string name="security__reset_confirm">Sim, Redefinir</string>
+    <string name="security__reset_dialog_channel_migration">Seus canais Lightning do app Bitkit anterior ainda não terminaram de ser transferidos para esta carteira. Os dados deles continuam neste dispositivo, mas redefinir agora pode dificultar a recuperação desses fundos.</string>
     <string name="security__reset_dialog_desc">Você tem certeza de que deseja redefinir sua Bitkit? Você tem um backup de sua frase de recuperação e dos dados da carteira?</string>
     <string name="security__reset_dialog_title">Redefinir Bitkit?</string>
     <string name="security__reset_graph_confirm">Sim, Redefinir</string>

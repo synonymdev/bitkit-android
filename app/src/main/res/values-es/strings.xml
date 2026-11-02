@@ -479,6 +479,7 @@
     <string name="security__reset_graph_confirm">Sí, restaurar</string>
     <string name="security__reset_dialog_desc">¿Está seguro de que desea restablecer su monedero Bitkit? ¿Tiene una copia de seguridad de su frase de recuperación y de los datos de su monedero?</string>
     <string name="security__reset_confirm">Sí, restaurar</string>
+    <string name="security__reset_dialog_channel_migration">Sus canales Lightning de la aplicación Bitkit anterior aún no han terminado de trasladarse a este monedero. Sus datos permanecen en este dispositivo, pero restablecer ahora puede dificultar la recuperación de esos fondos.</string>
     <string name="security__pass_recovery">&lt;accent&gt;Passphrase:&lt;/accent&gt; {passphrase}</string>
     <string name="security__recovery">Recuperación</string>
     <string name="security__recovery_text">Has entrado en el modo de recuperación de Bitkit. Aquí hay algunas acciones a realizar cuando tengas problemas que impidan que la app funcione correctamente. Reinicia la app para un inicio normal.</string>

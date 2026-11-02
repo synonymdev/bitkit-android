@@ -486,6 +486,7 @@
     <string name="security__reset_button_backup">Primero, la copia de seguridad</string>
     <string name="security__reset_button_reset">Restablecer cartera</string>
     <string name="security__reset_confirm">Sí, restaurar</string>
+    <string name="security__reset_dialog_channel_migration">Tus canales Lightning de la aplicación Bitkit anterior aún no han terminado de trasladarse a este monedero. Sus datos permanecen en este dispositivo, pero restablecer ahora puede dificultar la recuperación de esos fondos.</string>
     <string name="security__reset_dialog_desc">¿Está seguro de que desea restablecer su monedero Bitkit? ¿Tiene una copia de seguridad de su frase de recuperación y de los datos de su monedero?</string>
     <string name="security__reset_dialog_title">¿Restablecer Bitkit a los parámetros iniciales?</string>
     <string name="security__reset_graph_confirm">Sí, restaurar</string>

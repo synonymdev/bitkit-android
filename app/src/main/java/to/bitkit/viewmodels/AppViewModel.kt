@@ -2626,6 +2626,9 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    /** Whether channels from the RN app wait for a node start to take them, so a wipe keeps their only copy. */
+    fun isChannelMigrationPending(): Boolean = migrationService.peekPendingChannelMigration() != null
+
     private fun buildChannelMigrationIfAvailable(): ChannelDataMigration? {
         val migration = migrationService.peekPendingChannelMigration() ?: return null
         return ChannelDataMigration(

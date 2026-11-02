@@ -486,6 +486,7 @@
     <string name="security__reset_graph_confirm">Tak, zresetuj</string>
     <string name="security__reset_dialog_desc">Czy na pewno chcesz zresetować swój portfel Bitkit? Czy masz kopię zapasową swojej frazy odzyskiwania i danych portfela?</string>
     <string name="security__reset_confirm">Tak, zresetuj</string>
+    <string name="security__reset_dialog_channel_migration">Twoje kanały Lightning z poprzedniej aplikacji Bitkit nie zostały jeszcze w pełni przeniesione do tego portfela. Ich dane pozostają na tym urządzeniu, ale zresetowanie teraz może utrudnić odzyskanie tych środków.</string>
     <string name="security__recovery">Odzyskiwanie</string>
     <string name="security__recovery_text">Uruchomiłeś tryb odzyskiwania Bitkit. Oto kilka kroków, które możesz wykonać, gdy napotkasz problemy uniemożliwiające prawidłowe działanie aplikacji. Aby wrócić do normalnego trybu, uruchom aplikację ponownie.</string>
     <string name="security__display_seed">Pokaż frazę odzyskiwania</string>

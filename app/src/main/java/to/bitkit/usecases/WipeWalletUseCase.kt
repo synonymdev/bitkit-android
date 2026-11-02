@@ -127,6 +127,8 @@ class WipeWalletUseCase @Inject constructor(
         activityRepo.resetState()
         hwWalletRepo.resetState()
         resetWalletState()
+        // The RN app's seed, passphrase and PIN must not outlive the wallet
+        migrationService.removeLegacyAppData()
         // Must hold before the flag is cleared, or a later launch could re-run RN migration and re-import its PIN
         requiredStep(WipeStep.SETTINGS) { migrationService.markMigrationChecked() }
         requiredStep(WipeStep.PIN) { deletePin() }

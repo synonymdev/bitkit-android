@@ -501,6 +501,7 @@
     <string name="security__reset_button_backup">Создать Резервную Копию</string>
     <string name="security__reset_button_reset">Сбросить Кошелёк</string>
     <string name="security__reset_confirm">Да,\nСбросить</string>
+    <string name="security__reset_dialog_channel_migration">Ваши каналы Lightning из предыдущего приложения Bitkit ещё не полностью перенесены в этот кошелёк. Их данные остаются на этом устройстве, но сброс сейчас может затруднить восстановление этих средств.</string>
     <string name="security__reset_dialog_desc">Вы уверены, что хотите сбросить настройки своего кошелька Bitkit? У вас есть резервная копия фразы восстановления и данных кошелька?</string>
     <string name="security__reset_dialog_title">Сбросить Bitkit?</string>
     <string name="security__reset_graph_confirm">Да,\nСбросить</string>
