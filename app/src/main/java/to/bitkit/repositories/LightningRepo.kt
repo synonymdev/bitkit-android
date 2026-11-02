@@ -2116,13 +2116,13 @@ class LightningRepo @Inject constructor(
     suspend fun refreshChannelsAndPeers(onRefreshed: () -> Unit = {}): Result<Unit> = withContext(bgDispatcher) {
         if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext Result.success(Unit)
         runCatching {
-            val channels = readChannels()
             _lightningState.update {
                 it.copy(
                     peers = getPeers().orEmpty().toImmutableList(),
-                    channels = channels,
+                    channels = getChannels().orEmpty().toImmutableList(),
                 )
             }
+            publishLastKnownChannels()
             onRefreshed()
         }.onSuccess {
             refreshFailureLogged.set(false)
@@ -2134,16 +2134,16 @@ class LightningRepo @Inject constructor(
     }
 
     fun syncState() {
-        val channels = readChannels()
         _lightningState.update {
             it.copy(
                 nodeId = getNodeId().orEmpty(),
                 nodeStatus = getStatus(),
                 peers = getPeers().orEmpty().toImmutableList(),
-                channels = channels,
+                channels = getChannels().orEmpty().toImmutableList(),
                 balances = getBalances(),
             )
         }
+        publishLastKnownChannels()
         if (_lightningState.value.nodeLifecycleState.isRunning()) scheduleOrdinaryFollowupRetry()
     }
 
@@ -2250,9 +2250,10 @@ class LightningRepo @Inject constructor(
     fun getChannels(): List<ChannelDetails>? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
 
-    private fun readChannels(): ImmutableList<ChannelDetails> {
-        val channels = getChannels() ?: return persistentListOf()
-        return channels.toImmutableList().also { _lastKnownChannels.update { _ -> it } }
+    private fun publishLastKnownChannels() {
+        val state = _lightningState.value
+        if (!state.nodeLifecycleState.isRunning()) return
+        _lastKnownChannels.update { state.channels }
     }
 
     fun canReceive(): Boolean {
