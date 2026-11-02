@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -147,6 +148,11 @@ class LightningRepo @Inject constructor(
     private val _eventHandlers = ConcurrentHashMap.newKeySet<NodeEventHandler>()
     private val _isRecoveryMode = MutableStateFlow(false)
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
+
+    private val _lastKnownChannels = MutableStateFlow<ImmutableList<ChannelDetails>>(persistentListOf())
+
+    /** Channels from the last read of a running node, kept while the node stops and restarts. */
+    val lastKnownChannels = _lastKnownChannels.asStateFlow()
 
     @Volatile
     private var isWiping = false
@@ -916,6 +922,7 @@ class LightningRepo @Inject constructor(
             stopLocked().mapCatching {
                 Logger.debug("node stopped, calling wipeStorage", context = TAG)
                 lastKnownNodeId = null
+                _lastKnownChannels.update { persistentListOf() }
                 lightningService.wipeStorage(walletIndex)
                 arkadeRepo.wipe(walletIndex)
                 clearProbeOutcomes()
@@ -2194,12 +2201,13 @@ class LightningRepo @Inject constructor(
     suspend fun refreshChannelsAndPeers(onRefreshed: () -> Unit = {}): Result<Unit> = withContext(bgDispatcher) {
         if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext Result.success(Unit)
         runCatching {
-            _lightningState.update {
+            val committed = _lightningState.updateAndGet {
                 it.copy(
                     peers = getPeers().orEmpty().toImmutableList(),
                     channels = getChannels().orEmpty().toImmutableList(),
                 )
             }
+            if (committed.nodeLifecycleState.isRunning()) publishLastKnownChannels()
             onRefreshed()
         }.onSuccess {
             refreshFailureLogged.set(false)
@@ -2211,7 +2219,7 @@ class LightningRepo @Inject constructor(
     }
 
     fun syncState() {
-        _lightningState.update {
+        val committed = _lightningState.updateAndGet {
             it.copy(
                 nodeId = getNodeId().orEmpty(),
                 nodeStatus = getStatus(),
@@ -2220,6 +2228,7 @@ class LightningRepo @Inject constructor(
                 balances = getBalances(),
             )
         }
+        if (committed.nodeLifecycleState.isRunning()) publishLastKnownChannels()
         if (_lightningState.value.nodeLifecycleState.isRunning()) scheduleOrdinaryFollowupRetry()
     }
 
@@ -2326,6 +2335,11 @@ class LightningRepo @Inject constructor(
 
     fun getChannels(): List<ChannelDetails>? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
+
+    private fun publishLastKnownChannels() = _lastKnownChannels.update {
+        val state = _lightningState.value
+        if (state.nodeLifecycleState.isRunning()) state.channels else it
+    }
 
     /** The completion event of a Arkade send that settled before its caller started watching for it. */
     suspend fun settledArkadeSendEvent(paymentHash: String): Event? = arkadeRepo.settledSendEvent(paymentHash)
