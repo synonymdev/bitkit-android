@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.PubkySwapRouteState
 import com.synonym.bitkitcore.ServiceRouteLeg
 import com.synonym.bitkitcore.pubkySwapsAdvance
 import com.synonym.bitkitcore.pubkySwapsCommitRoute
+import com.synonym.bitkitcore.pubkySwapsRestore
 import com.synonym.bitkitcore.pubkySwapsRoutePaykitPayment
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -39,6 +40,7 @@ class PubkySwapsRouteRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val pubkyRepo: PubkyRepo,
+    private val lightningRepo: LightningRepo,
 ) {
     companion object {
         private const val TAG = "PubkySwapsRouteRepo"
@@ -60,8 +62,7 @@ class PubkySwapsRouteRepo @Inject constructor(
         onchainSpendableSats: ULong,
         serviceLegs: List<ServiceRouteLeg> = emptyList(),
     ): Result<PaykitRoute> = withSecrets { mnemonic, passphrase ->
-        // Providers come from the user's own graph: every contact is asked for its swap offer.
-        val candidates = pubkyRepo.contacts.value.map { it.publicKey } + Env.pubkySwapsProviders
+        val candidates = candidates()
         Logger.debug("Routing Paykit payment via '${candidates.map(PubkyPublicKeyFormat::redacted)}'", context = TAG)
         pubkySwapsRoutePaykitPayment(
             request = PaykitRouteRequest(
@@ -78,6 +79,26 @@ class PubkySwapsRouteRepo @Inject constructor(
             bip39Passphrase = passphrase,
         )
     }
+
+    /**
+     * Rebuilds the swaps this wallet started from each provider's listing, after a restore from the seed. The listing
+     * does not carry the contact's address, so a restored swap claims to a fresh Savings address. Returns the swap ids.
+     */
+    suspend fun restoreSwaps(): Result<List<String>> = withSecrets { mnemonic, passphrase ->
+        val payoutAddress = lightningRepo.newAddress().getOrThrow()
+        pubkySwapsRestore(
+            providers = candidates(),
+            electrumUrl = Env.electrumServerUrl,
+            payoutAddress = payoutAddress,
+            feeRateSatVb = CLAIM_FEE_RATE_SAT_VB,
+            network = Env.network.toCoreNetwork(),
+            mnemonic = mnemonic,
+            bip39Passphrase = passphrase,
+        )
+    }
+
+    /** Providers come from the user's own graph: every contact is asked for its swap offer. */
+    private fun candidates(): List<String> = pubkyRepo.contacts.value.map { it.publicKey } + Env.pubkySwapsProviders
 
     suspend fun commit(quoteId: String): Result<PubkySwapRoutePayment> = withSecrets { mnemonic, passphrase ->
         pubkySwapsCommitRoute(quoteId, Env.electrumServerUrl, mnemonic, passphrase)

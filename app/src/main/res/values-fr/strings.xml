@@ -889,6 +889,8 @@
     <string name="wallet__note">Note</string>
     <string name="wallet__lnurl_pay_confirm__comment">Commentaire</string>
     <string name="wallet__lnurl_pay_confirm__comment_placeholder">Commentaire facultatif au destinataire</string>
+    <string name="wallet__swap_route_restored_text">Un paiement à un contact interrompu par la restauration est revenu sur ton épargne.</string>
+    <string name="wallet__swap_route_restored_title">Paiement renvoyé vers l\'Épargne</string>
     <string name="wallet__tags">Tags</string>
     <string name="wallet__tags_add">Ajouter une étiquette</string>
     <string name="wallet__tags_add_button">Ajouter</string>

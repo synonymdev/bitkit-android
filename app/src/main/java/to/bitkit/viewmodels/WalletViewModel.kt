@@ -48,6 +48,7 @@ import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
@@ -79,6 +80,7 @@ class WalletViewModel @Inject constructor(
     private val connectivityRepo: ConnectivityRepo,
     private val boltzService: BoltzService,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val pubkySwapsRouteRepo: PubkySwapsRouteRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
@@ -492,6 +494,7 @@ class WalletViewModel @Inject constructor(
                 }
             }.onSuccess {
                 _restoreState.update { RestoreState.Completed }
+                restorePubkySwaps()
             }.onFailure {
                 Logger.error("Restore from backup failed", it, context = TAG)
                 ToastEventBus.send(it)
@@ -559,6 +562,32 @@ class WalletViewModel @Inject constructor(
             }
         }
         _restoreState.update { RestoreState.Settled }
+    }
+
+    /**
+     * Finishes swap routes a restored wallet left in flight: each is rebuilt from its provider's listing and claimed to
+     * Savings, since the contact's address did not survive the restore, so the user learns the payment came back.
+     */
+    private fun restorePubkySwaps() {
+        if (!pubkySwapsRouteRepo.isEnabled) return
+        viewModelScope.launch(bgDispatcher) {
+            val restored = pubkySwapsRouteRepo.restoreSwaps().getOrElse {
+                Logger.warn("Failed to restore Pubky Swaps routes", it, context = TAG)
+                return@launch
+            }
+            Logger.info("Restored '${restored.size}' Pubky Swaps routes", context = TAG)
+            restored.forEach { swapId ->
+                launch {
+                    pubkySwapsRouteRepo.awaitClaim(swapId).onSuccess {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.INFO,
+                            title = context.getString(R.string.wallet__swap_route_restored_title),
+                            description = context.getString(R.string.wallet__swap_route_restored_text),
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun onRestoreRetry() = requestRecoveryRetry(owner = null, editorId = null)

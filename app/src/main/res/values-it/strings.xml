@@ -1012,6 +1012,8 @@
     <string name="wallet__send_yes">Si, Invia</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Invia\nbitcoin&lt;/accent&gt;\nal tuo\nconto di spesa</string>
     <string name="wallet__spending__title">Spesa</string>
+    <string name="wallet__swap_route_restored_text">Un pagamento a un contatto interrotto dal ripristino è tornato nei tuoi risparmi.</string>
+    <string name="wallet__swap_route_restored_title">Pagamento restituito ai Risparmi</string>
     <string name="wallet__tags">Tag</string>
     <string name="wallet__tags_add">Aggiungi Tag</string>
     <string name="wallet__tags_add_button">Aggiungi</string>

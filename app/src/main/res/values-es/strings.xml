@@ -882,6 +882,8 @@
     <string name="wallet__send_fee_total">₿ {feeSats} para esta transacción</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} para esta transacción ({fiatSymbol}{fiatFormatted})</string>
     <string name="wallet__note">Nota</string>
+    <string name="wallet__swap_route_restored_text">Un pago a un contacto que la restauración interrumpió ha vuelto a tus ahorros.</string>
+    <string name="wallet__swap_route_restored_title">Pago devuelto a Ahorros</string>
     <string name="wallet__tags">Etiquetas</string>
     <string name="wallet__tags_add">Añadir etiqueta</string>
     <string name="wallet__tags_add_button">Añadir</string>

@@ -49,6 +49,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
@@ -86,6 +87,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val migrationService = mock<MigrationService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val boltzService = mock<BoltzService>()
+    private val pubkySwapsRouteRepo = mock<PubkySwapsRouteRepo>()
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
@@ -126,6 +128,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         )
     }
 
@@ -342,6 +345,40 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
+    fun `restores swap routes once a wallet restore completes`() = test {
+        whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(true)
+        whenever(pubkySwapsRouteRepo.restoreSwaps()).thenReturn(Result.success(listOf("swap")))
+        whenever(pubkySwapsRouteRepo.awaitClaim(eq("swap"), any())).thenReturn(Result.success("txid"))
+        whenever(context.getString(any())).thenReturn("text")
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+
+        sut.restoreWallet("mnemonic", "passphrase")
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+
+        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        verify(pubkySwapsRouteRepo).restoreSwaps()
+        verify(pubkySwapsRouteRepo).awaitClaim(eq("swap"), any())
+    }
+
+    @Test
+    fun `leaves swap routes alone after a restore while they are off`() = test {
+        whenever(pubkySwapsRouteRepo.isEnabled).thenReturn(false)
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+
+        sut.restoreWallet("mnemonic", "passphrase")
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+
+        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        verify(pubkySwapsRouteRepo, never()).restoreSwaps()
     }
 
     @Test
@@ -1164,6 +1201,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -1231,6 +1269,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         )
 
         testSut.start()
@@ -1287,6 +1326,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         )
 
         // Trigger restore to put state in non-idle
@@ -1327,6 +1367,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         )
 
         testSut.restoreWallet("mnemonic", null)
@@ -1418,6 +1459,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             boltzService = boltzService,
             connectionRecovery = connectionRecovery,
+            pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         )
         advanceUntilIdle()
 

@@ -891,6 +891,8 @@
     <string name="wallet__note">Notatka</string>
     <string name="wallet__lnurl_pay_confirm__comment">Komentarz</string>
     <string name="wallet__lnurl_pay_confirm__comment_placeholder">Opcjonalny komentarz dla odbiorcy</string>
+    <string name="wallet__swap_route_restored_text">Płatność do kontaktu przerwana przez przywracanie wróciła do twoich oszczędności.</string>
+    <string name="wallet__swap_route_restored_title">Płatność zwrócona do Oszczędności</string>
     <string name="wallet__tags">Tagi</string>
     <string name="wallet__tags_add">Dodaj tag</string>
     <string name="wallet__tags_add_button">Dodaj</string>

@@ -1571,6 +1571,8 @@
     <string name="wallet__send_yes">Yes, Send</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Send\nbitcoin&lt;/accent&gt;\nto your\nspending balance</string>
     <string name="wallet__spending__title">Spending</string>
+    <string name="wallet__swap_route_restored_text">A contact payment the restore interrupted came back to your savings.</string>
+    <string name="wallet__swap_route_restored_title">Payment returned to Savings</string>
     <string name="wallet__tags">Tags</string>
     <string name="wallet__tags_add">Add Tag</string>
     <string name="wallet__tags_add_button">Add</string>

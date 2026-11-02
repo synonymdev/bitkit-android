@@ -1016,6 +1016,8 @@
     <string name="wallet__send_yes">Sim, Enviar</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Transfira\nbitcoin&lt;/accent&gt;\npara seu\nsaldo de gastos</string>
     <string name="wallet__spending__title">Gastos</string>
+    <string name="wallet__swap_route_restored_text">Um pagamento a um contato que a restauração interrompeu voltou para sua poupança.</string>
+    <string name="wallet__swap_route_restored_title">Pagamento devolvido à Poupança</string>
     <string name="wallet__tags">Tags</string>
     <string name="wallet__tags_add">Adicionar Tag</string>
     <string name="wallet__tags_add_button">Adicionar</string>

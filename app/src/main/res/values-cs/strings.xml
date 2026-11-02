@@ -1014,6 +1014,8 @@
     <string name="wallet__send_yes">Ano, odeslat</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Odeslat\nbitcoin&lt;/accent&gt;\ndo vašeho\ndisponibilního zůstatku</string>
     <string name="wallet__spending__title">Útraty</string>
+    <string name="wallet__swap_route_restored_text">Platba kontaktu přerušená obnovou se vrátila do vašich úspor.</string>
+    <string name="wallet__swap_route_restored_title">Platba vrácena do Úspor</string>
     <string name="wallet__tags">Tagy</string>
     <string name="wallet__tags_add">Vložit tag</string>
     <string name="wallet__tags_add_button">Vložit</string>

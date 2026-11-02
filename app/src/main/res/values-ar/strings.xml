@@ -983,6 +983,8 @@
     <string name="wallet__send_yes">نعم، أرسل</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;أرسل\nBitcoin&lt;/accent&gt;\nإلى\nرصيد إنفاقك</string>
     <string name="wallet__spending__title">الإنفاق</string>
+    <string name="wallet__swap_route_restored_text">دفعة لجهة اتصال قاطعتها الاستعادة عادت إلى مدخراتك.</string>
+    <string name="wallet__swap_route_restored_title">أُعيدت الدفعة إلى المدخرات</string>
     <string name="wallet__tags">العلامات</string>
     <string name="wallet__tags_add">إضافة علامة</string>
     <string name="wallet__tags_add_button">إضافة</string>
