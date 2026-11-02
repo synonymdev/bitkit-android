@@ -218,6 +218,7 @@ internal fun PaymentRequestAmountContent(
         )
         CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoView) {
             BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                val maxHeight = this.maxHeight
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState())
                         .heightIn(min = maxHeight).padding(horizontal = 16.dp)
@@ -280,33 +281,29 @@ internal fun PaymentRequestAmountContent(
                         color = Colors.White10,
                         modifier = Modifier.testTag("PaymentRequestAmountDivider"),
                     )
-                    FillHeight()
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 24.dp),
-                    ) {
-                        val padModifier = Modifier
-                            .onFocusChanged { isNumberPadFocused = it.isFocused }
-                            .testTag("PaymentRequestNumberPad")
-                        if (asset == PaykitAsset.BTC) {
-                            NumberPad(
-                                viewModel = amountInputViewModel,
-                                currencies = currencies,
-                                modifier = padModifier
-                            )
-                        } else {
-                            NumberPad(
-                                onPress = {
-                                    dollars = NumberPadInputHandler.handleInput(
-                                        it, dollars, MAX_USD_INPUT_LENGTH, PaykitAsset.USD.decimals
-                                    )
-                                },
-                                type = NumberPadType.DECIMAL,
-                                modifier = padModifier
-                            )
-                        }
+                    FillHeight(min = 16.dp)
+                    val padModifier = Modifier
+                        .onFocusChanged { isNumberPadFocused = it.isFocused }
+                        .testTag("PaymentRequestNumberPad")
+                    if (asset == PaykitAsset.BTC) {
+                        NumberPad(
+                            viewModel = amountInputViewModel,
+                            currencies = currencies,
+                            availableHeight = maxHeight,
+                            modifier = padModifier
+                        )
+                    } else {
+                        NumberPad(
+                            onPress = {
+                                dollars = NumberPadInputHandler.handleInput(
+                                    it, dollars, MAX_USD_INPUT_LENGTH, PaykitAsset.USD.decimals
+                                )
+                            },
+                            type = NumberPadType.DECIMAL,
+                            availableHeight = maxHeight,
+                            modifier = padModifier
+                        )
                     }
-                    FillHeight()
                     PrimaryButton(
                         text = stringResource(R.string.common__continue),
                         enabled = (entered?.atomic ?: 0uL) > 0uL,
@@ -737,40 +734,53 @@ internal fun PaymentRequestSentContent(
             .testTag("PaymentRequestSent"),
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__payment_request_sent_title))
-        VerticalSpacer(32.dp)
-        Image(
-            painter = painterResource(R.drawable.check),
-            contentDescription = null,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .size(256.dp)
-                .testTag("PaymentRequestSentCheck"),
-        )
-        VerticalSpacer(32.dp)
-        Display(
-            text = stringResource(R.string.wallet__payment_request_sent_headline)
-                .withAccent(accentColor = Colors.Purple),
-        )
-        VerticalSpacer(12.dp)
-        BodyM(
-            text = stringResource(
-                if (currentRequest.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
-                    R.string.wallet__payment_request_sent_description
-                } else {
-                    R.string.wallet__payment_request_queued_description
-                }
-            ),
-            color = Colors.White64,
-            textAlign = TextAlign.Start,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        VerticalSpacer(24.dp)
-        PaymentRequestCard(
-            request = currentRequest,
-            contact = contact,
-            compactSubtitle = currentRequest.note?.takeIf(String::isNotBlank) ?: paymentRequestStatus(currentRequest),
-        )
-        VerticalSpacer(32.dp)
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()).heightIn(min = maxHeight)
+            ) {
+                FillHeight()
+                Image(
+                    painter = painterResource(R.drawable.check),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .size(256.dp)
+                        .testTag("PaymentRequestSentCheck"),
+                )
+                FillHeight()
+                Display(
+                    text = stringResource(R.string.wallet__payment_request_sent_headline)
+                        .withAccent(accentColor = Colors.Purple),
+                )
+                VerticalSpacer(12.dp)
+                BodyM(
+                    text = stringResource(
+                        if (currentRequest.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
+                            R.string.wallet__payment_request_sent_description
+                        } else {
+                            R.string.wallet__payment_request_queued_description
+                        }
+                    ),
+                    color = Colors.White64,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                VerticalSpacer(32.dp)
+                Caption13Up(
+                    text = stringResource(R.string.wallet__payment_request_recipient),
+                    color = Colors.White64,
+                    style = AppTextStyles.CaptionM.copy(letterSpacing = 1.sp),
+                )
+                VerticalSpacer(8.dp)
+                PaymentRequestCard(
+                    request = currentRequest,
+                    contact = contact,
+                    compactSubtitle = currentRequest.note?.takeIf(String::isNotBlank)
+                        ?: paymentRequestStatus(currentRequest),
+                )
+                VerticalSpacer(16.dp)
+            }
+        }
         PrimaryButton(
             text = stringResource(R.string.common__ok),
             onClick = onDone,
