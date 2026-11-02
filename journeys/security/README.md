@@ -25,3 +25,9 @@ Keep a local migration suspended while retrying and verify no new-wallet or rest
 run. A still-unavailable cleanup read must retain recovery. These storage and migration holds
 require a controlled fixture; ViewModel and installed root-routing tests cover the admission
 boundaries but do not establish a complete RN data migration or authenticated app journey.
+
+An unreadable migration-status store must show Wallet Migration with Retry, including for an
+existing native wallet. Hold either the migration-status read or its completion write; Retry
+must remain reachable without changing connectivity, while onboarding and wallet replacement
+stay blocked. After releasing the fault, Retry must complete classification once and open the
+existing wallet. Cleanup recovery takes precedence if its state also becomes unavailable.

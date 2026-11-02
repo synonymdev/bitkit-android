@@ -254,6 +254,7 @@
     <string name="lightning__conn_onboarding_title">Включить\nLightning\n&lt;accent&gt;платежи&lt;/accent&gt;</string>
     <string name="migration__description">Пожалуйста, подождите, пока данные вашего старого кошелька переносятся в эту новую версию Bitkit. Обычно это занимает меньше минуты.</string>
     <string name="migration__nav_title">Миграция кошелька</string>
+    <string name="migration__status_error">Статус переноса кошелька недоступен. Повторите попытку, прежде чем продолжить.</string>
     <string name="migration__title">МИГРАЦИЯ
 &lt;accent&gt;КОШЕЛЬКА&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Канал уведомлений для фоновой службы Lightning ноды</string>

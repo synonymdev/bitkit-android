@@ -244,6 +244,7 @@
     <string name="lightning__conn_onboarding_title">Activer les\n&lt;accent&gt;paiements&lt;/accent&gt;\nLightning</string>
     <string name="migration__description">Veuillez patienter pendant la migration de vos anciennes données vers cette nouvelle version de Bitkit. Cela prend généralement moins d\'une minute.</string>
     <string name="migration__nav_title">Migration du portefeuille</string>
+    <string name="migration__status_error">Le statut de migration du portefeuille est indisponible. Réessayez avant de continuer.</string>
     <string name="migration__title">MIGRATION\n&lt;accent&gt;DU PORTEFEUILLE&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Canal de notification pour le service de nœud Lightning en arrière-plan</string>
     <string name="notification__channel_node__name">Notification du nœud Lightning</string>

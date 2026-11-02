@@ -245,6 +245,7 @@
     <string name="lightning__conn_onboarding_title">Povolit\nLightning\n&lt;accent&gt;platby&lt;/accent&gt;</string>
     <string name="migration__description">Počkejte prosím, než budou vaše stará data peněženky migrována do této nové verze Bitkit. Obvykle to trvá méně než minutu.</string>
     <string name="migration__nav_title">Migrace peněženky</string>
+    <string name="migration__status_error">Stav migrace peněženky není dostupný. Před pokračováním to zkuste znovu.</string>
     <string name="migration__title">MIGRACE\n<accent>PENĚŽENKY</accent></string>
     <string name="notification__channel_node__body">Notifikační kanál pro službu Lightning uzlu na pozadí</string>
     <string name="notification__channel_node__name">Notifikace Lightning uzlu</string>

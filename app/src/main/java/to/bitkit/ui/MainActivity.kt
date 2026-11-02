@@ -65,6 +65,7 @@ import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
 import to.bitkit.ui.screens.CriticalUpdateScreen
 import to.bitkit.ui.screens.MigrationLoadingScreen
+import to.bitkit.ui.screens.MigrationRecoveryScreen
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.screens.recovery.WalletResetRecoveryScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
@@ -138,6 +139,7 @@ class MainActivity : FragmentActivity() {
                 val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
                 val walletResetRecovery = walletState.walletResetRecovery
                 val isCheckingRNMigration by walletViewModel.isCheckingRNMigration.collectAsStateWithLifecycle()
+                val isRNMigrationUnavailable by walletViewModel.isRNMigrationUnavailable.collectAsStateWithLifecycle()
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val isCriticalUpdateRequired by appViewModel.isCriticalUpdateRequired.collectAsStateWithLifecycle()
@@ -168,6 +170,7 @@ class MainActivity : FragmentActivity() {
                     isCriticalUpdateRequired = isCriticalUpdateRequired,
                     isShowingMigrationLoading = isShowingMigrationLoading,
                     isCheckingRNMigration = isCheckingRNMigration,
+                    isRNMigrationUnavailable = isRNMigrationUnavailable,
                     walletExists = walletExists,
                     isRecoveryMode = isRecoveryMode,
                     walletResetRecovery = walletResetRecovery,
@@ -190,6 +193,9 @@ class MainActivity : FragmentActivity() {
                         CriticalUpdateScreen()
                     },
                     migrationLoading = { MigrationLoadingScreen(isVisible = true) },
+                    migrationRecovery = {
+                        MigrationRecoveryScreen(onRetry = walletViewModel::refreshWalletResetRecovery)
+                    },
                     onboarding = {
                         CompositionLocalProvider(LocalAppViewModel provides appViewModel) {
                             OnboardingNav(
@@ -409,10 +415,12 @@ fun RootDestination(
     isCriticalUpdateRequired: Boolean,
     isShowingMigrationLoading: Boolean,
     isCheckingRNMigration: Boolean,
+    isRNMigrationUnavailable: Boolean,
     walletExists: Boolean,
     isRecoveryMode: Boolean,
     criticalUpdate: @Composable () -> Unit,
     migrationLoading: @Composable () -> Unit,
+    migrationRecovery: @Composable () -> Unit,
     onboarding: @Composable () -> Unit,
     wallet: @Composable () -> Unit,
     walletResetRecovery: WalletResetRecovery,
@@ -421,6 +429,7 @@ fun RootDestination(
     when {
         isCriticalUpdateRequired -> criticalUpdate()
         walletResetRecovery != WalletResetRecovery.Clear -> resetRecovery()
+        isRNMigrationUnavailable -> migrationRecovery()
         isCheckingRNMigration -> migrationLoading()
         isShowingMigrationLoading && !isRecoveryMode -> migrationLoading()
         !walletExists && !isRecoveryMode -> onboarding()

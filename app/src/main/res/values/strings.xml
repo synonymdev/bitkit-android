@@ -405,6 +405,7 @@
     <string name="migration__nav_title">Wallet Migration</string>
     <string name="migration__network_required_msg">Please ensure you have a stable internet connection. Data may show incorrectly while trying to connect.</string>
     <string name="migration__network_required_title">Network Issues Detected</string>
+    <string name="migration__status_error">Wallet migration status is unavailable. Retry before continuing.</string>
     <string name="migration__title">MIGRATING\n&lt;accent&gt;WALLET&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Notification channel for Lightning node foreground service</string>
     <string name="notification__channel_node__name">Lightning node notification</string>

@@ -238,6 +238,7 @@
     <string name="lightning__conn_onboarding_title">Ενεργοποίηση\nLightning\n&lt;accent&gt;πληρωμών&lt;/accent&gt;</string>
     <string name="migration__description">Περίμενε όσο τα παλιά δεδομένα του πορτοφολιού μεταφέρονται σε αυτή τη νέα έκδοση του Bitkit. Αυτό συνήθως διαρκεί λιγότερο από ένα λεπτό.</string>
     <string name="migration__nav_title">Μετάβαση πορτοφολιού</string>
+    <string name="migration__status_error">Η κατάσταση μεταφοράς του πορτοφολιού δεν είναι διαθέσιμη. Δοκιμάστε ξανά πριν συνεχίσετε.</string>
     <string name="migration__title">ΜΕΤΑΒΑΣΗ\n&lt;accent&gt;ΠΟΡΤΟΦΟΛΙΟΥ&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Κανάλι ειδοποιήσεων για υπηρεσία προσκηνίου κόμβου Lightning</string>
     <string name="notification__channel_node__name">Ειδοποίηση κόμβου Lightning</string>

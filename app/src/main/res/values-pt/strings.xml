@@ -239,6 +239,7 @@
     <string name="lightning__conn_onboarding_title">Ativar\nLightning\n&lt;accent&gt;pagamentos&lt;/accent&gt;</string>
     <string name="migration__description">Por favor aguarde enquanto seus dados da carteira antiga migram para esta nova versão da Bitkit. Isso geralmente leva menos de um minuto.</string>
     <string name="migration__nav_title">Migração da Carteira</string>
+    <string name="migration__status_error">O estado da migração da carteira está indisponível. Tenta novamente antes de continuar.</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;CARTEIRA&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Canal de notificação para o serviço em primeiro plano do nó Lightning</string>
     <string name="notification__channel_node__name">Notificação do nó Lightning</string>

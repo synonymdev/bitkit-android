@@ -116,6 +116,8 @@ class WalletViewModel @Inject constructor(
     private val rnMigrationMutex = Mutex()
     private val _isCheckingRNMigration = MutableStateFlow(true)
     val isCheckingRNMigration = _isCheckingRNMigration.asStateFlow()
+    private val _isRNMigrationUnavailable = MutableStateFlow(false)
+    val isRNMigrationUnavailable = _isRNMigrationUnavailable.asStateFlow()
 
     val isShowingMigrationLoading: StateFlow<Boolean> = migrationService.isShowingMigrationLoading
     val isRestoringFromRNRemoteBackup: StateFlow<Boolean> = migrationService.isRestoringFromRNRemoteBackup
@@ -375,11 +377,13 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun checkAndPerformRNMigration() = viewModelScope.launch(bgDispatcher) {
-        val startMigratedWallet = runSuspendCatching {
-            rnMigrationMutex.withLock { checkAndMigrateRNWallet() }
-        }.onFailure {
-            Logger.warn("RN migration admission is unavailable", it, context = TAG)
-        }.getOrDefault(false)
+        val startMigratedWallet = rnMigrationMutex.withLock {
+            _isRNMigrationUnavailable.update { false }
+            runSuspendCatching { checkAndMigrateRNWallet() }.onFailure {
+                _isRNMigrationUnavailable.update { _isCheckingRNMigration.value }
+                Logger.warn("Failed to check RN migration admission", it, context = TAG)
+            }.getOrDefault(false)
+        }
         if (!startMigratedWallet) return@launch
         runSuspendCatching {
             if (!isNetworkConnected()) {
@@ -430,7 +434,7 @@ class WalletViewModel @Inject constructor(
             if (migrationStarted) {
                 handleRNMigrationFailure(it)
             } else {
-                Logger.warn("RN migration admission is unavailable", it, context = TAG)
+                throw it
             }
         }.getOrDefault(false)
     }

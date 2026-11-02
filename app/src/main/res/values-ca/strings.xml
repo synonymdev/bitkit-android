@@ -242,6 +242,7 @@
     <string name="lightning__conn_onboarding_title">Habilitar\nLightning\n&lt;accent&gt;pagaments&lt;/accent&gt;</string>
     <string name="migration__description">Si us plau, espera mentre les dades de la teva antiga cartera es migren a aquesta nova versió de Bitkit. Normalment triga menys d\'un minut.</string>
     <string name="migration__nav_title">Migració de cartera</string>
+    <string name="migration__status_error">L’estat de la migració de la cartera no està disponible. Torna-ho a provar abans de continuar.</string>
     <string name="migration__title">MIGRANT\n&lt;accent&gt;CARTERA&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Canal de notificació per al servei en primer pla del node Lightning</string>
     <string name="notification__channel_node__name">Notificació del node Lightning</string>

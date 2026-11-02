@@ -45,6 +45,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | - | - |
 | CriticalUpdateScreen.kt | Update › Forced update |
 | MigrationLoadingScreen.kt | Update › Forced migration |
+| MigrationRecoveryScreen.kt | `todo` |
 | SplashScreen.kt | New user › Splash and loading screen |
 
 ## ui/screens/common

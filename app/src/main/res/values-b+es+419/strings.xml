@@ -245,6 +245,7 @@
     <string name="lightning__conn_onboarding_title">Habilitar\nLightning\n&lt;accent&gt;pagos&lt;/accent&gt;</string>
     <string name="migration__description">Por favor espera mientras se migran los datos de tu billetera anterior a esta nueva versión de Bitkit. Esto normalmente tarda menos de un minuto.</string>
     <string name="migration__nav_title">Migración de billetera</string>
+    <string name="migration__status_error">El estado de migración de la billetera no está disponible. Reinténtalo antes de continuar.</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;BILLETERA&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Canal de notificación para el servicio en segundo plano del nodo Lightning</string>
     <string name="notification__channel_node__name">Notificación del nodo Lightning</string>

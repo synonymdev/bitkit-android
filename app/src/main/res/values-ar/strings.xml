@@ -238,6 +238,7 @@
     <string name="lightning__conn_onboarding_title">تفعيل\nLightning\n&lt;accent&gt;المدفوعات&lt;/accent&gt;</string>
     <string name="migration__description">يرجى الانتظار أثناء ترحيل بيانات محفظتك القديمة إلى إصدار Bitkit الجديد. عادةً ما يستغرق هذا أقل من دقيقة.</string>
     <string name="migration__nav_title">ترحيل المحفظة</string>
+    <string name="migration__status_error">حالة ترحيل المحفظة غير متاحة. أعد المحاولة قبل المتابعة.</string>
     <string name="migration__title">جارٍ ترحيل\n&lt;accent&gt;المحفظة&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">قناة الإشعارات لخدمة عقدة Lightning في المقدمة</string>
     <string name="notification__channel_node__name">إشعار عقدة Lightning</string>

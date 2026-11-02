@@ -246,6 +246,7 @@
     <string name="lightning__conn_onboarding_title">Włącz\nLightning\n&lt;accent&gt;płatności&lt;/accent&gt;</string>
     <string name="migration__description">Proszę czekać, trwa migracja danych starego portfela do nowej wersji Bitkit. Zwykle trwa to mniej niż minutę.</string>
     <string name="migration__nav_title">Migracja portfela</string>
+    <string name="migration__status_error">Status migracji portfela jest niedostępny. Spróbuj ponownie przed kontynuowaniem.</string>
     <string name="migration__title">MIGRACJA\n&lt;accent&gt;PORTFELA&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Kanał powiadomień dla usługi Lightning w tle</string>
     <string name="notification__channel_node__name">Powiadomienie węzła Lightning</string>

@@ -24,6 +24,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
@@ -214,6 +215,7 @@ class WalletViewModelTest : BaseUnitTest() {
         val recovering = createViewModel()
         advanceUntilIdle()
         assertTrue(recovering.isCheckingRNMigration.value)
+        assertTrue(recovering.isRNMigrationUnavailable.value)
         verify(migrationService, never()).markMigrationChecked()
         unreadable = false
         whenever(migrationService.hasRNWalletData()).thenReturn(true)
@@ -221,6 +223,48 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         verify(migrationService).migrateFromReactNative()
         assertFalse(recovering.isCheckingRNMigration.value)
+        assertFalse(recovering.isRNMigrationUnavailable.value)
+    }
+
+    @Test
+    fun `native migration status write failure offers retry without replacing the wallet`() = test {
+        whenever(walletRepo.walletExists()).thenReturn(true)
+        walletState.value = WalletState(walletExists = true)
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasNativeWalletData()).thenReturn(true)
+        var unwritable = true
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(migrationService.markMigrationChecked()).doSuspendableAnswer {
+            check(!unwritable) { "metadata write failed" }
+            entered.complete(Unit)
+            release.await()
+        }
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertTrue(recovering.walletExists)
+        assertTrue(recovering.isCheckingRNMigration.value)
+        assertTrue(recovering.isRNMigrationUnavailable.value)
+        recovering.createWallet(null)
+        recovering.restoreWallet("replacement", null)
+        verify(walletRepo, never()).createWallet(anyOrNull())
+        verify(walletRepo, never()).restoreWallet(any(), anyOrNull())
+        verify(migrationService, never()).migrateFromReactNative()
+
+        unwritable = false
+        clearInvocations(migrationService)
+        recovering.refreshWalletResetRecovery()
+        entered.await()
+        recovering.refreshWalletResetRecovery()
+        assertTrue(recovering.isCheckingRNMigration.value)
+        assertFalse(recovering.isRNMigrationUnavailable.value)
+        release.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(recovering.walletExists)
+        assertFalse(recovering.isCheckingRNMigration.value)
+        assertFalse(recovering.isRNMigrationUnavailable.value)
+        verify(migrationService).markMigrationChecked()
+        verify(migrationService, never()).migrateFromReactNative()
     }
 
     @Test

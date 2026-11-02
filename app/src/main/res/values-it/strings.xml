@@ -243,6 +243,7 @@
     <string name="lightning__conn_onboarding_title">Abilita\nLightning\n&lt;accent&gt;pagamenti&lt;/accent&gt;</string>
     <string name="migration__description">Attendi mentre i dati del tuo vecchio wallet migrano a questa nuova versione di Bitkit. Questo di solito richiede meno di un minuto.</string>
     <string name="migration__nav_title">Migrazione Wallet</string>
+    <string name="migration__status_error">Lo stato della migrazione del portafoglio non è disponibile. Riprova prima di continuare.</string>
     <string name="migration__title">MIGRAZIONE\n&lt;accent&gt;WALLET&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Canale di notifica per il servizio in primo piano del nodo Lightning</string>
     <string name="notification__channel_node__name">Notifica nodo Lightning</string>

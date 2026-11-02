@@ -244,6 +244,7 @@
     <string name="lightning__conn_onboarding_title">Habilitar\nLightning\n&lt;accent&gt;pagos&lt;/accent&gt;</string>
     <string name="migration__description">Por favor espera mientras se migran los datos de tu antiguo monedero a esta nueva versión de Bitkit. Esto suele tardar menos de un minuto.</string>
     <string name="migration__nav_title">Migración del monedero</string>
+    <string name="migration__status_error">El estado de migración del monedero no está disponible. Reinténtalo antes de continuar.</string>
     <string name="migration__title">MIGRANDO\n&lt;accent&gt;MONEDERO&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Canal de notificación para el servicio en primer plano del nodo Lightning</string>
     <string name="notification__channel_node__name">Notificación del nodo Lightning</string>

@@ -242,6 +242,7 @@
     <string name="lightning__conn_onboarding_title">Lightning\n&lt;accent&gt;betalingen&lt;/accent&gt;\ninschakelen</string>
     <string name="migration__description">Even geduld terwijl je oude wallet-gegevens migreren naar deze nieuwe Bitkit-versie. Dit duurt meestal minder dan een minuut.</string>
     <string name="migration__nav_title">Wallet-migratie</string>
+    <string name="migration__status_error">De migratiestatus van de wallet is niet beschikbaar. Probeer het opnieuw voordat je doorgaat.</string>
     <string name="migration__title">WALLET\n&lt;accent&gt;MIGREREN&lt;/accent&gt;</string>
     <string name="notification__channel_node__body">Notificatiekanaal voor Lightning node voorgrondservice</string>
     <string name="notification__channel_node__name">Lightning node notificatie</string>
