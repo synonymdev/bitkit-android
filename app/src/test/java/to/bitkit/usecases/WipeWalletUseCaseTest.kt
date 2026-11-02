@@ -3,12 +3,17 @@ package to.bitkit.usecases
 import com.google.android.gms.tasks.TaskCompletionSource
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.messaging.FirebaseMessaging
+import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.PaykitSdk
+import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
@@ -27,6 +32,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
@@ -52,9 +58,13 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WipeWalletUseCaseTest : BaseUnitTest() {
+    private companion object {
+        val PAYKIT_SETUP_DURATION = 20.seconds
+    }
 
     private val backupRepo = mock<BackupRepo>()
     private val keychain = mock<Keychain>()
@@ -102,30 +112,32 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         onWipeCalled = false
         onSetWalletExistsStateCalled = false
 
-        sut = WipeWalletUseCase(
-            backupRepo = backupRepo,
-            keychain = keychain,
-            coreService = coreService,
-            usdtRepo = usdtRepo,
-            paykitUsdtPaymentRepo = paykitUsdtPaymentRepo,
-            db = db,
-            settingsStore = settingsStore,
-            cacheStore = cacheStore,
-            watchOnlyAccountRepo = watchOnlyAccountRepo,
-            widgetsStore = widgetsStore,
-            blocktankRepo = blocktankRepo,
-            activityRepo = activityRepo,
-            hwWalletRepo = hwWalletRepo,
-            lightningRepo = lightningRepo,
-            pubkyRepo = pubkyRepo,
-            privatePaykitRepo = privatePaykitRepoProvider,
-            privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
-            firebaseMessaging = firebaseMessaging,
-            migrationService = migrationService,
-            paykitSdkService = paykitSdkService,
-            connectionRecovery = connectionRecoveryFixture(settingsStore),
-        )
+        sut = wipeWalletUseCase()
     }
+
+    private fun wipeWalletUseCase(paykitSdkService: PaykitSdkService = this.paykitSdkService) = WipeWalletUseCase(
+        backupRepo = backupRepo,
+        keychain = keychain,
+        coreService = coreService,
+        usdtRepo = usdtRepo,
+        paykitUsdtPaymentRepo = paykitUsdtPaymentRepo,
+        db = db,
+        settingsStore = settingsStore,
+        cacheStore = cacheStore,
+        watchOnlyAccountRepo = watchOnlyAccountRepo,
+        widgetsStore = widgetsStore,
+        blocktankRepo = blocktankRepo,
+        activityRepo = activityRepo,
+        hwWalletRepo = hwWalletRepo,
+        lightningRepo = lightningRepo,
+        pubkyRepo = pubkyRepo,
+        privatePaykitRepo = privatePaykitRepoProvider,
+        privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
+        firebaseMessaging = firebaseMessaging,
+        migrationService = migrationService,
+        paykitSdkService = paykitSdkService,
+        connectionRecovery = connectionRecoveryFixture(settingsStore),
+    )
 
     @Test
     fun `invoke should reset all app state in correct order`() = runTest {
@@ -359,6 +371,40 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         verify(privatePaykitRepo).closeAndClear()
         verify(lightningRepo).wipeStorage(0)
+        verify(keychain).deleteWipePending()
+        assertTrue(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should reach the commit step when Paykit setup outlives the wipe's wait for it`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.initialize()).doSuspendableAnswer {
+            delay(PAYKIT_SETUP_DURATION)
+            IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT)
+        }
+        val paykitSdkService = PaykitSdkService(
+            mock(),
+            keychain,
+            mock(),
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            platformInitializer = {},
+            settingsStore = mock(),
+            sdkFactory = { sdk },
+        )
+        whenever(pubkyRepo.removeBitkitPaymentEndpoints()).doSuspendableAnswer {
+            runSuspendCatching { paykitSdkService.syncPublicEndpoints(emptyList()) }.map {}
+        }
+        whenever(pubkyRepo.wipeLocalState()).doSuspendableAnswer {
+            runSuspendCatching { paykitSdkService.forgetSessionAccess() }
+            Unit
+        }
+
+        val result = wipeWalletUseCase(paykitSdkService = paykitSdkService)
+            .invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
+
+        assertTrue(result.isSuccess)
+        verify(lightningRepo).wipeStorage(0)
+        verify(keychain).wipe(retainedKeys)
         verify(keychain).deleteWipePending()
         assertTrue(onSetWalletExistsStateCalled)
     }

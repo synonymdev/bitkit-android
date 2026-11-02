@@ -204,6 +204,9 @@ enum class PaykitReadLane {
 /** A public Pubky read that ran out of the timeout its caller gave it once it held a read slot. */
 class PaykitReadTimeoutError(timeout: Duration) : AppError("Public Pubky read timed out after $timeout")
 
+/** A Paykit setup whose caller was cancelled before it finished. */
+class PaykitSetupInterrupted(cause: Throwable) : AppError("Paykit setup was interrupted", cause)
+
 private class TimedRead<T>(val value: T)
 
 private class PaykitPublicReadSlots(slots: Int) {
@@ -353,6 +356,8 @@ class PaykitSdkService @Inject constructor(
     private suspend fun initialize(activate: suspend () -> Unit) {
         setupMutex.withLock {
             if (isSetup.isCompleted && !setupFailed) return
+            // Setup reaches the server, and a wallet wipe never waits on one, so a retry during it fails instead
+            if (setupFailed && operationLock.isWipeInProgress) return isSetup.await()
             if (setupFailed) {
                 isSetup = CompletableDeferred()
                 setupFailed = false
@@ -363,12 +368,20 @@ class PaykitSdkService @Inject constructor(
                 launch { republishIdentityIfNeeded() }
                 operationLock.withLock { activate() }
                 isSetup.complete(Unit)
+            } catch (e: CancellationException) {
+                // A stored cancellation would reach every waiter as if the waiter itself had been cancelled
+                failSetup(PaykitSetupInterrupted(e))
+                throw e
             } catch (t: Throwable) {
-                setupFailed = true
-                isSetup.completeExceptionally(t)
+                failSetup(t)
                 throw t
             }
         }
+    }
+
+    private fun failSetup(failure: Throwable) {
+        setupFailed = true
+        isSetup.completeExceptionally(failure)
     }
 
     private suspend fun initializeRuntime() {
@@ -1656,7 +1669,11 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun <T> withWalletWipe(operation: suspend () -> T): T {
         // Drain setup before closing admission, so cleanup cannot await setup queued behind its own barrier.
-        runSuspendCatching { initialize() }
+        // Setup can reach the network, so it is bounded and the wipe never waits on a server.
+        runSuspendCatching { withTimeoutOrNull(WALLET_WIPE_SETUP_TIMEOUT) { initialize() } }
+            .onSuccess {
+                if (it == null) Logger.warn("Timed out initializing Paykit before wallet wipe", context = TAG)
+            }
             .onFailure { Logger.warn("Failed to initialize Paykit before wallet wipe", it, context = TAG) }
         return operationLock.withWalletWipe {
             resetRuntime()
@@ -1963,6 +1980,9 @@ class PaykitSdkService @Inject constructor(
 
         /** Maximum duration of a public payment-request capability lookup. */
         private val PAYMENT_REQUEST_DISCOVERY_TIMEOUT = 5.seconds
+
+        /** Maximum time a wallet wipe waits for Paykit setup before closing admission. */
+        private val WALLET_WIPE_SETUP_TIMEOUT = 15.seconds
 
         /** Maximum concurrent public Pubky reads that run outside the operation lock. */
         private const val PUBLIC_READ_PERMITS = 6

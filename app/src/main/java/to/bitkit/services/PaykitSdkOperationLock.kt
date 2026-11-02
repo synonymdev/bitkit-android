@@ -29,6 +29,9 @@ internal class PaykitSdkOperationLock {
     private var generation = 0L
     private var isWiping = false
 
+    /** Whether a wallet wipe runs, from the moment it rejects new operations until it ends. */
+    val isWipeInProgress: Boolean get() = synchronized(stateLock) { isWiping }
+
     suspend fun <T> withLock(priority: Priority = Priority.Ordered, operation: suspend () -> T): T {
         if (ownsWipe()) return operation()
         val admittedGeneration = admit()

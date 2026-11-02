@@ -325,4 +325,35 @@ class PaykitSdkServiceWipeTest {
 
         assertEquals("wallet_wipe_in_progress", read.await().code)
     }
+
+    @Test
+    fun `a wallet wipe never sets up again the SDK whose setup failed before it`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        whenever { sdk.initialize() }
+            .thenAnswer { throw PaykitException.Transport("transport_error", "Unavailable homeserver") }
+            .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PUBLIC_ONLY))
+        whenever { sdk.contactRecords() }.thenReturn(emptyList())
+        var setups = 0
+        val service = PaykitSdkService(
+            mock(),
+            mock(),
+            mock(),
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            platformInitializer = { setups++ },
+            settingsStore = mock(),
+            sdkFactory = { sdk },
+        )
+
+        service.withWalletWipe {
+            assertFailsWith<PaykitException.Transport> { service.initialize() }
+            assertFailsWith<PaykitException.Transport> { service.contactRecords() }
+        }
+
+        assertEquals(1, setups)
+        verify(sdk, times(1)).initialize()
+        // Once the wipe is over, setting the SDK up works again
+        service.initialize()
+        assertEquals(emptyList(), service.contactRecords())
+        verify(sdk, times(2)).initialize()
+    }
 }
