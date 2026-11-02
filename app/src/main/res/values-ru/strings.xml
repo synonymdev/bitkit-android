@@ -307,6 +307,7 @@
     <string name="onboarding__restore_failed_header">Ошибка Баланса &lt;accent&gt;Расходов&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit восстановил ваши сбережения, но не смог восстановить ваш текущий Баланс Расходов (состояние Lightning) и данные кошелька.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Восстановить&lt;/accent&gt;\nваш кошелёк</string>
+    <string name="onboarding__restore_incomplete_text">Ваш кошелёк и баланс восстановлены, но Bitkit не удалось восстановить: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Контрольная сумма фразы восстановления некорректна. Пожалуйста, дважды проверьте вашу фразу восстановления.</string>
     <string name="onboarding__restore_no_backup_button">Продолжить Без Резервной Копии</string>
     <string name="onboarding__restore_no_backup_warn">Если у вас ранее была резервная копия Lightning, она будет перезаписана и утрачена. Это может привести к потере средств.</string>
@@ -829,7 +830,7 @@
     <string name="usdt__from_address">С адреса</string>
     <string name="usdt__hide_details">Скрыть детали</string>
     <string name="usdt__intro_decline">Нет, Спасибо</string>
-    <string name="usdt__intro_description">Биткоин в душе. Доллары, когда они нужны. Включите USDT (Tether), чтобы отправлять и получать цифровые доллары в Bitkit.</string>
+    <string name="usdt__intro_description">Биткоин в душе. Доллары, когда они нужны. Включите USDT (Tether), чтобы быстро отправлять и получать цифровые доллары в Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;ДОЛЛАРЫ?&lt;/accent&gt;\nРЕШАТЬ ВАМ</string>
     <string name="usdt__intro_title">Новинка: USDT</string>
     <string name="usdt__maximum_total">Макс. списание</string>
@@ -1391,8 +1392,10 @@
     <string name="profile__pay_contacts_error_wallet">Кошелёк ещё запускается. Попробуйте снова через мгновение.</string>
     <string name="profile__pay_contacts_headline">Пусть ваши\nконтакты\n&lt;accent&gt;платят вам&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Платежи Контактам</string>
+    <string name="profile__private_payments_toggle">Приватные платежи с контактами</string>
     <string name="profile__pubky_copied">pubky скопирован в буфер обмена</string>
     <string name="profile__public_key">Публичный Ключ</string>
+    <string name="profile__public_payments_toggle">Публичные платежи</string>
     <string name="profile__restore_nav_title">Восстановить Профиль</string>
     <string name="profile__session_expired">Сессия вашего профиля истекла. Переподключитесь, чтобы восстановить профиль.</string>
     <string name="profile__sign_out">Отключить</string>
@@ -1437,7 +1440,6 @@
     <string name="settings__es__server_error_certificate">Сертификат этого сервера не является доверенным. Используйте сервер с доверенным сертификатом или подключитесь к его TCP-порту.</string>
     <string name="settings__es__server_error_network">Этот сервер работает в другой сети Bitcoin. Выберите сервер для сети, которую использует Bitkit.</string>
     <string name="settings__es__server_error_protocol">Не удалось установить защищённое соединение. Проверьте, что протокол (TCP или TLS) соответствует порту сервера.</string>
-    <string name="settings__general__enable_contact_payments">Включить платежи с контактами</string>
     <string name="settings__hardware_wallets__add_button">Добавить Аппаратный Кошелёк</string>
     <string name="settings__hardware_wallets__name_label">Название</string>
     <string name="settings__hardware_wallets__nav_title">Аппаратные Кошельки</string>
@@ -1499,6 +1501,9 @@
     <string name="subscriptions__allowances">Бюджеты</string>
     <string name="subscriptions__allowances_empty_description">Вы можете задать лимиты расходов, чтобы автоматически оплачивать запросы на оплату от доверенных контактов.</string>
     <string name="subscriptions__allowances_empty_headline">Настройте\n&lt;accent&gt;бюджеты&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Данные ваших бюджетов старше тех, что этот кошелёк уже использовал. Запросы будут ждать вашего подтверждения, пока вы не возобновите платежи.</string>
+    <string name="subscriptions__allowances_paused_resume">Возобновить</string>
+    <string name="subscriptions__allowances_paused_title">Автоматические платежи приостановлены</string>
     <string name="subscriptions__cancel_subscription">Отменить Подписку</string>
     <string name="subscriptions__choose_recipient">Выберите Получателя</string>
     <string name="subscriptions__content_too_long">Сократите название или описание подписки и попробуйте снова.</string>

@@ -93,6 +93,7 @@ class WalletRepo @Inject constructor(
     private val receiveUpdateStatusLock = Any()
     private var pendingReceiveUpdates = 0
     private var pendingReceiveCacheLoads = 0
+    private var receiveCacheValidationFailed = false
     private var pendingReceiveValidation: String? = null
     private var committedReceiveBip21 = ""
 
@@ -192,7 +193,19 @@ class WalletRepo @Inject constructor(
         changePendingReceiveCacheLoads(1)
         repoScope.launch {
             receiveStateMutex.withLock {
-                val cacheData = cacheStore.data.first()
+                var cacheData = cacheStore.data.first()
+                cacheData.balance?.let { balance -> _balanceState.update { balance } }
+                val unavailable = runSuspendCatching {
+                    privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(cacheData.onchainAddress)
+                }.getOrElse {
+                    receiveCacheValidationFailed = true
+                    Logger.warn("Failed to validate cached receive address", it, context = TAG)
+                    return@withLock
+                }
+                if (unavailable) {
+                    cacheData = cacheData.invalidateReceiveOnchainAddress()
+                    cacheStore.update { it.invalidateReceiveOnchainAddress() }
+                }
                 committedReceiveBip21 = cacheData.bip21
                 _walletState.update {
                     it.copy(
@@ -202,9 +215,7 @@ class WalletRepo @Inject constructor(
                     )
                 }
                 synchronized(receiveUpdateStatusLock) { updateReceivePendingState() }
-                cacheData.balance?.let { balance ->
-                    _balanceState.update { balance }
-                }
+                receiveCacheValidationFailed = false
             }
         }.invokeOnCompletion { changePendingReceiveCacheLoads(-1) }
     }
@@ -431,14 +442,14 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    /** Debounce syncs for [Event.SyncCompleted]. Rapid consecutive events are coalesced. */
-    fun debounceSyncByEvent() {
+    /** Coalesces event syncs, then runs [onActivitiesSynced] only after a successful fresh activity sync. */
+    fun debounceSyncByEvent(onActivitiesSynced: suspend () -> Unit = {}) {
         eventSyncJob?.cancel()
         eventSyncJob = repoScope.launch {
             delay(EVENT_SYNC_DEBOUNCE_MS)
             syncBalances()
             transferRepo.syncTransferStates()
-            activityRepo.syncActivities()
+            activityRepo.syncActivities(requireFresh = true).onSuccess { onActivitiesSynced() }
         }
     }
 
@@ -583,16 +594,32 @@ class WalletRepo @Inject constructor(
     }
 
     private suspend fun refreshReusableReceiveAddressOrThrow() {
-        val address = getOnchainAddress()
-        if (address.isEmpty()) {
-            newAddress().getOrThrow()
-        } else if (privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(address)) {
-            replaceReusableOnchainAddress().getOrThrow()
-        } else {
-            val wasUsed = checkAddressUsage(address).getOrThrow()
-            if (wasUsed) {
-                replaceReusableOnchainAddress().getOrThrow()
-            }
+        val retryCache = getOnchainAddress().isEmpty() && receiveCacheValidationFailed
+        if (retryCache) changePendingReceiveCacheLoads(1)
+        try {
+            do {
+                val address = if (retryCache) cacheStore.data.first().onchainAddress else getOnchainAddress()
+                if (address.isEmpty()) {
+                    newAddress().getOrThrow()
+                } else if (privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(address)) {
+                    replaceReusableOnchainAddress().getOrThrow()
+                } else {
+                    val wasUsed = checkAddressUsage(address).getOrThrow()
+                    if (wasUsed) {
+                        replaceReusableOnchainAddress().getOrThrow()
+                    } else if (retryCache) {
+                        cacheStore.update { current ->
+                            if (current.onchainAddress == address) {
+                                _walletState.update { it.copy(onchainAddress = address) }
+                            }
+                            current
+                        }
+                    }
+                }
+            } while (retryCache && getOnchainAddress().isEmpty())
+            receiveCacheValidationFailed = false
+        } finally {
+            if (retryCache) changePendingReceiveCacheLoads(-1)
         }
     }
 
