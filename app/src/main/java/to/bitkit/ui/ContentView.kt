@@ -394,8 +394,6 @@ fun ContentView(
                     }
                     appViewModel.onScanResult(it.data, routePubkyKeys = true)
                 }
-
-                else -> Unit
             }
         }
     }

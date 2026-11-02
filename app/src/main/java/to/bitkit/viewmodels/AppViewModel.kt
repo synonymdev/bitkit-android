@@ -229,6 +229,9 @@ import to.bitkit.repositories.incomingPaymentRequestFailureReason
 import to.bitkit.repositories.onchainPaymentTerms
 import to.bitkit.repositories.parseUsdtPaymentRequest
 import to.bitkit.repositories.paykitRate
+import to.bitkit.security.PinResult
+import to.bitkit.security.PinVerifier
+import to.bitkit.security.WipeCoordinator
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
@@ -289,6 +292,8 @@ class AppViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val pinVerifier: PinVerifier,
+    private val wipeCoordinator: WipeCoordinator,
     private val lightningRepo: LightningRepo,
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val walletRepo: WalletRepo,
@@ -415,6 +420,11 @@ class AppViewModel @Inject constructor(
 
     private val _isAuthenticated = MutableStateFlow(false)
     val isAuthenticated = _isAuthenticated.asStateFlow()
+
+    val wipeState = wipeCoordinator.state
+
+    val canUseBiometrics = pinVerifier.canUseBiometrics
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Cached so the app can be locked synchronously when the activity stops. */
     private val isPinEnabled = settingsStore.data
@@ -585,6 +595,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun setIsAuthenticated(value: Boolean) {
+        if (value && wipeState.value.isGateUp) return
         _isAuthenticated.value = value
         if (!value) {
             clearPaymentRequestPreparation()
@@ -664,6 +675,18 @@ class AppViewModel @Inject constructor(
             resetIsAuthenticatedState()
             delay(AUTH_CHECK_SPLASH_DELAY_MS)
             splashVisible = false
+        }
+        viewModelScope.launch {
+            var wasGateUp = false
+            wipeState.collect {
+                when {
+                    it.isGateUp -> setIsAuthenticated(false)
+                    // A gate that drops without a wipe, e.g. once an unreadable intent reads as none, leaves the
+                    // launch auth state stale
+                    wasGateUp -> resetIsAuthenticatedStateInternal()
+                }
+                wasGateUp = it.isGateUp
+            }
         }
         viewModelScope.launch {
             quickPayRepo.unhandledFailures.collect {
@@ -7698,6 +7721,10 @@ class AppViewModel @Inject constructor(
 
     // region security
     private suspend fun resetIsAuthenticatedStateInternal() {
+        if (wipeState.value.isGateUp) {
+            _isAuthenticated.update { false }
+            return
+        }
         val settings = settingsStore.data.first()
         val needsAuth = settings.isPinEnabled
         _isAuthenticated.value = !needsAuth
@@ -7723,32 +7750,17 @@ class AppViewModel @Inject constructor(
         Logger.debug("Locked app on background", context = TAG)
     }
 
-    fun validatePin(pin: String): Boolean {
-        val storedPin = keychain.loadString(Keychain.Key.PIN.name)
-        val isValid = storedPin == pin
-
-        if (isValid) {
-            viewModelScope.launch {
-                keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
-            }
-            return true
+    suspend fun validatePin(pin: String): Boolean = when (pinVerifier.verify(pin)) {
+        PinResult.Correct -> true
+        is PinResult.Incorrect, PinResult.LockedOut -> false
+        PinResult.Unavailable -> {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = context.getString(R.string.security__pin_check_error),
+            )
+            false
         }
-
-        viewModelScope.launch(bgDispatcher) {
-            val newAttempts = pinAttemptsRemaining.value - 1
-            keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, newAttempts.toString())
-
-            if (newAttempts <= 0) {
-                toast(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.security__wiped_title),
-                    description = context.getString(R.string.security__wiped_message),
-                )
-                delay(250) // small delay for UI feedback
-                mainScreenEffect(MainScreenEffect.WipeWallet)
-            }
-        }
-        return false
     }
 
     fun addPin(pin: String) {
@@ -9088,7 +9100,6 @@ sealed class MainScreenEffect {
     ) : MainScreenEffect()
 
     data object NavigateToPubkyChoice : MainScreenEffect()
-    data object WipeWallet : MainScreenEffect()
     data class ProcessClipboardAutoRead(val data: String) : MainScreenEffect()
 }
 

@@ -11,6 +11,7 @@ class PubkyAuthApprovalSheetTest {
             isPinEnabled = true,
             isBiometricEnabled = true,
             isBiometrySupported = true,
+            canUseBiometrics = true,
         )
 
         assertEquals(PubkyApprovalLocalAuthMode.AuthCheck, result)
@@ -22,6 +23,7 @@ class PubkyAuthApprovalSheetTest {
             isPinEnabled = false,
             isBiometricEnabled = true,
             isBiometrySupported = true,
+            canUseBiometrics = true,
         )
 
         assertEquals(PubkyApprovalLocalAuthMode.Biometrics, result)
@@ -33,6 +35,7 @@ class PubkyAuthApprovalSheetTest {
             isPinEnabled = false,
             isBiometricEnabled = false,
             isBiometrySupported = false,
+            canUseBiometrics = true,
         )
 
         assertEquals(PubkyApprovalLocalAuthMode.None, result)
@@ -44,9 +47,22 @@ class PubkyAuthApprovalSheetTest {
             isPinEnabled = false,
             isBiometricEnabled = true,
             isBiometrySupported = false,
+            canUseBiometrics = true,
         )
 
         assertEquals(PubkyApprovalLocalAuthMode.None, result)
+    }
+
+    @Test
+    fun `resolve auth mode uses auth check instead of biometrics while local auth is locked out`() {
+        val result = resolvePubkyApprovalLocalAuthMode(
+            isPinEnabled = false,
+            isBiometricEnabled = true,
+            isBiometrySupported = true,
+            canUseBiometrics = false,
+        )
+
+        assertEquals(PubkyApprovalLocalAuthMode.AuthCheck, result)
     }
 
     @Test

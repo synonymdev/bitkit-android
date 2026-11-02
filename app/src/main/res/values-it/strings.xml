@@ -458,6 +458,7 @@
     <string name="security__pass_your">La Tua Passphrase</string>
     <string name="security__pin_allowance">Inserisci il codice PIN per confermare questa modifica al budget.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentativi rimanenti. Ha dimenticato il PIN?</string>
+    <string name="security__pin_check_error">Bitkit non è riuscito a verificare il tuo PIN. Riprova.</string>
     <string name="security__pin_choose_header">Scegli il PIN a 4 cifre</string>
     <string name="security__pin_choose_text">Utilizza un PIN che ricorderai. Se dimentichi il PIN, puoi reimpostarlo, ma ciò richiede il ripristino del wallet.</string>
     <string name="security__pin_disable_button">Disabilita il PIN</string>
@@ -495,6 +496,12 @@
     <string name="security__success_title">Wallet Protetto</string>
     <string name="security__use_pin">Usa il codice PIN</string>
     <string name="security__wipe_app">Resetta App</string>
+    <string name="security__wipe_blocked_text">Bitkit non riesce a verificare il suo stato di sicurezza, quindi il tuo wallet resta bloccato. Tocca Riprova per verificare di nuovo, oppure esporta i log per il supporto.</string>
+    <string name="security__wipe_blocked_title">Wallet bloccato</string>
+    <string name="security__wipe_failed_text">Bitkit non è riuscito a completare l\'eliminazione dei dati del tuo wallet e riproverà. Tieni Bitkit aperto, oppure tocca Riprova.</string>
+    <string name="security__wipe_not_started">Non è stato possibile avviare il reset. Non è stato eliminato nulla.</string>
+    <string name="security__wipe_running_text">Bitkit sta eliminando tutti i dati del wallet da questo dispositivo. Tieni Bitkit aperto finché non ha finito.</string>
+    <string name="security__wipe_title">Reset di Bitkit in corso</string>
     <string name="security__wiped_message">Bitkit è stato ripristinato e tutti i dati del portafoglio sono stati eliminati.</string>
     <string name="security__wiped_title">Dati del portafoglio eliminati</string>
     <string name="security__pin_enable_button">Abilita PIN</string>

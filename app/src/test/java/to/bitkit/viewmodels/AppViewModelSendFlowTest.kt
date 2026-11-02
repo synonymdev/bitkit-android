@@ -218,6 +218,10 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.repositories.parseUsdtPaymentRequest
+import to.bitkit.security.PinResult
+import to.bitkit.security.PinVerifier
+import to.bitkit.security.WipeCoordinator
+import to.bitkit.security.WipeState
 import to.bitkit.services.ActivityService
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.AppUpdaterService
@@ -313,6 +317,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val clipboardManager = mock<ClipboardManager>()
     private val toastManager = mock<ToastQueueManager>()
     private val toastState = MutableStateFlow<Toast?>(null)
+    private val pinVerifier = mock<PinVerifier>()
+    private val wipeCoordinator = mock<WipeCoordinator>()
+    private val wipeState = MutableStateFlow<WipeState>(WipeState.Idle)
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val connectivityState = MutableStateFlow(ConnectivityState.CONNECTED)
@@ -702,6 +709,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(connectionRecovery.isCurrentGeneration(anyOrNull())).thenAnswer {
             it.getArgument<Long?>(0) == walletGeneration
         }
+        wipeState.value = WipeState.Idle
+        whenever(wipeCoordinator.state).thenReturn(wipeState)
+        whenever(pinVerifier.canUseBiometrics).thenReturn(flowOf(true))
         whenever(currencyRepo.currencyState).thenReturn(MutableStateFlow(CurrencyState()))
         whenever(context.getString(any())).thenReturn("")
         whenever(context.getSystemService(Context.CLIPBOARD_SERVICE)).thenReturn(clipboardManager)
@@ -926,6 +936,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         bgDispatcher = testDispatcher,
         keychain = keychain,
         connectionRecovery = connectionRecovery,
+        pinVerifier = pinVerifier,
+        wipeCoordinator = wipeCoordinator,
         lightningRepo = lightningRepo,
         pendingPaymentRepo = pendingPaymentRepo,
         walletRepo = walletRepo,
@@ -10084,6 +10096,80 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `resetIsAuthenticatedState keeps the app locked while the wipe gate is up`() = test {
+        settingsData.value = SettingsData(isPinEnabled = false)
+        wipeState.value = WipeState.Running
+
+        sut.resetIsAuthenticatedState()
+        advanceUntilIdle()
+
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `raising the wipe gate locks an unlocked session`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        wipeState.value = WipeState.Running
+        advanceUntilIdle()
+
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `setIsAuthenticated cannot unlock while the wipe state is unknown`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        advanceUntilIdle()
+        wipeState.value = WipeState.Blocked(RuntimeException("keychain unreadable"))
+
+        sut.setIsAuthenticated(true)
+
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `lowering the wipe gate without a wipe unlocks a wallet without a PIN`() = test {
+        settingsData.value = SettingsData(isPinEnabled = false)
+        wipeState.value = WipeState.Blocked(RuntimeException("keychain unreadable"))
+        advanceUntilIdle()
+        assertFalse(sut.isAuthenticated.value)
+
+        wipeState.value = WipeState.Idle
+        advanceUntilIdle()
+
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `lowering the wipe gate without a wipe keeps a PIN-protected wallet locked`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        wipeState.value = WipeState.Blocked(RuntimeException("keychain unreadable"))
+        advanceUntilIdle()
+
+        wipeState.value = WipeState.Idle
+        advanceUntilIdle()
+
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `validatePin succeeds only when the verifier accepts the PIN`() = test {
+        whenever(pinVerifier.verify("1234")).thenReturn(PinResult.Correct)
+        whenever(pinVerifier.verify("0000")).thenReturn(PinResult.LockedOut)
+        whenever(pinVerifier.verify("1111")).thenReturn(PinResult.Incorrect(attemptsRemaining = 3))
+        whenever(pinVerifier.verify("2222")).thenReturn(PinResult.Unavailable)
+        clearInvocations(toastManager)
+
+        assertTrue(sut.validatePin("1234"))
+        assertFalse(sut.validatePin("0000"))
+        assertFalse(sut.validatePin("1111"))
+        assertFalse(sut.validatePin("2222"))
+        verify(toastManager).enqueue(check { assertEquals(Toast.ToastType.ERROR, it.type) })
     }
 
     @Test

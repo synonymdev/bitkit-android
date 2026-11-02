@@ -50,6 +50,8 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.security.WipeReason
+import to.bitkit.security.WipeState
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.BottomSheetOverlayHost
 import to.bitkit.ui.components.BottomSheetOverlayState
@@ -65,6 +67,7 @@ import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
 import to.bitkit.ui.screens.CriticalUpdateScreen
 import to.bitkit.ui.screens.MigrationLoadingScreen
 import to.bitkit.ui.screens.SplashScreen
+import to.bitkit.ui.screens.wipe.WipeGateScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
 import to.bitkit.ui.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
@@ -79,7 +82,6 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
-import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
@@ -136,6 +138,7 @@ class MainActivity : FragmentActivity() {
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val isCriticalUpdateRequired by appViewModel.isCriticalUpdateRequired.collectAsStateWithLifecycle()
+                val wipeState by appViewModel.wipeState.collectAsStateWithLifecycle()
                 val hazeState = rememberHazeState(blurEnabled = true)
                 val bottomSheetOverlayState = remember { BottomSheetOverlayState() }
                 val authSheetOverlayState = remember { BottomSheetOverlayState() }
@@ -149,9 +152,10 @@ class MainActivity : FragmentActivity() {
                     notificationsGranted,
                     keepActive,
                     restoreState,
+                    wipeState.isGateUp,
                 ) {
                     val canStartService = walletExists && notificationsGranted && keepActive && restoreState.isIdle()
-                    if (canStartService && !isRecoveryMode) {
+                    if (canStartService && !isRecoveryMode && !wipeState.isGateUp) {
                         tryStartForegroundService()
                     } else {
                         stopForegroundService()
@@ -159,10 +163,12 @@ class MainActivity : FragmentActivity() {
                 }
 
                 RootDestination(
+                    wipeState = wipeState,
                     isCriticalUpdateRequired = isCriticalUpdateRequired,
                     isShowingMigrationLoading = isShowingMigrationLoading,
                     walletExists = walletExists,
                     isRecoveryMode = isRecoveryMode,
+                    wipeGate = { WipeGateScreen() },
                     criticalUpdate = {
                         val lifecycle = LocalLifecycleOwner.current.lifecycle
                         DisposableEffect(lifecycle, walletExists, isRecoveryMode, notificationsGranted, keepActive) {
@@ -234,21 +240,12 @@ class MainActivity : FragmentActivity() {
                             CompositionLocalProvider(LocalBottomSheetOverlayState provides authSheetOverlayState) {
                                 ForgotPinSheet(
                                     onDismiss = { appViewModel.setShowForgotPin(false) },
-                                    onResetClick = { walletViewModel.wipeWallet() },
+                                    onResetClick = { walletViewModel.wipeWallet(WipeReason.FORGOT_PIN) },
                                 )
                             }
                         }
 
                         BottomSheetOverlayHost(state = authSheetOverlayState)
-
-                        LaunchedEffect(appViewModel) {
-                            appViewModel.mainScreenEffect.collect {
-                                when (it) {
-                                    MainScreenEffect.WipeWallet -> walletViewModel.wipeWallet()
-                                    else -> Unit
-                                }
-                            }
-                        }
                     },
                 )
 
@@ -395,16 +392,19 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 fun RootDestination(
+    wipeState: WipeState,
     isCriticalUpdateRequired: Boolean,
     isShowingMigrationLoading: Boolean,
     walletExists: Boolean,
     isRecoveryMode: Boolean,
+    wipeGate: @Composable () -> Unit,
     criticalUpdate: @Composable () -> Unit,
     migrationLoading: @Composable () -> Unit,
     onboarding: @Composable () -> Unit,
     wallet: @Composable () -> Unit,
 ) {
     when {
+        wipeState.isGateUp -> wipeGate()
         isCriticalUpdateRequired -> criticalUpdate()
         isShowingMigrationLoading && !isRecoveryMode -> migrationLoading()
         !walletExists && !isRecoveryMode -> onboarding()

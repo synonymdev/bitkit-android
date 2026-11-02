@@ -460,6 +460,7 @@
     <string name="security__pin_last_attempt">Ostatnia próba. Wpisanie błędnego kodu spowoduje zresetowanie portfela.</string>
     <string name="security__pin_allowance">Proszę podaj swój kod PIN, aby potwierdzić tę zmianę budżetu.</string>
     <string name="security__pin_attempts">Liczba pozostałych prób:{attemptsRemaining}. Zapomniałeś kodu PIN?</string>
+    <string name="security__pin_check_error">Bitkit nie mógł sprawdzić Twojego kodu PIN. Spróbuj ponownie.</string>
     <string name="security__pin_forgot_title">Zapomniałeś kodu PIN?</string>
     <string name="security__pin_forgot_text">Zapomniałeś kodu PIN? Zresetuj i odzyskaj swój portfel Bitkit używając mnemonika. Ustaw nowy kod PIN po zakończeniu odzyskiwania portfela.</string>
     <string name="security__pin_forgot_reset">Reset (wymaga mnemonika)</string>
@@ -490,6 +491,12 @@
     <string name="security__display_seed">Pokaż frazę odzyskiwania</string>
     <string name="security__contact_support">Skontaktuj się z pomocą techniczną</string>
     <string name="security__wipe_app">Wyczyść aplikację</string>
+    <string name="security__wipe_blocked_text">Bitkit nie może zweryfikować swojego stanu bezpieczeństwa, więc Twój portfel pozostaje zablokowany. Stuknij Spróbuj ponownie, aby sprawdzić go jeszcze raz, lub wyeksportuj logi dla pomocy technicznej.</string>
+    <string name="security__wipe_blocked_title">Portfel zablokowany</string>
+    <string name="security__wipe_failed_text">Bitkit nie mógł dokończyć usuwania danych Twojego portfela i spróbuje ponownie. Nie zamykaj Bitkit lub stuknij Spróbuj ponownie.</string>
+    <string name="security__wipe_not_started">Nie udało się rozpocząć resetowania. Nic nie zostało usunięte.</string>
+    <string name="security__wipe_running_text">Bitkit usuwa wszystkie dane portfela z tego urządzenia. Nie zamykaj Bitkit, dopóki się nie zakończy.</string>
+    <string name="security__wipe_title">Resetowanie Bitkit</string>
     <string name="security__cp_title">Zmień PIN</string>
     <string name="security__cp_text">Wprowadź swój &lt;accent>aktualny&lt;/accent> PIN, aby go zmienić.</string>
     <string name="security__cp_retype_title">Wpisz ponownie kod PIN</string>

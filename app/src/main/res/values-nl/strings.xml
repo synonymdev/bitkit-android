@@ -456,6 +456,7 @@
     <string name="security__pass_your">Je wachtwoordzin</string>
     <string name="security__pin_allowance">Voer je pincode in om deze wijziging van de toelage te bevestigen.</string>
     <string name="security__pin_attempts">{attemptsRemaining} pogingen over. Pincode vergeten?</string>
+    <string name="security__pin_check_error">Bitkit kon je pincode niet controleren. Probeer het opnieuw.</string>
     <string name="security__pin_choose_header">Kies 4-cijferige pincode</string>
     <string name="security__pin_choose_text">Gebruik een pincode die je zult onthouden. Als je je pincode vergeet, kun je deze resetten, maar daarvoor moet je je wallet herstellen.</string>
     <string name="security__pin_disable_button">Pincode uitschakelen</string>
@@ -493,6 +494,12 @@
     <string name="security__success_title">Wallet beveiligd</string>
     <string name="security__use_pin">Pincode gebruiken</string>
     <string name="security__wipe_app">App wissen</string>
+    <string name="security__wipe_blocked_text">Bitkit kan de beveiligingsstatus niet controleren, dus je wallet blijft vergrendeld. Tik op Opnieuw proberen om het nogmaals te controleren, of exporteer de logs voor support.</string>
+    <string name="security__wipe_blocked_title">Wallet vergrendeld</string>
+    <string name="security__wipe_failed_text">Bitkit kon het verwijderen van je walletgegevens niet voltooien en probeert het opnieuw. Houd Bitkit open of tik op Opnieuw proberen.</string>
+    <string name="security__wipe_not_started">Resetten kon niet worden gestart. Er is niets verwijderd.</string>
+    <string name="security__wipe_running_text">Bitkit verwijdert alle walletgegevens van dit apparaat. Houd Bitkit open tot dit is voltooid.</string>
+    <string name="security__wipe_title">Bitkit wordt gereset</string>
     <string name="security__wiped_message">Bitkit is gereset en alle wallet-gegevens zijn verwijderd.</string>
     <string name="security__wiped_title">Wallet-gegevens verwijderd</string>
     <string name="security__pin_enable_button">PIN inschakelen</string>

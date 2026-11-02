@@ -457,6 +457,7 @@
     <string name="security__pin_last_attempt">Dernière tentative. Si vous saisissez à nouveau un code PIN erroné, votre portefeuille sera réinitialisé.</string>
     <string name="security__pin_allowance">Veuillez saisir votre code PIN pour confirmer cette modification de l\'allocation.</string>
     <string name="security__pin_attempts">{attemptsRemaining} tentatives restantes. Vous avez oublié votre code PIN ?</string>
+    <string name="security__pin_check_error">Bitkit n\'a pas pu vérifier votre code PIN. Veuillez réessayer.</string>
     <string name="security__pin_forgot_title">Vous avez oublié votre code PIN ?</string>
     <string name="security__pin_forgot_text">Vous avez oublié votre code PIN ? Réinitialisez et récupérez votre portefeuille Bitkit avec votre phrase de récupération. Définissez un nouveau code PIN après avoir terminé la récupération.</string>
     <string name="security__pin_forgot_reset">Réinitialisation (nécessite une phrase de récupération)</string>
@@ -487,6 +488,12 @@
     <string name="security__display_seed">Afficher la phrase de récupération.</string>
     <string name="security__contact_support">Contacter le support</string>
     <string name="security__wipe_app">Effacer l\'application</string>
+    <string name="security__wipe_blocked_text">Bitkit ne peut pas vérifier son état de sécurité, votre portefeuille reste donc verrouillé. Touchez Réessayer pour vérifier à nouveau, ou exportez les logs pour le support.</string>
+    <string name="security__wipe_blocked_title">Portefeuille verrouillé</string>
+    <string name="security__wipe_failed_text">Bitkit n\'a pas pu terminer la suppression des données de votre portefeuille et va réessayer. Gardez Bitkit ouvert, ou touchez Réessayer.</string>
+    <string name="security__wipe_not_started">La réinitialisation n\'a pas pu démarrer. Rien n\'a été supprimé.</string>
+    <string name="security__wipe_running_text">Bitkit supprime toutes les données du portefeuille de cet appareil. Gardez Bitkit ouvert jusqu\'à la fin.</string>
+    <string name="security__wipe_title">Réinitialisation de Bitkit</string>
     <string name="security__cp_title">Modifier le PIN</string>
     <string name="security__cp_text">Saisissez votre PIN &lt;accent>actuel&lt;/accent> pour le modifier.</string>
     <string name="security__cp_retype_title">Confirmer le nouveau code PIN</string>

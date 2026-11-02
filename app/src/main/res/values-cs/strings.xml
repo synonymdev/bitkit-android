@@ -461,6 +461,7 @@
     <string name="security__pass_your">Vaše přístupová fráze</string>
     <string name="security__pin_allowance">Pro potvrzení této změny rozpočtu prosím zadejte svůj PIN kód.</string>
     <string name="security__pin_attempts">Zbývá {attemptsRemaining} pokus/ů. Zapomněli jste svůj PIN?</string>
+    <string name="security__pin_check_error">Bitkit nedokázal ověřit váš PIN. Zkuste to prosím znovu.</string>
     <string name="security__pin_choose_header">Vyberte 4místný PIN</string>
     <string name="security__pin_choose_text">Použijte prosím PIN, který si zapamatujete. Pokud svůj PIN zapomenete, můžete jej resetovat, ale to bude vyžadovat obnovení vaší peněženky.</string>
     <string name="security__pin_disable_button">Zakázat PIN</string>
@@ -498,6 +499,12 @@
     <string name="security__success_title">Peněženka zabezpečena</string>
     <string name="security__use_pin">Použít PIN kód</string>
     <string name="security__wipe_app">Vymazat aplikaci</string>
+    <string name="security__wipe_blocked_text">Bitkit nemůže ověřit svůj stav zabezpečení, proto vaše peněženka zůstává uzamčená. Klepněte na Opakovat a ověřte ho znovu, nebo exportujte protokoly pro podporu.</string>
+    <string name="security__wipe_blocked_title">Peněženka uzamčena</string>
+    <string name="security__wipe_failed_text">Bitkit nedokázal dokončit mazání dat vaší peněženky a zkusí to znovu. Nechte Bitkit otevřený, nebo klepněte na Opakovat.</string>
+    <string name="security__wipe_not_started">Resetování se nepodařilo spustit. Nic nebylo smazáno.</string>
+    <string name="security__wipe_running_text">Bitkit maže všechna data peněženky z tohoto zařízení. Nechte Bitkit otevřený, dokud to nedokončí.</string>
+    <string name="security__wipe_title">Resetování Bitkitu</string>
     <string name="security__wiped_message">Bitkit byla resetována a všechna data peněženky byla vymazána.</string>
     <string name="security__wiped_title">Odstranění dat peněženky</string>
     <string name="security__pin_enable_button">Povolit PIN</string>

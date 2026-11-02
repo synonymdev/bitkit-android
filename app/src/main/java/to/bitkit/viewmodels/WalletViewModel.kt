@@ -21,6 +21,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -52,6 +54,8 @@ import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WipeInProgressError
+import to.bitkit.security.WipeCoordinator
+import to.bitkit.security.WipeReason
 import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
@@ -79,6 +83,7 @@ class WalletViewModel @Inject constructor(
     private val connectivityRepo: ConnectivityRepo,
     private val boltzService: BoltzService,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val wipeCoordinator: WipeCoordinator,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
@@ -104,7 +109,7 @@ class WalletViewModel @Inject constructor(
     @Volatile
     private var isStarting = false
 
-    var walletExists by mutableStateOf(walletRepo.walletExists())
+    var walletExists by mutableStateOf(walletState.value.walletExists)
         private set
 
     val isRecoveryMode = lightningRepo.isRecoveryMode
@@ -365,6 +370,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun checkAndPerformRNMigration() = viewModelScope.launch(bgDispatcher) {
+        wipeCoordinator.state.first { !it.isGateUp }
         val isChecked = migrationService.isMigrationChecked()
         if (isChecked) {
             loadCacheIfWalletExists()
@@ -430,14 +436,17 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun collectStates() = viewModelScope.launch {
-        walletState.collect {
-            walletExists = it.walletExists
-            if (!it.walletExists) {
+        // The gate can drop without a wallet state change, so the pending restore check also runs then
+        val isWipeGateUp = wipeCoordinator.state.map { it.isGateUp }.distinctUntilChanged()
+        combine(walletState, isWipeGateUp) { state, isGateUp -> state to isGateUp }.collect { (state, isGateUp) ->
+            walletExists = state.walletExists
+            if (!state.walletExists) {
                 appliedConnection = null
                 _connectionStartupError.update { null }
                 closeConnectionRecovery()
                 return@collect
             }
+            if (isGateUp) return@collect
 
             when (_restoreState.value) {
                 RestoreState.InProgress.Wallet -> supervisorScope {
@@ -991,9 +1000,13 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun wipeWallet() = viewModelScope.launch(bgDispatcher) {
-        walletRepo.wipeWallet().onFailure {
-            ToastEventBus.send(it)
+    fun wipeWallet(reason: WipeReason) = viewModelScope.launch(bgDispatcher) {
+        wipeCoordinator.begin(reason).onFailure {
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = context.getString(R.string.security__wipe_not_started),
+            )
         }
     }
 

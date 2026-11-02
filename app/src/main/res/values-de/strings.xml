@@ -457,6 +457,7 @@
     <string name="security__pin_last_attempt">Letzter Versuch. Wenn du den falschen PIN erneut eingibst, wird dein Wallet zurückgesetzt.</string>
     <string name="security__pin_allowance">Bitte gib deinen PIN-Code ein, um diese Änderung des Budgets zu bestätigen.</string>
     <string name="security__pin_attempts">{attemptsRemaining} Versuche verbleiben. Hast du deinen PIN vergessen?</string>
+    <string name="security__pin_check_error">Bitkit konnte deine PIN nicht überprüfen. Bitte versuche es erneut.</string>
     <string name="security__pin_forgot_title">PIN vergessen?</string>
     <string name="security__pin_forgot_text">PIN vergessen? Setze hier dein Bitkit-Wallet zurück und stelle es mit deiner Wiederherstellungsphrase wieder her. Vergebe eine neue PIN nach deiner Wiederherstellung.</string>
     <string name="security__pin_forgot_reset">Zurücksetzen (erfordert Wiederherstellungsphrase)</string>
@@ -487,6 +488,12 @@
     <string name="security__display_seed">Seed-Phrase anzeigen</string>
     <string name="security__contact_support">Support kontaktieren</string>
     <string name="security__wipe_app">App löschen</string>
+    <string name="security__wipe_blocked_text">Bitkit kann seinen Sicherheitsstatus nicht überprüfen, daher bleibt dein Wallet gesperrt. Tippe auf Wiederholen, um es erneut zu prüfen, oder exportiere die Logs für den Support.</string>
+    <string name="security__wipe_blocked_title">Wallet gesperrt</string>
+    <string name="security__wipe_failed_text">Bitkit konnte das Löschen deiner Wallet-Daten nicht abschließen und versucht es erneut. Lass Bitkit geöffnet oder tippe auf Wiederholen.</string>
+    <string name="security__wipe_not_started">Das Zurücksetzen konnte nicht gestartet werden. Es wurde nichts gelöscht.</string>
+    <string name="security__wipe_running_text">Bitkit löscht alle Wallet-Daten von diesem Gerät. Lass Bitkit geöffnet, bis der Vorgang abgeschlossen ist.</string>
+    <string name="security__wipe_title">Bitkit wird zurückgesetzt</string>
     <string name="security__cp_title">PIN ändern</string>
     <string name="security__cp_text">Geben Sie Ihre &lt;accent>aktuelle&lt;/accent> PIN ein, um sie zu ändern.</string>
     <string name="security__cp_retype_title">Neuen PIN erneut eingeben</string>

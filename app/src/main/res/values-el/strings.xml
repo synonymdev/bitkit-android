@@ -441,6 +441,7 @@
     <string name="security__pass_your">Η κωδική φράση σου</string>
     <string name="security__pin_allowance">Εισάγαγε τον κωδικό PIN για να επιβεβαιώσεις αυτή την αλλαγή στον προϋπολογισμό.</string>
     <string name="security__pin_attempts">{attemptsRemaining} προσπάθειες απομένουν. Ξέχασες το PIN;</string>
+    <string name="security__pin_check_error">Το Bitkit δεν μπόρεσε να ελέγξει το PIN σου. Δοκίμασε ξανά.</string>
     <string name="security__pin_choose_header">Επίλεξε 4ψήφιο PIN</string>
     <string name="security__pin_choose_text">Χρησιμοποίησε ένα PIN που θα θυμάσαι. Αν ξεχάσεις το PIN σου μπορείς να το επαναφέρεις, αλλά αυτό θα απαιτήσει επαναφορά του πορτοφολιού σου.</string>
     <string name="security__pin_disable_button">Απενεργοποίηση PIN</string>
@@ -478,6 +479,12 @@
     <string name="security__success_title">Πορτοφόλι ασφαλισμένο</string>
     <string name="security__use_pin">Χρήση κωδικού PIN</string>
     <string name="security__wipe_app">Διαγραφή εφαρμογής</string>
+    <string name="security__wipe_blocked_text">Το Bitkit δεν μπορεί να επαληθεύσει την κατάσταση ασφαλείας του, οπότε το πορτοφόλι σου παραμένει κλειδωμένο. Πάτησε Δοκιμάστε Ξανά για νέο έλεγχο ή κάνε εξαγωγή των αρχείων καταγραφής για την υποστήριξη.</string>
+    <string name="security__wipe_blocked_title">Το πορτοφόλι κλειδώθηκε</string>
+    <string name="security__wipe_failed_text">Το Bitkit δεν μπόρεσε να ολοκληρώσει τη διαγραφή των δεδομένων του πορτοφολιού σου και θα προσπαθήσει ξανά. Κράτησε το Bitkit ανοιχτό ή πάτησε Δοκιμάστε Ξανά.</string>
+    <string name="security__wipe_not_started">Η επαναφορά δεν μπόρεσε να ξεκινήσει. Δεν διαγράφηκε τίποτα.</string>
+    <string name="security__wipe_running_text">Το Bitkit διαγράφει όλα τα δεδομένα πορτοφολιού από αυτή τη συσκευή. Κράτησε το Bitkit ανοιχτό μέχρι να ολοκληρωθεί.</string>
+    <string name="security__wipe_title">Επαναφορά του Bitkit</string>
     <string name="security__wiped_message">Το Bitkit επαναφέρθηκε και όλα τα δεδομένα πορτοφολιού διαγράφηκαν.</string>
     <string name="security__wiped_title">Δεδομένα πορτοφολιού διαγράφηκαν</string>
     <string name="security__pin_enable_button">Ενεργοποίηση PIN</string>

@@ -1,0 +1,21 @@
+<journey name="pin attempts wipe gate">
+  <description>
+    Verifies that running out of PIN attempts wipes the wallet behind a gate that a relaunch cannot get past: once the
+    last attempt fails, no PIN pad or biometric prompt is shown until the wipe has finished, and a relaunch resumes the
+    wipe instead of offering the PIN again.
+
+    Precondition: a disposable, unfunded dev wallet with the app PIN enabled (Settings > Security) and a known PIN,
+    biometrics off, on the PIN pad after a relaunch. This deletes the wallet. Force-stopping the app while the gate
+    shows only lands on a step if the wipe is still running. Killing it at each wipe step on a real device stays a
+    manual check.
+  </description>
+  <actions>
+    <action>Verify the PIN pad is visible (testTag "PinPad")</action>
+    <action>Enter a wrong PIN with the number pad keys (testTags "N0" to "N9") until the last-attempt message (testTag "LastAttempt") is visible</action>
+    <action>Enter a wrong PIN once more</action>
+    <action>Verify the wipe gate is visible (testTag "WipeGate") and the PIN pad (testTag "PinPad") is not</action>
+    <action>Run adb shell am force-stop to.bitkit.dev, then adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity</action>
+    <action>Verify either the wipe gate (testTag "WipeGate") or wallet onboarding is visible, and the PIN pad (testTag "PinPad") is not</action>
+    <action>Wait for the wipe to finish and verify wallet onboarding is visible</action>
+  </actions>
+</journey>

@@ -362,7 +362,7 @@ class LightningRepo @Inject constructor(
         var initialLifecycleState: NodeLifecycleState
 
         val result = lifecycleMutex.withLock {
-            if (isWiping) return@withLock Result.failure(WipeInProgressError())
+            if (isWiping || isWipeGateUp()) return@withLock Result.failure(WipeInProgressError())
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
                 return@withLock skipStartForRunningNode(
@@ -654,6 +654,8 @@ class LightningRepo @Inject constructor(
     fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
 
     fun setWiping(enabled: Boolean) = run { isWiping = enabled }
+
+    private fun isWipeGateUp(): Boolean = runCatching { keychain.loadWipePending() != null }.getOrDefault(true)
 
     fun setInitNodeLifecycleState() {
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }

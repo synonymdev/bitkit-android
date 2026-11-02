@@ -24,6 +24,8 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.security.WipeCoordinator
+import to.bitkit.security.WipeReason
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -36,6 +38,7 @@ class RecoveryViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
     private val settingsStore: SettingsStore,
+    private val wipeCoordinator: WipeCoordinator,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RecoveryUiState())
@@ -158,13 +161,11 @@ class RecoveryViewModel @Inject constructor(
 
     fun wipeWallet() {
         viewModelScope.launch {
-            walletRepo.wipeWallet().onFailure { error ->
-                ToastEventBus.send(error)
-            }.onSuccess {
+            wipeCoordinator.begin(WipeReason.RECOVERY_RESET).onFailure {
                 ToastEventBus.send(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.security__wiped_title),
-                    description = context.getString(R.string.security__wiped_message),
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.common__error),
+                    description = context.getString(R.string.security__wipe_not_started),
                 )
             }
         }

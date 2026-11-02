@@ -7,7 +7,9 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.security.WipeState
 import to.bitkit.test.annotations.ComposeUi
+import to.bitkit.utils.AppError
 
 @ComposeUi
 class RootDestinationTest {
@@ -16,6 +18,7 @@ class RootDestinationTest {
     val composeTestRule = createComposeRule()
 
     private fun setContent(
+        wipeState: WipeState = WipeState.Idle,
         isCriticalUpdateRequired: Boolean = false,
         isShowingMigrationLoading: Boolean = false,
         walletExists: Boolean = true,
@@ -23,10 +26,12 @@ class RootDestinationTest {
     ) {
         composeTestRule.setContent {
             RootDestination(
+                wipeState = wipeState,
                 isCriticalUpdateRequired = isCriticalUpdateRequired,
                 isShowingMigrationLoading = isShowingMigrationLoading,
                 walletExists = walletExists,
                 isRecoveryMode = isRecoveryMode,
+                wipeGate = { Text(text = "wipe gate", modifier = Modifier.testTag(TAG_WIPE_GATE)) },
                 criticalUpdate = { Text(text = "critical", modifier = Modifier.testTag(TAG_CRITICAL)) },
                 migrationLoading = { Text(text = "migration", modifier = Modifier.testTag(TAG_MIGRATION)) },
                 onboarding = { Text(text = "onboarding", modifier = Modifier.testTag(TAG_ONBOARDING)) },
@@ -37,9 +42,40 @@ class RootDestinationTest {
 
     private fun assertOnly(tag: String) {
         composeTestRule.onNodeWithTag(tag).assertExists()
-        listOf(TAG_CRITICAL, TAG_MIGRATION, TAG_ONBOARDING, TAG_WALLET)
+        listOf(TAG_WIPE_GATE, TAG_CRITICAL, TAG_MIGRATION, TAG_ONBOARDING, TAG_WALLET)
             .filterNot { it == tag }
             .forEach { composeTestRule.onNodeWithTag(it).assertDoesNotExist() }
+    }
+
+    @Test
+    fun whenWipePending_shouldShowWipeGateOnly() {
+        setContent(
+            wipeState = WipeState.Running,
+            isCriticalUpdateRequired = true,
+            isShowingMigrationLoading = true,
+            isRecoveryMode = true,
+        )
+
+        assertOnly(TAG_WIPE_GATE)
+    }
+
+    @Test
+    fun whenWipeFailedWithoutWallet_shouldShowWipeGateInsteadOfOnboarding() {
+        setContent(wipeState = WipeState.Failed(step = null, error = AppError("failed")), walletExists = false)
+
+        assertOnly(TAG_WIPE_GATE)
+    }
+
+    @Test
+    fun whenWipeStateUnknown_shouldShowBlockedGateWithoutWipe() {
+        setContent(
+            wipeState = WipeState.Blocked(AppError("unreadable")),
+            isCriticalUpdateRequired = true,
+            walletExists = false,
+            isRecoveryMode = true,
+        )
+
+        assertOnly(TAG_WIPE_GATE)
     }
 
     @Test
@@ -106,6 +142,7 @@ class RootDestinationTest {
     }
 }
 
+private const val TAG_WIPE_GATE = "TestWipeGate"
 private const val TAG_CRITICAL = "TestCriticalUpdate"
 private const val TAG_MIGRATION = "TestMigrationLoading"
 private const val TAG_ONBOARDING = "TestOnboarding"

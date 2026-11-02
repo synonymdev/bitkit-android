@@ -1,9 +1,12 @@
 package to.bitkit.usecases
 
+import com.google.android.gms.tasks.TaskCompletionSource
+import com.google.android.gms.tasks.Tasks
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -12,9 +15,11 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.reset
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppDb
@@ -40,7 +45,9 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.test.forEachCase
 import javax.inject.Provider
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -76,6 +83,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private var onWipeCalled = false
     private var onSetWalletExistsStateCalled = false
 
+    private val retainedKeys = setOf(Keychain.Key.PIN, Keychain.Key.PIN_ATTEMPTS_REMAINING)
+
     @Before
     fun setUp() {
         whenever { lightningRepo.stop() }.thenReturn(Result.success(Unit))
@@ -89,6 +98,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitAddressReservationRepo.clear() }.thenReturn(Unit)
+        whenever(firebaseMessaging.deleteToken()).thenReturn(Tasks.forResult(null))
         onWipeCalled = false
         onSetWalletExistsStateCalled = false
 
@@ -158,7 +168,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(privatePaykitAddressReservationRepo).clear()
         inOrder.verify(pubkyRepo).wipeLocalState()
         inOrder.verify(usdtRepo).wipe(any())
-        inOrder.verify(keychain).wipe()
+        inOrder.verify(keychain).wipe(retainedKeys)
         inOrder.verify(paykitUsdtPaymentRepo).resetForWipe()
         inOrder.verify(coreService).wipeData()
         inOrder.verify(db).clearAllTables()
@@ -170,6 +180,10 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(activityRepo).resetState()
         inOrder.verify(hwWalletRepo).resetState()
         inOrder.verify(migrationService).markMigrationChecked()
+        inOrder.verify(keychain).delete(Keychain.Key.PIN.name)
+        inOrder.verify(keychain).delete(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)
+        inOrder.verify(keychain).resetEncryptionKey()
+        inOrder.verify(keychain).deleteWipePending()
         assertTrue(onWipeCalled)
         assertTrue(onSetWalletExistsStateCalled)
         inOrder.verify(lightningRepo).setWiping(false)
@@ -212,7 +226,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(backupRepo).setWiping(false)
         inOrder.verify(backupRepo).startObservingBackups()
         verify(lightningRepo, never()).wipeStorage(any())
-        verify(keychain, never()).wipe()
+        verify(keychain, never()).wipe(any())
         verify(db, never()).clearAllTables()
         assertFalse(onWipeCalled)
         assertFalse(onSetWalletExistsStateCalled)
@@ -228,26 +242,178 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         )
 
         assertTrue(result.isSuccess)
-        verify(keychain).wipe()
+        verify(keychain).wipe(retainedKeys)
         assertTrue(onSetWalletExistsStateCalled)
     }
 
     @Test
-    fun `invoke should fail after wiping the rest when keychain wipe fails`() = runTest {
-        whenever(keychain.wipe()).thenThrow(RuntimeException("keystore write failed"))
+    fun `invoke should stop before settings reset and keep PIN and wipe-pending flag when keychain wipe fails`() =
+        runTest {
+            whenever(keychain.wipe(any())).thenThrow(RuntimeException("keystore write failed"))
 
-        val result = sut.invoke(
-            resetWalletState = { onWipeCalled = true },
-            onSuccess = { onSetWalletExistsStateCalled = true },
-        )
+            val result = sut.invoke(
+                resetWalletState = { onWipeCalled = true },
+                onSuccess = { onSetWalletExistsStateCalled = true },
+            )
 
-        assertIs<WipeIncomplete>(result.exceptionOrNull())
-        verify(lightningRepo).wipeStorage(0)
-        verify(db).clearAllTables()
-        verify(settingsStore).reset()
-        assertTrue(onWipeCalled)
+            assertEquals(WipeStep.KEYCHAIN, assertIs<WipeStepFailed>(result.exceptionOrNull()).step)
+            verify(lightningRepo).wipeStorage(0)
+            verify(settingsStore, never()).reset()
+            verify(db, never()).clearAllTables()
+            verify(migrationService, never()).markMigrationChecked()
+            verify(keychain, never()).delete(any())
+            verify(keychain, never()).resetEncryptionKey()
+            verify(keychain, never()).deleteWipePending()
+            assertFalse(onWipeCalled)
+            assertFalse(onSetWalletExistsStateCalled)
+        }
+
+    @Test
+    fun `invoke should retain PIN, attempts and WIPE_PENDING in the bulk keychain wipe`() = runTest {
+        val result = sut.invoke(resetWalletState = {}, onSuccess = {})
+
+        assertTrue(result.isSuccess)
+        verify(keychain).wipe(retainedKeys)
+        verify(keychain, never()).wipe(emptySet())
+    }
+
+    @Test
+    fun `invoke should delete PIN and attempts, then reset the encryption key, then clear WIPE_PENDING last`() =
+        runTest {
+            val result = sut.invoke(
+                resetWalletState = { onWipeCalled = true },
+                onSuccess = { onSetWalletExistsStateCalled = true },
+            )
+
+            assertTrue(result.isSuccess)
+            val inOrder = inOrder(keychain, settingsStore, migrationService)
+            inOrder.verify(keychain).wipe(retainedKeys)
+            inOrder.verify(settingsStore).reset()
+            inOrder.verify(migrationService).markMigrationChecked()
+            inOrder.verify(keychain).delete(Keychain.Key.PIN.name)
+            inOrder.verify(keychain).delete(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)
+            inOrder.verify(keychain).resetEncryptionKey()
+            inOrder.verify(keychain).deleteWipePending()
+            inOrder.verifyNoMoreInteractions()
+            assertTrue(onSetWalletExistsStateCalled)
+        }
+
+    @Test
+    fun `invoke should keep the PIN and wipe-pending flag when settings reset fails`() = runTest {
+        whenever(settingsStore.reset()).thenThrow(RuntimeException("settings write failed"))
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
+
+        assertEquals(WipeStep.SETTINGS, assertIs<WipeStepFailed>(result.exceptionOrNull()).step)
+        verify(keychain).wipe(retainedKeys)
+        verify(keychain, never()).delete(any())
+        verify(keychain, never()).deleteWipePending()
         assertFalse(onSetWalletExistsStateCalled)
     }
+
+    @Test
+    fun `invoke should keep the wipe-pending flag when deleting the PIN fails`() = runTest {
+        whenever(keychain.delete(Keychain.Key.PIN.name)).thenThrow(RuntimeException("delete failed"))
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
+
+        assertEquals(WipeStep.PIN, assertIs<WipeStepFailed>(result.exceptionOrNull()).step)
+        verify(keychain, never()).resetEncryptionKey()
+        verify(keychain, never()).deleteWipePending()
+        assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should report the commit step when clearing the wipe-pending flag fails`() = runTest {
+        whenever(keychain.deleteWipePending()).thenThrow(RuntimeException("delete failed"))
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
+
+        assertEquals(WipeStep.COMMIT, assertIs<WipeStepFailed>(result.exceptionOrNull()).step)
+        assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should finish and report incomplete when only the USDT storage wipe fails`() = runTest {
+        whenever(usdtRepo.wipe(any())).doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(0).invoke()
+            Result.failure<Unit>(RuntimeException("usdt files locked"))
+        }
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
+
+        assertIs<WipeIncomplete>(result.exceptionOrNull())
+        verify(keychain).wipe(retainedKeys)
+        verify(settingsStore).reset()
+        verify(keychain).deleteWipePending()
+        assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should continue when FCM token deletion or remote cleanup times out`() = runTest {
+        whenever(pubkyRepo.removeBitkitPaymentEndpoints()).doSuspendableAnswer { awaitCancellation() }
+        whenever(firebaseMessaging.deleteToken()).thenReturn(TaskCompletionSource<Void>().task)
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
+
+        assertTrue(result.isSuccess)
+        verify(privatePaykitRepo).closeAndClear()
+        verify(lightningRepo).wipeStorage(0)
+        verify(keychain).deleteWipePending()
+        assertTrue(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke resumed after each step completes`() = runTest {
+        val killPoints = listOf(
+            killPoint("remote cleanup") { doThrow(it).whenever(pubkyRepo).removeBitkitPaymentEndpoints() },
+            killPoint("LDK storage") { doThrow(it).whenever(lightningRepo).wipeStorage(0) },
+            killPoint("keychain") { doThrow(it).whenever(keychain).wipe(retainedKeys) },
+            killPoint("core data") { doThrow(it).whenever(coreService).wipeData() },
+            killPoint("settings") { doThrow(it).whenever(settingsStore).reset() },
+            killPoint("migration checked") { doThrow(it).whenever(migrationService).markMigrationChecked() },
+            killPoint("PIN") { doThrow(it).whenever(keychain).delete(Keychain.Key.PIN.name) },
+            killPoint("attempts") { doThrow(it).whenever(keychain).delete(Keychain.Key.PIN_ATTEMPTS_REMAINING.name) },
+            killPoint("encryption key") { doThrow(it).whenever(keychain).resetEncryptionKey() },
+            killPoint("commit") { doThrow(it).whenever(keychain).deleteWipePending() },
+        )
+        val killedAfterPinDeletion = setOf("attempts", "encryption key", "commit")
+
+        killPoints.forEachCase({ it.first }) { (name, killAt) ->
+            var isPinPresent = true
+            var isFlagPresent = true
+            val freshProcess = {
+                reset(keychain, coreService, settingsStore, migrationService, pubkyRepo, lightningRepo)
+                setUp()
+                whenever { keychain.delete(Keychain.Key.PIN.name) }.doSuspendableAnswer { isPinPresent = false }
+                whenever { keychain.deleteWipePending() }.doSuspendableAnswer { isFlagPresent = false }
+            }
+
+            freshProcess()
+            killAt(CancellationException("killed at '$name'"))
+            assertFailsWith<CancellationException> { sut.invoke(resetWalletState = {}, onSuccess = {}) }
+
+            assertTrue(isFlagPresent, name)
+            assertEquals(name in killedAfterPinDeletion, !isPinPresent, name)
+
+            freshProcess()
+            val resumed = sut.invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
+
+            assertTrue(resumed.isSuccess, name)
+            assertFalse(isPinPresent, name)
+            assertFalse(isFlagPresent, name)
+            val inOrder = inOrder(keychain, settingsStore, migrationService)
+            inOrder.verify(keychain).wipe(retainedKeys)
+            inOrder.verify(settingsStore).reset()
+            inOrder.verify(migrationService).markMigrationChecked()
+            inOrder.verify(keychain).delete(Keychain.Key.PIN.name)
+            inOrder.verify(keychain).delete(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)
+            inOrder.verify(keychain).resetEncryptionKey()
+            inOrder.verify(keychain).deleteWipePending()
+        }
+    }
+
+    private fun killPoint(name: String, stub: suspend (Throwable) -> Unit) = name to stub
 
     @Test
     fun `invoke should pass walletIndex to lightningRepo wipeStorage`() = runTest {
@@ -280,7 +446,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
 
     @Test
     fun `invoke should set wiping to false when cancelled`() = runTest {
-        whenever(keychain.wipe()).thenThrow(CancellationException("Cancelled"))
+        whenever(keychain.wipe(any())).thenThrow(CancellationException("Cancelled"))
 
         assertFailsWith<CancellationException> {
             sut.invoke(
@@ -306,7 +472,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(pubkyRepo).wipeLocalState()
-        verify(keychain).wipe()
+        verify(keychain).wipe(retainedKeys)
         verify(backupRepo).setWiping(false)
     }
 
@@ -324,7 +490,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         verify(privatePaykitRepo).closeAndClear()
         verify(pubkyRepo).wipeLocalState()
-        verify(keychain).wipe()
+        verify(keychain).wipe(retainedKeys)
         verify(backupRepo).setWiping(false)
     }
 
@@ -357,7 +523,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         val inOrder = inOrder(migrationService, keychain)
         inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
         inOrder.verify(migrationService).cleanupAfterMigration()
-        inOrder.verify(keychain).wipe()
+        inOrder.verify(keychain).wipe(retainedKeys)
     }
 
     @Test
@@ -414,7 +580,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(settingsStore).reset()
-        verify(keychain).wipe()
+        verify(keychain).wipe(retainedKeys)
         assertTrue(onWipeCalled)
         assertTrue(onSetWalletExistsStateCalled)
     }

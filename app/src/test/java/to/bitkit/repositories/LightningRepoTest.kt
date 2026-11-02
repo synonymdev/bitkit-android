@@ -69,6 +69,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.KeychainError
 import to.bitkit.data.keychain.WalletBackupRestorePendingError
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
@@ -1711,6 +1712,29 @@ class LightningRepoTest : BaseUnitTest() {
         assertIs<WipeInProgressError>(result.exceptionOrNull())
         verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
         assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `start refuses while the persisted wipe-pending flag is set`() = test {
+        whenever(keychain.loadWipePending()).thenReturn("{}")
+
+        val workerStart = sut.start(walletIndex = 0, timeout = 10.seconds, eventHandler = {})
+        val serviceStart = sut.start(eventHandler = {})
+
+        assertIs<WipeInProgressError>(workerStart.exceptionOrNull())
+        assertIs<WipeInProgressError>(serviceStart.exceptionOrNull())
+        verifyBlocking(lightningService, never()) { setup(any(), anyOrNull(), anyOrNull(), anyOrNull()) }
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start refuses while the wipe-pending flag cannot be read`() = test {
+        whenever(keychain.loadWipePending()).thenAnswer { throw KeychainError.FailedToLoad("WIPE_PENDING") }
+
+        val result = sut.start(eventHandler = {})
+
+        assertIs<WipeInProgressError>(result.exceptionOrNull())
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
     }
 
     @Test

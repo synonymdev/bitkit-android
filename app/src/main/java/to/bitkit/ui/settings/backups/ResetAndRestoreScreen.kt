@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.security.WipeReason
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
@@ -56,7 +57,7 @@ fun ResetAndRestoreScreen(
         onClickReset = { showDialog = true },
         onResetConfirm = {
             showDialog = false
-            wallet.wipeWallet()
+            wallet.wipeWallet(WipeReason.USER_RESET)
         },
         onResetDismiss = { showDialog = false },
         onBack = { navController.popBackStack() },

@@ -50,6 +50,7 @@ import to.bitkit.data.PrivatePaykitStoredAssignmentData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.KeychainError
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.AddressDerivationInfo
@@ -1083,6 +1084,16 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.walletExists()
 
         assertFalse(result)
+    }
+
+    @Test
+    fun `walletState starts without a wallet when the keychain cannot be read`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name))
+            .thenAnswer { throw KeychainError.FailedToLoad(Keychain.Key.BIP39_MNEMONIC.name) }
+
+        sut = createSut()
+
+        assertFalse(sut.walletState.value.walletExists)
     }
 
     @Test

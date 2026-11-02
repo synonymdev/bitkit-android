@@ -79,7 +79,8 @@ class WalletRepo @Inject constructor(
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
-    private val _walletState = MutableStateFlow(WalletState(walletExists = walletExists()))
+    // Must not crash startup: an unreadable keychain keeps the wipe gate up, which refreshes this once a read succeeds
+    private val _walletState = MutableStateFlow(WalletState(walletExists = initialWalletExists()))
     val walletState = _walletState.asStateFlow()
 
     private val _balanceState = MutableStateFlow(BalanceState())
@@ -208,6 +209,10 @@ class WalletRepo @Inject constructor(
     }
 
     fun walletExists(): Boolean = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
+
+    private fun initialWalletExists(): Boolean = runCatching { walletExists() }
+        .onFailure { Logger.warn("Failed to read wallet existence", it, context = TAG) }
+        .getOrDefault(false)
 
     fun setWalletExistsState() {
         _walletState.update { it.copy(walletExists = walletExists()) }

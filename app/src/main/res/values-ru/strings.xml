@@ -474,6 +474,7 @@
     <string name="security__pass_your">Ваша Кодовая Фраза</string>
     <string name="security__pin_allowance">Введите PIN-код, чтобы подтвердить это изменение бюджета.</string>
     <string name="security__pin_attempts">Осталось {attemptsRemaining} попыток. Забыли PIN-код?</string>
+    <string name="security__pin_check_error">Bitkit не смог проверить ваш PIN-код. Пожалуйста, попробуйте снова.</string>
     <string name="security__pin_choose_header">Выберите 4-значный PIN-код</string>
     <string name="security__pin_choose_text">Пожалуйста, используйте PIN-код, который вы запомните. Если вы забудете свой PIN-код, вы можете сбросить его, но для этого потребуется восстановить кошелёк.</string>
     <string name="security__pin_disable_button">Отключить PIN-код</string>
@@ -511,6 +512,12 @@
     <string name="security__success_title">Кошелёк Защищён</string>
     <string name="security__use_pin">Использовать PIN-код</string>
     <string name="security__wipe_app">Сбросить Приложение</string>
+    <string name="security__wipe_blocked_text">Bitkit не может проверить состояние своей безопасности, поэтому ваш кошелёк остаётся заблокированным. Нажмите «Повторить», чтобы проверить снова, или экспортируйте логи для поддержки.</string>
+    <string name="security__wipe_blocked_title">Кошелёк Заблокирован</string>
+    <string name="security__wipe_failed_text">Bitkit не смог завершить удаление данных вашего кошелька и попробует снова. Не закрывайте Bitkit или нажмите «Повторить».</string>
+    <string name="security__wipe_not_started">Не удалось начать сброс. Ничего не было удалено.</string>
+    <string name="security__wipe_running_text">Bitkit удаляет все данные кошелька с этого устройства. Не закрывайте Bitkit, пока процесс не завершится.</string>
+    <string name="security__wipe_title">Сброс Bitkit</string>
     <string name="security__wiped_message">Bitkit был сброшен, и все данные кошелька были удалены.</string>
     <string name="security__wiped_title">Данные Кошелька Удалены</string>
     <string name="security__pin_enable_button">Включить PIN</string>

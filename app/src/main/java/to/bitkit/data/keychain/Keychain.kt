@@ -38,6 +38,12 @@ class Keychain @Inject constructor(
     companion object {
         private const val TAG = "Keychain"
         private const val CAUSE_CHAIN_DEPTH = 4
+
+        /**
+         * Fixed key of the wipe-pending flag. Indexed key names read the wallet index from the database that
+         * a wipe clears, so the flag must not depend on it.
+         */
+        private val WIPE_PENDING = stringPreferencesKey("WIPE_PENDING")
     }
 
     private val keyStore by lazy { AndroidKeyStore(alias = "keychain") }
@@ -167,13 +173,65 @@ class Keychain @Inject constructor(
         return snapshot.contains(key.indexed)
     }
 
-    suspend fun wipe() {
-        val keys = snapshot.asMap().keys
-        keychain.edit { it.clear() }
-        keyStore.resetEncryptionKey()
-        val count = keys.size
+    /**
+     * Deletes every entry except the [retaining] keys and the wipe-pending flag, which only
+     * [deleteWipePending] removes. The encryption key is kept, so retained entries stay readable.
+     */
+    suspend fun wipe(retaining: Set<Key> = emptySet()) {
+        val retained = retaining.map { it.name.indexed }.toSet() + WIPE_PENDING
+        var count = 0
+        keychain.edit { prefs ->
+            val keys = prefs.asMap().keys.filterNot { it in retained }
+            keys.forEach { prefs.remove(it) }
+            count = keys.size
+        }
 
-        Logger.info("Reset keychain encryption key and deleted all '$count' entries", context = TAG)
+        Logger.info("Deleted '$count' keychain entries, retained '${retaining.joinToString()}'", context = TAG)
+    }
+
+    fun resetEncryptionKey() {
+        keyStore.resetEncryptionKey()
+        Logger.info("Reset keychain encryption key", context = TAG)
+    }
+
+    /**
+     * Returns the stored wipe intent, or null when no wipe is pending. Its presence alone marks a wipe as
+     * requested. The value holds no secret, so it is stored in plain text and stays readable after
+     * [resetEncryptionKey].
+     */
+    @Suppress("TooGenericExceptionCaught")
+    fun loadWipePending(): String? {
+        try {
+            return snapshot[WIPE_PENDING]
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            throw KeychainError.FailedToLoad(WIPE_PENDING.name, cause = t)
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    suspend fun saveWipePending(intent: String) {
+        try {
+            keychain.edit { it[WIPE_PENDING] = intent }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            throw KeychainError.FailedToSave(WIPE_PENDING.name, cause = t)
+        }
+        Logger.info("Saved value for key '${WIPE_PENDING.name}'", context = TAG)
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    suspend fun deleteWipePending() {
+        try {
+            keychain.edit { it.remove(WIPE_PENDING) }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            throw KeychainError.FailedToDelete(WIPE_PENDING.name, cause = t)
+        }
+        Logger.info("Deleted value for key '${WIPE_PENDING.name}'", context = TAG)
     }
 
     private val String.indexed: Preferences.Key<String>
