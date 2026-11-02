@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -89,6 +91,7 @@ import to.bitkit.ui.components.PaykitAmountDisplay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.PubkyContactRow
+import to.bitkit.ui.components.SHEET_INTRO_IMAGE_WIDTH_FRACTION
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -238,7 +241,7 @@ internal fun PaymentRequestAmountContent(
                             )
                         }
                     }
-                    VerticalSpacer(16.dp)
+                    FillHeight(min = 12.dp)
                     PaymentRequestDenominationLayout(asset, Alignment.Top) { displayAsset ->
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -276,12 +279,10 @@ internal fun PaymentRequestAmountContent(
                             color = Colors.White64
                         )
                     }
-                    VerticalSpacer(16.dp)
                     HorizontalDivider(
                         color = Colors.White10,
-                        modifier = Modifier.testTag("PaymentRequestAmountDivider"),
+                        modifier = Modifier.padding(top = 12.dp).testTag("PaymentRequestAmountDivider"),
                     )
-                    FillHeight(min = 16.dp)
                     val padModifier = Modifier
                         .onFocusChanged { isNumberPadFocused = it.isFocused }
                         .testTag("PaymentRequestNumberPad")
@@ -738,16 +739,20 @@ internal fun PaymentRequestSentContent(
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()).heightIn(min = maxHeight)
             ) {
-                FillHeight()
-                Image(
-                    painter = painterResource(R.drawable.check),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .size(256.dp)
-                        .testTag("PaymentRequestSentCheck"),
-                )
-                FillHeight()
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.check),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth(SHEET_INTRO_IMAGE_WIDTH_FRACTION)
+                            .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                            .testTag("PaymentRequestSentCheck"),
+                    )
+                }
                 Display(
                     text = stringResource(R.string.wallet__payment_request_sent_headline)
                         .withAccent(accentColor = Colors.Purple),
