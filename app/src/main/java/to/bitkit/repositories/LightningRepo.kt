@@ -2250,10 +2250,9 @@ class LightningRepo @Inject constructor(
     fun getChannels(): List<ChannelDetails>? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
 
-    private fun publishLastKnownChannels() {
+    private fun publishLastKnownChannels() = _lastKnownChannels.update {
         val state = _lightningState.value
-        if (!state.nodeLifecycleState.isRunning()) return
-        _lastKnownChannels.update { state.channels }
+        if (state.nodeLifecycleState.isRunning()) state.channels else it
     }
 
     fun canReceive(): Boolean {
