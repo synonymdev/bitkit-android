@@ -54,6 +54,17 @@ internal object Env {
      */
     val isSwapSupported get() = network == Network.BITCOIN
 
+    /**
+     * Whether a Paykit payment may route through a Pubky Swaps provider when no balance reaches the contact's
+     * endpoints. Regtest debug builds with `PUBKY_SWAPS_ROUTES=true` only.
+     */
+    val isPubkySwapsRouteEnabled: Boolean
+        get() = isDebug && network == Network.REGTEST && BuildConfig.PUBKY_SWAPS_ROUTES
+
+    /** Swap providers to ask besides the user's contacts, from `PUBKY_SWAPS_PROVIDERS` (comma-separated pubkys). */
+    val pubkySwapsProviders: List<String>
+        get() = BuildConfig.PUBKY_SWAPS_PROVIDERS.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
     const val fxRateRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
     const val fxRateStaleThreshold = 10 * 60 * 1000L // 10 minutes in millis
     const val lspOrdersRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
