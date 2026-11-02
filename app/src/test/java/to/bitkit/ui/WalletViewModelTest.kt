@@ -150,6 +150,76 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ensureSwapUpdatesRunning starts nothing while the wipe gate is up`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        wipeState.value = WipeState.Running
+
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        verify(boltzService, never()).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `the wipe gate ends the swap updates retries`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        whenever(boltzService.startUpdates(anyOrNull(), any(), anyOrNull()))
+            .doSuspendableAnswer { throw AppError("Boltz unreachable") }
+        sut.ensureSwapUpdatesRunning()
+        runCurrent()
+
+        wipeState.value = WipeState.Running
+        advanceUntilIdle()
+
+        verify(boltzService, times(1)).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    // The swap updates stream started with the wiped wallet's mnemonic was kept for the next wallet
+    @Test
+    fun `a wipe lets the next wallet start its own swap updates stream`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        wipeState.value = WipeState.Running
+        advanceUntilIdle()
+        wipeState.value = WipeState.Idle
+        advanceUntilIdle()
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        verify(boltzService, times(2)).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    // A start handed to bitkit-core cannot be cancelled, so one landing after a stop must not mark the stream running
+    @Test
+    fun `a swap updates start that lands after a wipe began leaves the next start free`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        val firstStartLands = CompletableDeferred<Unit>()
+        var starts = 0
+        whenever(boltzService.startUpdates(anyOrNull(), any(), anyOrNull())).doSuspendableAnswer {
+            if (++starts == 1) withContext(NonCancellable) { firstStartLands.await() }
+        }
+        sut.ensureSwapUpdatesRunning()
+        runCurrent()
+
+        wipeState.value = WipeState.Running
+        runCurrent()
+        firstStartLands.complete(Unit)
+        advanceUntilIdle()
+        wipeState.value = WipeState.Idle
+        advanceUntilIdle()
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        assertEquals(2, starts)
+    }
+
+    @Test
     fun `ensureSwapUpdatesRunning should do nothing when swaps are unsupported`() = test {
         whenever(boltzService.isSwapSupported).thenReturn(false)
 

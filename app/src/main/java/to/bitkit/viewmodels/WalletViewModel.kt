@@ -346,6 +346,7 @@ class WalletViewModel @Inject constructor(
         checkAndPerformRNMigration()
         collectStates()
         observeNetworkState()
+        resetSwapUpdatesOnWipe()
     }
 
     private fun observeNetworkState() = viewModelScope.launch(bgDispatcher) {
@@ -808,7 +809,7 @@ class WalletViewModel @Inject constructor(
      * settings, see [BoltzService.isSwapEnabled].
      */
     fun ensureSwapUpdatesRunning() {
-        if (!boltzService.isSwapSupported) return
+        if (!boltzService.isSwapSupported || wipeCoordinator.state.value.isGateUp) return
         if (swapUpdatesRunning || swapUpdatesJob?.isActive == true) return
         swapUpdatesJob = viewModelScope.launch {
             if (!boltzService.isSwapEnabled()) return@launch
@@ -831,6 +832,8 @@ class WalletViewModel @Inject constructor(
                 val speed = settingsStore.data.first().defaultTransactionSpeed
                 val feeRate = lightningRepo.getFeeRateForSpeed(speed).getOrNull()?.toDouble()
                 boltzService.startUpdates(feeRateSatPerVb = feeRate, acceptZeroConf = true)
+                // A stop made during the start has already reset the running state, which must stay reset
+                currentCoroutineContext().ensureActive()
             }.onFailure {
                 Logger.warn("Failed to start swap updates, attempt '${attempt + 1}'", it, context = TAG)
             }.isSuccess
@@ -843,6 +846,15 @@ class WalletViewModel @Inject constructor(
             delay((SWAP_UPDATES_RETRY_DELAY * attempt).coerceAtMost(SWAP_UPDATES_RETRY_CAP))
         }
         Logger.warn("Gave up starting swap updates after '$attempt' attempts", context = TAG)
+    }
+
+    private fun resetSwapUpdatesOnWipe() = viewModelScope.launch {
+        // A wipe stops the stream itself, so the next wallet's start must not find this one still marked as running
+        wipeCoordinator.state.map { it.isGateUp }.distinctUntilChanged().collect { isGateUp ->
+            if (!isGateUp) return@collect
+            swapUpdatesJob?.cancel()
+            swapUpdatesRunning = false
+        }
     }
 
     /** Refresh balances when a swap lands on-chain so savings reflect it without a manual sync. */

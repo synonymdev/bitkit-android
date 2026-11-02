@@ -22,6 +22,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
+import to.bitkit.services.BoltzService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.PaykitSdkService
@@ -55,6 +56,7 @@ class WipeWalletUseCase @Inject constructor(
     private val usdtRepo: UsdtRepo,
     private val paykitUsdtPaymentRepo: PaykitUsdtPaymentRepo,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val boltzService: BoltzService,
 ) {
     private val wipeMutex = Mutex()
 
@@ -70,6 +72,7 @@ class WipeWalletUseCase @Inject constructor(
         if (!wipeMutex.tryLock()) return Result.failure(WipeAlreadyInProgress())
         backupRepo.setWiping(true)
         lightningRepo.setWiping(true)
+        boltzService.setWiping(true)
         val result = try {
             runSuspendCatching {
                 connectionRecovery.withIdentityChange {
@@ -82,6 +85,7 @@ class WipeWalletUseCase @Inject constructor(
                 }
             }
         } finally {
+            boltzService.setWiping(false)
             lightningRepo.setWiping(false)
             backupRepo.setWiping(false)
             wipeMutex.unlock()
@@ -96,7 +100,8 @@ class WipeWalletUseCase @Inject constructor(
 
     private suspend fun stopNode(): Result<Unit> {
         backupRepo.reset()
-        return lightningRepo.stop()
+        // The stream outlives a screen, so left running it would keep the wiped wallet's keys for the next one
+        return lightningRepo.stop().onSuccess { boltzService.stopUpdatesAndAwait() }
     }
 
     private suspend fun cleanupRemote() {

@@ -46,6 +46,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
+import to.bitkit.services.BoltzService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.PaykitSdkService
@@ -87,6 +88,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val migrationService = mock<MigrationService>()
     private val paykitSdkService = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() }
     private val privatePaykitRepoProvider = Provider { privatePaykitRepo }
+    private val boltzService = mock<BoltzService>()
 
     private lateinit var sut: WipeWalletUseCase
 
@@ -138,6 +140,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         migrationService = migrationService,
         paykitSdkService = paykitSdkService,
         connectionRecovery = connectionRecoveryFixture(settingsStore),
+        boltzService = boltzService,
     )
 
     @Test
@@ -386,6 +389,41 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(lightningRepo).wipeStorage(0)
         verify(keychain).deleteWipePending()
         assertTrue(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should stop swap updates after the node and gate their starts until it ends`() = runTest {
+        assertTrue(sut.invoke(resetWalletState = {}, onSuccess = {}).isSuccess)
+
+        val inOrder = inOrder(boltzService, lightningRepo)
+        inOrder.verify(boltzService).setWiping(true)
+        inOrder.verify(lightningRepo).stop()
+        inOrder.verify(boltzService).stopUpdatesAndAwait()
+        inOrder.verify(lightningRepo).wipeStorage(0)
+        inOrder.verify(boltzService).setWiping(false)
+    }
+
+    @Test
+    fun `invoke should leave swap updates running when the node stop fails`() = runTest {
+        whenever(lightningRepo.stop()).thenReturn(Result.failure(RuntimeException("stop failed")))
+
+        assertTrue(sut.invoke(resetWalletState = {}, onSuccess = {}).isFailure)
+
+        verify(boltzService, never()).stopUpdatesAndAwait()
+        verify(boltzService).setWiping(false)
+    }
+
+    // A stream that may still run holds the wallet's mnemonic, so the wipe must not go on to the next wallet
+    @Test
+    fun `invoke should fail before any data is deleted when swap updates do not stop`() = runTest {
+        whenever(boltzService.stopUpdatesAndAwait()).thenThrow(IllegalStateException("Timed out"))
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = {})
+
+        assertEquals(WipeStep.STOP_NODE, assertIs<WipeStepFailed>(result.exceptionOrNull()).step)
+        verify(lightningRepo, never()).wipeStorage(any())
+        verify(keychain, never()).wipe(any())
+        verify(boltzService).setWiping(false)
     }
 
     // A wipe left the legacy app's seed, passphrase and PIN decryptable on the device
