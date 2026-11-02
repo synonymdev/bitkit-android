@@ -54,6 +54,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -138,7 +139,8 @@ private fun Content(
             }
         )
 
-        if (!uiState.isNodeRunning) {
+        val hasChannels = uiState.openChannels.isNotEmpty() || uiState.pendingConnections.isNotEmpty()
+        if (!uiState.isNodeRunning && !hasChannels) {
             SyncNodeView(modifier = Modifier.fillMaxSize())
             return@ScreenColumn
         }
@@ -183,6 +185,11 @@ private fun Content(
                     VerticalSpacer(16.dp)
                     LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+
+                    if (!uiState.isNodeRunning) {
+                        VerticalSpacer(16.dp)
+                        SyncingRow()
+                    }
 
                     // Pending Channels Section
                     if (uiState.pendingConnections.isNotEmpty()) {
@@ -368,6 +375,21 @@ private fun ChannelItem(
 }
 
 @Composable
+private fun SyncingRow(modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier
+    ) {
+        GradientCircularProgressIndicator(modifier = Modifier.size(16.dp))
+        BodyM(
+            text = stringResource(R.string.settings__status__lightning_node__pending),
+            color = Colors.White64,
+        )
+    }
+}
+
+@Composable
 private fun EmptyStateContent(modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
         Box(
@@ -449,7 +471,32 @@ private fun Preview() {
 private fun PreviewNodeNotRunning() {
     AppThemeSurface {
         Content(
-            uiState = LightningConnectionsUiState()
+            uiState = LightningConnectionsUiState(isNodeRunning = false)
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewNodeSyncing() {
+    AppThemeSurface {
+        Content(
+            uiState = LightningConnectionsUiState(
+                localBalance = 300_000u,
+                remoteBalance = 700_000u,
+                isNodeRunning = false,
+                openChannels = listOf(
+                    ChannelUi(
+                        name = "Connection 1",
+                        details = createChannelDetails().copy(
+                            channelId = "channel_1",
+                            channelValueSats = 1_000_000u,
+                            outboundCapacityMsat = 300_000_000u,
+                            inboundCapacityMsat = 700_000_000u,
+                        ),
+                    ),
+                ).toImmutableList(),
+            )
         )
     }
 }
