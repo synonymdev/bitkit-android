@@ -77,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restoring a backup made on iOS now brings back your profile, payment history, contact labels and settings, and the restore screen names any data it could not restore. #1733
 - Automatic allowance payments also check spending, paid requests and ended allowances recorded in the wallet and its backup, and pause with a Resume option when allowance records are older than ones the wallet already used. #1738
 - Bitkit shows the updated Tether artwork and USDT introduction, colours send reviews by the paying wallet, and always shows Request Payment, opening Add Contact when you have no contacts. #1741
-- Boost only replaces outgoing transactions this wallet sent.
+- Boost only replaces outgoing transactions this wallet sent. #1706
 
 ### Security
 - Keep contact payments private by default and require explicit opt-in to public payments with separately reserved Bitcoin addresses. #1668
