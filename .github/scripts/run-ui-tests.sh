@@ -12,11 +12,28 @@ adb shell getprop ro.product.cpu.abi
 
 ./gradlew installDevDebug
 
+run_instrumented_tests() {
+  local selection="$1"
+  shift
+  local results_dir="app/build/outputs/androidTest-results/connected"
+  if [[ -d "$results_dir" ]]; then
+    find "$results_dir" -type f -name 'TEST-*.xml' -delete
+  fi
+  ./gradlew connectedDevDebugAndroidTest "$@"
+  python3 .github/scripts/assert-android-tests-ran.py "$selection"
+}
+
 suites="${ANDROID_TEST_SUITES:-all}"
 suites="$(echo "$suites" | tr -d '[:space:]')"
 
 if [[ -z "$suites" || "$suites" == "all" ]]; then
-  ./gradlew connectedDevDebugAndroidTest
+  run_instrumented_tests all
+  exit 0
+fi
+
+if [[ "$suites" == "integration" ]]; then
+  run_instrumented_tests integration \
+    -Pandroid.testInstrumentationRunnerArguments.notAnnotation=to.bitkit.test.annotations.ComposeUi
   exit 0
 fi
 
@@ -27,5 +44,5 @@ for suite in "${requested_suites[@]}"; do
     exit 1
   fi
 
-  ./gradlew connectedDevDebugAndroidTest -PbitkitAndroidTestAnnotation="$suite"
+  run_instrumented_tests "$suite" -PbitkitAndroidTestAnnotation="$suite"
 done
