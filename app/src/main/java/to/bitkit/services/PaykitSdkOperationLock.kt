@@ -5,9 +5,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import to.bitkit.utils.AppError
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
 
 internal class PaykitSdkOperationLock {
     companion object {
@@ -60,14 +63,18 @@ internal class PaykitSdkOperationLock {
         }
     }
 
-    suspend fun <T> withWalletWipe(operation: suspend () -> T): T {
+    /**
+     * Runs [operation] once every admitted operation has ended, rejecting new ones until it returns. Fails when the
+     * operation holding the lock does not end within [acquireTimeout], as an SDK call it waits on cannot be cancelled.
+     */
+    suspend fun <T> withWalletWipe(acquireTimeout: Duration = Duration.INFINITE, operation: suspend () -> T): T {
         synchronized(stateLock) {
             checkAvailable()
             isWiping = true
             generation++
         }
         return try {
-            acquire(Priority.Ordered)
+            withTimeoutOrNull(acquireTimeout) { acquire(Priority.Ordered) } ?: throw PaykitWipeLockTimeout()
             try {
                 withContext(WipeContext(this, generation)) { operation() }
             } finally {
@@ -149,3 +156,5 @@ internal class PaykitSdkOperationLock {
         companion object Key : CoroutineContext.Key<WipeContext>
     }
 }
+
+class PaykitWipeLockTimeout : AppError("Timed out waiting for a Paykit operation before wallet wipe")

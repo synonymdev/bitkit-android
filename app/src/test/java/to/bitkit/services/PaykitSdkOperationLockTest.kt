@@ -15,9 +15,25 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PaykitSdkOperationLockTest {
+    @Test
+    fun `a wipe fails within its bound while an operation never releases the lock`() = runTest {
+        val lock = PaykitSdkOperationLock()
+        val releaseHolder = CompletableDeferred<Unit>()
+        val holder = launch { lock.withLock { releaseHolder.await() } }
+        runCurrent()
+
+        assertFailsWith<PaykitWipeLockTimeout> { lock.withWalletWipe(acquireTimeout = 15.seconds) { error("ran") } }
+
+        assertEquals(15.seconds.inWholeMilliseconds, testScheduler.currentTime)
+        releaseHolder.complete(Unit)
+        holder.join()
+        assertEquals("next", lock.withWalletWipe { "next" })
+    }
+
     @Test
     fun `interactive work overtakes only queued publication with bounded fairness`() = runTest {
         val lock = PaykitSdkOperationLock()

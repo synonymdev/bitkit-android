@@ -88,9 +88,11 @@ import com.synonym.paykit.pubkySecretKeyFromBip39Mnemonic
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -1668,14 +1670,16 @@ class PaykitSdkService @Inject constructor(
     }
 
     suspend fun <T> withWalletWipe(operation: suspend () -> T): T {
-        // Drain setup before closing admission, so cleanup cannot await setup queued behind its own barrier.
-        // Setup can reach the network, so it is bounded and the wipe never waits on a server.
-        runSuspendCatching { withTimeoutOrNull(WALLET_WIPE_SETUP_TIMEOUT) { initialize() } }
+        // Drain setup before closing admission, so cleanup cannot await setup queued behind its own barrier. Setup can
+        // reach the network in an SDK call that does not end on cancellation, so the wipe waits for its outcome with a
+        // bound and leaves a setup that outlives it to finish on its own.
+        val setup = async(start = CoroutineStart.UNDISPATCHED) { initialize() }
+        runSuspendCatching { withTimeoutOrNull(WALLET_WIPE_SETUP_TIMEOUT) { setup.await() } }
             .onSuccess {
                 if (it == null) Logger.warn("Timed out initializing Paykit before wallet wipe", context = TAG)
             }
             .onFailure { Logger.warn("Failed to initialize Paykit before wallet wipe", it, context = TAG) }
-        return operationLock.withWalletWipe {
+        return operationLock.withWalletWipe(acquireTimeout = WALLET_WIPE_LOCK_TIMEOUT) {
             resetRuntime()
             try {
                 operation()
@@ -1983,6 +1987,9 @@ class PaykitSdkService @Inject constructor(
 
         /** Maximum time a wallet wipe waits for Paykit setup before closing admission. */
         private val WALLET_WIPE_SETUP_TIMEOUT = 15.seconds
+
+        /** Maximum time a wallet wipe waits for the SDK operation that holds the lock once admission is closed. */
+        private val WALLET_WIPE_LOCK_TIMEOUT = 15.seconds
 
         /** Maximum concurrent public Pubky reads that run outside the operation lock. */
         private const val PUBLIC_READ_PERMITS = 6
