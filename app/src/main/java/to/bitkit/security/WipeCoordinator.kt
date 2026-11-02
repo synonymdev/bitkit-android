@@ -79,7 +79,7 @@ class WipeCoordinator @Inject constructor(
      * on the calling thread; the PIN attempts check, which opens the database, runs in the background behind the gate.
      */
     fun resumeAtLaunch() {
-        if (!raiseGate(readIntent())) _state.update { WipeState.Checking }
+        if (!raiseGate(readIntent())) _state.update { if (it == WipeState.Idle) WipeState.Checking else it }
         launchAttempts()
     }
 

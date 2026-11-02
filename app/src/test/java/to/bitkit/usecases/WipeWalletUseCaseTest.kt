@@ -523,6 +523,41 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     }
 
     @Test
+    fun `invoke should count a remote cleanup call cancelled on its own as a failed step`() = runTest {
+        whenever(privatePaykitRepo.removePublishedEndpointsForCleanup(any())).doSuspendableAnswer {
+            throw CancellationException("cancelled inside the call")
+        }
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = {})
+
+        assertTrue(result.isSuccess)
+        verify(pubkyRepo).removeBitkitPaymentEndpoints()
+        verify(keychain).deleteWipePending()
+    }
+
+    @Test
+    fun `a cancelled wipe cancels its remote cleanup call`() = runTest {
+        val callStarted = CompletableDeferred<Unit>()
+        val callEnded = CompletableDeferred<Throwable?>()
+        whenever(privatePaykitRepo.removePublishedEndpointsForCleanup(any())).doSuspendableAnswer {
+            callStarted.complete(Unit)
+            try {
+                awaitCancellation()
+            } catch (e: CancellationException) {
+                callEnded.complete(e)
+                throw e
+            }
+        }
+        val wipe = launch { sut.invoke(resetWalletState = {}, onSuccess = {}) }
+        callStarted.await()
+
+        wipe.cancel()
+
+        assertIs<CancellationException>(callEnded.await())
+        verify(lightningRepo, never()).wipeStorage(any())
+    }
+
+    @Test
     fun `invoke should keep the PIN and wipe-pending flag when the legacy app's secrets remain`() = runTest {
         whenever(migrationService.removeLegacyAppData()).thenReturn(Result.failure(IllegalStateException("kept")))
 
@@ -559,7 +594,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     @Test
     fun `invoke resumed after each step completes`() = runTest {
         val killPoints = listOf(
-            killPoint("remote cleanup") { doThrow(it).whenever(pubkyRepo).removeBitkitPaymentEndpoints() },
+            killPoint("remote cleanup") { doThrow(it).whenever(privatePaykitRepo).closeAndClear() },
             killPoint("LDK storage") { doThrow(it).whenever(lightningRepo).wipeStorage(0) },
             killPoint("keychain") { doThrow(it).whenever(keychain).wipe(retainedKeys) },
             killPoint("core data") { doThrow(it).whenever(coreService).wipeData() },
@@ -576,7 +611,15 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             var isPinPresent = true
             var isFlagPresent = true
             val freshProcess = {
-                reset(keychain, coreService, settingsStore, migrationService, pubkyRepo, lightningRepo)
+                reset(
+                    keychain,
+                    coreService,
+                    settingsStore,
+                    migrationService,
+                    pubkyRepo,
+                    lightningRepo,
+                    privatePaykitRepo,
+                )
                 setUp()
                 whenever { keychain.delete(Keychain.Key.PIN.name) }.doSuspendableAnswer { isPinPresent = false }
                 whenever { keychain.deleteWipePending() }.doSuspendableAnswer { isFlagPresent = false }

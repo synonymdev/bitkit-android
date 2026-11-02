@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
@@ -37,6 +38,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
@@ -169,11 +171,18 @@ class WipeWalletUseCase @Inject constructor(
             .isSuccess
 
     private suspend fun remoteStep(name: String, block: suspend () -> Any?): Boolean = step(name) {
-        // Detached, as an SDK call in flight does not end on cancellation, so the bound ends the wait instead
+        // Detached, as an SDK call in flight does not end on cancellation, so the bound ends the wait instead. It keeps
+        // the caller's context, as Paykit admits only the wipe's own operations while the wipe runs.
         val call = remoteScope.async(currentCoroutineContext().minusKey(Job)) { block() ?: Unit }
-        withTimeoutOrNull(REMOTE_STEP_TIMEOUT) { call.await() } ?: run {
-            call.cancel()
-            throw RemoteStepTimeout()
+        try {
+            val result = runCatching { withTimeoutOrNull(REMOTE_STEP_TIMEOUT) { call.await() } }.getOrElse {
+                // A call cancelled on its own while the wipe goes on is a failed step like any other
+                if (it is CancellationException) currentCoroutineContext().ensureActive()
+                throw RemoteStepFailed(it)
+            }
+            result ?: throw RemoteStepTimeout()
+        } finally {
+            if (!call.isCompleted) call.cancel()
         }
     }
 
@@ -209,3 +218,5 @@ enum class WipeStep {
 class WipeStepFailed(val step: WipeStep, cause: Throwable) : AppError("Failed wipe step '$step'", cause)
 
 private class RemoteStepTimeout : AppError("Remote cleanup timed out")
+
+private class RemoteStepFailed(cause: Throwable) : AppError("Remote cleanup failed", cause)
