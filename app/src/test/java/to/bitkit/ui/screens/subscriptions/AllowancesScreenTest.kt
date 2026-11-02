@@ -9,6 +9,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -42,6 +45,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.LocalAppViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.AppViewModel
+import kotlin.test.assertEquals
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -66,6 +70,7 @@ class AllowancesScreenTest {
     private val settingsStore: SettingsStore = mock()
 
     private var isHostShown by mutableStateOf(true)
+    private var allowanceClicks = 0
     private lateinit var viewModel: AllowancesViewModel
 
     @Before
@@ -107,7 +112,7 @@ class AllowancesScreenTest {
                             AllowancesScreen(
                                 topPadding = 0.dp,
                                 onClickAdd = {},
-                                onClickAllowance = {},
+                                onClickAllowance = { allowanceClicks++ },
                                 viewModel = viewModel,
                             )
                         }
@@ -154,6 +159,26 @@ class AllowancesScreenTest {
         composeRule.onNodeWithTag("N1").assertDoesNotExist()
         verifyBlocking(allowanceRepo, never()) { resumeAutomaticPayments() }
         click("AllowancesResume")
+        composeRule.onNodeWithTag("N1").assertExists()
+    }
+
+    // Tall enough that the row lies under the empty part of the PIN check, not under its keypad.
+    @Config(qualifiers = "w360dp-h800dp")
+    @Test
+    fun `a tap on a row under the pin check does not open the allowance`() {
+        click("AllowancesResume")
+        composeRule.onNodeWithTag("N1").assertExists()
+
+        ShadowSystemClock.advanceBy(1.seconds.toJavaDuration())
+        composeRule.onNode(
+            SemanticsMatcher("row") {
+                it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("AllowanceRow-") == true
+            }
+        ).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(0, allowanceClicks, "a tap on the PIN overlay reached the allowance row beneath it")
+        }
         composeRule.onNodeWithTag("N1").assertExists()
     }
 

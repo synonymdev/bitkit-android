@@ -58,6 +58,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.screens.wallets.usdt.UsdtAuthentication
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -125,6 +126,7 @@ internal fun BoxScope.AllowanceAuthorizationOverlay(
         modifier = Modifier
             .matchParentSize()
             .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
+            .blockPointerInputPassthrough()
     ) {
         UsdtAuthentication(
             useBiometrics = authorization.useBiometrics,
