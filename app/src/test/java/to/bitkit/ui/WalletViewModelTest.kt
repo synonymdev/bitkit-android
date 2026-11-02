@@ -176,7 +176,6 @@ class WalletViewModelTest : BaseUnitTest() {
         verify(boltzService, times(1)).startUpdates(anyOrNull(), any(), anyOrNull())
     }
 
-    // The swap updates stream started with the wiped wallet's mnemonic was kept for the next wallet
     @Test
     fun `a wipe lets the next wallet start its own swap updates stream`() = test {
         whenever(boltzService.isSwapSupported).thenReturn(true)
@@ -194,7 +193,6 @@ class WalletViewModelTest : BaseUnitTest() {
         verify(boltzService, times(2)).startUpdates(anyOrNull(), any(), anyOrNull())
     }
 
-    // A start handed to bitkit-core cannot be cancelled, so one landing after a stop must not mark the stream running
     @Test
     fun `a swap updates start that lands after a wipe began leaves the next start free`() = test {
         whenever(boltzService.isSwapSupported).thenReturn(true)

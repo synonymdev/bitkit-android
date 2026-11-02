@@ -1493,18 +1493,24 @@ class MigrationService internal constructor(
         }
 
     /**
-     * Removes the RN app's seed, passphrase and PIN, and its app state, for a wipe, after which nothing reads them. Its
-     * channel files go only on evidence that a node start took their channels. Without it, as after a migration that
-     * failed, was killed or ran before that evidence was kept, they may be the only copy of the channel monitors.
+     * Removes the RN app's seed, passphrase and PIN, and its app state, for a wipe, after which nothing reads them.
+     * Fails when its keystore keys or keychain file remain, as they hold the seed; the rest is best effort. Its channel
+     * files go only on evidence that a node start took their channels. Without it, as after a migration that failed,
+     * was killed or ran before that evidence was kept, they may be the only copy of the channel monitors.
      */
-    suspend fun removeLegacyAppData() {
-        runSuspendCatching {
+    suspend fun removeLegacyAppData(): Result<Unit> {
+        val secretsRemoved = runSuspendCatching {
             val keyStore = androidKeyStore()
             RNKeychainKey.entries.map { it.service }.filter(keyStore::containsAlias).forEach(keyStore::deleteEntry)
-        }.onFailure { Logger.error("Failed to delete the RN keychain keys", it, context = TAG) }
-        deleteLegacyFile(File(context.filesDir, "datastore/RN_KEYCHAIN.preferences_pb"))
+            val keychainFile = File(context.filesDir, "datastore/RN_KEYCHAIN.preferences_pb")
+            check(deleteLegacyFile(keychainFile)) { "Failed to delete the RN keychain file" }
+        }
         deleteLegacyFile(File(context.filesDir, "mmkv"))
+        removeTakenLegacyChannelFiles()
+        return secretsRemoved
+    }
 
+    private suspend fun removeTakenLegacyChannelFiles() {
         // A store that cannot be read holds no evidence, so it keeps the files too
         val isLocalChannelDataConsumed = runSuspendCatching {
             val preferences = rnMigrationStore.data.first()

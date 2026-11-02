@@ -1,15 +1,21 @@
 package to.bitkit.usecases
 
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
+import to.bitkit.async.appScope
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
@@ -35,6 +41,7 @@ import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class WipeWalletUseCase @Inject constructor(
+    @BgDispatcher bgDispatcher: CoroutineDispatcher,
     private val backupRepo: BackupRepo,
     private val keychain: Keychain,
     private val coreService: CoreService,
@@ -59,6 +66,7 @@ class WipeWalletUseCase @Inject constructor(
     private val boltzService: BoltzService,
 ) {
     private val wipeMutex = Mutex()
+    private val remoteScope = appScope(bgDispatcher, TAG)
 
     /**
      * The PIN, its attempt counter and the wipe-pending flag outlive every other local step, so a wipe interrupted
@@ -73,6 +81,7 @@ class WipeWalletUseCase @Inject constructor(
         backupRepo.setWiping(true)
         lightningRepo.setWiping(true)
         boltzService.setWiping(true)
+        hwWalletRepo.setWiping(true)
         val result = try {
             runSuspendCatching {
                 connectionRecovery.withIdentityChange {
@@ -85,6 +94,7 @@ class WipeWalletUseCase @Inject constructor(
                 }
             }
         } finally {
+            hwWalletRepo.setWiping(false)
             boltzService.setWiping(false)
             lightningRepo.setWiping(false)
             backupRepo.setWiping(false)
@@ -134,9 +144,9 @@ class WipeWalletUseCase @Inject constructor(
         requiredStep(WipeStep.HARDWARE_WALLET) { hwWalletRepo.resetState().getOrThrow() }
         resetWalletState()
         // The RN app's seed, passphrase and PIN must not outlive the wallet
-        migrationService.removeLegacyAppData()
+        requiredStep(WipeStep.LEGACY_DATA) { migrationService.removeLegacyAppData().getOrThrow() }
         // Must hold before the flag is cleared, or a later launch could re-run RN migration and re-import its PIN
-        requiredStep(WipeStep.SETTINGS) { migrationService.markMigrationChecked() }
+        requiredStep(WipeStep.MIGRATION) { migrationService.markMigrationChecked() }
         requiredStep(WipeStep.PIN) { deletePin() }
         requiredStep(WipeStep.COMMIT) { keychain.deleteWipePending() }
         if (usdtWipe.isFailure) throw WipeIncomplete()
@@ -159,7 +169,12 @@ class WipeWalletUseCase @Inject constructor(
             .isSuccess
 
     private suspend fun remoteStep(name: String, block: suspend () -> Any?): Boolean = step(name) {
-        withTimeoutOrNull(REMOTE_STEP_TIMEOUT) { block() ?: Unit } ?: throw RemoteStepTimeout()
+        // Detached, as an SDK call in flight does not end on cancellation, so the bound ends the wait instead
+        val call = remoteScope.async(currentCoroutineContext().minusKey(Job)) { block() ?: Unit }
+        withTimeoutOrNull(REMOTE_STEP_TIMEOUT) { call.await() } ?: run {
+            call.cancel()
+            throw RemoteStepTimeout()
+        }
     }
 
     companion object {
@@ -175,10 +190,21 @@ class WipeWalletUseCase @Inject constructor(
 
 class WipeAlreadyInProgress : AppError("Wallet wipe already in progress")
 
-class WipeIncomplete : AppError("Wallet wipe did not complete, please reset again")
+class WipeIncomplete : AppError("Wallet wipe left USDT wallet data behind")
 
 /** The wipe steps that must succeed; [BEGIN] is establishing the durable wipe intent. */
-enum class WipeStep { BEGIN, STOP_NODE, LDK_STORAGE, KEYCHAIN, SETTINGS, HARDWARE_WALLET, PIN, COMMIT }
+enum class WipeStep {
+    BEGIN,
+    STOP_NODE,
+    LDK_STORAGE,
+    KEYCHAIN,
+    SETTINGS,
+    HARDWARE_WALLET,
+    LEGACY_DATA,
+    MIGRATION,
+    PIN,
+    COMMIT,
+}
 
 class WipeStepFailed(val step: WipeStep, cause: Throwable) : AppError("Failed wipe step '$step'", cause)
 

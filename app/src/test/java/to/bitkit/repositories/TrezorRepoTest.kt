@@ -1513,6 +1513,23 @@ class TrezorRepoTest : BaseUnitTest() {
     // region resetState
 
     @Test
+    fun `setWiping refuses and ends prompts until the wipe ends`() = test {
+        sut = createSut()
+
+        sut.setWiping(true)
+        sut.setWiping(false)
+
+        inOrder(trezorTransport, trezorUiHandler) {
+            verify(trezorUiHandler).refusePinRequests()
+            verify(trezorTransport).refusePairingCodeRequests()
+            verify(trezorUiHandler).cancelPin()
+            verify(trezorTransport).cancelPairingCode()
+            verify(trezorTransport).allowPairingCodeRequests()
+            verify(trezorUiHandler).allowPinRequests()
+        }
+    }
+
+    @Test
     fun `resetState releases a pending PIN entry of a connect in progress`() = test {
         sut = createSut()
 

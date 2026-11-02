@@ -31,6 +31,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import java.io.File
 import java.security.KeyStore
+import java.security.KeyStoreException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -40,7 +41,6 @@ class MigrationServiceTest : BaseUnitTest() {
     @get:Rule
     val temporaryFolder = TemporaryFolder()
 
-    // Regression: a wipe left the legacy seed, passphrase and PIN decryptable, and the legacy app and channel state
     @Test
     fun `wipe removes the legacy seed, app state and the channel files a node start took`() = test {
         withLegacyAppData { service, store, keyStore ->
@@ -48,7 +48,7 @@ class MigrationServiceTest : BaseUnitTest() {
             service.migrateLdkData().getOrThrow()
             service.consumePendingChannelMigration()
 
-            service.removeLegacyAppData()
+            assertTrue(service.removeLegacyAppData().isSuccess)
 
             listOf("wallet0", "wallet0passphrase", "pin").forEach { verify(keyStore).deleteEntry(it) }
             assertFalse(rnKeychainFile.exists())
@@ -58,8 +58,36 @@ class MigrationServiceTest : BaseUnitTest() {
         }
     }
 
-    // Regression: deleting the legacy channel files of a migration that had not handed them to a node lost the only
-    // copy of the channel monitors
+    @Test
+    fun `wipe fails while the legacy keystore keys remain, and still removes the app state`() = test {
+        withLegacyAppData { service, _, keyStore ->
+            whenever(keyStore.deleteEntry(any())).thenThrow(KeyStoreException("keystore unavailable"))
+
+            val result = service.removeLegacyAppData()
+
+            assertTrue(result.isFailure)
+            assertFalse(rnMmkvDir.exists())
+        }
+    }
+
+    @Test
+    fun `wipe fails while the legacy keychain file remains`() = test {
+        withLegacyAppData { service, _, _ ->
+            // A read-only directory keeps its entries
+            val keychainDir = requireNotNull(rnKeychainFile.parentFile)
+            assertTrue(keychainDir.setWritable(false))
+
+            val result = try {
+                service.removeLegacyAppData()
+            } finally {
+                keychainDir.setWritable(true)
+            }
+
+            assertTrue(result.isFailure)
+            assertTrue(rnKeychainFile.exists())
+        }
+    }
+
     @Test
     fun `wipe keeps the legacy channel files that no node start took`() = test {
         withLegacyAppData { service, store, keyStore ->

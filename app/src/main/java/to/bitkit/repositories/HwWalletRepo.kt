@@ -259,6 +259,9 @@ class HwWalletRepo @Inject constructor(
     private suspend fun transportDeviceId(walletId: String): String =
         requireNotNull(transportDeviceIdOrNull(walletId)) { "Unknown hardware wallet '$walletId'" }
 
+    /** Answers every hardware wallet prompt at once from the start of a wipe until its end, as nobody can enter one. */
+    fun setWiping(enabled: Boolean) = trezorRepo.setWiping(enabled)
+
     /** Resets every vendor's state, failing when a hardware wallet credential is left behind. */
     suspend fun resetState(): Result<Unit> = withContext(ioDispatcher) {
         watcherMutex.withLock {

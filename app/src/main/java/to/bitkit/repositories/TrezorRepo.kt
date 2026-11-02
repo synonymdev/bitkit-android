@@ -212,6 +212,19 @@ class TrezorRepo @Inject constructor(
         trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
     }
 
+    /** Refuses PIN and pairing prompts, ending any shown, from the start of a wipe until its end. */
+    fun setWiping(enabled: Boolean) {
+        if (enabled) {
+            trezorUiHandler.refusePinRequests()
+            trezorTransport.refusePairingCodeRequests()
+            cancelPin()
+            cancelPairingCode()
+        } else {
+            trezorTransport.allowPairingCodeRequests()
+            trezorUiHandler.allowPinRequests()
+        }
+    }
+
     /**
      * Resets all Trezor state, failing when a stored THP credential could not be deleted or a connect in flight, which
      * could still save one, did not end.

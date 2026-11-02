@@ -9,6 +9,7 @@ import com.synonym.paykit.PubkyIdentityCapability
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -59,12 +61,15 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WipeWalletUseCaseTest : BaseUnitTest() {
     private companion object {
         val PAYKIT_SETUP_DURATION = 20.seconds
+        val PAYKIT_WIPE_BOUNDS = 30.seconds
+        val REMOTE_CALL_DURATION = 1.minutes
     }
 
     private val backupRepo = mock<BackupRepo>()
@@ -106,6 +111,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         }
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
         whenever { hwWalletRepo.resetState() }.thenReturn(Result.success(Unit))
+        whenever { migrationService.removeLegacyAppData() }.thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
@@ -119,6 +125,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     }
 
     private fun wipeWalletUseCase(paykitSdkService: PaykitSdkService = this.paykitSdkService) = WipeWalletUseCase(
+        bgDispatcher = testDispatcher,
         backupRepo = backupRepo,
         keychain = keychain,
         coreService = coreService,
@@ -413,7 +420,6 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(boltzService).setWiping(false)
     }
 
-    // A stream that may still run holds the wallet's mnemonic, so the wipe must not go on to the next wallet
     @Test
     fun `invoke should fail before any data is deleted when swap updates do not stop`() = runTest {
         whenever(boltzService.stopUpdatesAndAwait()).thenThrow(IllegalStateException("Timed out"))
@@ -426,7 +432,6 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(boltzService).setWiping(false)
     }
 
-    // A wipe left the legacy app's seed, passphrase and PIN decryptable on the device
     @Test
     fun `invoke should remove the legacy app data before clearing the wipe-pending flag`() = runTest {
         assertTrue(sut.invoke(resetWalletState = {}, onSuccess = {}).isSuccess)
@@ -465,10 +470,90 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             .invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
 
         assertTrue(result.isSuccess)
+        // The setup holds the SDK lock until it ends, which the wipe waits for within its lock bound
+        assertEquals(PAYKIT_SETUP_DURATION.inWholeMilliseconds, testScheduler.currentTime)
         verify(lightningRepo).wipeStorage(0)
         verify(keychain).wipe(retainedKeys)
         verify(keychain).deleteWipePending()
         assertTrue(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should fail within its bounds before deleting anything when Paykit setup never ends`() = runTest {
+        val releaseSetup = CompletableDeferred<Unit>()
+        val sdk = mock<PaykitSdk>()
+        whenever(sdk.initialize()).doSuspendableAnswer {
+            releaseSetup.await()
+            IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT)
+        }
+        val paykitSdkService = PaykitSdkService(
+            mock(),
+            keychain,
+            mock(),
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            platformInitializer = {},
+            settingsStore = mock(),
+            sdkFactory = { sdk },
+        )
+
+        val result = wipeWalletUseCase(paykitSdkService = paykitSdkService)
+            .invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
+
+        assertTrue(result.isFailure)
+        assertTrue(testScheduler.currentTime <= PAYKIT_WIPE_BOUNDS.inWholeMilliseconds)
+        verify(lightningRepo, never()).stop()
+        verify(lightningRepo, never()).wipeStorage(any())
+        verify(keychain, never()).wipe(any())
+        assertFalse(onSetWalletExistsStateCalled)
+        releaseSetup.complete(Unit)
+    }
+
+    @Test
+    fun `invoke should not wait past its bound for a remote cleanup call that ignores cancellation`() = runTest {
+        whenever(privatePaykitRepo.removePublishedEndpointsForCleanup(any())).doSuspendableAnswer {
+            withContext(NonCancellable) { delay(REMOTE_CALL_DURATION) }
+            Result.success(Unit)
+        }
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = {})
+
+        assertTrue(result.isSuccess)
+        assertTrue(testScheduler.currentTime < REMOTE_CALL_DURATION.inWholeMilliseconds)
+        verify(keychain).deleteWipePending()
+    }
+
+    @Test
+    fun `invoke should keep the PIN and wipe-pending flag when the legacy app's secrets remain`() = runTest {
+        whenever(migrationService.removeLegacyAppData()).thenReturn(Result.failure(IllegalStateException("kept")))
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = { onSetWalletExistsStateCalled = true })
+
+        assertEquals(WipeStep.LEGACY_DATA, assertIs<WipeStepFailed>(result.exceptionOrNull()).step)
+        verify(migrationService, never()).markMigrationChecked()
+        verify(keychain, never()).delete(any())
+        verify(keychain, never()).deleteWipePending()
+        assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should report the migration step when marking the migration checked fails`() = runTest {
+        whenever(migrationService.markMigrationChecked()).thenThrow(RuntimeException("store write failed"))
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = {})
+
+        assertEquals(WipeStep.MIGRATION, assertIs<WipeStepFailed>(result.exceptionOrNull()).step)
+        verify(keychain, never()).deleteWipePending()
+    }
+
+    @Test
+    fun `invoke should refuse hardware wallet prompts from its start until it ends`() = runTest {
+        assertTrue(sut.invoke(resetWalletState = {}, onSuccess = {}).isSuccess)
+
+        val inOrder = inOrder(hwWalletRepo, lightningRepo)
+        inOrder.verify(hwWalletRepo).setWiping(true)
+        inOrder.verify(lightningRepo).stop()
+        inOrder.verify(hwWalletRepo).resetState()
+        inOrder.verify(hwWalletRepo).setWiping(false)
     }
 
     @Test

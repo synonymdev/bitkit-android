@@ -1836,6 +1836,15 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `setWiping passes the wipe to the Trezor prompts`() = test {
+        val sut = createRepo()
+
+        sut.setWiping(true)
+
+        verify(trezorRepo).setWiping(true)
+    }
+
+    @Test
     fun `resetState fails when the Trezor reset keeps a credential, after resetting Jade`() = test {
         whenever(trezorRepo.resetState()).thenReturn(Result.failure(IllegalStateException("credential file kept")))
         val sut = createRepo()
