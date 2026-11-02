@@ -6,7 +6,10 @@ backends. The required `build` job aggregates `build-and-test` and `compose-ui`;
 it runs even after dependency failure/skip and succeeds only when both succeed.
 The active master ruleset already requires `build` (alongside `lint` and
 `e2e-status`), so this change does not require editing repository protection.
-Keep this aggregate name stable. The APK comment uses the build artifact directly.
+Keep this aggregate name stable. The migration workflow displays its separate build
+as `migration-build`, so its skipped PR job cannot collide with the required `build`
+context. Its job ID and dependencies remain unchanged. The APK comment uses the
+build artifact directly.
 
 `Android Instrumented Tests` runs the complement of `ComposeUi` on master pushes
 and defaults to that same `integration` selection on manual dispatch. Excluding
