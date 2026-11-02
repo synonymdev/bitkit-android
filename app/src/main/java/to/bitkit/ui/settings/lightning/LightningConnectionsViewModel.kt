@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -65,7 +66,7 @@ class LightningConnectionsViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             activityRepo.getClosedChannels(SortDirection.DESC)
                 .onSuccess { closedChannels ->
-                    val channels = lightningRepo.lightningState.value.channels
+                    val channels = lightningRepo.lastKnownChannels.value
                     val openChannels = channels.filterOpen()
                     val pendingConnections = channels.filterPending()
 
@@ -88,13 +89,17 @@ class LightningConnectionsViewModel @Inject constructor(
 
     private fun observeState() {
         viewModelScope.launch(bgDispatcher) {
-            lightningRepo.lightningState.collect { lightningState ->
-                val channels = lightningState.channels
+            combine(
+                lightningRepo.lightningState,
+                lightningRepo.lastKnownChannels,
+            ) { lightningState, channels ->
+                lightningState.nodeLifecycleState.isRunning() to channels
+            }.collect { (isNodeRunning, channels) ->
                 val connectionText = context.getString(R.string.lightning__connection)
 
                 _uiState.update {
                     it.copy(
-                        isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
+                        isNodeRunning = isNodeRunning,
                         openChannels = channels.filterOpen().map { channel ->
                             channel.mapToUiModel(channels, connectionText)
                         }.reversed().toImmutableList(),

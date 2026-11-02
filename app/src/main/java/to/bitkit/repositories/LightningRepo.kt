@@ -143,6 +143,11 @@ class LightningRepo @Inject constructor(
     private val _isRecoveryMode = MutableStateFlow(false)
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
 
+    private val _lastKnownChannels = MutableStateFlow<ImmutableList<ChannelDetails>>(persistentListOf())
+
+    /** Channels from the last read of a running node, kept while the node stops and restarts. */
+    val lastKnownChannels = _lastKnownChannels.asStateFlow()
+
     @Volatile
     private var isWiping = false
 
@@ -899,6 +904,7 @@ class LightningRepo @Inject constructor(
             stopLocked().mapCatching {
                 Logger.debug("node stopped, calling wipeStorage", context = TAG)
                 lastKnownNodeId = null
+                _lastKnownChannels.update { persistentListOf() }
                 lightningService.wipeStorage(walletIndex)
                 clearProbeOutcomes()
                 _lightningState.update {
@@ -2110,10 +2116,11 @@ class LightningRepo @Inject constructor(
     suspend fun refreshChannelsAndPeers(onRefreshed: () -> Unit = {}): Result<Unit> = withContext(bgDispatcher) {
         if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext Result.success(Unit)
         runCatching {
+            val channels = readChannels()
             _lightningState.update {
                 it.copy(
                     peers = getPeers().orEmpty().toImmutableList(),
-                    channels = getChannels().orEmpty().toImmutableList(),
+                    channels = channels,
                 )
             }
             onRefreshed()
@@ -2127,12 +2134,13 @@ class LightningRepo @Inject constructor(
     }
 
     fun syncState() {
+        val channels = readChannels()
         _lightningState.update {
             it.copy(
                 nodeId = getNodeId().orEmpty(),
                 nodeStatus = getStatus(),
                 peers = getPeers().orEmpty().toImmutableList(),
-                channels = getChannels().orEmpty().toImmutableList(),
+                channels = channels,
                 balances = getBalances(),
             )
         }
@@ -2241,6 +2249,11 @@ class LightningRepo @Inject constructor(
 
     fun getChannels(): List<ChannelDetails>? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
+
+    private fun readChannels(): ImmutableList<ChannelDetails> {
+        val channels = getChannels() ?: return persistentListOf()
+        return channels.toImmutableList().also { _lastKnownChannels.update { _ -> it } }
+    }
 
     fun canReceive(): Boolean {
         val isRunning = _lightningState.value.nodeLifecycleState.isRunning()
