@@ -55,6 +55,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletResetRecovery
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.profileRemovalCorruptionHandler
 import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.ActivityRepo
@@ -385,7 +386,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     @Test
     fun `pending restart wipe skips remote cleanup and only clears marker after local acknowledgement`() = test {
         val id = UUID.randomUUID().toString()
-        profileRemovalStore.withAccess(id) { profileRemovalStore.begin(id) }
+        profileRemovalStore.withAccess(id, ProfileRemovalScope.WALLET_WIPE) { profileRemovalStore.begin(id) }
         whenever { privatePaykitRepo.finishProfileRemoval(any()) }.doSuspendableAnswer {
             assertEquals(id, profileRemovalStore.pendingAttempt())
             verify(keychain).wipe()
@@ -396,6 +397,38 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any())
         verify(pubkyRepo, never()).removeBitkitPaymentEndpoints()
         verify(privatePaykitRepo, never()).closeAndClear()
+    }
+
+    @Test
+    fun `explicit reset from corrupt marker attempts endpoint cleanup before erasing credentials`() = test {
+        val file = folder.newFile("corrupt-removal.json").also { it.writeText("broken") }
+        val storage = DataStoreFactory.create(
+            serializer = ProfileRemovalSerializer,
+            corruptionHandler = profileRemovalCorruptionHandler(),
+            scope = backgroundScope,
+            produceFile = { file },
+        )
+        val removalStore = ProfileRemovalStore(storage)
+        val recovery = assertIs<WalletResetRecovery.Unreadable>(removalStore.walletResetRecovery.first())
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.doSuspendableAnswer {
+            assertEquals(recovery.attemptId, removalStore.pendingAttempt())
+            assertEquals(ProfileRemovalScope.WALLET_WIPE, storage.data.first().scope)
+            Result.success(Unit)
+        }
+
+        val result = localWipe(removalStore).invoke(
+            resetWalletState = {},
+            onSuccess = {},
+            expectedPendingAttemptId = recovery.attemptId,
+        )
+
+        assertTrue(result.isSuccess)
+        inOrder(privatePaykitRepo, pubkyRepo, keychain) {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(pubkyRepo).removeBitkitPaymentEndpoints()
+            verify(keychain).wipe()
+        }
+        assertNull(removalStore.pendingAttempt())
     }
 
     @Test

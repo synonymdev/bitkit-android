@@ -105,6 +105,8 @@ class ProfileRemovalStore internal constructor(private val store: DataStore<Prof
 
     internal suspend fun pendingAttempt(): String? = store.data.first().attemptId
 
+    internal suspend fun pendingState(): ProfileRemovalState = store.data.first()
+
     internal suspend fun requireWalletAvailable() {
         val state = store.data.first()
         if (state.attemptId != null && state.scope != ProfileRemovalScope.PROFILE) {

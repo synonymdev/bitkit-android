@@ -50,6 +50,7 @@ fun AuthCheckView(
     onSuccess: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
     onValidatePin: ((String) -> Boolean)? = null,
+    onClickForgotPin: (() -> Unit)? = null,
 ) {
     val isBiometricsEnabled by settingsViewModel.isBiometricEnabled.collectAsStateWithLifecycle()
     val attemptsRemaining by appViewModel.pinAttemptsRemaining.collectAsStateWithLifecycle()
@@ -64,7 +65,7 @@ fun AuthCheckView(
         validatePin = onValidatePin ?: appViewModel::validatePin,
         onSuccess = onSuccess,
         onBack = onBack,
-        onClickForgotPin = { appViewModel.setShowForgotPin(true) },
+        onClickForgotPin = onClickForgotPin ?: { appViewModel.setShowForgotPin(true) },
     )
 }
 

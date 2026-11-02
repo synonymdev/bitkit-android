@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -60,6 +61,7 @@ fun WalletResetRecoveryScreen(
         appViewModel.recoveryPinRequired
     }
     val pinEnabled by recoveryPinRequired.collectAsStateWithLifecycle(initialValue = null)
+    LaunchedEffect(appViewModel) { appViewModel.setShowForgotPin(false) }
     WalletResetRecoveryFlow(
         recovery = walletState.walletResetRecovery,
         busy = finishing || wiping,
@@ -80,6 +82,7 @@ fun WalletResetRecoveryScreen(
                 onSuccess = onSuccess,
                 onBack = onBack,
                 onValidatePin = appViewModel::validateRecoveryPin,
+                onClickForgotPin = onBack,
             )
         },
         phrase = { onBack -> ScopedRecoveryMnemonic(onBack) },

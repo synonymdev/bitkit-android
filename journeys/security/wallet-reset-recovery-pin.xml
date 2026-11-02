@@ -1,0 +1,16 @@
+<journey name="forgotten PIN during wallet reset recovery">
+  <description>
+    Android-specific restricted recovery route. Use a prepared disposable, unfunded wallet with
+    a known PIN and an unreadable reset marker; preparation requires a controlled storage fixture.
+    Do not reset the wallet or enter its correct PIN in this journey. No seed display is needed.
+    iOS profile-removal recovery is separate from this Android wallet-reset route.
+  </description>
+  <actions>
+    <action>Open the app and verify the unreadable recovery overview, with no ordinary wallet controls</action>
+    <action>Tap Show Seed Phrase and verify the PIN prompt appears without displaying any seed</action>
+    <action>Enter one incorrect PIN and verify the prompt remains with an attempts-remaining link</action>
+    <action>Tap the attempts-remaining link and verify the recovery overview appears without a Forgot PIN sheet or reset confirmation</action>
+    <action>Tap Show Seed Phrase again and verify a fresh PIN prompt appears</action>
+    <action>Go back without entering a PIN, restart the app, and verify recovery remains pending without a queued Forgot PIN sheet</action>
+  </actions>
+</journey>

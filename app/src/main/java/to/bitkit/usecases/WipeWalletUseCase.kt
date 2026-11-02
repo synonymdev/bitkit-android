@@ -83,13 +83,13 @@ class WipeWalletUseCase @Inject constructor(
                     contactPaymentSettingsRepo.get().withWalletWipe(pubkyRepo::withWalletWipeAdmission) {
                         paykitSdkService.withWalletWipe {
                             expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
-                            val pending = profileRemovalStore.pendingAttempt()
-                            val attemptId = pending ?: UUID.randomUUID().toString()
+                            val pending = profileRemovalStore.pendingState()
+                            val attemptId = pending.attemptId ?: UUID.randomUUID().toString()
                             profileRemovalStore.withAccess(attemptId, ProfileRemovalScope.WALLET_WIPE) {
                                 privatePaykitRepo.get().withProfileDeletionPaused { pause ->
                                     stopNode().getOrThrow()
                                     profileRemovalStore.begin(attemptId)
-                                    if (pending == null) cleanupRemote()
+                                    if (pending.scope != ProfileRemovalScope.WALLET_WIPE) cleanupRemote()
                                     wipeLocal(walletIndex, pause) { credentialsMayBeErased = true }.getOrThrow()
                                     profileRemovalStore.complete(attemptId)
                                     resetWalletState()
