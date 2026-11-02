@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-11-02
+
+### Added
+- Allowances: set a per-payment and a monthly limit for a Paykit contact so their payment requests within the limits are paid automatically. #1340
+- Allowances now activate automatically on the receiving wallet: when a contact sets up an allowance for you, Bitkit accepts it and lets you know. #1385
+- Bitkit now shows a toast when a pending payment request expires. #1624
+- The send confirmation now estimates the confirmation time for a custom on-chain fee from the current fee tiers. #1634
+- On-chain sends without Lightning channels now show a bitcoin-themed Connecting to network view. #1718
+- Allowances can be turned off from Dev Settings. #1734
+
+### Changed
+- The wallet picker on the send amount screen now shows a dropdown arrow instead of the switch icon. #1612
+- Updated the terms of use to cover USDT support and third-party services. #1613
+- Payment requests from a shop now show the payee under To instead of Contact. #1625
+- Hardware wallet screens now show the current Jade Plus and Trezor Safe 7 devices. #1665
+- Pubkys from Pubky Ring now show "Unlink pubky" instead of "Delete Profile" in Edit Profile, making clear the pubky stays in Pubky Ring. #1677
+- Blocktank no longer sells Lightning connections, so transfers to spending and receiving beyond your spending capacity now point to Manual Setup, and a forced close of a Blocktank connection no longer leaves funds stuck. #1696
+
+### Fixed
+- Improved USDT payment layout, contact loading feedback and receive sharing amounts. #1523
+- Keep Bitcoin and Lightning receiving details up to date when USDT address preparation is temporarily unavailable. #1524
+- Improved USDT scanning, amount formatting, bridge errors, refund feedback, accessibility and payment retry handling. #1531
+- Fixed paid Paykit payment requests briefly reappearing as payable after sending, kept paid USDT requests hidden while their payment proofs are delivered, and refreshed retryable payments promptly. #1534
+- Avoid an unnecessary registry update during profile deletion while preserving pending cleanup and retries. #1538
+- Eligible initial USDT subscription payments continue after subscribing without a second swipe while retaining authentication and safety checks, with retryable unpaid periods, expired requests retained in payment history, and only paid periods shown in subscription details. #1540
+- Keep USDT wallet transitions and Receive controls consistent, improve payment request and subscription amount layouts, and keep compact QR codes scannable. #1565
+- The Forgot PIN and unavailable subscription sheets now keep their buttons above the navigation bar. #1572
+- Optional reminders no longer interrupt the QR scanner or other open sheets and remain available for a later Home visit. #1575
+- The Bitcoin Headlines widget keeps its time on one line at large font sizes. #1576
+- System Back on the payment PIN screen now cancels a retry of the original payment, so a later retry works without restarting the app. #1577
+- Retry original payment now uses Bitkit's dialog style, with a labelled recipient, the usual amount block and a fee field showing its unit. #1578
+- Toasts with a close button keep their text clear of the button in every language. #1579
+- Show the USDT introduction after interrupted startup and remember when it has been seen. #1580
+- Fixed quoted Bitcoin payment requests opening an unnecessary amount-entry screen before confirmation. #1581
+- Swiping over the USDT receive QR now changes tabs instead of copying the address. #1582
+- Receiving USDT now slides between the address, network, amount and fee screens, like the Bitcoin receive flow. #1586
+- Reduce delays while authorizing Paykit payments and delivering payment confirmations. #1591
+- Swiping past the first or last Receive tab now wraps around to the tab at the other end. #1593
+- Updated USDT bridge validation and recovery, with clearer errors when deposit liquidity is unavailable. #1600
+- Swiping past the first or last Receive tab now slides to the other end like the other tabs. #1608
+- Bitkit now shows Paykit again after updating on wallets where it had been turned off. #1618
+- Show a network reminder when copying a USDT receive address. #1619
+- Fixed payment requests with a set amount moving to the Amount step on their own; they now open on confirmation, where Pay From switches between bitcoin and USDT and an expired USDT fee quote refreshes in place. #1623
+- Defer automatic Paykit contact updates during payment review and sending, and retry them afterward. #1626
+- The USDT amount keypad now sits right above Continue, as on the Bitcoin amount screen. #1627
+- On the expanded USDT payment review, the fee note no longer crowds Hide Details, and long details scroll above Swipe To Pay, which stays clear of the navigation bar. #1628
+- Tapping the transaction ID in USDT activity details now copies it. #1633
+- Background payment-request updates now give priority to payment review and submission. #1639
+- USDT sends over half your USDT balance now warn about the USDT balance instead of the total balance. #1644
+- Improve how incoming payment requests refresh without interrupting payment review. #1645
+- Use a single BTC/USD denomination toggle when creating payment requests and subscriptions. #1654
+- Show USDT balances quietly with consistent decimals, a currency symbol on Home and an unknown marker until the balance loads. #1655
+- Incoming Lightning payments can use the whole channel instead of 10% of it, on channels opened after this update. #1662
+- Scale received-payment artwork consistently across Bitcoin, Lightning and USDT sheets. #1664
+- Payment requests blocked by an earlier on-chain payment can be retried after that payment is resolved. #1676
+- Coalesce simultaneous activity refreshes and preserve an active refresh when another caller times out. #1680
+- Keep ordinary USDT recovery backups independent of Pubky and resume the same signed payment after backup failures. #1681
+- Show locally available transaction details for restored payments while keeping background synchronization limited to cached details. #1682
+- Show contact profiles and allow saving while optional payment details are still loading. #1683
+- Keep wallet actions gated and recovery visible during required downloads, allow connection corrections, and avoid repeated node restarts while backup recovery retries. #1685
+- Show the last known Home balance while USDT balances and exchange rates refresh. #1700
+- Use the saved Bitcoin fee schedule during temporary gateway errors while keeping payment links and requests blocked until required wallet recovery finishes. #1701
+- Creating a Pubky profile no longer waits for a redundant profile read or contact refresh after saving. #1711
+- Payment requests and subscription payments now open confirmation with the requested amount and let you choose a payment source from the send dropdown. #1713
+- On-chain sends now pay the fee rate shown on the confirm screen. #1722
+- Keep payment entry responsive while checking wallet recovery. #1725
+- Home marks the balance with a soft shimmer while it updates, without moving the screen. #1729
+- Restoring a backup made on iOS now brings back your profile, payment history, contact labels and settings, and the restore screen names any data it could not restore. #1733
+- Automatic allowance payments also check spending, paid requests and ended allowances recorded in the wallet and its backup, and pause with a Resume option when allowance records are older than ones the wallet already used. #1738
+- Bitkit shows the updated Tether artwork and USDT introduction, colours send reviews by the paying wallet, and always shows Request Payment, opening Add Contact when you have no contacts. #1741
+- Boost only replaces outgoing transactions this wallet sent.
+
+### Security
+- Keep contact payments private by default and require explicit opt-in to public payments with separately reserved Bitcoin addresses. #1668
+
+
+
+
+
+
+
 ## [3.0.1] - 2026-10-19
 
 ### Fixed
@@ -350,7 +431,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v3.0.1...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/synonymdev/bitkit-android/compare/v3.0.1...v3.1.0
 [3.0.1]: https://github.com/synonymdev/bitkit-android/compare/v3.0.0..v3.0.1
 [3.0.0]: https://github.com/synonymdev/bitkit-android/compare/v2.5.1..v3.0.0
 [2.5.1]: https://github.com/synonymdev/bitkit-android/compare/v2.5.0...v2.5.1
