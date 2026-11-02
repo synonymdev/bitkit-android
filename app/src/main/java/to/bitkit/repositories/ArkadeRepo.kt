@@ -374,15 +374,16 @@ class ArkadeRepo @Inject constructor(
     private suspend fun onSwap(swap: ArkadeSwap) {
         Logger.info("Arkade swap '${swap.id}' is '${swap.outcome}'", context = TAG)
         recordSwap(swap)
-        refresh()
+        // Before the refresh, which reads the chain and can fail, so a claimed swap still shows as received
         swap.toNodeEvent()?.let { _nodeEvents.emit(it) }
+        refresh()
     }
 
     // A payment that reached the wallet outside this client's swaps: an offline receive the LNURL server claimed,
     // or a payment straight to the Arkade address. Boarding and swap claims show up through their own records.
     private suspend fun onHistory(entries: List<ArkadeHistoryEntry>) {
-        refresh()
         recordReceives(entries)
+        refresh()
     }
 
     private suspend fun recordReceives(entries: List<ArkadeHistoryEntry>) {
