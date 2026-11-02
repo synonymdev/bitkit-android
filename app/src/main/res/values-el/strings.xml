@@ -282,6 +282,7 @@
     <string name="onboarding__restore_failed_header">Σφάλμα υπολοίπου &lt;accent&gt;δαπανών&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Το Bitkit επανέφερε τις αποταμιεύσεις σου, αλλά απέτυχε να επαναφέρει το τρέχον υπόλοιπο δαπανών (κατάσταση Lightning) και τα δεδομένα πορτοφολιού.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Επαναφορά&lt;/accent&gt;\nτου πορτοφολιού σου</string>
+    <string name="onboarding__restore_incomplete_text">Το πορτοφόλι και το υπόλοιπό σας επανήλθαν, αλλά το Bitkit δεν μπόρεσε να επαναφέρει: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Το checksum της φράσης ανάκτησης φαίνεται να είναι λανθασμένο. Έλεγξε ξανά τη φράση ανάκτησης.</string>
     <string name="onboarding__restore_no_backup_button">Συνέχεια χωρίς αντίγραφο ασφαλείας</string>
     <string name="onboarding__restore_no_backup_warn">Αν είχες προηγουμένως αντίγραφο ασφαλείας lightning, θα αντικατασταθεί και θα χαθεί. Αυτό μπορεί να οδηγήσει σε απώλεια κεφαλαίων.</string>
@@ -786,7 +787,7 @@
     <string name="usdt__from_address">Από διεύθυνση</string>
     <string name="usdt__hide_details">Απόκρυψη λεπτομερειών</string>
     <string name="usdt__intro_decline">Όχι, ευχαριστώ</string>
-    <string name="usdt__intro_description">Bitcoin στην καρδιά. Δολάρια όταν τα χρειάζεσαι. Ενεργοποίησε το USDT (Tether) για να στέλνεις και να λαμβάνεις ψηφιακά δολάρια με το Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin στην καρδιά. Δολάρια όταν τα χρειάζεσαι. Ενεργοποίησε το USDT (Tether) για να στέλνεις και να λαμβάνεις γρήγορα ψηφιακά δολάρια με το Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;ΔΟΛΑΡΙΑ;&lt;/accent&gt;\nΔΙΚΗ ΣΟΥ ΕΠΙΛΟΓΗ</string>
     <string name="usdt__intro_title">Νέο: USDT</string>
     <string name="usdt__maximum_total">Μέγ. συνολική χρέωση</string>
@@ -1469,6 +1470,9 @@
     <string name="subscriptions__allowances">Προϋπολογισμοί</string>
     <string name="subscriptions__allowances_empty_description">Μπορείς να ορίσεις όρια δαπανών για να εκπληρώνονται αυτόματα αιτήματα πληρωμής από αξιόπιστες επαφές.</string>
     <string name="subscriptions__allowances_empty_headline">Ρύθμισε\n&lt;accent&gt;προϋπολογισμούς&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Τα αρχεία των προϋπολογισμών σου είναι παλαιότερα από αρχεία που έχει ήδη χρησιμοποιήσει αυτό το πορτοφόλι. Τα αιτήματα θα ζητούν την έγκρισή σου μέχρι να συνεχίσεις.</string>
+    <string name="subscriptions__allowances_paused_resume">Συνέχεια</string>
+    <string name="subscriptions__allowances_paused_title">Οι αυτόματες πληρωμές έχουν παυθεί</string>
     <string name="subscriptions__cancel_subscription">Ακύρωση συνδρομής</string>
     <string name="subscriptions__choose_recipient">Επιλογή παραλήπτη</string>
     <string name="subscriptions__content_too_long">Συντόμευσε το όνομα ή την περιγραφή της συνδρομής και δοκίμασε ξανά.</string>

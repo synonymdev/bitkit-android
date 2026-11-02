@@ -265,6 +265,7 @@
     <string name="notification__service__stop">Parar App</string>
     <string name="onboarding__connection_saved">Guardado. Tente novamente para continuar o restauro.</string>
     <string name="onboarding__connection_settings">Definições de ligação</string>
+    <string name="onboarding__restore_incomplete_text">A sua carteira e o seu saldo estão de volta, mas a Bitkit não conseguiu restaurar: %1$s.</string>
     <string name="onboarding__tos_header">Bitkit\n&lt;accent&gt;termos de uso&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Termos de uso</string>
     <string name="onboarding__tos_checkbox_value">Ao continuar, você declara que leu e aceita os termos de uso.</string>
@@ -997,7 +998,7 @@
     <string name="usdt__from_address">Endereço de origem</string>
     <string name="usdt__hide_details">Ocultar detalhes</string>
     <string name="usdt__intro_decline">Não, obrigado</string>
-    <string name="usdt__intro_description">Bitcoin no coração. Dólares quando precisar. Ative o USDT (Tether) para enviar e receber dólares digitais com a Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin no coração. Dólares quando precisar. Ative o USDT (Tether) para enviar e receber dólares digitais rapidamente com a Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DÓLARES?&lt;/accent&gt;\nA ESCOLHA É SUA</string>
     <string name="usdt__intro_title">Novo: USDT</string>
     <string name="usdt__maximum_total">Débito total máx.</string>
@@ -1463,6 +1464,9 @@
     <string name="subscriptions__allowances">Mesadas</string>
     <string name="subscriptions__allowances_empty_description">Pode definir limites de gastos para pagar automaticamente pedidos de pagamento de contactos de confiança.</string>
     <string name="subscriptions__allowances_empty_headline">Configure\n&lt;accent&gt;mesadas&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Os registos das suas mesadas são mais antigos do que outros que esta carteira já usou. Os pedidos vão pedir a sua aprovação até retomar.</string>
+    <string name="subscriptions__allowances_paused_resume">Retomar</string>
+    <string name="subscriptions__allowances_paused_title">Pagamentos automáticos em pausa</string>
     <string name="subscriptions__cancel_subscription">Cancelar subscrição</string>
     <string name="subscriptions__choose_recipient">Escolher destinatário</string>
     <string name="subscriptions__content_too_long">Encurte o nome ou a descrição da subscrição e tente novamente.</string>

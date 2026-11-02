@@ -282,6 +282,7 @@
     <string name="onboarding__restore_failed_header">خطأ في رصيد &lt;accent&gt;الإنفاق&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">استعاد Bitkit مدخراتك، لكن فشل في استعادة رصيد الإنفاق الحالي (حالة Lightning) وبيانات المحفظة.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;استعادة&lt;/accent&gt;\nمحفظتك</string>
+    <string name="onboarding__restore_incomplete_text">تمت استعادة محفظتك ورصيدك، لكن Bitkit لم يتمكن من استعادة: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">يبدو أن المجموع الاختباري لعبارة الاسترداد غير صحيح. يرجى التحقق مرة أخرى من عبارة الاسترداد.</string>
     <string name="onboarding__restore_no_backup_button">المتابعة بدون نسخة احتياطية</string>
     <string name="onboarding__restore_no_backup_warn">إذا كان لديك نسخة احتياطية سابقة من Lightning، سيتم الكتابة عليها وفقدانها. قد يؤدي هذا إلى خسارة الأموال.</string>
@@ -785,7 +786,7 @@
     <string name="usdt__from_address">من العنوان</string>
     <string name="usdt__hide_details">إخفاء التفاصيل</string>
     <string name="usdt__intro_decline">لا، شكرًا</string>
-    <string name="usdt__intro_description">Bitcoin في الصميم. ودولارات عندما تحتاجها. فعّل USDT (Tether) لإرسال الدولارات الرقمية واستلامها باستخدام Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin في الصميم. ودولارات عندما تحتاجها. فعّل USDT (Tether) لإرسال الدولارات الرقمية واستلامها بسرعة باستخدام Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;دولارات؟&lt;/accent&gt;\nالقرار لك</string>
     <string name="usdt__intro_title">جديد: USDT</string>
     <string name="usdt__maximum_total">أقصى خصم إجمالي</string>
@@ -1463,6 +1464,9 @@
     <string name="subscriptions__allowances">الميزانيات</string>
     <string name="subscriptions__allowances_empty_description">يمكنك تعيين حدود للإنفاق لتلبية طلبات الدفع من جهات الاتصال الموثوقة تلقائيًا.</string>
     <string name="subscriptions__allowances_empty_headline">أعدّ\n&lt;accent&gt;الميزانيات&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">سجلات الميزانيات لديك أقدم من سجلات استخدمتها هذه المحفظة من قبل. ستطلب الطلبات موافقتك حتى تستأنف.</string>
+    <string name="subscriptions__allowances_paused_resume">استئناف</string>
+    <string name="subscriptions__allowances_paused_title">تم إيقاف الدفعات التلقائية مؤقتًا</string>
     <string name="subscriptions__cancel_subscription">إلغاء الاشتراك</string>
     <string name="subscriptions__choose_recipient">اختر المستلم</string>
     <string name="subscriptions__content_too_long">اختصر اسم الاشتراك أو وصفه وحاول مرة أخرى.</string>

@@ -1,0 +1,62 @@
+{
+  "activities": [
+    {
+      "lightning": {
+        "_0": {
+          "fee": 1,
+          "timestamp": 1793351855,
+          "value": 3000,
+          "id": "5f1c0d2b6c7a4e3f9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f",
+          "preimage": "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b",
+          "walletId": "default",
+          "invoice": "lnbcrt30u1pnexample",
+          "updatedAt": 1793351855,
+          "status": {
+            "succeeded": {}
+          },
+          "message": "QA1164",
+          "createdAt": 1793351855,
+          "contact": "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw374y",
+          "txType": {
+            "sent": {}
+          }
+        }
+      }
+    },
+    {
+      "onchain": {
+        "_0": {
+          "id": "a3f1c2d4e5b6a7980f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6e5f4a3b2",
+          "confirmTimestamp": 1793351855,
+          "value": 2500,
+          "timestamp": 1793351855,
+          "feeRate": 1,
+          "confirmed": true,
+          "address": "bcrt1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+          "isTransfer": false,
+          "fee": 141,
+          "doesExist": true,
+          "isBoosted": false,
+          "txType": {
+            "received": {}
+          },
+          "boostTxIds": [],
+          "txId": "a3f1c2d4e5b6a7980f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6e5f4a3b2",
+          "walletId": "default"
+        }
+      }
+    }
+  ],
+  "activityTags": [
+    {
+      "walletId": "default",
+      "tags": [
+        "QA1164"
+      ],
+      "activityId": "5f1c0d2b6c7a4e3f9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f"
+    }
+  ],
+  "version": 1,
+  "createdAt": 1793351855000,
+  "closedChannels": []
+}

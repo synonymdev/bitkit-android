@@ -286,6 +286,7 @@
     <string name="onboarding__restore_failed_header">Error del saldo &lt;accent&gt;de despesa&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit ha restaurat els teus estalvis, però no ha pogut restaurar el teu saldo de despesa actual (estat Lightning) i les dades de la cartera.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Restaura&lt;/accent&gt;\nla teva cartera</string>
+    <string name="onboarding__restore_incomplete_text">La teva cartera i el teu saldo s\'han recuperat, però Bitkit no ha pogut restaurar: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">La suma de verificació de la frase de recuperació sembla incorrecta. Si us plau, verifica la teva frase de recuperació.</string>
     <string name="onboarding__restore_no_backup_button">Continuar sense còpia de seguretat</string>
     <string name="onboarding__restore_no_backup_warn">Si tenies una còpia de seguretat Lightning anteriorment, es sobreescriurà i es perdrà. Això podria resultar en una pèrdua de fons.</string>
@@ -802,7 +803,7 @@
     <string name="usdt__from_address">Adreça d\'origen</string>
     <string name="usdt__hide_details">Amagar detalls</string>
     <string name="usdt__intro_decline">No, gràcies</string>
-    <string name="usdt__intro_description">Bitcoin de cor. Dòlars quan els necessitis. Activa USDT (Tether) per enviar i rebre dòlars digitals amb Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin de cor. Dòlars quan els necessitis. Activa USDT (Tether) per enviar i rebre dòlars digitals ràpidament amb Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DÒLARS?&lt;/accent&gt;\nTU DECIDEIXES</string>
     <string name="usdt__intro_title">Novetat: USDT</string>
     <string name="usdt__maximum_total">Càrrec total màx.</string>
@@ -1475,6 +1476,9 @@
     <string name="subscriptions__allowances">Assignacions</string>
     <string name="subscriptions__allowances_empty_description">Pots establir límits de despesa per pagar automàticament les sol·licituds de pagament de contactes de confiança.</string>
     <string name="subscriptions__allowances_empty_headline">Configura\n&lt;accent&gt;assignacions&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Els teus registres d\'assignacions són més antics que altres que aquest moneder ja ha fet servir. Les sol·licituds demanaran la teva aprovació fins que reprenguis.</string>
+    <string name="subscriptions__allowances_paused_resume">Reprèn</string>
+    <string name="subscriptions__allowances_paused_title">Pagaments automàtics en pausa</string>
     <string name="subscriptions__cancel_subscription">Cancel·lar subscripció</string>
     <string name="subscriptions__choose_recipient">Triar destinatari</string>
     <string name="subscriptions__content_too_long">Escurça el nom o la descripció de la subscripció i torna-ho a provar.</string>

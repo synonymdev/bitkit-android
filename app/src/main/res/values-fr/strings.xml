@@ -270,6 +270,7 @@
     <string name="notification__service__stop">Arrêter l\'application</string>
     <string name="onboarding__connection_saved">Enregistré. Réessayez pour poursuivre la restauration.</string>
     <string name="onboarding__connection_settings">Paramètres de connexion</string>
+    <string name="onboarding__restore_incomplete_text">Votre portefeuille et votre solde sont de retour, mais Bitkit n\'a pas pu restaurer : %1$s.</string>
     <string name="onboarding__tos_header">Bitkit \n&lt;accent&gt;Conditions d\'utilisation&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Conditions d\'utilisation</string>
     <string name="onboarding__tos_checkbox_value">En continuant, vous déclarez avoir lu et accepté les conditions d\'utilisation.</string>
@@ -805,7 +806,7 @@
     <string name="usdt__from_address">Adresse d\'envoi</string>
     <string name="usdt__hide_details">Masquer les détails</string>
     <string name="usdt__intro_decline">Non merci</string>
-    <string name="usdt__intro_description">Bitcoin dans l\'âme. Des dollars quand vous en avez besoin. Activez USDT (Tether) pour envoyer et recevoir des dollars numériques avec Bitkit.</string>
+    <string name="usdt__intro_description">Bitcoin dans l\'âme. Des dollars quand vous en avez besoin. Activez USDT (Tether) pour envoyer et recevoir rapidement des dollars numériques avec Bitkit.</string>
     <string name="usdt__intro_headline">&lt;accent&gt;DES DOLLARS ?&lt;/accent&gt;\nÀ VOUS DE VOIR</string>
     <string name="usdt__intro_title">Nouveau : USDT</string>
     <string name="usdt__maximum_total">Débit total max</string>
@@ -1474,6 +1475,9 @@
     <string name="subscriptions__allowances">Allocations</string>
     <string name="subscriptions__allowances_empty_description">Vous pouvez définir des limites de dépenses pour régler automatiquement les demandes de paiement de contacts de confiance.</string>
     <string name="subscriptions__allowances_empty_headline">Configurez\n&lt;accent&gt;vos allocations&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Vos données d\'allocations sont plus anciennes que celles que ce portefeuille a déjà utilisées. Les demandes attendront votre accord jusqu\'à la reprise.</string>
+    <string name="subscriptions__allowances_paused_resume">Reprendre</string>
+    <string name="subscriptions__allowances_paused_title">Paiements automatiques en pause</string>
     <string name="subscriptions__cancel_subscription">Annuler l\'abonnement</string>
     <string name="subscriptions__choose_recipient">Choisir le destinataire</string>
     <string name="subscriptions__content_too_long">Raccourcissez le nom ou la description de l\'abonnement et réessayez.</string>
