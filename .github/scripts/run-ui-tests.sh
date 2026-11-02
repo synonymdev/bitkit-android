@@ -2,6 +2,22 @@
 
 set -euo pipefail
 
+# The emulator runner waits for the emulator process to exit after `emu kill`, and an emulator that
+# hangs while shutting down then holds the job until its timeout, after the tests already finished.
+# Stop it here with a bounded wait so the test result decides the step.
+EMULATOR_EXIT_TIMEOUT_SECONDS=30
+
+stop_emulator() {
+  adb emu kill > /dev/null 2>&1 || true
+  for _ in $(seq "$EMULATOR_EXIT_TIMEOUT_SECONDS"); do
+    pgrep -f qemu-system > /dev/null || return 0
+    sleep 1
+  done
+  echo "::warning::Emulator did not exit ${EMULATOR_EXIT_TIMEOUT_SECONDS}s after emu kill; killing it."
+  pkill -9 -f qemu-system || true
+}
+trap stop_emulator EXIT
+
 adb wait-for-device
 echo "Waiting for boot to complete..."
 adb shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 1; done'
