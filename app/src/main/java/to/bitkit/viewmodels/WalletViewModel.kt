@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.PeerDetails
@@ -111,6 +112,10 @@ class WalletViewModel @Inject constructor(
         private set
 
     val isRecoveryMode = lightningRepo.isRecoveryMode
+
+    private val rnMigrationMutex = Mutex()
+    private val _isCheckingRNMigration = MutableStateFlow(true)
+    val isCheckingRNMigration = _isCheckingRNMigration.asStateFlow()
 
     val isShowingMigrationLoading: StateFlow<Boolean> = migrationService.isShowingMigrationLoading
     val isRestoringFromRNRemoteBackup: StateFlow<Boolean> = migrationService.isRestoringFromRNRemoteBackup
@@ -348,7 +353,9 @@ class WalletViewModel @Inject constructor(
 
     private fun observeNetworkState() = viewModelScope.launch(bgDispatcher) {
         connectivityRepo.isOnline.collect { state ->
-            if (state == ConnectivityState.CONNECTED && pendingWalletStart) {
+            if (state == ConnectivityState.CONNECTED && _isCheckingRNMigration.value) {
+                checkAndPerformRNMigration()
+            } else if (state == ConnectivityState.CONNECTED && pendingWalletStart) {
                 pendingWalletStart = false
                 val isChecked = migrationService.isMigrationChecked()
                 if (!isChecked && migrationService.hasRNWalletData()) {
@@ -368,28 +375,38 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun checkAndPerformRNMigration() = viewModelScope.launch(bgDispatcher) {
-        if (walletRepo.checkWalletAvailable().isFailure) return@launch
-        val isChecked = migrationService.isMigrationChecked()
-        if (isChecked) {
-            loadCacheIfWalletExists()
-            return@launch
-        }
-
-        val hasNative = migrationService.hasNativeWalletData()
-        if (hasNative) {
-            migrationService.markMigrationChecked()
-            loadCacheIfWalletExists()
-            return@launch
-        }
-
-        val hasRN = migrationService.hasRNWalletData()
-        if (!hasRN) {
-            migrationService.markMigrationChecked()
-            loadCacheIfWalletExists()
-            return@launch
-        }
-
+        val startMigratedWallet = runSuspendCatching {
+            rnMigrationMutex.withLock { checkAndMigrateRNWallet() }
+        }.onFailure {
+            Logger.warn("RN migration admission is unavailable", it, context = TAG)
+        }.getOrDefault(false)
+        if (!startMigratedWallet) return@launch
         runSuspendCatching {
+            if (!isNetworkConnected()) {
+                Logger.warn("Network offline, dismissing loader and skipping wallet start", context = TAG)
+                migrationService.setShowingMigrationLoading(false)
+                pendingWalletStart = true
+                return@runSuspendCatching
+            }
+            startNode(0)
+        }.onFailure { handleRNMigrationFailure(it) }
+    }
+
+    private suspend fun checkAndMigrateRNWallet(): Boolean {
+        if (!_isCheckingRNMigration.value || walletRepo.checkWalletAvailable().isFailure) return false
+        if (migrationService.isMigrationChecked()) {
+            loadCacheIfWalletExists()
+            _isCheckingRNMigration.update { false }
+            return false
+        }
+        if (migrationService.hasNativeWalletData() || !migrationService.hasRNWalletData()) {
+            migrationService.markMigrationChecked()
+            loadCacheIfWalletExists()
+            _isCheckingRNMigration.update { false }
+            return false
+        }
+        var migrationStarted = false
+        return runSuspendCatching {
             connectionRecovery.withIdentityChange(
                 isStillNeeded = {
                     walletRepo.checkWalletAvailable().getOrThrow()
@@ -398,6 +415,7 @@ class WalletViewModel @Inject constructor(
                 },
             ) {
                 walletRepo.checkWalletAvailable().getOrThrow()
+                migrationStarted = true
                 migrationService.setShowingMigrationLoading(true)
                 Logger.info("RN wallet data found, starting migration...", context = TAG)
                 migrationService.migrateFromReactNative()
@@ -405,29 +423,29 @@ class WalletViewModel @Inject constructor(
             walletRepo.setWalletExistsState()
             walletExists = walletRepo.walletExists()
             loadCacheIfWalletExists()
-            if (walletExists) {
-                // Re-check network before starting wallet (like iOS)
-                if (!isNetworkConnected()) {
-                    Logger.warn("Network offline, dismissing loader and skipping wallet start", context = TAG)
-                    migrationService.setShowingMigrationLoading(false)
-                    pendingWalletStart = true
-                    return@runSuspendCatching
-                }
-                startNode(0)
-            } else {
-                migrationService.setShowingMigrationLoading(false)
-            }
+            _isCheckingRNMigration.update { false }
+            if (!walletExists) migrationService.setShowingMigrationLoading(false)
+            walletExists
         }.onFailure {
-            if (walletRepo.checkWalletAvailable().isFailure) return@onFailure
-            Logger.error("RN migration failed", it, context = TAG)
-            migrationService.markMigrationChecked()
-            migrationService.setShowingMigrationLoading(false)
-            ToastEventBus.send(
-                type = Toast.ToastType.ERROR,
-                title = "Migration Failed",
-                description = "Please restore your wallet manually using your recovery phrase"
-            )
-        }
+            if (migrationStarted) {
+                handleRNMigrationFailure(it)
+            } else {
+                Logger.warn("RN migration admission is unavailable", it, context = TAG)
+            }
+        }.getOrDefault(false)
+    }
+
+    private suspend fun handleRNMigrationFailure(error: Throwable) {
+        if (walletRepo.checkWalletAvailable().isFailure) return
+        Logger.error("RN migration failed", error, context = TAG)
+        migrationService.markMigrationChecked()
+        migrationService.setShowingMigrationLoading(false)
+        _isCheckingRNMigration.update { false }
+        ToastEventBus.send(
+            type = Toast.ToastType.ERROR,
+            title = "Migration Failed",
+            description = "Please restore your wallet manually using your recovery phrase"
+        )
     }
 
     private fun loadCacheIfWalletExists() {
@@ -440,6 +458,7 @@ class WalletViewModel @Inject constructor(
         walletState.collect {
             walletExists = it.walletExists
             if (it.walletResetRecovery != WalletResetRecovery.Clear) return@collect
+            if (_isCheckingRNMigration.value) checkAndPerformRNMigration()
             if (!it.walletExists) {
                 appliedConnection = null
                 _connectionStartupError.update { null }
@@ -1006,7 +1025,10 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun refreshWalletResetRecovery() = walletRepo.refreshWalletResetRecovery()
+    fun refreshWalletResetRecovery() {
+        walletRepo.refreshWalletResetRecovery()
+        if (_isCheckingRNMigration.value) checkAndPerformRNMigration()
+    }
 
     fun finishPendingWalletReset(attemptId: String) = viewModelScope.launch {
         if (isWiping.value || !_isFinishingWalletReset.compareAndSet(false, true)) return@launch
@@ -1018,6 +1040,7 @@ class WalletViewModel @Inject constructor(
     }
 
     suspend fun createWallet(bip39Passphrase: String?) {
+        if (_isCheckingRNMigration.value) return
         walletRepo.checkWalletAvailable().getOrElse {
             ToastEventBus.send(it)
             return
@@ -1037,6 +1060,7 @@ class WalletViewModel @Inject constructor(
     }
 
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?) {
+        if (_isCheckingRNMigration.value) return
         walletRepo.checkWalletAvailable().getOrElse {
             ToastEventBus.send(it)
             return

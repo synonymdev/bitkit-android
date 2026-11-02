@@ -16,3 +16,12 @@ For an explicitly authorized reset in a separate disposable fixture, an unreadab
 attempt private and public endpoint cleanup before erasing credentials. A known interrupted
 wallet wipe resumes local cleanup without automatically replaying remote operations. Capture the
 marker scope and redacted operation order; component tests do not establish this network journey.
+
+React Native migration after cleanup-state recovery needs a prepared, unfunded RN-only
+installation with no native mnemonic and no completed migration marker. Hold the initial
+cleanup-state read unavailable, then release it and use Retry. Recovery must precede onboarding;
+automatic Clear or a reconnect must resume the same migration check without a second importer.
+Keep a local migration suspended while retrying and verify no new-wallet or restore action can
+run. A still-unavailable cleanup read must retain recovery. These storage and migration holds
+require a controlled fixture; ViewModel and installed root-routing tests cover the admission
+boundaries but do not establish a complete RN data migration or authenticated app journey.

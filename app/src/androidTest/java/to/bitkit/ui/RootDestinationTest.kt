@@ -19,6 +19,7 @@ class RootDestinationTest {
     private fun setContent(
         isCriticalUpdateRequired: Boolean = false,
         isShowingMigrationLoading: Boolean = false,
+        isCheckingRNMigration: Boolean = false,
         walletExists: Boolean = true,
         isRecoveryMode: Boolean = false,
         walletResetRecovery: WalletResetRecovery = WalletResetRecovery.Clear,
@@ -27,6 +28,7 @@ class RootDestinationTest {
             RootDestination(
                 isCriticalUpdateRequired = isCriticalUpdateRequired,
                 isShowingMigrationLoading = isShowingMigrationLoading,
+                isCheckingRNMigration = isCheckingRNMigration,
                 walletExists = walletExists,
                 isRecoveryMode = isRecoveryMode,
                 walletResetRecovery = walletResetRecovery,
@@ -44,6 +46,24 @@ class RootDestinationTest {
         listOf(TAG_CRITICAL, TAG_MIGRATION, TAG_ONBOARDING, TAG_WALLET, TAG_RESET)
             .filterNot { it == tag }
             .forEach { composeTestRule.onNodeWithTag(it).assertDoesNotExist() }
+    }
+
+    @Test
+    fun migrationAdmissionPrecedesOnboarding() {
+        setContent(walletExists = false, isCheckingRNMigration = true)
+        assertOnly(TAG_MIGRATION)
+    }
+
+    @Test
+    fun recoveryModeCannotBypassMigrationAdmission() {
+        setContent(walletExists = false, isRecoveryMode = true, isCheckingRNMigration = true)
+        assertOnly(TAG_MIGRATION)
+    }
+
+    @Test
+    fun unreadableCleanupKeepsItsRetryAheadOfMigrationAdmission() {
+        setContent(isCheckingRNMigration = true, walletResetRecovery = WalletResetRecovery.Unavailable)
+        assertOnly(TAG_RESET)
     }
 
     @Test

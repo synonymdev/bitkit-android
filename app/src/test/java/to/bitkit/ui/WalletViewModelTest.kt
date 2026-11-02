@@ -35,6 +35,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
+import to.bitkit.data.WalletResetRecovery
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.hasPendingWalletRestore
 import to.bitkit.ext.of
@@ -115,20 +116,172 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(1uL))
 
         connectionRecovery = connectionRecoveryFixture(settingsStore, recoveryKeychain) { currentBinding }
-        sut = WalletViewModel(
-            context = context,
-            bgDispatcher = testDispatcher,
-            walletRepo = walletRepo,
-            lightningRepo = lightningRepo,
-            settingsStore = settingsStore,
-            backupRepo = backupRepo,
-            blocktankRepo = blocktankRepo,
-            pubkyRepo = pubkyRepo,
-            migrationService = migrationService,
-            connectivityRepo = connectivityRepo,
-            boltzService = boltzService,
-            connectionRecovery = connectionRecovery,
-        )
+        sut = createViewModel()
+    }
+
+    private fun createViewModel() = WalletViewModel(
+        context = context,
+        bgDispatcher = testDispatcher,
+        walletRepo = walletRepo,
+        lightningRepo = lightningRepo,
+        settingsStore = settingsStore,
+        backupRepo = backupRepo,
+        blocktankRepo = blocktankRepo,
+        pubkyRepo = pubkyRepo,
+        migrationService = migrationService,
+        connectivityRepo = connectivityRepo,
+        boltzService = boltzService,
+        connectionRecovery = connectionRecovery,
+    )
+
+    @Test
+    fun `clear cleanup state resumes deferred rn migration`() = test {
+        walletState.value = WalletState(walletResetRecovery = WalletResetRecovery.Unavailable)
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("temporarily unreadable")))
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        createViewModel()
+        advanceUntilIdle()
+        verify(migrationService, never()).migrateFromReactNative()
+
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
+        walletState.value = WalletState(walletResetRecovery = WalletResetRecovery.Clear)
+        advanceUntilIdle()
+
+        verify(migrationService).migrateFromReactNative()
+    }
+
+    @Test
+    fun `read retry resumes deferred rn migration without a state emission`() = test {
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("temporarily unreadable")))
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        verify(migrationService, never()).migrateFromReactNative()
+
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
+        recovering.refreshWalletResetRecovery()
+        advanceUntilIdle()
+
+        verify(migrationService).migrateFromReactNative()
+    }
+
+    @Test
+    fun `reconnect resumes deferred migration once and blocks replacement while held`() = test {
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("temporarily unreadable")))
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(migrationService.migrateFromReactNative()).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+        }
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertTrue(recovering.isCheckingRNMigration.value)
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
+        isOnline.value = ConnectivityState.DISCONNECTED
+        runCurrent()
+        isOnline.value = ConnectivityState.CONNECTED
+        entered.await()
+        recovering.refreshWalletResetRecovery()
+        walletState.value = WalletState(walletResetRecovery = WalletResetRecovery.Unavailable)
+        walletState.value = WalletState(walletResetRecovery = WalletResetRecovery.Clear)
+        recovering.createWallet(null)
+        recovering.restoreWallet("replacement", null)
+        assertTrue(recovering.isCheckingRNMigration.value)
+        verify(walletRepo, never()).createWallet(anyOrNull())
+        verify(walletRepo, never()).restoreWallet(any(), anyOrNull())
+        verify(backupRepo, never()).setRestorePending(true)
+        release.complete(Unit)
+        advanceUntilIdle()
+        verify(migrationService).migrateFromReactNative()
+        assertFalse(recovering.isCheckingRNMigration.value)
+        recovering.refreshWalletResetRecovery()
+        advanceUntilIdle()
+        verify(migrationService).migrateFromReactNative()
+    }
+
+    @Test
+    fun `unavailable migration metadata does not classify rn data as absent`() = test {
+        var unreadable = true
+        whenever(migrationService.isMigrationChecked()).doSuspendableAnswer {
+            check(!unreadable) { "metadata unreadable" }
+            false
+        }
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertTrue(recovering.isCheckingRNMigration.value)
+        verify(migrationService, never()).markMigrationChecked()
+        unreadable = false
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        recovering.refreshWalletResetRecovery()
+        advanceUntilIdle()
+        verify(migrationService).migrateFromReactNative()
+        assertFalse(recovering.isCheckingRNMigration.value)
+    }
+
+    @Test
+    fun `unavailable cleanup keeps retries from migrating or exposing onboarding`() = test {
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("reset pending")))
+        val recovering = createViewModel()
+        recovering.refreshWalletResetRecovery()
+        isOnline.value = ConnectivityState.DISCONNECTED
+        runCurrent()
+        isOnline.value = ConnectivityState.CONNECTED
+        advanceUntilIdle()
+        assertTrue(recovering.isCheckingRNMigration.value)
+        verify(migrationService, never()).migrateFromReactNative()
+        verify(migrationService, never()).markMigrationChecked()
+    }
+
+    @Test
+    fun `fresh installation completes migration classification without importing`() = test {
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasRNWalletData()).thenReturn(false)
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertFalse(recovering.isCheckingRNMigration.value)
+        verify(migrationService).markMigrationChecked()
+        verify(migrationService, never()).migrateFromReactNative()
+    }
+
+    @Test
+    fun `failed inner cleanup admission retains migration for explicit retry`() = test {
+        var checks = 0
+        whenever(migrationService.isMigrationChecked()).doSuspendableAnswer {
+            checks += 1
+            if (checks >= 2) {
+                whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("read failed")))
+            }
+            false
+        }
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertTrue(recovering.isCheckingRNMigration.value)
+        verify(migrationService, never()).migrateFromReactNative()
+        verify(migrationService, never()).markMigrationChecked()
+
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
+        recovering.refreshWalletResetRecovery()
+        advanceUntilIdle()
+        verify(migrationService).migrateFromReactNative()
+        assertFalse(recovering.isCheckingRNMigration.value)
+    }
+
+    @Test
+    fun `native wallet completes migration classification without importing rn data`() = test {
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasNativeWalletData()).thenReturn(true)
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertFalse(recovering.isCheckingRNMigration.value)
+        verify(migrationService).markMigrationChecked()
+        verify(migrationService, never()).migrateFromReactNative()
     }
 
     @Test

@@ -137,6 +137,7 @@ class MainActivity : FragmentActivity() {
                 val walletExists = walletViewModel.walletExists
                 val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
                 val walletResetRecovery = walletState.walletResetRecovery
+                val isCheckingRNMigration by walletViewModel.isCheckingRNMigration.collectAsStateWithLifecycle()
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val isCriticalUpdateRequired by appViewModel.isCriticalUpdateRequired.collectAsStateWithLifecycle()
@@ -166,6 +167,7 @@ class MainActivity : FragmentActivity() {
                 RootDestination(
                     isCriticalUpdateRequired = isCriticalUpdateRequired,
                     isShowingMigrationLoading = isShowingMigrationLoading,
+                    isCheckingRNMigration = isCheckingRNMigration,
                     walletExists = walletExists,
                     isRecoveryMode = isRecoveryMode,
                     walletResetRecovery = walletResetRecovery,
@@ -406,6 +408,7 @@ class MainActivity : FragmentActivity() {
 fun RootDestination(
     isCriticalUpdateRequired: Boolean,
     isShowingMigrationLoading: Boolean,
+    isCheckingRNMigration: Boolean,
     walletExists: Boolean,
     isRecoveryMode: Boolean,
     criticalUpdate: @Composable () -> Unit,
@@ -418,6 +421,7 @@ fun RootDestination(
     when {
         isCriticalUpdateRequired -> criticalUpdate()
         walletResetRecovery != WalletResetRecovery.Clear -> resetRecovery()
+        isCheckingRNMigration -> migrationLoading()
         isShowingMigrationLoading && !isRecoveryMode -> migrationLoading()
         !walletExists && !isRecoveryMode -> onboarding()
         else -> wallet()
