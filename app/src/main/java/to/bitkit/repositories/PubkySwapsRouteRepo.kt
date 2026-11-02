@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.PaykitRoute
 import com.synonym.bitkitcore.PaykitRouteRequest
 import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteState
+import com.synonym.bitkitcore.ServiceRouteLeg
 import com.synonym.bitkitcore.pubkySwapsAdvance
 import com.synonym.bitkitcore.pubkySwapsCommitRoute
 import com.synonym.bitkitcore.pubkySwapsRoutePaykitPayment
@@ -57,6 +58,7 @@ class PubkySwapsRouteRepo @Inject constructor(
         endpoints: List<PaykitEndpoint>,
         lightningSpendableSats: ULong,
         onchainSpendableSats: ULong,
+        serviceLegs: List<ServiceRouteLeg> = emptyList(),
     ): Result<PaykitRoute> = withSecrets { mnemonic, passphrase ->
         // Providers come from the user's own graph: every contact is asked for its swap offer.
         val candidates = pubkyRepo.contacts.value.map { it.publicKey } + Env.pubkySwapsProviders
@@ -69,6 +71,7 @@ class PubkySwapsRouteRepo @Inject constructor(
                 onchainSpendableSat = onchainSpendableSats,
                 providers = candidates,
                 feeRateSatVb = CLAIM_FEE_RATE_SAT_VB,
+                serviceLegs = serviceLegs,
             ),
             network = Env.network.toCoreNetwork(),
             mnemonic = mnemonic,

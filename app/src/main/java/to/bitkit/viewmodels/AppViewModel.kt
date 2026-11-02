@@ -4526,6 +4526,12 @@ class AppViewModel @Inject constructor(
                 toast(AppError(paykitRoute.reason))
                 return false
             }
+            // No service legs are passed in yet, so the router cannot pick one.
+            is PaykitRoute.Service -> {
+                Logger.error("Unexpected service route '${paykitRoute.leg.service}'", context = TAG)
+                toast(AppError(context.getString(R.string.common__error_body)))
+                return false
+            }
             // Balances changed after the contact opened: the regular flow must reopen it.
             is PaykitRoute.Direct -> {
                 _sendUiState.update { it.copy(paykitSwapRoute = null) }
