@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -749,7 +749,7 @@ internal fun PaymentRequestSentContent(
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth(SHEET_INTRO_IMAGE_WIDTH_FRACTION)
-                            .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                            .fillMaxHeight()
                             .testTag("PaymentRequestSentCheck"),
                     )
                 }
