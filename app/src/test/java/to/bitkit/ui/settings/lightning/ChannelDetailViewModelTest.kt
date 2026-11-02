@@ -22,7 +22,6 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.repositories.LightningState
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 
@@ -42,14 +41,8 @@ class ChannelDetailViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(context.getString(R.string.lightning__connection)).thenReturn("Connection")
-        whenever(lightningRepo.lightningState).thenReturn(
-            MutableStateFlow(
-                LightningState(
-                    channels = persistentListOf(
-                        createChannelDetails().copy(channelId = CHANNEL_ID),
-                    )
-                )
-            )
+        whenever(lightningRepo.lastKnownChannels).thenReturn(
+            MutableStateFlow(persistentListOf(createChannelDetails().copy(channelId = CHANNEL_ID)))
         )
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever {
