@@ -18,6 +18,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.KeychainError
+import to.bitkit.env.Env
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.usecases.WipeStep
@@ -201,25 +202,35 @@ class PinVerifierTest : BaseUnitTest() {
     }
 
     @Test
-    fun `unreadable PIN returns Unavailable and still counts the attempt`() = test {
+    fun `unreadable PIN returns Unavailable without counting the attempt`() = test {
         store.attempts = "4"
         whenever(keychain.loadString(Keychain.Key.PIN.name)).thenAnswer { throw KeychainError.FailedToLoad("pin") }
 
         assertEquals(PinResult.Unavailable, sut.verify(PIN))
 
-        assertEquals("3", store.attempts)
+        assertEquals("4", store.attempts)
         assertFalse(coordinator.state.value.isGateUp)
     }
 
     @Test
-    fun `a failed attempt write returns Unavailable without comparing the PIN`() = test {
+    fun `a PIN that can never be read does not lead to a wipe however often it is entered`() = test {
+        whenever(keychain.loadString(Keychain.Key.PIN.name)).thenAnswer { throw KeychainError.FailedToLoad("pin") }
+
+        repeat(Env.PIN_ATTEMPTS + 1) { assertEquals(PinResult.Unavailable, sut.verify(PIN)) }
+
+        assertNull(store.attempts)
+        assertNull(store.wipePending)
+        verify(walletRepo, never()).wipeWallet(any())
+    }
+
+    @Test
+    fun `a failed attempt write returns Unavailable even for the correct PIN`() = test {
         store.attempts = "4"
         store.beforeWrite = { throw IOException() }
 
         assertEquals(PinResult.Unavailable, sut.verify(PIN))
 
         assertEquals("4", store.attempts)
-        verify(keychain, never()).loadString(Keychain.Key.PIN.name)
         assertFalse(coordinator.state.value.isGateUp)
         verify(walletRepo, never()).wipeWallet(any())
     }

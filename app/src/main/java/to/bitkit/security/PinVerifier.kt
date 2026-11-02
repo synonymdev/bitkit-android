@@ -6,7 +6,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -40,14 +43,20 @@ class PinVerifier @Inject constructor(
 
     private val mutex = Mutex()
 
-    private val storedAttempts: Flow<Int> = keychain.pinAttemptsRemaining()
-        .map { it ?: Env.PIN_ATTEMPTS }
-        .retryWhen { error, attempt ->
-            if (attempt == 0L) Logger.error("Failed to read PIN attempts", error, context = TAG)
-            emit(0)
-            delay(ATTEMPTS_RETRY_DELAY)
-            true
-        }
+    private val storedAttempts: Flow<Int> = flow {
+        var isReadFailing = false
+        val attempts = keychain.pinAttemptsRemaining()
+            .map { it ?: Env.PIN_ATTEMPTS }
+            .onEach { isReadFailing = false }
+            .retryWhen { error, _ ->
+                if (!isReadFailing) Logger.error("Failed to read PIN attempts", error, context = TAG)
+                isReadFailing = true
+                emit(0)
+                delay(ATTEMPTS_RETRY_DELAY)
+                true
+            }
+        emitAll(attempts)
+    }
 
     /** False while a wipe is pending or unverifiable, or once the PIN attempts are used up or cannot be read. */
     val canUseBiometrics: Flow<Boolean> = combine(wipeCoordinator.state, storedAttempts) { wipeState, attempts ->
@@ -77,11 +86,12 @@ class PinVerifier @Inject constructor(
             .getOrElse { return unavailable("Failed to read PIN attempts", it) }
         if (attemptsRemaining <= 0) return beginForcedWipe()
 
+        // A PIN that cannot be read is not counted, as a correct entry could never succeed against it
+        val storedPin = runSuspendCatching { keychain.loadString(Keychain.Key.PIN.name) }
+            .getOrElse { return unavailable("Failed to read PIN", it) }
         // Recorded before comparing, so no guess is ever compared without counting
         runSuspendCatching { saveAttempts(attemptsRemaining - 1) }
             .getOrElse { return unavailable("Failed to record PIN attempt", it) }
-        val storedPin = runSuspendCatching { keychain.loadString(Keychain.Key.PIN.name) }
-            .getOrElse { return unavailable("Failed to read PIN", it) }
         return if (storedPin == pin) accept() else reject(attemptsRemaining - 1)
     }
 
