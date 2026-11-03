@@ -2174,6 +2174,86 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `released VSS auth transport failure is temporary without retrying authorization failures`() {
+        for (prefix in listOf("", "error performing external request: ")) {
+            for (url in listOf("http://127.0.0.1:1/lnurl_auth/auth", "https://auth.example.com/signed?k1=fixture")) {
+                assertTrue(
+                    VssException.AuthException(
+                        "${prefix}error sending request for url ($url)"
+                    ).isTemporaryBackupFailure()
+                )
+            }
+        }
+        listOf(
+            "authorization was refused: LNURL Auth failed",
+            "invalid data: invalid JWT",
+            "HTTP status client error (401 Unauthorized)",
+            "error performing external request: error decoding response body",
+            "prefix error sending request for url (https://auth.example.com/auth)",
+            "error performing external request: prefix error sending request for url (https://auth.example.com/auth)",
+            "error sending request for url (file://auth.example.com/auth)",
+            "error sending request for url (https:///auth)",
+            "error sending request for url (not a URL)",
+            "error sending request for url (https://auth.example.com/auth) suffix",
+        ).forEach { assertFalse(VssException.AuthException(it).isTemporaryBackupFailure(), it) }
+        assertFalse(
+            VssException.UnknownException(
+                "error sending request for url (https://auth.example.com/auth)"
+            ).isTemporaryBackupFailure()
+        )
+    }
+
+    @Test
+    fun `cold explicit auth transport failure retries without observation or another request`() = test {
+        val category = BackupCategory.SETTINGS
+        val error = VssException.AuthException(
+            "error performing external request: error sending request for url (http://127.0.0.1:1/lnurl_auth/auth)",
+        )
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        whenever(vssBackupClient.putObject(eq(category.name), any()))
+            .thenReturn(Result.failure(error))
+            .thenReturn(Result.success(VssItem(category.name, byteArrayOf(), 1)))
+        try {
+            assertEquals(error, sut.triggerBackup(category).exceptionOrNull())
+            assertTrue(statuses.value.getValue(category).isRequired)
+            assertFalse(statuses.value.getValue(category).running)
+            advanceTimeBy(10_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(category.name), any())
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient, times(2)).setup(any())
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+            advanceTimeBy(600_000)
+            runCurrent()
+            verify(vssBackupClient, times(2)).putObject(eq(category.name), any())
+        } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `cold explicit authorization denial stays pending without automatic retry`() = test {
+        val category = BackupCategory.SETTINGS
+        val error = VssException.AuthException("authorization was refused: LNURL Auth failed")
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        whenever(vssBackupClient.putObject(eq(category.name), any())).thenReturn(Result.failure(error))
+        try {
+            assertEquals(error, sut.triggerBackup(category).exceptionOrNull())
+            advanceTimeBy(600_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(category.name), any())
+            assertTrue(statuses.value.getValue(category).isRequired)
+            assertFalse(statuses.value.getValue(category).running)
+        } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
     fun `released VSS connection failure is temporary without broad unknown retry`() {
         assertTrue(
             VssException.UnknownException("error sending request for url (http://127.0.0.1:1/putObjects)")

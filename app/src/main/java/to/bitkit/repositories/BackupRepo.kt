@@ -1603,13 +1603,17 @@ internal fun Throwable.isTemporaryBackupFailure(): Boolean = isPaykitTemporarily
     is VssException.StoreException,
     is VssException.PutException,
     -> true
-    is VssException.UnknownException -> isVssRequestSendFailure(errorDetails)
+    is VssException.UnknownException -> isVssRequestSendFailure(errorDetails, "/putObjects")
+    is VssException.AuthException -> isVssRequestSendFailure(
+        errorDetails.removePrefix("error performing external request: "),
+    )
     else -> false
 }
 
-private fun isVssRequestSendFailure(details: String): Boolean {
+private fun isVssRequestSendFailure(details: String, pathSuffix: String? = null): Boolean {
     val prefix = "error sending request for url ("
     if (!details.startsWith(prefix) || !details.endsWith(")")) return false
     val url = runCatching { URI(details.removePrefix(prefix).dropLast(1)) }.getOrNull() ?: return false
-    return url.scheme in setOf("http", "https") && !url.host.isNullOrEmpty() && url.path.endsWith("/putObjects")
+    return url.scheme in setOf("http", "https") && !url.host.isNullOrEmpty() &&
+        (pathSuffix == null || url.path.endsWith(pathSuffix))
 }
