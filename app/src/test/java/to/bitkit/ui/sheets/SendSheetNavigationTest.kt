@@ -48,6 +48,33 @@ class SendSheetNavigationTest {
     }
 
     @Test
+    fun `back from a confirm opened by an invoice amount replaces it with amount`() {
+        for (start in listOf(SendRoute.Confirm, SendRoute.Recipient)) {
+            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+                navigatorProvider.addNavigator(ComposeNavigator())
+                graph = createGraph(startDestination = start) {
+                    composable<SendRoute.Recipient> {}
+                    composable<SendRoute.Confirm> {}
+                    composable<SendRoute.Amount> {}
+                }
+            }
+            if (start != SendRoute.Confirm) navController.navigateTo(SendRoute.Confirm)
+
+            navController.navigateToAmountFromConfirm()
+
+            assertTrue(requireNotNull(navController.currentDestination).hasRoute<SendRoute.Amount>())
+            val previous = navController.previousBackStackEntry?.destination
+            if (start == SendRoute.Confirm) {
+                assertNull(previous)
+            } else {
+                assertTrue(requireNotNull(previous).hasRoute<SendRoute.Recipient>())
+            }
+            navController.navigateTo(SendRoute.Confirm)
+            assertTrue(navController.popBackStack(SendRoute.Amount, inclusive = false))
+        }
+    }
+
+    @Test
     fun `pending clears earlier send screens after prepared amount review`() {
         for (start in listOf(SendRoute.Confirm, SendRoute.ContactSelect, SendRoute.Amount)) {
             val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {

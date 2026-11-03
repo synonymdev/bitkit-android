@@ -54,6 +54,8 @@ import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.PaykitAmount
+import to.bitkit.models.PaykitAsset
 import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BiometricsView
@@ -135,6 +137,12 @@ fun UsdtWalletScreen(
     var maximumAmount by rememberSaveable { mutableStateOf<String?>(null) }
     val destinations by viewModel.destinations.collectAsStateWithLifecycle()
     var destination by rememberSaveable { mutableStateOf(UsdtDestination.ARBITRUM) }
+    InitialUsdtQuoteEffect(
+        payment = InitialUsdtPayment(page, recipient, amount, destination, hasQuote = state.quote != null),
+        initialRecipient = initialRecipient,
+        initialAmount = initialAmount,
+        onQuote = { viewModel.quote(recipient, amount, destination) },
+    )
     val dismissalBlocked = state.busy || state.authenticationRequired
     val dismiss = {
         if (!dismissalBlocked) {
@@ -298,6 +306,35 @@ fun UsdtWalletScreen(
         }
     }
 }
+
+@Composable
+private fun InitialUsdtQuoteEffect(
+    payment: InitialUsdtPayment,
+    initialRecipient: String,
+    initialAmount: String,
+    onQuote: () -> Unit,
+) {
+    var isRequested by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (isRequested) return@LaunchedEffect
+        isRequested = true
+        val isInitialPayment = payment.page == UsdtPage.AMOUNT && payment.recipient == initialRecipient &&
+            payment.amount == initialAmount && payment.destination == UsdtDestination.ARBITRUM && !payment.hasQuote
+        if (isInitialPayment && shouldQuoteInitialUsdtPayment(initialRecipient, initialAmount)) onQuote()
+    }
+}
+
+private data class InitialUsdtPayment(
+    val page: UsdtPage,
+    val recipient: String,
+    val amount: String,
+    val destination: UsdtDestination,
+    val hasQuote: Boolean,
+)
+
+/** A payment request with a recipient and a positive amount opens on its review, as tapping Review would. */
+internal fun shouldQuoteInitialUsdtPayment(recipient: String, amount: String): Boolean =
+    recipient.isNotEmpty() && runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, amount) }.isSuccess
 
 @Composable
 internal fun rememberUsdtPage(initialRecipient: String, state: UsdtSendState): MutableState<UsdtPage> {

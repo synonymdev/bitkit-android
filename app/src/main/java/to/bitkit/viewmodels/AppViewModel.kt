@@ -5399,6 +5399,8 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        if (amount > 0u && openOnchainConfirmForInvoiceAmount(amount, fromMainScanner, walletGeneration)) return
+
         Logger.info(
             when (amount > 0u) {
                 true -> "Found amount in invoice, proceeding to edit amount"
@@ -5408,6 +5410,30 @@ class AppViewModel @Inject constructor(
         )
 
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount, walletGeneration)
+    }
+
+    /**
+     * An on-chain invoice with a payable amount opens on Confirm, as Amount's continue would.
+     * Manual coin selection and contact payments keep going through Amount.
+     */
+    private suspend fun openOnchainConfirmForInvoiceAmount(
+        amount: ULong,
+        fromMainScanner: Boolean,
+        walletGeneration: Long?,
+    ): Boolean {
+        if (_sendUiState.value.payMethod != SendMethod.ONCHAIN || hasActiveContactPaymentContext()) return false
+        if (!validateAmount(amount)) return false
+        val isHardware = _sendUiState.value.hardwareWalletId != null
+        if (!isHardware && !settingsStore.data.first().coinSelectAuto) return false
+        requireCurrentPaymentPreparation(walletGeneration)
+        if (isHardware && !prepareHardwareSendFee()) return false
+        requireCurrentPaymentPreparation(walletGeneration)
+
+        Logger.info("Found payable amount in invoice, proceeding to confirm", context = TAG)
+        _sendUiState.update { it.copy(isAmountInputValid = true, canReturnToAmount = true) }
+        navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm, walletGeneration)
+        refreshOnchainSendIfNeeded(walletGeneration)
+        return true
     }
 
     private suspend fun hardwareMaxSpendable(
@@ -8935,6 +8961,7 @@ data class SendUiState(
     val isInitialSubscriptionPayment: Boolean = false,
     val initialSubscriptionPaymentAutoStartPending: Boolean = false,
     val requiresAmountReview: Boolean = false,
+    val canReturnToAmount: Boolean = false,
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 ) {

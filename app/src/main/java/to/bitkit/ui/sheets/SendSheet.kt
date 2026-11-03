@@ -129,6 +129,13 @@ internal fun NavController.navigateToSendAmount(startDestination: SendRoute) {
     }
 }
 
+/** Confirm opened straight from an invoice amount is replaced by Amount, so Back from Amount skips it. */
+internal fun NavController.navigateToAmountFromConfirm() {
+    navigateTo(SendRoute.Amount) {
+        popUpTo<SendRoute.Confirm> { inclusive = true }
+    }
+}
+
 internal fun NavController.navigateToSendPending(route: SendRoute.Pending) {
     navigateTo(route) { popUpTo(graph.id) { inclusive = true } }
 }
@@ -498,11 +505,13 @@ fun SendSheet(
                             lightningState.nodeLifecycleState.isRunning(),
                         canAutoStart = !isOffline && !shouldShowSyncOverlay,
                         syncNodeVariant = syncNodeVariant,
-                        canGoBack = navController.previousBackStackEntry != null,
+                        canGoBack = navController.previousBackStackEntry != null || uiState.canReturnToAmount,
                         onBack = {
                             val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
-                            if (!didPopToAmount && !navController.popBackStack()) {
-                                appViewModel.hideSheet()
+                            when {
+                                didPopToAmount -> Unit
+                                uiState.canReturnToAmount -> navController.navigateToAmountFromConfirm()
+                                !navController.popBackStack() -> appViewModel.hideSheet()
                             }
                         },
                         onEvent = { e -> appViewModel.setSendEvent(e) },
