@@ -14446,6 +14446,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             SendUiState(
                 address = address,
                 amount = cachedMax,
+                isMaxAmount = true,
                 payMethod = SendMethod.ONCHAIN,
                 speed = TransactionSpeed.Medium,
                 feeRates = feeRates,
@@ -14517,6 +14518,63 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             feeRates = feeRates,
             isMaxAmount = false,
         )
+    }
+
+    @Test
+    fun `exact onchain amount above the max at the selected speed is not lowered into a drain`() = test {
+        val address = "bcrt1qexactamount"
+        val requested = 99_800uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(address = address, speed = TransactionSpeed.Fast, feeRates = feeRates)
+        }.thenReturn(Result.success(99_500uL))
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(20uL))
+        whenever(formatMoneyValue(any())).thenReturn("300 sats")
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = requested,
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(requested, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, atLeastOnce()).enqueue(toastCaptor.capture())
+        assertTrue(toastCaptor.allValues.any { it.testTag == "InsufficientSavingsToast" })
+    }
+
+    @Test
+    fun `max tap marks an onchain send as max until the amount is edited`() = test {
+        val amount = 100_000uL
+        balanceState.value = BalanceState(maxSendOnchainSats = amount)
+        setSendState(
+            SendUiState(
+                address = "bcrt1qmaxtap",
+                payMethod = SendMethod.ONCHAIN,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.AmountMax(amount))
+        sut.setSendEvent(SendEvent.AmountChange(amount))
+        advanceUntilIdle()
+
+        assertEquals(amount, sut.sendUiState.value.amount)
+        assertTrue(sut.sendUiState.value.isMaxAmount)
+
+        sut.setSendEvent(SendEvent.AmountChange(1_000uL))
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isMaxAmount)
     }
 
     @Test

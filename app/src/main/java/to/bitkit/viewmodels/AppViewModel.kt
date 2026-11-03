@@ -3090,6 +3090,7 @@ class AppViewModel @Inject constructor(
                         is SendEvent.AddressContinue -> onAddressContinue(it.data)
 
                         is SendEvent.AmountChange -> onAmountChange(it.amount)
+                        is SendEvent.AmountMax -> onAmountMax(it.amount)
                         SendEvent.AmountReset -> resetAmountInput()
                         SendEvent.AmountContinue -> try {
                             onAmountContinue()
@@ -4166,11 +4167,19 @@ class AppViewModel @Inject constructor(
             it.copy(
                 amount = amount,
                 isAmountInputValid = validateAmount(amount),
-                isMaxAmount = false,
+                isMaxAmount = it.isMaxAmount && amount == it.amount,
                 confirmedWarnings = persistentListOf(),
             )
         }
         updateCanSwitchWallet()
+    }
+
+    private suspend fun onAmountMax(amount: ULong) {
+        onAmountChange(amount)
+        _sendUiState.update {
+            val isWalletOnchain = it.payMethod == SendMethod.ONCHAIN && it.hardwareWalletId == null
+            it.copy(isMaxAmount = isWalletOnchain && it.amount == amount)
+        }
     }
 
     private fun onCommentChange(comment: String) {
@@ -7199,8 +7208,8 @@ class AppViewModel @Inject constructor(
     }
 
     /**
-     * Flags the send as a drain when the amount reaches the max sendable to this recipient at the selected speed,
-     * lowering the amount to that max so the confirmed figure matches what the drain delivers.
+     * Moves a Max send to the max sendable to this recipient at the selected speed, so the confirmed figure matches
+     * what the drain delivers. Any other amount is kept as entered and marked invalid when it no longer fits.
      */
     private suspend fun refreshMaxSendOnchain() {
         val generation = sendStateGeneration
@@ -7225,17 +7234,33 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val isMaxAmount = state.amount >= max
-        if (isMaxAmount && state.amount != max) {
-            Logger.info(
-                "Lowering amount '${state.amount}' to max '$max' at speed '${state.speed.serialized()}'",
-                context = TAG,
-            )
+        if (state.isMaxAmount) {
+            if (state.amount != max) {
+                Logger.info(
+                    "Updating max amount '${state.amount}' to '$max' at speed '${state.speed.serialized()}'",
+                    context = TAG,
+                )
+            }
+            _sendUiState.update {
+                if (generation != sendStateGeneration || it.divergedFrom(state)) return@update it
+                it.copy(amount = max)
+            }
+            return
         }
+
+        val isAmountInputValid = state.amount <= max && validateAmount(state.amount, state.payMethod)
         _sendUiState.update {
             if (generation != sendStateGeneration || it.divergedFrom(state)) return@update it
-            it.copy(amount = if (isMaxAmount) max else it.amount, isMaxAmount = isMaxAmount)
+            it.copy(isAmountInputValid = isAmountInputValid)
         }
+        if (state.amount <= max || generation != sendStateGeneration || _sendUiState.value.divergedFrom(state)) return
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.other__pay_insufficient_savings),
+            description = context.getString(R.string.other__pay_insufficient_savings_amount_description)
+                .replace("{amount}", formatMoneyValue(state.amount.safe() - max.safe())),
+            testTag = "InsufficientSavingsToast",
+        )
     }
 
     private fun SendUiState.divergedFrom(snapshot: SendUiState) = amount != snapshot.amount ||
@@ -9157,6 +9182,7 @@ sealed interface SendEvent {
     data object AmountReset : SendEvent
     data object AmountContinue : SendEvent
     data class AmountChange(val amount: ULong) : SendEvent
+    data class AmountMax(val amount: ULong) : SendEvent
 
     data class CoinSelectionContinue(val utxos: List<SpendableUtxo>) : SendEvent
 
