@@ -1,0 +1,62 @@
+{
+  "cache": {
+    "hasDismissedWidgetsOnboardingHint": false,
+    "detachedActivityContacts": [],
+    "hasSeenQuickpayIntro": false,
+    "hasSeenWidgetsIntro": false,
+    "highBalanceIgnoreCount": 0,
+    "backupIgnoreTimestamp": 0,
+    "dismissedSuggestions": [
+      "backupSeedPhrase"
+    ],
+    "hasSeenTransferToSavingsIntro": false,
+    "hasSeenContactsIntro": true,
+    "appUpdateIgnoreTimestamp": 0,
+    "lastUsedTags": [
+      "QA1164"
+    ],
+    "hasSeenNotificationsIntro": false,
+    "hasSeenProfileIntro": true,
+    "hasSeenShopIntro": false,
+    "highBalanceIgnoreTimestamp": 0
+  },
+  "tagMetadata": [
+    {
+      "walletId": "default",
+      "tags": [
+        "QA1164"
+      ],
+      "paymentId": "5f1c0d2b6c7a4e3f9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f",
+      "paymentHash": "5f1c0d2b6c7a4e3f9b8a7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f",
+      "isTransfer": false,
+      "feeRate": 0,
+      "createdAt": 1793351855,
+      "isReceive": true
+    },
+    {
+      "isTransfer": false,
+      "feeRate": 0,
+      "tags": [
+        "rent"
+      ],
+      "address": "bcrt1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+      "paymentId": "bcrt1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+      "walletId": "default",
+      "isReceive": true,
+      "createdAt": 1793351855
+    }
+  ],
+  "pubkySession": {
+    "kind": "localSeed"
+  },
+  "pubkyContactProfileOverrides": {
+    "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw374y": {
+      "links": [],
+      "name": "Contact Wallet",
+      "tags": [],
+      "bio": ""
+    }
+  },
+  "createdAt": 1793351855000,
+  "version": 1
+}

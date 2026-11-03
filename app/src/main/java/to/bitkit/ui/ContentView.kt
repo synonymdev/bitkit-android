@@ -52,6 +52,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filterNotNull
@@ -482,6 +483,9 @@ fun ContentView(
     } else if (restoreState is RestoreState.Completed) {
         WalletRestoreSuccessView(
             onContinue = { walletViewModel.onRestoreContinue() },
+            failedCategories = remember(restoreState) {
+                (restoreState as? RestoreState.Completed)?.failedCategories.orEmpty().toImmutableList()
+            },
         )
         return
     }

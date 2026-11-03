@@ -168,7 +168,7 @@ class PaymentRequestAmountLocaleTest {
                     val control = composeTestRule.onNodeWithTag(lastControl).getUnclippedBoundsInRoot()
                     assertEquals(divider.left.value, amount.left.value, 0.5f)
                     assertEquals(divider.right.value, control.right.value, 0.5f)
-                    assertTrue(actions.top >= amount.bottom && actions.top - amount.bottom <= 17.dp)
+                    assertTrue(actions.top - amount.bottom >= 12.dp)
                     assertTrue(divider.top >= actions.bottom)
                     val positions = listOf(
                         actions.top.value,
