@@ -5,7 +5,8 @@ set -euo pipefail
 # The emulator runner waits until the emulator's output closes. Processes that outlive the emulator
 # (its crashpad_handler, the Gradle daemon, the adb server) can keep it open and hold the job until
 # its timeout after the tests already finished. Stop them here, with bounded waits, so the test
-# result decides the step.
+# result decides the step. Only on GitHub Actions: the kills are host-wide, and a local run may share
+# the host with other emulators.
 EMULATOR_EXIT_TIMEOUT_SECONDS=30
 
 stop_emulator() {
@@ -26,7 +27,9 @@ stop_emulator() {
   pkill -9 -f crashpad_handler || true
   adb kill-server > /dev/null 2>&1 || true
 }
-trap stop_emulator EXIT
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  trap stop_emulator EXIT
+fi
 
 adb wait-for-device
 echo "Waiting for boot to complete..."
