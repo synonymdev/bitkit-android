@@ -2,19 +2,29 @@
 
 set -euo pipefail
 
-# The emulator runner waits for the emulator process to exit after `emu kill`, and an emulator that
-# hangs while shutting down then holds the job until its timeout, after the tests already finished.
-# Stop it here with a bounded wait so the test result decides the step.
+# The emulator runner waits until the emulator's output closes. Processes that outlive the emulator
+# (its crashpad_handler, the Gradle daemon, the adb server) can keep it open and hold the job until
+# its timeout after the tests already finished. Stop them here, with bounded waits, so the test
+# result decides the step.
 EMULATOR_EXIT_TIMEOUT_SECONDS=30
 
 stop_emulator() {
+  ./gradlew --stop > /dev/null 2>&1 || true
   adb emu kill > /dev/null 2>&1 || true
+  local exited=false
   for _ in $(seq "$EMULATOR_EXIT_TIMEOUT_SECONDS"); do
-    pgrep -f qemu-system > /dev/null || return 0
+    if ! pgrep -f qemu-system > /dev/null; then
+      exited=true
+      break
+    fi
     sleep 1
   done
-  echo "::warning::Emulator did not exit ${EMULATOR_EXIT_TIMEOUT_SECONDS}s after emu kill; killing it."
-  pkill -9 -f qemu-system || true
+  if [[ "$exited" != true ]]; then
+    echo "::warning::Emulator did not exit ${EMULATOR_EXIT_TIMEOUT_SECONDS}s after emu kill; killing it."
+    pkill -9 -f qemu-system || true
+  fi
+  pkill -9 -f crashpad_handler || true
+  adb kill-server > /dev/null 2>&1 || true
 }
 trap stop_emulator EXIT
 
