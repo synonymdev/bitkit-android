@@ -1,4 +1,4 @@
-name: UI Tests
+name: Android Instrumented Tests
 
 on:
   push:
@@ -7,13 +7,23 @@ on:
   workflow_dispatch:
     inputs:
       suites:
-        description: "Android test annotations: all or comma-separated simple annotation names"
+        description: "integration (non-Compose), all, or comma-separated annotation names"
         required: false
-        default: "all"
+        default: "integration"
         type: string
 
+  workflow_call:
+    inputs:
+      suites:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-instrumented-${{ inputs.suites || 'integration' }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -79,13 +89,14 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-30-x86_64
+          key: avd-30-default-x86_64
 
       - name: Create AVD and generate snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
+          target: default
           arch: x86_64
           profile: pixel_4
           force-avd-creation: false
@@ -96,9 +107,10 @@ jobs:
       - name: Run UI tests on Android Emulator
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          ANDROID_TEST_SUITES: ${{ github.event.inputs.suites || 'all' }}
+          ANDROID_TEST_SUITES: ${{ inputs.suites || 'integration' }}
         with:
           api-level: 30
+          target: default
           arch: x86_64
           profile: pixel_4
           force-avd-creation: false
@@ -110,7 +122,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: compose_test_report
+          name: android_test_report_${{ inputs.suites || 'integration' }}
           path: |
             app/build/reports/androidTests/connected/**/*
             app/build/outputs/androidTest-results/connected/**/*

@@ -282,6 +282,7 @@
     <string name="onboarding__restore_failed_header">Ошибка Баланса &lt;accent&gt;Расходов&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit восстановил ваши сбережения, но не смог восстановить ваш текущий Баланс Расходов (состояние Lightning) и данные кошелька.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Восстановить&lt;/accent&gt;\nваш кошелёк</string>
+    <string name="onboarding__restore_incomplete_text">Ваш кошелёк и баланс восстановлены, но Bitkit не удалось восстановить: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Контрольная сумма фразы восстановления некорректна. Пожалуйста, дважды проверьте вашу фразу восстановления.</string>
     <string name="onboarding__restore_no_backup_button">Продолжить Без Резервной Копии</string>
     <string name="onboarding__restore_no_backup_warn">Если у вас ранее была резервная копия Lightning, она будет перезаписана и утрачена. Это может привести к потере средств.</string>
@@ -1474,6 +1475,9 @@
     <string name="subscriptions__allowances">Бюджеты</string>
     <string name="subscriptions__allowances_empty_description">Вы можете задать лимиты расходов, чтобы автоматически оплачивать запросы на оплату от доверенных контактов.</string>
     <string name="subscriptions__allowances_empty_headline">Настройте\n&lt;accent&gt;бюджеты&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Данные ваших бюджетов старше тех, что этот кошелёк уже использовал. Запросы будут ждать вашего подтверждения, пока вы не возобновите платежи.</string>
+    <string name="subscriptions__allowances_paused_resume">Возобновить</string>
+    <string name="subscriptions__allowances_paused_title">Автоматические платежи приостановлены</string>
     <string name="subscriptions__cancel_subscription">Отменить Подписку</string>
     <string name="subscriptions__choose_recipient">Выберите Получателя</string>
     <string name="subscriptions__content_too_long">Сократите название или описание подписки и попробуйте снова.</string>
