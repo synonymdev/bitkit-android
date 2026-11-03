@@ -1,0 +1,25 @@
+<journey name="confirmed-only onchain receive shows the received sheet">
+  <description>
+    Covers issue #797. An onchain deposit the wallet first sees already confirmed, with no prior
+    mempool event, must show the received sheet once. ldk-node emits OnchainTransactionConfirmed
+    without OnchainTransactionReceived in that case.
+
+    Precondition: onboarded regtest wallet, node running, app in the foreground on the home screen.
+    The deposit and the mine must run in one shell command so the 10s wallet sync does not see the
+    transaction in the mempool first. If the log shows OnchainTransactionReceived for the txid, the
+    run tested the mempool path instead; repeat with a new address.
+  </description>
+  <actions>
+    <action>Tap Receive (testTag "Receive") and verify the Receive sheet opens (testTag "ReceiveScreen")</action>
+    <action>Tap the "Savings" receive tab (the tab row carries no test tag), tap "Show Details" (testTag "ShowDetails") and read the address from testTag "ReceiveOnchainAddress"</action>
+    <action>Press back to return to the home screen</action>
+    <action>Run: adb logcat -c</action>
+    <action>Run in one command: ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings addr&gt;","amountSat":21797}' &amp;&amp; ./lsp POST /regtest/chain/mine '{"count":1}'</action>
+    <action>Wait up to 30s for the next wallet sync</action>
+    <action>Run: adb logcat -d -s APP:V | grep &lt;txid&gt;</action>
+    <action>Verify the log shows an "LDK event fired" line with OnchainTransactionConfirmed for the txid and no OnchainTransactionReceived for it</action>
+    <action>Verify the received sheet (testTag "ReceivedTransaction") is visible with the deposited amount (testTag "MoneyText")</action>
+    <action>Tap the sheet button (testTag "ReceivedTransactionButton")</action>
+    <action>Wait 10s and verify the received sheet does not appear again</action>
+  </actions>
+</journey>

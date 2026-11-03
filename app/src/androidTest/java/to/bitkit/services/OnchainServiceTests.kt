@@ -181,7 +181,7 @@ class OnchainServiceTests {
                 descriptorCase = descriptorCase,
                 network = Network.REGTEST,
                 coinType = "1",
-                publicKeyPrefix = "tpub",
+                publicKeyPrefix = "xpub",
             )
         }
     }
@@ -223,9 +223,10 @@ class OnchainServiceTests {
             accountIndex = 0u,
         )
 
-        assertTrue(descriptor.startsWith(descriptorCase.prefix))
-        assertTrue(descriptor.contains("/${descriptorCase.purpose}'/$coinType'/0']$publicKeyPrefix"))
-        assertTrue(descriptor.contains("/0/*"))
+        val message = "Unexpected '$network' descriptor '$descriptor'"
+        assertTrue(descriptor.startsWith(descriptorCase.prefix), message)
+        assertTrue(descriptor.contains("/${descriptorCase.purpose}'/$coinType'/0']$publicKeyPrefix"), message)
+        assertTrue(descriptor.contains("/0/*"), message)
     }
 
     @Test

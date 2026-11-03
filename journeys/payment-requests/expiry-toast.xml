@@ -1,0 +1,16 @@
+<journey name="Payment Request Expiry Toast">
+  <description>
+    Verifies that a pending incoming one-time Payment Request that expires unopened shows the expired toast once, and that a request the user opened is not reported twice. Uses the linked fixture issuer from README.md, which can send a request with a short proposal expiry. Toasts do not reach the layout dump, so capture a screenshot right after the expiry.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled and the fixture issuer saved as a contact and linked</action>
+    <action>Have the issuer send a proposed one-time request for 0.001 btc with a proposal expiry 60 seconds from now</action>
+    <action>Dismiss the automatic Payment Request confirmation with Back and stay on the home screen without opening the request</action>
+    <action>Verify the pending Payment Requests bell (testTag "PaymentRequestsBell") is visible</action>
+    <action>Wait until the proposal expiry passes</action>
+    <action>Verify from a screenshot that a toast titled "Payment Request" with "The payment request has expired." appears, and that the bell (testTag "PaymentRequestsBell") is gone</action>
+    <action>Verify no second expired toast appears within the next 10 seconds</action>
+    <action>Have the issuer send another one-time request with a proposal expiry 60 seconds from now, dismiss the automatic confirmation, then tap the bell and open the request row to its details</action>
+    <action>Wait on Payment Request details until the expiry passes and verify at most one expired toast appears</action>
+  </actions>
+</journey>

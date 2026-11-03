@@ -1,6 +1,7 @@
 package to.bitkit.ui.components
 
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.TransportType
 import to.bitkit.ui.theme.Colors
 
@@ -35,14 +37,45 @@ internal const val SIGNED_VISUAL_TOP_RATIO = (481f - 92f) / (812f - 92f - 34f)
 /** Figma top ratio for the Trezor visual within the content area below navigation. */
 internal const val SIGN_VISUAL_TOP_RATIO = (488f - 92f) / (812f - 92f - 34f)
 
-/** Trezor illustration left bleed past the frame, as a fraction of the sheet width (Figma device frames). */
-private const val HW_DEVICE_TREZOR_BLEED_RATIO = 84f / 375f
+/** Trezor illustration left bleed past the frame, as a fraction of the sheet width; keeps its screen text in view. */
+private const val HW_DEVICE_TREZOR_BLEED_RATIO = 71f / 375f
 
 /** Ledger illustration right bleed past the frame, as a fraction of the sheet width (Figma device frames). */
 private const val HW_DEVICE_LEDGER_BLEED_RATIO = 53f / 375f
 
 /** Vertical stagger between the two device illustrations, as a fraction of the sheet width. */
 private const val HW_DEVICE_STAGGER_RATIO = 12f / 375f
+
+/** The device illustration shown for a vendor across the hardware wallet flow. */
+@DrawableRes
+fun HwWalletVendor.illustrationRes(): Int = when (this) {
+    HwWalletVendor.TREZOR -> R.drawable.trezor
+    HwWalletVendor.BLOCKSTREAM -> R.drawable.jade
+}
+
+@StringRes
+fun HwWalletVendor.modelNameRes(): Int = when (this) {
+    HwWalletVendor.TREZOR -> R.string.hardware__device_model_trezor
+    HwWalletVendor.BLOCKSTREAM -> R.string.hardware__device_model_jade
+}
+
+@StringRes
+fun HwWalletVendor.foundHeaderRes(): Int = when (this) {
+    HwWalletVendor.TREZOR -> R.string.hardware__found_header
+    HwWalletVendor.BLOCKSTREAM -> R.string.hardware__found_header_jade
+}
+
+@StringRes
+fun HwWalletVendor.pairedHeaderRes(): Int = when (this) {
+    HwWalletVendor.TREZOR -> R.string.hardware__paired_header
+    HwWalletVendor.BLOCKSTREAM -> R.string.hardware__paired_header_jade
+}
+
+@StringRes
+fun HwWalletVendor.sendOpenConnectRes(): Int = when (this) {
+    HwWalletVendor.TREZOR -> R.string.hardware__send_open_connect
+    HwWalletVendor.BLOCKSTREAM -> R.string.hardware__send_open_connect_jade
+}
 
 @Composable
 fun HwDeviceIllustrations(modifier: Modifier = Modifier) {

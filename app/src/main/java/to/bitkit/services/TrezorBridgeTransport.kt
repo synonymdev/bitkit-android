@@ -19,7 +19,6 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Suppress("MagicNumber")
 @Singleton
 class TrezorBridgeTransport(
     private val baseUrl: String,

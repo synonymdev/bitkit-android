@@ -1,0 +1,18 @@
+<journey name="link contact after resume">
+  <description>
+    Requires two disposable Bitkit identities with contact payment sharing enabled. On the second
+    device, save the first identity as a contact and keep Bitkit open. The first device must not
+    already have the second identity saved or linked. No payment is sent. Record the time from
+    saving the contact to Request or Pay becoming available; there is no fixed latency assertion.
+  </description>
+  <actions>
+    <action>On the first device, open Contacts and add the second identity by its Pubky key</action>
+    <action>Save the contact and verify Contact Saved shows the second identity's name</action>
+    <action>Immediately press the device Home button, wait 5 seconds, then reopen Bitkit</action>
+    <action>Open the saved contact from Contacts without saving or importing it again</action>
+    <action>Tap Pay and wait for the result; if Request or Pay is not yet offered, close the payment flow without paying and retry after 5 seconds</action>
+    <action>Verify Request or Pay becomes available with an enabled Request button; record elapsed time or report a failure if it never becomes available during the run</action>
+    <action>Tap Request and verify the Payment Request amount screen opens</action>
+    <action>Close the request flow without sending, return to Contacts and verify the contact appears only once</action>
+  </actions>
+</journey>

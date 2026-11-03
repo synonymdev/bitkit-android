@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.contacts
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,12 +9,16 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -27,17 +32,26 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.Job
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.repositories.Endpoint
+import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BottomSheet
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.CenteredProfileHeader
+import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.LinkRow
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
@@ -45,16 +59,21 @@ import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun ContactDetailScreen(
     viewModel: ContactDetailViewModel,
     onBackClick: () -> Unit,
-    onPayContact: (String, String, PrivatePaykitPaymentContext?) -> Unit,
+    onPayContact: (String, String, PrivatePaykitPaymentContext?, List<Endpoint>) -> Job?,
     onActivityClick: (String) -> Unit,
+    onRequestPayment: (PaykitPaymentRequestTarget) -> Unit = {},
     showDeleteAction: Boolean = false,
     onContactDeleted: () -> Unit = {},
     onEditContact: (String) -> Unit = {},
@@ -62,11 +81,17 @@ fun ContactDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.dismissRequestOrPaySheet() }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                is ContactDetailEffect.OpenPayment ->
-                    onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext)
+                is ContactDetailEffect.OpenPayment -> {
+                    val scanJob = onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext, it.endpoints)
+                    viewModel.onPaymentOpening(scanJob)
+                }
                 ContactDetailEffect.ContactDeleted -> onContactDeleted()
             }
         }
@@ -79,7 +104,7 @@ fun ContactDetailScreen(
         showDeleteAction = showDeleteAction,
         onClickDelete = { viewModel.showDeleteConfirmation() },
         onClickCopy = { viewModel.copyPublicKey() },
-        onClickPay = { viewModel.payContact() },
+        onClickPay = { viewModel.onClickPay() },
         onClickActivity = { uiState.profile?.publicKey?.let { onActivityClick(it) } },
         onClickShare = { uiState.profile?.publicKey?.let { shareText(context, it) } },
         onClickRetry = { viewModel.loadContact() },
@@ -90,6 +115,94 @@ fun ContactDetailScreen(
         onDismissDeleteDialog = { viewModel.dismissDeleteConfirmation() },
         onConfirmDelete = { viewModel.deleteContact() },
     )
+
+    val requestOrPayContact = uiState.profile
+    val paymentRequestTarget = uiState.paymentRequestTarget
+    if (uiState.showRequestOrPaySheet && requestOrPayContact != null) {
+        RequestOrPaySheet(
+            contact = requestOrPayContact,
+            isPayLoading = uiState.isPayLoading,
+            canRequest = paymentRequestTarget != null,
+            onDismiss = { viewModel.dismissRequestOrPaySheet() },
+            onPay = { viewModel.payContact() },
+            onRequest = {
+                viewModel.dismissRequestOrPaySheet()
+                paymentRequestTarget?.let(onRequestPayment)
+            },
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun RequestOrPaySheet(
+    contact: PubkyProfile,
+    isPayLoading: Boolean,
+    canRequest: Boolean,
+    onDismiss: () -> Unit,
+    onPay: () -> Unit,
+    onRequest: () -> Unit,
+) {
+    BottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .sheetHeight(SheetSize.MEDIUM, isModal = true)
+                .gradientBackground()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp)
+                .testTag("RequestOrPaySheet")
+        ) {
+            SheetTopBar(titleText = stringResource(R.string.wallet__payment_request_or_pay))
+            FillHeight()
+            Image(
+                painter = painterResource(R.drawable.coin_stack),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(256.dp)
+                    .align(Alignment.CenterHorizontally),
+            )
+            FillHeight()
+            Display(
+                text = stringResource(R.string.wallet__payment_request_or_pay_headline)
+                    .withAccent(accentColor = Colors.Purple),
+            )
+            VerticalSpacer(12.dp)
+            BodyM(
+                text = stringResource(R.string.wallet__payment_request_or_pay_description, contact.name),
+                color = Colors.White64,
+            )
+            VerticalSpacer(24.dp)
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                SecondaryButton(
+                    text = stringResource(R.string.wallet__payment_request_pay),
+                    onClick = onPay,
+                    isLoading = isPayLoading,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_sent),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                PrimaryButton(
+                    text = stringResource(R.string.wallet__payment_request_request),
+                    onClick = onRequest,
+                    enabled = canRequest && !isPayLoading,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_received),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            VerticalSpacer(16.dp)
+        }
+    }
 }
 
 @Composable
@@ -126,6 +239,7 @@ private fun Content(
                 profile = currentProfile,
                 tags = uiState.tags,
                 showPayButton = uiState.showPayButton,
+                isPayLoading = uiState.isPayLoading,
                 showDeleteAction = showDeleteAction,
                 onClickEdit = onClickEdit,
                 onClickDelete = onClickDelete,
@@ -164,6 +278,7 @@ private fun ContactBody(
     profile: PubkyProfile,
     tags: ImmutableList<String>,
     showPayButton: Boolean,
+    isPayLoading: Boolean,
     showDeleteAction: Boolean,
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
@@ -209,6 +324,7 @@ private fun ContactBody(
                 ActionButton(
                     onClick = onClickPay,
                     iconRes = R.drawable.ic_coins,
+                    isLoading = isPayLoading,
                     modifier = Modifier.testTag("ContactPay")
                 )
             }
@@ -219,7 +335,7 @@ private fun ContactBody(
             )
             ActionButton(
                 onClick = onClickCopy,
-                iconRes = R.drawable.ic_copy,
+                iconRes = R.drawable.ic_copy_simple,
                 modifier = Modifier.testTag("ContactCopy")
             )
             ActionButton(
@@ -236,7 +352,7 @@ private fun ContactBody(
             } else {
                 ActionButton(
                     onClick = onClickEdit,
-                    iconRes = R.drawable.ic_edit,
+                    iconRes = R.drawable.ic_pencil,
                     modifier = Modifier.testTag("ContactEdit")
                 )
             }
@@ -259,27 +375,36 @@ private fun ContactBody(
                 .testTag("ContactViewTagsHeader")
         )
         VerticalSpacer(8.dp)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            tags.forEach { tag ->
-                TagButton(
-                    text = tag,
-                    onClick = { onRemoveTag(tag) },
-                    accessibilityLabel = stringResource(R.string.common__remove_tag, tag),
-                    displayIconClose = true,
-                )
+        if (tags.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                tags.forEach { tag ->
+                    TagButton(
+                        text = tag,
+                        onClick = { onRemoveTag(tag) },
+                        accessibilityLabel = stringResource(R.string.common__remove_tag, tag),
+                        displayIconClose = true,
+                    )
+                }
             }
+            VerticalSpacer(8.dp)
         }
-        VerticalSpacer(8.dp)
         Row(modifier = Modifier.fillMaxWidth()) {
-            TagButton(
+            PrimaryButton(
                 text = stringResource(R.string.profile__add_tag),
                 onClick = onAddTag,
-                icon = painterResource(R.drawable.ic_tag),
-                displayIconClose = true,
+                size = ButtonSize.Small,
+                fullWidth = false,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_tag),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
                 modifier = Modifier.testTag("ContactAddTag")
             )
         }

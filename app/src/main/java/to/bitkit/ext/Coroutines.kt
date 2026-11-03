@@ -4,7 +4,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import to.bitkit.utils.Logger
 
-@Suppress("TooGenericExceptionCaught")
 suspend inline fun <T> runSuspendCatching(crossinline block: suspend () -> T): Result<T> =
     try {
         Result.success(block())

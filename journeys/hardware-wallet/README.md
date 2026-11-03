@@ -61,8 +61,8 @@ instead of UI interactions.
 Run in this order — `connect-home-tile.xml` pairs the emulator that the later journeys
 rely on, `suggestion-intro-sheet.xml`, `connect-flow.xml` and `settings-hardware-wallets.xml`
 each end by re-pairing after a forget, and `detail-overview.xml` runs last because its final
-Remove step forgets the device. Run the send journey while the paired native-segwit account is
-funded. The `passphrase-*` journeys run as a block after
+Remove step forgets the device. Run the send and receive journeys while the paired native-segwit
+account is funded. The `passphrase-*` journeys run as a block after
 `connect-home-tile.xml`, in the order listed: `passphrase-pairing.xml` pairs the hidden wallet
 the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 
@@ -76,14 +76,11 @@ the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 | `connect-flow.xml` | Settings Add button → connect flow with an edited Label Funds → paired device count + name |
 | `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, rename sheet, Add button sheet/back dismiss, per-row delete confirm + re-pair |
 | `detail-overview.xml` | Detail screen overview, Transfer placeholder when funded, activity, Remove confirm + forget |
-| `transfer-to-spending.xml` | Happy-path transfer plus one scoped hardware Transfer activity |
-| `transfer-to-spending-max-lsp-cap.xml` | MAX when Trezor balance is higher than remaining LSP headroom; verifies MAX uses AVAILABLE and reaches sign without insufficient funds |
-| `transfer-to-spending-node-warmup.xml` | Transfer started during app/node warm-up; verifies loading recovers into the sign screen |
 | `send-onchain.xml` | Normal Send flow funded by Trezor: source selection, guarded preparation, device signing, broadcast, success, and activity |
+| `receive-onchain.xml` | Trezor Receive tab: current address and QR display plus exact on-device address verification |
 | `passphrase-pairing.xml` | Passphrase button on Paired → Enter Passphrase → Passphrase Funds Found; second home tile, own label, no passphrase in logs |
 | `passphrase-duplicate.xml` | Re-entering a watched passphrase reports "already added" and adds no tile |
 | `passphrase-settings-remove.xml` | Per-identity settings row, rename and delete; removing the hidden wallet keeps the device paired |
-| `passphrase-transfer-to-spending.xml` | Signs with the live session, re-prompts after the session is dropped, refuses a wrong passphrase |
 
 Connect-flow testTags: `HardwareWalletSheet`, `HardwareWalletIntroScreen`,
 `HardwareWalletIntroCancel`, `HardwareWalletIntroContinue`,
@@ -103,9 +100,10 @@ Passphrase testTags: `HardwareWalletPairedPassphrase`, `HardwareWalletPassphrase
 sign screen `HwTransferPassphraseSheet`, `HwTransferPassphraseInput`,
 `HwTransferPassphraseCancel`, `HwTransferPassphraseContinue`.
 
-Send testTags: `Send`, `RecipientManual`, `RecipientInput`, `AddressContinue`,
+Send and receive testTags: `Send`, `RecipientManual`, `RecipientInput`, `AddressContinue`,
 `send_amount_screen`, `AssetButton-switch`, `ContinueAmount`, `SendConfirmAssetButton`,
-`HardwareSendAmount`, `HardwareSendAddress`, `HardwareSendOpenTrezorConnect`, and `SendSuccess`.
+`HardwareSendAmount`, `HardwareSendAddress`, `HardwareSendOpenTrezorConnect`, `SendSuccess`,
+`Receive`, `ReceiveScreen`, `QRCode`, `ReceiveHardwareAddress`, and `HardwareVerifyAddress`.
 
 The current Connect Hardware sheet starts USB discovery immediately after Continue. BLE is
 included only once Android nearby-devices permission is granted and Bluetooth is enabled.
@@ -138,3 +136,10 @@ balance can be much larger than the displayed AVAILABLE amount because MAX is ca
 Blocktank channel headroom. After signing, decode the funding transaction and compare the
 activity DB row: the on-chain activity fee should be the composed mining fee, while the
 funding output should equal the final Blocktank `order.feeSat`.
+
+## Blockstream Jade
+
+There is no Jade emulator in `bitkit-docker`, so the Jade flows (Connect Hardware over USB or
+Bluetooth, receive-address verification and on-device signing) are covered by unit tests
+(`JadeRepoTest.kt`, `JadeTransportTest.kt`, `HwWalletRepoTest.kt`) and by manual runs against a
+physical Jade. The journeys in this folder stay Trezor-only.

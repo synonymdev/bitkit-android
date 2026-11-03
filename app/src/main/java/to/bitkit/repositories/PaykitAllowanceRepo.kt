@@ -1,0 +1,705 @@
+package to.bitkit.repositories
+
+import com.synonym.paykit.AllowanceFilter
+import com.synonym.paykit.AllowanceHistoryStatus
+import com.synonym.paykit.AllowanceLifecycleState
+import com.synonym.paykit.AllowanceLocalRole
+import com.synonym.paykit.AllowanceRecord
+import com.synonym.paykit.AllowanceTerms
+import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.PaymentOutcome
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Network
+import to.bitkit.async.appScope
+import to.bitkit.di.IoDispatcher
+import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.safe
+import to.bitkit.services.PaykitSdkService
+import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
+
+sealed interface PaykitAllowanceEvent {
+    data class PaidAutomatically(
+        val counterparty: String,
+        val amountSats: ULong,
+        val paymentId: String,
+    ) : PaykitAllowanceEvent
+
+    data class LimitReached(val counterparty: String, val amountSats: ULong) : PaykitAllowanceEvent
+
+    data object LedgerChanged : PaykitAllowanceEvent
+}
+
+enum class PaykitAllowanceAutoPayResult {
+    /** No accepted Allowance covers the request's contact, or the request is already being paid. */
+    NOT_COVERED,
+
+    /** An Allowance exists but this request stays on the manual flow (over a limit, ended, no payable endpoint). */
+    MANUAL,
+
+    /** The Lightning payment was handed to the node; the outcome arrives through the node's payment events. */
+    STARTED,
+
+    /** The payee has not published a payment list newer than the one last paid; the next refresh tries again. */
+    DEFERRED,
+}
+
+sealed class PaykitAllowanceError(message: String) : AppError(message) {
+    data object ContactNotLinked : PaykitAllowanceError("The contact has no linked Paykit identity")
+    data object Unavailable : PaykitAllowanceError("The allowance is unavailable")
+    data object PaymentAlreadyRecorded : PaykitAllowanceError("A payment for this request is already in progress")
+    data object PaymentListPending : PaykitAllowanceError("The payee has not published a new payment list yet")
+    data object LedgerBehind : PaykitAllowanceError("The allowance ledger is behind one this wallet has read")
+}
+
+/**
+ * Allowances for the active identity. One user-facing entry is one grant to a contact's identity, which covers every
+ * Paykit app of that contact, and covered incoming requests are paid headlessly through
+ * [PaykitAllowanceExecutor]. The repository also settles its own Lightning attempts from the node's payment events
+ * and attributes automatic payments to the contact's activity.
+ */
+@Singleton
+@Suppress("TooManyFunctions", "LongParameterList")
+class PaykitAllowanceRepo @Inject constructor(
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val paykitSdkService: PaykitSdkService,
+    private val executor: PaykitAllowanceExecutor,
+    private val lightningRepo: LightningRepo,
+    private val activityRepo: ActivityRepo,
+    private val clock: Clock,
+) {
+    companion object {
+        private const val TAG = "PaykitAllowanceRepo"
+
+        /** A request created up to this long before its Allowance was accepted still counts as created after it. */
+        val ACCEPTANCE_CLOCK_TOLERANCE = 30.seconds
+
+        /** Endpoints Bitkit pays automatically: bolt11 and every on-chain method of the network. */
+        fun allowedPaymentEndpointIdentifiers(network: Network = Env.network): List<String> =
+            (listOf(MethodId.Bolt11) + MethodId.entries.filter { it.isOnchain }).map { it.rawValueForNetwork(network) }
+    }
+
+    private val scope = appScope(ioDispatcher, TAG)
+    private val refreshMutex = Mutex()
+    private val publishLock = Any()
+    private val isProcessingRequests = AtomicBoolean(false)
+    private val isAcceptingOffers = AtomicBoolean(false)
+    private val updates = MutableStateFlow(0)
+
+    /** True while allowances are refreshing or requests are being admitted, when coverage may still change. */
+    val isUpdating: Boolean get() = updates.value > 0
+
+    /** [isUpdating] as a flow, so requests held while coverage was changing are presented once it settles. */
+    val isUpdatingFlow: Flow<Boolean> = updates.map { it > 0 }.distinctUntilChanged()
+    private val manualRequestSignatures = ConcurrentHashMap<PaykitPaymentRequestId, Int>()
+    private val _allowances = MutableStateFlow<List<PaykitAllowance>>(emptyList())
+    private val _localState = MutableStateFlow(PaykitAllowanceLocalState())
+    private val _autoPaidRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
+    private var allowanceTerms: (PaykitAllowanceLimits, Instant, List<String>) -> AllowanceTerms =
+        { limits, monthAnchor, endpoints -> limits.terms(monthAnchor, endpoints) }
+
+    @Volatile
+    private var activeIdentity: String? = null
+
+    private val _entries = MutableStateFlow<List<PaykitAllowanceEntry>>(emptyList())
+
+    /** Grants by contact identity. */
+    val entries: StateFlow<List<PaykitAllowanceEntry>> = _entries.asStateFlow()
+
+    private val _autoPaidSats = MutableStateFlow<Map<String, ULong>>(emptyMap())
+
+    /** Sats paid automatically per entry id, for "Paid so far". */
+    val autoPaidSats: StateFlow<Map<String, ULong>> = _autoPaidSats.asStateFlow()
+
+    private val _isAutomaticPaymentPaused = MutableStateFlow(false)
+
+    /** True while the allowance ledger is behind one this wallet has read, until [resumeAutomaticPayments]. */
+    val isAutomaticPaymentPaused: StateFlow<Boolean> = _isAutomaticPaymentPaused.asStateFlow()
+
+    val events: SharedFlow<PaykitAllowanceEvent> = executor.events
+
+    private val _offersToAnnounce = MutableStateFlow<List<PaykitAllowanceEntry>>(emptyList())
+    private val announcedOfferKeys = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * Offers accepted automatically that the user has not been told about yet. They stay here until
+     * [markOffersAnnounced], independent of the refresh that accepted them, so a cancelled refresh never loses one.
+     */
+    val offersToAnnounce: StateFlow<List<PaykitAllowanceEntry>> = _offersToAnnounce.asStateFlow()
+
+    internal constructor(
+        ioDispatcher: CoroutineDispatcher,
+        paykitSdkService: PaykitSdkService,
+        executor: PaykitAllowanceExecutor,
+        lightningRepo: LightningRepo,
+        activityRepo: ActivityRepo,
+        clock: Clock,
+        allowanceTerms: (PaykitAllowanceLimits, Instant, List<String>) -> AllowanceTerms,
+    ) : this(ioDispatcher, paykitSdkService, executor, lightningRepo, activityRepo, clock) {
+        this.allowanceTerms = allowanceTerms
+    }
+
+    init {
+        scope.launch { executor.events.collect { onAllowanceEvent(it) } }
+        scope.launch { lightningRepo.nodeEvents.collect { onNodeEvent(it) } }
+        scope.launch {
+            lightningRepo.lightningState
+                .map { it.nodeLifecycleState.isRunning() }
+                .distinctUntilChanged()
+                .filter { it }
+                .collect {
+                    // Attempts recovery left open while the node could not list payments are settled now.
+                    executor.activeIdentity?.let { identity -> executor.recover(identity) }
+                    executor.settleOpenLightningAttempts()
+                }
+        }
+    }
+
+    fun entry(id: String): PaykitAllowanceEntry? = _entries.value.firstOrNull { it.id == id }
+
+    // region Lifecycle
+
+    suspend fun activate(identity: String?) {
+        val normalizedIdentity = identity?.let(PubkyPublicKeyFormat::normalized)
+        if (normalizedIdentity == null) {
+            deactivate()
+            return
+        }
+        withContext(ioDispatcher) {
+            val identityChanged = activeIdentity != normalizedIdentity
+            activeIdentity = normalizedIdentity
+            executor.activate(normalizedIdentity)
+            if (identityChanged) {
+                manualRequestSignatures.clear()
+                _offersToAnnounce.update { emptyList() }
+                announcedOfferKeys.clear()
+                executor.recover(normalizedIdentity)
+            }
+            refresh()
+        }
+    }
+
+    fun deactivate() {
+        executor.activate(null)
+        clear()
+    }
+
+    /**
+     * Hides allowances and stops new automatic payments, while payments already sent still settle. [identity] lets
+     * the executor settle attempts left open before allowances were turned off; null keeps its current one.
+     */
+    suspend fun pause(identity: String? = null) {
+        executor.stopAdmitting()
+        clear()
+        val normalizedIdentity = identity?.let(PubkyPublicKeyFormat::normalized) ?: return
+        withContext(ioDispatcher) { executor.pause(normalizedIdentity) }
+    }
+
+    private fun clear() {
+        activeIdentity = null
+        manualRequestSignatures.clear()
+        _offersToAnnounce.update { emptyList() }
+        announcedOfferKeys.clear()
+        _isAutomaticPaymentPaused.update { false }
+        publish(emptyList(), PaykitAllowanceLocalState())
+    }
+
+    suspend fun refresh(): Result<Unit> = withContext(ioDispatcher) {
+        val identity = activeIdentity ?: return@withContext Result.success(Unit)
+        whileUpdating {
+            refreshMutex.withLock {
+                val listing = listAllowances()
+                listing.onSuccess { executor.rememberEndedAllowances(identity, it) }
+                val isPaused = executor.isLedgerBehind(identity)
+                if (activeIdentity == identity) {
+                    _isAutomaticPaymentPaused.update { isPaused }
+                    publish(listing.getOrDefault(_allowances.value), executor.localState(identity))
+                }
+                listing.map {}
+            }
+        }
+    }
+
+    private suspend fun <T> whileUpdating(block: suspend () -> T): T {
+        val release = beginCoverageUpdate()
+        return try {
+            block()
+        } finally {
+            release()
+        }
+    }
+
+    /**
+     * Holds [isUpdating] until the returned function runs, for a caller whose new requests and allowance changes arrive
+     * together: a request is not shown for manual payment before the allowances it may fall under are refreshed.
+     */
+    fun beginCoverageUpdate(): () -> Unit {
+        updates.update { it + 1 }
+        val released = AtomicBoolean(false)
+        return { if (released.compareAndSet(false, true)) updates.update { it - 1 } }
+    }
+
+    /**
+     * True when an allowance this wallet grants, or was asked to grant, names [request]'s contact and can still pay:
+     * such a request may become covered by the refresh in progress, so it is not shown for manual payment meanwhile.
+     */
+    fun mayCover(request: PaykitPaymentRequest): Boolean {
+        if (!request.requiresAcceptance || !request.acceptsLightning()) return false
+        val now = clock.now()
+        return _allowances.value.any {
+            it.isAllower && PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty) &&
+                (
+                    it.lifecycleState == AllowanceLifecycleState.PROPOSED ||
+                        it.status(now) == PaykitAllowance.Status.ACTIVE
+                    )
+        }
+    }
+
+    private suspend fun listAllowances(): Result<List<PaykitAllowance>> = runSuspendCatching {
+        paykitSdkService.listAllowances(
+            AllowanceFilter(
+                counterparty = null,
+                localRole = null,
+                states = emptyList(),
+            ),
+        )
+            .filter {
+                it.historyStatus == AllowanceHistoryStatus.CONSISTENT ||
+                    it.historyStatus == AllowanceHistoryStatus.UNRESOLVED_REFERENCES
+            }
+            .mapNotNull { PaykitAllowance.from(it) }
+    }.onFailure { Logger.warn("Failed to list Paykit allowances", it, context = TAG) }
+
+    /** Proposes the terms to the contact's identity, which needs a linked contact, and records one entry. */
+    suspend fun propose(contactPublicKey: String, limits: PaykitAllowanceLimits): Result<Unit> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+                val contactKey = PubkyPublicKeyFormat.normalized(contactPublicKey)
+                    ?: throw PaykitAllowanceError.ContactNotLinked
+                val isLinked = paykitSdkService.linkedPeers().any {
+                    PubkyPublicKeyFormat.matches(it.counterparty, contactKey) && it.state == LinkedPeerState.LINKED
+                }
+                if (!isLinked) throw PaykitAllowanceError.ContactNotLinked
+
+                val terms = allowanceTerms(
+                    limits,
+                    PaykitAllowanceTime.monthStart(clock.now()),
+                    allowedPaymentEndpointIdentifiers(),
+                )
+                val allowance = paykitSdkService.proposeAllowance(contactKey, AllowanceLocalRole.ALLOWER, terms)
+                sendQueuedMessages(contactKey)
+                val group = PaykitAllowanceLocalState.Group(
+                    id = UUID.randomUUID().toString(),
+                    counterparty = contactKey,
+                    limits = limits,
+                    allowanceIds = listOf(allowance.allowanceId),
+                    createdAtMillis = clock.now().toEpochMilliseconds(),
+                )
+                executor.updateLocalState(identity) { it.copy(groups = it.groups + group) }
+                Logger.info("Proposed an allowance", context = TAG)
+                refresh()
+                Unit
+            }
+        }
+
+    suspend fun accept(entryId: String): Result<Unit> = respond(entry(entryId)) { acceptProposal(it) }
+
+    private suspend fun acceptProposal(allowance: PaykitAllowance): AllowanceRecord {
+        val proposalStreamItemId = allowance.proposalStreamItemId ?: throw PaykitAllowanceError.Unavailable
+        return paykitSdkService.acceptAllowance(allowance.counterparty, allowance.allowanceId, proposalStreamItemId)
+    }
+
+    /**
+     * Accepts the offers that make this wallet the allowee, adds the ones now active to [offersToAnnounce] and returns
+     * them. A failed accept stays unanswered and is tried again on the next refresh. Stops accepting once
+     * [canContinue] turns false and still announces what it accepted. An offer is marked before its accept and stays
+     * marked until [markOffersAnnounced], so one whose accept committed in a call that was cancelled, or a process
+     * that died, is announced by the next call. Announces nothing once the identity it started with is gone or
+     * [canAnnounce] turns false.
+     */
+    suspend fun acceptOffersFromAllowers(
+        canAnnounce: () -> Boolean = { true },
+        canContinue: () -> Boolean = { true },
+    ): List<PaykitAllowanceEntry> = withContext(ioDispatcher) {
+        val identity = activeIdentity ?: return@withContext emptyList()
+        val isCurrent = { activeIdentity == identity && canAnnounce() }
+        val offers = _entries.value.filter { entry ->
+            val answerable = entry.allowances.filter { it.isAnswerable }
+            answerable.isNotEmpty() && answerable.all { it.isOfferFromAllower }
+        }
+        val unannounced = unannouncedOffers(identity)
+        if (offers.isEmpty() && unannounced.isEmpty()) return@withContext emptyList()
+        if (!isAcceptingOffers.compareAndSet(false, true)) return@withContext emptyList()
+
+        try {
+            val accepted = unannounced.toMutableList()
+            for (offer in offers) {
+                if (!isCurrent() || !canContinue()) break
+                val keys = offer.allowances.map { it.key }
+                // The mark must be saved before the accept, or an accept that commits as the call is cancelled is lost.
+                val isMarked = runSuspendCatching {
+                    executor.updateLocalStateDurably(identity) {
+                        it.copy(acceptingOfferIds = it.acceptingOfferIds + keys)
+                    }
+                }.onFailure { Logger.warn("Failed to mark an allowance offer before accepting it", it, context = TAG) }
+                    .isSuccess
+                if (isMarked) {
+                    respond(offer) { acceptProposal(it) }
+                        .onSuccess { accepted += offer }
+                        .onFailure { Logger.warn("Failed to accept an allowance offer", it, context = TAG) }
+                }
+            }
+            if (!isCurrent()) return@withContext emptyList()
+            _offersToAnnounce.update { queued ->
+                val keys = queuedOfferKeys()
+                queued + accepted.filter { offer -> offer.allowances.none { it.key in keys } }
+            }
+            accepted
+        } finally {
+            isAcceptingOffers.set(false)
+        }
+    }
+
+    /** Clears offers the user was told about, so they are never announced again. */
+    suspend fun markOffersAnnounced(offers: List<PaykitAllowanceEntry>) {
+        val announced = offers.flatMap { offer -> offer.allowances.map { it.key } }.toSet()
+        if (announced.isEmpty()) return
+        // Kept in memory too, so a mark whose clear fails to save is not announced again on the next poll.
+        announcedOfferKeys += announced
+        // The marks go before the queued offers: a refresh in between still sees one of them and never queues it again.
+        activeIdentity?.let { identity ->
+            withContext(ioDispatcher) {
+                executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - announced) }
+            }
+        }
+        _offersToAnnounce.update { pending ->
+            pending.filterNot { entry -> entry.allowances.any { it.key in announced } }
+        }
+    }
+
+    private fun queuedOfferKeys(): Set<String> =
+        _offersToAnnounce.value.flatMap { entry -> entry.allowances.map { it.key } }.toSet()
+
+    private suspend fun unannouncedOffers(identity: String): List<PaykitAllowanceEntry> {
+        // Read before the marks, the reverse of the order markOffersAnnounced clears them in.
+        val pending = queuedOfferKeys()
+        val stored = executor.localState(identity).acceptingOfferIds
+        val marked = stored - announcedOfferKeys
+        val stale = _entries.value.flatMap { it.allowances }
+            .filter {
+                it.key in marked && it.lifecycleState != AllowanceLifecycleState.PROPOSED &&
+                    it.lifecycleState != AllowanceLifecycleState.ACCEPTED
+            }
+            .map { it.key }
+            .toSet() + (stored intersect announcedOfferKeys)
+        if (stale.isNotEmpty()) {
+            executor.updateLocalState(identity) { it.copy(acceptingOfferIds = it.acceptingOfferIds - stale) }
+        }
+        if (marked.isEmpty()) return emptyList()
+        return _entries.value.filter { entry ->
+            entry.allowances.none { it.key in pending } &&
+                entry.allowances.any { it.key in marked && it.lifecycleState == AllowanceLifecycleState.ACCEPTED }
+        }
+    }
+
+    suspend fun reject(entryId: String): Result<Unit> = respond(entry(entryId)) {
+        paykitSdkService.rejectAllowance(it.counterparty, it.allowanceId)
+    }
+
+    /** Resumes automatic payments from the ledger read now; see [PaykitAllowanceExecutor.acceptCurrentLedger]. */
+    suspend fun resumeAutomaticPayments(): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+            executor.acceptCurrentLedger(identity)
+            executor.recover(identity)
+            refresh()
+            Unit
+        }
+    }
+
+    suspend fun end(entryId: String): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val entry = entry(entryId) ?: throw PaykitAllowanceError.Unavailable
+            val endable = entry.allowances.filter { it.canEnd }
+            if (endable.isEmpty()) throw PaykitAllowanceError.Unavailable
+            val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+            executor.rememberEnding(identity, endable) {
+                endable.forEach { paykitSdkService.endAllowance(it.counterparty, it.allowanceId) }
+            }
+            endable.forEach { sendQueuedMessages(it.counterparty) }
+            refresh()
+            Unit
+        }
+    }
+
+    private suspend fun respond(
+        entry: PaykitAllowanceEntry?,
+        response: suspend (PaykitAllowance) -> AllowanceRecord,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+            if (entry == null) throw PaykitAllowanceError.Unavailable
+            val answerable = entry.allowances.filter { it.isAnswerable }
+            if (answerable.isEmpty()) throw PaykitAllowanceError.Unavailable
+            for (allowance in answerable) {
+                response(allowance)
+                sendQueuedMessages(allowance.counterparty)
+            }
+            val keys = entry.allowances.map { it.key }
+            if (activeIdentity == identity) {
+                executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + keys) }
+            }
+            refresh()
+            Unit
+        }
+    }
+
+    private suspend fun sendQueuedMessages(counterparty: String) {
+        runSuspendCatching { paykitSdkService.processOutboundPrivateMessages(counterparty) }
+            .onFailure { Logger.warn("Failed to send allowance messages right away", it, context = TAG) }
+    }
+
+    // endregion
+
+    // region Presentation
+
+    /** The first received proposal that needs the user's answer and was not shown yet; offers are accepted instead. */
+    fun proposalForPresentation(): PaykitAllowanceEntry? {
+        val presented = _localState.value.presentedProposalIds
+        return _entries.value.firstOrNull { entry ->
+            entry.allowances.any { it.isAnswerable && !it.isOfferFromAllower } &&
+                entry.allowances.none { it.key in presented }
+        }
+    }
+
+    suspend fun markProposalPresented(entryId: String) {
+        val identity = activeIdentity ?: return
+        val keys = entry(entryId)?.allowances?.map { it.key } ?: return
+        val state = withContext(ioDispatcher) {
+            executor.updateLocalState(identity) { it.copy(presentedProposalIds = it.presentedProposalIds + keys) }
+        }
+        if (activeIdentity == identity) publish(_allowances.value, state)
+    }
+
+    // endregion
+
+    // region Automatic payments
+
+    /**
+     * Whether an active Allowance this wallet granted covers the request's contact identity. A request created before
+     * the Allowance was accepted stays manual: it may already have been shown to the user for a decision.
+     */
+    fun coversRequest(request: PaykitPaymentRequest): Boolean {
+        // Only bitcoin requests are paid automatically; anything else follows the manual flow at once.
+        if (request.allowanceSats() == null) return false
+        // Allowances pay only over Lightning, so a request that accepts no Lightning invoice never waits for one.
+        if (!request.acceptsLightning()) return false
+        val now = clock.now()
+        return _allowances.value.any { allowance ->
+            allowance.isAllower &&
+                allowance.status(now) == PaykitAllowance.Status.ACTIVE &&
+                PubkyPublicKeyFormat.matches(allowance.counterparty, request.counterparty) &&
+                isCreatedAfterAcceptance(request, allowance)
+        }
+    }
+
+    /** Pays covered incoming requests headlessly; returns true when any request was handled. */
+    suspend fun processIncomingRequests(requests: List<PaykitPaymentRequest>): Boolean = withContext(ioDispatcher) {
+        val identity = activeIdentity ?: return@withContext false
+        val signature = allowancesSignature()
+        val covered = requests.filter {
+            it.requiresAcceptance && coversRequest(it) && manualRequestSignatures[it.id] != signature
+        }
+        if (covered.isEmpty()) return@withContext false
+        if (!canPayNow()) return@withContext markAboveLimitManual(covered, identity, signature)
+        if (!isProcessingRequests.compareAndSet(false, true)) return@withContext false
+
+        try {
+            whileUpdating { payCovered(covered, identity, signature) }
+        } finally {
+            isProcessingRequests.set(false)
+        }
+    }
+
+    /**
+     * True while a request is covered by an active allowance or is being paid automatically: keep it off the Send
+     * sheet. A covered request counts until processIncomingRequests has found it manual.
+     */
+    suspend fun isAutomaticallyHandling(request: PaykitPaymentRequest): Boolean {
+        if (executor.isHandling(request.id)) return true
+        return request.requiresAcceptance &&
+            coversRequest(request) &&
+            manualRequestSignatures[request.id] != allowancesSignature()
+    }
+
+    /**
+     * A node that just started lists its channels before they reconnect, and a payment sent then fails with no route.
+     * Covered requests wait for the next refresh instead of falling back to the manual flow.
+     */
+    private fun canPayNow(): Boolean {
+        val state = lightningRepo.lightningState.value
+        return state.nodeLifecycleState.isRunning() && (state.channels.isEmpty() || state.channels.any { it.isUsable })
+    }
+
+    /** While the node cannot pay, a request that fits no allowance must not wait for channels: it asks at once. */
+    private suspend fun markAboveLimitManual(
+        covered: List<PaykitPaymentRequest>,
+        identity: String,
+        signature: Int,
+    ): Boolean {
+        var markedAny = false
+        for (request in covered) {
+            if (!executor.classifyAboveLimit(request, _allowances.value, identity)) continue
+            manualRequestSignatures[request.id] = signature
+            markedAny = true
+        }
+        return markedAny
+    }
+
+    /** Request ids paid automatically, for the "Auto-paid" tag in payment history. */
+    fun isAutoPaid(id: PaykitPaymentRequestId): Boolean = id in _autoPaidRequestIds.value
+
+    private suspend fun payCovered(
+        covered: List<PaykitPaymentRequest>,
+        identity: String,
+        signature: Int,
+    ): Boolean {
+        var handledAny = false
+        for (request in covered) {
+            val result = executor.autoPay(request, _allowances.value, identity)
+            Logger.info("Decided '$result' for an incoming request covered by an allowance", context = TAG)
+            when (result) {
+                PaykitAllowanceAutoPayResult.STARTED -> handledAny = true
+                PaykitAllowanceAutoPayResult.MANUAL -> manualRequestSignatures[request.id] = signature
+                PaykitAllowanceAutoPayResult.NOT_COVERED, PaykitAllowanceAutoPayResult.DEFERRED -> Unit
+            }
+        }
+        if (handledAny) refresh()
+        return handledAny
+    }
+
+    private fun isCreatedAfterAcceptance(request: PaykitPaymentRequest, allowance: PaykitAllowance): Boolean {
+        // A request whose order against the acceptance cannot be proven may predate it, so it stays manual.
+        val acceptedAt = allowance.lastEventAt ?: return false
+        val createdAt = request.createdAt ?: return false
+        return createdAt >= acceptedAt - ACCEPTANCE_CLOCK_TOLERANCE
+    }
+
+    private fun allowancesSignature(): Int {
+        val lifecycle = _allowances.value.map { it.allowanceId to it.lifecycleState }
+        val autoPaidTotal = _autoPaidSats.value.values.fold(0uL) { total, sats -> total.safe() + sats.safe() }
+        return listOf(lifecycle, autoPaidTotal).hashCode()
+    }
+
+    // endregion
+
+    // region Ledger
+
+    /**
+     * Reports a manual payment of a request to the allowance ledger; returns the attempt id or null when no ledger
+     * applies. Fails with [PaykitAllowanceError.PaymentAlreadyRecorded] while another attempt for the request is live.
+     */
+    suspend fun beginManualPayment(
+        request: PaykitPaymentRequest,
+        paymentEndpointIdentifier: String,
+        paymentHash: String?,
+    ): Result<String?> = executor.beginManualPayment(request, paymentEndpointIdentifier, paymentHash)
+
+    suspend fun manualLightningPaymentSent(attemptId: String, paymentHash: String) =
+        executor.manualLightningPaymentSent(attemptId, paymentHash)
+
+    /** [succeeded] null = outcome unknown (pending). */
+    suspend fun finishManualPayment(attemptId: String, succeeded: Boolean?, transactionId: String? = null) {
+        val outcome = when (succeeded) {
+            true -> PaymentOutcome.SUCCEEDED
+            false -> PaymentOutcome.FAILED
+            null -> PaymentOutcome.UNKNOWN
+        }
+        executor.finishManualPayment(attemptId, outcome, transactionId)
+    }
+
+    /** Whether [paymentHash] is an automatic Allowance payment, which no foreground send flow owns. */
+    fun isAutomaticPayment(paymentHash: String): Boolean = executor.isAutomaticPayment(paymentHash)
+
+    private suspend fun onNodeEvent(event: Event) {
+        when (event) {
+            is Event.PaymentSuccessful -> executor.lightningPaymentSettled(event.paymentHash, succeeded = true)
+            is Event.PaymentFailed -> (event.paymentHash ?: event.paymentId)?.let {
+                executor.lightningPaymentSettled(it, succeeded = false)
+            }
+            else -> Unit
+        }
+    }
+
+    private suspend fun onAllowanceEvent(event: PaykitAllowanceEvent) {
+        when (event) {
+            is PaykitAllowanceEvent.PaidAutomatically -> {
+                activityRepo.setContact(event.counterparty, event.paymentId)
+                reloadLocalState()
+            }
+            PaykitAllowanceEvent.LedgerChanged -> reloadLocalState()
+            is PaykitAllowanceEvent.LimitReached -> Unit
+        }
+    }
+
+    private fun reloadLocalState() {
+        val identity = activeIdentity ?: return
+        publish(_allowances.value, executor.localState(identity))
+    }
+
+    // endregion
+
+    private fun publish(
+        allowances: List<PaykitAllowance>,
+        state: PaykitAllowanceLocalState,
+    ) = synchronized(publishLock) {
+        val entries = allowances
+            .groupBy { state.group(containing = it.allowanceId, counterparty = it.counterparty)?.id ?: it.key }
+            .map { (id, members) ->
+                PaykitAllowanceEntry(
+                    id = id,
+                    allowances = members,
+                    limits = state.groups.firstOrNull { it.id == id }?.limits,
+                )
+            }
+        val paidByAllowance = state.autoPaidSatsByAllowance
+        _allowances.update { allowances }
+        _localState.update { state }
+        _autoPaidRequestIds.update { state.autoPaidRequestIds }
+        _entries.update { entries }
+        _autoPaidSats.update {
+            entries.associate { entry ->
+                entry.id to entry.allowances.fold(0uL) { total, allowance ->
+                    total.safe() + (paidByAllowance[allowance.key] ?: 0uL).safe()
+                }
+            }
+        }
+    }
+}
+
+private fun PaykitPaymentRequest.acceptsLightning() = MethodId.Bolt11.rawValue in acceptedPaymentEndpointIdentifiers

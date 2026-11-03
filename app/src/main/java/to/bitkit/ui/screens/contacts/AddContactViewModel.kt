@@ -7,6 +7,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,12 +21,13 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
+import to.bitkit.usecases.RefreshContactPaykitLinkUseCase
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -32,7 +36,7 @@ class AddContactViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
-    private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
+    private val refreshContactPaykitLink: RefreshContactPaykitLinkUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -50,6 +54,8 @@ class AddContactViewModel @Inject constructor(
     private val _effects = MutableSharedFlow<AddContactEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
+    private var profileJob: Job? = null
+
     init {
         fetchProfile(publicKey)
     }
@@ -59,10 +65,12 @@ class AddContactViewModel @Inject constructor(
     }
 
     fun fetchProfile(publicKey: String) {
-        viewModelScope.launch {
+        profileJob?.cancel()
+        profileJob = viewModelScope.launch {
             _uiState.update {
                 it.copy(
                     isLoading = true,
+                    fetchedProfile = null,
                     error = null,
                     publicKeyInput = publicKey,
                     hasPublicPaymentEndpoint = false,
@@ -70,16 +78,19 @@ class AddContactViewModel @Inject constructor(
             }
             pubkyRepo.fetchContactProfile(publicKey)
                 .onSuccess { profile ->
-                    val hasEndpoint = loadPaymentEndpoint(profile.publicKey)
+                    currentCoroutineContext().ensureActive()
                     _uiState.update {
                         it.copy(
                             fetchedProfile = profile,
-                            hasPublicPaymentEndpoint = hasEndpoint,
                             isLoading = false,
                         )
                     }
+                    val hasEndpoint = loadPaymentEndpoint(profile.publicKey)
+                    currentCoroutineContext().ensureActive()
+                    _uiState.update { it.copy(hasPublicPaymentEndpoint = hasEndpoint) }
                 }
                 .onFailure { error ->
+                    currentCoroutineContext().ensureActive()
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
@@ -96,7 +107,7 @@ class AddContactViewModel @Inject constructor(
                         )
                     }
                     if (error == PubkyContactError.AlreadyExists) {
-                        refreshContactPaykitReceivers(publicKey)
+                        refreshContactPaykitLink(publicKey)
                     }
                 }
         }
@@ -121,12 +132,16 @@ class AddContactViewModel @Inject constructor(
                 .onSuccess { result ->
                     when (result) {
                         is PublicPaykitPaymentResult.Opened ->
-                            _effects.emit(AddContactEffect.OpenPayment(result.paymentRequest, profile.publicKey))
+                            _effects.emit(
+                                AddContactEffect.OpenPayment(result.paymentRequest, profile.publicKey, result.endpoints)
+                            )
                         PublicPaykitPaymentResult.NoEndpoint ->
                             showPayError(R.string.slashtags__error_pay_empty_msg)
                         PublicPaykitPaymentResult.NotOpened ->
                             showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
+                        PublicPaykitPaymentResult.PrivateLinkPending,
+                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList,
+                        ->
                             showPayError(R.string.slashtags__error_pay_waiting_msg)
                     }
                 }
@@ -151,11 +166,13 @@ class AddContactViewModel @Inject constructor(
     }
 
     fun saveContact() {
+        if (_uiState.value.isLoading) return
         val profile = _uiState.value.fetchedProfile ?: return
+        _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
             pubkyRepo.addContact(profile.publicKey, profile)
                 .onSuccess {
+                    refreshContactPaykitLink(profile.publicKey)
                     _effects.emit(AddContactEffect.ContactSaved(profile.publicKey))
                 }
                 .onFailure {
@@ -182,5 +199,9 @@ data class AddContactUiState(
 
 sealed interface AddContactEffect {
     data class ContactSaved(val publicKey: String) : AddContactEffect
-    data class OpenPayment(val paymentRequest: String, val publicKey: String) : AddContactEffect
+    data class OpenPayment(
+        val paymentRequest: String,
+        val publicKey: String,
+        val endpoints: List<Endpoint> = emptyList()
+    ) : AddContactEffect
 }

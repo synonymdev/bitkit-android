@@ -9,18 +9,27 @@ import android.os.Looper
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -39,15 +48,21 @@ import to.bitkit.androidServices.LightningNodeService.Companion.ACTION_START_SER
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.ui.components.AuthCheckView
+import to.bitkit.ui.components.BottomSheetOverlayHost
+import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
+import to.bitkit.ui.components.modelNameRes
 import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
 import to.bitkit.ui.onboarding.IntroScreen
 import to.bitkit.ui.onboarding.OnboardingSlidesScreen
 import to.bitkit.ui.onboarding.RestoreWalletScreen
 import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
+import to.bitkit.ui.screens.CriticalUpdateScreen
 import to.bitkit.ui.screens.MigrationLoadingScreen
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
@@ -56,6 +71,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.enableAppEdgeToEdge
+import to.bitkit.ui.utils.hwVendorOrNull
+import to.bitkit.ui.utils.isHwBootloader
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -66,18 +83,16 @@ import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
-
-private const val TREZOR_WEBUSB_VENDOR_ID = 0x1209
-private const val TREZOR_WEBUSB_FIRMWARE_PRODUCT_ID = 0x53C1
-private const val TREZOR_WEBUSB_BOOTLOADER_PRODUCT_ID = 0x53C0
-private const val TREZOR_LEGACY_VENDOR_ID = 0x534C
-private const val TREZOR_LEGACY_PRODUCT_ID = 0x0001
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     private companion object {
         const val KEY_CONSUMED_LAUNCH_INTENT = "consumed_launch_intent"
     }
+
+    @Inject
+    lateinit var hwWalletRepo: HwWalletRepo
 
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
@@ -88,7 +103,6 @@ class MainActivity : FragmentActivity() {
     private val settingsViewModel by viewModels<SettingsViewModel>()
     private val backupsViewModel by viewModels<BackupsViewModel>()
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -121,7 +135,13 @@ class MainActivity : FragmentActivity() {
                 val walletExists = walletViewModel.walletExists
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
+                val isCriticalUpdateRequired by appViewModel.isCriticalUpdateRequired.collectAsStateWithLifecycle()
                 val hazeState = rememberHazeState(blurEnabled = true)
+                val bottomSheetOverlayState = remember { BottomSheetOverlayState() }
+                val authSheetOverlayState = remember { BottomSheetOverlayState() }
+                val isAuthenticated by appViewModel.isAuthenticated.collectAsState()
+                val focusManager = LocalFocusManager.current
+                val keyboardController = LocalSoftwareKeyboardController.current
 
                 LaunchedEffect(
                     walletExists,
@@ -138,61 +158,108 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
-                if (isShowingMigrationLoading && !isRecoveryMode) {
-                    MigrationLoadingScreen(isVisible = true)
-                } else if (!walletViewModel.walletExists && !isRecoveryMode) {
-                    OnboardingNav(
-                        startupNavController = rememberNavController(),
-                        scope = scope,
-                        appViewModel = appViewModel,
-                        walletViewModel = walletViewModel,
-                    )
-                } else {
-                    val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
-
-                    IsOnlineTracker(appViewModel)
-                    ContentView(
-                        appViewModel = appViewModel,
-                        walletViewModel = walletViewModel,
-                        blocktankViewModel = blocktankViewModel,
-                        currencyViewModel = currencyViewModel,
-                        activityListViewModel = activityListViewModel,
-                        transferViewModel = transferViewModel,
-                        settingsViewModel = settingsViewModel,
-                        backupsViewModel = backupsViewModel,
-                        hazeState = hazeState,
-                        modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
-                    )
-
-                    AnimatedVisibility(
-                        visible = !isAuthenticated,
-                        enter = fadeIn(),
-                        exit = fadeOut(),
-                    ) {
-                        AuthCheckView(
-                            showLogoOnPin = true,
-                            appViewModel = appViewModel,
-                            settingsViewModel = settingsViewModel,
-                            onSuccess = { appViewModel.setIsAuthenticated(true) },
-                        )
-                    }
-
-                    val showForgotPinSheet by appViewModel.showForgotPinSheet.collectAsStateWithLifecycle()
-                    if (showForgotPinSheet) {
-                        ForgotPinSheet(
-                            onDismiss = { appViewModel.setShowForgotPin(false) },
-                            onResetClick = { walletViewModel.wipeWallet() },
-                        )
-                    }
-
-                    LaunchedEffect(appViewModel) {
-                        appViewModel.mainScreenEffect.collect {
-                            when (it) {
-                                MainScreenEffect.WipeWallet -> walletViewModel.wipeWallet()
-                                else -> Unit
+                RootDestination(
+                    isCriticalUpdateRequired = isCriticalUpdateRequired,
+                    isShowingMigrationLoading = isShowingMigrationLoading,
+                    walletExists = walletExists,
+                    isRecoveryMode = isRecoveryMode,
+                    criticalUpdate = {
+                        val lifecycle = LocalLifecycleOwner.current.lifecycle
+                        DisposableEffect(lifecycle, walletExists, isRecoveryMode, notificationsGranted, keepActive) {
+                            val observer = LifecycleEventObserver { _, event ->
+                                if (event != Lifecycle.Event.ON_STOP) return@LifecycleEventObserver
+                                val keptAliveByService = notificationsGranted &&
+                                    keepActive &&
+                                    appViewModel.isForegroundServiceRunning()
+                                if (walletExists && !isRecoveryMode && !keptAliveByService) {
+                                    walletViewModel.stop()
+                                }
+                            }
+                            lifecycle.addObserver(observer)
+                            onDispose { lifecycle.removeObserver(observer) }
+                        }
+                        CriticalUpdateScreen()
+                    },
+                    migrationLoading = { MigrationLoadingScreen(isVisible = true) },
+                    onboarding = {
+                        CompositionLocalProvider(LocalAppViewModel provides appViewModel) {
+                            OnboardingNav(
+                                startupNavController = rememberNavController(),
+                                scope = scope,
+                                appViewModel = appViewModel,
+                                walletViewModel = walletViewModel,
+                                modifier = Modifier.hazeSource(hazeState, zIndex = 0f)
+                            )
+                        }
+                    },
+                    wallet = {
+                        IsOnlineTracker(appViewModel)
+                        LaunchedEffect(isAuthenticated) {
+                            if (!isAuthenticated) {
+                                focusManager.clearFocus(force = true)
+                                keyboardController?.hide()
                             }
                         }
-                    }
+                        CompositionLocalProvider(LocalIsAppLocked provides !isAuthenticated) {
+                            ContentView(
+                                appViewModel = appViewModel,
+                                walletViewModel = walletViewModel,
+                                blocktankViewModel = blocktankViewModel,
+                                currencyViewModel = currencyViewModel,
+                                activityListViewModel = activityListViewModel,
+                                transferViewModel = transferViewModel,
+                                settingsViewModel = settingsViewModel,
+                                backupsViewModel = backupsViewModel,
+                                hazeState = hazeState,
+                                bottomSheetOverlayState = bottomSheetOverlayState,
+                                modifier = Modifier.hazeSource(hazeState, zIndex = 0f)
+                            )
+                        }
+
+                        AnimatedVisibility(
+                            visible = !isAuthenticated,
+                            enter = EnterTransition.None,
+                            exit = fadeOut(),
+                        ) {
+                            AuthCheckView(
+                                showLogoOnPin = true,
+                                appViewModel = appViewModel,
+                                settingsViewModel = settingsViewModel,
+                                onSuccess = { appViewModel.setIsAuthenticated(true) },
+                            )
+                        }
+
+                        val showForgotPinSheet by appViewModel.showForgotPinSheet.collectAsStateWithLifecycle()
+                        if (showForgotPinSheet) {
+                            CompositionLocalProvider(LocalBottomSheetOverlayState provides authSheetOverlayState) {
+                                ForgotPinSheet(
+                                    onDismiss = { appViewModel.setShowForgotPin(false) },
+                                    onResetClick = { walletViewModel.wipeWallet() },
+                                )
+                            }
+                        }
+
+                        BottomSheetOverlayHost(state = authSheetOverlayState)
+
+                        LaunchedEffect(appViewModel) {
+                            appViewModel.mainScreenEffect.collect {
+                                when (it) {
+                                    MainScreenEffect.WipeWallet -> walletViewModel.wipeWallet()
+                                    else -> Unit
+                                }
+                            }
+                        }
+                    },
+                )
+
+                val transactionSheetDetails by appViewModel.transactionSheet.collectAsStateWithLifecycle()
+                val hideBalance by settingsViewModel.hideBalance.collectAsStateWithLifecycle()
+                if (isAuthenticated && transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
+                    NewTransactionSheet(
+                        appViewModel = appViewModel,
+                        bottomSheetOverlayState = bottomSheetOverlayState,
+                        hideBalance = hideBalance,
+                    )
                 }
 
                 val currentToast by appViewModel.currentToast.collectAsStateWithLifecycle()
@@ -203,15 +270,6 @@ class MainActivity : FragmentActivity() {
                     onDragStart = { appViewModel.pauseToast() },
                     onDragEnd = { appViewModel.resumeToast() }
                 )
-
-                val transactionSheetDetails by appViewModel.transactionSheet.collectAsStateWithLifecycle()
-                if (transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
-                    NewTransactionSheet(
-                        appViewModel = appViewModel,
-                        currencyViewModel = currencyViewModel,
-                        settingsViewModel = settingsViewModel,
-                    )
-                }
 
                 SplashScreen(appViewModel.splashVisible)
             }
@@ -230,6 +288,13 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleLaunchIntent(intent: Intent) {
+        if (intent.getBooleanExtra(EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE, false)) {
+            intent.removeExtra(EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE)
+            appViewModel.onPaykitSubscriptionNotificationTapped(
+                payerIdentity = intent.getStringExtra(EXTRA_PAYKIT_PAYER_IDENTITY),
+                requestId = intent.paykitPaymentRequestId(),
+            )
+        }
         if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
             handleUsbAttachIntent(intent)
             return
@@ -242,6 +307,18 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    private fun Intent.paykitPaymentRequestId(): PaykitPaymentRequestId? {
+        val requestId = getStringExtra(EXTRA_PAYKIT_PAYMENT_REQUEST_ID) ?: return null
+        val counterparty = getStringExtra(EXTRA_PAYKIT_COUNTERPARTY) ?: return null
+        val billingPeriodStartsAt = getStringExtra(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT) ?: return null
+
+        return PaykitPaymentRequestId(
+            paymentRequestId = requestId,
+            counterparty = counterparty,
+            billingPeriodStartsAt = billingPeriodStartsAt,
+        )
+    }
+
     /**
      * The OS delivers the USB attach event as an activity intent (via the app picker),
      * not as a broadcast, so it is forwarded from here to trigger the silent reconnect.
@@ -252,11 +329,12 @@ class MainActivity : FragmentActivity() {
             appViewModel.onUsbDeviceAttached()
             return
         }
-        if (!device.isSupportedTrezorDevice()) return
+        val vendor = device.hwVendorOrNull() ?: return
 
         appViewModel.onUsbDeviceAttached(
-            deviceId = device.deviceName.takeUnless { device.isTrezorBootloader() },
-            deviceModel = getString(R.string.hardware__device_model_trezor),
+            deviceId = device.deviceName.takeUnless { device.isHwBootloader() },
+            deviceModel = getString(vendor.modelNameRes()),
+            vendor = vendor,
         )
     }
 
@@ -267,8 +345,24 @@ class MainActivity : FragmentActivity() {
         intent.launchKey()?.let { outState.putString(KEY_CONSUMED_LAUNCH_INTENT, it) }
     }
 
+    override fun onResume() {
+        super.onResume()
+        appViewModel.onAppResumed()
+        // A permission dialog launched from a sheet that has since closed loses its result callback.
+        settingsViewModel.setNotificationPreference(areNotificationsEnabled())
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) appViewModel.lockOnBackground()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        // A Jade left with an open Bluetooth link when the process dies can refuse connections until
+        // it is power-cycled, so release every link when the activity is going away for good. The
+        // repository clears its session with the transport, off the main thread.
+        if (isFinishing) hwWalletRepo.onActivityFinishing()
         if (!settingsViewModel.notificationsGranted.value) {
             stopForegroundService()
         }
@@ -299,6 +393,25 @@ class MainActivity : FragmentActivity() {
     }
 }
 
+@Composable
+fun RootDestination(
+    isCriticalUpdateRequired: Boolean,
+    isShowingMigrationLoading: Boolean,
+    walletExists: Boolean,
+    isRecoveryMode: Boolean,
+    criticalUpdate: @Composable () -> Unit,
+    migrationLoading: @Composable () -> Unit,
+    onboarding: @Composable () -> Unit,
+    wallet: @Composable () -> Unit,
+) {
+    when {
+        isCriticalUpdateRequired -> criticalUpdate()
+        isShowingMigrationLoading && !isRecoveryMode -> migrationLoading()
+        !walletExists && !isRecoveryMode -> onboarding()
+        else -> wallet()
+    }
+}
+
 internal fun Intent?.launchKey(): String? {
     this ?: return null
     return when (action) {
@@ -313,25 +426,18 @@ internal fun Intent?.launchKey(): String? {
 private fun Intent.usbDevice(): UsbDevice? =
     IntentCompat.getParcelableExtra(this, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
 
-private fun UsbDevice.isSupportedTrezorDevice() = isTrezorFirmwareDevice() || isTrezorBootloader()
-
-private fun UsbDevice.isTrezorFirmwareDevice() =
-    (vendorId == TREZOR_WEBUSB_VENDOR_ID && productId == TREZOR_WEBUSB_FIRMWARE_PRODUCT_ID) ||
-        (vendorId == TREZOR_LEGACY_VENDOR_ID && productId == TREZOR_LEGACY_PRODUCT_ID)
-
-private fun UsbDevice.isTrezorBootloader() =
-    vendorId == TREZOR_WEBUSB_VENDOR_ID && productId == TREZOR_WEBUSB_BOOTLOADER_PRODUCT_ID
-
 @Composable
 private fun OnboardingNav(
     startupNavController: NavHostController,
     scope: CoroutineScope,
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
+    modifier: Modifier = Modifier,
 ) {
     NavHost(
         navController = startupNavController,
         startDestination = StartupRoutes.Terms,
+        modifier = modifier,
     ) {
         composable<StartupRoutes.Terms> {
             TermsOfUseScreen(
@@ -352,10 +458,8 @@ private fun OnboardingNav(
         }
         composableWithDefaultTransitions<StartupRoutes.Slides> { navBackEntry ->
             val route = navBackEntry.toRoute<StartupRoutes.Slides>()
-            val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
             OnboardingSlidesScreen(
                 currentTab = route.tab,
-                isGeoBlocked = isGeoBlocked,
                 onAdvancedSetupClick = { startupNavController.navigateTo(StartupRoutes.Advanced) },
                 onCreateClick = {
                     scope.launch {

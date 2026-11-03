@@ -29,7 +29,7 @@ class TrezorUiHandler @Inject constructor() : TrezorUiCallback {
         private const val UI_TIMEOUT_MS = 120_000L
     }
 
-    private val pinLock = Object()
+    private val pinLock = Any()
 
     @Volatile
     private var pinLatch: CountDownLatch? = null

@@ -165,17 +165,27 @@ internal fun SuggestionsContent(
             .sheetHeight(SheetSize.COMPACT, isModal = true)
             .gradientBackground()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp),
     ) {
-        SheetTopBar(titleText = title, onBack = onBack)
+        SheetTopBar(
+            titleText = title,
+            onBack = onBack,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
         VerticalSpacer(16.dp)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
         ) {
             suggestions.forEach { suggestion ->
-                TagButton(text = suggestion, onClick = { onSelect(suggestion) })
+                PrimaryButton(
+                    text = suggestion,
+                    onClick = { onSelect(suggestion) },
+                    size = ButtonSize.Small,
+                    fullWidth = false,
+                )
             }
         }
         VerticalSpacer(24.dp)

@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,10 +35,10 @@ class ReceiveNavigationTest {
     private var sheetDismissed = false
 
     @Test
-    fun deepLinkedAmountReturnsToQr() {
-        setGraph(ReceiveRoute.Amount)
+    fun deepLinkedTransferUnavailableReturnsToQr() {
+        setGraph(ReceiveRoute.TransferUnavailable)
 
-        assertOn(ReceiveRoute.Amount::class)
+        assertOn(ReceiveRoute.TransferUnavailable::class)
         pressBack()
         assertOn(ReceiveRoute.QR::class)
         assertFalse(sheetDismissed)
@@ -78,6 +79,7 @@ class ReceiveNavigationTest {
     }
 
     @Composable
+    @OptIn(ExperimentalMaterial3Api::class)
     private fun TestGraph(startRoute: ReceiveRoute) {
         val context = LocalContext.current
         val controller = remember {
@@ -95,7 +97,7 @@ class ReceiveNavigationTest {
                     LaunchedEffect(startRoute) { controller.navigateToReceiveStart(startRoute) }
                     NavHost(navController = controller, startDestination = startRoute.rootRoute()) {
                         composable<ReceiveRoute.QR> { Text("QR") }
-                        composable<ReceiveRoute.Amount> { Text("Amount") }
+                        composable<ReceiveRoute.TransferUnavailable> { Text("Transfer Unavailable") }
                         composable<ReceiveRoute.PaymentRequestDetails> { Text("Details") }
                         composable<ReceiveRoute.PaymentRequestRecipient> { Text("Recipient") }
                         composable<ReceiveRoute.PaymentRequestSent> { Text("Sent") }

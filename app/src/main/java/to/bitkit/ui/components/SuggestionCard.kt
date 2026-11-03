@@ -85,7 +85,6 @@ fun SuggestionCard(
                     Modifier.gradientBackground(gradientColor)
                 } else {
                     val (borderColor, centerColor) =
-                        @Suppress("MagicNumber")
                         when (gradientColor) {
                             Colors.Purple24 -> Pair(
                                 Color(185, 92, 232),

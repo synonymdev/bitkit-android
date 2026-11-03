@@ -1,19 +1,26 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
+import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -33,6 +40,136 @@ class EditProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+
+    @Test
+    fun `disconnect finishes private cleanup after the screen is closed`() = test {
+        val sut = createSut()
+        val forget = CompletableDeferred<Result<Boolean>>()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).doSuspendableAnswer { forget.await() }
+        advanceUntilIdle()
+
+        sut.disconnectProfile()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isDeleting)
+        assertFalse(sut.uiState.value.isSaving)
+        assertTrue(sut.uiState.value.isBusy)
+
+        sut.disconnectProfile()
+        sut.deleteProfile()
+        sut.save()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        verify(pubkyRepo, times(1)).forgetUnrestoredIdentity()
+        verify(pubkyRepo, never()).deleteProfileWithSessionRetry()
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+        assertFalse(sut.uiState.value.showDeleteDialog)
+
+        sut.viewModelScope.cancel()
+        forget.complete(Result.success(true))
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isDeleting)
+        assertFalse(sut.uiState.value.isBusy)
+        verify(privatePaykitRepo).closeAndClear()
+        verify(pubkyRepo, never()).signOut()
+    }
+
+    @Test
+    fun `disconnect forgets unrestored identity without remote cleanup`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).thenReturn(Result.success(true))
+        whenever(privatePaykitRepo.removePublishedEndpointsForCleanup(any()))
+            .thenReturn(Result.failure(AppError("No session")))
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.disconnectProfile()
+            advanceUntilIdle()
+            assertEquals(EditProfileEffect.DisconnectSuccess, awaitItem())
+        }
+
+        assertFalse(sut.uiState.value.isDeleting)
+        verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any())
+        verify(pubkyRepo, never()).signOut()
+        verify(privatePaykitRepo).closeAndClear()
+    }
+
+    @Test
+    fun `failed local disconnect preserves private state`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.forgetUnrestoredIdentity()).thenReturn(Result.failure(AppError("Storage failed")))
+        advanceUntilIdle()
+
+        sut.disconnectProfile()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isDeleting)
+        verify(privatePaykitRepo, never()).closeAndClear()
+        verify(pubkyRepo, never()).signOut()
+    }
+
+    @Test
+    fun `pending deletion blocks duplicate actions and clears progress on failure`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        val result = CompletableDeferred<Result<Unit>>()
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).doSuspendableAnswer { result.await() }
+
+        sut.showDeleteConfirmation()
+        sut.deleteProfile()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isDeleting)
+        assertFalse(sut.uiState.value.isSaving)
+        assertTrue(sut.uiState.value.isBusy)
+        assertFalse(sut.uiState.value.showDeleteDialog)
+
+        sut.deleteProfile()
+        sut.retryDeleteProfile()
+        sut.save()
+        sut.disconnectProfile()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        verify(pubkyRepo, times(1)).deleteProfileWithSessionRetry()
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, never()).signOut()
+        assertFalse(sut.uiState.value.showDeleteDialog)
+
+        result.complete(Result.failure(TestAppError("Offline")))
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isDeleting)
+        assertFalse(sut.uiState.value.isBusy)
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+    }
+
+    @Test
+    fun `pending save shows only save progress and blocks other actions`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        val result = CompletableDeferred<Result<Unit>>()
+        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), any())).doSuspendableAnswer { result.await() }
+
+        sut.save()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
+        assertTrue(sut.uiState.value.isBusy)
+
+        sut.save()
+        sut.deleteProfile()
+        sut.retryDeleteProfile()
+        sut.disconnectProfile()
+        sut.showDeleteConfirmation()
+        advanceUntilIdle()
+        verify(pubkyRepo, times(1)).saveProfile(any(), any(), any(), any(), any())
+        verify(pubkyRepo, never()).deleteProfileWithSessionRetry()
+        verify(pubkyRepo, never()).forgetUnrestoredIdentity()
+        assertFalse(sut.uiState.value.showDeleteDialog)
+
+        result.complete(Result.failure(TestAppError("Offline")))
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isBusy)
+    }
 
     @Test
     fun `updateLinkUrl should update existing profile link`() = test {
@@ -59,10 +196,62 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
             verify(pubkyRepo).deleteProfileWithSessionRetry()
             verify(privatePaykitRepo).closeAndClear()
         }
+    }
+
+    @Test
+    fun `profile created in Bitkit keeps delete copy`() = test {
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        assertEquals(ProfileRemoval.DELETE, sut.uiState.value.removal)
+
+        sut.deleteProfile()
+        advanceUntilIdle()
+        verify(context).getString(R.string.profile__delete_success)
+        verify(context, never()).getString(R.string.profile__unlink_success)
+    }
+
+    @Test
+    fun `ring identity is unlinked with the same cleanup`() = test {
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+        val sut = createSut(isRingIdentity = true)
+        advanceUntilIdle()
+
+        assertEquals(ProfileRemoval.UNLINK, sut.uiState.value.removal)
+
+        sut.effects.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+
+            assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
+        }
+        verify(context).getString(R.string.profile__unlink_success)
+        verify(context, never()).getString(R.string.profile__delete_success)
+        inOrder(privatePaykitRepo, pubkyRepo).apply {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
+            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(privatePaykitRepo).closeAndClear()
+        }
+    }
+
+    @Test
+    fun `ring identity keeps loading until unlink copy is resolved`() = test {
+        val ringCheck = CompletableDeferred<Boolean>()
+        val sut = createSut(ringCheck = ringCheck)
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.isLoading)
+
+        ringCheck.complete(true)
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isLoading)
+        assertEquals(ProfileRemoval.UNLINK, sut.uiState.value.removal)
     }
 
     @Test
@@ -80,7 +269,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
             verify(pubkyRepo).deleteProfileWithSessionRetry()
             verify(privatePaykitRepo).closeAndClear()
         }
@@ -99,7 +288,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertTrue(sut.uiState.value.showDeleteFailureDialog)
-        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
+        verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test
@@ -140,13 +331,13 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.disconnectProfile()
         advanceUntilIdle()
 
-        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
         verify(pubkyRepo, never()).signOut()
         verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test
-    fun `disconnectProfile clears local Paykit state when Pubky sign out fails`() = test {
+    fun `disconnectProfile preserves local Paykit state when Pubky sign out fails`() = test {
         val sut = createSut()
         whenever(pubkyRepo.signOut()).thenReturn(Result.failure(TestAppError("sign out failed")))
         advanceUntilIdle()
@@ -154,14 +345,14 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.disconnectProfile()
         advanceUntilIdle()
 
-        assertFalse(sut.uiState.value.isSaving)
-        verify(privatePaykitRepo).closeAndClear()
+        assertFalse(sut.uiState.value.isDeleting)
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test
     fun `deleteProfile should continue when private cleanup fails`() = test {
         val sut = createSut()
-        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true)) }
             .thenReturn(Result.failure(TestAppError("cleanup failed")))
         whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
         advanceUntilIdle()
@@ -173,9 +364,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        assertFalse(sut.uiState.value.isSaving)
+        assertFalse(sut.uiState.value.isDeleting)
         inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
             verify(pubkyRepo).deleteProfileWithSessionRetry()
             verify(privatePaykitRepo).closeAndClear()
         }
@@ -197,11 +388,22 @@ class EditProfileViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
     }
 
-    private fun createSut(): EditProfileViewModel {
+    private fun createSut(
+        isRingIdentity: Boolean = false,
+        ringCheck: CompletableDeferred<Boolean>? = null,
+    ): EditProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
+        if (ringCheck != null) {
+            whenever { pubkyRepo.isRingAdoptedIdentity() }.doSuspendableAnswer { ringCheck.await() }
+        } else {
+            whenever { pubkyRepo.isRingAdoptedIdentity() }.thenReturn(isRingIdentity)
+        }
+        whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true)) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
 

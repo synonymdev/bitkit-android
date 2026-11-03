@@ -1,9 +1,7 @@
 package to.bitkit.ui.settings.backgroundPayments
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -21,7 +19,6 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -34,7 +31,6 @@ import to.bitkit.viewmodels.SettingsViewModel
 @Composable
 fun BackgroundPaymentsIntroScreen(
     onBack: () -> Unit,
-    onLater: () -> Unit,
     onEnable: () -> Unit,
     modifier: Modifier = Modifier,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
@@ -48,10 +44,6 @@ fun BackgroundPaymentsIntroScreen(
             actions = { DrawerNavIcon() },
         )
         BackgroundPaymentsIntroContent(
-            onLater = {
-                settingsViewModel.setBgPaymentsIntroSeen(true)
-                onLater()
-            },
             onEnable = {
                 settingsViewModel.setBgPaymentsIntroSeen(true)
                 onEnable()
@@ -62,7 +54,6 @@ fun BackgroundPaymentsIntroScreen(
 
 @Composable
 fun BackgroundPaymentsIntroContent(
-    onLater: () -> Unit,
     onEnable: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -70,7 +61,7 @@ fun BackgroundPaymentsIntroContent(
         modifier = modifier.padding(horizontal = 32.dp)
     ) {
         Image(
-            painter = painterResource(R.drawable.bell),
+            painter = painterResource(R.drawable.bell_figure),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
@@ -84,32 +75,14 @@ fun BackgroundPaymentsIntroContent(
             text = stringResource(R.string.settings__bg__intro_title).withAccent(accentColor = Colors.Purple),
             color = Colors.White,
         )
-        VerticalSpacer(14.dp)
+        VerticalSpacer(8.dp)
         BodyM(text = stringResource(R.string.settings__bg__intro_desc), color = Colors.White64)
         VerticalSpacer(32.dp)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("BackgroundPaymentsIntro-buttons")
-        ) {
-            SecondaryButton(
-                text = stringResource(R.string.common__later),
-                fullWidth = false,
-                onClick = onLater,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("BackgroundPaymentsIntro-later")
-            )
-            PrimaryButton(
-                text = stringResource(R.string.settings__bg__intro_button),
-                fullWidth = false,
-                onClick = onEnable,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("BackgroundPaymentsIntro-enable")
-            )
-        }
+        PrimaryButton(
+            text = stringResource(R.string.settings__bg__intro_button),
+            onClick = onEnable,
+            modifier = Modifier.testTag("BackgroundPaymentsIntro-enable")
+        )
         VerticalSpacer(16.dp)
     }
 }
@@ -119,7 +92,6 @@ fun BackgroundPaymentsIntroContent(
 private fun Preview() {
     AppThemeSurface {
         BackgroundPaymentsIntroContent(
-            onLater = {},
             onEnable = {},
         )
     }

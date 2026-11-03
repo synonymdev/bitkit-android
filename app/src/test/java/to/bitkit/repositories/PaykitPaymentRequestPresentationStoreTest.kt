@@ -1,15 +1,28 @@
+@file:OptIn(ExperimentalTime::class)
+
 package to.bitkit.repositories
 
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.verifyBlocking
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
     companion object {
@@ -19,7 +32,7 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `saving replaces corrupt presentation state`() = test {
+    fun `loading or saving corrupt subscription state preserves it`() = test {
         val keychain = mock<Keychain>()
         var storedValue = "not-json"
         whenever(keychain.loadString(KEY)).thenAnswer { storedValue }
@@ -28,12 +41,190 @@ class PaykitPaymentRequestPresentationStoreTest : BaseUnitTest() {
             Unit
         }
         val sut = PaykitPaymentRequestPresentationStore(keychain)
-        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY, "bitkit/server")
+        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY)
 
-        assertTrue(sut.load(IDENTITY).isEmpty())
+        val loadError = assertFailsWith<PaykitPaymentStateUnreadableError> { sut.load(IDENTITY) }
+        val saveError = assertFailsWith<PaykitPaymentStateUnreadableError> { sut.save(IDENTITY, setOf(requestId)) }
+        val backupError = assertFailsWith<PaykitPaymentStateUnreadableError> { sut.backupSnapshot() }
+        listOf(loadError, saveError, backupError).forEach {
+            assertContains(it.message.orEmpty(), KEY)
+            assertIs<SerializationException>(it.cause)
+        }
+        assertEquals("not-json", storedValue)
+        verify(keychain, never()).upsertString(eq(KEY), any())
+    }
+
+    @Test
+    fun `only portable subscription changes update backup state`() = test {
+        val keychain = mock<Keychain>()
+        var storedValue: String? = null
+        whenever(keychain.loadString(KEY)).thenAnswer { storedValue }
+        whenever { keychain.upsertString(eq(KEY), any()) }.thenAnswer {
+            storedValue = it.getArgument(1)
+            Unit
+        }
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY)
+        val subscriptionId = PaykitSubscriptionId("subscription", COUNTERPARTY)
+        val dismissedOnly = PaykitSubscriptionPresentationState(dismissedPaymentIds = setOf(requestId))
+        val accepted = dismissedOnly.copy(
+            acceptedAt = mapOf(subscriptionId to Instant.parse("2026-09-24T08:00:00.123Z")),
+        )
+
+        sut.save(IDENTITY, setOf(requestId))
+        sut.saveSubscriptionState(IDENTITY, dismissedOnly)
+        assertEquals(0L, sut.backupStateVersion.value)
+        assertEquals(emptyMap(), sut.backupSnapshot())
+
+        sut.saveSubscriptionState(IDENTITY, accepted)
+        assertEquals(1L, sut.backupStateVersion.value)
+        assertEquals(
+            "2026-09-24T08:00:00.123Z",
+            sut.backupSnapshot().getValue(IDENTITY).acceptances.single().acceptedAt,
+        )
+
+        sut.saveSubscriptionState(IDENTITY, accepted)
+        assertEquals(1L, sut.backupStateVersion.value)
+
+        sut.saveSubscriptionState(
+            IDENTITY,
+            accepted.copy(presentedProposalIds = setOf(subscriptionId)),
+        )
+        assertEquals(2L, sut.backupStateVersion.value)
+    }
+
+    @Test
+    fun `accepted one time ownership survives reopening and wallet restore`() = test {
+        val keychain = mock<Keychain>()
+        val values = mutableMapOf<String, String>()
+        whenever(keychain.loadString(any())).thenAnswer { values[it.getArgument<String>(0)] }
+        whenever(keychain.upsertString(any(), any())).thenAnswer {
+            values[it.getArgument(0)] = it.getArgument(1)
+            Unit
+        }
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+        val requestId = PaykitPaymentRequestId("request", COUNTERPARTY)
+        val secondId = PaykitPaymentRequestId("second", COUNTERPARTY)
+        sut.addAcceptedOneTimeId(IDENTITY, requestId)
+        sut.addAcceptedOneTimeId(COUNTERPARTY, secondId)
+        sut.addAcceptedOneTimeId(IDENTITY, secondId)
         sut.save(IDENTITY, setOf(requestId))
 
-        assertEquals(setOf(requestId), sut.load(IDENTITY))
-        verifyBlocking(keychain) { upsertString(KEY, storedValue) }
+        val reopened = PaykitPaymentRequestPresentationStore(keychain)
+        assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
+        assertEquals(setOf(secondId), reopened.loadAcceptedOneTimeIds(COUNTERPARTY))
+        assertEquals(emptyMap(), reopened.backupSnapshot())
+        assertEquals(3L, sut.backupStateVersion.value)
+        val backup = reopened.acceptedOneTimeBackupSnapshot()
+        reopened.restoreBackup(emptyMap())
+        assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
+
+        values.clear()
+        reopened.restoreBackup(emptyMap())
+        reopened.restoreAcceptedOneTimeRequests(backup)
+        assertEquals(setOf(requestId, secondId), reopened.loadAcceptedOneTimeIds(IDENTITY))
+        assertEquals(setOf(secondId), reopened.loadAcceptedOneTimeIds(COUNTERPARTY))
+    }
+
+    @Test
+    fun `acceptance cleanup removes only specified ids from the current stored identity`() = test {
+        val keychain = mock<Keychain>()
+        val key = Keychain.Key.PAYKIT_ACCEPTED_PAYMENT_REQUESTS.name
+        var stored: String? = null
+        whenever(keychain.loadString(key)).thenAnswer { stored }
+        whenever(keychain.upsertString(eq(key), any())).thenAnswer {
+            stored = it.getArgument(1)
+            Unit
+        }
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+        val finished = PaykitPaymentRequestId("finished", COUNTERPARTY)
+        val live = PaykitPaymentRequestId("live", COUNTERPARTY)
+        sut.addAcceptedOneTimeId(IDENTITY, finished)
+        sut.addAcceptedOneTimeId(COUNTERPARTY, finished)
+        sut.addAcceptedOneTimeId(IDENTITY, live)
+
+        assertEquals(setOf(live), sut.removeAcceptedOneTimeIds(IDENTITY, setOf(finished)))
+        val reopened = PaykitPaymentRequestPresentationStore(keychain)
+        assertEquals(setOf(live), reopened.loadAcceptedOneTimeIds(IDENTITY))
+        assertEquals(setOf(finished), reopened.loadAcceptedOneTimeIds(COUNTERPARTY))
+        clearInvocations(keychain)
+        reopened.removeAcceptedOneTimeIds(IDENTITY, setOf(finished))
+        verify(keychain, never()).upsertString(any(), any())
+    }
+
+    @Test
+    fun `unreadable accepted one time ownership is preserved and fails closed`() = test {
+        val keychain = mock<Keychain>()
+        val acceptedKey = Keychain.Key.PAYKIT_ACCEPTED_PAYMENT_REQUESTS.name
+        whenever(keychain.loadString(acceptedKey)).thenReturn("not-json")
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+
+        assertFailsWith<PaykitPaymentStateUnreadableError> { sut.loadAcceptedOneTimeIds(IDENTITY) }
+        assertFailsWith<PaykitPaymentStateUnreadableError> {
+            sut.addAcceptedOneTimeId(IDENTITY, PaykitPaymentRequestId("request", COUNTERPARTY))
+        }
+        assertFailsWith<PaykitPaymentStateUnreadableError> {
+            sut.removeAcceptedOneTimeIds(IDENTITY, setOf(PaykitPaymentRequestId("request", COUNTERPARTY)))
+        }
+        verify(keychain, never()).upsertString(any(), any())
+    }
+
+    @Test
+    fun `backup restore preserves precise acceptance billing boundaries`() = test {
+        val keychain = mock<Keychain>()
+        var storedValue: String? = null
+        whenever(keychain.loadString(KEY)).thenAnswer { storedValue }
+        whenever { keychain.upsertString(eq(KEY), any()) }.thenAnswer {
+            storedValue = it.getArgument(1)
+            Unit
+        }
+        val sut = PaykitPaymentRequestPresentationStore(keychain)
+        val millisecondId = PaykitSubscriptionId("millisecond", COUNTERPARTY)
+        val nanosecondId = PaykitSubscriptionId("nanosecond", COUNTERPARTY)
+        val acceptedAt = mapOf(
+            millisecondId to Instant.parse("2026-09-24T10:00:00.123Z"),
+            nanosecondId to Instant.parse("2026-09-24T10:00:00.123456789Z"),
+        )
+
+        sut.saveSubscriptionState(IDENTITY, PaykitSubscriptionPresentationState(acceptedAt = acceptedAt))
+        val backup = Json.decodeFromString<Map<String, PaykitPaymentStateBackup.Subscription>>(
+            Json.encodeToString(sut.backupSnapshot()),
+        )
+        storedValue = null
+        sut.restoreBackup(backup)
+
+        val restoredAcceptedAt = sut.loadSubscriptionState(IDENTITY).acceptedAt
+        assertEquals(acceptedAt, restoredAcceptedAt)
+
+        fun eligiblePeriods(boundaryFraction: String) = PaykitSubscriptionRecurrence(
+            every = 1,
+            unit = PaykitRecurrenceUnit.Day,
+            startsAt = Instant.parse("2026-09-23T10:00:00.$boundaryFraction"),
+            anchor = Instant.parse("2026-09-23T10:00:00.$boundaryFraction"),
+            endsAt = null,
+        ).periodsThrough(
+            date = Instant.parse("2026-09-24T10:00:01Z"),
+            acceptedAt = restoredAcceptedAt.getValue(millisecondId),
+        )
+
+        assertEquals(1, eligiblePeriods("122999950Z").size)
+        assertEquals(1, eligiblePeriods("123Z").size)
+        assertEquals(2, eligiblePeriods("123000050Z").size)
+    }
+
+    @Test
+    fun `invalid subscription timestamp identifies its preserved key`() = test {
+        val keychain = mock<Keychain>()
+        val value = """
+            {"subscriptionStatesByIdentity":{"$IDENTITY":{"acceptances":[{"id":{"paymentRequestId":"subscription","counterparty":"$COUNTERPARTY"},"acceptedAt":"not-a-timestamp"}]}}}
+        """.trimIndent()
+        whenever(keychain.loadString(KEY)).thenReturn(value)
+
+        val error = assertFailsWith<PaykitPaymentStateUnreadableError> {
+            PaykitPaymentRequestPresentationStore(keychain).loadSubscriptionState(IDENTITY)
+        }
+
+        assertContains(error.message.orEmpty(), KEY)
+        verify(keychain, never()).upsertString(eq(KEY), any())
     }
 }

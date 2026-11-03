@@ -1,42 +1,79 @@
 package to.bitkit.services
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doNothing
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import to.bitkit.data.SettingsStore
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "en-rUS")
 @OptIn(ExperimentalCoroutinesApi::class)
 class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
+    private companion object {
+        const val PACKAGE_NAME = "to.bitkit"
+    }
+
     private val context: Context = mock()
     private val packageManager: PackageManager = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val settingsStore: SettingsStore = mock()
     private val isPaykitEnabled = MutableStateFlow(false)
     private val publicKey = MutableStateFlow<String?>(null)
+    private val backupStateVersion = MutableStateFlow(0L)
+    private val identityRefreshVersion = MutableStateFlow(0L)
 
     @Before
-    fun setUp() {
+    fun setUp() = runBlocking<Unit> {
         whenever(context.packageName).thenReturn(PACKAGE_NAME)
         whenever(context.packageManager).thenReturn(packageManager)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
         whenever(pubkyRepo.publicKey).thenReturn(publicKey)
+        whenever(pubkyRepo.backupStateVersion).thenReturn(backupStateVersion)
+        whenever(pubkyRepo.identityRefreshVersion).thenReturn(identityRefreshVersion)
+        whenever(pubkyRepo.hasIdentity()).thenAnswer { publicKey.value != null }
+        whenever(pubkyRepo.hasLocalSecretKey()).thenReturn(false)
+    }
+
+    @Test
+    fun `handler preserves component states until initial identity load finishes`() = test {
+        isPaykitEnabled.value = true
+        val initialized = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+
+        createSut().start(backgroundScope)
+        runCurrent()
+
+        verify(packageManager, never()).setComponentEnabledSetting(any(), any(), any())
+        publicKey.value = "pubkylocal"
+        initialized.complete(Unit)
+        runCurrent()
+
+        verifyComponentStates(authEnabled = true, signupEnabled = false)
     }
 
     @Test
@@ -48,7 +85,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         createSut().start(backgroundScope)
         runCurrent()
 
-        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
+        verifyComponentStates(authEnabled = true, signupEnabled = false)
         assertTrue(
             canHandlePubkyAuth(
                 isPaykitUiEnabled = true,
@@ -70,14 +107,21 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
     }
 
     @Test
-    fun `handler is disabled without an identity`() = test {
+    fun `only signup handler is enabled without an identity`() = test {
         isPaykitEnabled.value = true
 
         createSut().start(backgroundScope)
         runCurrent()
 
-        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_DISABLED)
+        verifyComponentStates(authEnabled = false, signupEnabled = true)
         verify(pubkyRepo, never()).hasSecretKey()
+
+        clearInvocations(packageManager)
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        publicKey.value = "pubkylocal"
+        runCurrent()
+
+        verifyComponentStates(authEnabled = true, signupEnabled = false)
     }
 
     @Test
@@ -89,11 +133,11 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         createSut().start(backgroundScope)
         runCurrent()
 
-        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_DISABLED)
+        verifyComponentStates(authEnabled = false, signupEnabled = false)
     }
 
     @Test
-    fun `handler is disabled when the local identity is removed`() = test {
+    fun `authorization handler switches to signup when the local identity is removed`() = test {
         isPaykitEnabled.value = true
         publicKey.value = "pubkylocal"
         whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
@@ -104,7 +148,63 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         publicKey.value = null
         runCurrent()
 
-        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_DISABLED)
+        verifyComponentStates(authEnabled = false, signupEnabled = true)
+    }
+
+    @Test
+    fun `failed restore keeps the handler on for a saved locally managed identity`() = test {
+        isPaykitEnabled.value = true
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        whenever(pubkyRepo.hasLocalSecretKey()).thenReturn(true)
+
+        createSut().start(backgroundScope)
+        runCurrent()
+
+        verifyComponentStates(authEnabled = true, signupEnabled = false)
+        verify(pubkyRepo, never()).hasSecretKey()
+
+        clearInvocations(packageManager)
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        publicKey.value = "pubkylocal"
+        runCurrent()
+
+        verify(packageManager, never()).setComponentEnabledSetting(any(), any(), any())
+    }
+
+    @Test
+    fun `saved identity suppresses signup during restoration failure until explicitly removed`() = test {
+        isPaykitEnabled.value = true
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        createSut().start(backgroundScope)
+        runCurrent()
+        verifyComponentStates(authEnabled = false, signupEnabled = false)
+        clearInvocations(packageManager)
+
+        whenever(pubkyRepo.hasIdentity()).thenReturn(false)
+        backupStateVersion.value += 1
+        runCurrent()
+
+        verifyComponentStates(authEnabled = false, signupEnabled = true)
+    }
+
+    @Test
+    fun `signup becomes available when unreadable credentials recover empty`() = test {
+        isPaykitEnabled.value = true
+        var readable = false
+        whenever(pubkyRepo.hasIdentity()).thenAnswer {
+            check(readable) { "Keychain unavailable" }
+            false
+        }
+        createSut().start(backgroundScope)
+        runCurrent()
+        verifyComponentStates(authEnabled = false, signupEnabled = false)
+        clearInvocations(packageManager)
+
+        readable = true
+        identityRefreshVersion.value += 1
+        runCurrent()
+
+        verifyComponentStates(authEnabled = false, signupEnabled = true)
     }
 
     @Test
@@ -119,7 +219,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         isPaykitEnabled.value = false
         runCurrent()
 
-        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_DISABLED)
+        verifyComponentStates(authEnabled = false, signupEnabled = false)
     }
 
     @Test
@@ -130,7 +230,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         sut.start(backgroundScope)
         runCurrent()
 
-        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_DISABLED)
+        verifyComponentStates(authEnabled = false, signupEnabled = false)
     }
 
     @Test
@@ -145,11 +245,12 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
 
         createSut().start(backgroundScope)
         runCurrent()
+        clearInvocations(packageManager)
 
         isPaykitEnabled.value = false
         runCurrent()
 
-        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_DISABLED)
+        verifyComponentStates(authEnabled = false, signupEnabled = false)
     }
 
     private fun createSut() = PubkyAuthHandlerRegistrar(
@@ -159,15 +260,21 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         ioDispatcher = testDispatcher,
     )
 
-    private fun verifyComponentState(state: Int) {
-        verify(packageManager).setComponentEnabledSetting(
-            any(),
-            eq(state),
-            eq(PackageManager.DONT_KILL_APP),
-        )
-    }
-
-    private companion object {
-        const val PACKAGE_NAME = "to.bitkit"
+    private fun verifyComponentStates(authEnabled: Boolean, signupEnabled: Boolean) {
+        mapOf(
+            "to.bitkit.ui.MainActivityPubkyAuth" to authEnabled,
+            "to.bitkit.ui.MainActivityPubkySignup" to signupEnabled,
+        ).forEach { (className, enabled) ->
+            val state = if (enabled) {
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            } else {
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            }
+            verify(packageManager).setComponentEnabledSetting(
+                eq(ComponentName(PACKAGE_NAME, className)),
+                eq(state),
+                eq(PackageManager.DONT_KILL_APP),
+            )
+        }
     }
 }

@@ -42,7 +42,6 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun BlocktankRegtestScreen(
     navController: NavController,

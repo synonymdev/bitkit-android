@@ -29,7 +29,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
-private fun Modifier.sheet() = this then sheetHeight(SheetSize.MEDIUM, isModal = true)
+private fun Modifier.sheet() = sheetHeight(SheetSize.MEDIUM, isModal = true)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

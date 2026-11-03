@@ -18,7 +18,6 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.R
-import to.bitkit.env.Peers
 import to.bitkit.models.NodePeer
 import to.bitkit.models.Toast
 import to.bitkit.models.alias
@@ -47,7 +46,6 @@ class NodeInfoViewModel @Inject constructor(
             NodePeer(
                 peerDetails = peer,
                 lspNode = lspNodes?.firstOrNull { it.pubkey == peer.nodeId },
-                name = Peers.Known.find(peer)?.name,
             )
         }.sortedBy { it.alias() }.toImmutableList()
     }

@@ -1,0 +1,20 @@
+<journey name="funding source dropdown">
+  <description>
+    Verifies that the Send Amount wallet picker opens as a dropdown: an outlined button with the
+    selected wallet name followed by a downward chevron. Preconditions: an onboarded regtest wallet
+    with confirmed Savings funds and a usable Spending channel, a fresh zero-amount unified BIP21 URI
+    (on-chain address plus Lightning invoice) from another wallet, and a fresh on-chain address
+    from another wallet. Close each send without paying.
+  </description>
+  <actions>
+    <action>Open the zero-amount unified BIP21 URI with a bitcoin: deep link</action>
+    <action>Verify Send Amount shows the funding source button (testTag "AssetButton-switch") as an outlined button with the selected wallet name and a downward chevron after it, and no switch arrows before the name</action>
+    <action>Tap the funding source button and verify the dropdown (testTag "SendFundingSources") lists Savings and Spending with their balances and a check next to the selected wallet</action>
+    <action>Select the wallet that is not checked and verify the button shows its name in its color, orange for Savings and purple for Spending, still outlined with the downward chevron</action>
+    <action>Tap the funding source button again and verify the check moved to the newly selected wallet; dismiss the dropdown</action>
+    <action>Close the send sheet without paying</action>
+    <action>Open the on-chain address with a bitcoin: deep link and verify the funding source button shows Savings outlined in orange with no chevron or other icon</action>
+    <action>Tap the funding source button and verify the dropdown (testTag "SendFundingSources") opens with Savings checked and Spending dimmed with its balance; tap Spending and verify the selection does not change</action>
+    <action>Close the send sheet without paying</action>
+  </actions>
+</journey>

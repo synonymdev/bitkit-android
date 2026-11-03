@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
 import to.bitkit.data.entities.TransferEntity
 
 @Dao
-@Suppress("TooManyFunctions")
 interface TransferDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(transfer: TransferEntity)

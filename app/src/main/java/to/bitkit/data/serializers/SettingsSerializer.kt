@@ -10,7 +10,7 @@ import java.io.InputStream
 import java.io.OutputStream
 
 object SettingsSerializer : Serializer<SettingsData> {
-    override val defaultValue: SettingsData = SettingsData()
+    override val defaultValue: SettingsData = SettingsData(hasIndependentPaykitSharing = true)
 
     override suspend fun readFrom(input: InputStream): SettingsData {
         return try {

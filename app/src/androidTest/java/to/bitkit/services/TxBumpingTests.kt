@@ -8,18 +8,23 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
+import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.annotations.CoreServiceIntegration
 import to.bitkit.test.annotations.DeviceIntegration
+import to.bitkit.test.awaitSpendableDeposits
 import javax.inject.Inject
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -124,15 +129,7 @@ class TxBumpingTests {
         coreService.blocktank.regtestMine(6u)
         println("Blocks mined successfully")
 
-        // Wait for blocks to be processed
-        println("Waiting 15 seconds for blocks to be processed")
-        delay(15_000)
-        println("Wait completed")
-
-        // Sync the wallet to see the new balance
-        println("Syncing wallet to update balances")
-        lightningService.sync()
-        println("Wallet sync complete")
+        lightningService.awaitSpendableDeposits(mapOf(fundingTxId to depositAmount))
 
         // Verify we have the expected balance
         val balances = lightningService.balances
@@ -148,11 +145,12 @@ class TxBumpingTests {
         val lowFeeRate = 1uL // 1 sat/vbyte (very low)
 
         println("Sending $sendAmount sats to $destinationAddress with low fee rate of $lowFeeRate sat/vbyte")
-        val originalTxId = lightningService.send(
+        val outcome = lightningService.prepareOnchainSend(
             address = destinationAddress,
             sats = sendAmount,
             satsPerVByte = lowFeeRate,
-        )
+        ).broadcast()
+        val originalTxId = assertIs<OnchainSendOutcome.Accepted>(outcome).txid
 
         lightningService.sync()
 
@@ -274,11 +272,18 @@ class TxBumpingTests {
         val cpfpDestinationAddress = lightningService.newAddress()
         println("CPFP destination address: $cpfpDestinationAddress")
 
-        val childTxId = lightningService.accelerateByCpfp(
-            txid = stuckIncomingTxId,
-            satsPerVByte = highFeeRate,
-            toAddress = cpfpDestinationAddress,
-        )
+        val cpfpResult = runSuspendCatching {
+            lightningService.accelerateByCpfp(
+                txid = stuckIncomingTxId,
+                satsPerVByte = highFeeRate,
+                toAddress = cpfpDestinationAddress,
+            )
+        }
+        // The shared regtest chain can mine the parent before the child is built, leaving nothing to bump
+        val isParentConfirmed = generateSequence(cpfpResult.exceptionOrNull()) { it.cause }
+            .any { it.message.orEmpty().contains("Transaction already confirmed") }
+        assumeFalse(isParentConfirmed)
+        val childTxId = cpfpResult.getOrThrow()
 
         assertFalse(childTxId.isEmpty(), "CPFP child transaction ID should not be empty")
         assertTrue(

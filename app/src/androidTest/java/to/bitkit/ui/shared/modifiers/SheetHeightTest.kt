@@ -8,7 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidRule
@@ -51,7 +51,7 @@ class SheetHeightTest {
                 val windowHeight = LocalWindowInfo.current.containerSize.height
                 val topInset = Insets.Top
                 val expected = with(density) {
-                    (windowHeight.toDp() - topInset - TopBarHeight + 6.dp).roundToPx()
+                    (windowHeight.toDp() - topInset - TopBarHeight - 16.dp).roundToPx()
                 }
 
                 SideEffect {

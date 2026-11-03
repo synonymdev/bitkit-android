@@ -3,17 +3,22 @@ package to.bitkit.ui.screens.wallets
 import android.content.Context
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.UsdtPreference
 import to.bitkit.data.WidgetsData
+import to.bitkit.env.Env
 import to.bitkit.models.BalanceState
 import to.bitkit.models.HwWallet
 import to.bitkit.models.Suggestion
@@ -25,9 +30,12 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SuggestionsRepo
 import to.bitkit.repositories.TransferRepo
+import to.bitkit.repositories.UsdtRepo
+import to.bitkit.repositories.UsdtWalletState
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -44,6 +52,8 @@ class HomeViewModelTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val suggestionsRepo = mock<SuggestionsRepo>()
+    private val usdtRepo = mock<UsdtRepo>()
+    private val usdtState = MutableStateFlow(UsdtWalletState())
 
     private lateinit var hardwareWallets: MutableStateFlow<ImmutableList<HwWallet>>
     private lateinit var suggestions: MutableStateFlow<List<Suggestion>>
@@ -71,6 +81,7 @@ class HomeViewModelTest : BaseUnitTest() {
         }.thenReturn(Result.success(emptyList()))
         whenever(hwWalletRepo.wallets).thenReturn(hardwareWallets)
         whenever(suggestionsRepo.suggestionsFlow).thenReturn(suggestions)
+        whenever(usdtRepo.state).thenReturn(usdtState)
     }
 
     @Test
@@ -104,6 +115,60 @@ class HomeViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.showEmptyState)
     }
 
+    @Test
+    fun `empty state follows the enabled USDT balance`() = test {
+        val settings = MutableStateFlow(SettingsData(usdtPreference = UsdtPreference.ENABLED))
+        whenever(settingsStore.data).thenReturn(settings)
+        val sut = createViewModel()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.showEmptyState)
+
+        usdtState.value = UsdtWalletState(balance = 50_000uL)
+        advanceUntilIdle()
+        assertEquals(!Env.isUsdtEnabled, sut.uiState.value.showEmptyState)
+
+        usdtState.value = UsdtWalletState(cachedBalance = 50_000uL)
+        advanceUntilIdle()
+        assertEquals(!Env.isUsdtEnabled, sut.uiState.value.showEmptyState)
+
+        usdtState.value = UsdtWalletState(balance = 0uL, cachedBalance = 50_000uL)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.showEmptyState)
+
+        usdtState.value = UsdtWalletState(cachedBalance = 50_000uL)
+        settings.value = SettingsData(usdtPreference = UsdtPreference.DISABLED)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.showEmptyState)
+    }
+
+    @Test
+    fun `onPullToRefresh refreshes rates and widgets`() = test {
+        val sut = createViewModel()
+
+        sut.onPullToRefresh()
+        advanceUntilIdle()
+
+        verify(currencyRepo).triggerRefresh()
+        verify(widgetsRepo).refreshEnabledWidgets()
+    }
+
+    @Test
+    fun `onPullToRefresh refreshes widgets while rates refresh is pending`() = test {
+        val release = CompletableDeferred<Unit>()
+        whenever(currencyRepo.triggerRefresh()).doSuspendableAnswer { release.await() }
+        val sut = createViewModel()
+
+        sut.onPullToRefresh()
+        advanceUntilIdle()
+
+        verify(widgetsRepo).refreshEnabledWidgets()
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        verify(currencyRepo).triggerRefresh()
+    }
+
     private fun createViewModel() = HomeViewModel(
         context = context,
         walletRepo = walletRepo,
@@ -115,6 +180,7 @@ class HomeViewModelTest : BaseUnitTest() {
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
         suggestionsRepo = suggestionsRepo,
+        usdtRepo = usdtRepo,
     )
 
     private fun hardwareWallet(balanceSats: ULong = 0uL) = HwWallet(

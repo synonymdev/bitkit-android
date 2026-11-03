@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -98,6 +99,7 @@ fun SendRecipientScreen(
 
     // Context & lifecycle
     val context = LocalContext.current
+    val resources = LocalResources.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
@@ -136,7 +138,7 @@ fun SendRecipientScreen(
     val analyzer = remember(onEvent) {
         QrCodeAnalyzer { result ->
             if (result.isSuccess) {
-                val qrCode = result.getOrThrow()
+                val qrCode = result.getOrThrow().text ?: return@QrCodeAnalyzer
                 Logger.debug("Scanned QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
                 onEvent(SendEvent.AddressContinue(qrCode))
             } else {
@@ -144,8 +146,8 @@ fun SendRecipientScreen(
                 Logger.error("Scan failed", error, context = TAG)
                 app?.toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.other__qr_error_text),
+                    title = resources.getString(R.string.other__qr_error_header),
+                    description = resources.getString(R.string.other__qr_error_text),
                 )
             }
         }
@@ -179,8 +181,8 @@ fun SendRecipientScreen(
                 Logger.error("Camera initialization failed", it, context = TAG)
                 app?.toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.other__camera_init_error)
+                    title = resources.getString(R.string.other__qr_error_header),
+                    description = resources.getString(R.string.other__camera_init_error)
                         .replace("{message}", it.message.orEmpty())
                 )
                 isCameraInitialized = false
@@ -241,6 +243,7 @@ fun SendRecipientScreen(
 
     SendRecipientContent(
         previewView = previewView,
+        isFlashlightOn = isFlashlightOn,
         onClickFlashlight = {
             camera?.cameraControl?.let { control ->
                 isFlashlightOn = !isFlashlightOn
@@ -275,6 +278,7 @@ fun SendRecipientScreen(
 @Composable
 private fun SendRecipientContent(
     previewView: PreviewView?,
+    isFlashlightOn: Boolean,
     onClickFlashlight: () -> Unit,
     onClickGallery: () -> Unit,
     onClickContact: () -> Unit,
@@ -306,6 +310,7 @@ private fun SendRecipientContent(
                 if (cameraPermissionGranted && previewView != null) {
                     CameraPreviewWithControls(
                         previewView = previewView,
+                        isFlashlightOn = isFlashlightOn,
                         onClickFlashlight = onClickFlashlight,
                         onClickGallery = onClickGallery,
                         modifier = Modifier.fillMaxSize()
@@ -355,6 +360,7 @@ private fun SendRecipientContent(
 @Composable
 private fun CameraPreviewWithControls(
     previewView: PreviewView,
+    isFlashlightOn: Boolean,
     onClickFlashlight: () -> Unit,
     onClickGallery: () -> Unit,
     modifier: Modifier = Modifier,
@@ -377,7 +383,7 @@ private fun CameraPreviewWithControls(
             modifier = Modifier
                 .padding(16.dp)
                 .clip(CircleShape)
-                .background(Colors.White64)
+                .background(Colors.White32)
                 .size(CameraOverlayButtonSize)
                 .align(Alignment.TopStart)
         ) {
@@ -402,7 +408,7 @@ private fun CameraPreviewWithControls(
             modifier = Modifier
                 .padding(16.dp)
                 .clip(CircleShape)
-                .background(Colors.White64)
+                .background(if (isFlashlightOn) Colors.White64 else Colors.White32)
                 .size(CameraOverlayButtonSize)
                 .align(Alignment.TopEnd)
         ) {
@@ -494,6 +500,7 @@ private fun Preview() {
         BottomSheetPreview {
             SendRecipientContent(
                 previewView = null,
+                isFlashlightOn = false,
                 onClickFlashlight = {},
                 onClickGallery = {},
                 onClickContact = {},

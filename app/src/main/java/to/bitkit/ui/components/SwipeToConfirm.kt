@@ -16,10 +16,9 @@ import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,13 +35,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
@@ -67,23 +66,25 @@ fun SwipeToConfirm(
     modifier: Modifier = Modifier,
     text: String = stringResource(R.string.other__swipe),
     color: Color = Colors.Brand,
-    icon: ImageVector = Icons.AutoMirrored.Default.ArrowForward,
+    @DrawableRes icon: Int = R.drawable.ic_arrow_right,
     @DrawableRes endIcon: Int = R.drawable.ic_check,
     endIconTint: Color = Colors.Black,
     enabled: Boolean = true,
     loading: Boolean = false,
     confirmed: Boolean = false,
     progress: MutableFloatState? = null,
+    textStyle: TextStyle = LocalTextStyle.current,
 ) {
     val scope = rememberCoroutineScope()
     val trailColor = remember(color) { color.copy(alpha = 0.24f) }
 
     var swiperWidth by remember { mutableFloatStateOf(0f) }
-    val maxPanX = if (swiperWidth == 0f) 1f else swiperWidth - with(LocalDensity.current) { CircleSize.toPx() }
+    val maxPanX = (swiperWidth - with(LocalDensity.current) { CircleSize.toPx() }).coerceAtLeast(1f)
 
     val panX = remember { Animatable(0f) }
+    val startedConfirmed = remember { confirmed }
     val loadingOpacity = remember { Animatable(0f) }
-    val contentAlpha = if (enabled || loading) 1f else 0.5f
+    val contentAlpha = if (enabled || loading || confirmed) 1f else 0.5f
 
     LaunchedEffect(loading) {
         loadingOpacity.animateTo(
@@ -93,8 +94,13 @@ fun SwipeToConfirm(
     }
 
     LaunchedEffect(confirmed, maxPanX) {
+        val target = if (confirmed) maxPanX else 0f
+        if (startedConfirmed && confirmed) {
+            panX.snapTo(target)
+            return@LaunchedEffect
+        }
         panX.animateTo(
-            targetValue = if (confirmed) maxPanX else 0f,
+            targetValue = target,
             animationSpec = spring()
         )
     }
@@ -133,6 +139,7 @@ fun SwipeToConfirm(
             // Text
             Text(
                 text = text,
+                style = textStyle,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -184,7 +191,7 @@ fun SwipeToConfirm(
                             .alpha(1f - (panX.value / (maxPanX / 2)) - loadingOpacity.value)
                     ) {
                         Icon(
-                            imageVector = icon,
+                            painter = painterResource(icon),
                             contentDescription = null,
                             tint = Color.Black,
                         )
@@ -225,7 +232,6 @@ fun SwipeToConfirm(
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {

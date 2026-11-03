@@ -1,0 +1,60 @@
+<journey name="LNURL Pay Comment Note">
+  <description>
+    Verifies that the comment typed when paying an LNURL-pay request is saved as the Invoice note of
+    the sent Lightning activity, and that it survives an app restart.
+
+    Requires an LNURL-pay endpoint that issues description-hash invoices (LUD-06) and allows comments
+    (commentAllowed of at least 12), reachable from the same Lightning network as the app: an
+    lnurl-node `LNURL.createServer` backed by a local LND, as the bitkit-e2e-tests lnurl suite sets up
+    in test/specs/lnurl.e2e.ts. The endpoint also needs minSendable below maxSendable with 1,000 sats
+    (1,000,000 msat) in range: a fixed amount goes straight to Confirm and skips the amount screen, so
+    the amount steps would fail, and the e2e suite's own pay ranges (149,500-200,999 msat) do not
+    cover 1,000 sats.
+
+    The bitkit-docker lnurl-server is not usable here. It builds the invoice with a plain memo that
+    already contains the comment, so the note reads "LNURL Payment &lt;id&gt; - thanks" on this branch
+    and on master alike, and the run says nothing about the fix. A note in that shape means the
+    endpoint issued a memo invoice rather than a description-hash one.
+
+    The staging regtest backend the dev flavor uses has no LNURL-pay endpoint. Also requires a
+    spending balance of at least 1,000 sats plus routing fees.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Run adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;lnurl-pay&gt;" to.bitkit.dev with the LNURL-pay string
+    </action>
+    <action>
+      Verify the send amount screen (testTag "SendNumberField") is visible
+    </action>
+    <action>
+      Enter 1000 on the number pad (testTags "N1", "N0", "N0", "N0") and tap Continue (testTag "ContinueAmount")
+    </action>
+    <action>
+      Verify the comment field (testTag "CommentInput") is visible on the confirm screen
+    </action>
+    <action>
+      Type "thanks" into the comment field (testTag "CommentInput")
+    </action>
+    <action>
+      Swipe the pay slider (testTag "GRAB") to the right
+    </action>
+    <action>
+      Verify the payment success screen (testTag "SendSuccess") or the "Payment Pending" screen is visible — the pending screen carries no testTag, so assert it by its title
+    </action>
+    <action>
+      Close the result screen and open the newest activity row (testTag "ActivityShort-0")
+    </action>
+    <action>
+      Verify the Invoice note (testTag "InvoiceNote") is exactly "thanks", not a memo containing it and not the invoice description hash
+    </action>
+    <action>
+      Run adb shell am force-stop to.bitkit.dev, relaunch the app and open the newest activity row (testTag "ActivityShort-0")
+    </action>
+    <action>
+      Verify the Invoice note (testTag "InvoiceNote") is still exactly "thanks"
+    </action>
+  </actions>
+</journey>

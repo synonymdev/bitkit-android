@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.profile
 
 import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -86,7 +87,6 @@ fun EditProfileScreen(
     )
 }
 
-@Suppress("LongParameterList")
 @Composable
 private fun Content(
     uiState: EditProfileUiState,
@@ -111,6 +111,10 @@ private fun Content(
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
 ) {
+    BackHandler(enabled = uiState.isBusy) {}
+
+    val removal = uiState.removal
+
     val pickMedia = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { onAvatarSelected(it) } }
@@ -128,14 +132,18 @@ private fun Content(
         }
     }
 
-    ScreenColumn {
+    val topBar = @Composable { modifier: Modifier ->
         AppTopBar(
             titleText = stringResource(R.string.profile__edit_nav_title),
-            onBackClick = onBackClick,
-            actions = { DrawerNavIcon() },
+            onBackClick = { if (!uiState.isBusy) onBackClick() },
+            actions = { if (!uiState.isBusy) DrawerNavIcon() },
+            modifier = modifier,
         )
+    }
 
+    ScreenColumn {
         if (uiState.isLoading) {
+            topBar(Modifier)
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize()
@@ -158,25 +166,31 @@ private fun Content(
                 onAddTag = onAddTag,
                 onSave = onSave,
                 onCancel = onBackClick,
-                isSaveEnabled = uiState.name.isNotBlank() && !uiState.isSaving,
+                isSaveEnabled = uiState.name.isNotBlank() && !uiState.isBusy,
+                topBar = topBar,
+                isSaving = uiState.isSaving,
+                isDeleting = uiState.isDeleting,
                 avatarContent = {
                     AvatarSection(
                         imageUrl = uiState.imageUrl,
                         newAvatarUri = uiState.newAvatarUri,
                         onClick = launchPhotoPicker,
+                        enabled = !uiState.isBusy,
                     )
                 },
                 onDelete = onDelete,
-                deleteLabel = stringResource(R.string.profile__delete_profile),
+                deleteLabel = stringResource(removal.label),
+                deleteSectionLabel = stringResource(removal.sectionLabel),
+                deleteIcon = removal.icon,
             )
         }
     }
 
     if (uiState.showDeleteDialog) {
         AppAlertDialog(
-            title = stringResource(R.string.profile__delete_confirm_title),
-            text = stringResource(R.string.profile__delete_confirm_description),
-            confirmText = stringResource(R.string.common__delete_yes),
+            title = stringResource(removal.confirmTitle),
+            text = stringResource(removal.confirmDescription),
+            confirmText = stringResource(removal.confirmText),
             onConfirm = onConfirmDelete,
             onDismiss = onDismissDeleteDialog,
         )
@@ -184,8 +198,8 @@ private fun Content(
 
     if (uiState.showDeleteFailureDialog) {
         AppAlertDialog(
-            title = stringResource(R.string.profile__delete_error_title),
-            text = stringResource(R.string.profile__delete_error_description),
+            title = stringResource(removal.errorTitle),
+            text = stringResource(removal.errorDescription),
             confirmText = stringResource(R.string.common__retry),
             dismissText = stringResource(R.string.profile__sign_out),
             onConfirm = onRetryDelete,
@@ -218,15 +232,16 @@ private fun AvatarSection(
     imageUrl: String?,
     newAvatarUri: Uri?,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(96.dp)
             .clip(CircleShape)
-            .background(Colors.Gray5)
+            .background(Colors.Gray6)
             .testTag("EditProfileAvatar")
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
     ) {
         when {
             newAvatarUri != null -> AsyncImage(
@@ -237,10 +252,10 @@ private fun AvatarSection(
             )
             imageUrl != null -> PubkyImage(uri = imageUrl, size = 96.dp)
             else -> Icon(
-                painter = painterResource(R.drawable.ic_user_square),
+                painter = painterResource(R.drawable.ic_image_square),
                 contentDescription = null,
                 tint = Colors.White32,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(32.dp)
             )
         }
     }

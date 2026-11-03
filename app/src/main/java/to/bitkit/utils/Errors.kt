@@ -15,15 +15,12 @@ open class AppError(
 sealed class ServiceError(message: String) : AppError(message) {
     class NodeNotSetup : ServiceError("Node is not setup")
     class NodeNotStarted : ServiceError("Node is not started")
+    class PaymentDeadlineExpired : ServiceError("Payment deadline has expired")
     class MnemonicNotFound : ServiceError("Mnemonic not found")
     class VssAuthRequired : ServiceError("VSS requires LNURL-auth")
     class NodeStillRunning : ServiceError("Node is still running")
     class NodeReleaseTimeout : ServiceError("Previous node release did not finish in time")
     class InvalidNodeSigningMessage : ServiceError("Invalid node signing message")
-    class CurrencyRateUnavailable : ServiceError("Currency rate unavailable")
-    class BlocktankInfoUnavailable : ServiceError("Blocktank info not available")
-    class GeoBlocked : ServiceError("Geo blocked user")
-    class GiftClaimPaymentNotReceived : ServiceError("Gift claim payment not received")
 }
 
 class HttpError(message: String, val code: Int = 500, cause: Throwable? = null) : AppError(message, cause)
@@ -120,6 +117,7 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
                 is NodeException.NoSpendableOutputs -> "No spendable outputs"
                 is NodeException.TransactionAlreadyConfirmed -> "Transaction already confirmed"
                 is NodeException.TransactionNotFound -> "Transaction not found"
+                is NodeException.TransactionNotBroadcastByWallet -> "No broadcast record for this transaction"
                 is NodeException.RouteNotFound -> "Failed to find a route for fee estimation."
                 else -> exception.message
             }?.let { "LDK Node error: $it" }

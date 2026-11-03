@@ -6,6 +6,175 @@ This file provides guidance to Codex, Claude Code, and Cursor when working with 
 
 Durable shared agent command specs live in `.agents/commands/`. For PR creation, follow `.agents/commands/pr.md`; `.claude/commands` is a compatibility symlink to the same files.
 
+## Agent workflow
+
+### Verification
+
+- For code changes, keep the full gate: run `just compile`, `just test`, and `just lint` before
+  reporting completion or the final PR creation/update/push. Follow the batching and focused rerun
+  guidance under Rules; targeted checks during development do not replace this gate.
+- Fix relevant local check failures caused by the change and rerun the affected checks before
+  reporting work as complete, asking the user to run those checks, pushing, or creating/updating a PR.
+- If a check is blocked by missing prerequisites or fails for an unrelated reason, investigate and
+  report the command, cause, and remaining verification. Do not mark blocked, skipped, or unrun
+  checks as passed or describe validation as complete.
+- For user-visible changes, run the relevant journeys when their prerequisites are available; report
+  any missing prerequisites and untested flows explicitly.
+- In the final handoff, report the commands run and their results, including failures and blockers.
+  Documentation-only changes need documentation checks such as `git diff --check` and validation of
+  changed references, not an application build or device run.
+
+### Device-test setup
+
+When requesting journeys or manual device tests, give the reviewer enough setup instructions to
+reproduce their required environment. Under `#### Setup` in PR QA Notes, provide executable steps
+or a reproducible shared recipe and describe PR-specific deviations. Include only relevant details:
+service/library versions or pinned revisions, staging versus local backend/network, configuration
+and flags, prerequisites, fixture accounts/identities, preparation and reset steps. For a recipe on
+a branch, record its resolved commit. Do not assume a required Shop/Marketplace, Pubky Ring,
+homeserver or library version is available in standard staging; state how to obtain/configure the
+compatible version, or identify the missing prerequisite. Keep setup proportional to the requested
+cases; documentation-only/no-runtime changes can use `N/A — no device testing required.` with the
+reason. Preserve existing authored QA notes when updating a description.
+
+### Stable QA case IDs
+
+Assign explicit IDs to PR QA cases: manual tests `1.`, `2.`, etc., sub-cases `2a`,
+`2b`, and journeys `J1`, `J2`, etc. IDs are scoped to the PR and remain fixed once
+it is open, including while in draft. Use literal labels inside task-list items
+(for example `- [ ] 1. ...` and `- [ ] J1: new ...`), not automatically renumbered
+ordered lists.
+
+When updating the description, preserve IDs for the same cases even if their order
+changes. Append new IDs after the highest previously assigned ID in that category;
+do not fill gaps or reuse removed IDs. Record retired IDs and why the cases were
+removed, without leaving them as runnable unchecked tasks. A replacement testing a
+different behavior gets a new ID; clarify edits to an existing case so earlier
+results are not treated as evidence for changed expectations. Adding or renaming
+an ID is not execution evidence. `N/A` sections do not need IDs.
+
+Reviews, author Evidence/Gaps notes and test reports should refer to these IDs,
+together with the tested revision and relevant environment. Preserve historical
+results at their original revisions; an unchanged ID does not make a result fresh.
+
+### Author verification
+
+Authors are strongly encouraged to run the tests they ask reviewers to perform before requesting
+review. In PR QA Notes, briefly record what was verified, on which app commit/build and environment,
+the observed results, and supporting evidence where useful. For anything not verified, identify the
+affected cases, why they were not run, and any missing prerequisites. Report failures honestly;
+partial verification must not be presented as a complete pass. This recommendation complements
+mandatory checks above and does not make them optional. For documentation-only changes, report
+documentation checks and a justified runtime `N/A`.
+
+### Draft status and review readiness
+
+Open work-in-progress PRs as drafts. Mark ready for review only when the change is ready after
+applicable verification; draft status does not waive the checks above. For an already-ready PR,
+do not cycle draft/ready merely to suppress automated reviews while addressing feedback. Returning
+to ready can trigger an additional review even when an ordinary push to a ready PR would not;
+check the configured review triggers. Return to draft when the change is no longer ready for review
+or the user requests it. Preserve an explicit request to keep a PR draft; a description update
+alone must not undraft it.
+
+AI PR reviewers should check the current draft status before starting and before publishing a
+review, skip drafts, and wait until ready for review. This does not prevent author-requested local
+validation or an independent pre-publication review of a frozen local candidate.
+
+Draft is a readiness signal, not a guarantee that every automation stops. The manually dispatched
+`.github/workflows/claude-code-review.yml` has no workflow-level draft guard, and its comment
+minimization step runs before the review plugin. A hard skip before those steps needs a separate
+workflow change; external reviewers also need to honor draft status in their own configuration.
+
+### Independent review (recommended)
+
+Before marking a PR ready for human review, preferably run an independent review using a subagent
+with fresh context. Give the reviewer the requirements, scope, acceptance criteria, applicable
+repository guidelines, and base/head revisions (or the working-tree diff for uncommitted changes).
+Include intentional platform differences, but do not pass the implementation conversation or its
+justification of the solution. The reviewer should inspect the diff, callers, and surrounding code
+independently. Address actionable findings and recheck the affected changes.
+
+The reviewer may use the same model as the implementation agent. A separate context is the
+recommendation; using a different model is not required. If subagents are unavailable, use a separate
+review session when practical. Do not describe a self-review as an independent review.
+
+### Resolving model metadata
+
+Resolve the actual model and reasoning effort for each contributing session before writing a review
+footer or updating Models used. This applies to any agent, model provider or runner. Missing values
+in the prompt or a reviewer's reply do not establish that metadata is unavailable.
+
+- Check authoritative metadata tied to the actual execution: the host's run/session details,
+  provider response metadata, a recorded reviewer invocation, or structured execution logs. Use
+  whichever sources the environment exposes; no particular product, file path or log schema is
+  required. A configuration default or requested model alias alone does not prove what ran.
+- Match records to the contributing run/session and relevant turns using their recorded identity,
+  timestamps and parent/reviewer linkage where available. Record the reported model identifier and
+  reasoning setting for that work. Do not apply current settings retroactively; list each distinct
+  model/effort pair when they changed across contributing turns.
+- Ask independent reviewers/subagents to include their own model, reasoning effort and the metadata
+  source in their internal handoff. If a reply omits metadata or reports a fallback, the parent
+  should check accessible records for that reviewer before final reporting. Do not assume the
+  reviewer used the parent's or implementation agent's model or effort. A self-reported model
+  identity without supporting run metadata is not verification.
+- Read only the identifiers, linkage, timestamps, model and effort needed for this lookup. Do not
+  dump session logs, prompts, private reasoning, credentials or unrelated sessions into outputs.
+- Use `Unknown` only when the value is absent from relevant accessible records, or those records
+  cannot be located/read. Use `Not exposed` for reasoning only after checking the available sources
+  and establishing that they do not expose a setting. Add a brief metadata note explaining the
+  missing field or unavailable source; do not claim values are unexposed merely because the prompt
+  did not supply them. Never infer identity/effort from a tool name or invent a value to avoid a
+  fallback. This lookup does not require new access permissions or exposing private records.
+- Preserve verified historical pairs. Replace an earlier fallback only when records establish the
+  model/effort for that earlier work; otherwise keep it and add newly verified pairs separately.
+
+### Review summary metadata
+
+AI reviewers should end each review summary with `Reviewer model: <model name>` and
+`Reasoning effort: <effort>` on separate lines, including reviews with no findings. Include this
+footer once per review, not on each inline comment. It describes that review round and complements
+the PR's Models used section; it is informational, not an approval or quality claim.
+
+Use the model and effort actually used for the review, following Resolving model metadata above,
+including its lookup and fallback-note requirements. Never copy the implementation model or infer
+settings from tool names. If multiple model/effort combinations contributed, list each pair in the
+footer. Unassisted human
+reviews do not need it; AI-assisted human reviews should identify the AI model and effort used.
+
+### PR relationships
+
+Use optional `Twin:`, `Companion:`, and `Dependency:` lines for confirmed related PRs, following
+`.agents/commands/pr.md`. A twin is the matching change in the other native Bitkit app; a companion
+is related coordinated work such as E2E coverage; a dependency is a prerequisite. Omit absent
+relationships and use repository-qualified PR references so cross-repository numbers are unambiguous.
+
+### Models used
+
+Include `### Models used` in the PR body with `Planning/scoping`, `Implementation`, and a single
+`Review` entry. Record the model names reported by the tools as work proceeds, including subagent
+reviews. For each phase, list each distinct model/effort pair once, separated by commas; repeated
+reviews with the same pair do not add entries. The same model may appear in all three phases.
+Do not add per-round model rows. Optionally add `Review rounds: N` when the number of completed
+review passes is known; omit the count when unknown and do not count parallel reviewers as rounds.
+
+Record reasoning effort alongside each model as `` `model-name` (reasoning: `medium`) ``. Follow
+Resolving model metadata above before using `Unknown` or `reasoning: Not exposed`, and include its
+brief metadata note when a fallback remains. Do not infer effort from the model name or apply the
+current setting to earlier work. Preserve all known model/effort pairs when
+updating the section; collapse older per-round rows into the single Review entry.
+
+This section is informational, not a quality score, verification result, or approval requirement.
+Use `Not used` when a phase had no AI involvement and `Unknown` when the model was not recorded;
+never infer a model from a tool name. If no review occurred, write `Review: Not performed`.
+`Not used` and `Not performed` need no reasoning value. See `.agents/commands/pr.md` for formatting.
+
+### Review Findings
+
+When addressing review feedback on any PR, release PRs included, PR babysitters and the author's agent keep the PR in scope:
+- Fix in the PR only critical and HIGH findings and reachable correctness bugs. MEDIUM findings are a judgment call.
+- PR babysitters re-triage each LOW or non-blocking finding. If it is still LOW and not a reachable correctness bug, they defer it and leave the code unchanged: file an issue in the next release's milestone, add an Out of Scope bullet linking the issue and the thread (see `.agents/commands/pr.md`), reply in the thread `out of scope: tracked in #N, because …`, and resolve it.
+
 ## Build Commands
 
 ```sh
@@ -30,19 +199,16 @@ just test android
 # Build for E2E tests (UI hooks enabled, local Electrum by default)
 just e2e
 
-# Build for E2E tests with geoblocking disabled
-just e2e no geo
-
 # Build for E2E tests using network Electrum (not local; staging/mainnet based on flavor)
 just e2e network assembleTnetRelease
 
-# Lint using detekt
+# Lint using detekt and Android Lint
 just lint
 
 # Auto-format using detekt
 just format
 
-# Update detekt baseline
+# Update the Android Lint baseline
 just lint baseline
 
 # Install dev build
@@ -51,6 +217,110 @@ just install
 # Clean build artifacts
 just clean
 ```
+
+## Prerequisites
+
+- The **`android` CLI and the `android-cli` skill** are required, not recommended: they are how an
+  agent drives a connected emulator or device, so without them the journeys under `journeys/` cannot
+  run and a PR's QA contract cannot be checked. Install the CLI as below.
+
+### Agent CLI (android)
+
+Agents drive a connected emulator or device with the `android` CLI, which wraps the SDK tooling
+and adds a semantic UI dump. It is not provisioned by this repo — install it if it is missing, from
+`https://dl.google.com/android/cli/latest/<platform>/install.sh` where `<platform>` is one of
+`darwin_arm64`, `darwin_x86_64` or `linux_x86_64`:
+
+```sh
+curl -fsSL https://dl.google.com/android/cli/latest/darwin_arm64/install.sh | bash
+```
+
+On Windows the installer is a `.cmd` instead:
+`curl -fsSL https://dl.google.com/android/cli/latest/windows_x86_64/install.cmd -o "%TEMP%\i.cmd" && "%TEMP%\i.cmd"`.
+
+Discover arguments with `--help` rather than memorizing them.
+
+```sh
+# Emulators
+android emulator list                  # AVD names; `start` requires one, it has no default
+android emulator start Pixel_9
+
+# Inspect the screen
+android layout --pretty                # flat JSON of on-screen elements
+android layout --diff                  # only what changed, to keep context small
+android screen capture -o shot.png     # secondary; use when layout hits a WebView or animation
+android screen capture --annotate -o shot.png   # numbered boxes, for elements layout cannot name
+
+# Interact
+adb shell input tap <x> <y>            # use an element's `center`
+```
+
+`android layout` reports each element's `resource-id`, `text`, `content-desc`, `interactions`,
+`bounds` and `center`. Compose `testTag`s land in `resource-id`. **The JSON keys are hyphenated, not
+camelCase** — the `android-cli` skill's `references/interact.md` documents `resourceId` and
+`contentDesc`, and a filter written against those names matches nothing.
+
+Prefer `android layout` over screenshots: it names elements by their test tag, and full-resolution
+screenshots can exceed image size limits. It does not see everything, though — toasts never appear
+in it, some tiles carry no text, and an element can be missing from one dump and present in the
+next. `journeys/README.md` lists what needs a screenshot instead.
+
+## Journeys
+
+`journeys/` holds XML walkthroughs of app behaviour that an agent evaluates by driving a running
+emulator or device — number pad caps, notification permission, widget flows, deeplinks, hardware
+wallet pairing and transfers. Read [`journeys/README.md`](journeys/README.md) before running or
+writing one; it has the format, the runner commands and the per-suite preconditions.
+
+- Journeys are **the QA contract for a PR**. A PR with a user-visible change adds or updates the
+  journeys that prove it and any journey whose route it changes, and lists them under `#### Journeys`
+  in the PR body. Reviewers drive the listed journeys on a device; nothing in `.github/workflows`
+  reads `journeys/`. Write a manual test only for a step that needs a capability the Capabilities
+  table in [`journeys/README.md`](journeys/README.md) does not list.
+- A journey is **not the source of truth** for app behaviour, despite what the `android-cli` skill's
+  own `references/journeys.md` says. A journey that disagrees with the app is most likely stale. Say
+  what you found and update the journey; escalate only once you have separately confirmed the app is
+  wrong. A crash, exit or freeze is the exception — stop there and escalate.
+- **PORT the journeys whenever a feature crosses to or from iOS.** If a change ships or touches a
+  journey under `journeys/`, the matching `bitkit-ios` PR carries it, and vice versa. A ported
+  feature without its journey is an incomplete port.
+- KEEP the file name, `<journey name>` and `<action>` prose identical across the two repos so the
+  specs stay diffable. Change only what the platform forces.
+- MATCH the iOS identifier string when adding a `testTag` a journey asserts on — the vocabulary is
+  deliberately shared (`N9`, `NRemove`, `TransferUnavailableContinue`, `HardwareTransferToSpending`). Record any
+  name that cannot match in the identifier table in `journeys/README.md`.
+- ADAPT rather than transcribe when a platform genuinely behaves differently, and say so in the
+  journey's `<description>` and the suite README — never assert behaviour the platform does not have.
+- SKIP a journey only when the feature does not exist on the other side, and record it under the
+  cross-platform table in `journeys/README.md` with what is missing.
+
+### Running a journey on both platforms
+
+A journey is a shared spec, so when a behaviour is meant to match iOS, run the same file on both
+sides rather than reasoning about the difference. Android uses the `android` CLI above; iOS uses the
+XcodeBuildMCP CLI against a `bitkit-ios` checkout:
+
+```sh
+xcodebuildmcp simulator build-and-run                 # build, install, launch, capture logs
+xcodebuildmcp simulator snapshot-ui                   # the `android layout` equivalent
+xcodebuildmcp ui-automation tap --element-ref e12     # tap one ref from the latest snapshot
+xcodebuildmcp ui-automation wait-for-ui --identifier SpendingAmount --predicate exists
+```
+
+`snapshot-ui` names elements by `accessibilityIdentifier` the way `android layout` names them by
+`resource-id`, so a journey's tag assertions map onto both. The vocabulary really is shared —
+Settings on both platforms agrees on `Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`,
+`HeaderMenu`, `CurrenciesSettings`, `UnitSettings`, `WidgetsSettings` and `QuickpaySettings` — so a
+comparison run is mostly signal and the rows that disagree stand out.
+
+A cross-platform Lightning payment is the sharpest single check that the two builds agree: take an
+invoice from one side and pay it from the other (`xcrun simctl pbpaste <udid>` after tapping Copy on
+iOS, then the `lightning:` URI route above on Android).
+
+When the two platforms disagree on a journey, write down which it looks like — an intentional
+platform difference, or something worth a closer look — in the journey's `<description>` and the
+suite README, on both sides, so the next reader does not rediscover it. A disagreement is a prompt to
+investigate, not a bug report on its own.
 
 ## Architecture Overview
 
@@ -170,7 +440,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - Use narrower checks earlier only when they answer an immediate risk, e.g. a single unit test after touching focused business logic or a Kotlin compile after a risky refactor.
 - ALWAYS ask clarifying questions to ensure an optimal plan when encountering functional or technical uncertainties in requests
 - ALWAYS when fixing lint or test failures prefer to do the minimal amount of changes to fix the issues
-- USE single-line commit messages under 50 chars; use conventional commit messages template format: `feat: add something new`
+- USE single-line commit messages under 72 chars; use conventional commit messages template format: `feat: add something new`
 - USE `git diff HEAD sourceFilePath` to diff an uncommitted file against the last commit
 - NEVER capitalize words in commit messages
 - ALWAYS create a `*-backup` branch before performing a rebase
@@ -185,6 +455,13 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS remove unused code after refactors
 - ALWAYS follow Material3 design guidelines for UI components
 - When building from a Figma frame, reuse only scaffolding (sheet host, `SheetTopBar`, buttons, typography); NEVER swap a design-specific illustration/animation for a lookalike. Export the frame's assets via the Figma MCP and read animation timing/easing/direction from prototype reactions (`use_figma` → `node.reactions`)
+- ALWAYS resolve a changed `*Screen.kt` to its Figma frame through `docs/screens-map.md` (`Flow › Frame` on the latest `Bitkit - Handoff vNN` page). When adding or removing a `*Screen.kt`, add or drop its row there (`todo` when the design does not exist yet); `ScreensMapTest` fails otherwise
+- ALWAYS fill the PR `### Design` section:
+  - User-visible UI changes with an existing design: link the relevant Figma frames. Start with `docs/screens-map.md` for mapped screens; link known handoff frames directly for sheets, dialogs, reusable views, and other UI outside the map.
+  - UI changes mapped to `todo` or `n/a`, or other UI changes without an available design, including new features: use `N/A — no design available.`; creating a design is never required.
+  - Changes without user-visible UI changes: use `N/A — no UI changes.`
+  - Genuinely uncertain frame matches: report the uncertainty honestly; never invent links.
+- Code review may make at most one advisory request per PR when an existing-design UI link is omitted or an out-of-map `N/A — no design available.` claim is unverified. Valid mapped `todo`/`n/a` cases and `N/A — no UI changes.` require no request. Missing links never block approval, CI, PR creation, or review readiness.
 - ALWAYS ensure proper error handling in coroutines
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions
@@ -234,6 +511,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add business logic to repository layer via methods returning `Result<T>` and use it in ViewModels
 - ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice versa for downstream
 - ALWAYS add new localizable string resources in alphabetical order in `strings.xml`
+- ALWAYS give rail-specific copy of a shared message its own key with the rail as suffix (`wallet__send_dialog2_usdt` next to `wallet__send_dialog2`) and leave the shared key unchanged
+- ALWAYS add or update the translation in every `values-*/strings.xml` in the same PR when adding or changing an English string; translations live in this repository, not in Transifex
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
 - ALWAYS reference test files in PR descriptions/QA Notes by bare file name only (e.g. `HwWalletRepoTest.kt`), NEVER the full path; only when two referenced test files share the same name, prefix the shortest leading path segment(s) that disambiguate them (e.g. `repositories/FooTest.kt` vs `viewmodels/FooTest.kt`)
@@ -241,6 +520,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
+- NEVER push with lint findings: detekt and Android Lint fail CI, and Kotlin warnings fail compilation (`allWarningsAsErrors`; deprecations stay warnings). Fix the finding instead of suppressing it or adding it to `app/lint-baseline.xml`
 - ALWAYS wrap suspend functions in `withContext(ioDispatcher)` if in domain layer, using ctor injected prop `@IoDispatcher private val ioDispatcher: CoroutineDispatcher`
 - ALWAYS position `companion object` at the top of the class
 - NEVER use `Exception` directly, use `AppError` instead
@@ -282,6 +562,12 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS download device files to `.ai/{name}_{timestamp}/` when needed for debugging (e.g. `.ai/logs_1770671066/`)
 - To download: `adb shell "run-as to.bitkit.dev cat files/path/to/file" > .ai/folder_timestamp/filename`
 - ALWAYS try reading device logs automatically via adb BEFORE asking user to provide log files
+- NEVER type long strings with `adb shell input text` — it silently drops characters (it lost 54 of a
+  397-character invoice), and `adb shell cmd clipboard` is not implemented on the emulator image.
+  Hand an address or invoice to the app as a URI instead, which also skips the recipient screen:
+  `adb shell am start -a android.intent.action.VIEW -d "lightning:<invoice>" to.bitkit.dev`
+- For short strings that must be typed, enter digit groups and separators separately, then verify —
+  dotted strings such as host IPs are where the dropping shows up first
 
 ### Architecture Guidelines
 

@@ -1,4 +1,3 @@
-@file:Suppress("TooManyFunctions")
 
 package to.bitkit.ui.settings.lightning.components
 
@@ -62,7 +61,6 @@ fun ChannelStatusView(
     }
 }
 
-@Suppress("CyclomaticComplexMethod", "ReturnCount")
 @Composable
 private fun getStatusInfo(
     channel: ChannelUi,

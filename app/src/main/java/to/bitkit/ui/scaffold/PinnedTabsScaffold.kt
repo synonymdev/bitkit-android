@@ -23,7 +23,21 @@ import dev.chrisbanes.haze.rememberHazeState
 import to.bitkit.ui.theme.Colors
 
 private val PinnedTabsShadowHeight = 32.dp
-private val PinnedTabsBlurRadius = 24.dp
+
+/** Blur radius shared by every pinned header and footer that floats over scrolling content. */
+private val ChromeBlurRadius = 24.dp
+
+/**
+ * Haze style for chrome (pinned headers, footer buttons) that scrolling content passes behind.
+ */
+@Composable
+fun rememberChromeHazeStyle(): HazeStyle = remember {
+    HazeStyle(
+        backgroundColor = Colors.Black,
+        tint = HazeTint(Colors.Black70),
+        blurRadius = ChromeBlurRadius,
+    )
+}
 
 private enum class PinnedTabsSlot { Header, Content, Shadow }
 
@@ -37,13 +51,7 @@ fun PinnedTabsScaffold(
     val shadowBrush = remember {
         Brush.verticalGradient(colors = listOf(Colors.Black, Color.Transparent))
     }
-    val hazeStyle = remember {
-        HazeStyle(
-            backgroundColor = Colors.Black,
-            tint = HazeTint(Colors.Black70),
-            blurRadius = PinnedTabsBlurRadius,
-        )
-    }
+    val hazeStyle = rememberChromeHazeStyle()
 
     SubcomposeLayout(modifier = modifier.fillMaxSize()) { constraints ->
         val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)

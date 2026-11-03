@@ -1,0 +1,21 @@
+<journey name="pending wallet recovery admission">
+  <description>
+    Use a disposable test-network recovery fixture with synthetic funds and a complete wallet backup
+    containing an unresolved payment attempt and private address reservation ceilings. A VSS control
+    must fail or delay wallet download/import without preventing node sync, and a separate control
+    must fail Pubky profile caching after wallet restoration succeeds. These full-app fault controls
+    are not currently provisioned; repository tests and Compose component tests are separate evidence.
+    iOS already keeps its normal startup behind the durable restore gate and presents retry-only
+    recovery failure. Android keeps node sync and reservation reveal available because restore needs them.
+    Never reset a real wallet or use live funds.
+  </description>
+  <actions>
+    <action>Start restoring the fixture wallet and fail required wallet backup download</action>
+    <action>Retry more than twice and verify Try Again remains available without Proceed Without Backup</action>
+    <action>Attempt ordinary BTC and Lightning sends, a new receive address and a prepared broadcast through the fixture; verify no new operation is signed or broadcast while required recovery is pending</action>
+    <action>Restart the app with the same pending restore and verify the same admission restrictions remain</action>
+    <action>Restore backup availability, trigger overlapping retries and verify one restoration completes before wallet actions become available</action>
+    <action>Repeat with successful wallet recovery followed by profile cache failure; after repeated failures verify Proceed is available only while safety markers are clear</action>
+    <action>Set a pending restore marker before confirming Proceed and verify the current state is rechecked and recovery cannot be dismissed</action>
+  </actions>
+</journey>

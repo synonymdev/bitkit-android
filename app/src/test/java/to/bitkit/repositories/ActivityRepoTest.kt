@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
+import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -10,8 +11,15 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -19,18 +27,22 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mock
+import to.bitkit.models.ActivityBackupV1
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.services.HwSnapshotResult
@@ -44,8 +56,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-@Suppress("LargeClass")
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class ActivityRepoTest : BaseUnitTest() {
 
     private val coreService = mock<CoreService>()
@@ -70,6 +81,10 @@ class ActivityRepoTest : BaseUnitTest() {
         on { v1 } doReturn testActivityV1
     }
 
+    private val backupTags by lazy { ActivityTags(WalletScope.default, "activity1", listOf("daily")) }
+
+    private val backupClosedChannel = mock<ClosedChannelDetails>()
+
     private val baseOnchainActivity = OnchainActivity.create(
         walletId = "wallet0",
         id = "base_activity_id",
@@ -82,8 +97,8 @@ class ActivityRepoTest : BaseUnitTest() {
         feeRate = 10uL,
     )
 
-    @Suppress("LongParameterList")
     private fun createOnchainActivity(
+        walletId: String = baseOnchainActivity.walletId,
         id: String = baseOnchainActivity.id,
         txId: String = baseOnchainActivity.txId,
         value: ULong = baseOnchainActivity.value,
@@ -105,6 +120,7 @@ class ActivityRepoTest : BaseUnitTest() {
     ): Activity.Onchain {
         return Activity.Onchain(
             v1 = baseOnchainActivity.copy(
+                walletId = walletId,
                 id = id,
                 txId = txId,
                 value = value,
@@ -148,38 +164,236 @@ class ActivityRepoTest : BaseUnitTest() {
         )
     }
 
+    @Test
+    fun `observed hardware payment completes only after original Sent activity is durable`() = test {
+        val txid = "ab".repeat(32)
+        val wallet = "original-hardware-wallet"
+        val original = baseOnchainActivity.copy(walletId = wallet, txId = txid)
+        whenever(coreService.activity.restoreSentOnchainTags(txid, wallet)).thenReturn(false)
+        whenever(coreService.activity.getOnchainActivityByTxId(txid, wallet))
+            .thenReturn(null)
+            .thenReturn(original.copy(walletId = "different-wallet"))
+            .thenReturn(original)
+        val before = sut.activitiesChanged.value
+
+        assertTrue(
+            sut.completeObservedHardwarePayment(
+                wallet,
+                txid,
+                original.address,
+                original.value,
+                original.fee,
+                original.feeRate
+            ).isFailure
+        )
+        assertEquals(before, sut.activitiesChanged.value)
+        assertTrue(
+            sut.completeObservedHardwarePayment(
+                wallet,
+                txid,
+                original.address,
+                original.value,
+                original.fee,
+                original.feeRate
+            ).isFailure
+        )
+        assertEquals(before, sut.activitiesChanged.value)
+        sut.completeObservedHardwarePayment(
+            wallet,
+            txid,
+            original.address,
+            original.value,
+            original.fee,
+            original.feeRate
+        ).getOrThrow()
+        assertTrue(sut.activitiesChanged.value > before)
+        verify(coreService.activity).restoreSentOnchainTags(txid, wallet)
+        verify(coreService.activity, times(3)).createSentOnchainActivityFromSendResult(
+            txid,
+            original.address,
+            original.value,
+            original.fee,
+            original.feeRate,
+            false,
+            null,
+            wallet,
+        )
+    }
+
     private fun setupSyncActivitiesMocks(
         cacheData: AppCacheData,
     ) {
         whenever(cacheStore.data).thenReturn(flowOf(cacheData))
-        wheneverBlocking { lightningRepo.getPayments() }.thenReturn(Result.success(emptyList()))
-        wheneverBlocking {
+        whenever { lightningRepo.getPayments() }.thenReturn(Result.success(emptyList()))
+        whenever {
             coreService.activity.syncLdkNodePaymentsToActivities(
                 any(),
                 eq(false),
                 any()
             )
         }.thenReturn(Unit)
-        wheneverBlocking { transferRepo.syncTransferStates() }.thenReturn(Result.success(Unit))
-        wheneverBlocking { coreService.activity.allPossibleTags() }.thenReturn(emptyList())
+        whenever { transferRepo.syncTransferStates() }.thenReturn(Result.success(Unit))
+        whenever { coreService.activity.allPossibleTags() }.thenReturn(emptyList())
+    }
+
+    @Test
+    fun `Paykit backfill notifies activity observers only after a changed row`() = test {
+        whenever(coreService.activity.backfillPaykitContacts()).thenReturn(false, true)
+
+        sut.backfillPaykitContacts().getOrThrow()
+        assertEquals(0L, sut.activitiesChanged.value)
+        sut.backfillPaykitContacts().getOrThrow()
+        assertTrue(sut.activitiesChanged.value > 0L)
+        assertEquals(0L, sut.activityTagsChanged.value)
+    }
+
+    @Test
+    fun `Paykit backfill preserves cancellation`() = test {
+        whenever(coreService.activity.backfillPaykitContacts()).thenThrow(CancellationException("canceled"))
+        assertFailsWith<CancellationException> { sut.backfillPaykitContacts() }
+    }
+
+    @Test
+    fun `simultaneous activity syncs share one operation and its failure`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        val failure = IllegalStateException("Node unavailable")
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val calls = List(256) { async { sut.syncActivities() } }
+        runCurrent()
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        verify(lightningRepo, times(1)).getPayments()
+        response.complete(Result.failure(failure))
+        assertTrue(calls.awaitAll().all { it.exceptionOrNull() === failure })
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        sut.syncActivities()
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `cancelled and timed out waiters cannot reset the active sync`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val cancelled = async { sut.syncActivities() }
+        val waiting = async { sut.syncActivities() }
+        runCurrent()
+        cancelled.cancel()
+        advanceTimeBy(40_001)
+        runCurrent()
+        assertTrue(waiting.await().isFailure)
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        val later = async { sut.syncActivities() }
+        runCurrent()
+        verify(lightningRepo, times(1)).getPayments()
+        owner.cancel()
+        runCurrent()
+        assertTrue(owner.isCancelled)
+        assertFalse(later.isCancelled)
+        val interrupted = later.await().exceptionOrNull()
+        assertTrue(interrupted is AppError)
+        assertTrue(interrupted.cause is CancellationException)
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        response.complete(Result.failure(IllegalStateException("Unavailable")))
+        sut.syncActivities()
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `successful overlap stays reserved through transfer updates`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val transfers = CompletableDeferred<Result<Unit>>()
+        whenever(transferRepo.syncTransferStates()).doSuspendableAnswer { transfers.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val waiting = List(16) { async { sut.syncActivities() } }
+        runCurrent()
+        assertFalse(owner.isCompleted)
+        assertTrue(waiting.none { it.isCompleted })
+        assertTrue(sut.isSyncingLdkNodePayments.value)
+        verify(lightningRepo, times(1)).getPayments()
+        transfers.complete(Result.success(Unit))
+        assertTrue(owner.await().isSuccess)
+        assertTrue(waiting.awaitAll().all { it.isSuccess })
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+        assertTrue(sut.syncActivities().isSuccess)
+        verify(lightningRepo, times(2)).getPayments()
+    }
+
+    @Test
+    fun `fresh callers import payments added after the active snapshot`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val transfers = CompletableDeferred<Result<Unit>>()
+        whenever(transferRepo.syncTransferStates()).doSuspendableAnswer { transfers.await() }
+        val owner = async { sut.syncActivities() }
+        runCurrent()
+        val newPayments = listOf(testPaymentDetails)
+        val paymentResponse = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { paymentResponse.await() }
+        val fresh = List(16) { async { sut.syncActivities(requireFresh = true) } }
+        runCurrent()
+        assertTrue(fresh.none { it.isCompleted })
+        verify(lightningRepo, times(1)).getPayments()
+        transfers.complete(Result.success(Unit))
+        assertTrue(owner.await().isSuccess)
+        runCurrent()
+        assertTrue(fresh.none { it.isCompleted })
+        paymentResponse.complete(Result.success(newPayments))
+        assertTrue(fresh.awaitAll().all { it.isSuccess })
+        verify(coreService.activity).syncLdkNodePaymentsToActivities(eq(newPayments), eq(false), any())
+        verify(lightningRepo, times(2)).getPayments()
+        assertFalse(sut.isSyncingLdkNodePayments.value)
+    }
+
+    @Test
+    fun `fresh callers retry after cancelled or failed refreshes`() = test {
+        setupSyncActivitiesMocks(AppCacheData())
+        val responses = ArrayDeque<CompletableDeferred<Result<List<PaymentDetails>>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { responses.removeFirst().await() }
+        listOf(true, false).forEachIndexed { index, cancelOwner ->
+            val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+            val nextResponse = CompletableDeferred<Result<List<PaymentDetails>>>()
+            responses.addLast(response)
+            responses.addLast(nextResponse)
+            val owner = async { sut.syncActivities() }
+            runCurrent()
+            val fresh = async { sut.syncActivities(requireFresh = true) }
+            runCurrent()
+            assertFalse(fresh.isCompleted)
+
+            if (cancelOwner) owner.cancel() else response.complete(Result.failure(AppError("Unavailable")))
+            runCurrent()
+            assertFalse(fresh.isCompleted)
+            val payments = listOf(testPaymentDetails)
+            nextResponse.complete(Result.success(payments))
+            assertTrue(fresh.await().isSuccess)
+            if (cancelOwner) assertTrue(owner.isCancelled) else assertTrue(owner.await().isFailure)
+            verify(lightningRepo, times(2 * (index + 1))).getPayments()
+            verify(coreService.activity, times(index + 1)).syncLdkNodePaymentsToActivities(
+                eq(payments),
+                eq(false),
+                any(),
+            )
+            assertFalse(sut.isSyncingLdkNodePayments.value)
+        }
     }
 
     @Test
     fun `syncActivities success flow`() = test {
         val payments = listOf(testPaymentDetails)
-        wheneverBlocking { lightningRepo.getPayments() }.thenReturn(Result.success(payments))
-        wheneverBlocking {
+        whenever { lightningRepo.getPayments() }.thenReturn(Result.success(payments))
+        whenever {
             coreService.activity.getActivity(any<String>(), eq(WalletScope.default))
         }.thenReturn(null)
-        wheneverBlocking {
+        whenever {
             coreService.activity.syncLdkNodePaymentsToActivities(
                 any<List<PaymentDetails>>(),
                 any<Boolean>(),
                 any<Map<String, String>>()
             )
         }.thenReturn(Unit)
-        wheneverBlocking { transferRepo.syncTransferStates() }.thenReturn(Result.success(Unit))
-        wheneverBlocking { coreService.activity.allPossibleTags() }.thenReturn(emptyList())
+        whenever { transferRepo.syncTransferStates() }.thenReturn(Result.success(Unit))
+        whenever { coreService.activity.allPossibleTags() }.thenReturn(emptyList())
 
         val result = sut.syncActivities()
 
@@ -192,7 +406,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `syncActivities handles lightningRepo failure`() = test {
         val exception = Exception("Lightning repo failed")
-        wheneverBlocking { lightningRepo.getPayments() }.thenReturn(Result.failure(exception))
+        whenever { lightningRepo.getPayments() }.thenReturn(Result.failure(exception))
 
         val result = sut.syncActivities()
 
@@ -205,7 +419,7 @@ class ActivityRepoTest : BaseUnitTest() {
     fun `findActivityByPaymentId returns failure when activity not found after sync`() = test {
         val paymentId = "payment123"
 
-        wheneverBlocking {
+        whenever {
             coreService.activity.get(
                 walletId = eq(WalletScope.default),
                 filter = any(),
@@ -219,8 +433,8 @@ class ActivityRepoTest : BaseUnitTest() {
             )
         }.thenReturn(emptyList())
 
-        wheneverBlocking { lightningRepo.sync() }.thenReturn(Result.success(Unit))
-        wheneverBlocking { lightningRepo.getPayments() }.thenReturn(Result.success(emptyList()))
+        whenever { lightningRepo.sync() }.thenReturn(Result.success(Unit))
+        whenever { lightningRepo.getPayments() }.thenReturn(Result.success(emptyList()))
 
         val result = sut.findActivityByPaymentId(
             paymentHashOrTxId = paymentId,
@@ -235,7 +449,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `getActivities returns activities successfully`() = test {
         val activities = listOf(testActivity)
-        wheneverBlocking {
+        whenever {
             coreService.activity.get(
                 walletId = WalletScope.default,
                 filter = ActivityFilter.ALL,
@@ -267,7 +481,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `getActivity returns activity when found`() = test {
         val activityId = "activity123"
-        wheneverBlocking {
+        whenever {
             coreService.activity.getActivity(activityId, WalletScope.default)
         }.thenReturn(testActivity)
 
@@ -403,7 +617,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `getActivity returns null when not found`() = test {
         val activityId = "activity123"
-        wheneverBlocking {
+        whenever {
             coreService.activity.getActivity(activityId, WalletScope.default)
         }.thenReturn(null)
 
@@ -413,23 +627,7 @@ class ActivityRepoTest : BaseUnitTest() {
         assertNull(result.getOrThrow())
     }
 
-    @Test
-    fun `contactActivities filters replaced sent transaction`() = test {
-        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        val replacedTxId = "replaced_tx_id"
-        val replacedActivity = createOnchainActivity(
-            id = "replaced_activity_id",
-            txId = replacedTxId,
-            doesExist = false,
-            contact = contactPublicKey,
-        )
-        val replacementActivity = createOnchainActivity(
-            id = "replacement_activity_id",
-            txId = "replacement_tx_id",
-            boostTxIds = listOf(replacedTxId),
-            contact = contactPublicKey,
-        )
-        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(setOf(replacedTxId))
+    private suspend fun stubContactActivities(activities: List<Activity>) {
         whenever(
             coreService.activity.get(
                 walletId = null,
@@ -442,11 +640,193 @@ class ActivityRepoTest : BaseUnitTest() {
                 limit = null,
                 sortDirection = SortDirection.DESC,
             )
-        ).thenReturn(listOf(replacedActivity, replacementActivity))
+        ).thenReturn(activities)
+    }
+
+    @Test
+    fun `contactActivities filters replaced sent transaction`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val replacedTxId = "replaced_tx_id"
+        val replacedActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "replaced_activity_id",
+            txId = replacedTxId,
+            doesExist = false,
+            contact = contactPublicKey,
+        )
+        val replacementActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "replacement_activity_id",
+            txId = "replacement_tx_id",
+            boostTxIds = listOf(replacedTxId),
+            contact = contactPublicKey,
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(setOf(replacedTxId))
+        stubContactActivities(listOf(replacedActivity, replacementActivity))
 
         val result = sut.contactActivities(contactPublicKey)
 
         assertEquals(listOf(replacementActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities keeps hardware sent row whose txId is boosted only in default wallet`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val hardwareWalletId = "hardware-wallet"
+        val sharedTxId = "shared_tx_id"
+        val defaultReplacementActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "default_replacement_id",
+            txId = "default_replacement_tx_id",
+            boostTxIds = listOf(sharedTxId),
+            contact = contactPublicKey,
+        )
+        val hardwareActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_activity_id",
+            txId = sharedTxId,
+            doesExist = false,
+            contact = contactPublicKey,
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(setOf(sharedTxId))
+        whenever(coreService.activity.getTxIdsInBoostTxIds(hardwareWalletId)).thenReturn(emptySet())
+        stubContactActivities(listOf(defaultReplacementActivity, hardwareActivity))
+
+        val result = sut.contactActivities(contactPublicKey)
+
+        assertEquals(listOf(defaultReplacementActivity, hardwareActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities returns rows from every wallet with matching contact`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val hardwareWalletId = "hardware-wallet"
+        val defaultActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "default_activity_id",
+            txId = "default_tx_id",
+            contact = contactPublicKey,
+        )
+        val hardwareActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_activity_id",
+            txId = "hardware_tx_id",
+            contact = contactPublicKey,
+        )
+        val otherContactActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "other_contact_activity_id",
+            txId = "other_contact_tx_id",
+            contact = "pubky8pinxras7i1dn6qgyqp1xa4ksxnm9yupmbzpf8ec6aqmqhw6t8o",
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(emptySet())
+        whenever(coreService.activity.getTxIdsInBoostTxIds(hardwareWalletId)).thenReturn(emptySet())
+        stubContactActivities(listOf(defaultActivity, hardwareActivity, otherContactActivity))
+
+        val result = sut.contactActivities(contactPublicKey)
+
+        assertEquals(listOf(defaultActivity, hardwareActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities filters replaced sent row using its own wallet boosts`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val hardwareWalletId = "hardware-wallet"
+        val replacedTxId = "hardware_replaced_tx_id"
+        val replacedActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_replaced_id",
+            txId = replacedTxId,
+            doesExist = false,
+            contact = contactPublicKey,
+        )
+        val replacementActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_replacement_id",
+            txId = "hardware_replacement_tx_id",
+            boostTxIds = listOf(replacedTxId),
+            contact = contactPublicKey,
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(hardwareWalletId)).thenReturn(setOf(replacedTxId))
+        stubContactActivities(listOf(replacedActivity, replacementActivity))
+
+        val result = sut.contactActivities(contactPublicKey)
+
+        assertEquals(listOf(replacementActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities rethrows cancellation`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val cancellation = CancellationException("cancelled")
+        whenever(
+            coreService.activity.get(
+                walletId = null,
+                filter = ActivityFilter.ALL,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = SortDirection.DESC,
+            )
+        ).thenThrow(cancellation)
+
+        val thrown = assertFailsWith<CancellationException> {
+            sut.contactActivities(contactPublicKey)
+        }
+
+        assertEquals(cancellation.message, thrown.message)
+    }
+
+    @Test
+    fun `failed contact assignment preserves manual detachment`() = test {
+        val activity = createOnchainActivity(id = "detached", txId = "detached-tx")
+        whenever(coreService.activity.getActivity("detached-tx", WalletScope.default)).thenReturn(activity)
+        whenever(coreService.activity.update(eq(activity.v1.id), any()))
+            .thenThrow(RuntimeException("Core write failed"))
+        val result = sut.setContact("new-contact", "detached-tx", syncLdkPayments = false)
+        assertTrue(result.isFailure)
+        verify(cacheStore, never()).setActivityContactDetached(any(), any(), eq(false))
+    }
+
+    @Test
+    fun `contact retry completes detachment cleanup and replacement after partial write`() = test {
+        val contact = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        var original = createOnchainActivity(id = "original", txId = "original-tx", doesExist = false)
+        val replacement = createOnchainActivity(
+            id = "replacement",
+            txId = "replacement-tx",
+            boostTxIds = listOf("original-tx")
+        )
+        whenever(coreService.activity.getActivity("original-tx", WalletScope.default)).thenAnswer { original }
+        whenever(coreService.activity.update(eq("original"), any())).doSuspendableAnswer {
+            original = it.getArgument(1)
+            Unit
+        }
+        whenever(
+            coreService.activity.get(
+                any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            )
+        )
+            .thenAnswer { listOf(original, replacement) }
+        var failCleanup = true
+        whenever(cacheStore.setActivityContactDetached("original", WalletScope.default, false)).doSuspendableAnswer {
+            if (failCleanup) {
+                failCleanup = false
+                error("detachment marker write failed")
+            }
+            Unit
+        }
+        assertTrue(sut.setContact(contact, "original-tx", syncLdkPayments = false).isFailure)
+        assertEquals(contact, original.v1.contact)
+        assertTrue(sut.setContact(contact, "original-tx", syncLdkPayments = false).isSuccess)
+        verify(cacheStore, times(2)).setActivityContactDetached("original", WalletScope.default, false)
+        verify(
+            coreService.activity
+        ).update(eq("replacement"), argThat { this is Activity.Onchain && v1.contact == contact })
     }
 
     @Test
@@ -507,7 +887,7 @@ class ActivityRepoTest : BaseUnitTest() {
         val activityId = "activity123"
         val cacheData = AppCacheData(deletedActivities = emptyList())
         whenever(cacheStore.data).thenReturn(flowOf(cacheData))
-        wheneverBlocking { coreService.activity.update(activityId, testActivity) }.thenReturn(Unit)
+        whenever { coreService.activity.update(activityId, testActivity) }.thenReturn(Unit)
 
         val result = sut.updateActivity(activityId, testActivity)
 
@@ -532,7 +912,7 @@ class ActivityRepoTest : BaseUnitTest() {
         val activityId = "activity123"
         val cacheData = AppCacheData(deletedActivities = listOf(activityId))
         whenever(cacheStore.data).thenReturn(flowOf(cacheData))
-        wheneverBlocking { coreService.activity.update(activityId, testActivity) }.thenReturn(Unit)
+        whenever { coreService.activity.update(activityId, testActivity) }.thenReturn(Unit)
 
         val result = sut.updateActivity(activityId, testActivity, forceUpdate = true)
 
@@ -549,19 +929,19 @@ class ActivityRepoTest : BaseUnitTest() {
         whenever(cacheStore.data).thenReturn(flowOf(cacheData))
 
         // Mock update for the new activity
-        wheneverBlocking { coreService.activity.update(activityId, testActivity) }.thenReturn(Unit)
+        whenever { coreService.activity.update(activityId, testActivity) }.thenReturn(Unit)
         // Mock getActivity to return the new activity (for addTagsToActivity check)
-        wheneverBlocking {
+        whenever {
             coreService.activity.getActivity(activityId, WalletScope.default)
         }.thenReturn(testActivity)
         // Mock tags retrieval from the old activity
-        wheneverBlocking {
+        whenever {
             coreService.activity.tags(activityToDeleteId, WalletScope.default)
         }.thenReturn(tagsMock)
         // Mock tags retrieval from the new activity (should be empty so all tags are considered new)
-        wheneverBlocking { coreService.activity.tags(activityId, WalletScope.default) }.thenReturn(emptyList())
+        whenever { coreService.activity.tags(activityId, WalletScope.default) }.thenReturn(emptyList())
         // Mock appendTags to add tags to the new activity
-        wheneverBlocking {
+        whenever {
             coreService.activity.appendTags(activityId, tagsMock, WalletScope.default)
         }.thenReturn(Result.success(Unit))
 
@@ -583,7 +963,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `deleteActivity deletes successfully`() = test {
         val activityId = "activity123"
-        wheneverBlocking { coreService.activity.delete(activityId, WalletScope.default) }.thenReturn(true)
+        whenever { coreService.activity.delete(activityId, WalletScope.default) }.thenReturn(true)
         whenever { cacheStore.addActivityToDeletedList(activityId, WalletScope.default) }.thenReturn(Unit)
 
         val result = sut.deleteActivity(activityId)
@@ -596,7 +976,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `deleteActivity fails when service returns false`() = test {
         val activityId = "activity123"
-        wheneverBlocking { coreService.activity.delete(activityId, WalletScope.default) }.thenReturn(false)
+        whenever { coreService.activity.delete(activityId, WalletScope.default) }.thenReturn(false)
 
         val result = sut.deleteActivity(activityId)
 
@@ -608,7 +988,7 @@ class ActivityRepoTest : BaseUnitTest() {
     fun `insertActivity inserts successfully when not deleted`() = test {
         val cacheData = AppCacheData(deletedActivities = emptyList())
         whenever(cacheStore.data).thenReturn(flowOf(cacheData))
-        wheneverBlocking { coreService.activity.insert(testActivity) }.thenReturn(Unit)
+        whenever { coreService.activity.insert(testActivity) }.thenReturn(Unit)
 
         val result = sut.insertActivity(testActivity)
 
@@ -645,8 +1025,8 @@ class ActivityRepoTest : BaseUnitTest() {
     fun `insertActivityFromCjit returns true when newly inserted`() = test {
         val channel = createChannelDetails()
         val id = channel.fundingTxo?.txid.orEmpty()
-        wheneverBlocking { coreService.activity.getActivity(id, WalletScope.default) }.thenReturn(null)
-        wheneverBlocking { coreService.activity.insert(any()) }.thenReturn(Unit)
+        whenever { coreService.activity.getActivity(id, WalletScope.default) }.thenReturn(null)
+        whenever { coreService.activity.insert(any()) }.thenReturn(Unit)
 
         val result = sut.insertActivityFromCjit(cjitEntry = IcJitEntry.mock(), channel = channel)
 
@@ -659,7 +1039,7 @@ class ActivityRepoTest : BaseUnitTest() {
     fun `insertActivityFromCjit returns false when activity already exists`() = test {
         val channel = createChannelDetails()
         val id = channel.fundingTxo?.txid.orEmpty()
-        wheneverBlocking { coreService.activity.getActivity(id, WalletScope.default) }.thenReturn(testActivity)
+        whenever { coreService.activity.getActivity(id, WalletScope.default) }.thenReturn(testActivity)
 
         val result = sut.insertActivityFromCjit(cjitEntry = IcJitEntry.mock(), channel = channel)
 
@@ -685,11 +1065,11 @@ class ActivityRepoTest : BaseUnitTest() {
         val newTags = listOf("tag2", "tag3", "tag4", "") // tag2 exists, empty string should be filtered
         val expectedNewTags = listOf("tag3", "tag4")
 
-        wheneverBlocking {
+        whenever {
             coreService.activity.getActivity(activityId, WalletScope.default)
         }.thenReturn(testActivity)
-        wheneverBlocking { coreService.activity.tags(activityId, WalletScope.default) }.thenReturn(existingTags)
-        wheneverBlocking {
+        whenever { coreService.activity.tags(activityId, WalletScope.default) }.thenReturn(existingTags)
+        whenever {
             coreService.activity.appendTags(
                 activityId,
                 expectedNewTags,
@@ -706,7 +1086,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `addTagsToActivity fails when activity not found`() = test {
         val activityId = "activity123"
-        wheneverBlocking { coreService.activity.getActivity(activityId, WalletScope.default) }.thenReturn(null)
+        whenever { coreService.activity.getActivity(activityId, WalletScope.default) }.thenReturn(null)
 
         val result = sut.addTagsToActivity(activityId, listOf("tag1"))
 
@@ -719,10 +1099,10 @@ class ActivityRepoTest : BaseUnitTest() {
         val existingTags = listOf("tag1", "tag2")
         val duplicateTags = listOf("tag1", "tag2", "")
 
-        wheneverBlocking {
+        whenever {
             coreService.activity.getActivity(activityId, WalletScope.default)
         }.thenReturn(testActivity)
-        wheneverBlocking { coreService.activity.tags(activityId, WalletScope.default) }.thenReturn(existingTags)
+        whenever { coreService.activity.tags(activityId, WalletScope.default) }.thenReturn(existingTags)
 
         val result = sut.addTagsToActivity(activityId, duplicateTags)
 
@@ -759,10 +1139,10 @@ class ActivityRepoTest : BaseUnitTest() {
         val activityId = "activity123"
         val tagsToRemove = listOf("tag1", "tag2")
 
-        wheneverBlocking {
+        whenever {
             coreService.activity.getActivity(activityId, WalletScope.default)
         }.thenReturn(testActivity)
-        wheneverBlocking {
+        whenever {
             coreService.activity.dropTags(activityId, tagsToRemove, WalletScope.default)
         }.thenReturn(Unit)
 
@@ -775,7 +1155,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `removeTagsFromActivity fails when activity not found`() = test {
         val activityId = "activity123"
-        wheneverBlocking { coreService.activity.getActivity(activityId, WalletScope.default) }.thenReturn(null)
+        whenever { coreService.activity.getActivity(activityId, WalletScope.default) }.thenReturn(null)
 
         val result = sut.removeTagsFromActivity(activityId, listOf("tag1"))
 
@@ -786,7 +1166,7 @@ class ActivityRepoTest : BaseUnitTest() {
     fun `getActivityTags returns tags successfully`() = test {
         val activityId = "activity123"
         val tags = listOf("tag1", "tag2", "tag3")
-        wheneverBlocking { coreService.activity.tags(activityId, WalletScope.default) }.thenReturn(tags)
+        whenever { coreService.activity.tags(activityId, WalletScope.default) }.thenReturn(tags)
 
         val result = sut.getActivityTags(activityId)
 
@@ -797,7 +1177,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `getAllAvailableTags returns all tags successfully`() = test {
         val allTags = listOf("tag1", "tag2", "tag3", "tag4")
-        wheneverBlocking { coreService.activity.allPossibleTags() }.thenReturn(allTags)
+        whenever { coreService.activity.allPossibleTags() }.thenReturn(allTags)
 
         val result = sut.getAllAvailableTags()
 
@@ -905,6 +1285,189 @@ class ActivityRepoTest : BaseUnitTest() {
         assertEquals(listOf("hw-txid"), result.map { it.paymentId })
     }
 
+    @Test
+    fun `restoreFromBackup applies every slice and signals tag changes`() = test {
+        val tagsBefore = sut.activityTagsChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity).upsertList(listOf(testActivity))
+        verify(coreService.activity).upsertTags(listOf(backupTags))
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        assertTrue(sut.activityTagsChanged.value > tagsBefore)
+    }
+
+    @Test
+    fun `restoreFromBackup replaces the synced row of a restored on-chain transaction`() = test {
+        val synced = createOnchainActivity(id = "ldk-payment-id", txId = "txid", feeRate = 1u).v1
+        val restored = createOnchainActivity(id = "txid", txId = "txid", feeRate = 3u)
+        whenever(coreService.activity.getOnchainActivityByTxId("txid", restored.v1.walletId)).thenReturn(synced)
+        whenever(coreService.activity.tags(synced.id, synced.walletId)).thenReturn(listOf("synced-tag"))
+        whenever(coreService.activity.delete(synced.id, synced.walletId)).thenReturn(true)
+        whenever(coreService.activity.appendTags(any(), any(), any())).thenReturn(Result.success(Unit))
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(restored)))
+
+        assertTrue(result.isSuccess)
+        inOrder(coreService.activity) {
+            verify(coreService.activity).upsertList(listOf(restored))
+            verify(coreService.activity).appendTags("txid", listOf("synced-tag"), synced.walletId)
+            verify(coreService.activity).delete(synced.id, synced.walletId)
+        }
+    }
+
+    @Test
+    fun `restoreFromBackup does not wait for a sync blocked on node start`() = test {
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val sync = async { sut.syncActivities() }
+        runCurrent()
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(createOnchainActivity())))
+
+        assertTrue(result.isSuccess)
+        assertEquals(0L, currentTime)
+        assertTrue(sync.isActive)
+        sync.cancel()
+    }
+
+    @Test
+    fun `restoreFromBackup waits for a sync while the node runs`() = test {
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        val response = CompletableDeferred<Result<List<PaymentDetails>>>()
+        whenever(lightningRepo.getPayments()).doSuspendableAnswer { response.await() }
+        val sync = async { sut.syncActivities() }
+        runCurrent()
+
+        val payload = backupPayload().copy(activities = listOf(createOnchainActivity()))
+        val restore = async { sut.restoreFromBackup(payload) }
+        runCurrent()
+
+        assertFalse(restore.isCompleted)
+        verify(coreService.activity, never()).upsertList(any())
+        response.complete(Result.success(emptyList()))
+        sync.await()
+        assertTrue(restore.await().isSuccess)
+    }
+
+    @Test
+    fun `restoreFromBackup keeps the synced row when saving the restored rows fails`() = test {
+        val synced = createOnchainActivity(id = "ldk-payment-id", txId = "txid").v1
+        val restored = createOnchainActivity(id = "txid", txId = "txid")
+        whenever(coreService.activity.getOnchainActivityByTxId("txid", restored.v1.walletId)).thenReturn(synced)
+        whenever(coreService.activity.upsertList(any())).thenThrow(RuntimeException("upsert failed"))
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(restored)))
+
+        assertTrue(result.isFailure)
+        verify(coreService.activity, never()).delete(any(), any())
+    }
+
+    @Test
+    fun `restoreFromBackup keeps a synced row that already has the restored id`() = test {
+        val restored = createOnchainActivity(id = "ldk-payment-id", txId = "txid")
+        whenever(coreService.activity.getOnchainActivityByTxId("txid", restored.v1.walletId)).thenReturn(restored.v1)
+
+        val result = sut.restoreFromBackup(backupPayload().copy(activities = listOf(restored)))
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity, never()).delete(any(), any())
+        verify(coreService.activity).upsertList(listOf(restored))
+    }
+
+    @Test
+    fun `restoreFromBackup applies remaining slices when the tags slice fails`() = test {
+        whenever(coreService.activity.upsertTags(any()))
+            .thenThrow(RuntimeException("Failed to insert tag: FOREIGN KEY constraint failed"))
+        val activitiesBefore = sut.activitiesChanged.value
+        val tagsBefore = sut.activityTagsChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        // One unusable tag must not cost the activities or the closed channels.
+        verify(coreService.activity).upsertList(listOf(testActivity))
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        // Still a failure, so BackupRepo never rewrites a good backup with partial state.
+        assertTrue(result.isFailure)
+        assertTrue(sut.activitiesChanged.value > activitiesBefore)
+        // No tag was stored, so the metadata backup must not be marked as changed.
+        assertEquals(tagsBefore, sut.activityTagsChanged.value)
+    }
+
+    @Test
+    fun `restoreFromBackup applies remaining slices when the activities slice fails`() = test {
+        whenever(coreService.activity.upsertList(any())).thenThrow(RuntimeException("upsert failed"))
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        verify(coreService.activity).upsertTags(listOf(backupTags))
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `restoreFromBackup applies remaining slices when the closed channels slice fails`() = test {
+        val failure = RuntimeException("closed channels upsert failed")
+        whenever(coreService.activity.upsertClosedChannelList(any())).thenThrow(failure)
+        val activitiesBefore = sut.activitiesChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        verify(coreService.activity).upsertList(listOf(testActivity))
+        verify(coreService.activity).upsertTags(listOf(backupTags))
+        assertEquals(failure, result.exceptionOrNull())
+        assertTrue(sut.activitiesChanged.value > activitiesBefore)
+    }
+
+    @Test
+    fun `restoreFromBackup returns the first failure when several slices fail`() = test {
+        val activitiesFailure = RuntimeException("activities upsert failed")
+        whenever(coreService.activity.upsertList(any())).thenThrow(activitiesFailure)
+        whenever(coreService.activity.upsertTags(any())).thenThrow(RuntimeException("tags upsert failed"))
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        assertEquals(activitiesFailure, result.exceptionOrNull())
+    }
+
+    @Test
+    fun `restoreFromBackup does not notify observers when every slice fails`() = test {
+        whenever(coreService.activity.upsertList(any())).thenThrow(RuntimeException("activities upsert failed"))
+        whenever(coreService.activity.upsertTags(any())).thenThrow(RuntimeException("tags upsert failed"))
+        whenever(coreService.activity.upsertClosedChannelList(any()))
+            .thenThrow(RuntimeException("closed channels upsert failed"))
+        val activitiesBefore = sut.activitiesChanged.value
+        val tagsBefore = sut.activityTagsChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        assertTrue(result.isFailure)
+        assertEquals(activitiesBefore, sut.activitiesChanged.value)
+        assertEquals(tagsBefore, sut.activityTagsChanged.value)
+    }
+
+    @Test
+    fun `restoreFromBackup rethrows cancellation`() = test {
+        val cancellation = CancellationException("cancelled")
+        whenever(coreService.activity.upsertTags(any())).thenThrow(cancellation)
+
+        val thrown = assertFailsWith<CancellationException> {
+            sut.restoreFromBackup(backupPayload())
+        }
+
+        assertEquals(cancellation.message, thrown.message)
+    }
+
+    private fun backupPayload() = ActivityBackupV1(
+        createdAt = 1234567890L,
+        activities = listOf(testActivity),
+        activityTags = listOf(backupTags),
+        closedChannels = listOf(backupClosedChannel),
+    )
+
     private suspend fun stubHardwareTagLookup(activity: Activity.Onchain) {
         whenever { coreService.activity.getAllActivitiesTags() }
             .thenReturn(listOf(ActivityTags(HARDWARE_WALLET_ID, "hw-activity", listOf("cold"))))
@@ -951,7 +1514,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
     @Test
     fun `removeAllActivities removes all activities successfully`() = test {
-        wheneverBlocking { coreService.activity.removeAll() }.thenReturn(Unit)
+        whenever { coreService.activity.removeAll() }.thenReturn(Unit)
 
         val result = sut.removeAllActivities()
 
@@ -961,7 +1524,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
     @Test
     fun `generateTestData generates with validated count`() = test {
-        wheneverBlocking { coreService.activity.generateRandomTestData(any()) }.thenReturn(Unit)
+        whenever { coreService.activity.generateRandomTestData(any()) }.thenReturn(Unit)
 
         val result = sut.generateTestData(50)
 
@@ -971,7 +1534,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
     @Test
     fun `generateTestData coerces count to valid range`() = test {
-        wheneverBlocking { coreService.activity.generateRandomTestData(any()) }.thenReturn(Unit)
+        whenever { coreService.activity.generateRandomTestData(any()) }.thenReturn(Unit)
 
         val result = sut.generateTestData(1500) // Over limit
 
@@ -986,7 +1549,7 @@ class ActivityRepoTest : BaseUnitTest() {
             updatedAt = 2000u,
             activityToDelete = null
         )
-        wheneverBlocking { cacheStore.addActivityToPendingBoost(pendingBoost) }.thenReturn(Unit)
+        whenever { cacheStore.addActivityToPendingBoost(pendingBoost) }.thenReturn(Unit)
 
         sut.addActivityToPendingBoost(pendingBoost)
 
@@ -1015,7 +1578,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
         val cacheData = AppCacheData(pendingBoostActivities = listOf(pendingBoost))
         setupSyncActivitiesMocks(cacheData)
-        wheneverBlocking {
+        whenever {
             coreService.activity.get(
                 walletId = eq(WalletScope.default),
                 filter = eq(ActivityFilter.ONCHAIN),
@@ -1028,8 +1591,8 @@ class ActivityRepoTest : BaseUnitTest() {
                 sortDirection = anyOrNull()
             )
         }.thenReturn(listOf(existingActivity))
-        wheneverBlocking { coreService.activity.update(eq(activityId), any()) }.thenReturn(Unit)
-        wheneverBlocking { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
+        whenever { coreService.activity.update(eq(activityId), any()) }.thenReturn(Unit)
+        whenever { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
 
         val result = sut.syncActivities()
 
@@ -1068,7 +1631,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
         val cacheData = AppCacheData(pendingBoostActivities = listOf(pendingBoost))
         setupSyncActivitiesMocks(cacheData)
-        wheneverBlocking {
+        whenever {
             coreService.activity.get(
                 walletId = eq(WalletScope.default),
                 filter = eq(ActivityFilter.ONCHAIN),
@@ -1081,8 +1644,8 @@ class ActivityRepoTest : BaseUnitTest() {
                 sortDirection = anyOrNull()
             )
         }.thenReturn(listOf(existingActivity))
-        wheneverBlocking { coreService.activity.update(eq(activityId), any()) }.thenReturn(Unit)
-        wheneverBlocking { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
+        whenever { coreService.activity.update(eq(activityId), any()) }.thenReturn(Unit)
+        whenever { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
 
         val result = sut.syncActivities()
 
@@ -1121,7 +1684,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
         val cacheData = AppCacheData(pendingBoostActivities = listOf(pendingBoost))
         setupSyncActivitiesMocks(cacheData)
-        wheneverBlocking {
+        whenever {
             coreService.activity.get(
                 walletId = eq(WalletScope.default),
                 filter = eq(ActivityFilter.ONCHAIN),
@@ -1134,8 +1697,8 @@ class ActivityRepoTest : BaseUnitTest() {
                 sortDirection = anyOrNull()
             )
         }.thenReturn(listOf(existingActivity))
-        wheneverBlocking { coreService.activity.update(eq(activityId), any()) }.thenReturn(Unit)
-        wheneverBlocking { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
+        whenever { coreService.activity.update(eq(activityId), any()) }.thenReturn(Unit)
+        whenever { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
 
         val result = sut.syncActivities()
 
@@ -1173,7 +1736,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
         val cacheData = AppCacheData(pendingBoostActivities = listOf(pendingBoost))
         setupSyncActivitiesMocks(cacheData)
-        wheneverBlocking {
+        whenever {
             coreService.activity.get(
                 walletId = eq(WalletScope.default),
                 filter = eq(ActivityFilter.ONCHAIN),
@@ -1187,18 +1750,18 @@ class ActivityRepoTest : BaseUnitTest() {
             )
         }.thenReturn(listOf(existingActivity))
         val tagsToCopy = listOf("tag1", "tag2")
-        wheneverBlocking { coreService.activity.update(eq(activityId), any()) }.thenReturn(Unit)
-        wheneverBlocking {
+        whenever { coreService.activity.update(eq(activityId), any()) }.thenReturn(Unit)
+        whenever {
             coreService.activity.getActivity(activityId, WalletScope.default)
         }.thenReturn(existingActivity)
-        wheneverBlocking {
+        whenever {
             coreService.activity.tags(activityToDeleteId, WalletScope.default)
         }.thenReturn(tagsToCopy)
-        wheneverBlocking { coreService.activity.tags(activityId, WalletScope.default) }.thenReturn(emptyList())
-        wheneverBlocking {
+        whenever { coreService.activity.tags(activityId, WalletScope.default) }.thenReturn(emptyList())
+        whenever {
             coreService.activity.appendTags(activityId, tagsToCopy, WalletScope.default)
         }.thenReturn(Result.success(Unit))
-        wheneverBlocking { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
+        whenever { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
 
         val result = sut.syncActivities()
 
@@ -1232,7 +1795,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
         val cacheData = AppCacheData(pendingBoostActivities = listOf(pendingBoost))
         setupSyncActivitiesMocks(cacheData)
-        wheneverBlocking {
+        whenever {
             coreService.activity.get(
                 walletId = eq(WalletScope.default),
                 filter = eq(ActivityFilter.ONCHAIN),
@@ -1245,7 +1808,7 @@ class ActivityRepoTest : BaseUnitTest() {
                 sortDirection = anyOrNull()
             )
         }.thenReturn(listOf(existingActivity))
-        wheneverBlocking { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
+        whenever { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
 
         val result = sut.syncActivities()
 
@@ -1254,6 +1817,40 @@ class ActivityRepoTest : BaseUnitTest() {
         verify(coreService.activity, never()).update(eq(activityId), any())
         // Verify pending boost was removed (skipped)
         verify(cacheStore).removeActivityFromPendingBoost(pendingBoost)
+    }
+
+    @Test
+    fun `savePendingLightningMessage stores the message by payment hash`() = test {
+        val result = sut.savePendingLightningMessage("payment-hash", "thanks")
+
+        assertTrue(result.isSuccess)
+        verify(cacheStore).setPendingLightningMessage("payment-hash", "thanks")
+    }
+
+    @Test
+    fun `clearPendingLightningMessage removes the message for the payment hash`() = test {
+        val result = sut.clearPendingLightningMessage("payment-hash")
+
+        assertTrue(result.isSuccess)
+        verify(cacheStore).removePendingLightningMessage("payment-hash")
+    }
+
+    @Test
+    fun `setLightningMessageIfEmpty delegates to the activity service`() = test {
+        val result = sut.setLightningMessageIfEmpty("payment-hash", "thanks")
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity).setLightningMessageIfEmpty("payment-hash", "thanks")
+    }
+
+    @Test
+    fun `setLightningMessageIfEmpty returns failure when the activity service fails`() = test {
+        whenever(coreService.activity.setLightningMessageIfEmpty("payment-hash", "thanks"))
+            .doSuspendableAnswer { throw AppError("db") }
+
+        val result = sut.setLightningMessageIfEmpty("payment-hash", "thanks")
+
+        assertTrue(result.isFailure)
     }
 
     private companion object {

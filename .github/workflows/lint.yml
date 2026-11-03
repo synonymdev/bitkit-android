@@ -16,10 +16,11 @@ env:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     permissions:
       contents: read  # for actions/checkout to fetch code
+      packages: read  # for Android Lint to resolve GitHub Packages dependencies
       security-events: write  # for github/codeql-action/upload-sarif to upload SARIF results
 
     steps:
@@ -38,7 +39,14 @@ jobs:
       - name: Run Detekt Analysis
         run: |
           ./gradlew detekt --no-daemon --stacktrace
-        continue-on-error: true
+
+      - name: Run Android Lint
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./gradlew lintDevDebug --no-daemon --stacktrace
 
       - name: Upload SARIF
         if: always()
@@ -48,8 +56,11 @@ jobs:
         continue-on-error: true
 
       - name: Upload lint report
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: lint_report_${{ github.run_number }}
-          path: app/build/reports/detekt/
+          path: |
+            app/build/reports/detekt/
+            app/build/reports/lint-results-devDebug.*
           retention-days: 30

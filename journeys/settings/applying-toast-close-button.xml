@@ -1,0 +1,28 @@
+<journey name="applying toast close button">
+  <description>
+    A toast that does not hide by itself shows a close X at its top right, and its text never runs
+    under that X. The "Applying changes…" toast shown while the address type changes is one, on
+    both platforms. French at the largest text size makes its title ("Application des
+    modifications…") fill the first line, so it has to wrap before the X instead of continuing
+    beneath it.
+
+    Precondition: onboarded dev wallet, start on the wallet home screen. The toast stays only while
+    the change applies, usually one or two seconds, so take the screenshot right after the tap and
+    repeat the switch if it was missed. Toasts are not in `android layout` or `snapshot-ui`, so the
+    checks read a screenshot.
+
+    Android: set French with `adb shell cmd locale set-app-locales to.bitkit.dev --locales fr` and
+    the text size with `adb shell settings put system font_scale 2.0`. iOS: set French in the app's
+    language settings and the text size with
+    `xcrun simctl ui booted content_size accessibility-extra-extra-extra-large`.
+  </description>
+  <actions>
+    <action>Set the app language to French and the text size to the largest value</action>
+    <action>Tap the menu button (tag "HeaderMenu") and tap Settings</action>
+    <action>Tap the Advanced tab (tag "Tab-advanced") and tap Address Type (tag "AddressTypePreference")</action>
+    <action>Tap the address type that is not selected among Native Segwit (tag "p2wpkh") and Taproot (tag "p2tr"), and take a screenshot right away</action>
+    <action>Verify from the screenshot that the toast titled "Application des modifications…" shows a close X at its top right and no part of its text is drawn under or to the right of the left edge of the X</action>
+    <action>Tap the address type that was selected at the start, to restore it</action>
+    <action>Restore the app language and the default text size</action>
+  </actions>
+</journey>

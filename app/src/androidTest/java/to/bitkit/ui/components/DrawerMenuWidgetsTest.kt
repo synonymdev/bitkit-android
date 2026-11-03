@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -68,6 +69,7 @@ class DrawerMenuWidgetsTest {
                     rootNavController = navController,
                     hasSeenWidgetsIntro = false,
                     hasSeenShopIntro = true,
+                    profileIdentityExists = flowOf(false),
                     onBeforeNavigate = {},
                     showWidgets = true,
                 )
@@ -100,6 +102,7 @@ class DrawerMenuWidgetsTest {
                     rootNavController = navController,
                     hasSeenWidgetsIntro = true,
                     hasSeenShopIntro = true,
+                    profileIdentityExists = flowOf(false),
                     onBeforeNavigate = {},
                     showWidgets = true,
                     onOpenWidgetsHome = { openWidgetsHome.value = true },
@@ -136,6 +139,7 @@ class DrawerMenuWidgetsTest {
                     rootNavController = navController,
                     hasSeenWidgetsIntro = true,
                     hasSeenShopIntro = true,
+                    profileIdentityExists = flowOf(false),
                     onBeforeNavigate = {},
                     showWidgets = false,
                     onOpenWidgetsHome = { error("Should not request home widgets page") },
@@ -153,7 +157,7 @@ class DrawerMenuWidgetsTest {
     }
 
     @Test
-    fun paymentRequestsIsAvailableFromDrawerWhenPaykitIsEnabled() {
+    fun subscriptionsIsTheOnlyPaykitEntryInDrawerWhenPaykitIsEnabled() {
         composeTestRule.setContent {
             val navController = rememberNavController()
             val drawerState = rememberDrawerState(DrawerValue.Open)
@@ -166,8 +170,8 @@ class DrawerMenuWidgetsTest {
                     composable<Routes.Home> {
                         Text("Home", modifier = Modifier.testTag("HomeRoute"))
                     }
-                    composable<Routes.PaymentRequests> {
-                        Text("Payment Requests", modifier = Modifier.testTag("PaymentRequestsRoute"))
+                    composable<Routes.Subscriptions> {
+                        Text("Subscriptions", modifier = Modifier.testTag("SubscriptionsRoute"))
                     }
                 }
                 DrawerMenu(
@@ -175,6 +179,7 @@ class DrawerMenuWidgetsTest {
                     rootNavController = navController,
                     hasSeenWidgetsIntro = true,
                     hasSeenShopIntro = true,
+                    profileIdentityExists = flowOf(true),
                     onBeforeNavigate = {},
                     showWidgets = true,
                     isPaykitEnabled = true,
@@ -182,14 +187,13 @@ class DrawerMenuWidgetsTest {
             }
         }
 
-        composeTestRule.onNodeWithText("REQUESTS").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("DrawerPaymentRequests").performClick()
+        composeTestRule.onNodeWithTag("DrawerSubscriptions").performClick()
 
-        composeTestRule.onNodeWithTag("PaymentRequestsRoute").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("SubscriptionsRoute").assertIsDisplayed()
     }
 
     @Test
-    fun paymentRequestsIsHiddenFromDrawerWhenPaykitIsDisabled() {
+    fun paykitEntriesAreHiddenFromDrawerWhenPaykitIsDisabled() {
         composeTestRule.setContent {
             val navController = rememberNavController()
             val drawerState = rememberDrawerState(DrawerValue.Open)
@@ -200,6 +204,7 @@ class DrawerMenuWidgetsTest {
                     rootNavController = navController,
                     hasSeenWidgetsIntro = true,
                     hasSeenShopIntro = true,
+                    profileIdentityExists = flowOf(true),
                     onBeforeNavigate = {},
                     showWidgets = true,
                     isPaykitEnabled = false,
@@ -207,7 +212,7 @@ class DrawerMenuWidgetsTest {
             }
         }
 
-        composeTestRule.onNodeWithTag("DrawerPaymentRequests").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("DrawerSubscriptions").assertDoesNotExist()
     }
 }
 

@@ -46,7 +46,6 @@ import javax.inject.Singleton
 import kotlin.time.Clock
 
 @Singleton
-@Suppress("LongParameterList", "LargeClass", "TooManyFunctions")
 class QuickPayRepo @Inject constructor(
     cacheStore: CacheStore,
     private val settingsStore: SettingsStore,
@@ -480,7 +479,6 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    @Suppress("CyclomaticComplexMethod", "ReturnCount")
     private suspend fun signalCompletionLocked(
         paymentId: String?,
         paymentHash: String?,

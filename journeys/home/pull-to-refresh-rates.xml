@@ -1,0 +1,24 @@
+<journey name="pull to refresh rates">
+  <description>
+    Pulling to refresh on Home also refreshes exchange rates, not only the wallet, activity and
+    widgets. Precondition: onboarded dev wallet on Home (tag "HomeScrollView" visible), the Bitcoin
+    Price widget enabled, and network access to the rates backend. Rates also refresh on app start
+    and every two minutes of polling (`Env.fxRateRefreshInterval`), so pull at least 20s after the
+    last "Currency rates refreshed successfully" line and well before the next polling tick, or the
+    log check passes for the wrong reason. The success line and any error toast are not in
+    `android layout`; read the app log and take a screenshot. Log files rotate into `.part_NNN.log`
+    files mid-run, so list the logs again before each grep and read the newest one. Android only for
+    now: iOS does not refresh rates on pull.
+  </description>
+  <actions>
+    <action>Run `adb shell "run-as to.bitkit.dev ls -t files/logs/"` and note the newest log file</action>
+    <action>Run `adb shell "run-as to.bitkit.dev grep 'Currency rates refreshed' files/logs/&lt;newest&gt;"` and note the time of the last line</action>
+    <action>Verify the home screen (tag "HomeScrollView") is visible</action>
+    <action>Run `adb shell input swipe 540 700 540 1600 400` and note the UTC time</action>
+    <action>Verify the newest log (list the logs again) gains a "Currency rates refreshed successfully" line within 10s of the pull</action>
+    <action>Verify the same pull logs "Updated PRICE widget successfully" from WidgetsRepo</action>
+    <action>Run `adb shell input swipe 540 700 540 1600 400` twice back to back and take a screenshot</action>
+    <action>Verify no "Rates currently unavailable" toast is visible in the screenshot</action>
+    <action>Verify the newest log (list the logs again) gains at most one "Currency rates refreshed successfully" line for the two pulls and no "Currency rates refresh failed" line</action>
+  </actions>
+</journey>

@@ -22,6 +22,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.UrlValidator
 import javax.inject.Singleton
+import javax.net.ssl.SSLSocketFactory
 import io.ktor.client.plugins.logging.Logger as KtorLogger
 
 @Module
@@ -49,6 +50,10 @@ object HttpModule {
 
     @Provides
     @Singleton
+    fun provideSslSocketFactory(): SSLSocketFactory = SSLSocketFactory.getDefault() as SSLSocketFactory
+
+    @Provides
+    @Singleton
     fun provideUrlValidator(httpClient: HttpClient) = UrlValidator { url ->
         runCatching {
             val response = httpClient.head(url)
@@ -58,7 +63,6 @@ object HttpModule {
         }
     }
 
-    @Suppress("MagicNumber")
     private fun HttpTimeoutConfig.defaultTimeoutConfig() {
         requestTimeoutMillis = 60_000
         connectTimeoutMillis = 60_000

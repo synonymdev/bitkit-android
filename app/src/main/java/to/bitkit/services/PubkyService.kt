@@ -1,32 +1,49 @@
 package to.bitkit.services
 
-import com.synonym.paykit.ContactProfileResolution
+import com.synonym.bitkitcore.approvePubkyAuth
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.PaykitPublicKeys
+import com.synonym.paykit.ProfileResolution
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkySessionBootstrapResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.async.ServiceQueue
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import com.synonym.bitkitcore.parsePubkyAuthUrl as parseLegacyPubkyAuthUrl
 
-@Suppress("TooManyFunctions")
 @Singleton
 class PubkyService @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
 ) {
+    companion object {
+        /** Maximum wait for a Pubky authorization network response. */
+        internal val AUTHORIZATION_TIMEOUT = 30.seconds
+    }
+
     suspend fun initialize() = ServiceQueue.CORE.background {
         paykitSdkService.initialize()
     }
+
+    suspend fun initializeAndImportSession(secret: String): Result<String> = ServiceQueue.CORE.background {
+        paykitSdkService.initializeAndImportSession(secret).map { it.publicKey }
+    }
+
+    suspend fun republishIdentityIfNeeded(publicKey: String? = null) =
+        paykitSdkService.republishIdentityIfNeeded(publicKey)
 
     // region Session management
 
     suspend fun importSession(secret: String): String = ServiceQueue.CORE.background {
         paykitSdkService.importSession(secret).publicKey
-    }
-
-    suspend fun importExternalSession(secret: String): String = ServiceQueue.CORE.background {
-        paykitSdkService.importSession(secret, includeLocalSecret = false).publicKey
     }
 
     suspend fun currentPublicKey(): String? = ServiceQueue.CORE.background {
@@ -37,8 +54,8 @@ class PubkyService @Inject constructor(
         paykitSdkService.signOut()
     }
 
-    suspend fun forceSignOut() = ServiceQueue.CORE.background {
-        paykitSdkService.forceSignOut()
+    suspend fun forgetSessionAccess() = ServiceQueue.CORE.background {
+        paykitSdkService.forgetSessionAccess()
     }
 
     suspend fun clearSessionAccess() = ServiceQueue.CORE.background {
@@ -50,11 +67,11 @@ class PubkyService @Inject constructor(
             val report = paykitSdkService.syncPublicEndpoints(emptyList())
             if (report.failed.isNotEmpty()) throw AppError("Failed to remove Paykit payment endpoints")
         }.exceptionOrNull()
-        val markerError = runSuspendCatching {
-            paykitSdkService.syncLocalReceiverMarker(isDiscoverable = false)
+        val appError = runSuspendCatching {
+            paykitSdkService.syncPaykitApp(privatePaymentsEnabled = false)
         }.exceptionOrNull()
-        val cleanupError = endpointError ?: markerError
-        if (endpointError != null && markerError != null) endpointError.addSuppressed(markerError)
+        val cleanupError = endpointError ?: appError
+        if (endpointError != null && appError != null) endpointError.addSuppressed(appError)
         cleanupError?.let { throw it }
     }
 
@@ -80,26 +97,26 @@ class PubkyService @Inject constructor(
             Unit
         }
 
+    suspend fun registerIdentity(
+        secretKeyHex: String,
+        homeserverZ32: String,
+        signupCode: String?,
+    ): PubkySessionBootstrapResult =
+        ServiceQueue.CORE.background {
+            paykitSdkService.registerIdentity(secretKeyHex, homeserverZ32, signupCode)
+        }
+
+    suspend fun activateRegisteredIdentity(result: PubkySessionBootstrapResult) = ServiceQueue.CORE.background {
+        paykitSdkService.activateRegisteredIdentity(result)
+    }
+
     suspend fun signIn(secretKeyHex: String): Unit = ServiceQueue.CORE.background {
         paykitSdkService.signIn(secretKeyHex)
         Unit
     }
 
-    // endregion
-
-    // region Auth flow (Ring)
-
-    suspend fun startAuth(): String = ServiceQueue.CORE.background {
-        paykitSdkService.startAuth()
-    }
-
-    suspend fun completeAuth(): Unit = ServiceQueue.CORE.background {
-        paykitSdkService.completeAuth()
-        Unit
-    }
-
-    suspend fun cancelAuth() = ServiceQueue.CORE.background {
-        paykitSdkService.cancelAuth()
+    suspend fun hasIdentityRecord(publicKey: String): Boolean = ServiceQueue.CORE.background {
+        paykitSdkService.hasIdentityRecord(publicKey)
     }
 
     // endregion
@@ -110,23 +127,46 @@ class PubkyService @Inject constructor(
         PaykitSdkService.parseAuthUrl(url)
     }
 
+    suspend fun validateSignupRequest(authorizationUrl: String?, homeserverPublicKey: String): Unit =
+        ServiceQueue.CORE.background {
+            authorizationUrl?.let { parseLegacyPubkyAuthUrl(it) }
+            PaykitPublicKeys.normalize(homeserverPublicKey)
+            Unit
+        }
+
     suspend fun approveAuth(
         authUrl: String,
         expectedCapabilities: String,
+        approvedClientId: String,
         secretKeyHex: String,
     ) = ServiceQueue.CORE.background {
-        paykitSdkService.approveAuth(authUrl, expectedCapabilities, secretKeyHex)
+        paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
+        paykitSdkService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
+    }
+
+    suspend fun approveRingAuth(
+        authUrl: String,
+        secretKeyHex: String,
+        timeout: Duration = AUTHORIZATION_TIMEOUT,
+    ) = ServiceQueue.CORE.background {
+        paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
+        withTimeoutOrNull(timeout) {
+            approvePubkyAuth(authUrl, secretKeyHex)
+        } ?: throw PubkyRingAuthTimeoutError()
     }
 
     suspend fun approveAuthWithCompanionClaim(
         authUrl: String,
         expectedCapabilities: String,
+        approvedClientId: String,
         secretKeyHex: String,
         claim: PubkyAuthCompanionClaim,
     ) = ServiceQueue.CORE.background {
+        paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
         paykitSdkService.approveAuthWithCompanionClaim(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
+            approvedClientId = approvedClientId,
             secretKeyHex = secretKeyHex,
             claim = claim,
         )
@@ -136,8 +176,23 @@ class PubkyService @Inject constructor(
 
     // region File operations
 
-    suspend fun fetchFile(uri: String): ByteArray = ServiceQueue.CORE.background {
-        paykitSdkService.fetchFile(uri)
+    suspend fun fetchFile(uri: String, maxBytes: ULong): ByteArray = cancellablePublicRead {
+        paykitSdkService.fetchFile(uri, maxBytes)
+    }
+
+    suspend fun listPublicDirectoryPage(uri: String, cursor: String?, limit: UShort): List<String> =
+        cancellablePublicRead { paykitSdkService.listPublicDirectoryPage(uri, cursor, limit) }
+
+    suspend fun fetchPublicFile(uri: String, maxBytes: ULong): ByteArray = cancellablePublicRead {
+        paykitSdkService.fetchPublicFile(uri, maxBytes)
+    }
+
+    suspend fun importShopContacts(
+        publicKeys: List<String>,
+        expectedIdentity: String,
+        isStillCurrent: () -> Boolean,
+    ): List<ContactRecord> = ServiceQueue.CORE.background(ServiceQueue.CORE.queueContext.minusKey(Job)) {
+        paykitSdkService.importShopContacts(publicKeys, expectedIdentity, isStillCurrent)
     }
 
     // endregion
@@ -156,7 +211,7 @@ class PubkyService @Inject constructor(
         paykitSdkService.deletePaykitProfile()
     }
 
-    suspend fun getContacts(publicKey: String): List<String> = ServiceQueue.CORE.background {
+    suspend fun getContacts(publicKey: String): List<String> = cancellablePublicRead {
         paykitSdkService.fetchPubkyFollows(publicKey)
     }
 
@@ -164,28 +219,54 @@ class PubkyService @Inject constructor(
         paykitSdkService.contactRecords()
     }
 
+    suspend fun observedContactRecords(expectedIdentity: String): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.observeState(expectedIdentity).contacts
+    }
+
     suspend fun saveContact(
         publicKey: String,
         label: String?,
-        receiverPaths: List<String>? = null,
+        restorePrivateConnection: Boolean = false,
+        expectedIdentity: String? = null,
+        isStillCurrent: (() -> Boolean)? = null,
     ): ContactRecord = ServiceQueue.CORE.background {
-        paykitSdkService.saveContact(publicKey, label, receiverPaths)
+        paykitSdkService.saveContact(
+            publicKey,
+            label,
+            restorePrivateConnection,
+            expectedIdentity,
+            isStillCurrent,
+        )
+    }
+
+    suspend fun saveContacts(
+        updates: List<ContactUpdate>,
+        expectedIdentity: String? = null,
+        isStillCurrent: (() -> Boolean)? = null,
+    ): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.saveContacts(updates, expectedIdentity, isStillCurrent)
     }
 
     suspend fun removeContact(publicKey: String): ContactRecord? = ServiceQueue.CORE.background {
         paykitSdkService.removeContact(publicKey)
     }
 
+    suspend fun removeContacts(publicKeys: List<String>): List<ContactRecord> = ServiceQueue.CORE.background {
+        paykitSdkService.removeContacts(publicKeys)
+    }
+
     suspend fun resolveContactProfile(
         publicKey: String,
         allowPubkyProfileFallback: Boolean,
-    ): ContactProfileResolution? = ServiceQueue.CORE.background {
-        paykitSdkService.resolveContactProfile(publicKey, allowPubkyProfileFallback)
+        lane: PaykitReadLane = PaykitReadLane.Interactive,
+        timeout: Duration? = null,
+    ): ProfileResolution? = cancellablePublicRead {
+        paykitSdkService.resolveContactProfile(publicKey, allowPubkyProfileFallback, lane, timeout)
     }
-
-    suspend fun discoverRelevantReceiverPaths(publicKey: String): List<String> = ServiceQueue.CORE.background {
-        paykitSdkService.discoverRelevantReceiverPaths(publicKey)
-    }
-
     // endregion
+
+    private suspend fun <T> cancellablePublicRead(block: suspend CoroutineScope.() -> T): T =
+        ServiceQueue.CORE.background(ServiceQueue.CORE.queueContext.minusKey(Job), block)
 }
+
+class PubkyRingAuthTimeoutError : AppError("Ring authorization timed out")

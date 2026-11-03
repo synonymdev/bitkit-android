@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -19,9 +20,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
@@ -53,12 +56,12 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.animations.BalanceAnimations
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
 import to.bitkit.ui.utils.uiDateText
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ActivityRow(
     item: Activity,
@@ -104,15 +107,7 @@ fun ActivityRow(
         }
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickableAlpha { onClick(item) }
-            .background(color = Colors.Gray6, shape = Shapes.medium)
-            .padding(16.dp)
-            .testTag(testTag)
-    ) {
+    ActivityRowSurface(onClick = { onClick(item) }, modifier = Modifier.testTag(testTag)) {
         ActivityIcon(
             activity = item,
             size = 40.dp,
@@ -196,7 +191,6 @@ private fun shouldUseContactActivityTitle(
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun TransactionStatusText(
     txType: PaymentType,
@@ -294,7 +288,7 @@ private fun AmountView(
 }
 
 @Composable
-private fun AmountViewContent(
+fun AmountViewContent(
     title: String,
     titlePrefix: String,
     subtitle: String,
@@ -303,20 +297,27 @@ private fun AmountViewContent(
     subtitleSymbol: String? = null,
     isSymbolSuffix: Boolean = false,
     hideBalance: Boolean = false,
+    titleStyle: TextStyle = AppTextStyles.BodyMSB,
+    subtitleStyle: TextStyle = AppTextStyles.CaptionB,
+    verticalSpacing: Dp = 2.dp,
 ) {
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(verticalSpacing),
     ) {
         // Title row with static prefix and symbol
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            BodyM(text = titlePrefix, color = Colors.White64)
+            BodyM(
+                text = titlePrefix,
+                color = Colors.White64,
+                style = titleStyle.copy(fontWeight = AppTextStyles.BodyM.fontWeight)
+            )
             if (titleSymbol != null && !isSymbolSuffix) {
-                BodyMSB(text = titleSymbol, color = Colors.White64)
+                BodyMSB(text = titleSymbol, color = Colors.White64, style = titleStyle)
             }
             HorizontalSpacer(2.dp)
             AnimatedContent(
@@ -324,11 +325,12 @@ private fun AmountViewContent(
                 transitionSpec = { BalanceAnimations.activityAmountTransition },
                 label = "titleAnimation"
             ) { isHidden ->
-                BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else title)
+                BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else title, style = titleStyle)
             }
             if (titleSymbol != null && isSymbolSuffix) {
                 BodyMSB(
                     text = titleSymbol,
+                    style = titleStyle,
                     color = Colors.White64,
                     modifier = Modifier.padding(start = 2.dp),
                 )
@@ -341,7 +343,7 @@ private fun AmountViewContent(
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             if (subtitleSymbol != null && !isSymbolSuffix) {
-                CaptionB(text = subtitleSymbol, color = Colors.White64)
+                CaptionB(text = subtitleSymbol, color = Colors.White64, style = subtitleStyle)
             }
             AnimatedContent(
                 targetState = hideBalance,
@@ -350,11 +352,12 @@ private fun AmountViewContent(
             ) { isHidden ->
                 CaptionB(
                     text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else subtitle,
+                    style = subtitleStyle,
                     color = Colors.White64,
                 )
             }
             if (subtitleSymbol != null && isSymbolSuffix) {
-                CaptionB(text = subtitleSymbol, color = Colors.White64)
+                CaptionB(text = subtitleSymbol, color = Colors.White64, style = subtitleStyle)
             }
         }
     }
@@ -377,4 +380,18 @@ private fun Preview(@PreviewParameter(ActivityItemsPreviewProvider::class) item:
             testTag = "Activity-",
         )
     }
+}
+
+@Composable
+fun ActivityRowSurface(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+        modifier = modifier.fillMaxWidth().clickableAlpha(onClick = onClick)
+            .background(Colors.Gray6, Shapes.medium).padding(16.dp)
+    )
 }

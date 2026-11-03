@@ -1,0 +1,23 @@
+<journey name="local-only paykit fallback">
+  <description>
+    LOCAL-ONLY and unrun. Use the setup recipe in local-paykit-fallback.md only after actual
+    remote Shop staging Paykit pairing fails and the staging homeserver signup prerequisite passes.
+    This verifies a standalone Paykit fixture, not Shop order-paid or Locks content acceptance.
+  </description>
+  <actions>
+    <action>Record the failed remote staging pairing evidence and successful homeserver signup prerequisite</action>
+    <action>Verify the pinned server revision, app binary, staging homeserver identities and matching regtest Electrum endpoint</action>
+    <action>Validate the owned server configuration, start the server and Cloudflare tunnel, and verify both health endpoints</action>
+    <action>Open the fixture setup page in a browser, send its generated Pubky Auth URL to the seller wallet, and verify Paykit access and watch-only account consent</action>
+    <action>Authorize the claims and verify setup completes for the original seller without sharing root identity or spending keys</action>
+    <action>Enable contact payments in both wallets, save both contacts and verify their linked state</action>
+    <action>Fund the fresh buyer staging-regtest savings address and verify the confirmed balance</action>
+    <action>Create exactly one fixture request and record its original payer, seller, request, invoice, amount, recipient, network and deadline</action>
+    <action>Verify the received request and payment review match those original values before authenticating</action>
+    <action>Authenticate the payment once and record the retained transaction identity and backend outcome</action>
+    <action>If the outcome is uncertain, retain the original guard and request without creating a replacement payment</action>
+    <action>Verify the exact transaction output and server payment observation, then mine and record confirmation</action>
+    <action>Report standalone pairing, delivery and payment results separately from the original Shop order, marking unexercised Shop acceptance unrun</action>
+    <action>Save sanitized evidence, classify incomplete boundaries and verify teardown of only owned resources while preserving unresolved recovery state</action>
+  </actions>
+</journey>

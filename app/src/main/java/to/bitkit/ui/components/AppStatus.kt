@@ -35,8 +35,8 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun AppStatus(
-    healthStatus: HealthState = rememberHealthState(),
     modifier: Modifier = Modifier,
+    healthStatus: HealthState = rememberHealthState(),
     showText: Boolean = false,
     showReady: Boolean = false,
     color: Color? = null,
@@ -120,7 +120,6 @@ fun rememberHealthState(): HealthState {
     return healthState.app
 }
 
-@Suppress("MagicNumber")
 @Composable
 private fun rememberRotationEasing(): Easing {
     val bezierEasing = remember { CubicBezierEasing(0.4f, 0f, 0.2f, 1f) }

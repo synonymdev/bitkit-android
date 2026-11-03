@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -106,8 +105,12 @@ fun ProgressSteps(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        BodySSB(text = steps[activeStepIndex], color = Colors.White32)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.height(56.dp)
+        ) {
+            BodySSB(text = steps[activeStepIndex], color = Colors.White32)
+        }
     }
 }
 

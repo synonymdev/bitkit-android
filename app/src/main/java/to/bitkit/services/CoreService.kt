@@ -5,15 +5,13 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.BlocktankException
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.ClosedChannelDetails
-import com.synonym.bitkitcore.CreateCjitOptions
-import com.synonym.bitkitcore.CreateOrderOptions
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.GetAddressesResponse
-import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
@@ -30,17 +28,15 @@ import com.synonym.bitkitcore.SortDirection
 import com.synonym.bitkitcore.ValidationResult
 import com.synonym.bitkitcore.WordCount
 import com.synonym.bitkitcore.addTags
-import com.synonym.bitkitcore.createCjitEntry
-import com.synonym.bitkitcore.createOrder
 import com.synonym.bitkitcore.deleteActivitiesByWalletId
 import com.synonym.bitkitcore.deleteActivityById
 import com.synonym.bitkitcore.deleteTransactionDetails
 import com.synonym.bitkitcore.deriveOnchainDescriptor
-import com.synonym.bitkitcore.estimateOrderFeeFull
 import com.synonym.bitkitcore.getActivities
 import com.synonym.bitkitcore.getActivityById
 import com.synonym.bitkitcore.getActivityByTxId
 import com.synonym.bitkitcore.getAllClosedChannels
+import com.synonym.bitkitcore.getAllTransactionDetails
 import com.synonym.bitkitcore.getAllUniqueTags
 import com.synonym.bitkitcore.getCjitEntries
 import com.synonym.bitkitcore.getInfo
@@ -65,11 +61,11 @@ import com.synonym.bitkitcore.upsertInfo
 import com.synonym.bitkitcore.upsertOrders
 import com.synonym.bitkitcore.upsertTransactionDetails
 import com.synonym.bitkitcore.wipeAllDatabases
-import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ConfirmationStatus
@@ -100,6 +96,7 @@ import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
+import to.bitkit.repositories.PaykitReceivedPaymentContacts
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -113,18 +110,19 @@ import com.synonym.bitkitcore.TxInput as BitkitCoreTxInput
 import com.synonym.bitkitcore.TxOutput as BitkitCoreTxOutput
 import com.synonym.bitkitcore.getLnurlInvoiceForPayData as coreGetLnurlInvoiceForPayData
 import com.synonym.bitkitcore.getTransactionDetails as getBitkitCoreTransactionDetails
+import com.synonym.bitkitcore.markActivityAsSeen as coreMarkActivityAsSeen
 
 // region Core
 
 @Singleton
 class CoreService @Inject constructor(
     private val lightningService: LightningService,
-    private val httpClient: HttpClient,
     private val cacheStore: CacheStore,
     private val settingsStore: SettingsStore,
     private val privatePaykitContactResolver: Provider<PrivatePaykitContactResolver>,
 ) {
-    private var walletIndex: Int = 0
+    internal var walletIndex: Int = 0
+        private set
 
     val activity: ActivityService by lazy {
         ActivityService(
@@ -169,46 +167,9 @@ class CoreService @Inject constructor(
         }
     }
 
-    @Suppress("KotlinConstantConditions")
-    suspend fun isGeoBlocked(): Boolean {
-        val tag = "GeoCheck"
-        if (!Env.isGeoblockingEnabled) {
-            Logger.verbose("Geoblocking disabled via build config", context = tag)
-            return false
-        }
-
-        return ServiceQueue.CORE.background {
-            runCatching {
-                Logger.verbose("Checking geo status…", context = tag)
-                val response = httpClient.get(Env.geoCheckUrl)
-
-                when (response.status.value) {
-                    HttpStatusCode.OK.value -> {
-                        Logger.verbose("Region allowed", context = tag)
-                        false
-                    }
-
-                    HttpStatusCode.Forbidden.value -> {
-                        Logger.warn("Region blocked", context = tag)
-                        true
-                    }
-
-                    else -> {
-                        Logger.warn(
-                            "Unexpected status code: ${response.status.value}, defaulting to false",
-                            context = tag
-                        )
-                        false
-                    }
-                }
-            }.onFailure {
-                Logger.warn("Error. defaulting isGeoBlocked to false", context = tag)
-            }.getOrDefault(false)
-        }
-    }
-
     suspend fun wipeData(): Result<Unit> = ServiceQueue.CORE.background {
         runCatching {
+            activity.invalidatePaykitContactBackfill()
             val result = wipeAllDatabases()
             Logger.info("Core DB wipe: '$result'", context = TAG)
         }.onFailure {
@@ -217,8 +178,32 @@ class CoreService @Inject constructor(
     }
 
     suspend fun isAddressUsed(address: String): Boolean = ServiceQueue.CORE.background {
-        com.synonym.bitkitcore.isAddressUsed(address = address)
+        com.synonym.bitkitcore.isAddressUsed(address = address) || getAllTransactionDetails().any { transaction ->
+            transaction.outputs.any { it.scriptpubkeyAddress == address }
+        }
     }
+
+    /** Checks each address using activity matches and at most one stored transaction history read. */
+    suspend fun getAddressUsage(addresses: Collection<String>): Map<String, Result<Boolean>> =
+        ServiceQueue.CORE.background {
+            val activityUsage = addresses.distinct().associateWith { address ->
+                runSuspendCatching { com.synonym.bitkitcore.isAddressUsed(address = address) }
+            }
+            val unusedAddresses = activityUsage.filterValues { it.getOrNull() == false }.keys
+            if (unusedAddresses.isEmpty()) return@background activityUsage
+
+            val usedOutputAddresses = runSuspendCatching { usedTransactionOutputAddresses(unusedAddresses) }
+            activityUsage.mapValues { (address, usage) ->
+                if (usage.getOrNull() == false) usedOutputAddresses.map { address in it } else usage
+            }
+        }
+
+    private fun usedTransactionOutputAddresses(addresses: Set<String>): Set<String> =
+        getAllTransactionDetails().asSequence()
+            .flatMap { it.outputs.asSequence() }
+            .mapNotNull { it.scriptpubkeyAddress }
+            .filter { it in addresses }
+            .toSet()
 
     suspend fun decode(input: String): Scanner = ServiceQueue.CORE.background {
         com.synonym.bitkitcore.decode(input)
@@ -324,7 +309,58 @@ private fun OnchainActivity.withRecoveredTransfer(recoveredChannelId: String?): 
         else -> copy(isTransfer = true, channelId = channelId ?: recoveredChannelId)
     }
 
-@Suppress("LargeClass", "TooManyFunctions")
+/**
+ * Applies the latest LDK payment details to a stored Lightning activity.
+ *
+ * A retry of the same invoice reuses the payment hash, so the stored row must take the final
+ * attempt's amount, fee and preimage. Missing values keep the stored ones. The stored message is
+ * never replaced, because LDK reports a description-hash invoice's hash as its description.
+ */
+internal fun LightningActivity.withPaymentUpdate(
+    payment: PaymentDetails,
+    kind: PaymentKind.Bolt11,
+    state: PaymentState,
+    contact: String?,
+): LightningActivity = copy(
+    value = payment.amountSats ?: value,
+    fee = payment.feePaidMsat?.let { msatFloorOf(it) } ?: fee,
+    preimage = kind.preimage ?: preimage,
+    updatedAt = payment.latestUpdateTimestamp,
+    status = state,
+    contact = contact,
+)
+
+/**
+ * Applies a pending LNURL-pay comment as the stored Lightning activity message.
+ *
+ * The comment replaces only an empty message or the [description] LDK reported, which for a
+ * description-hash invoice is the hash itself. A comment is stored only for invoices without a
+ * direct description, so an invoice's own description is never replaced.
+ */
+internal fun LightningActivity.withPendingMessage(
+    pendingMessage: String?,
+    description: String?,
+): LightningActivity {
+    if (pendingMessage.isNullOrBlank()) return this
+    if (message.isNotEmpty() && message != description) return this
+    return copy(message = pendingMessage)
+}
+
+/**
+ * Applies an on-chain confirmation state to the stored activity.
+ *
+ * A block time earlier than the first-seen [OnchainActivity.timestamp] moves the timestamp down to it,
+ * so `confirmTimestamp >= timestamp` holds as bitkit-core requires.
+ */
+internal fun OnchainActivity.withConfirmation(
+    isConfirmed: Boolean,
+    confirmTimestamp: ULong?,
+): OnchainActivity = copy(
+    confirmed = isConfirmed,
+    confirmTimestamp = confirmTimestamp,
+    timestamp = if (confirmTimestamp != null && confirmTimestamp < timestamp) confirmTimestamp else timestamp,
+)
+
 class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
     private val cacheStore: CacheStore,
@@ -333,9 +369,23 @@ class ActivityService(
     private val privatePaykitContactResolver: Provider<PrivatePaykitContactResolver>,
 ) {
     private val defaultWalletId = WalletScope.default
+    private var paykitActivityRevision = 0L
+    private var lastPaykitContactBackfill: PaykitContactBackfillState? = null
+
+    private data class PaykitContactBackfillState(
+        val contacts: PaykitReceivedPaymentContacts,
+        val generation: Long,
+        val activityRevision: Long,
+        val reservationVersion: Long,
+    )
+
+    internal suspend fun invalidatePaykitContactBackfill() = ServiceQueue.CORE.background {
+        paykitActivityRevision++
+    }
 
     suspend fun removeAll() {
         ServiceQueue.CORE.background {
+            invalidatePaykitContactBackfill()
             // Get all activities and delete them one by one
             val activities = getActivities(
                 walletId = null,
@@ -358,18 +408,22 @@ class ActivityService(
     }
 
     suspend fun deleteByWalletId(walletId: String): UInt = ServiceQueue.CORE.background {
+        invalidatePaykitContactBackfill()
         deleteActivitiesByWalletId(walletId)
     }
 
     suspend fun insert(activity: Activity) = ServiceQueue.CORE.background {
+        invalidatePaykitContactBackfill()
         insertActivity(activity)
     }
 
     suspend fun upsert(activity: Activity) = ServiceQueue.CORE.background {
+        invalidatePaykitContactBackfill()
         upsertActivity(activity)
     }
 
     suspend fun upsertList(activities: List<Activity>) = ServiceQueue.CORE.background {
+        invalidatePaykitContactBackfill()
         upsertActivities(activities)
     }
 
@@ -389,6 +443,7 @@ class ActivityService(
         transactionDetails: List<BitkitCoreTransactionDetails>,
         transferChannelIdsByFundingTxId: Map<String, String>,
     ): HwSnapshotResult = ServiceQueue.CORE.background {
+        invalidatePaykitContactBackfill()
         val existingActivities = getActivities(
             walletId = walletId,
             filter = ActivityFilter.ONCHAIN,
@@ -477,8 +532,19 @@ class ActivityService(
     suspend fun getTransactionDetails(
         txid: String,
         walletId: String = defaultWalletId,
-    ): BitkitCoreTransactionDetails? = ServiceQueue.CORE.background {
-        getBitkitCoreTransactionDetails(walletId = walletId, txId = txid)
+    ): BitkitCoreTransactionDetails? {
+        val cached = ServiceQueue.CORE.background {
+            getBitkitCoreTransactionDetails(walletId = walletId, txId = txid)
+        }
+        if (cached != null) return cached
+        if (walletId != defaultWalletId || txid.length != 64 ||
+            txid.any { it !in '0'..'9' && it !in 'a'..'f' && it !in 'A'..'F' }
+        ) {
+            return null
+        }
+        return lightningService.getTransactionDetails(txid, coreService.walletIndex)?.let {
+            mapToCoreTransactionDetails(txid, it)
+        }
     }
 
     suspend fun getActivity(id: String, walletId: String = defaultWalletId): Activity? = ServiceQueue.CORE.background {
@@ -500,7 +566,6 @@ class ActivityService(
     suspend fun hasOnchainActivityForTxid(txid: String): Boolean =
         getOnchainActivityByTxId(txid) != null
 
-    @Suppress("LongParameterList")
     suspend fun get(
         walletId: String? = defaultWalletId,
         filter: ActivityFilter? = null,
@@ -526,10 +591,95 @@ class ActivityService(
     }
 
     suspend fun update(id: String, activity: Activity) = ServiceQueue.CORE.background {
+        invalidatePaykitContactBackfill()
         updateActivity(activityId = id, activity = activity)
     }
 
+    suspend fun backfillPaykitContacts(): Boolean = ServiceQueue.CORE.background {
+        val resolver = privatePaykitContactResolver.get()
+        val contacts = resolver.receivedPaymentContacts
+        if (contacts === PaykitReceivedPaymentContacts.Empty) {
+            lastPaykitContactBackfill = null
+            return@background false
+        }
+        val snapshot = PaykitContactBackfillState(
+            contacts = contacts,
+            generation = resolver.receivedPaymentContactsGeneration,
+            activityRevision = paykitActivityRevision,
+            reservationVersion = resolver.reservationVersion,
+        )
+        if (snapshot == lastPaykitContactBackfill) return@background false
+        val activities = getActivities(
+            walletId = null,
+            filter = ActivityFilter.ALL,
+            txType = PaymentType.RECEIVED,
+            tags = null,
+            search = null,
+            minDate = null,
+            maxDate = null,
+            limit = null,
+            sortDirection = null,
+        )
+        var changed = false
+        var complete = true
+        for (activity in activities) {
+            if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
+            if (cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) continue
+            val (updated, hydrated) = attributedPaykitActivity(activity, contacts)
+            complete = complete && hydrated
+            if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
+            if (updated != null && !cacheStore.data.first().isContactDetached(activity.rawId(), activity.walletId())) {
+                if (!isCurrentPaykitContactBackfill(resolver, snapshot)) return@background changed
+                updateActivity(activityId = activity.rawId(), activity = updated)
+                changed = true
+            }
+        }
+        if (complete && isCurrentPaykitContactBackfill(resolver, snapshot)) {
+            lastPaykitContactBackfill = snapshot
+        }
+        changed
+    }
+
+    private fun isCurrentPaykitContactBackfill(
+        resolver: PrivatePaykitContactResolver,
+        snapshot: PaykitContactBackfillState,
+    ): Boolean = resolver.receivedPaymentContacts === snapshot.contacts &&
+        resolver.receivedPaymentContactsGeneration == snapshot.generation &&
+        paykitActivityRevision == snapshot.activityRevision &&
+        resolver.reservationVersion == snapshot.reservationVersion
+
+    private suspend fun attributedPaykitActivity(
+        activity: Activity,
+        contacts: PaykitReceivedPaymentContacts,
+    ): Pair<Activity?, Boolean> = when (activity) {
+        is Activity.Lightning -> {
+            val contact = receivedPaykitContact(activity.v1, contacts)
+            contact?.let { Activity.Lightning(activity.v1.copy(contact = it)) } to true
+        }
+        is Activity.Onchain -> {
+            val (contact, hydrated) = receivedPaykitContact(activity.v1)
+            contact?.let { Activity.Onchain(activity.v1.copy(contact = it)) } to hydrated
+        }
+    }
+
+    private fun receivedPaykitContact(row: LightningActivity, contacts: PaykitReceivedPaymentContacts): String? {
+        if (row.contact != null || row.txType != PaymentType.RECEIVED || row.status == PaymentState.FAILED) return null
+        return contacts.contactsForPaymentHash(row.id).singleOrNull()
+    }
+
+    private suspend fun receivedPaykitContact(row: OnchainActivity): Pair<String?, Boolean> {
+        if (row.contact != null || row.txType != PaymentType.RECEIVED) return null to true
+        val details = getBitkitCoreTransactionDetails(walletId = row.walletId, txId = row.txId)
+        val addresses = details?.outputs?.mapNotNull { it.scriptpubkeyAddress }.orEmpty()
+        if (row.address !in addresses) return null to false
+        return privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
+            receivingAddress = row.address,
+            addresses = addresses,
+        ) to true
+    }
+
     suspend fun delete(id: String, walletId: String = defaultWalletId): Boolean = ServiceQueue.CORE.background {
+        invalidatePaykitContactBackfill()
         deleteActivityById(walletId = walletId, activityId = id)
     }
 
@@ -713,7 +863,6 @@ class ActivityService(
         }
     }
 
-    @Suppress("CyclomaticComplexMethod")
     private suspend fun processBolt11(
         kind: PaymentKind.Bolt11,
         payment: PaymentDetails,
@@ -726,6 +875,9 @@ class ActivityService(
         ) {
             return
         }
+
+        val pendingMessage = payment.id.takeIf { payment.direction == PaymentDirection.OUTBOUND }
+            ?.let { cacheStore.data.first().pendingLightningMessages[it] }
 
         val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
         if (existingActivity is Activity.Lightning) {
@@ -743,12 +895,17 @@ class ActivityService(
         val contact = existingActivity
             ?.takeIf { it is Activity.Lightning }
             ?.let { (it as Activity.Lightning).v1.contact }
-            ?: privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(payment.id, payment.direction)
+            ?: payment.takeUnless {
+                it.status == PaymentStatus.FAILED || cacheStore.data.first().isContactDetached(it.id, defaultWalletId)
+            }?.let {
+                privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(it.id, it.direction)
+            }
 
         val ln = if (existingActivity is Activity.Lightning) {
-            existingActivity.v1.copy(
-                updatedAt = payment.latestUpdateTimestamp,
-                status = state,
+            existingActivity.v1.withPaymentUpdate(
+                payment = payment,
+                kind = kind,
+                state = state,
                 contact = contact,
             )
         } else {
@@ -765,13 +922,36 @@ class ActivityService(
                 contact = contact,
                 seenAt = null,
             )
-        }
+        }.withPendingMessage(pendingMessage = pendingMessage, description = kind.description)
 
+        if (existingActivity != Activity.Lightning(ln)) invalidatePaykitContactBackfill()
         if (getActivityById(walletId = defaultWalletId, activityId = payment.id) != null) {
             updateActivity(activityId = payment.id, activity = Activity.Lightning(ln))
         } else {
             upsertActivity(Activity.Lightning(ln))
         }
+
+        if (pendingMessage != null) cacheStore.removePendingLightningMessage(payment.id)
+    }
+
+    /**
+     * Applies a pending LNURL-pay comment to the Lightning activity for [paymentHash] if the row exists.
+     *
+     * The row is read and written with no suspension point in between, so on the single-threaded Core
+     * queue no payment sync can write the same row from a stale snapshot. The pending comment is kept
+     * when the row does not exist yet, so the payment sync applies it later.
+     */
+    suspend fun setLightningMessageIfEmpty(paymentHash: String, message: String) = ServiceQueue.CORE.background {
+        val description = lightningService.listPayments()
+            ?.firstOrNull { it.id == paymentHash }
+            ?.let { (it.kind as? PaymentKind.Bolt11)?.description }
+        val existing = getActivityById(walletId = defaultWalletId, activityId = paymentHash)
+            as? Activity.Lightning ?: return@background
+        val updated = existing.v1.withPendingMessage(pendingMessage = message, description = description)
+        if (updated != existing.v1) {
+            update(paymentHash, Activity.Lightning(updated))
+        }
+        cacheStore.removePendingLightningMessage(paymentHash)
     }
 
     /**
@@ -779,7 +959,9 @@ class ActivityService(
      * Returns the first address found in pre-activity metadata that matches a transaction output
      */
     private suspend fun fetchTransactionDetails(txid: String): BitkitCoreTransactionDetails? = runCatching {
-        getTransactionDetails(txid)
+        ServiceQueue.CORE.background {
+            getBitkitCoreTransactionDetails(walletId = defaultWalletId, txId = txid)
+        }
     }.onFailure {
         Logger.warn("Failed to fetch stored transaction details for '$txid'", it, context = TAG)
     }.getOrNull()
@@ -807,11 +989,10 @@ class ActivityService(
     private suspend fun resolveAddressForInboundPayment(
         kind: PaymentKind.Onchain,
         payment: PaymentDetails,
-        transactionDetails: BitkitCoreTransactionDetails? = null,
+        details: BitkitCoreTransactionDetails?,
     ): String? {
         if (payment.direction != PaymentDirection.INBOUND) return null
 
-        val details = transactionDetails ?: fetchTransactionDetails(kind.txid)
         if (details == null) {
             Logger.verbose(
                 "Skipped address resolution because transaction details are unavailable for '${kind.txid}'",
@@ -836,7 +1017,7 @@ class ActivityService(
     private suspend fun findPrivateReservedAddress(details: BitkitCoreTransactionDetails): String? {
         for (output in details.outputs) {
             val address = output.scriptpubkeyAddress ?: continue
-            if (privatePaykitContactPublicKeyForReservedAddress(address) != null) return address
+            if (privatePaykitContactResolver.get().contactPublicKeyForReservedAddress(address) != null) return address
         }
         return null
     }
@@ -863,6 +1044,23 @@ class ActivityService(
             }
         }
 
+        val accounts = runSuspendCatching { lightningService.listOnchainWalletAccounts() }
+            .onFailure { Logger.warn("Failed to list onchain wallet accounts", it, context = TAG) }
+            .getOrDefault(emptyList())
+            .filter { it.accountIndex != 0u }
+        for (isChange in listOf(false, true)) {
+            for (account in accounts) {
+                searchReceivingAddressForType(
+                    details = details,
+                    value = value,
+                    currentWalletAddress = "",
+                    addressType = account.addressType.toBitkitAddressType(),
+                    isChange = isChange,
+                    accountIndex = account.accountIndex,
+                )?.let { return it }
+            }
+        }
+
         return null
     }
 
@@ -872,14 +1070,21 @@ class ActivityService(
         currentWalletAddress: String,
         addressType: AddressType,
         isChange: Boolean,
+        accountIndex: UInt = 0u,
     ): String? {
-        val addressTypeKey = addressType.toSettingsString()
+        val addressTypeKey = addressType.toSettingsString().let {
+            if (accountIndex == 0u) it else "$it:account:$accountIndex"
+        }
         val endIndex = addressSearchEndIndex(lastUsedAddressSearchIndex(addressTypeKey, isChange))
 
         var index = 0
         var currentAddressBatch: Int? = null
         while (index < endIndex) {
-            val addresses = fetchAddressSearchBatch(addressType, isChange, index, addressTypeKey) ?: return null
+            val count = minOf(ADDRESS_SEARCH_BATCH_SIZE, endIndex - index)
+            val addressInfos = fetchAddressSearchBatch(
+                addressType, isChange, index, count, addressTypeKey, accountIndex,
+            ) ?: return null
+            val addresses = addressInfos.map { it.address }
 
             if (
                 currentWalletAddress.isNotBlank() &&
@@ -890,13 +1095,14 @@ class ActivityService(
             }
 
             findAddressSearchMatch(details, value, addresses)?.let {
-                saveLastUsedAddressSearchIndex(addressTypeKey, isChange, index)
+                val matchedIndex = addressInfos.first { info -> info.address == it }.index
+                saveLastUsedAddressSearchIndex(addressTypeKey, isChange, matchedIndex)
                 return it
             }
 
             if (shouldStopAfterCurrentAddressBatch(currentAddressBatch, index)) return null
 
-            index += ADDRESS_SEARCH_BATCH_SIZE
+            index += count
         }
 
         return null
@@ -906,16 +1112,19 @@ class ActivityService(
         addressType: AddressType,
         isChange: Boolean,
         index: Int,
+        count: Int,
         addressTypeKey: String,
-    ): List<String>? {
+        accountIndex: UInt,
+    ): List<AddressDerivationInfo>? {
         val scope = if (isChange) "change" else "receive"
-        return runCatching {
+        return runSuspendCatching {
             lightningService.addressInfosForType(
                 addressType = addressType,
                 isChange = isChange,
                 startIndex = index,
-                count = ADDRESS_SEARCH_BATCH_SIZE,
-            ).map { it.address }
+                count = count,
+                accountIndex = accountIndex,
+            )
         }.onFailure {
             Logger.warn(
                 "Skipping '$addressTypeKey' '$scope' address search batch '$index'",
@@ -946,7 +1155,7 @@ class ActivityService(
 
     private fun addressSearchEndIndex(lastUsed: Int?): Int {
         return lastUsed?.let {
-            if (it > Int.MAX_VALUE - ADDRESS_SEARCH_WINDOW) Int.MAX_VALUE else it + ADDRESS_SEARCH_WINDOW
+            if (it > Int.MAX_VALUE - ADDRESS_SEARCH_WINDOW - 1) Int.MAX_VALUE else it + ADDRESS_SEARCH_WINDOW + 1
         } ?: ADDRESS_SEARCH_WINDOW
     }
 
@@ -1015,7 +1224,6 @@ class ActivityService(
         return ConfirmationData(isConfirmed, blockTimestamp, timestamp)
     }
 
-    @Suppress("LongParameterList")
     private fun buildUpdatedOnchainActivity(
         existingActivity: Activity.Onchain,
         confirmationData: ConfirmationData,
@@ -1044,9 +1252,10 @@ class ActivityService(
         val ldkFeeSats = msatFloorOf(ldkFeeMsat)
         val updatedFee = if (existingActivity.v1.fee == 0uL && ldkFeeSats > 0uL) ldkFeeSats else existingActivity.v1.fee
 
-        val updatedOnChain = existingActivity.v1.copy(
-            confirmed = confirmationData.isConfirmed,
+        val updatedOnChain = existingActivity.v1.withConfirmation(
+            isConfirmed = confirmationData.isConfirmed,
             confirmTimestamp = confirmationData.confirmedTimestamp,
+        ).copy(
             doesExist = finalDoesExist,
             updatedAt = confirmationData.timestamp,
             isTransfer = preservedIsTransfer,
@@ -1060,7 +1269,6 @@ class ActivityService(
         return updatedOnChain
     }
 
-    @Suppress("LongParameterList")
     private fun buildNewOnchainActivity(
         payment: PaymentDetails,
         kind: PaymentKind.Onchain,
@@ -1096,7 +1304,6 @@ class ActivityService(
         )
     }
 
-    @Suppress("CyclomaticComplexMethod", "ComplexCondition", "LongMethod")
     private suspend fun processOnchainPayment(
         kind: PaymentKind.Onchain,
         payment: PaymentDetails,
@@ -1106,21 +1313,6 @@ class ActivityService(
     ) {
         val timestamp = payment.latestUpdateTimestamp
         val confirmationData = getConfirmationStatus(kind, timestamp)
-
-        var existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
-        if (existingActivity == null) {
-            getOnchainActivityByTxId(kind.txid)?.let {
-                existingActivity = Activity.Onchain(it)
-            }
-        }
-
-        val existingOnchainActivity = existingActivity as? Activity.Onchain
-        if (existingOnchainActivity != null &&
-            (existingOnchainActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
-            !(existingOnchainActivity.v1.contact == null && payment.direction == PaymentDirection.INBOUND)
-        ) {
-            return
-        }
 
         var resolvedChannelId = channelId
 
@@ -1136,12 +1328,45 @@ class ActivityService(
             }
         }
 
-        val resolvedAddress = resolveAddressForInboundPayment(kind, payment, transactionDetails)
-        val existingContact = existingOnchainActivity?.v1?.contact
-        val contact = existingContact ?: if (payment.direction == PaymentDirection.INBOUND) {
-            resolvedAddress?.let { privatePaykitContactPublicKeyForReservedAddress(it) }
+        val details = transactionDetails ?: payment.takeIf { it.direction == PaymentDirection.INBOUND }
+            ?.let { fetchTransactionDetails(kind.txid) }
+        val resolvedAddress = resolveAddressForInboundPayment(kind, payment, details)
+        val resolvedContact = if (
+            payment.direction == PaymentDirection.INBOUND && payment.status != PaymentStatus.FAILED &&
+            !details?.outputs.isNullOrEmpty()
+        ) {
+            val contactCache = cacheStore.data.first()
+            val snapshot =
+                (getActivityById(walletId = defaultWalletId, activityId = payment.id) as? Activity.Onchain)?.v1
+                    ?: getActivityByTxId(walletId = defaultWalletId, txId = kind.txid)
+            if (
+                snapshot?.contact != null ||
+                contactCache.isContactDetached(snapshot?.id ?: payment.id, defaultWalletId)
+            ) {
+                null
+            } else {
+                privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(
+                    receivingAddress = resolvedAddress,
+                    addresses = details.outputs.mapNotNull { it.scriptpubkeyAddress },
+                )
+            }
         } else {
             null
+        }
+
+        val cache = cacheStore.data.first()
+        val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
+            ?: getActivityByTxId(walletId = defaultWalletId, txId = kind.txid)?.let { Activity.Onchain(it) }
+        val existingOnchainActivity = existingActivity as? Activity.Onchain
+        if (existingOnchainActivity != null &&
+            (existingOnchainActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp &&
+            !(existingOnchainActivity.v1.contact == null && payment.direction == PaymentDirection.INBOUND)
+        ) {
+            return
+        }
+        val activityId = existingOnchainActivity?.v1?.id ?: payment.id
+        val contact = existingOnchainActivity?.v1?.contact ?: resolvedContact.takeUnless {
+            cache.isContactDetached(activityId, defaultWalletId)
         }
 
         val ldkValue = payment.amountSats ?: 0u
@@ -1166,11 +1391,12 @@ class ActivityService(
             )
         }
 
-        if (cacheStore.data.first().isActivityDeleted(onChain.id, onChain.walletId) && !forceUpdate) {
+        if (cache.isActivityDeleted(onChain.id, onChain.walletId) && !forceUpdate) {
             Logger.verbose("Activity ${onChain.id} was already deleted, skipping", context = TAG)
             return
         }
 
+        if (existingActivity != Activity.Onchain(onChain)) paykitActivityRevision++
         if (existingActivity != null && existingActivity is Activity.Onchain) {
             val existingOnchain = existingActivity.v1
             updateActivity(activityId = existingOnchain.id, activity = Activity.Onchain(onChain))
@@ -1190,12 +1416,8 @@ class ActivityService(
         return privatePaykitContactResolver.get().contactPublicKeyForPrivateInvoicePaymentHash(paymentHash)
     }
 
-    private suspend fun privatePaykitContactPublicKeyForReservedAddress(address: String): String? =
-        privatePaykitContactResolver.get().contactPublicKeyForPrivateOnchainAddresses(listOf(address))
-
     // MARK: - Test Data Generation (regtest only)
 
-    @Suppress("LongMethod")
     suspend fun generateRandomTestData(count: Int = 100) {
         if (Env.network != Network.REGTEST) {
             throw AppError(message = "Regtest only")
@@ -1270,7 +1492,7 @@ class ActivityService(
                 }
 
                 // Insert activity
-                insertActivity(activity)
+                insert(activity)
 
                 // Add random tags
                 val numTags = (0..3).random()
@@ -1282,7 +1504,6 @@ class ActivityService(
         }
     }
 
-    @Suppress("LongParameterList")
     suspend fun createSentOnchainActivityFromSendResult(
         txid: String,
         address: String,
@@ -1302,7 +1523,7 @@ class ActivityService(
                             isTransfer = true,
                             channelId = existing.channelId ?: channelId,
                         )
-                        if (updated != existing) upsertActivity(Activity.Onchain(updated))
+                        if (updated != existing) upsert(Activity.Onchain(updated))
                     }
                     Logger.debug("Activity already exists for txid $txid, skipping immediate creation", context = TAG)
                     return@background
@@ -1325,7 +1546,7 @@ class ActivityService(
                     updatedAt = 0u,
                     seenAt = now,
                 )
-                upsertActivity(Activity.Onchain(onchain))
+                upsert(Activity.Onchain(onchain))
                 Logger.info("Created sent onchain activity for txid $txid from send result", context = TAG)
             }.onFailure {
                 Logger.error("Failed to create sent onchain activity for txid $txid", it, context = TAG)
@@ -1333,10 +1554,57 @@ class ActivityService(
         }
     }
 
+    /** Apply saved original hardware tags once after exact outgoing activity verification. */
+    suspend fun restoreSentOnchainTags(txid: String, walletId: String): Boolean =
+        ServiceQueue.CORE.background {
+            val activity = requireNotNull(getActivityByTxId(walletId = walletId, txId = txid))
+            check(
+                activity.walletId == walletId && activity.txId.equals(txid, true) &&
+                    activity.txType == PaymentType.SENT
+            )
+            val metadata = com.synonym.bitkitcore.getAllPreActivityMetadata().filter {
+                it.walletId == walletId && !it.isReceive && it.paymentId.equals(txid, true) &&
+                    it.txId?.equals(txid, true) == true && it.tags.isNotEmpty()
+            }
+            if (metadata.isEmpty()) return@background false
+            val existingTags = getTags(walletId = walletId, activityId = activity.id)
+            val newTags = metadata.flatMap { it.tags }.distinct().filter { it.isNotBlank() && it !in existingTags }
+            if (newTags.isNotEmpty()) addTags(walletId = walletId, activityId = activity.id, tags = newTags)
+            com.synonym.bitkitcore.upsertPreActivityMetadata(metadata.map { it.copy(tags = emptyList()) })
+            newTags.isNotEmpty()
+        }
+
+    /** Restore original attribution only when no contact has been saved for the accepted transaction. */
+    suspend fun restoreSentOnchainContact(txid: String, walletId: String, contact: String) =
+        ServiceQueue.CORE.background {
+            val existing = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(existing.walletId == walletId && existing.txId == txid && existing.txType == PaymentType.SENT)
+            if (cacheStore.data.first().isContactDetached(existing.id, walletId)) return@background
+            if (existing.contact == null) {
+                upsertActivity(Activity.Onchain(existing.copy(contact = contact)))
+            }
+            check(
+                cacheStore.data.first().isContactDetached(existing.id, walletId) ||
+                    requireNotNull(getOnchainActivityByTxId(txid, walletId)).contact != null
+            )
+        }
+
+    /** Called only after exact original-node transaction/prevout verification, to repair an existing placeholder. */
+    suspend fun repairVerifiedSentOnchainFee(txid: String, walletId: String, fee: ULong, feeRate: ULong) =
+        ServiceQueue.CORE.background {
+            val existing = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(existing.walletId == walletId && existing.txId == txid && existing.txType == PaymentType.SENT)
+            val updated = existing.copy(fee = fee, feeRate = feeRate)
+            if (updated != existing) upsertActivity(Activity.Onchain(updated))
+            val restored = requireNotNull(getOnchainActivityByTxId(txid, walletId))
+            check(restored.fee == fee && restored.feeRate == feeRate)
+        }
+
     suspend fun handleOnchainTransactionReceived(txid: String, details: TransactionDetails) {
         ServiceQueue.CORE.background {
             runCatching {
                 val coreDetails = mapToCoreTransactionDetails(txid, details)
+                invalidatePaykitContactBackfill()
                 upsertTransactionDetails(listOf(coreDetails))
 
                 val payments = lightningService.listPayments() ?: run {
@@ -1368,6 +1636,7 @@ class ActivityService(
         ServiceQueue.CORE.background {
             runCatching {
                 val coreDetails = mapToCoreTransactionDetails(txid, details)
+                invalidatePaykitContactBackfill()
                 upsertTransactionDetails(listOf(coreDetails))
 
                 val payments = lightningService.listPayments() ?: run {
@@ -1430,6 +1699,7 @@ class ActivityService(
                 isBoosted = false,
                 updatedAt = System.currentTimeMillis().toULong() / 1000u
             )
+            paykitActivityRevision++
             updateActivity(activityId = replacedActivity.id, activity = Activity.Onchain(updatedActivity))
             Logger.info("Marked transaction $txid as replaced", context = TAG)
         } else {
@@ -1490,7 +1760,7 @@ class ActivityService(
             contact = replacementActivity.contact ?: replacedActivity?.contact,
             updatedAt = System.currentTimeMillis().toULong() / 1000u,
         )
-        updateActivity(activityId = replacementActivity.id, activity = Activity.Onchain(updatedActivity))
+        update(replacementActivity.id, Activity.Onchain(updatedActivity))
 
         if (replacedActivity != null) {
             copyTagsFromReplacedActivity(txid, conflictTxid, replacedActivity.id, replacementActivity.id)
@@ -1534,7 +1804,7 @@ class ActivityService(
                     updatedAt = System.currentTimeMillis().toULong() / 1000u
                 )
 
-                updateActivity(activityId = onchain.id, activity = Activity.Onchain(updatedActivity))
+                update(onchain.id, Activity.Onchain(updatedActivity))
             }.onFailure { e ->
                 Logger.error("Error handling onchain transaction reorged for $txid", e, context = TAG)
             }
@@ -1554,7 +1824,7 @@ class ActivityService(
                     updatedAt = System.currentTimeMillis().toULong() / 1000u
                 )
 
-                updateActivity(activityId = onchain.id, activity = Activity.Onchain(updatedActivity))
+                update(onchain.id, Activity.Onchain(updatedActivity))
             }.onFailure { e ->
                 Logger.error("Error handling onchain transaction evicted for $txid", e, context = TAG)
             }
@@ -1632,18 +1902,13 @@ class ActivityService(
         walletId: String = defaultWalletId,
         seenAt: ULong? = null,
     ) = ServiceQueue.CORE.background {
-        val activity = getActivityById(walletId = walletId, activityId = activityId) ?: run {
+        if (getActivityById(walletId = walletId, activityId = activityId) == null) {
             Logger.warn("Cannot mark activity as seen - activity not found: $activityId", context = TAG)
             return@background
         }
 
         val timestamp = seenAt ?: nowTimestamp().epochSecond.toULong()
-        val updatedActivity = when (activity) {
-            is Activity.Lightning -> Activity.Lightning(activity.v1.copy(seenAt = timestamp))
-            is Activity.Onchain -> Activity.Onchain(activity.v1.copy(seenAt = timestamp))
-        }
-
-        updateActivity(activityId = activityId, activity = updatedActivity)
+        coreMarkActivityAsSeen(walletId = walletId, activityId = activityId, seenAt = timestamp)
         Logger.info("Marked activity $activityId as seen at $timestamp", context = TAG)
     }
 
@@ -1661,7 +1926,14 @@ class ActivityService(
         markActivityAsSeen(activity.id, walletId = activity.walletId, seenAt = seenAt)
     }
 
-    suspend fun markAllUnseenActivitiesAsSeen() = ServiceQueue.CORE.background {
+    /**
+     * Marks every unseen activity as seen.
+     *
+     * [startedBefore] limits the pass to activity that already existed at that epoch second. The restore sweep passes
+     * the moment the restore began, so a payment that genuinely arrives while the restore is still running keeps its
+     * unseen state and still notifies the user.
+     */
+    suspend fun markAllUnseenActivitiesAsSeen(startedBefore: ULong? = null) = ServiceQueue.CORE.background {
         val timestamp = nowTimestamp().epochSecond.toULong()
         val activities = getActivities(
             walletId = null,
@@ -1680,6 +1952,12 @@ class ActivityService(
                 is Activity.Onchain -> activity.v1.seenAt != null
                 is Activity.Lightning -> activity.v1.seenAt != null
             }
+            val createdAt = when (activity) {
+                is Activity.Onchain -> activity.v1.timestamp
+                is Activity.Lightning -> activity.v1.timestamp
+            }
+
+            if (startedBefore != null && createdAt > startedBefore) continue
 
             if (!isSeen) {
                 markActivityAsSeen(activity.rawId(), walletId = activity.walletId(), seenAt = timestamp)
@@ -1858,7 +2136,6 @@ class ActivityService(
 
 // region Blocktank
 
-@Suppress("TooManyFunctions")
 class BlocktankService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
     private val lightningService: LightningService,
@@ -1874,37 +2151,38 @@ class BlocktankService(
     }
 
     suspend fun getFees(): Result<FeeRates> {
-        var fees = fees(refresh = true)
+        val fresh = runSuspendCatching { fees(refresh = true) }
+        val error = fresh.exceptionOrNull()
+        if (error != null && !isInfoBadGateway(error)) throw error
+        var fees = fresh.getOrNull()
         if (fees == null) {
+            currentCoroutineContext().ensureActive()
             Logger.warn("Failed to fetch fresh fee rate, using cached rate.")
             fees = fees(refresh = false)
+            currentCoroutineContext().ensureActive()
         }
         if (fees == null) {
-            return Result.failure(AppError("Fees unavailable from bitkit-core"))
+            return Result.failure(error ?: AppError("Fees unavailable from bitkit-core"))
         }
 
         return Result.success(fees)
     }
 
-    @Suppress("LongParameterList")
-    suspend fun createCjit(
-        channelSizeSat: ULong,
-        invoiceSat: ULong,
-        invoiceDescription: String,
-        nodeId: String,
-        channelExpiryWeeks: UInt,
-        options: CreateCjitOptions,
-    ): IcJitEntry {
-        return ServiceQueue.CORE.background {
-            createCjitEntry(
-                channelSizeSat = channelSizeSat,
-                invoiceSat = invoiceSat,
-                invoiceDescription = invoiceDescription,
-                nodeId = nodeId,
-                channelExpiryWeeks = channelExpiryWeeks,
-                options = options
-            )
+    private fun isInfoBadGateway(error: Throwable): Boolean {
+        var cause = error
+        repeat(8) {
+            when (val current = cause) {
+                is BlocktankException.DataException -> {
+                    val prefix = "Failed to fetch info from Blocktank: Blocktank error: " +
+                        "Failed to get info: Client error: "
+                    return current.errorDetails.startsWith(prefix + "Request failed with status 502 Bad Gateway:") ||
+                        current.errorDetails.startsWith(prefix + "Request failed (502 Bad Gateway):")
+                }
+                is AppError -> cause = current.cause ?: return false
+                else -> return false
+            }
         }
+        return false
     }
 
     suspend fun cjitEntries(
@@ -1920,37 +2198,14 @@ class BlocktankService(
         }
     }
 
-    suspend fun newOrder(
-        lspBalanceSat: ULong,
-        channelExpiryWeeks: UInt,
-        options: CreateOrderOptions,
-    ): IBtOrder {
-        return ServiceQueue.CORE.background {
-            createOrder(lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options)
-        }
-    }
-
-    suspend fun estimateFee(
-        lspBalanceSat: ULong,
-        channelExpiryWeeks: UInt,
-        options: CreateOrderOptions? = null,
-    ): IBtEstimateFeeResponse2 {
-        return ServiceQueue.CORE.background {
-            estimateOrderFeeFull(
-                lspBalanceSat = lspBalanceSat,
-                channelExpiryWeeks = channelExpiryWeeks,
-                options = options,
-            )
-        }
-    }
-
     suspend fun orders(
         orderIds: List<String>? = null,
         filter: BtOrderState2? = null,
         refresh: Boolean = true,
+        refreshActive: Boolean = refresh,
     ): List<IBtOrder> {
         return ServiceQueue.CORE.background {
-            if (refresh) {
+            if (refreshActive) {
                 refreshActiveOrders()
             }
             getOrders(orderIds = orderIds, filter = filter, refresh = refresh)
@@ -2046,7 +2301,6 @@ class OnchainService {
         }
     }
 
-    @Suppress("LongParameterList")
     suspend fun deriveBitcoinAddresses(
         mnemonicPhrase: String,
         derivationPathStr: String?,
@@ -2087,7 +2341,6 @@ class OnchainService {
         }
     }
 
-    @Suppress("LongParameterList")
     suspend fun prepareLegacyRnNativeSegwitRecoverySweep(
         mnemonicPhrase: String,
         network: Network?,

@@ -23,8 +23,9 @@
       Verify the Send amount screen is visible (testTag "send_amount_screen")
     </action>
     <action>
-      Tap the funding-source button (testTag "AssetButton-switch"), waiting for any balance loading
-      to finish between taps, until it shows the paired Trezor name in blue
+      Tap the funding-source button (testTag "AssetButton-switch") once, verify the source menu
+      (testTag "SendFundingSources") opens, then select the paired Trezor row. Wait for balance
+      loading to finish and verify the button shows the paired Trezor name in blue
     </action>
     <action>
       Verify AVAILABLE shows a positive Trezor balance, then enter a valid amount smaller than it

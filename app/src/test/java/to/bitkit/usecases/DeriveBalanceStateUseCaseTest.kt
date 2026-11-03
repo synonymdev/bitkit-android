@@ -16,7 +16,6 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.TransferEntity
@@ -45,13 +44,13 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
             whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
             whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
-            wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
-            wheneverBlocking { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
+            whenever { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
+            whenever { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
             whenever(transferRepo.resolveChannelIdForTransfer(any(), any())).thenAnswer { invocation ->
                 val transfer = invocation.getArgument<TransferEntity>(0)
                 transfer.channelId
             }
-            wheneverBlocking {
+            whenever {
                 lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
             }.thenReturn(Result.success(1000uL))
         }
@@ -62,40 +61,6 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             settingsStore = settingsStore,
             hwWalletRepo = hwWalletRepo,
         )
-    }
-
-    @Test
-    fun `should calculate LSP order transfer to spending using transfer amount`() = test {
-        val balance = newBalanceDetails()
-        val amountSats = 50_000uL
-        val transfers = listOf(
-            newTransferEntity(
-                type = TransferType.TO_SPENDING,
-                amountSats = amountSats.toLong(),
-                lspOrderId = "lsp-order-id",
-                channelId = null
-            )
-        )
-
-        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
-
-        val result = sut()
-
-        assertTrue(result.isSuccess)
-        val balanceState = result.getOrThrow()
-        assertEquals(amountSats, balanceState.balanceInTransferToSpending)
-        assertEquals(
-            balance.totalOnchainBalanceSats,
-            balanceState.totalOnchainSats,
-            "Onchain balance unchanged - LDK already reflects sent payment to LSP"
-        )
-        assertEquals(
-            balance.totalLightningBalanceSats,
-            balanceState.totalLightningSats,
-            "Lightning balance unchanged - channel not open yet"
-        )
-        assertEquals(200_000uL, balanceState.totalSats)
     }
 
     @Test
@@ -114,7 +79,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
-        wheneverBlocking {
+        whenever {
             lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.success(fee))
 
@@ -140,7 +105,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
-        wheneverBlocking {
+        whenever {
             lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.failure(Exception("Fee estimation failed")))
 
@@ -178,7 +143,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         val channelBalance = newChannelBalance(channelId, amountSats)
 
         val balance = newBalanceDetails().copy(lightningBalances = listOf(channelBalance))
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
 
         val channel = mock<ChannelDetails> {
             on { this.channelId } doReturn channelId
@@ -213,39 +178,6 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             "Lightning balance reduced - pending channel not ready"
         )
         assertEquals(150_000uL, balanceState.totalSats)
-    }
-
-    @Test
-    fun `should subtract LSP funding transaction while onchain balance has not synced`() = test {
-        val initialOnchainSats = 86_901uL
-        val transferSats = 20_212uL
-        val txTotalSats = 25_809uL
-        val balance = newBalanceDetails().copy(
-            totalOnchainBalanceSats = initialOnchainSats,
-            totalLightningBalanceSats = 0uL,
-        )
-        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
-        val transfers = listOf(
-            newTransferEntity(
-                type = TransferType.TO_SPENDING,
-                amountSats = transferSats.toLong(),
-                fundingTxId = "funding-tx-id",
-                lspOrderId = "lsp-order-id",
-                txTotalSats = txTotalSats.toLong(),
-                preTransferOnchainSats = initialOnchainSats.toLong(),
-            )
-        )
-
-        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
-
-        val result = sut()
-
-        assertTrue(result.isSuccess)
-        val balanceState = result.getOrThrow()
-        assertEquals(61_092uL, balanceState.totalOnchainSats)
-        assertEquals(transferSats, balanceState.balanceInTransferToSpending)
-        assertEquals(81_304uL, balanceState.totalSats)
     }
 
     @Test
@@ -368,7 +300,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         val closingChannelBalance = newClosingChannelBalance(channelId, amountSats)
 
         val balance = newBalanceDetails().copy(lightningBalances = listOf(closingChannelBalance))
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
 
         val transfers = listOf(
             newTransferEntity(
@@ -381,7 +313,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
-        wheneverBlocking { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenReturn(channelId)
+        whenever { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenReturn(channelId)
 
         val result = sut()
 
@@ -410,7 +342,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             lightningBalances = listOf(closingChannelBalance),
             totalLightningBalanceSats = amountSats,
         )
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
 
         val transfers = listOf(
             newTransferEntity(
@@ -423,7 +355,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
-        wheneverBlocking { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenReturn(channelId)
+        whenever { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenReturn(channelId)
 
         val result = sut()
 
@@ -500,7 +432,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     @Test
     fun `should calculate zero max send onchain when spendable balance is zero`() = test {
         val balance = newBalanceDetails().copy(totalOnchainBalanceSats = 50_000u)
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
 
         val result = sut()
@@ -518,9 +450,9 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         val balance = newBalanceDetails().copy(spendableOnchainBalanceSats = spendableAmount)
 
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        wheneverBlocking {
+        whenever {
             lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.success(feeAmount))
 
@@ -541,7 +473,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        wheneverBlocking {
+        whenever {
             lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.failure(Exception("Fee estimation failed")))
 
@@ -559,9 +491,9 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
         val balance = newBalanceDetails().copy(spendableOnchainBalanceSats = spendableAmount)
 
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        wheneverBlocking {
+        whenever {
             lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
         }.thenReturn(Result.success(excessiveFee))
 
@@ -585,7 +517,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
                 newClosingChannelBalance(savingsChannelId, toSavings)
             ),
         )
-        wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
         val spendingChannel = mock<ChannelDetails> {
             on { channelId } doReturn spendingChannelId
             on { isChannelReady } doReturn false
@@ -606,7 +538,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         )
         whenever(lightningRepo.getChannels()).thenReturn(listOf(spendingChannel))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
-        wheneverBlocking { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenAnswer { invocation ->
+        whenever { transferRepo.resolveChannelIdForTransfer(any(), any()) }.thenAnswer { invocation ->
             val transfer = invocation.getArgument<TransferEntity>(0)
             transfer.channelId
         }

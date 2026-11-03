@@ -91,7 +91,6 @@ data class ElectrumServerPeer(
     val protocol: ElectrumProtocol,
 )
 
-@Suppress("MagicNumber")
 fun ElectrumProtocol.getDefaultPort(): Int {
     val network = Env.network
 

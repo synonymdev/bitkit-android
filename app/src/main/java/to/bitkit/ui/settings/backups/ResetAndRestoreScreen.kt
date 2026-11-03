@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.backups
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
@@ -45,12 +47,17 @@ fun ResetAndRestoreScreen(
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
     var showDialog by remember { mutableStateOf(false) }
+    val isWiping by wallet.isWiping.collectAsStateWithLifecycle()
 
     Content(
         showConfirmDialog = showDialog,
+        isWiping = isWiping,
         onClickBackup = { app.showSheet(Sheet.Backup()) },
         onClickReset = { showDialog = true },
-        onResetConfirm = { wallet.wipeWallet() },
+        onResetConfirm = {
+            showDialog = false
+            wallet.wipeWallet()
+        },
         onResetDismiss = { showDialog = false },
         onBack = { navController.popBackStack() },
     )
@@ -59,16 +66,19 @@ fun ResetAndRestoreScreen(
 @Composable
 private fun Content(
     showConfirmDialog: Boolean,
+    isWiping: Boolean,
     onClickBackup: () -> Unit,
     onClickReset: () -> Unit,
     onResetConfirm: () -> Unit,
     onResetDismiss: () -> Unit,
     onBack: () -> Unit,
 ) {
+    BackHandler(enabled = isWiping) {}
+
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.security__reset_title),
-            onBackClick = onBack,
+            onBackClick = if (isWiping) null else onBack,
             actions = { DrawerNavIcon() },
         )
         Spacer(Modifier.height(32.dp))
@@ -101,6 +111,7 @@ private fun Content(
                 SecondaryButton(
                     text = stringResource(R.string.security__reset_button_backup),
                     onClick = onClickBackup,
+                    enabled = !isWiping,
                     modifier = Modifier
                         .weight(1f)
                         .testTag(ResetAndRestoreTestTags.BACKUP_BUTTON)
@@ -108,6 +119,7 @@ private fun Content(
                 PrimaryButton(
                     text = stringResource(R.string.security__reset_button_reset),
                     onClick = onClickReset,
+                    isLoading = isWiping,
                     modifier = Modifier
                         .weight(1f)
                         .testTag(ResetAndRestoreTestTags.RESET_BUTTON)
@@ -143,6 +155,7 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             showConfirmDialog = false,
+            isWiping = false,
             onClickBackup = {},
             onClickReset = {},
             onResetConfirm = {},
@@ -158,6 +171,7 @@ private fun PreviewDialog() {
     AppThemeSurface {
         Content(
             showConfirmDialog = true,
+            isWiping = false,
             onClickBackup = {},
             onClickReset = {},
             onResetConfirm = {},

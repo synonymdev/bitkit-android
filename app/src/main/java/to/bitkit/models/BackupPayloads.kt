@@ -21,9 +21,12 @@ data class WalletBackupV1(
     val createdAt: Long,
     val transfers: List<TransferEntity>,
     val privatePaykitHighestReservedReceiveIndexByAddressType: Map<String, Int>? = null,
+    val publicPaykitLegacyAddresses: List<String>? = null,
     val paykitSdkBackupState: String? = null,
     val watchOnlyAccounts: List<WatchOnlyAccountRecord>? = null,
     val watchOnlyAccountAllocationState: WatchOnlyAccountAllocationState? = null,
+    val usdtWallet: String? = null,
+    val paykitPaymentState: PaykitPaymentStateBackup? = null,
 )
 
 @Serializable
@@ -40,8 +43,8 @@ data class MetadataBackupV1(
 
 @Serializable
 data class PubkySessionBackupV1(
-    val kind: PubkySessionBackupKind,
-    val sessionSecret: String? = null,
+    /** Null when bitkit-ios wrote a kind it no longer restores, which it then encodes as `{}`. */
+    val kind: PubkySessionBackupKind? = null,
 )
 
 @Serializable
@@ -49,6 +52,7 @@ enum class PubkySessionBackupKind {
     @SerialName("localSeed")
     LocalSeed,
 
+    /** Legacy: sessions imported through the removed Pubky Ring relay flow; restored as no identity. */
     @SerialName("externalSession")
     ExternalSession,
 }

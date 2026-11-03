@@ -1,5 +1,10 @@
 package to.bitkit.ui.screens.profile
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,35 +19,49 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.data.PubkyCachedProfile
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.LinkRow
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
@@ -50,9 +69,11 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
+import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.TopBarGradient
 
 @Composable
 fun ProfileScreen(
@@ -85,6 +106,7 @@ fun ProfileScreen(
         onRemoveTag = { viewModel.removeTag(it) },
         onDismissAddTagSheet = { viewModel.dismissAddTagSheet() },
         onSaveTag = { viewModel.addTag(it) },
+        onDismissCopiedPopup = { viewModel.dismissCopiedPopup() },
     )
 }
 
@@ -103,27 +125,53 @@ private fun Content(
     onRemoveTag: (String) -> Unit,
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
+    onDismissCopiedPopup: () -> Unit,
 ) {
     val currentProfile = uiState.profile
-
-    ScreenColumn {
+    val cachedProfile = uiState.cachedProfile
+    val topBar = @Composable { modifier: Modifier ->
         AppTopBar(
             titleText = stringResource(R.string.profile__nav_title),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
+            modifier = modifier,
         )
+    }
 
-        when {
-            uiState.isLoading && currentProfile == null -> LoadingState()
-            currentProfile != null -> ProfileBody(
+    when {
+        currentProfile != null -> Box(modifier = Modifier.screen()) {
+            ProfileBody(
                 profile = currentProfile,
+                canEdit = uiState.canEdit,
+                isLoading = uiState.isLoading || uiState.isSigningOut,
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
                 onClickShare = onClickShare,
                 onClickAddTag = onClickAddTag,
                 onRemoveTag = onRemoveTag,
+                onClickSignOut = onClickSignOut,
+                onClickRetry = onClickRetry,
             )
-            else -> EmptyState(onClickRetry = onClickRetry, onClickSignOut = onClickSignOut)
+            topBar(Modifier.background(TopBarGradient))
+            CopiedPopup(
+                publicKey = uiState.copiedPublicKey,
+                onClick = onDismissCopiedPopup,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+
+        cachedProfile != null -> Box(modifier = Modifier.screen()) {
+            CachedProfileBody(profile = cachedProfile)
+            topBar(Modifier.background(TopBarGradient))
+        }
+
+        else -> ScreenColumn {
+            topBar(Modifier)
+            if (uiState.isLoading) {
+                LoadingState()
+            } else {
+                EmptyState(onClickRetry = onClickRetry, onClickSignOut = onClickSignOut)
+            }
         }
     }
 
@@ -148,11 +196,15 @@ private fun Content(
 @Composable
 private fun ProfileBody(
     profile: PubkyProfile,
+    canEdit: Boolean,
+    isLoading: Boolean,
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
     onClickShare: () -> Unit,
     onClickAddTag: () -> Unit,
     onRemoveTag: (String) -> Unit,
+    onClickSignOut: () -> Unit,
+    onClickRetry: () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -161,6 +213,7 @@ private fun ProfileBody(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
     ) {
+        TopBarSpacer()
         VerticalSpacer(24.dp)
 
         CenteredProfileHeader(
@@ -172,17 +225,18 @@ private fun ProfileBody(
             notesTestTag = "ProfileViewNotes",
         )
 
-        VerticalSpacer(24.dp)
+        VerticalSpacer(16.dp)
 
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 32.dp)
                 .clickableAlpha(onClick = onClickCopy)
         ) {
             QrCodeImage(
                 content = profile.publicKey,
-                modifier = Modifier.size(279.dp),
+                modifier = Modifier.fillMaxWidth(),
                 testTag = "ProfileQRCode",
             )
             if (profile.imageUrl != null) {
@@ -200,7 +254,7 @@ private fun ProfileBody(
             }
         }
 
-        VerticalSpacer(24.dp)
+        VerticalSpacer(16.dp)
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
@@ -208,12 +262,13 @@ private fun ProfileBody(
         ) {
             ActionButton(
                 onClick = onClickEdit,
-                iconRes = R.drawable.ic_edit,
+                iconRes = R.drawable.ic_pencil,
+                enabled = canEdit,
                 modifier = Modifier.testTag("ProfileEdit")
             )
             ActionButton(
                 onClick = onClickCopy,
-                iconRes = R.drawable.ic_copy,
+                iconRes = R.drawable.ic_copy_simple,
                 modifier = Modifier.testTag("ProfileCopy")
             )
             ActionButton(
@@ -224,11 +279,10 @@ private fun ProfileBody(
         }
 
         VerticalSpacer(32.dp)
+        HorizontalDivider()
 
-        if (profile.links.isNotEmpty()) {
-            profile.links.forEachIndexed { index, link ->
-                LinkRow(label = link.label, value = link.url, linkIndex = index)
-            }
+        profile.links.forEachIndexed { index, link ->
+            LinkRow(label = link.label, value = link.url, linkIndex = index)
         }
 
         VerticalSpacer(16.dp)
@@ -240,30 +294,127 @@ private fun ProfileBody(
                 .testTag("ProfileViewTagsHeader")
         )
         VerticalSpacer(8.dp)
-        @OptIn(ExperimentalLayoutApi::class)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            profile.tags.forEach { tag ->
-                TagButton(
-                    text = tag,
-                    onClick = { onRemoveTag(tag) },
-                    accessibilityLabel = stringResource(R.string.common__remove_tag, tag),
-                    displayIconClose = true,
-                )
+        if (profile.tags.isNotEmpty()) {
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                profile.tags.forEach { tag ->
+                    TagButton(
+                        text = tag,
+                        onClick = if (canEdit) ({ onRemoveTag(tag) }) else null,
+                        accessibilityLabel = stringResource(R.string.common__remove_tag, tag).takeIf { canEdit },
+                        displayIconClose = canEdit,
+                    )
+                }
             }
-            TagButton(
+            VerticalSpacer(8.dp)
+        }
+        Row(modifier = Modifier.fillMaxWidth()) {
+            PrimaryButton(
                 text = stringResource(R.string.profile__add_tag),
                 onClick = onClickAddTag,
-                icon = painterResource(R.drawable.ic_tag),
-                displayIconClose = true,
+                enabled = canEdit,
+                size = ButtonSize.Small,
+                fullWidth = false,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_tag),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
                 modifier = Modifier.testTag("ProfileAddTag")
             )
         }
 
         VerticalSpacer(16.dp)
+        if (!canEdit) {
+            SecondaryButton(
+                text = stringResource(R.string.profile__retry_load),
+                onClick = onClickRetry,
+                enabled = !isLoading,
+                modifier = Modifier.testTag("ProfileRetry")
+            )
+            VerticalSpacer(8.dp)
+            TextButton(
+                onClick = rememberDebouncedClick(onClick = onClickSignOut),
+                modifier = Modifier.testTag("ProfileSignOut")
+            ) {
+                BodyS(text = stringResource(R.string.profile__sign_out), color = Colors.White64)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CachedProfileBody(profile: PubkyCachedProfile) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp)
+            .testTag("ProfileCachedHeader")
+    ) {
+        TopBarSpacer()
+        VerticalSpacer(24.dp)
+
+        CenteredProfileHeader(
+            publicKey = profile.publicKey,
+            name = profile.name,
+            bio = "",
+            imageUrl = profile.imageUri,
+            nameTestTag = "ProfileCachedName",
+        )
+
+        VerticalSpacer(32.dp)
+        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
+    }
+}
+
+@Composable
+private fun CopiedPopup(
+    publicKey: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var lastPublicKey by remember { mutableStateOf("") }
+    LaunchedEffect(publicKey) {
+        if (publicKey != null) lastPublicKey = publicKey
+    }
+
+    AnimatedVisibility(
+        visible = publicKey != null,
+        enter = fadeIn() + scaleIn(initialScale = 0.95f),
+        exit = fadeOut() + scaleOut(targetScale = 0.95f),
+        modifier = modifier
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .padding(horizontal = 32.dp)
+                .shadow(elevation = 25.dp, shape = MaterialTheme.shapes.medium, spotColor = Colors.Black)
+                .clip(MaterialTheme.shapes.medium)
+                .background(Colors.Gray6)
+                .clickableAlpha(onClick = onClick)
+                .padding(32.dp)
+                .testTag("ProfilePubkyCopiedToast")
+        ) {
+            BodyMSB(
+                text = stringResource(R.string.profile__pubky_copied),
+                color = Colors.Brand,
+                textAlign = TextAlign.Center,
+            )
+            BodyS(
+                text = lastPublicKey,
+                color = Colors.White,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 
@@ -273,7 +424,7 @@ private fun LoadingState() {
         contentAlignment = Alignment.Center,
         modifier = Modifier.fillMaxSize()
     ) {
-        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
+        GradientCircularProgressIndicator(modifier = Modifier.size(24.dp).testTag("ProfileLoading"))
     }
 }
 
@@ -308,6 +459,36 @@ private fun EmptyState(
 
 @Preview(showSystemUi = true)
 @Composable
+private fun PreviewCached() {
+    AppThemeSurface {
+        Content(
+            uiState = ProfileUiState(
+                cachedProfile = PubkyCachedProfile(
+                    publicKey = "pk8e3qm5...gxag",
+                    name = "Satoshi",
+                    imageUri = null,
+                ),
+                isLoading = true,
+            ),
+            onBackClick = {},
+            onClickEdit = {},
+            onClickCopy = {},
+            onClickShare = {},
+            onClickSignOut = {},
+            onDismissSignOutDialog = {},
+            onConfirmSignOut = {},
+            onClickRetry = {},
+            onClickAddTag = {},
+            onRemoveTag = {},
+            onDismissAddTagSheet = {},
+            onSaveTag = {},
+            onDismissCopiedPopup = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
 private fun Preview() {
     AppThemeSurface {
         Content(
@@ -334,6 +515,7 @@ private fun Preview() {
             onRemoveTag = {},
             onDismissAddTagSheet = {},
             onSaveTag = {},
+            onDismissCopiedPopup = {},
         )
     }
 }

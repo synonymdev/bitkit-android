@@ -27,7 +27,6 @@ import java.io.File
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class VssDebugViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

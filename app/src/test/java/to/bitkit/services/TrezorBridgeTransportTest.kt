@@ -13,7 +13,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-@Suppress("MagicNumber")
 class TrezorBridgeTransportTest {
 
     private lateinit var server: TestHttpServer

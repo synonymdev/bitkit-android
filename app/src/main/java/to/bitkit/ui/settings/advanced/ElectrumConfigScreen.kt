@@ -12,10 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -29,7 +27,6 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServerPeer
-import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
@@ -53,31 +50,6 @@ fun ElectrumConfigScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val app = appViewModel ?: return
-    val context = LocalContext.current
-
-    // Monitor connection results
-    LaunchedEffect(uiState.connectionResult) {
-        uiState.connectionResult?.let { result ->
-            if (result.isSuccess) {
-                app.toast(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.settings__es__server_updated_title),
-                    description = context.getString(R.string.settings__es__server_updated_message)
-                        .replace("{host}", uiState.host)
-                        .replace("{port}", uiState.port),
-                    testTag = "ElectrumUpdatedToast",
-                )
-            } else {
-                app.toast(
-                    type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.settings__es__server_error),
-                    description = context.getString(R.string.settings__es__server_error_description),
-                    testTag = "ElectrumErrorToast",
-                )
-            }
-            viewModel.clearConnectionResult()
-        }
-    }
 
     Content(
         uiState = uiState,

@@ -17,7 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -192,12 +192,12 @@ private fun AccountDetailsSheet(
     onDismiss: () -> Unit,
 ) {
     var name by remember(account.id, account.name) { mutableStateOf(account.name) }
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val app = appViewModel
     val copyXpub = copyToClipboard(account.xpub) {
         app?.toast(
             type = Toast.ToastType.SUCCESS,
-            title = context.getString(R.string.common__copied),
+            title = resources.getString(R.string.common__copied),
         )
     }
 

@@ -61,9 +61,9 @@ fun BTCPayConnectionSheet(
 @Composable
 private fun Content(
     setup: SamRockSetupRequest,
+    modifier: Modifier = Modifier,
     isConnecting: Boolean = false,
     errorText: String? = null,
-    modifier: Modifier = Modifier,
     onCancel: () -> Unit = {},
     onConnect: () -> Unit = {},
 ) {

@@ -15,12 +15,15 @@ import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.annotations.CoreServiceIntegration
 import to.bitkit.test.annotations.DeviceIntegration
+import to.bitkit.test.awaitSpendableDeposits
 import javax.inject.Inject
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -133,15 +136,7 @@ class UtxoSelectionTests {
         coreService.blocktank.regtestMine(6u)
         println("Blocks mined successfully")
 
-        // Sleep 15 seconds to ensure all blocks are processed
-        println("Waiting 15 seconds for blocks to be processed")
-        delay(15_000)
-        println("Wait completed")
-
-        // Sync the wallet to see the new balance
-        println("Syncing wallet to update balances")
-        lightningService.sync()
-        println("Wallet sync complete")
+        lightningService.awaitSpendableDeposits(transactionIds.zip(depositAmounts).toMap())
 
         // Verify updated balances after funding
         val updatedBalances = lightningService.balances
@@ -203,12 +198,13 @@ class UtxoSelectionTests {
         val feeRate = 1uL // 1 sat/vbyte
 
         println("Sending $sendAmount sats to $destinationAddress using specific UTXOs")
-        val txId = lightningService.send(
+        val outcome = lightningService.prepareOnchainSend(
             address = destinationAddress,
             sats = sendAmount,
             satsPerVByte = feeRate,
             utxosToSpend = utxosToSpend
-        )
+        ).broadcast()
+        val txId = assertIs<OnchainSendOutcome.Accepted>(outcome).txid
 
         assertTrue(txId.isNotEmpty(), "Transaction ID should not be empty")
         println("Transaction sent successfully with txid: $txId")
@@ -288,6 +284,7 @@ class UtxoSelectionTests {
 
         // Define different deposit amounts for testing coin selection algorithms
         val depositAmounts = listOf(5_000uL, 10_000uL, 20_000uL, 30_000uL, 50_000uL)
+        val deposits = mutableMapOf<String, ULong>()
         var totalExpectedAmount = 0uL
 
         // Fund the wallet with multiple transactions
@@ -295,6 +292,7 @@ class UtxoSelectionTests {
             println("Depositing $depositAmount sats to wallet (transaction ${index + 1}/${depositAmounts.size})")
             val txId = coreService.blocktank.regtestDeposit(address = depositAddress, amountSat = depositAmount)
             assertTrue(txId.isNotEmpty(), "Transaction ID should not be empty")
+            deposits[txId] = depositAmount
             totalExpectedAmount += depositAmount
             println("Deposit transaction ${index + 1} ID: $txId, Amount: $depositAmount sats")
         }
@@ -306,15 +304,7 @@ class UtxoSelectionTests {
         coreService.blocktank.regtestMine(6u)
         println("Blocks mined successfully")
 
-        // Wait for blocks to be processed
-        println("Waiting 15 seconds for blocks to be processed")
-        delay(15_000)
-        println("Wait completed")
-
-        // Sync the wallet to see the new balance
-        println("Syncing wallet to update balances")
-        lightningService.sync()
-        println("Wallet sync complete")
+        lightningService.awaitSpendableDeposits(deposits)
 
         // Get all available UTXOs
         println("Listing all available UTXOs")

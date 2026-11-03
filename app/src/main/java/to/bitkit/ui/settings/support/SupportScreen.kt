@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -75,11 +78,13 @@ fun SupportScreen(
     navController: NavController,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
     val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
     var devModeTapCount by remember { mutableIntStateOf(0) }
     val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
 
     Content(
         onBack = { navController.popBackStack() },
@@ -96,7 +101,7 @@ fun SupportScreen(
         onClickShare = {
             shareText(
                 context,
-                context.getString(R.string.settings__about__shareText)
+                resources.getString(R.string.settings__about__shareText)
                     .replace("{appStoreUrl}", Env.APP_STORE_URL)
                     .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
             )
@@ -107,27 +112,30 @@ fun SupportScreen(
 
             if (devModeTapCount >= DEV_MODE_TAP_THRESHOLD) {
                 val newValue = !isDevModeEnabled
-                settings.setIsDevModeEnabled(newValue)
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
-                app.toast(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(
-                        if (newValue) {
-                            R.string.settings__dev_enabled_title
-                        } else {
-                            R.string.settings__dev_disabled_title
-                        }
-                    ),
-                    description = context.getString(
-                        if (newValue) {
-                            R.string.settings__dev_enabled_message
-                        } else {
-                            R.string.settings__dev_disabled_message
-                        }
-                    ),
-                    testTag = if (newValue) "DevModeEnabledToast" else "DevModeDisabledToast",
-                )
+                scope.launch {
+                    // Toast only after the write, so the disable-all-toasts gate already sees the new value
+                    settings.setIsDevModeEnabled(newValue)
+                    app.toast(
+                        type = Toast.ToastType.SUCCESS,
+                        title = resources.getString(
+                            if (newValue) {
+                                R.string.settings__dev_enabled_title
+                            } else {
+                                R.string.settings__dev_disabled_title
+                            }
+                        ),
+                        description = resources.getString(
+                            if (newValue) {
+                                R.string.settings__dev_enabled_message
+                            } else {
+                                R.string.settings__dev_disabled_message
+                            }
+                        ),
+                        testTag = if (newValue) "DevModeEnabledToast" else "DevModeDisabledToast",
+                    )
+                }
                 devModeTapCount = 0
             }
         },

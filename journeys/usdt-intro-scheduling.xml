@@ -1,0 +1,14 @@
+<journey name="USDT Intro Scheduling">
+  <description>Use an owned, unfunded wallet in a build with USDT configured, whose introductory USDT sheet has never appeared. Repeat the unseen steps using an in-place upgrade with existing undecided settings. Never clear a real wallet to create these conditions. Release regtest builds intentionally omit USDT; they are not eligible for this journey.</description>
+  <actions>
+    <action>Immediately after Home opens, open Receive before the timed intro can appear. Wait at least three seconds. Verify Receive remains open and is not replaced by the USDT intro.</action>
+    <action>Terminate and relaunch the app while Receive is open. Verify the unseen USDT intro is still eligible and appears once Home is idle. If another introductory sheet appears first, dismiss it and verify the USDT intro follows.</action>
+    <action>Swipe down to dismiss the USDT intro. Terminate and relaunch the app. Verify the USDT intro does not appear again and USDT remains off.</action>
+    <action>Open Settings, General, Payments. Verify the USDT (Tether) switch remains available. Enable it and return Home. Verify the USDT tile appears.</action>
+    <action>On another eligible unseen test profile, open Receive before the timed intro appears, wait at least three seconds, then close Receive without restarting. Verify the USDT intro appears after the screen settles.</action>
+    <action>Tap No Thanks (id "UsdtIntroDecline"), relaunch, and verify the intro does not return. Repeat with Enable USDT (id "UsdtIntroEnable") on another unseen profile and verify relaunch preserves the enabled choice without repeating the intro.</action>
+    <action>On an owned test profile with App Update and an unseen USDT intro both eligible, wait for App Update, then open a Bitcoin payment link to replace it. Verify the payment sheet remains open until closed without paying, and the USDT intro can then appear after Home settles without restarting.</action>
+    <action>On an owned test profile whose USDT introduction was already seen and whose Backup reminder is eligible, terminate and relaunch the app, complete startup authentication, and wait on Home. Verify Backup appears without navigating away from Home. Do not fund or reset a wallet for this check.</action>
+    <action>On an eligible unseen test profile, open the scanner before the intro appears and scan an invalid payment QR. Verify the error is shown without opening a payment. If the scanner remains open, close it. Wait at least three seconds on Home and verify the USDT intro appears without another Home visit.</action>
+  </actions>
+</journey>

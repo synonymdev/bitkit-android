@@ -8,8 +8,9 @@ import kotlin.test.assertNull
 
 class PubkyRouteResolverTest {
     companion object {
-        private const val VALID_PUBLIC_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        private const val OTHER_VALID_PUBLIC_KEY = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        private const val VALID_PUBLIC_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
+        private const val NON_CANONICAL_PUBLIC_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        private const val OTHER_VALID_PUBLIC_KEY = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xy"
     }
 
     @Test
@@ -17,7 +18,7 @@ class PubkyRouteResolverTest {
         assertEquals(
             Routes.Profile,
             resolvePastedPubkyRoute(
-                input = VALID_PUBLIC_KEY,
+                input = NON_CANONICAL_PUBLIC_KEY,
                 ownPublicKey = VALID_PUBLIC_KEY,
                 contacts = emptyList(),
             ),
@@ -29,7 +30,7 @@ class PubkyRouteResolverTest {
         assertEquals(
             Routes.ContactDetail(VALID_PUBLIC_KEY),
             resolvePastedPubkyRoute(
-                input = VALID_PUBLIC_KEY,
+                input = NON_CANONICAL_PUBLIC_KEY,
                 ownPublicKey = OTHER_VALID_PUBLIC_KEY,
                 contacts = listOf(PubkyProfile.placeholder(VALID_PUBLIC_KEY)),
             ),
@@ -41,7 +42,7 @@ class PubkyRouteResolverTest {
         assertEquals(
             Routes.AddContact(VALID_PUBLIC_KEY),
             resolvePastedPubkyRoute(
-                input = VALID_PUBLIC_KEY,
+                input = NON_CANONICAL_PUBLIC_KEY,
                 ownPublicKey = OTHER_VALID_PUBLIC_KEY,
                 contacts = emptyList(),
             ),

@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -18,12 +19,13 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun SheetDragHandle(
     modifier: Modifier = Modifier,
+    topPadding: Dp = 12.dp,
 ) {
     Surface(
         color = Colors.White32,
         shape = MaterialTheme.shapes.extraLarge,
         modifier = modifier
-            .padding(top = 12.dp)
+            .padding(top = topPadding)
     ) {
         Box(Modifier.size(width = 32.dp, height = 4.dp))
     }

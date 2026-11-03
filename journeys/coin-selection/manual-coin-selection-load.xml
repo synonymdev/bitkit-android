@@ -1,0 +1,41 @@
+<journey name="manual coin selection loads once and keeps the selection">
+  <description>
+    Verifies the Send coin selection screen loads the wallet's UTXOs without a toast, and that a
+    manual selection survives an activity update while the screen is open (the load runs once per
+    amount and address; activity changes only refresh tag lookup).
+
+    The inline load error state (text "Bitkit could not load your coins. Please try again.", testTag
+    "CoinSelectionLoadError", with a Retry button, testTag "CoinSelectionRetry") is not reachable on
+    a healthy wallet: the Send amount screen shows "Connecting to network" (testTag
+    "sync_node_view") until the node runs, and fee calculation falls back to a fixed fee instead of
+    failing. It was checked with a temporary local change that failed 'listSpendableOutputs'.
+    SendCoinSelectionViewModelTest.kt covers it. Both tags sit on a SecondaryButton wrapper and on a
+    Column that carry no semantics of their own, so they do not reach `android layout`; assert the
+    error from its text or a screenshot.
+
+    Precondition: onboarded dev wallet with at least two confirmed Savings UTXOs, funded through the
+    lsp regtest deposit and mine (see ../README.md). Note a Savings address from Receive before
+    starting, and a valid regtest address to send to. Start on the wallet home screen. This journey
+    changes the Coin Selection setting to Manual and adds a 10 000 sat deposit; the last actions
+    restore the previous setting.
+  </description>
+  <actions>
+    <action>Tap the header menu (testTag "HeaderMenu") and then Settings (testTag "DrawerSettings")</action>
+    <action>Tap the Advanced tab (testTag "Tab-advanced") and then Coin Selection (testTag "CoinSelectPreference")</action>
+    <action>Note which method and autopilot mode are checked, then tap Manual (testTag "manual_button")</action>
+    <action>Go back to the wallet home screen</action>
+    <action>Run adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;regtest address&gt;?amount=0.0001" to.bitkit.dev</action>
+    <action>Verify the amount field (testTag "SendNumberField") shows 10 000, waiting through "Connecting to network" (testTag "sync_node_view") if it is shown</action>
+    <action>Tap Continue (testTag "ContinueAmount")</action>
+    <action>Verify the coin selection screen (testTag "coin_selection_screen") lists one row per UTXO (testTags starting with "utxo_row_"), all toggled on, with TOTAL REQUIRED and TOTAL SELECTED above zero</action>
+    <action>Verify no error toast appeared and the load error text "Bitkit could not load your coins. Please try again." is not shown</action>
+    <action>Tap the smallest UTXO row once to deselect it</action>
+    <action>Verify TOTAL SELECTED decreased by that UTXO's amount</action>
+    <action>Run ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings address&gt;","amountSat":10000}' and then ./lsp POST /regtest/chain/mine '{"count":1}'</action>
+    <action>Wait about 60 seconds for the wallet to sync the new activity, without touching the screen apart from the next step</action>
+    <action>The deposit is an ordinary incoming payment, so the Received sheet (testTag "new_transaction_sheet") opens over coin selection; close it with its OK button (testTag "ReceivedTransactionButton"). Do not press Back, which would close the Send sheet and the selection under it</action>
+    <action>Verify the coin selection screen still shows the same UTXO rows, the deselected row is still off, and TOTAL SELECTED is unchanged</action>
+    <action>Close the Send sheet without continuing</action>
+    <action>Open Settings, Advanced, Coin Selection again and restore the method and autopilot mode noted earlier</action>
+  </actions>
+</journey>

@@ -2,6 +2,7 @@ package to.bitkit.ui.onboarding
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.VectorConverter
@@ -47,7 +48,6 @@ import kotlin.math.roundToInt
 const val LOADING_MS = 2000
 const val RESTORING_MS = 8000
 
-@Suppress("MagicNumber")
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun InitializingWalletView(
@@ -88,21 +88,21 @@ fun InitializingWalletView(
             targetValue = 1f,
             typeConverter = Float.VectorConverter,
             animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 2000, easing = LinearEasing),
+                animation = tween(durationMillis = 3500, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Restart,
             ),
             label = "rocketAnimation"
         )
 
         val xOffset = lerp(
-            start = -maxWidth / 2 - 100.dp,
-            end = maxWidth / 2 + 100.dp,
+            start = -maxWidth / 2 - 70.dp,
+            end = maxWidth / 2 + 128.dp,
             fraction = rocketOffset,
         )
 
         val yOffset = lerp(
-            start = maxHeight / 2 + 150.dp,
-            end = 0.dp - 100.dp,
+            start = maxHeight * 0.5f,
+            end = -(maxHeight * 0.25f),
             fraction = rocketOffset,
         )
 

@@ -1,0 +1,33 @@
+<journey name="own invoice guard">
+  <description>
+    Paying a Lightning invoice created by this wallet is rejected with a "Cannot Pay Own Invoice"
+    toast before QuickPay or the Confirm screen, and a unified QR carrying an own invoice falls back
+    to an on-chain send. Precondition: onboarded dev wallet, node running, a usable spending channel
+    and a savings balance. The toast never reaches `android layout`; assert it from a screenshot
+    taken within ~2s of the deep link. The unified URI has to be quoted twice: `adb shell` joins its
+    arguments and hands them to the device shell without re-escaping, so quotes written bare on the
+    host are eaten there and the device shell splits the URI at the `&amp;` before `lightning=`,
+    leaving an on-chain-only URI. Wrap the whole remote command in double quotes and the URI in
+    single quotes so one level survives to the device. Android only for now: `bitkit-ios` has no
+    own-invoice guard.
+  </description>
+  <actions>
+    <action>Tap Receive on the home screen (tag "Receive")</action>
+    <action>Tap Edit (tag "SpecifyInvoiceButton"), tap the amount field (tag "ReceiveNumberPadTextField"), enter 1000 with "N1" and "N000", tap Continue (tag "ReceiveNumberPadSubmit"), then tap QR Code (tag "ShowQrReceive")</action>
+    <action>Read the unified `bitcoin:` URI from the QR element's content-desc in `android layout`, and take the `lightning=` value as the own invoice; never type it</action>
+    <action>Press the device back button until the wallet overview is visible</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;own invoice&gt;" to.bitkit.dev`</action>
+    <action>Verify from a screenshot that an error toast titled "Cannot Pay Own Invoice" is visible (tag "SelfPaymentToast")</action>
+    <action>Verify that the wallet overview is still visible and no Send sheet, QuickPay screen or Confirm screen opened</action>
+    <action>Run `adb shell "am start -a android.intent.action.VIEW -d '&lt;unified bitcoin: URI&gt;' to.bitkit.dev"` — outer double quotes, inner single quotes, so the device shell receives the whole URI as one word (see the description)</action>
+    <action>Verify that the send amount screen (tag "send_amount_screen") is visible with 1 000 prefilled and the SAVINGS source selected; without the guard the `lightning=` param would route this to a Lightning send instead</action>
+    <action>Verify that the app log contains "Skipped own lightning invoice in unified URI, defaulting to onchain"</action>
+    <action>Tap Continue (tag "ContinueAmount"), then tap Show Details (tag "SendConfirmToggleDetails")</action>
+    <action>Verify that the Confirm screen shows FROM Savings and TO the wallet's own on-chain address (tag "ReviewUri"); do not swipe to pay</action>
+    <action>Press the device back button until the wallet overview is visible</action>
+    <action>Open Settings ▸ QuickPay (tag "QuickpaySettings"), turn QuickPay on, and return to the wallet overview</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;own invoice&gt;" to.bitkit.dev`</action>
+    <action>Verify from a screenshot that the "Cannot Pay Own Invoice" toast is visible and the QuickPay screen did not open</action>
+    <action>Open Settings ▸ QuickPay and turn QuickPay back off if it was off before this journey</action>
+  </actions>
+</journey>

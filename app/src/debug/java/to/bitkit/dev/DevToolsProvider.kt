@@ -22,6 +22,9 @@ import kotlin.time.Duration.Companion.seconds
 import to.bitkit.repositories.ProbeReadiness as NodeProbeReadiness
 
 private const val TAG = "DevToolsProvider"
+
+/** UID of the ADB shell; `Process.SHELL_UID` holds the same value but is public only from API 29. */
+private const val SHELL_UID = 2000
 private val DEV_JSON = Json { encodeDefaults = true }
 
 class DevToolsProvider : ContentProvider() {
@@ -38,7 +41,7 @@ class DevToolsProvider : ContentProvider() {
     }
 
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
-        check(Binder.getCallingUid() == Process.SHELL_UID) { "Only ADB shell callers are allowed" }
+        check(Binder.getCallingUid() == SHELL_UID) { "Only ADB shell callers are allowed" }
         return runCatching {
             val command = requireNotNull(DevCommand.parse(method, arg)) { "Unknown command: '$method'" }
             ServiceQueue.LDK.blocking { command.execute(deps) }

@@ -50,8 +50,8 @@ fun EditWidgetOverlay(
     type: WidgetType,
     onDelete: () -> Unit,
     onSettings: () -> Unit,
-    dragHandleModifier: Modifier,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier,
     content: @Composable () -> Unit,
 ) {
     val name = stringResource(type.title)
@@ -98,8 +98,8 @@ private fun EditActions(
     settingsEnabled: Boolean,
     onDelete: () -> Unit,
     onSettings: () -> Unit,
-    dragHandleModifier: Modifier,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier,
 ) {
     Box(
         contentAlignment = Alignment.Center,

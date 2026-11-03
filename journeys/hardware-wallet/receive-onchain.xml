@@ -1,0 +1,34 @@
+<journey name="Hardware Wallet On-chain Receive">
+  <description>
+    Opens the standard Receive flow for a paired Trezor, verifies that Bitkit shows its current
+    native-segwit receive address and QR code, and confirms the same address on the device. Requires
+    exactly one paired Bridge-emulator wallet so the global Receive sheet can select it.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Tap the Receive button (testTag "Receive") and verify the Receive sheet opens (testTag
+      "ReceiveScreen")
+    </action>
+    <action>
+      Tap the "Trezor" receive tab and wait for its address to load
+    </action>
+    <action>
+      Verify a QR code is shown (testTag "QRCode")
+    </action>
+    <action>
+      Tap "Show Details" (testTag "ShowDetails"), verify a complete regtest address beginning with
+      "bcrt1" is shown (testTag "ReceiveHardwareAddress"), then tap "Verify on Device" (testTag
+      "HardwareVerifyAddress") and verify the button shows a loading state while the request is active
+    </action>
+    <action>
+      Read the complete address displayed by the Bridge emulator and verify it exactly matches the
+      address shown by Bitkit (testTag "ReceiveHardwareAddress"), then approve it on the emulator
+    </action>
+    <action>
+      Verify the request completes without an error and the same address remains visible in Bitkit
+    </action>
+  </actions>
+</journey>

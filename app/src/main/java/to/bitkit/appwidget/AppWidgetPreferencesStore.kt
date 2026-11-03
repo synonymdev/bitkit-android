@@ -45,7 +45,6 @@ val Context.appWidgetRefreshScheduler: AppWidgetRefreshScheduler
         .appWidgetRefreshScheduler()
 
 @Singleton
-@Suppress("TooManyFunctions")
 class AppWidgetPreferencesStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {

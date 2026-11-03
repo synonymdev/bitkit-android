@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.HwWalletDataSerializer
 import to.bitkit.di.IoDispatcher
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.KnownDevice
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,22 +30,27 @@ class HwWalletStore @Inject constructor(
 
     val data: Flow<HwWalletData> = store.data
 
-    suspend fun loadKnownDevices(): List<KnownDevice> = withContext(ioDispatcher) {
-        store.data.first().knownDevices
+    /** @param vendor when given, only that vendor's entries are returned. */
+    suspend fun loadKnownDevices(vendor: HwWalletVendor? = null): List<KnownDevice> = withContext(ioDispatcher) {
+        store.data.first().knownDevices.filter { vendor == null || it.vendor == vendor }
     }
 
     /**
      * @param pendingName a pending-name change to apply in the same write, or null to leave them alone.
      * Splitting the two would publish a device list without its matching name change, which restarts a
      * watcher for a wallet already being removed and can leave a name in both places or in neither.
+     * @param vendor when given, [devices] replaces only that vendor's entries and the other vendors'
+     * entries are kept, so each vendor repo can write its own view without dropping the others'.
      */
     suspend fun saveKnownDevices(
         devices: List<KnownDevice>,
         pendingName: PendingNameUpdate? = null,
+        vendor: HwWalletVendor? = null,
     ) = withContext(ioDispatcher) {
         store.updateData { data ->
+            val kept = if (vendor == null) emptyList() else data.knownDevices.filter { it.vendor != vendor }
             data.copy(
-                knownDevices = devices,
+                knownDevices = kept + devices,
                 pendingNames = pendingName?.applyTo(data.pendingNames) ?: data.pendingNames,
             )
         }

@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.withRequiredNativeSegwitMonitoring
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
@@ -50,7 +51,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
 
     private fun loadState() {
         viewModelScope.launch(bgDispatcher) {
-            settingsStore.data.first().let { settings ->
+            settingsStore.data.first().withRequiredNativeSegwitMonitoring().let { settings ->
                 val selected = settings.selectedAddressType.toAddressType() ?: AddressType.P2WPKH
                 val monitored = settings.addressTypesToMonitor.toImmutableSet()
                 _uiState.update {
@@ -147,6 +148,8 @@ class AddressTypePreferenceViewModel @Inject constructor(
     }
 
     private fun monitoringErrorMessage(errorMessage: String?): String? = when {
+        errorMessage?.contains("Blocktank refunds") == true ->
+            context.getString(R.string.settings__addr_type__disabled_native_refund_required)
         errorMessage?.contains("has balance") == true ->
             context.getString(R.string.settings__addr_type__disabled_has_balance)
         errorMessage?.contains("verify") == true ->

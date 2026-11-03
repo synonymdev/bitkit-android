@@ -15,7 +15,6 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Suppress("LongParameterList")
 @Singleton
 class NotifyChannelReadyHandler @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,

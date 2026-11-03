@@ -2,7 +2,6 @@ package to.bitkit.utils
 
 import kotlin.math.roundToInt
 
-@Suppress("MagicNumber")
 object BlockTimeHelpers {
     private const val BLOCK_TIME_MINUTES = 10
     private const val MINUTES_PER_HOUR = 60.0

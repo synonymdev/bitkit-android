@@ -27,12 +27,12 @@ private val Context.appCacheDataStore: DataStore<AppCacheData> by dataStore(
     serializer = AppCacheSerializer
 )
 
-@Suppress("TooManyFunctions")
 @Singleton
-class CacheStore @Inject constructor(
-    @ApplicationContext private val context: Context,
+class CacheStore internal constructor(
+    private val store: DataStore<AppCacheData>,
 ) {
-    private val store = context.appCacheDataStore
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context.appCacheDataStore)
 
     val data: Flow<AppCacheData> = store.data
     val backupStatuses: Flow<Map<BackupCategory, BackupItemStatus>> = data.map { it.backupStatuses }
@@ -41,21 +41,16 @@ class CacheStore @Inject constructor(
         store.updateData(transform)
     }
 
-    suspend fun addPaidOrder(orderId: String, txId: String) {
-        store.updateData {
-            val newEntry = mapOf(orderId to txId)
-            val updatedOrders = newEntry + it.paidOrders
-            val limitedOrders = when {
-                updatedOrders.size > MAX_PAID_ORDERS -> updatedOrders.toList().take(MAX_PAID_ORDERS).toMap()
-                else -> updatedOrders
-            }
-            Logger.debug("Cached paid order '$orderId'")
-            it.copy(paidOrders = limitedOrders)
-        }
-    }
-
     suspend fun setOnchainAddress(address: String) {
         store.updateData { it.copy(onchainAddress = address) }
+    }
+
+    suspend fun setActivityContactDetached(activityId: String, walletId: String, detached: Boolean) {
+        val id = scopedActivityId(walletId, activityId)
+        store.updateData {
+            val contacts = it.detachedActivityContacts
+            it.copy(detachedActivityContacts = if (detached) contacts + id else contacts - id)
+        }
     }
 
     suspend fun saveBolt11(bolt11: String, paymentHash: String) {
@@ -132,6 +127,15 @@ class CacheStore @Inject constructor(
         }
     }
 
+    suspend fun setPendingLightningMessage(paymentHash: String, message: String) {
+        store.updateData { it.copy(pendingLightningMessages = it.pendingLightningMessages + (paymentHash to message)) }
+    }
+
+    suspend fun removePendingLightningMessage(paymentHash: String) {
+        if (paymentHash !in store.data.first().pendingLightningMessages) return
+        store.updateData { it.copy(pendingLightningMessages = it.pendingLightningMessages - paymentHash) }
+    }
+
     suspend fun setBackgroundReceive(details: NewTransactionSheetDetails) = store.updateData {
         it.copy(backgroundReceive = details)
     }
@@ -144,29 +148,31 @@ class CacheStore @Inject constructor(
         store.updateData { AppCacheData() }
         Logger.info("Deleted all app cached data.")
     }
-
-    companion object {
-        private const val MAX_PAID_ORDERS = 50
-    }
 }
 
 @Serializable
 data class AppCacheData(
     val cachedRates: List<FxRate> = listOf(),
-    val paidOrders: Map<String, String> = mapOf(),
     val onchainAddress: String = "",
     val bolt11: String = "",
     val bolt11PaymentHash: String = "",
     val bip21: String = "",
     val balance: BalanceState? = null,
+    val usdtDisplayBalance: CachedUsdtBalance? = null,
     val backupStatuses: Map<BackupCategory, BackupItemStatus> = mapOf(),
     val deletedActivities: List<String> = listOf(),
+    val detachedActivityContacts: Set<String> = emptySet(),
     val pendingBoostActivities: List<PendingBoostActivity> = listOf(),
     val backgroundReceive: NewTransactionSheetDetails? = null,
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
     val quickPayLedger: QuickPayLedger? = null,
+    /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
+    val pendingLightningMessages: Map<String, String> = mapOf(),
 ) {
+    fun isContactDetached(activityId: String, walletId: String): Boolean =
+        scopedActivityId(walletId, activityId) in detachedActivityContacts
+
     fun isActivityDeleted(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in deletedActivities ||
             walletId == WalletScope.default && activityId in deletedActivities
@@ -176,4 +182,14 @@ data class AppCacheData(
     fun invalidateReceiveLightningInvoice() = copy(bip21 = "", bolt11 = "", bolt11PaymentHash = "")
 
     fun invalidateReceiveOnchainAddress() = copy(bip21 = "", onchainAddress = "")
+}
+
+@Serializable
+data class CachedUsdtBalance(
+    val address: String,
+    val network: String,
+    val balance: ULong,
+) {
+    fun balanceFor(address: String, network: String): ULong? =
+        balance.takeIf { this.address == address && this.network == network }
 }

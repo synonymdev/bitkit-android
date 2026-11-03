@@ -35,7 +35,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 
-@Suppress("LongParameterList")
 @Composable
 internal fun BalanceLookupSection(
     uiState: TrezorUiState,
@@ -118,7 +117,6 @@ internal fun BalanceLookupSection(
     }
 }
 
-@Suppress("LongParameterList")
 @Composable
 private fun AccountInfoResultView(
     result: AccountInfoResult,

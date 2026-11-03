@@ -131,7 +131,6 @@ private fun Content(
             Row(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(vertical = 8.dp)
             ) {
                 Column {
                     Text13Up(
@@ -169,8 +168,7 @@ private fun Content(
                 )
             }
 
-            HorizontalDivider()
-            VerticalSpacer(16.dp)
+            HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
 
             NumberPad(
                 viewModel = amountInputViewModel,

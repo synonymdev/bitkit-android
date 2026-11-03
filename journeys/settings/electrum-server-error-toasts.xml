@@ -1,0 +1,40 @@
+<journey name="electrum server error toasts">
+  <description>
+    Verifies that a rejected custom Electrum server shows a warning toast whose description names the
+    cause: a wrong-network server and a TLS handshake against a plain TCP port get their own messages,
+    and an unreachable host keeps the generic one. The server is probed before the node stops, so a
+    rejected server is never persisted and the wallet stays on its current server.
+
+    Precondition: onboarded dev wallet on the default staging regtest server (Settings shows Electrum
+    Server "Auto"). Start on the wallet home screen. Toasts never appear in `android layout` and last
+    about 2s, so assert them from a screen recording or a screenshot taken 2-6s after tapping connect.
+    Type hosts in short chunks and verify the field text; `adb shell input text` drops characters.
+    Do not tap "Reset To Default" unless the starting server was the default. Tapping a protocol row
+    rewrites the port whenever it is empty or still one of 51002/50002/51001/50001, to that
+    protocol's default for the build's network (60002 for TLS on the regtest dev build), so always
+    set the protocol before typing the port and never re-tap a protocol row afterwards.
+  </description>
+  <actions>
+    <action>Tap the menu icon (testTag "HeaderMenu")</action>
+    <action>Tap Settings (testTag "DrawerSettings")</action>
+    <action>Tap the Advanced tab (testTag "Tab-advanced")</action>
+    <action>Tap Electrum Server (testTag "ElectrumConfig")</action>
+    <action>Verify "Currently connected to" is visible and note the connected server (testTag "Connected")</action>
+    <action>Select "TLS" under protocol (testTag "ElectrumProtocol")</action>
+    <action>Replace the host (testTag "HostInput") with "electrum.blockstream.info" and the port (testTag "PortInput") with "50002", then verify the port field still reads "50002"</action>
+    <action>Hide the keyboard and tap Connect To Host (testTag "ConnectToHost")</action>
+    <action>Verify a warning toast "Electrum Connection Failed" appears with the description "This server is on a different Bitcoin network. Choose a server for the network Bitkit is using."</action>
+    <action>Verify the connected server (testTag "Connected") is unchanged</action>
+    <action>Replace the port (testTag "PortInput") with "50001" without tapping a protocol row, keeping "TLS" selected, and verify the port field still reads "50001"</action>
+    <action>Hide the keyboard and tap Connect To Host (testTag "ConnectToHost")</action>
+    <action>Verify a warning toast "Electrum Connection Failed" appears with the description "Secure connection failed. Check that the protocol (TCP or TLS) matches the server port."</action>
+    <action>Replace the host (testTag "HostInput") with "10.255.255.1" and the port (testTag "PortInput") with "9999"</action>
+    <action>Hide the keyboard and tap Connect To Host (testTag "ConnectToHost")</action>
+    <action>Verify a warning toast "Electrum Connection Failed" appears with the description "Bitkit could not establish a connection to Electrum." after the ~5s connect timeout</action>
+    <action>Verify the connected server (testTag "Connected") is unchanged</action>
+    <action>Tap Reset To Default (testTag "ResetToDefault")</action>
+    <action>Verify the host and port fields show the default server, which is the connected one, and Connect To Host (testTag "ConnectToHost") is disabled</action>
+    <action>Tap back (testTag "NavigationBack")</action>
+    <action>Verify the Electrum Server row (testTag "ElectrumConfig") still shows "Auto"</action>
+  </actions>
+</journey>

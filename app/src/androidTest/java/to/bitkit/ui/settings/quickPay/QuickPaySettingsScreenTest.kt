@@ -1,7 +1,7 @@
 package to.bitkit.ui.settings.quickPay
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import dagger.hilt.android.testing.HiltAndroidRule

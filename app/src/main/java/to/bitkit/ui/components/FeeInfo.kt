@@ -29,7 +29,7 @@ fun RowScope.FeeInfo(
             color = Colors.White64,
         )
         Spacer(modifier = Modifier.height(8.dp))
-        MoneySSB(sats = amount)
+        MoneySSB(sats = amount, showSymbol = true)
         Spacer(modifier = Modifier.weight(1f))
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
     }

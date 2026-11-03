@@ -3,12 +3,14 @@ package to.bitkit.ui.settings.advanced
 import android.content.Context
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -26,6 +28,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AddressTypePreferenceViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val settingsStore: SettingsStore = mock()
@@ -43,6 +46,7 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
     private val disabledHasBalance = "Address type has balance"
     private val disabledVerifyFailed = "Failed to verify balance"
     private val disabledNativeRequired = "Native SegWit or Taproot required"
+    private val disabledNativeRefundRequired = "Native SegWit required for Blocktank refunds"
     private val disabledCurrentlySelected = "Currently selected"
 
     @Before
@@ -61,6 +65,9 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
             context.getString(R.string.settings__addr_type__disabled_native_required)
         ).thenReturn(disabledNativeRequired)
         whenever(
+            context.getString(R.string.settings__addr_type__disabled_native_refund_required)
+        ).thenReturn(disabledNativeRefundRequired)
+        whenever(
             context.getString(R.string.settings__addr_type__disabled_currently_selected)
         ).thenReturn(disabledCurrentlySelected)
         whenever(settingsStore.data).thenReturn(
@@ -72,7 +79,7 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
                 )
             )
         )
-        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any()) }
+        whenever { privatePaykitRepo.refreshKnownSavedContactEndpoints(any(), any(), any(), anyOrNull()) }
             .thenReturn(Result.success(Unit))
     }
 
@@ -181,6 +188,33 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
         assertEquals(Toast.ToastType.WARNING, toasts.last().type)
         assertEquals(errorTitle, toasts.last().title)
         assertEquals(disabledCurrentlySelected, toasts.last().description)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `setMonitoring native refund requirement sends localized error toast`() = test {
+        whenever(lightningRepo.setMonitoring(AddressType.P2WPKH, false)).thenReturn(
+            Result.failure(Exception("Cannot disable monitoring: Native SegWit is required for Blocktank refunds")),
+        )
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "taproot",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot"),
+                    isDevModeEnabled = true,
+                )
+            )
+        )
+        sut = createSut()
+        advanceUntilIdle()
+
+        val toasts = mutableListOf<Toast>()
+        val collectJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        sut.setMonitoring(AddressType.P2WPKH, false)
+        advanceUntilIdle()
+
+        assertEquals(Toast.ToastType.WARNING, toasts.last().type)
+        assertEquals(disabledNativeRefundRequired, toasts.last().description)
         collectJob.cancel()
     }
 

@@ -1,11 +1,15 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import app.cash.turbine.test
+import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.models.ReceiveAdditionalLiquidityAction
+import to.bitkit.models.ReceiveLiquiditySource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.wallets.receive.EditInvoiceVM.EditInvoiceScreenEffects
@@ -17,55 +21,59 @@ class EditInvoiceVMTest : BaseUnitTest() {
     private val walletRepo: WalletRepo = mock()
 
     @Before
-    fun setUp() {
+    fun setUp() = runBlocking {
+        whenever(walletRepo.inboundLiquiditySats()).thenReturn(1_000u)
         sut = EditInvoiceVM(walletRepo)
     }
 
     @Test
-    fun `onClickContinue should emit NavigateAddLiquidity when shouldRequestAdditionalLiquidity returns true`() = test {
-        // Given
-        whenever(walletRepo.shouldRequestAdditionalLiquidity()).thenReturn(Result.success(true))
-
-        // When & Then
+    fun `onClickContinue should emit none for auto when amount exceeds inbound`() = test {
         sut.editInvoiceEffect.test {
-            sut.onClickContinue()
+            sut.onClickContinue(
+                source = ReceiveLiquiditySource.AUTO,
+                amountSats = 10_000u,
+            )
 
-            assertEquals(EditInvoiceScreenEffects.NavigateAddLiquidity, awaitItem())
+            assertEquals(
+                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.None),
+                awaitItem(),
+            )
             cancelAndIgnoreRemainingEvents()
         }
-
-        verify(walletRepo).shouldRequestAdditionalLiquidity()
+        verify(walletRepo, times(1)).inboundLiquiditySats()
     }
 
     @Test
-    fun `onClickContinue should emit UpdateInvoice when shouldRequestAdditionalLiquidity returns false`() = test {
-        // Given
-        whenever(walletRepo.shouldRequestAdditionalLiquidity()).thenReturn(Result.success(false))
-
-        // When & Then
+    fun `onClickContinue should emit transfer unavailable for spending above inbound`() = test {
         sut.editInvoiceEffect.test {
-            sut.onClickContinue()
+            sut.onClickContinue(
+                source = ReceiveLiquiditySource.SPENDING,
+                amountSats = 10_000u,
+            )
 
-            assertEquals(EditInvoiceScreenEffects.UpdateInvoice, awaitItem())
+            assertEquals(
+                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(
+                    ReceiveAdditionalLiquidityAction.TransferUnavailable
+                ),
+                awaitItem(),
+            )
             cancelAndIgnoreRemainingEvents()
         }
-
-        verify(walletRepo).shouldRequestAdditionalLiquidity()
     }
 
     @Test
-    fun `onClickContinue should emit UpdateInvoice when shouldRequestAdditionalLiquidity fails`() = test {
-        // Given
-        whenever(walletRepo.shouldRequestAdditionalLiquidity()).thenReturn(Result.failure<Boolean>(Exception("Error")))
-
-        // When & Then
+    fun `onClickContinue should emit none for spending within inbound`() = test {
         sut.editInvoiceEffect.test {
-            sut.onClickContinue()
+            sut.onClickContinue(
+                source = ReceiveLiquiditySource.SPENDING,
+                amountSats = 500u,
+            )
 
-            assertEquals(EditInvoiceScreenEffects.UpdateInvoice, awaitItem())
+            assertEquals(
+                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.None),
+                awaitItem(),
+            )
             cancelAndIgnoreRemainingEvents()
         }
-
-        verify(walletRepo).shouldRequestAdditionalLiquidity()
     }
 }

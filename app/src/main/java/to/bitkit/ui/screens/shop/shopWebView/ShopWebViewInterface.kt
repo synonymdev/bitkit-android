@@ -25,7 +25,9 @@ class ShopWebViewInterface(
         Set<String>,
         WebViewCompat.WebMessageListener,
     ) -> Unit = { webView, jsObjectName, allowedOriginRules, listener ->
-        WebViewCompat.addWebMessageListener(webView, jsObjectName, allowedOriginRules, listener)
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(webView, jsObjectName, allowedOriginRules, listener)
+        }
     },
 ) {
     private companion object {

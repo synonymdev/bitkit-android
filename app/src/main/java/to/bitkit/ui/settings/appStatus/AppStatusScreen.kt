@@ -67,7 +67,6 @@ fun AppStatusScreen(
     )
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun Content(
     uiState: AppStatusUiState = AppStatusUiState(),

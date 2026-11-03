@@ -34,16 +34,10 @@ fun Context.batterySettingsSnapshot(): BatterySettingsSnapshot {
     val powerManager = powerManager
     return BatterySettingsSnapshot(
         isPowerSaveMode = runCatching { powerManager.isPowerSaveMode }.getOrNull(),
-        isIgnoringBatteryOptimizations = if (VERSION.SDK_INT >= VERSION_CODES.M) {
-            runCatching { powerManager.isIgnoringBatteryOptimizations(packageName) }.getOrNull()
-        } else {
-            null
-        },
-        isDeviceIdleMode = if (VERSION.SDK_INT >= VERSION_CODES.M) {
-            runCatching { powerManager.isDeviceIdleMode }.getOrNull()
-        } else {
-            null
-        },
+        isIgnoringBatteryOptimizations = runCatching {
+            powerManager.isIgnoringBatteryOptimizations(packageName)
+        }.getOrNull(),
+        isDeviceIdleMode = runCatching { powerManager.isDeviceIdleMode }.getOrNull(),
         isDeviceLightIdleMode = if (VERSION.SDK_INT >= VERSION_CODES.TIRAMISU) {
             runCatching { powerManager.isDeviceLightIdleMode }.getOrNull()
         } else {
@@ -59,11 +53,7 @@ fun Context.batterySettingsSnapshot(): BatterySettingsSnapshot {
         } else {
             null
         },
-        appStandbyBucket = if (VERSION.SDK_INT >= VERSION_CODES.P) {
-            runCatching { usageStatsManager.appStandbyBucket.toAppStandbyBucketName() }.getOrNull()
-        } else {
-            null
-        },
+        appStandbyBucket = runCatching { usageStatsManager.appStandbyBucket.toAppStandbyBucketName() }.getOrNull(),
     )
 }
 

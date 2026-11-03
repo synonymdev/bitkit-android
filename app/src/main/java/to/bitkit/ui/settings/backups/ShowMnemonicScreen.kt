@@ -30,10 +30,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -70,6 +72,7 @@ fun ShowMnemonicScreen(
     BlockScreenshots()
 
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     ShowMnemonicContent(
         mnemonic = uiState.bip39Mnemonic,
@@ -80,8 +83,8 @@ fun ShowMnemonicScreen(
             scope.launch {
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.common__copied),
-                    description = context.getString(R.string.security__mnemonic_copied),
+                    title = resources.getString(R.string.common__copied),
+                    description = resources.getString(R.string.security__mnemonic_copied),
                 )
             }
         },
@@ -164,21 +167,27 @@ private fun ShowMnemonicContent(
                         .padding(32.dp)
                         .testTag("backup_mnemonic_words_box")
                 ) {
-                    MnemonicWordsGrid(
-                        actualWords = mnemonicWords,
-                        showMnemonic = showMnemonic,
-                    )
+                    Box(
+                        modifier = Modifier
+                            .testTag("SeedContainer")
+                            .clearAndSetSemantics {
+                                contentDescription = mnemonic
+                                if (!showMnemonic) {
+                                    hideFromAccessibility()
+                                }
+                            }
+                    ) {
+                        MnemonicWordsGrid(
+                            actualWords = mnemonicWords,
+                            showMnemonic = showMnemonic,
+                        )
+                    }
                 }
 
                 if (buttonAlpha > 0f) {
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .matchParentSize()
-                            .testTag("SeedContainer")
-                            .semantics {
-                                contentDescription = mnemonic
-                            }
+                        modifier = Modifier.matchParentSize()
                     ) {
                         PrimaryButton(
                             text = stringResource(R.string.security__mnemonic_reveal),
@@ -262,7 +271,6 @@ private fun PreviewShown() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview24Words() {

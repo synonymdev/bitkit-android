@@ -1,8 +1,6 @@
 package to.bitkit.repositories
 
 import android.app.Application
-import android.content.Context
-import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -12,13 +10,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,6 +39,7 @@ import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.QuickPayRecordPhase
 import to.bitkit.models.USD
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import java.math.BigDecimal
@@ -59,7 +56,6 @@ import kotlin.time.Instant
 @OptIn(ExperimentalCoroutinesApi::class)
 @Config(application = Application::class, sdk = [34])
 @RunWith(RobolectricTestRunner::class)
-@Suppress("LargeClass")
 class QuickPayRepoTest : BaseUnitTest() {
     companion object {
         private const val TEST_BOLT11 = "lnbcrt1quickpay"
@@ -106,8 +102,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             }
         """.trimIndent()
     }
-    private val context = ApplicationProvider.getApplicationContext<Context>()
-    private val cacheStore = CacheStore(context)
+    private val cacheStore = CacheStore(InMemoryDataStore(AppCacheData()))
     private val settingsStore: SettingsStore = mock()
     private val currencyRepo: CurrencyRepo = mock()
     private val lightningRepo: LightningRepo = mock()
@@ -122,8 +117,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     private lateinit var sut: QuickPayRepo
 
     @Before
-    fun setUp() = runBlocking {
-        cacheStore.reset()
+    fun setUp() {
         paymentRows = null
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
@@ -144,9 +138,6 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
         sut = repo()
     }
-
-    @After
-    fun tearDown() = runBlocking { cacheStore.reset() }
 
     @Test
     fun `reserveBound on clock rollback keeps existing spend`() = test {
@@ -485,7 +476,6 @@ class QuickPayRepoTest : BaseUnitTest() {
         cacheStore.update {
             AppCacheData(
                 onchainAddress = "keep-me",
-                paidOrders = mapOf("order" to "tx"),
                 quickPayLedger = QuickPayLedger(
                     version = 99,
                     dayKey = "2026-08-15",
@@ -499,7 +489,6 @@ class QuickPayRepoTest : BaseUnitTest() {
         assertFalse(sut.canApply(500u).getOrThrow())
         val data = cacheStore.data.first()
         assertEquals("keep-me", data.onchainAddress)
-        assertEquals(mapOf("order" to "tx"), data.paidOrders)
         assertEquals(99, data.quickPayLedger?.version)
         assertEquals(999L, data.quickPayLedger?.spentCents)
     }
@@ -985,11 +974,12 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun `reconcile during live dispatched op does not steal completion`() = test {
         val (bolt11, hash) = testInvoice()
         val dispatched = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Result<String>>()
         whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
             val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             dispatched.complete(Unit)
-            Result.success("pid")
+            hold.await()
         }
         val session = QuickPaySession()
 
@@ -1002,6 +992,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             sut.reconcileAgainstLdk()
             assertEquals(250L, spentCents())
             assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
+            hold.complete(Result.success("pid"))
             val outcome = sut.signalCompletion(paymentId = "pid", paymentHash = hash, success = true)
             assertEquals(QuickPayCompletionKind.SETTLED_SUCCESS, outcome.kind)
             assertTrue(outcome.wasQuickPay)

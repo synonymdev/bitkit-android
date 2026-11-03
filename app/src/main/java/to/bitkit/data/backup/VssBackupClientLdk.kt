@@ -22,7 +22,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
 
-@Suppress("TooManyFunctions")
 @Singleton
 class VssBackupClientLdk @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -39,15 +38,15 @@ class VssBackupClientLdk @Inject constructor(
         )
     }
 
+    @Volatile
     private var isSetup = CompletableDeferred<Unit>()
     private val setupMutex = Mutex()
 
     suspend fun setup(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
         setupMutex.withLock {
+            val gate = isSetup
             runCatching {
-                if (isSetup.isCompleted && !isSetup.isCancelled) {
-                    runCatching { isSetup.await() }.onSuccess { return@runCatching }
-                }
+                if (gate.isCompleted && !gate.isCancelled) return@runCatching
 
                 val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
                     ?: throw MnemonicNotAvailableException()
@@ -64,11 +63,12 @@ class VssBackupClientLdk @Inject constructor(
                         passphrase = passphrase,
                         lnurlAuthServerUrl = Env.lnurlAuthServerUrl,
                     )
-                    isSetup.complete(Unit)
+                    gate.complete(Unit)
                     Logger.info("VSS LDK client setup", context = TAG)
                 }
             }.onFailure {
-                isSetup.completeExceptionally(it)
+                gate.completeExceptionally(it)
+                if (isSetup === gate) isSetup = CompletableDeferred()
                 Logger.error("VSS LDK client setup error", it, context = TAG)
             }
         }

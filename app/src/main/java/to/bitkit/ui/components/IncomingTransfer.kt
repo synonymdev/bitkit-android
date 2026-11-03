@@ -24,8 +24,8 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun IncomingTransfer(
     amount: ULong,
-    remainingDuration: String? = null,
     modifier: Modifier = Modifier,
+    remainingDuration: String? = null,
     currencies: CurrencyState = LocalCurrencies.current,
 ) {
     val subtitle = if (remainingDuration != null) {

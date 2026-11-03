@@ -10,6 +10,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PrimaryDisplay
@@ -28,13 +33,21 @@ import java.math.BigDecimal
 @Composable
 fun MoneyDisplay(
     sats: Long,
+    modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    showSymbol: Boolean = true,
+    prefix: String = "",
 ) {
-    val text = rememberMoneyText(sats)
+    val text = rememberMoneyText(sats, showSymbol = showSymbol)
     text?.let {
         Display(
-            text = it.withAccent(accentColor = Colors.White64),
-            modifier = Modifier
+            text = "$prefix$it".withAccent(
+                accentStyle = SpanStyle(
+                    color = Colors.White64,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+            ),
+            modifier = modifier
                 .clickableAlpha(onClick = onClick)
                 .testTag("MoneyText")
         )
@@ -45,24 +58,67 @@ fun MoneyDisplay(
 fun MoneyCell(
     sats: Long,
     modifier: Modifier = Modifier,
+    prefix: String = "",
+    showBitcoinSymbol: Boolean = true,
+    fiatReplacement: String? = null,
+    maxAmountLines: Int = Int.MAX_VALUE,
+    statusModifier: Modifier = Modifier,
 ) {
     val currencies = LocalCurrencies.current
+    val primaryUnit = currencies.primaryDisplay
+    val secondaryUnit = primaryUnit.not()
+
+    val primaryMoney = rememberMoneyText(
+        sats = sats,
+        unit = primaryUnit,
+        showSymbol = primaryUnit != PrimaryDisplay.BITCOIN || showBitcoinSymbol,
+    )
+    val secondaryMoney = rememberMoneyText(
+        sats = sats,
+        unit = secondaryUnit,
+        showSymbol = secondaryUnit != PrimaryDisplay.BITCOIN || showBitcoinSymbol,
+    )
+    val primaryIsReplaced = fiatReplacement != null && primaryUnit == PrimaryDisplay.FIAT
+    val primary = if (primaryIsReplaced) fiatReplacement else primaryMoney
+    val secondaryIsReplaced = fiatReplacement != null && secondaryUnit == PrimaryDisplay.FIAT
+    val amountOverflow = if (maxAmountLines == Int.MAX_VALUE) TextOverflow.Clip else TextOverflow.Ellipsis
+    val secondary = if (secondaryIsReplaced) {
+        fiatReplacement
+    } else {
+        secondaryMoney
+    }
+
     Column(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = modifier,
     ) {
-        rememberMoneyText(sats = sats, unit = currencies.primaryDisplay, showSymbol = true)?.let { text ->
-            BodyMSB(
-                text = text.withAccent(accentColor = Colors.White64),
-                modifier = Modifier.testTag("MoneyPrimary"),
-            )
+        primary?.let { text ->
+            if (primaryIsReplaced) {
+                CaptionB(
+                    text = text,
+                    color = Colors.White64,
+                    textAlign = TextAlign.End,
+                    modifier = statusModifier.testTag("MoneyPrimary")
+                )
+            } else {
+                BodyMSB(
+                    text = "$prefix$text".withAccent(accentColor = Colors.White64),
+                    textAlign = TextAlign.End,
+                    maxLines = maxAmountLines,
+                    overflow = amountOverflow,
+                    modifier = Modifier.testTag("MoneyPrimary")
+                )
+            }
         }
-        rememberMoneyText(sats = sats, unit = currencies.primaryDisplay.not(), showSymbol = true)?.let { text ->
+        secondary?.let { text ->
             CaptionB(
                 text = text.withAccent(accentColor = Colors.White64),
                 color = Colors.White64,
-                modifier = Modifier.testTag("MoneySecondary"),
+                textAlign = TextAlign.End,
+                maxLines = if (secondaryIsReplaced) Int.MAX_VALUE else maxAmountLines,
+                overflow = amountOverflow,
+                modifier = (if (secondaryIsReplaced) statusModifier else Modifier).testTag("MoneySecondary")
             )
         }
     }
@@ -93,9 +149,30 @@ fun MoneyMSB(
     unit: PrimaryDisplay = LocalCurrencies.current.primaryDisplay,
     color: Color = MaterialTheme.colorScheme.primary,
     accent: Color = Colors.White64,
+    showSymbol: Boolean = unit == PrimaryDisplay.FIAT,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
 ) {
-    rememberMoneyText(sats = sats, unit = unit)?.let { text ->
+    rememberMoneyText(sats = sats, unit = unit, showSymbol = showSymbol)?.let { text ->
         BodyMSB(
+            text = text.withAccent(accentColor = accent),
+            color = color,
+            letterSpacing = letterSpacing,
+            modifier = modifier.testTag("MoneyText")
+        )
+    }
+}
+
+@Composable
+fun MoneyCaptionM(
+    sats: Long,
+    modifier: Modifier = Modifier,
+    unit: PrimaryDisplay = LocalCurrencies.current.primaryDisplay,
+    color: Color = MaterialTheme.colorScheme.primary,
+    accent: Color = Colors.White64,
+    showSymbol: Boolean = false,
+) {
+    rememberMoneyText(sats = sats, unit = unit, showSymbol = showSymbol)?.let { text ->
+        CaptionM(
             text = text.withAccent(accentColor = accent),
             color = color,
             modifier = modifier.testTag("MoneyText")
@@ -141,7 +218,6 @@ fun MoneyCaptionB(
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun rememberMoneyText(
     sats: Long,

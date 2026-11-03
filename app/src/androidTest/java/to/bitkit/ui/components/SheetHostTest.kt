@@ -5,6 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
@@ -22,12 +27,15 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.test.annotations.ComposeUi
+import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import kotlin.test.assertEquals
 
 @HiltAndroidTest
 @ComposeUi
+@OptIn(ExperimentalMaterial3Api::class)
 class SheetHostTest {
     @get:Rule
     val hiltRule = HiltAndroidRule(this)
@@ -83,5 +91,157 @@ class SheetHostTest {
         composeTestRule.onNodeWithTag("LockedSheet").assertIsDisplayed()
         assertEquals(0, dismissCount)
         assertEquals(0, backgroundClickCount)
+    }
+
+    @Test
+    fun dismissingSheetPresentsQueuedSheet() {
+        val sheet = mutableStateOf<Sheet?>(Sheet.Receive())
+        val request = Sheet.Send()
+        var dismissCount = 0
+        var presentationCount = 0
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SheetHost(
+                    shouldExpand = sheet.value != null,
+                    visibilityKey = sheet.value,
+                    onDismiss = {
+                        dismissCount++
+                        sheet.value = null
+                        sheet.value = request
+                    },
+                    onVisible = { presentationCount++ },
+                    sheets = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(320.dp)
+                                .testTag(if (sheet.value === request) "PaymentRequestSheet" else "ReceiveSheet")
+                        )
+                    },
+                    content = { Box(Modifier.fillMaxSize()) },
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("ReceiveSheet").assertIsDisplayed()
+
+        pressBack()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("PaymentRequestSheet").assertIsDisplayed()
+        assertEquals(1, dismissCount)
+        assertEquals(2, presentationCount)
+    }
+
+    @Test
+    fun subscriptionPaymentReplacementKeepsSheetExpanded() {
+        val sheet = mutableStateOf<Sheet>(
+            Sheet.Subscription(SubscriptionRoute.Review(PaykitSubscriptionId("subscription", "payee")))
+        )
+        var dismissCount = 0
+        var visibleCount = 0
+        lateinit var sheetState: SheetState
+        composeTestRule.setContent {
+            AppThemeSurface {
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                SheetHost(
+                    shouldExpand = true,
+                    visibilityKey = sheet.value,
+                    onDismiss = { dismissCount++ },
+                    onVisible = { visibleCount++ },
+                    sheetState = sheetState,
+                    sheets = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(320.dp)
+                                .testTag(if (sheet.value is Sheet.Send) "SubscriptionPayment" else "SubscriptionReview")
+                        )
+                    },
+                    content = { Box(Modifier.fillMaxSize()) },
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("SubscriptionReview").assertIsDisplayed()
+        val expandedOffset = composeTestRule.runOnIdle { sheetState.requireOffset() }
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.runOnIdle { sheet.value = Sheet.Send(SendRoute.Confirm) }
+
+        repeat(30) {
+            composeTestRule.mainClock.advanceTimeByFrame()
+            composeTestRule.runOnIdle {
+                assertEquals(SheetValue.Expanded, sheetState.currentValue)
+                assertEquals(SheetValue.Expanded, sheetState.targetValue)
+                assertEquals(expandedOffset, sheetState.requireOffset())
+                assertEquals(0, dismissCount)
+            }
+        }
+
+        composeTestRule.onNodeWithTag("SubscriptionPayment").assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals(2, visibleCount) }
+    }
+
+    @Test
+    fun programmaticHideDoesNotInvokeDismissalCallback() {
+        val shouldExpand = mutableStateOf(true)
+        val visibilityKey = mutableStateOf<Any?>("subscription")
+        var dismissCount = 0
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SheetHost(
+                    shouldExpand = shouldExpand.value,
+                    onDismiss = { dismissCount++ },
+                    visibilityKey = visibilityKey.value,
+                    sheets = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(320.dp)
+                                .testTag("ProgrammaticSheet")
+                        )
+                    },
+                    content = { Box(Modifier.fillMaxSize()) },
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("ProgrammaticSheet").assertIsDisplayed()
+
+        composeTestRule.runOnIdle {
+            shouldExpand.value = false
+            visibilityKey.value = null
+        }
+        composeTestRule.mainClock.advanceTimeBy(1_000)
+        composeTestRule.waitForIdle()
+
+        assertEquals(0, dismissCount)
+    }
+
+    @Test
+    fun scrimDismissesSheetWhileOpening() {
+        composeTestRule.mainClock.autoAdvance = false
+        var dismissCount = 0
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SheetHost(
+                    shouldExpand = true,
+                    onDismiss = { dismissCount++ },
+                    sheets = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(320.dp)
+                                .testTag("OpeningSheet")
+                        )
+                    },
+                    content = { Box(Modifier.fillMaxSize()) },
+                )
+            }
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+
+        composeTestRule.onRoot().performTouchInput { click(Offset(center.x, 50f)) }
+        composeTestRule.mainClock.advanceTimeBy(1_000)
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, dismissCount)
     }
 }

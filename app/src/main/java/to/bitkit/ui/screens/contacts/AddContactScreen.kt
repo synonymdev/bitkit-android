@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -57,6 +58,7 @@ import to.bitkit.ext.getClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.repositories.Endpoint
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheet
@@ -92,6 +94,7 @@ fun AddContactSheet(
     onScanQr: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     var publicKeyInput by remember { mutableStateOf("") }
     val validationResult = resolveAddContactValidation(
         input = publicKeyInput,
@@ -100,9 +103,9 @@ fun AddContactSheet(
     )
     val validationMessage = when (validationResult) {
         AddContactValidationResult.Empty -> null
-        is AddContactValidationResult.ExistingContact -> context.getString(R.string.contacts__add_error_existing)
-        AddContactValidationResult.InvalidKey -> context.getString(R.string.contacts__add_error_invalid_key)
-        AddContactValidationResult.OwnKey -> context.getString(R.string.contacts__add_error_self)
+        is AddContactValidationResult.ExistingContact -> resources.getString(R.string.contacts__add_error_existing)
+        AddContactValidationResult.InvalidKey -> resources.getString(R.string.contacts__add_error_invalid_key)
+        AddContactValidationResult.OwnKey -> resources.getString(R.string.contacts__add_error_self)
         is AddContactValidationResult.Valid -> null
     }
     BottomSheet(
@@ -240,7 +243,7 @@ fun AddContactScreen(
     viewModel: AddContactViewModel,
     onBackClick: () -> Unit,
     onContactSaved: (String) -> Unit,
-    onPayContact: (String, String) -> Unit,
+    onPayContact: (String, String, List<Endpoint>) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -248,7 +251,7 @@ fun AddContactScreen(
         viewModel.effects.collect {
             when (it) {
                 is AddContactEffect.ContactSaved -> onContactSaved(it.publicKey)
-                is AddContactEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey)
+                is AddContactEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey, it.endpoints)
             }
         }
     }

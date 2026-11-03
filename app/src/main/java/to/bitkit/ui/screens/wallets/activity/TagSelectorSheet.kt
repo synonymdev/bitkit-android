@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -25,10 +24,12 @@ import kotlinx.collections.immutable.persistentSetOf
 import to.bitkit.R
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.TagButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -72,28 +73,32 @@ private fun Content(
     ) {
         SheetTopBar(stringResource(R.string.wallet__tags_filter_title))
 
-        Spacer(modifier = Modifier.height(42.dp))
+        VerticalSpacer(26.dp)
 
         Caption13Up(
             text = stringResource(R.string.wallet__tags_filter),
             color = Colors.White64,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
 
-        FlowRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight(align = Alignment.Top),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            availableTags.forEach { tag ->
-                TagButton(
-                    text = tag,
-                    onClick = { onTagClick(tag) },
-                    isSelected = selectedTags.contains(tag)
-                )
+        if (availableTags.isEmpty()) {
+            BodyS(text = stringResource(R.string.wallet__tags_no))
+        } else {
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(align = Alignment.Top),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                availableTags.forEach { tag ->
+                    TagButton(
+                        text = tag,
+                        onClick = { onTagClick(tag) },
+                        isSelected = selectedTags.contains(tag)
+                    )
+                }
             }
         }
 

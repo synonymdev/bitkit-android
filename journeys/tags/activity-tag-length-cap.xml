@@ -1,0 +1,32 @@
+<journey name="activity tag input is capped at 20 characters">
+  <description>
+    Verifies the Add Tag input on an activity stops accepting characters at 20, still allows deleting
+    and retyping at the cap, and that the added tag renders as a one-line chip with its close icon
+    visible. Line-break stripping cannot be driven from adb (no clipboard on the emulator image, and
+    the field is single-line), so it is covered by TagsViewModelTest.kt instead.
+
+    Precondition: onboarded dev wallet with at least one activity item on the home screen. Type the
+    tag in 8-character chunks, since `adb shell input text` drops characters on long strings; the
+    exact characters that land do not matter, only the length. Start on the wallet home screen.
+    Clean up afterwards: remove the tag from the activity, then delete it under Settings ▸ General ▸
+    Tags (testTag "TagsSettings", a row that only appears once a tag has been used), which keeps
+    previously used tags separately.
+  </description>
+  <actions>
+    <action>Tap the first activity item on the home screen (testTag "ActivityShort-0")</action>
+    <action>Tap the Tag button (testTag "ActivityTag")</action>
+    <action>Verify the Add Tag sheet is visible with an empty new-tag input (testTag "TagInput")</action>
+    <action>Tap the new-tag input (testTag "TagInput")</action>
+    <action>Type "capped12", then "34567890", then "abcdefgh", then "ijklmnop" as four separate text inputs</action>
+    <action>Verify the new-tag input (testTag "TagInput") holds exactly 20 characters</action>
+    <action>Tap the keyboard delete key once (`adb shell input keyevent 67`)</action>
+    <action>Verify the new-tag input (testTag "TagInput") holds 19 characters</action>
+    <action>Type "zy" as one text input</action>
+    <action>Verify the new-tag input (testTag "TagInput") holds exactly 20 characters and ends with "z"</action>
+    <action>Tap Add (testTag "ActivityTagsSubmit")</action>
+    <action>Verify the activity detail tag row (testTag "ActivityTags") shows a chip whose testTag is "Tag-" followed by the 20-character input</action>
+    <action>Verify in a screenshot that the chip is a single line and its close icon (testTag "Tag-&lt;tag&gt;-delete") is fully visible inside the chip border</action>
+    <action>Tap the tag chip to remove it</action>
+    <action>Verify no tag chip remains on the activity detail</action>
+  </actions>
+</journey>

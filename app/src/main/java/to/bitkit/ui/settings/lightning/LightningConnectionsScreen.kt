@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -15,8 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -32,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -56,6 +54,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -109,7 +108,6 @@ fun LightningConnectionsScreen(
     )
 }
 
-@Suppress("CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Content(
@@ -141,7 +139,8 @@ private fun Content(
             }
         )
 
-        if (!uiState.isNodeRunning) {
+        val hasChannels = uiState.openChannels.isNotEmpty() || uiState.pendingConnections.isNotEmpty()
+        if (!uiState.isNodeRunning && !hasChannels) {
             SyncNodeView(modifier = Modifier.fillMaxSize())
             return@ScreenColumn
         }
@@ -187,6 +186,11 @@ private fun Content(
                     LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
+                    if (!uiState.isNodeRunning) {
+                        VerticalSpacer(16.dp)
+                        SyncingRow()
+                    }
+
                     // Pending Channels Section
                     if (uiState.pendingConnections.isNotEmpty()) {
                         VerticalSpacer(16.dp)
@@ -209,19 +213,6 @@ private fun Content(
                         )
                     }
 
-                    // Closed & Failed Channels Section
-                    AnimatedVisibility(visible = showClosed && uiState.failedOrders.isNotEmpty()) {
-                        Column {
-                            VerticalSpacer(16.dp)
-                            Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
-                            ChannelList(
-                                status = ChannelStatusUi.CLOSED,
-                                channels = uiState.failedOrders,
-                                onClickChannel = onClickChannel,
-                            )
-                        }
-                    }
-
                     // Closed Channels Section
                     AnimatedVisibility(visible = showClosed && uiState.closedChannels.isNotEmpty()) {
                         Column {
@@ -236,7 +227,7 @@ private fun Content(
                     }
 
                     // Show/Hide Closed Channels Button
-                    if (uiState.failedOrders.isNotEmpty() || uiState.closedChannels.isNotEmpty()) {
+                    if (uiState.closedChannels.isNotEmpty()) {
                         VerticalSpacer(16.dp)
                         TertiaryButton(
                             text = stringResource(
@@ -286,20 +277,20 @@ private fun LightningBalancesSection(localBalance: ULong, remoteBalance: ULong) 
         BalanceColumn(
             label = stringResource(R.string.lightning__spending_label),
             balance = localBalance,
-            icon = Icons.Default.ArrowUpward,
+            icon = R.drawable.ic_sent,
             color = Colors.Purple,
         )
         BalanceColumn(
             label = stringResource(R.string.lightning__receiving_label),
             balance = remoteBalance,
-            icon = Icons.Default.ArrowDownward,
+            icon = R.drawable.ic_received,
             color = Colors.White,
         )
     }
 }
 
 @Composable
-private fun BalanceColumn(label: String, balance: ULong, icon: ImageVector, color: Color) {
+private fun BalanceColumn(label: String, balance: ULong, @DrawableRes icon: Int, color: Color) {
     Column {
         Caption13Up(text = label, color = Colors.White64)
         VerticalSpacer(8.dp)
@@ -307,7 +298,7 @@ private fun BalanceColumn(label: String, balance: ULong, icon: ImageVector, colo
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = icon,
+                painter = painterResource(icon),
                 contentDescription = null,
                 tint = color,
                 modifier = Modifier.size(22.dp)
@@ -384,6 +375,21 @@ private fun ChannelItem(
 }
 
 @Composable
+private fun SyncingRow(modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier
+    ) {
+        GradientCircularProgressIndicator(modifier = Modifier.size(16.dp))
+        BodyM(
+            text = stringResource(R.string.settings__status__lightning_node__pending),
+            color = Colors.White64,
+        )
+    }
+}
+
+@Composable
 private fun EmptyStateContent(modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
         Box(
@@ -404,7 +410,7 @@ private fun EmptyStateContent(modifier: Modifier = Modifier) {
                 .withAccent(accentColor = Colors.Purple),
         )
 
-        VerticalSpacer(14.dp)
+        VerticalSpacer(8.dp)
 
         BodyM(
             text = stringResource(R.string.lightning__conn_onboarding_text),
@@ -454,28 +460,6 @@ private fun Preview() {
                             inboundCapacityMsat = 700_000_000u,
                         ),
                     ),
-                ).toImmutableList(),
-                failedOrders = listOf(
-                    ChannelUi(
-                        name = "Connection 4",
-                        details = createChannelDetails().copy(
-                            channelId = "failed_order_1",
-                            channelValueSats = 200_000u,
-                            outboundCapacityMsat = 50_000_000u,
-                            inboundCapacityMsat = 150_000_000u,
-                            isChannelReady = false,
-                            isUsable = false,
-                        ),
-                    ),
-                    ChannelUi(
-                        name = "Connection 5",
-                        details = createChannelDetails().copy(
-                            channelId = "failed_order_2",
-                            channelValueSats = 100_000u,
-                            outboundCapacityMsat = 30_000_000u,
-                            inboundCapacityMsat = 70_000_000u,
-                        ),
-                    ),
                 ).toImmutableList()
             )
         )
@@ -487,7 +471,32 @@ private fun Preview() {
 private fun PreviewNodeNotRunning() {
     AppThemeSurface {
         Content(
-            uiState = LightningConnectionsUiState()
+            uiState = LightningConnectionsUiState(isNodeRunning = false)
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewNodeSyncing() {
+    AppThemeSurface {
+        Content(
+            uiState = LightningConnectionsUiState(
+                localBalance = 300_000u,
+                remoteBalance = 700_000u,
+                isNodeRunning = false,
+                openChannels = listOf(
+                    ChannelUi(
+                        name = "Connection 1",
+                        details = createChannelDetails().copy(
+                            channelId = "channel_1",
+                            channelValueSats = 1_000_000u,
+                            outboundCapacityMsat = 300_000_000u,
+                            inboundCapacityMsat = 700_000_000u,
+                        ),
+                    ),
+                ).toImmutableList(),
+            )
         )
     }
 }

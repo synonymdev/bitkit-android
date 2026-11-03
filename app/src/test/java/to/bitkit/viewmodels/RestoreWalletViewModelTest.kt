@@ -1,12 +1,16 @@
 package to.bitkit.viewmodels
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import to.bitkit.repositories.SeedQrRepo
 import to.bitkit.services.core.Bip39Service
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -18,6 +22,7 @@ import kotlin.test.assertTrue
 class RestoreWalletViewModelTest : BaseUnitTest() {
 
     private val bip39Service = mock<Bip39Service>()
+    private val seedQrRepo = mock<SeedQrRepo>()
 
     private lateinit var viewModel: RestoreWalletViewModel
 
@@ -28,7 +33,7 @@ class RestoreWalletViewModelTest : BaseUnitTest() {
         whenever(bip39Service.isValidMnemonicSize(any())).thenReturn(true)
         whenever(bip39Service.validateMnemonic(any())).thenReturn(Result.success(Unit))
 
-        viewModel = RestoreWalletViewModel(bip39Service)
+        viewModel = RestoreWalletViewModel(bip39Service, seedQrRepo)
     }
 
     // region Initial State
@@ -268,6 +273,237 @@ class RestoreWalletViewModelTest : BaseUnitTest() {
         assertFalse(state.shouldDismissKeyboard)
     }
 
+    @Test
+    fun `handlePastedWords should keep full replace when pasting 12 words into later field of empty form`() {
+        val words = List(12) { "w${it + 1}" }.joinToString(" ")
+
+        viewModel.onChangeWord(5, words)
+
+        val state = viewModel.uiState.value
+        assertEquals("w1", state.words[0])
+        assertEquals("w12", state.words[11])
+        assertEquals("", state.words[12])
+        assertFalse(state.is24Words)
+    }
+
+    @Test
+    fun `handlePastedWords should spread 12 words into field 13 when earlier fields hold words`() {
+        for (i in 0 until 12) {
+            viewModel.onChangeWord(i, "a${i + 1}")
+        }
+        val secondHalf = List(12) { "b${it + 13}" }.joinToString(" ")
+
+        viewModel.onChangeWord(12, secondHalf)
+
+        val state = viewModel.uiState.value
+        assertEquals(List(12) { "a${it + 1}" }, state.words.subList(0, 12))
+        assertEquals(List(12) { "b${it + 13}" }, state.words.subList(12, 24))
+        assertTrue(state.is24Words)
+        assertNull(state.focusedIndex)
+        assertTrue(state.areButtonsEnabled)
+    }
+
+    @Test
+    fun `handlePastedWords should spread 12 words into later field on empty 24 word layout`() {
+        viewModel.onChangeWord(0, List(24) { "a${it + 1}" }.joinToString(" "))
+        for (i in 0 until 24) {
+            viewModel.onChangeWord(i, "")
+        }
+        val secondHalf = List(12) { "b${it + 13}" }.joinToString(" ")
+
+        viewModel.onChangeWord(12, secondHalf)
+
+        val state = viewModel.uiState.value
+        assertTrue(state.words.subList(0, 12).all { it.isEmpty() })
+        assertEquals(List(12) { "b${it + 13}" }, state.words.subList(12, 24))
+        assertTrue(state.is24Words)
+        assertEquals(0, state.focusedIndex)
+    }
+
+    @Test
+    fun `handlePastedWords should full replace 12 words pasted into first field on 24 word layout`() {
+        viewModel.onChangeWord(0, List(24) { "a${it + 1}" }.joinToString(" "))
+
+        viewModel.onChangeWord(0, List(12) { "b${it + 1}" }.joinToString(" "))
+
+        val state = viewModel.uiState.value
+        assertEquals(List(12) { "b${it + 1}" }, state.words.subList(0, 12))
+        assertTrue(state.words.subList(12, 24).all { it.isEmpty() })
+        assertFalse(state.is24Words)
+    }
+
+    @Test
+    fun `handlePastedWords should spread fragment from first field`() {
+        viewModel.onChangeWord(0, "abandon ability able")
+
+        val state = viewModel.uiState.value
+        assertEquals(listOf("abandon", "ability", "able"), state.words.subList(0, 3))
+        assertTrue(state.words.drop(3).all { it.isEmpty() })
+        assertFalse(state.is24Words)
+        assertEquals(3, state.focusedIndex)
+        assertEquals(3, state.scrollToFieldIndex)
+        assertTrue(state.suggestions.isEmpty())
+        assertFalse(state.shouldDismissKeyboard)
+    }
+
+    @Test
+    fun `handlePastedWords should spread fragment from middle field`() {
+        viewModel.onChangeWord(0, "about")
+        viewModel.onChangeWord(8, "access")
+
+        viewModel.onChangeWord(5, "abandon ability able")
+
+        val state = viewModel.uiState.value
+        assertEquals("about", state.words[0])
+        assertEquals("", state.words[4])
+        assertEquals(listOf("abandon", "ability", "able"), state.words.subList(5, 8))
+        assertEquals("access", state.words[8])
+        assertEquals(9, state.focusedIndex)
+    }
+
+    @Test
+    fun `handlePastedWords should switch to 24 words when fragment passes field 12`() {
+        val words = List(15) { "w${it + 1}" }.joinToString(" ")
+
+        viewModel.onChangeWord(0, words)
+
+        val state = viewModel.uiState.value
+        assertTrue(state.is24Words)
+        assertEquals("w1", state.words[0])
+        assertEquals("w15", state.words[14])
+        assertEquals("", state.words[15])
+        assertEquals(15, state.focusedIndex)
+    }
+
+    @Test
+    fun `handlePastedWords should drop words beyond field 24`() {
+        val words = List(5) { "w${it + 1}" }.joinToString(" ")
+
+        viewModel.onChangeWord(21, words)
+
+        val state = viewModel.uiState.value
+        assertTrue(state.is24Words)
+        assertEquals(listOf("w1", "w2", "w3"), state.words.subList(21, 24))
+        assertEquals(24, state.words.size)
+    }
+
+    @Test
+    fun `handlePastedWords should mark invalid word in fragment`() = runBlocking {
+        whenever(bip39Service.isValidWord("zzzz")).thenReturn(false)
+
+        viewModel.onChangeWord(2, "abandon zzzz able")
+
+        val state = viewModel.uiState.value
+        assertEquals("zzzz", state.words[3])
+        assertEquals(setOf(3), state.invalidWordIndices)
+    }
+
+    @Test
+    fun `handlePastedWords should clear invalid flag of overwritten fields`() = runBlocking {
+        whenever(bip39Service.isValidWord("zzzz")).thenReturn(false)
+        viewModel.onChangeWord(1, "zzzz")
+        assertTrue(viewModel.uiState.value.invalidWordIndices.contains(1))
+
+        viewModel.onChangeWord(0, "abandon ability")
+
+        val state = viewModel.uiState.value
+        assertEquals("ability", state.words[1])
+        assertTrue(state.invalidWordIndices.isEmpty())
+    }
+
+    @Test
+    fun `handlePastedWords should write word with trailing space to its field`() {
+        viewModel.onChangeWord(4, "abandon ")
+
+        val state = viewModel.uiState.value
+        assertEquals("abandon", state.words[4])
+        assertTrue(state.words.withIndex().filter { it.index != 4 }.all { it.value.isEmpty() })
+        assertFalse(state.is24Words)
+    }
+
+    @Test
+    fun `handlePastedWords should ignore whitespace only input`() {
+        viewModel.onChangeWord(0, "abandon")
+
+        viewModel.onChangeWord(0, "  ")
+
+        val state = viewModel.uiState.value
+        assertEquals("abandon", state.words[0])
+    }
+
+    @Test
+    fun `word typed while a paste validates should not be undone by the paste`() = test {
+        val validation = CompletableDeferred<Unit>()
+        whenever(bip39Service.isValidWord("w1")).doSuspendableAnswer {
+            validation.await()
+            true
+        }
+
+        viewModel.onChangeWord(0, "w1 w2 w3")
+        viewModel.onChangeWord(0, "typed")
+        assertEquals("", viewModel.uiState.value.words[0])
+
+        validation.complete(Unit)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("typed", state.words[0])
+        assertEquals(listOf("w2", "w3"), state.words.subList(1, 3))
+    }
+
+    @Test
+    fun `handlePastedWords should focus first empty field when fragment fills the tail`() {
+        for (i in 3 until 9) {
+            viewModel.onChangeWord(i, "word$i")
+        }
+
+        viewModel.onChangeWord(9, "abandon ability able")
+
+        assertEquals(0, viewModel.uiState.value.focusedIndex)
+    }
+
+    @Test
+    fun `handlePastedWords should clear focus and dismiss keyboard when fragment completes phrase`() {
+        for (i in 0 until 9) {
+            viewModel.onChangeWord(i, "word$i")
+        }
+
+        viewModel.onChangeWord(9, "abandon ability able")
+
+        val state = viewModel.uiState.value
+        assertNull(state.focusedIndex)
+        assertTrue(state.shouldDismissKeyboard)
+        assertTrue(state.areButtonsEnabled)
+    }
+
+    @Test
+    fun `handlePastedWords should focus invalid field when fragment fills the tail`() = runBlocking {
+        whenever(bip39Service.isValidWord("zzzz")).thenReturn(false)
+        for (i in 0 until 9) {
+            viewModel.onChangeWord(i, "word$i")
+        }
+
+        viewModel.onChangeWord(9, "zzzz ability able")
+
+        val state = viewModel.uiState.value
+        assertEquals(9, state.focusedIndex)
+        assertEquals(9, state.scrollToFieldIndex)
+        assertEquals(setOf(9), state.invalidWordIndices)
+        assertFalse(state.shouldDismissKeyboard)
+    }
+
+    @Test
+    fun `handlePastedWords should focus first invalid field of a full paste`() = runBlocking {
+        whenever(bip39Service.isValidWord("zzzz")).thenReturn(false)
+        val pastedWords = List(12) { if (it == 4) "zzzz" else "w${it + 1}" }.joinToString(" ")
+
+        viewModel.onChangeWord(0, pastedWords)
+
+        val state = viewModel.uiState.value
+        assertEquals(4, state.focusedIndex)
+        assertFalse(state.shouldDismissKeyboard)
+    }
+
     // endregion
 
     // region Focus Management
@@ -326,6 +562,27 @@ class RestoreWalletViewModelTest : BaseUnitTest() {
 
         val state = viewModel.uiState.value
         assertTrue(state.suggestions.isEmpty())
+    }
+
+    @Test
+    fun `updateSuggestions should resolve for field focused after a tail filling paste`() = runBlocking {
+        whenever(bip39Service.isValidWord("zzzz")).thenReturn(false)
+        whenever(bip39Service.getSuggestions("abi", 3u)).thenReturn(listOf("ability", "abandon"))
+        for (i in 0 until 9) {
+            viewModel.onChangeWord(i, "word$i")
+        }
+        viewModel.onChangeWord(9, "zzzz ability able")
+
+        viewModel.onChangeWord(9, "abi")
+
+        assertEquals(listOf("ability", "abandon"), viewModel.uiState.value.suggestions)
+
+        viewModel.onSelectSuggestion("ability")
+
+        val state = viewModel.uiState.value
+        assertEquals("ability", state.words[9])
+        assertTrue(state.suggestions.isEmpty())
+        assertTrue(state.invalidWordIndices.isEmpty())
     }
 
     @Test

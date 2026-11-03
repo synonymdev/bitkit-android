@@ -8,9 +8,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.env.Env
+import to.bitkit.utils.SubscriptionClockOffset
 import java.util.Locale
+import javax.inject.Qualifier
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.time.TimeSource
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -24,5 +27,17 @@ object EnvModule {
     fun provideClock(): Clock = Clock.System
 
     @Provides
+    fun provideTimeSource(): TimeSource = TimeSource.Monotonic
+
+    @Provides
+    @SubscriptionClock
+    fun provideSubscriptionClock(clock: Clock): Clock = SubscriptionClockOffset.subscriptionClock(clock)
+
+    @Provides
     fun provideLocale(@ApplicationContext context: Context): Locale = context.resources.configuration.locales[0]
 }
+
+/** The [Clock] for Paykit subscription scheduling; [SubscriptionClockOffset] can move it ahead in debug builds. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class SubscriptionClock

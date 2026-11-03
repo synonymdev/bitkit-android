@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -109,7 +108,6 @@ fun SettingsButtonRow(
     )
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun SettingsButtonRowCore(
     title: String,
@@ -152,7 +150,6 @@ private fun SettingsButtonRowCore(
                 ) {
                     if (subtitle != null) {
                         BodyMSB(text = title)
-                        Spacer(modifier = Modifier.height(4.dp))
                         BodySSB(
                             text = subtitle,
                             maxLines = maxLinesSubtitle,

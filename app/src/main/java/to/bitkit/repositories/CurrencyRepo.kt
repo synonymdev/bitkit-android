@@ -25,10 +25,12 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BTC_SCALE
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
+import to.bitkit.models.PaykitExchangeRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.STUB_RATE
@@ -47,7 +49,6 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
-@Suppress("TooManyFunctions")
 @Singleton
 class CurrencyRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
@@ -110,21 +111,21 @@ class CurrencyRepo @Inject constructor(
             combine(
                 settingsStore.data.distinctUntilChanged(),
                 cacheStore.data.distinctUntilChanged()
-            ) { settings, cachedData ->
+            ) { settings, cachedData -> settings to cachedData }.collect { (settings, cachedData) ->
                 val selectedRate = cachedData.cachedRates.firstOrNull { rate ->
                     rate.quote == settings.selectedCurrency
                 }
-                _currencyState.value.copy(
-                    rates = cachedData.cachedRates.toImmutableList(),
-                    selectedCurrency = settings.selectedCurrency,
-                    displayUnit = settings.displayUnit,
-                    primaryDisplay = settings.primaryDisplay,
-                    currencySymbol = selectedRate?.currencySymbol ?: "$",
-                    error = null,
-                    hasStaleData = false
-                )
-            }.collect { newState ->
-                _currencyState.update { newState }
+                _currencyState.update {
+                    it.copy(
+                        rates = cachedData.cachedRates.toImmutableList(),
+                        selectedCurrency = settings.selectedCurrency,
+                        displayUnit = settings.displayUnit,
+                        primaryDisplay = settings.primaryDisplay,
+                        currencySymbol = selectedRate?.currencySymbol ?: "$",
+                        error = null,
+                        hasStaleData = false,
+                    )
+                }
             }
         }
     }
@@ -136,31 +137,40 @@ class CurrencyRepo @Inject constructor(
     private suspend fun refresh() {
         if (isRefreshing) return
         isRefreshing = true
-        runCatching {
-            val fetchedRates = currencyService.fetchLatestRates()
-            cacheStore.update { it.copy(cachedRates = fetchedRates) }
-            _currencyState.update {
-                it.copy(
-                    error = null,
-                    hasStaleData = false,
-                    lastSuccessfulRefresh = clock.now().toEpochMilliseconds(),
-                )
-            }
-            Logger.debug("Currency rates refreshed successfully", context = TAG)
-        }.onFailure { e ->
-            Logger.error("Currency rates refresh failed", e, context = TAG)
-            _currencyState.update { it.copy(error = e) }
+        _currencyState.update { it.copy(isRefreshing = true) }
+        try {
+            runSuspendCatching {
+                val fetchedRates = currencyService.fetchLatestRates()
+                cacheStore.update { it.copy(cachedRates = fetchedRates) }
+                _currencyState.update {
+                    it.copy(
+                        error = null,
+                        hasStaleData = false,
+                        lastSuccessfulRefresh = clock.now().toEpochMilliseconds(),
+                    )
+                }
+                Logger.debug("Currency rates refreshed successfully", context = TAG)
+            }.onFailure { e ->
+                Logger.error("Currency rates refresh failed", e, context = TAG)
+                _currencyState.update { it.copy(error = e) }
 
-            _currencyState.value.lastSuccessfulRefresh?.let { lastUpdatedAt ->
-                val isStale = clock.now().toEpochMilliseconds() - lastUpdatedAt > Env.fxRateStaleThreshold
-                _currencyState.update { it.copy(hasStaleData = isStale) }
+                _currencyState.value.lastSuccessfulRefresh?.let { lastUpdatedAt ->
+                    val isStale = clock.now().toEpochMilliseconds() - lastUpdatedAt > Env.fxRateStaleThreshold
+                    _currencyState.update { it.copy(hasStaleData = isStale) }
+                }
             }
+        } finally {
+            isRefreshing = false
+            _currencyState.update { it.copy(isRefreshing = false) }
         }
-        isRefreshing = false
     }
 
     suspend fun switchUnit() = withContext(bgDispatcher) {
         settingsStore.update { it.copy(primaryDisplay = it.primaryDisplay.not()) }
+    }
+
+    suspend fun switchBalanceUnit() = withContext(bgDispatcher) {
+        runSuspendCatching { settingsStore.switchBalanceUnit() }
     }
 
     override suspend fun switchUnit(unit: PrimaryDisplay): PrimaryDisplay = withContext(bgDispatcher) {
@@ -265,7 +275,13 @@ data class CurrencyState(
     val displayUnit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
     val primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
     val lastSuccessfulRefresh: Long? = null,
+    val isRefreshing: Boolean = false,
 )
+
+val CurrencyState.paykitRate: PaykitExchangeRate?
+    get() = rates.firstOrNull {
+        it.quote == "USD"
+    }?.let { PaykitExchangeRate(it.lastPrice, it.lastUpdatedAt) }
 
 interface AmountInputHandler {
     fun convertSatsToFiatString(sats: Long): String

@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
@@ -34,6 +35,7 @@ fun TextInput(
     placeholder: String? = null,
     value: String,
     onValueChange: (String) -> Unit,
+    enabled: Boolean = true,
     singleLine: Boolean = false,
     isError: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
@@ -48,6 +50,8 @@ fun TextInput(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     textStyle: TextStyle = AppTextStyles.BodySSB,
     colors: TextFieldColors = AppTextFieldDefaults.semiTransparent,
+    placeholderColor: Color = Colors.White64,
+    inputTransform: (String) -> String = { it },
 ) {
     var textFieldValue by remember {
         mutableStateOf(
@@ -71,15 +75,22 @@ fun TextInput(
     TextField(
         placeholder = {
             placeholder?.let {
-                Text(placeholder, color = Colors.White64, style = textStyle)
+                Text(
+                    text = placeholder,
+                    color = placeholderColor,
+                    style = textStyle,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
+        enabled = enabled,
         isError = isError,
         textStyle = textStyle,
         value = textFieldValue,
         onValueChange = {
-            textFieldValue = it
-            onValueChange(it.text)
+            val text = inputTransform(it.text)
+            textFieldValue = if (text == it.text) it else it.copy(text = text)
+            onValueChange(text)
         },
         maxLines = maxLines,
         minLines = minLines,

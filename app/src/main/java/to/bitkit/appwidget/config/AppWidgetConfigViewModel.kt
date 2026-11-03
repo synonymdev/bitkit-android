@@ -39,7 +39,6 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
-@Suppress("TooManyFunctions")
 class AppWidgetConfigViewModel @Inject constructor(
     private val preferencesStore: AppWidgetPreferencesStore,
     private val dataRepository: AppWidgetDataRepository,

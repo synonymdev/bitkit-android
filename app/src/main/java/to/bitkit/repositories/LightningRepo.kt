@@ -1,7 +1,6 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
-import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.FeeRates
@@ -17,8 +16,10 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,13 +32,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonPrimitive
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BestBlock
@@ -50,6 +52,7 @@ import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.PaymentId
@@ -62,17 +65,17 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.requireWalletRestoreComplete
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
-import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
-import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
@@ -92,7 +95,6 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlChannelResponse
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LnurlWithdrawResponse
-import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
@@ -111,25 +113,24 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 @Singleton
-@Suppress("LongParameterList", "TooManyFunctions", "LargeClass")
 class LightningRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
     private val settingsStore: SettingsStore,
     private val coreService: CoreService,
-    private val lspNotificationsService: LspNotificationsService,
-    private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
     private val lnurlService: LnurlService,
     private val cacheStore: CacheStore,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
+    private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val connectivityRepo: ConnectivityRepo,
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val urlValidator: UrlValidator,
     private val electrumProbeService: ElectrumProbeService,
-) {
+) : OnchainReleasing {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
 
@@ -143,6 +144,17 @@ class LightningRepo @Inject constructor(
     private val _isRecoveryMode = MutableStateFlow(false)
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
 
+    private val _lastKnownChannels = MutableStateFlow<ImmutableList<ChannelDetails>>(persistentListOf())
+
+    /** Channels from the last read of a running node, kept while the node stops and restarts. */
+    val lastKnownChannels = _lastKnownChannels.asStateFlow()
+
+    @Volatile
+    private var isWiping = false
+
+    @Volatile
+    private var lastKnownNodeId: String? = null
+
     private val channelCache = ConcurrentHashMap<String, ChannelDetails>()
     private val probeOutcomeCache = ConcurrentHashMap<PaymentId, ProbeOutcome>()
     private val probeOutcomeSignal = MutableSharedFlow<ProbeOutcome>(extraBufferCapacity = 64)
@@ -150,6 +162,7 @@ class LightningRepo @Inject constructor(
     private val syncMutex = Mutex()
     private val syncPending = AtomicBoolean(false)
     private val syncRetryJob = AtomicReference<Job?>(null)
+    private val ordinaryFollowupRetryJob = AtomicReference<Job?>(null)
     private val pendingStopJob = AtomicReference<Job?>(null)
     private val pendingStopLock = Any()
     private val lifecycleMutex = Mutex()
@@ -163,6 +176,7 @@ class LightningRepo @Inject constructor(
      */
     private val configChangeMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
+    private val refreshFailureLogged = AtomicBoolean(false)
 
     init {
         observeConnectivityForSyncRetry()
@@ -181,7 +195,7 @@ class LightningRepo @Inject constructor(
                     }
 
                     if (_lightningState.value.nodeLifecycleState.isRunning()) {
-                        connectToTrustedPeers()
+                        scheduleOrdinaryFollowupRetry()
                     }
 
                     // Start retry loop if sync is failing
@@ -251,7 +265,7 @@ class LightningRepo @Inject constructor(
         // If node is not in a state that can become running, fail fast
         if (!nodeLifecycleState.canRun()) {
             return@withContext Result.failure(
-                AppError("Cannot execute '$operationName': node is '$nodeLifecycleState' and not starting")
+                NodeNotRunningError(operationName, nodeLifecycleState)
             )
         }
 
@@ -268,6 +282,10 @@ class LightningRepo @Inject constructor(
         if (!nodeRunning) return@withContext Result.failure(NodeRunTimeoutError(operationName))
 
         return@withContext executeOperation(operationName, operation)
+    }
+
+    private fun requireWalletRestoreComplete() {
+        keychain.requireWalletRestoreComplete()
     }
 
     private suspend fun <T> executeOperation(
@@ -291,13 +309,11 @@ class LightningRepo @Inject constructor(
         customRgsServerUrl: String? = null,
         channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
-        runCatching {
-            val trustedPeers = fetchTrustedPeers()
+        runSuspendCatching {
             lightningService.setup(
                 walletIndex,
                 customServerUrl,
                 customRgsServerUrl,
-                trustedPeers,
                 channelMigration,
             )
         }.onFailure {
@@ -305,17 +321,6 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runCatching {
-        val info = coreService.blocktank.info(refresh = false)
-            ?: coreService.blocktank.info(refresh = true)
-        info?.nodes?.toPeerDetailsList()?.also {
-            Logger.info("Fetched ${it.size} trusted peers from remote", context = TAG)
-        }
-    }.onFailure {
-        Logger.warn("fetchTrustedPeers error", it, context = TAG)
-    }.getOrNull()
-
-    @Suppress("LongMethod", "LongParameterList")
     suspend fun start(
         walletIndex: Int = 0,
         timeout: Duration? = null,
@@ -325,12 +330,35 @@ class LightningRepo @Inject constructor(
         eventHandler: NodeEventHandler? = null,
         channelMigration: ChannelDataMigration? = null,
         shouldValidateGraph: Boolean = true,
+    ): Result<Unit> = startNode(
+        walletIndex = walletIndex,
+        timeout = timeout,
+        shouldRetry = shouldRetry,
+        customServerUrl = customServerUrl,
+        customRgsServerUrl = customRgsServerUrl,
+        eventHandler = eventHandler,
+        channelMigration = channelMigration,
+        shouldValidateGraph = shouldValidateGraph,
+        shouldRetryYieldToStop = false,
+    )
+
+    private suspend fun startNode(
+        walletIndex: Int = 0,
+        timeout: Duration? = null,
+        shouldRetry: Boolean = true,
+        customServerUrl: String? = null,
+        customRgsServerUrl: String? = null,
+        eventHandler: NodeEventHandler? = null,
+        channelMigration: ChannelDataMigration? = null,
+        shouldValidateGraph: Boolean = true,
+        shouldRetryYieldToStop: Boolean = false,
+        shouldCancelPendingStop: Boolean = true,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
             return@withContext Result.failure(RecoveryModeError())
         }
 
-        cancelPendingStop()
+        if (shouldCancelPendingStop) cancelPendingStop()
 
         eventHandler?.let { _eventHandlers.add(it) }
 
@@ -340,6 +368,7 @@ class LightningRepo @Inject constructor(
         var initialLifecycleState: NodeLifecycleState
 
         val result = lifecycleMutex.withLock {
+            if (isWiping) return@withLock Result.failure(WipeInProgressError())
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
                 return@withLock skipStartForRunningNode(
@@ -374,12 +403,7 @@ class LightningRepo @Inject constructor(
                         .onFailure {
                             Logger.warn("Failed to reconcile Paykit Server accounts during startup", it, context = TAG)
                         }
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                    lightningService.startEventListener(::onEvent).onFailure {
-                        Logger.warn("Failed to start event listener", it, context = TAG)
-                        return@withLock Result.failure(it)
-                    }
-                    return@withLock Result.success(Unit)
+                    return@withLock adoptRunningNode()
                 }
 
                 lightningService.start(timeout, ::onEvent)
@@ -389,7 +413,6 @@ class LightningRepo @Inject constructor(
                 // Initial state sync
                 syncState()
                 logNodeSupportSummary("node started")
-                updateGeoBlockState()
                 refreshChannelCache()
 
                 if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
@@ -404,21 +427,30 @@ class LightningRepo @Inject constructor(
                 }
 
                 // Post-startup tasks (non-blocking)
-                connectToTrustedPeers().onFailure {
-                    Logger.error("Failed to connect to trusted peers", it, context = TAG)
+                disconnectIdlePeers().onFailure {
+                    Logger.error("Failed to disconnect idle peers", it, context = TAG)
                 }
-                logNodeSupportSummary("trusted peers connected")
+                logNodeSupportSummary("idle peers disconnected")
 
                 sync().onFailure { e ->
                     Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
                 }
-                scope.launch { registerForNotifications() }
                 Result.success(Unit)
             }.getOrElse { e ->
+                if (e is CancellationException) {
+                    withContext(NonCancellable) { reconcileCancelledStart(initialLifecycleState) }
+                    throw e
+                }
+
                 val currentState = _lightningState.value.nodeLifecycleState
                 if (currentState.isRunning()) {
                     Logger.warn("Start error but node is $currentState, skipping retry", e, context = TAG)
                     return@withLock Result.success(Unit)
+                }
+
+                if (lightningService.status?.isRunning == true) {
+                    Logger.warn("Start error but LDK node is running, adopting it", e, context = TAG)
+                    return@withLock adoptRunningNode()
                 }
 
                 if (shouldRetry) {
@@ -436,7 +468,12 @@ class LightningRepo @Inject constructor(
         // Retry OUTSIDE the mutex to avoid deadlock (Kotlin Mutex is non-reentrant)
         if (shouldRetryStart) {
             delay(2.seconds)
-            return@withContext start(
+            // A stop requested after this start began wins over the retry; a foreground start cancels it
+            if (shouldRetryYieldToStop && pendingStopJob.get() != null) {
+                Logger.info("Skipped start retry because a stop was requested", context = TAG)
+                return@withContext Result.failure(NodeStartYieldedToStopError(result.exceptionOrNull()))
+            }
+            return@withContext startNode(
                 walletIndex = walletIndex,
                 timeout = timeout,
                 shouldRetry = false,
@@ -444,6 +481,7 @@ class LightningRepo @Inject constructor(
                 customRgsServerUrl = customRgsServerUrl,
                 channelMigration = channelMigration,
                 shouldValidateGraph = shouldValidateGraph,
+                shouldCancelPendingStop = !shouldRetryYieldToStop,
             )
         }
 
@@ -462,6 +500,30 @@ class LightningRepo @Inject constructor(
         }
 
         result
+    }
+
+    private suspend fun adoptRunningNode(): Result<Unit> {
+        _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+        scheduleOrdinaryFollowupRetry()
+        return lightningService.startEventListener(::onEvent).onFailure {
+            Logger.warn("Failed to start event listener", it, context = TAG)
+        }
+    }
+
+    private suspend fun reconcileCancelledStart(initialLifecycleState: NodeLifecycleState) {
+        if (lightningService.status?.isRunning == true) {
+            if (_lightningState.value.nodeLifecycleState.isRunning()) {
+                // This start already installed the event listener. Re-arming it would cancel and join
+                // the live listener, aborting an in-flight handler for an event LDK already acknowledged.
+                Logger.info("Kept running LDK node and its event listener after start cancellation", context = TAG)
+                return
+            }
+            Logger.info("Adopted running LDK node after start cancellation", context = TAG)
+            adoptRunningNode()
+            return
+        }
+        Logger.info("Restored lifecycle state '$initialLifecycleState' after start cancellation", context = TAG)
+        _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
     }
 
     private suspend fun skipStartForRunningNode(
@@ -486,6 +548,30 @@ class LightningRepo @Inject constructor(
     }
 
     private suspend fun onEvent(event: Event) {
+        val observedTxid = when (event) {
+            is Event.OnchainTransactionReceived -> event.txid
+            is Event.OnchainTransactionConfirmed -> event.txid
+            else -> null
+        }
+        if (observedTxid != null) {
+            runSuspendCatching {
+                val observed = onchainSendAttemptStore.observeExactTransaction(
+                    observedTxid,
+                    isConfirmed = event is Event.OnchainTransactionConfirmed,
+                )
+                val attempt = observed ?: onchainSendAttemptStore.current()
+                if (attempt != null && attempt.txid.equals(observedTxid, ignoreCase = true) &&
+                    attempt.hasPositiveEvidence && !attempt.localFollowupComplete && attempt.requestId == null
+                ) {
+                    finishOnchainSendLocally(attempt)
+                    onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+                }
+            }
+                .onFailure {
+                    Logger.warn("Failed to record exact on-chain transaction observation", it, context = TAG)
+                    scheduleOrdinaryFollowupRetry()
+                }
+        }
         handleLdkEvent(event)
         recordProbeOutcome(event)
         val settledReceiveInvoice: SettledReceiveInvoice?
@@ -573,11 +659,7 @@ class LightningRepo @Inject constructor(
 
     fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
 
-    suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
-        _lightningState.update {
-            it.copy(isGeoBlocked = coreService.isGeoBlocked())
-        }
-    }
+    fun setWiping(enabled: Boolean) = run { isWiping = enabled }
 
     fun setInitNodeLifecycleState() {
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
@@ -613,29 +695,35 @@ class LightningRepo @Inject constructor(
     fun cancelPendingStop() = synchronized(pendingStopLock) { pendingStopJob.getAndSet(null)?.cancel() }
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
-        lifecycleMutex.withLock {
-            if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
-                clearProbeOutcomes()
-                return@withLock Result.success(Unit)
-            }
+        lifecycleMutex.withLock { stopLocked() }
+    }
 
-            runCatching {
-                withContext(NonCancellable) {
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
-                    lightningService.stop()
-                    clearProbeOutcomes()
-                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+    private suspend fun stopLocked(): Result<Unit> {
+        if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping() && lightningService.node == null) {
+            clearProbeOutcomes()
+            return Result.success(Unit)
+        }
+
+        return runCatching {
+            withContext(NonCancellable) {
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
+                lightningService.stop()
+                clearProbeOutcomes()
+                _lightningState.update {
+                    LightningState(nodeLifecycleState = NodeLifecycleState.Stopped)
                 }
-            }.onFailure {
-                Logger.error("Node stop error", it, context = TAG)
-                // On failure, check actual node state and update accordingly
-                // If node is still running, revert to Running state to allow retry
-                if (lightningService.node != null && lightningService.status?.isRunning == true) {
-                    Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
-                    _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                } else {
-                    // Node appears stopped, update state
-                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+            }
+        }.onFailure {
+            Logger.error("Node stop error", it, context = TAG)
+            // On failure, check actual node state and update accordingly
+            // If node is still running, revert to Running state to allow retry
+            if (lightningService.node != null && lightningService.status?.isRunning == true) {
+                Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
+                _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+            } else {
+                // Node appears stopped, update state
+                _lightningState.update {
+                    LightningState(nodeLifecycleState = NodeLifecycleState.Stopped)
                 }
             }
         }
@@ -669,7 +757,6 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun sync(): Result<Unit> = executeWhenNodeRunning("sync") {
         // If sync is in progress, mark pending and skip
         if (!syncMutex.tryLock()) {
@@ -697,6 +784,11 @@ class LightningRepo @Inject constructor(
             _lightningState.update { state -> state.copy(isSyncingWallet = false) }
             syncMutex.unlock()
         }.onFailure {
+            if (it is CancellationException) {
+                // A cancellation is not a sync failure, but a sync requested meanwhile must still run
+                if (syncPending.getAndSet(false)) syncAsync()
+                throw it
+            }
             _lightningState.update { state -> state.copy(lastSyncError = it) }
             startSyncRetryLoopIfNeeded()
         }
@@ -809,17 +901,21 @@ class LightningRepo @Inject constructor(
 
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("wipeStorage called, stopping node first", context = TAG)
-        stop().mapCatching {
-            Logger.debug("node stopped, calling wipeStorage", context = TAG)
-            lightningService.wipeStorage(walletIndex)
-            clearProbeOutcomes()
-            _lightningState.update {
-                LightningState(
-                    nodeStatus = it.nodeStatus,
-                    nodeLifecycleState = it.nodeLifecycleState,
-                )
+        lifecycleMutex.withLock {
+            stopLocked().mapCatching {
+                Logger.debug("node stopped, calling wipeStorage", context = TAG)
+                lastKnownNodeId = null
+                _lastKnownChannels.update { persistentListOf() }
+                lightningService.wipeStorage(walletIndex)
+                clearProbeOutcomes()
+                _lightningState.update {
+                    LightningState(
+                        nodeStatus = it.nodeStatus,
+                        nodeLifecycleState = it.nodeLifecycleState,
+                    )
+                }
+                setRecoveryMode(false)
             }
-            setRecoveryMode(false)
         }.onFailure {
             Logger.error("wipeStorage error", it, context = TAG)
         }
@@ -835,23 +931,30 @@ class LightningRepo @Inject constructor(
 
         configChangeMutex.withLock {
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-            stop().onFailure {
-                Logger.error("Failed to stop node during electrum server change", it, context = TAG)
-                return@withContext Result.failure(it)
-            }
 
-            Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
+            recoverOnCancellation {
+                stop().onFailure {
+                    Logger.error("Failed to stop node during electrum server change", it, context = TAG)
+                    return@withContext Result.failure(it)
+                }
 
-            start(
-                shouldRetry = false,
-                customServerUrl = newServerUrl,
-            ).onFailure {
+                Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
+
+                start(
+                    shouldRetry = false,
+                    customServerUrl = newServerUrl,
+                )
+            }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
                 Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
                 scope.launch { restartWithPreviousConfig() }
             }.onSuccess {
-                settingsStore.update { it.copy(electrumServer = newServerUrl) }
+                runSuspendCatching { settingsStore.update { it.copy(electrumServer = newServerUrl) } }
+                    .onFailure {
+                        Logger.error("Failed to persist electrum server '$newServerUrl'", it, context = TAG)
+                        return@withContext Result.failure(it)
+                    }
 
                 Logger.info("Successfully changed electrum server", context = TAG)
             }
@@ -868,17 +971,20 @@ class LightningRepo @Inject constructor(
 
         configChangeMutex.withLock {
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-            stop().onFailure {
-                Logger.error("Failed to stop node during RGS server change", it, context = TAG)
-                return@withContext Result.failure(it)
-            }
 
-            Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
+            recoverOnCancellation {
+                stop().onFailure {
+                    Logger.error("Failed to stop node during RGS server change", it, context = TAG)
+                    return@withContext Result.failure(it)
+                }
 
-            start(
-                shouldRetry = false,
-                customRgsServerUrl = newRgsUrl,
-            ).onFailure {
+                Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
+
+                start(
+                    shouldRetry = false,
+                    customRgsServerUrl = newRgsUrl,
+                )
+            }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
                 Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
@@ -891,13 +997,27 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    private suspend fun validateRgsUrl(url: String): Result<Unit> = withContext(bgDispatcher) {
+    private inline fun <T> recoverOnCancellation(block: () -> T): T {
+        try {
+            return block()
+        } catch (e: CancellationException) {
+            // The caller is route-scoped: leaving the screen cancels the change mid-rebuild. stop()
+            // and start() rethrow the cancellation instead of reporting a failure, so the onFailure
+            // recovery never runs and the node would stay down until the next ON_START. Hand the
+            // recovery to the repo scope, which outlives the caller, then preserve the cancellation.
+            Logger.warn("Cancelled ldk-node config change, recovering in background…", context = TAG)
+            scope.launch { restartWithPreviousConfig() }
+            throw e
+        }
+    }
+
+    suspend fun validateRgsUrl(url: String): Result<Unit> = withContext(bgDispatcher) {
         val initialTimestamp = 0
         val testUrl = "${url.trimEnd('/')}/$initialTimestamp"
         urlValidator.validate(testUrl)
     }
 
-    private suspend fun validateElectrumServer(url: String): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun validateElectrumServer(url: String): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching { ElectrumServer.parse(url) }
             .fold(
                 onSuccess = { electrumProbeService.probe(it) },
@@ -947,6 +1067,7 @@ class LightningRepo @Inject constructor(
         val previousSettings = settingsStore.data.first()
         val oldSelected = previousSettings.selectedAddressType
         val oldMonitored = previousSettings.addressTypesToMonitor
+        val requiredMonitoredTypes = (monitoredTypes + DEFAULT_ADDRESS_TYPE_STRING).distinct()
         val addressType = selectedType.toAddressType() ?: AddressType.P2WPKH
 
         suspend fun rollback() =
@@ -954,7 +1075,7 @@ class LightningRepo @Inject constructor(
 
         runCatching {
             settingsStore.update {
-                it.copy(selectedAddressType = selectedType, addressTypesToMonitor = monitoredTypes)
+                it.copy(selectedAddressType = selectedType, addressTypesToMonitor = requiredMonitoredTypes)
             }
             lightningService.setPrimaryAddressType(addressType)
             syncMonitoredTypesFromNode()
@@ -1011,21 +1132,22 @@ class LightningRepo @Inject constructor(
         settings: SettingsData,
         monitoredTypes: List<String>,
     ): AppError? {
-        if (addressType == settings.selectedAddressType.toAddressType()) {
-            return AppError("Cannot disable monitoring: address type is currently selected")
-        }
-        if (isLastRequiredNativeWitnessWallet(addressType, monitoredTypes)) {
-            return AppError(
+        val configurationError = when {
+            addressType == AddressType.P2WPKH ->
+                AppError("Cannot disable monitoring: Native SegWit is required for Blocktank refunds")
+            addressType == settings.selectedAddressType.toAddressType() ->
+                AppError("Cannot disable monitoring: address type is currently selected")
+            isLastRequiredNativeWitnessWallet(addressType, monitoredTypes) -> AppError(
                 "Cannot disable monitoring: at least one Native SegWit or Taproot wallet required for Lightning"
             )
+            else -> null
         }
+        if (configurationError != null) return configurationError
+
         val balance = getBalanceForAddressType(addressType).getOrElse {
             return AppError("Cannot disable monitoring: failed to verify balance")
         }
-        if (balance > 0uL) {
-            return AppError("Cannot disable monitoring: address type has balance")
-        }
-        return null
+        return if (balance > 0uL) AppError("Cannot disable monitoring: address type has balance") else null
     }
 
     private suspend fun syncMonitoredTypesFromNode() {
@@ -1033,7 +1155,7 @@ class LightningRepo @Inject constructor(
             val nodeMonitored = lightningService.listMonitoredAddressTypes()
             val settings = settingsStore.data.first()
             val selectedType = settings.selectedAddressType.toAddressType() ?: AddressType.P2WPKH
-            val combined = (nodeMonitored + selectedType).distinct()
+            val combined = (nodeMonitored + selectedType + AddressType.P2WPKH).distinct()
             val allOrdered = ALL_ADDRESS_TYPE_STRINGS
             val newMonitored = allOrdered.filter { typeStr ->
                 typeStr.toAddressType() in combined
@@ -1054,6 +1176,7 @@ class LightningRepo @Inject constructor(
         val monitored = settings.addressTypesToMonitor.toMutableList()
 
         val toRemove = monitored.filter { typeStr ->
+            if (typeStr == DEFAULT_ADDRESS_TYPE_STRING) return@filter false
             if (typeStr == settings.selectedAddressType) return@filter false
             val type = typeStr.toAddressType() ?: return@filter false
             val balance = getBalanceForAddressType(type).getOrNull() ?: return@filter false
@@ -1120,8 +1243,8 @@ class LightningRepo @Inject constructor(
         return@withContext Result.success(Unit)
     }
 
-    suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
-        runCatching { lightningService.connectToTrustedPeers() }.also {
+    suspend fun disconnectIdlePeers(): Result<Unit> = executeWhenNodeRunning("disconnectIdlePeers") {
+        runSuspendCatching { lightningService.disconnectIdlePeers() }.also {
             syncState()
         }
     }
@@ -1139,22 +1262,25 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun newAddress(): Result<String> = executeWhenNodeRunning("newAddress") {
+        requireWalletRestoreComplete()
         runCatching { lightningService.newAddress() }
     }
 
     suspend fun newAddressForType(addressType: AddressType): Result<String> =
         executeWhenNodeRunning("newAddressForType") {
+            requireWalletRestoreComplete()
             runCatching { lightningService.newAddressForType(addressType) }
         }
 
     suspend fun newAddressInfoForType(addressType: AddressType): Result<AddressDerivationInfo> =
         executeWhenNodeRunning("newAddressInfoForType") {
-            runCatching { lightningService.newAddressInfoForType(addressType) }
+            requireWalletRestoreComplete()
+            runSuspendCatching { lightningService.newAddressInfoForType(addressType) }
         }
 
     suspend fun addressInfoForType(addressType: AddressType, receiveIndex: Int): Result<AddressDerivationInfo> =
         executeWhenNodeRunning("addressInfoForType") {
-            runCatching { lightningService.addressInfoForType(addressType, receiveIndex) }
+            runSuspendCatching { lightningService.addressInfoForType(addressType, receiveIndex) }
         }
 
     suspend fun addressInfosForType(
@@ -1169,7 +1295,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType): Result<Unit> =
         executeWhenNodeRunning("revealReceiveAddresses") {
-            runCatching { lightningService.revealReceiveAddresses(toReceiveIndex, forType) }
+            runSuspendCatching { lightningService.revealReceiveAddresses(toReceiveIndex, forType) }
         }
 
     suspend fun createInvoice(
@@ -1177,7 +1303,7 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoice") {
-        updateGeoBlockState()
+        requireWalletRestoreComplete()
         runCatching { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
@@ -1186,7 +1312,7 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = Defaults.bolt11ExpirySec,
     ): Result<String> = executeWhenNodeRunning("createInvoiceMsats") {
-        updateGeoBlockState()
+        requireWalletRestoreComplete()
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
     }
 
@@ -1215,6 +1341,7 @@ class LightningRepo @Inject constructor(
         callback: String,
         paymentRequest: String,
     ): Result<LnurlWithdrawResponse> = executeWhenNodeRunning("requestLnurlWithdraw") {
+        requireWalletRestoreComplete()
         val callbackUrl = createWithdrawCallbackUrl(k1, callback, paymentRequest)
         Logger.debug("handleLnurlWithdraw callbackUrl generated: '$callbackUrl'", context = TAG)
         lnurlService.requestLnurlWithdraw(callbackUrl)
@@ -1225,6 +1352,7 @@ class LightningRepo @Inject constructor(
         callback: String,
         nodeId: String,
     ): Result<LnurlChannelResponse> = executeWhenNodeRunning("requestLnurlChannel") {
+        requireWalletRestoreComplete()
         val url = createChannelRequestUrl(
             k1 = k1,
             callback = callback,
@@ -1266,10 +1394,28 @@ class LightningRepo @Inject constructor(
         bolt11: String,
         sats: ULong? = null,
         onBeforeSend: suspend () -> Boolean,
+    ): Result<PaymentId> = payInvoice(bolt11, sats, null, onBeforeSend)
+
+    suspend fun payInvoice(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        onBeforeSend: suspend () -> Boolean,
+    ): Result<PaymentId> = payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat = null, onBeforeSend)
+
+    suspend fun payInvoice(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        maxTotalRoutingFeeMsat: ULong?,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
+        requireWalletRestoreComplete()
         waitForUsableChannels()
+        requireWalletRestoreComplete()
         if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
-        runCatching { lightningService.send(bolt11, sats) }.also {
+        requireWalletRestoreComplete()
+        runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }.also {
             syncState()
         }
     }
@@ -1307,9 +1453,7 @@ class LightningRepo @Inject constructor(
 
         Logger.info("Waiting for usable channels before sending payment", context = TAG)
 
-        val finalState = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
-            _lightningState.first { it.shouldStopWaitingForUsableChannels() }
-        } ?: run {
+        val finalState = awaitUsableChannels() ?: run {
             Logger.warn("Timed out waiting for usable channels", context = TAG)
             return@withContext
         }
@@ -1317,6 +1461,15 @@ class LightningRepo @Inject constructor(
         if (!finalState.nodeLifecycleState.canRun() || finalState.channels.isEmpty()) {
             delayNoUsableChannelsFeedback()
         }
+    }
+
+    private suspend fun awaitUsableChannels(): LightningState? = withTimeoutOrNull(CHANNELS_USABLE_TIMEOUT) {
+        refreshChannelsAndPeers()
+        while (!_lightningState.value.shouldStopWaitingForUsableChannels()) {
+            delay(CHANNELS_USABLE_POLL_DELAY)
+            refreshChannelsAndPeers()
+        }
+        _lightningState.value
     }
 
     private suspend fun waitForChannelsToLoadIfNeeded(state: LightningState): LightningState? {
@@ -1343,7 +1496,6 @@ class LightningRepo @Inject constructor(
         delay(NO_USABLE_CHANNELS_FEEDBACK_DELAY)
     }
 
-    @Suppress("LongParameterList")
     suspend fun sendOnChain(
         address: Address,
         sats: ULong,
@@ -1354,8 +1506,25 @@ class LightningRepo @Inject constructor(
         channelId: String? = null,
         isMaxAmount: Boolean = false,
         tags: List<String> = emptyList(),
-    ): Result<Txid> = executeWhenNodeRunning("sendOnChain") {
+        beforeSendAttempt: suspend () -> Unit = {},
+        onBroadcast: suspend (Txid) -> Unit = {},
+        requestId: PaykitPaymentRequestId? = null,
+        orderId: String? = null,
+        transferContext: OnchainTransferContext? = null,
+        payerIdentity: String? = null,
+        paymentDeadlineAt: Instant? = null,
+        contactPublicKey: String? = null,
+    ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
+        requireWalletRestoreComplete()
         require(address.isNotEmpty()) { "Send address cannot be empty" }
+
+        // Recovery must remain reachable when observing the original transaction makes sync fail.
+        val retainedAttempt = runSuspendCatching { onchainSendAttemptStore.current() }.getOrElse {
+            return@executeWhenNodeRunning Result.failure(it)
+        }
+        if (retainedAttempt?.blocksNextSend == true) {
+            return@executeWhenNodeRunning Result.failure(OnchainSendBlockedError(retainedAttempt))
+        }
 
         // Ensure wallet is synced before sending to have up-to-date state
         ensureSyncedBeforeSend().onFailure {
@@ -1390,35 +1559,412 @@ class LightningRepo @Inject constructor(
 
         Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
 
-        val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isDrain)
+        val attempt = runSuspendCatching {
+            requireWalletRestoreComplete()
+            onchainSendAttemptStore.admit(
+                walletId = WalletScope.default,
+                requestId = requestId,
+                orderId = orderId,
+                address = address,
+                amountSats = sats,
+                isMaxAmount = isDrain,
+                feeRateSatsPerVByte = satsPerVByte,
+                isTransfer = isTransfer,
+                channelId = channelId,
+                tags = tags,
+                transferContext = transferContext,
+                beforeSendAttempt = beforeSendAttempt,
+                payerIdentity = payerIdentity,
+                contactPublicKey = contactPublicKey,
+            )
+        }.getOrElse {
+            val error = if (it is OnchainSendBlockedError || it is OnchainSendAttemptUnreadableError) {
+                it
+            } else {
+                OnchainSendNotDispatchedError(it)
+            }
+            return@executeWhenNodeRunning Result.failure(error)
+        }
+        val preparedResult = try {
+            runSuspendCatching {
+                requireWalletRestoreComplete()
+                lightningService.prepareOnchainSend(
+                    address,
+                    sats,
+                    satsPerVByte,
+                    utxosForSend,
+                    isDrain,
+                    attempt.walletIndex,
+                    paymentDeadlineAt,
+                )
+                    .also { prepared ->
+                        if (!isDrain && utxosForSend != null) {
+                            check(
+                                prepared.receipt.inputs.toSet() == utxosForSend.map {
+                                    OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
+                                }.toSet()
+                            )
+                        }
+                        onchainSendAttemptStore.retainPreparedReceipt(
+                            attempt.attemptId,
+                            attempt.walletIndex,
+                            prepared.receipt.copy(feeRateSatsPerVByte = satsPerVByte),
+                            isRecovery = false,
+                        )
+                    }
+            }
+        } catch (cancelled: CancellationException) {
+            // Release only the exact empty pre-dispatch guard. A retained receipt remains protected.
+            withContext(NonCancellable) {
+                runSuspendCatching {
+                    onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
+                }.onFailure { Logger.warn("Failed to release cancelled preparation", it, context = TAG) }
+            }
+            throw cancelled
+        }
+        val prepared = preparedResult.getOrElse {
+            // Preparation and receipt persistence never dispatch. A failed save leaves the preguard if cleanup fails.
+            runSuspendCatching { onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex) }
+            return@executeWhenNodeRunning Result.failure(OnchainSendNotDispatchedError(it))
+        }
+        var outcomePersisted = true
+        var dispatchStarted = false
+        val outcome = runSuspendCatching {
+            onchainSendAttemptStore.broadcastPreparedCandidate(
+                attempt.attemptId,
+                attempt.walletIndex,
+                prepared.receipt.txid,
+                broadcast = { beforeDispatch ->
+                    prepared.broadcast {
+                        requireWalletRestoreComplete()
+                        beforeDispatch()
+                        requireWalletRestoreComplete()
+                        dispatchStarted = true
+                    }
+                },
+            )
+        }.getOrElse { error ->
+            if (error is OnchainSendNotDispatchedError) {
+                runSuspendCatching {
+                    onchainSendAttemptStore.releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
+                }.onFailure { Logger.warn("Failed to clear unsubmitted preparation", it, context = TAG) }
+                return@executeWhenNodeRunning Result.failure(error)
+            }
+            val winnerResult = runSuspendCatching { onchainSendAttemptStore.current() }
+            val winner = winnerResult.getOrNull()
+            val releasedWithoutDispatch = !dispatchStarted && winnerResult.isSuccess && winner == null
+            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
+                winner.hasPositiveEvidence
+            ) {
+                outcomePersisted = false
+                OnchainSendOutcome.Accepted(requireNotNull(winner.txid))
+            } else if (releasedWithoutDispatch &&
+                lightningService.currentWalletIndex == attempt.walletIndex
+            ) {
+                // current() released the exact local preparation whose dispatch marker was never written.
+                return@executeWhenNodeRunning Result.failure(OnchainSendNotDispatchedError(error))
+            } else {
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
+            }
+        }
+        val recorded = runSuspendCatching {
+            onchainSendAttemptStore.recordOutcome(attempt.attemptId, outcome, attempt.walletIndex)
+        }.getOrElse { error ->
+            outcomePersisted = false
+            val winner = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull()
+            if (winner?.attemptId == attempt.attemptId && winner.walletId == attempt.walletId &&
+                winner.hasPositiveEvidence
+            ) {
+                winner
+            } else {
+                // Native acceptance is not durable local completion. Preserve the signed receipt
+                // and Pending until the exact winner can be persisted or independently observed.
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(error, prepared.receipt.txid))
+            }
+        }
+        val winningOutcome = if (recorded.hasPositiveEvidence) {
+            OnchainSendOutcome.Accepted(requireNotNull(recorded.txid))
+        } else {
+            outcome
+        }
+        if (winningOutcome !is OnchainSendOutcome.Accepted) return@executeWhenNodeRunning Result.success(winningOutcome)
+        val txId = winningOutcome.txid
+        runSuspendCatching { onBroadcast(txId) }
+            .onFailure { Logger.warn("Failed to continue accepted on-chain send", it, context = TAG) }
 
+        runSuspendCatching { finishOnchainSendLocally(recorded) }
+            .onFailure { Logger.warn("Failed to finish accepted on-chain send locally", it, context = TAG) }
+        if (!outcomePersisted) {
+            runSuspendCatching {
+                val durable = requireNotNull(onchainSendAttemptStore.currentDurable())
+                check(
+                    durable.attemptId == recorded.attemptId && durable.walletId == recorded.walletId &&
+                        durable.hasPositiveEvidence && durable.txid.equals(txId, true)
+                ) {
+                    "Accepted on-chain outcome repair is not durable"
+                }
+            }.getOrElse {
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(it, txId))
+            }
+        }
+        runSuspendCatching { syncState() }
+            .onFailure { Logger.warn("Failed to sync after accepted on-chain send", it, context = TAG) }
+        Result.success(winningOutcome.copy(amountSats = recorded.amountSats.takeIf { recorded.isMaxAmount }))
+    }
+
+    private val recoveryCoordinator by lazy {
+        OnchainSendCoordinator(
+            onchainSendAttemptStore,
+            object : OnchainPreparedSender {
+                override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend =
+                    error("Initial sends use sendOnChain admission")
+
+                override suspend fun prepareRecovery(
+                    attempt: OnchainSendAttempt,
+                    feeRateSatsPerVByte: ULong,
+                    paymentDeadlineAt: Instant?,
+                ): PreparedOnchainSend {
+                    val inputs = requireNotNull(attempt.originalInputs)
+                    // The saved signed receipt is the input identity. Native preparation resolves
+                    // the actual values and spendability; never replace missing inputs from a fresh list.
+                    val selected = inputs.map { input ->
+                        SpendableUtxo(OutPoint(input.txid, input.vout), 0uL)
+                    }
+                    requireWalletRestoreComplete()
+                    return guardPreparedBroadcast(
+                        lightningService.prepareOnchainSend(
+                            attempt.address,
+                            attempt.amountSats,
+                            feeRateSatsPerVByte,
+                            selected,
+                            false,
+                            attempt.walletIndex,
+                            paymentDeadlineAt,
+                        )
+                    )
+                }
+            },
+            bgDispatcher
+        )
+    }
+
+    suspend fun retryOriginalOnchainSend(
+        attemptId: String,
+        walletId: String,
+        feeRateSatsPerVByte: ULong,
+        paymentDeadlineAt: Instant? = null,
+        approvePrepared: suspend (OnchainPreparedReceipt) -> Unit = {},
+        authorizeOriginal: suspend (OnchainSendAttempt) -> Unit,
+    ): Result<OnchainSendOutcome> = executeWhenNodeRunning("retryOriginalOnchainSend") {
+        requireWalletRestoreComplete()
+        val result = recoveryCoordinator.retryOriginal(
+            attemptId,
+            walletId,
+            feeRateSatsPerVByte,
+            paymentDeadlineAt,
+            approvePrepared,
+            authorizeOriginal,
+        )
+        val accepted = result.getOrNull() as? OnchainSendOutcome.Accepted
+        if (accepted != null) {
+            runSuspendCatching {
+                onchainSendAttemptStore.current()?.takeIf { it.hasPositiveEvidence }?.let {
+                    finishOnchainSendLocally(
+                        it
+                    )
+                }
+            }.onFailure { Logger.warn("Failed to finish recovered on-chain send locally", it, context = TAG) }
+            runSuspendCatching {
+                val durable = requireNotNull(onchainSendAttemptStore.currentDurable())
+                check(
+                    durable.attemptId == attemptId && durable.walletId == walletId &&
+                        durable.hasPositiveEvidence && durable.txid.equals(accepted.txid, true)
+                ) {
+                    "Recovered on-chain outcome is not durable"
+                }
+            }.getOrElse {
+                return@executeWhenNodeRunning Result.failure(OnchainSendPendingError(it, accepted.txid))
+            }
+        }
+        result
+    }
+
+    private suspend fun finishOnchainSendLocally(attempt: OnchainSendAttempt) {
+        val originalFollowup = attempt.backupFollowup
+        check(
+            !attempt.restoredFromBackup || originalFollowup != null
+        ) { "Original local follow-up context is unavailable" }
+        val originalContact = originalFollowup?.contact?.let {
+            require(it is JsonPrimitive && it.isString && it.content.isNotBlank()) { "Invalid original contact" }
+            it.content
+        }
+        val txId = requireNotNull(attempt.txid) { "On-chain send has no transaction id" }
+        val isSuccessor = attempt.candidateTxids.isNotEmpty() && !txId.equals(attempt.candidateTxids.first(), true)
+        val needsExactFee = attempt.verifiedWinningFeeSats == null && (
+            isSuccessor ||
+                (attempt.candidateTxids.isNotEmpty() && originalFollowup?.feeSats?.toULongOrNull() == 0uL)
+            )
+        val fee = attempt.verifiedWinningFeeSats ?: if (needsExactFee) {
+            requireNotNull(winningCandidateFee(attempt)) {
+                "Winning transaction fee is unavailable"
+            }.also { onchainSendAttemptStore.retainWinningFee(attempt.attemptId, attempt.walletIndex, txId, it) }
+        } else {
+            originalFollowup?.feeSats?.toULong() ?: 0uL
+        }
         val preActivityMetadata = PreActivityMetadata(
-            walletId = WalletScope.default,
+            walletId = attempt.walletId,
             paymentId = txId,
-            createdAt = nowTimestamp().toEpochMilli().toULong(),
-            tags = tags,
+            createdAt = originalFollowup?.createdAtMillis?.toULong() ?: nowMillis().toULong(),
+            tags = attempt.tags,
             paymentHash = null,
             txId = txId,
-            address = address,
+            address = attempt.address,
             isReceive = false,
-            feeRate = satsPerVByte,
-            isTransfer = isTransfer,
-            channelId = channelId ?: "",
+            feeRate = attempt.winningFeeRateSatsPerVByte,
+            isTransfer = attempt.isTransfer,
+            channelId = attempt.channelId ?: "",
         )
-        preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata)
-
+        preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata).getOrThrow()
         coreService.activity.createSentOnchainActivityFromSendResult(
             txid = txId,
-            address = address,
-            amount = sats,
-            fee = 0u,
-            feeRate = satsPerVByte,
-            isTransfer = isTransfer,
-            channelId = channelId,
+            address = attempt.address,
+            amount = attempt.amountSats,
+            fee = fee,
+            feeRate = attempt.winningFeeRateSatsPerVByte,
+            isTransfer = attempt.isTransfer,
+            channelId = attempt.channelId,
+            walletId = attempt.walletId,
         )
+        if (originalContact != null) {
+            coreService.activity.restoreSentOnchainContact(txId, attempt.walletId, originalContact)
+        }
+        if (needsExactFee || attempt.verifiedWinningFeeSats != null) {
+            coreService.activity.repairVerifiedSentOnchainFee(
+                txId,
+                attempt.walletId,
+                fee,
+                attempt.winningFeeRateSatsPerVByte
+            )
+        }
+        check(coreService.activity.getOnchainActivityByTxId(txId, attempt.walletId) != null) {
+            "Accepted on-chain transaction has no durable local activity"
+        }
+    }
 
-        syncState()
-        Result.success(txId)
+    private suspend fun winningCandidateFee(attempt: OnchainSendAttempt): ULong? =
+        attempt.candidateMiningFees[requireNotNull(attempt.txid).lowercase()]
+            ?: lightningService.observedOriginalSendFee(attempt)
+
+    private fun scheduleOrdinaryFollowupRetry() {
+        val previous = ordinaryFollowupRetryJob.get()
+        if (previous?.isActive == true) return
+        val retry = scope.launch(start = CoroutineStart.LAZY) {
+            repeat(3) {
+                delay(1.seconds)
+                if (!_lightningState.value.nodeLifecycleState.isRunning()) return@launch
+                val attempt = runSuspendCatching { onchainSendAttemptStore.current() }.getOrNull() ?: return@launch
+                if (!attempt.hasPositiveEvidence || attempt.localFollowupComplete || attempt.requestId != null) {
+                    return@launch
+                }
+                completeAcceptedOrdinaryFollowup(requireNotNull(attempt.txid))
+            }
+        }
+        if (ordinaryFollowupRetryJob.compareAndSet(previous, retry)) retry.start() else retry.cancel()
+    }
+
+    suspend fun completeAcceptedOrdinaryFollowup(txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt != null && attempt.requestId == null &&
+            attempt.txid.equals(txid, ignoreCase = true) && attempt.hasPositiveEvidence
+        ) {
+            runSuspendCatching {
+                finishOnchainSendLocally(attempt)
+                onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+            }.onFailure { Logger.warn("Failed to finish accepted ordinary send locally", it, context = TAG) }
+        }
+    }
+
+    // A change signal only: consumers must reread and validate the original attempt.
+    val onchainSendAttemptUpdates get() = onchainSendAttemptStore.backupStateVersion
+
+    suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
+
+    /** Syncs the on-chain wallet, then checks that none of the attempt's candidates reached the mempool or chain. */
+    override suspend fun onchainCandidatesNeverReachedNetwork(attempt: OnchainSendAttempt): Boolean =
+        onchainCandidatesNeverReachedNetwork(attempt, ABANDON_SYNC_TIMEOUT)
+
+    suspend fun onchainCandidatesNeverReachedNetwork(
+        attempt: OnchainSendAttempt,
+        timeout: Duration,
+    ): Boolean {
+        // The requested sync runs on the serial LDK queue after any sync already in flight, so its success proves a
+        // fresh view. Failing that, an on-chain sync that finishes later than the one read here also counts.
+        val previousSync = lightningService.status?.latestOnchainWalletSyncTimestamp ?: 0uL
+        // The sync blocks on the LDK queue and ignores cancellation, so it runs apart and the wait keeps its limit.
+        val requestedSyncSucceeded = AtomicBoolean(false)
+        scope.launch { if (runSuspendCatching { lightningService.sync() }.isSuccess) requestedSyncSucceeded.set(true) }
+        withTimeoutOrNull(timeout) {
+            while (true) {
+                val latestSync = lightningService.status?.latestOnchainWalletSyncTimestamp
+                if (isOnchainSyncAfter(latestSync, previousSync, requestedSyncSucceeded.get())) break
+                delay(500.milliseconds)
+            }
+        } ?: throw OnchainSendAbandonSyncError()
+        return lightningService.walletKnowsNoCandidate(attempt)
+    }
+
+    override suspend fun walletKnowsTransaction(txid: String): Boolean = lightningService.walletKnowsTransaction(txid)
+
+    override suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean =
+        lightningService.originalCoinSpentElsewhere(attempt)
+
+    override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
+        requireWalletRestoreComplete()
+        return guardPreparedBroadcast(lightningService.prepareRelease(attempt))
+    }
+
+    private fun guardPreparedBroadcast(prepared: PreparedOnchainSend): PreparedOnchainSend =
+        PreparedOnchainSend(prepared.receipt) { beforeDispatch ->
+            requireWalletRestoreComplete()
+            prepared.broadcast {
+                requireWalletRestoreComplete()
+                beforeDispatch()
+                requireWalletRestoreComplete()
+            }
+        }
+
+    suspend fun recordOnchainRelease(expected: OnchainSendAttempt, txid: String): OnchainSendAttempt? =
+        onchainSendAttemptStore.recordRelease(expected, txid)
+
+    suspend fun approveOnchainRelease(expected: OnchainSendAttempt): OnchainSendAttempt? =
+        onchainSendAttemptStore.approveRelease(expected)
+
+    suspend fun abandonUnbroadcastOnchainSend(
+        expected: OnchainSendAttempt,
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Boolean = onchainSendAttemptStore.abandonUnbroadcast(expected, removeOriginalProof)
+
+    suspend fun releaseInterruptedShopPreparation(
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Boolean = onchainSendAttemptStore.releaseInterruptedShopPreparation(removeOriginalProof)
+
+    suspend fun finishAcceptedShopActivity(requestId: PaykitPaymentRequestId, txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt?.requestId == requestId && attempt.txid.equals(txid, ignoreCase = true) &&
+            attempt.hasPositiveEvidence
+        ) {
+            finishOnchainSendLocally(attempt)
+        }
+    }
+
+    suspend fun completeAcceptedShopFollowup(requestId: PaykitPaymentRequestId, txid: String) {
+        val attempt = onchainSendAttemptStore.current()
+        if (attempt?.requestId == requestId && attempt.txid.equals(txid, ignoreCase = true) &&
+            attempt.hasPositiveEvidence
+        ) {
+            finishOnchainSendLocally(attempt)
+            onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        }
     }
 
     suspend fun determineUtxosToSpend(
@@ -1541,6 +2087,10 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    suspend fun getFeeRates(): Result<FeeRates> = withContext(bgDispatcher) {
+        coreService.blocktank.getFees()
+    }
+
     suspend fun getFeeRateForSpeed(
         speed: TransactionSpeed,
         feeRates: FeeRates? = null,
@@ -1568,6 +2118,7 @@ class LightningRepo @Inject constructor(
         pushToCounterpartySats: ULong? = null,
         channelConfig: ChannelConfig? = null,
     ): Result<OpenChannelResult> = executeWhenNodeRunning("openChannel") {
+        requireWalletRestoreComplete()
         lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats, channelConfig).also {
             syncState()
         }
@@ -1578,13 +2129,40 @@ class LightningRepo @Inject constructor(
         force: Boolean = false,
         forceCloseReason: String? = null,
     ): Result<Unit> = executeWhenNodeRunning("closeChannel") {
+        requireWalletRestoreComplete()
         runCatching { lightningService.closeChannel(channel, force, forceCloseReason) }.also {
             syncState()
         }
     }
 
+    /**
+     * Re-reads channels and peers from the running node, leaving balances as they are (see [syncState]).
+     * A peer reconnecting makes a channel usable again without any node event, so callers poll this.
+     * [onRefreshed] runs right after the new channels are published, in the same uninterruptible block,
+     * so state derived from them cannot fall behind them.
+     */
+    suspend fun refreshChannelsAndPeers(onRefreshed: () -> Unit = {}): Result<Unit> = withContext(bgDispatcher) {
+        if (!_lightningState.value.nodeLifecycleState.isRunning()) return@withContext Result.success(Unit)
+        runCatching {
+            val committed = _lightningState.updateAndGet {
+                it.copy(
+                    peers = getPeers().orEmpty().toImmutableList(),
+                    channels = getChannels().orEmpty().toImmutableList(),
+                )
+            }
+            if (committed.nodeLifecycleState.isRunning()) publishLastKnownChannels()
+            onRefreshed()
+        }.onSuccess {
+            refreshFailureLogged.set(false)
+        }.onFailure {
+            if (refreshFailureLogged.compareAndSet(false, true)) {
+                Logger.warn("Failed to re-read channels and peers", it, context = TAG)
+            }
+        }
+    }
+
     fun syncState() {
-        _lightningState.update {
+        val committed = _lightningState.updateAndGet {
             it.copy(
                 nodeId = getNodeId().orEmpty(),
                 nodeStatus = getStatus(),
@@ -1593,6 +2171,8 @@ class LightningRepo @Inject constructor(
                 balances = getBalances(),
             )
         }
+        if (committed.nodeLifecycleState.isRunning()) publishLastKnownChannels()
+        if (_lightningState.value.nodeLifecycleState.isRunning()) scheduleOrdinaryFollowupRetry()
     }
 
     private fun logNodeSupportSummary(reason: String) {
@@ -1658,7 +2238,23 @@ class LightningRepo @Inject constructor(
     }
 
     fun getNodeId(): String? =
-        if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.nodeId else null
+        if (_lightningState.value.nodeLifecycleState.isRunning()) {
+            lightningService.nodeId?.also { lastKnownNodeId = it }
+        } else {
+            null
+        }
+
+    /**
+     * Node id of the current node, falling back to the one observed while it last ran.
+     * The id is derived from the wallet mnemonic and only cleared on storage wipe, which is the
+     * single path to another mnemonic, so it always belongs to the active wallet.
+     */
+    fun getLastKnownNodeId(): String? = getNodeId() ?: lastKnownNodeId
+
+    suspend fun awaitNodeId(): String? = lastKnownNodeId
+        ?: executeWhenNodeRunning("awaitNodeId", NODE_ID_WAIT_TIMEOUT) {
+            runCatching { requireNotNull(lightningService.nodeId) { "Node id not available" } }
+        }.getOrNull()?.also { lastKnownNodeId = it }
 
     fun getBalances(): BalanceDetails? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.balances else null
@@ -1682,37 +2278,21 @@ class LightningRepo @Inject constructor(
     fun getChannels(): List<ChannelDetails>? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
 
+    private fun publishLastKnownChannels() = _lastKnownChannels.update {
+        val state = _lightningState.value
+        if (state.nodeLifecycleState.isRunning()) state.channels else it
+    }
+
     fun canReceive(): Boolean {
         val isRunning = _lightningState.value.nodeLifecycleState.isRunning()
         return isRunning && lightningService.canReceive()
     }
 
-    fun separateTrustedChannels(channels: List<ChannelDetails>) = lightningService.separateTrustedChannels(channels)
-
-    suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
-        runCatching {
-            val token = token ?: firebaseMessaging.token.await()
-            val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
-
-            require(token.isNotEmpty()) { "FCM token is empty or null" }
-
-            if (cachedToken == token) {
-                Logger.debug("registerForNotifications skipped, device token already registered")
-                return@executeWhenNodeRunning Result.success(Unit)
-            }
-
-            lspNotificationsService.registerDevice(token)
-        }.onFailure {
-            Logger.error("registerForNotifications error", it, context = TAG)
-        }
-    }
-
-    fun registerForNotificationsAsync(token: String) = scope.launch { registerForNotifications(token) }
-
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,
         satsPerVByte: ULong,
     ): Result<Txid> = executeWhenNodeRunning("bumpFeeByRbf") {
+        requireWalletRestoreComplete()
         runCatching {
             require(!originalTxId.isBlank()) { "originalTxId is null or empty: $originalTxId" }
             require(satsPerVByte > 0u) { "satsPerVByte invalid: $satsPerVByte" }
@@ -1743,6 +2323,7 @@ class LightningRepo @Inject constructor(
         satsPerVByte: ULong,
         destinationAddress: Address,
     ): Result<Txid> = executeWhenNodeRunning("accelerateByCpfp") {
+        requireWalletRestoreComplete()
         runCatching {
             require(!originalTxId.isBlank()) { "originalTxId is null or empty: $originalTxId" }
             require(!destinationAddress.isBlank()) { "destinationAddress is null or empty: $destinationAddress" }
@@ -2042,14 +2623,36 @@ class LightningRepo @Inject constructor(
     }
     // endregion
 
-    suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
+    /**
+     * Runs [restartNode] on the repo scope, for the same reason [stopDebounced] does: the node
+     * lifecycle outlives any screen that asks to change it. A caller cancelled mid-restart — a
+     * ViewModel cleared inside the bounded start retry delay — cannot drop the retry and strand the
+     * node Stopped.
+     *
+     * The caller still awaits the [Result], so a live caller keeps reporting the outcome; a cancelled
+     * one only loses the reporting, never the restart.
+     */
+    suspend fun restartNodeDetached(): Result<Unit> = scope.async { restartNode() }.await()
+
+    suspend fun restartNode(
+        channelMigration: ChannelDataMigration? = null,
+        walletIndex: Int = 0,
+    ): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Restarting node", context = TAG)
         stop().onFailure {
             Logger.error("Failed to stop node during restart", it, context = TAG)
             return@withContext Result.failure(it)
         }
-        start(shouldRetry = false).onFailure {
-            Logger.error("Failed to start node during restart", it, context = TAG)
+        startNode(
+            walletIndex = walletIndex,
+            channelMigration = channelMigration,
+            shouldRetryYieldToStop = true
+        ).onFailure {
+            if (it is NodeStartYieldedToStopError) {
+                Logger.info("Deferred node restart to a requested stop", context = TAG)
+            } else {
+                Logger.error("Failed to start node during restart", it, context = TAG)
+            }
             return@withContext Result.failure(it)
         }.onSuccess {
             Logger.info("Node restarted successfully", context = TAG)
@@ -2065,7 +2668,13 @@ class LightningRepo @Inject constructor(
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
+        private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
+        private val ABANDON_SYNC_TIMEOUT = 30.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
+
+        /** Max time to wait for a starting node before its id is treated as unavailable. */
+        private val NODE_ID_WAIT_TIMEOUT = 15.seconds
+
         val SEND_LN_TIMEOUT = 10.seconds
         private val PROBE_TIMEOUT = 60.seconds
         private val PAYMENT_ROUTING_REFRESH_TIMEOUT = 20.seconds
@@ -2130,10 +2739,16 @@ private data class PaymentRoutingRefreshStatus(
 }
 
 class RecoveryModeError : AppError("App in recovery mode, skipping node start")
+
+class WipeInProgressError : AppError("Wallet wipe in progress, refusing node start")
 class NodeSetupError : AppError("Unknown node setup error")
 class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
+class NodeStartYieldedToStopError(cause: Throwable?) :
+    AppError("Node start retry skipped because a stop was requested", cause)
 class NodeConfigNotAppliedError : AppError("Node already running, requested config was not applied")
 class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
+class NodeNotRunningError(opName: String, state: NodeLifecycleState) :
+    AppError("Cannot execute '$opName': node is '$state' and not starting")
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
 class PaymentAbortedBeforeSend : AppError("Payment aborted before send")
@@ -2182,7 +2797,6 @@ data class LightningState(
     val channels: ImmutableList<ChannelDetails> = persistentListOf(),
     val balances: BalanceDetails? = null,
     val isSyncingWallet: Boolean = false,
-    val isGeoBlocked: Boolean = false,
     val lastSyncError: Throwable? = null,
     val lastSuccessfulSyncAt: Long? = null,
 ) {
@@ -2242,3 +2856,10 @@ sealed interface ProbeOutcome {
         val routeFeeMsat: ULong?,
     ) : ProbeOutcome
 }
+
+/**
+ * The sync requested for a check proves a fresh view once it succeeds. Otherwise only a sync that finished later than
+ * the one read before the request counts; one finished in the same second may predate it.
+ */
+internal fun isOnchainSyncAfter(latest: ULong?, previous: ULong, requestedSyncSucceeded: Boolean = false): Boolean =
+    requestedSyncSucceeded || (latest ?: 0uL) > previous

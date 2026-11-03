@@ -17,6 +17,8 @@ enum class ServiceQueue {
 
     private val scope by lazy { CoroutineScope(newSingleThreadDispatcher(name) + SupervisorJob()) }
 
+    val queueContext: CoroutineContext get() = scope.coroutineContext
+
     fun <T> blocking(
         coroutineContext: CoroutineContext = scope.coroutineContext,
         block: suspend CoroutineScope.() -> T,

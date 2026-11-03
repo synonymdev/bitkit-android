@@ -16,7 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -55,7 +55,7 @@ fun SavingsProgressScreen(
     onContinueClick: () -> Unit = {},
     onTransferUnavailable: () -> Unit = {},
 ) {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
     val swapResult by transfer.savingsSwapResult.collectAsStateWithLifecycle()
 
@@ -76,14 +76,6 @@ fun SavingsProgressScreen(
                 onSuccess = { progressState = SavingsProgressState.SUCCESS },
                 onInterrupted = { progressState = SavingsProgressState.INTERRUPTED },
                 onGiveUp = { app.showSheet(Sheet.ForceTransfer) },
-                onUnavailable = {
-                    app.toast(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.lightning__close_error),
-                        description = context.getString(R.string.lightning__close_error_msg),
-                    )
-                    onTransferUnavailable()
-                },
             )
         }
     }
@@ -106,7 +98,7 @@ fun SavingsProgressScreen(
             is SavingsSwapResult.Failure -> {
                 app.toast(
                     type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.common__error),
+                    title = resources.getString(R.string.common__error),
                     description = result.reason,
                 )
                 onTransferUnavailable()
@@ -124,14 +116,12 @@ fun SavingsProgressScreen(
 }
 
 /** Legacy path: cooperatively close the selected channel(s), retrying on failure. */
-@Suppress("MagicNumber", "LongParameterList")
 private suspend fun runChannelClose(
     transfer: TransferViewModel,
     wallet: WalletViewModel,
     onSuccess: () -> Unit,
     onInterrupted: () -> Unit,
     onGiveUp: () -> Unit,
-    onUnavailable: () -> Unit,
 ) {
     val channelsFailedToCoopClose = transfer.closeSelectedChannels()
 
@@ -142,28 +132,19 @@ private suspend fun runChannelClose(
         return
     }
 
-    // Check if any channels can be retried (filter out trusted peers)
-    val (_, nonTrustedChannels) = transfer.separateTrustedChannels(channelsFailedToCoopClose)
-
-    if (nonTrustedChannels.isEmpty()) {
-        // All channels are trusted peers - show error and navigate back immediately
-        onUnavailable()
-    } else {
-        transfer.startCoopCloseRetries(
-            channels = nonTrustedChannels,
-            onGiveUp = onGiveUp,
-            onTransferUnavailable = onUnavailable,
-        )
-        delay(2500)
-        onInterrupted()
-    }
+    transfer.startCoopCloseRetries(
+        channels = channelsFailedToCoopClose,
+        onGiveUp = onGiveUp,
+    )
+    delay(2500)
+    onInterrupted()
 }
 
 @Composable
 private fun Content(
     progressState: SavingsProgressState,
-    onContinueClick: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onContinueClick: () -> Unit = {},
 ) {
     val inProgress = progressState == SavingsProgressState.PROGRESS
     val showAnimation = inProgress || progressState == SavingsProgressState.SETTLING

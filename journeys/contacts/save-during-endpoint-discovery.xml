@@ -1,0 +1,18 @@
+<journey name="save contact during endpoint discovery">
+  <description>
+    Requires a disposable authenticated Bitkit identity and an unsaved peer with a readable profile.
+    Delay only the peer's public payment-endpoint lookup after its profile has loaded; leave contact
+    writes available. The native component tests provide deterministic held-read coverage. A complete
+    service journey needs a compatible homeserver fault fixture and must be reported unrun without it.
+    No payment is sent. Opening the saved contact confirms the contact record, not payment-link readiness.
+    iOS titles this screen Contact Saved; Android titles it Contact.
+  </description>
+  <actions>
+    <action>Open Contacts and add the unsaved peer by its Pubky key</action>
+    <action>While payment-endpoint discovery is delayed, verify the peer profile and Save button appear without waiting for the endpoint response</action>
+    <action>Verify Pay is absent until a payable endpoint has been confirmed</action>
+    <action>Tap Save once and verify the saved contact details show the peer after the contact write succeeds</action>
+    <action>Return to Contacts and verify the peer appears only once</action>
+    <action>Restore endpoint access, reopen the saved contact and retry Pay if needed; do not send a payment or assume the saved confirmation means the link is ready</action>
+  </actions>
+</journey>

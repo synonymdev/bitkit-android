@@ -1,0 +1,26 @@
+<journey name="retry original dialog style">
+  <description>
+    Both steps of Retry original payment on Payment Pending use the app's dialog: a title in the
+    Title style on the Gray5 surface, text-style Cancel and confirm buttons, the recipient under a
+    "To" label, the amount block as on Send review with its fiat line above the sats, and a fee field
+    labelled "Set Custom Fee" with the ₿ / vbyte unit inside the field.
+
+    Precondition: an onboarded funded dev wallet with Payment Pending showing "Retry original
+    payment" for an on-chain send whose broadcast timed out. To get there, start an on-chain send to
+    any regtest address and run `adb shell cmd connectivity airplane-mode enable` right after the
+    swipe; turn airplane mode off again once Payment Pending shows the retry button. PIN for
+    payments may be on or off; the journey stops before authorizing.
+
+    Android only: iOS shows the same two steps as native alerts.
+  </description>
+  <actions>
+    <action>Tap Retry original payment</action>
+    <action>Verify from a screenshot that the dialog's title reads "Retry original payment" in the Title style, the description sits below it, "TO" labels the recipient address, and the amount shows the fiat line above the sats with space between it and the address</action>
+    <action>Verify the fee field is labelled "SET CUSTOM FEE", is prefilled with the original fee rate, and shows "₿ / vbyte" inside the field at its end</action>
+    <action>Clear the fee field and enter 1000; verify the error "Enter a valid positive fee rate in sat/vB." appears under the field and Continue is greyed out and does nothing when tapped</action>
+    <action>Clear the fee field and enter the original fee rate; verify the error disappears and Continue is enabled</action>
+    <action>Tap Continue</action>
+    <action>Verify from a screenshot that the approval step shows the same title, "TO" with the recipient, the amount block, "SPEED AND FEE" with the mining fee in sats and the fee rate below it, and the buttons Cancel and Authorize retry</action>
+    <action>Tap Cancel and verify Payment Pending still shows "Retry original payment"</action>
+  </actions>
+</journey>

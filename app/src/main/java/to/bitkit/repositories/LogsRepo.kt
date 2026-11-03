@@ -64,7 +64,6 @@ class LogsRepo @Inject constructor(
     }
 
     /** Lists log files sorted by newest first */
-    @Suppress("NestedBlockDepth")
     suspend fun getLogs(): Result<List<LogFile>> = withContext(bgDispatcher) {
         runCatching {
             val logDir = Env.logDir
@@ -161,7 +160,6 @@ class LogsRepo @Inject constructor(
             nodeId = state.nodeId,
             lifecycle = state.nodeLifecycleState.supportName(),
             isSyncingWallet = state.isSyncingWallet,
-            isGeoBlocked = state.isGeoBlocked,
             batterySettings = context.batterySettingsSnapshot(),
             lastSuccessfulSyncAt = state.lastSuccessfulSyncAt?.toString(),
             lastSyncError = state.lastSyncError?.javaClass?.simpleName,
@@ -326,7 +324,6 @@ private data class SupportSnapshot(
     val nodeId: String,
     val lifecycle: String,
     val isSyncingWallet: Boolean,
-    val isGeoBlocked: Boolean,
     val batterySettings: BatterySettingsSnapshot,
     val lastSuccessfulSyncAt: String?,
     val lastSyncError: String?,

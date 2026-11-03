@@ -1,0 +1,122 @@
+package to.bitkit.ui.sheets
+
+import android.content.Context
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.ComposeNavigator
+import androidx.navigation.compose.composable
+import androidx.navigation.createGraph
+import androidx.test.core.app.ApplicationProvider
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import to.bitkit.ui.navigateTo
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+@Config(sdk = [34])
+@RunWith(RobolectricTestRunner::class)
+class SendSheetNavigationTest {
+    @Test
+    fun `recovery pin holds review only until returning to pending`() {
+        val pending = SendRoute.Pending(paymentHash = "payment", amount = 1000, walletId = "wallet0")
+        val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+            navigatorProvider.addNavigator(ComposeNavigator())
+            graph = createGraph(startDestination = pending) {
+                composable<SendRoute.Pending> {}
+                composable<SendRoute.Confirm> {}
+                composable<SendRoute.PinCheck> {}
+                composable<SendRoute.RecoveryPinCheck> {}
+                composable<SendRoute.HardwareSign> {}
+            }
+        }
+        val reviewRoutes = listOf(
+            SendRoute.RecoveryPinCheck,
+            SendRoute.Confirm,
+            SendRoute.PinCheck,
+            SendRoute.HardwareSign,
+        )
+        for (route in reviewRoutes) {
+            assertFalse(requireNotNull(navController.currentDestination).isPaymentReview())
+            navController.navigateTo(route)
+            assertTrue(requireNotNull(navController.currentDestination).isPaymentReview())
+            assertTrue(navController.popBackStack())
+            assertFalse(requireNotNull(navController.currentDestination).isPaymentReview())
+        }
+    }
+
+    @Test
+    fun `pending clears earlier send screens after prepared amount review`() {
+        for (start in listOf(SendRoute.Confirm, SendRoute.ContactSelect, SendRoute.Amount)) {
+            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+                navigatorProvider.addNavigator(ComposeNavigator())
+                graph = createGraph(startDestination = start) {
+                    composable<SendRoute.Confirm> {}
+                    composable<SendRoute.ContactSelect> {}
+                    composable<SendRoute.Amount> {}
+                    composable<SendRoute.Pending> {}
+                }
+            }
+            navController.navigateToSendAmount(start)
+            navController.navigateTo(SendRoute.Confirm)
+            navController.navigateToSendPending(
+                SendRoute.Pending(paymentHash = "payment", amount = 1000, walletId = "wallet0")
+            )
+            assertNull(navController.previousBackStackEntry)
+            navController.popBackStack()
+            assertNull(navController.currentDestination)
+        }
+    }
+
+    @Test
+    fun `amount review discards confirmations while contact payments retain their previous screen`() {
+        for (start in listOf(SendRoute.Confirm, SendRoute.Amount, SendRoute.ContactSelect)) {
+            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+                navigatorProvider.addNavigator(ComposeNavigator())
+                graph = createGraph(startDestination = start) {
+                    composable<SendRoute.Confirm> {}
+                    composable<SendRoute.ContactSelect> {}
+                    composable<SendRoute.Amount> {}
+                    composable<SendRoute.UsdtReview> {}
+                }
+            }
+            navController.navigateToSendAmount(start)
+            navController.navigateTo(SendRoute.UsdtReview)
+            assertTrue(navController.popBackStack())
+            assertTrue(navController.currentDestination?.hasRoute<SendRoute.Amount>() == true)
+            repeat(2) {
+                navController.navigateTo(SendRoute.Confirm)
+                navController.navigateToSendAmount(start)
+                assertTrue(navController.currentDestination?.hasRoute<SendRoute.Amount>() == true)
+            }
+            navController.popBackStack()
+            if (start == SendRoute.ContactSelect) {
+                assertTrue(navController.currentDestination?.hasRoute<SendRoute.ContactSelect>() == true)
+            } else {
+                assertNull(navController.currentDestination)
+            }
+        }
+    }
+
+    @Test
+    fun `amount fallback after a pay from switch clears the replacing confirmation`() {
+        val switches = listOf(SendRoute.UsdtReview to SendRoute.Confirm, SendRoute.Confirm to SendRoute.UsdtReview)
+        for ((start, switched) in switches) {
+            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+                navigatorProvider.addNavigator(ComposeNavigator())
+                graph = createGraph(startDestination = start) {
+                    composable<SendRoute.Confirm> {}
+                    composable<SendRoute.Amount> {}
+                    composable<SendRoute.UsdtReview> {}
+                }
+            }
+            navController.navigateTo(switched) { popUpTo(start) { inclusive = true } }
+            navController.navigateToSendAmount(start)
+            assertTrue(navController.currentDestination?.hasRoute<SendRoute.Amount>() == true)
+            navController.popBackStack()
+            assertNull(navController.currentDestination)
+        }
+    }
+}

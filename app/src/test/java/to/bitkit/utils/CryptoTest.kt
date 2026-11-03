@@ -1,22 +1,73 @@
 package to.bitkit.utils
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import to.bitkit.env.Env.derivationName
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toBase64
 import to.bitkit.ext.toHex
-import to.bitkit.fcm.EncryptedNotification
+import java.security.Provider
+import java.security.Security
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class CryptoTest {
+    private companion object {
+        const val BC = BouncyCastleProvider.PROVIDER_NAME
+    }
+
     private lateinit var sut: Crypto
+    private var baselineProvider: Provider? = null
+    private var baselinePosition = 0
 
     @Before
     fun setUp() {
+        baselineProvider = Security.getProvider(BC)
+        baselinePosition = positionOf(baselineProvider)
         sut = Crypto()
+    }
+
+    @After
+    fun tearDown() {
+        // The provider list is shared by the whole JVM, so restore BC as it was before this test started
+        Security.removeProvider(BC)
+        baselineProvider?.let { Security.insertProviderAt(it, baselinePosition) }
+    }
+
+    @Test
+    fun `it should preserve registered providers while using its own provider`() {
+        val originalProviders = Security.getProviders()
+        val originalProvider = Security.getProvider("BC")
+        val originalPosition = originalProviders.indexOf(originalProvider) + 1
+        val platformProvider = object : Provider("BC", 1.0, "Test platform provider") {}
+
+        try {
+            Security.removeProvider("BC")
+            Security.insertProviderAt(platformProvider, 1)
+            val providersBefore = Security.getProviders()
+
+            val crypto = Crypto()
+            val keys = crypto.generateKeyPair()
+            assertContentEquals(keys.publicKey, crypto.getPublicKey(keys.privateKey))
+            val secret = crypto.generateSharedSecret(keys.privateKey, keys.publicKey.toHex(), DERIVATION_NAME)
+            val plaintext = "Provider preservation".toByteArray()
+            val encrypted = crypto.encrypt(plaintext, secret)
+            assertContentEquals(plaintext, crypto.decrypt(encrypted, secret))
+
+            assertSame(platformProvider, Security.getProvider("BC"))
+            val providersAfter = Security.getProviders()
+            assertEquals(providersBefore.size, providersAfter.size)
+            providersBefore.forEachIndexed { index, provider -> assertSame(provider, providersAfter[index]) }
+        } finally {
+            Security.removeProvider("BC")
+            if (originalProvider != null) Security.insertProviderAt(originalProvider, originalPosition)
+        }
     }
 
     @Test
@@ -28,14 +79,12 @@ class CryptoTest {
         val sharedSecret = sut.generateSharedSecret(privateKey, publicKey.toHex())
         assertEquals(33, sharedSecret.size)
 
-        val sharedSecretHash = sut.generateSharedSecret(privateKey, publicKey.toHex(), derivationName)
+        val sharedSecretHash = sut.generateSharedSecret(privateKey, publicKey.toHex(), DERIVATION_NAME)
         assertEquals(32, sharedSecretHash.size)
     }
 
     @Test
     fun `it should decrypt payload it encrypted`() {
-        val derivationName = derivationName
-
         // Step 1: Client generates a key pair
         val clientKeys = sut.generateKeyPair()
         val clientPublicKey = clientKeys.publicKey
@@ -47,12 +96,14 @@ class CryptoTest {
         val serverPrivateKey = serverKeys.privateKey
 
         // Step 3: Server generates shared secret using its private key and client public key
-        val serverSecret = sut.generateSharedSecret(serverPrivateKey, clientPublicKey.toHex(), derivationName)
+        val serverSecret = sut.generateSharedSecret(serverPrivateKey, clientPublicKey.toHex(), DERIVATION_NAME)
 
         // Step 4: Server encrypts data using the shared secret
         val dataToEncrypt = "Hello from the server!"
         val encrypted = sut.encrypt(dataToEncrypt.toByteArray(), serverSecret)
-        val response = EncryptedNotification(
+        assertEquals(12, encrypted.iv.size)
+        assertEquals(16, encrypted.tag.size)
+        val response = EncryptedResponse(
             cipher = encrypted.cipher.toBase64(),
             iv = encrypted.iv.toHex(),
             tag = encrypted.tag.toHex(),
@@ -60,7 +111,7 @@ class CryptoTest {
         )
 
         // Step 5: Client generates its shared secret using its private key and server public key
-        val clientSecret = sut.generateSharedSecret(clientPrivateKey, response.publicKey, derivationName)
+        val clientSecret = sut.generateSharedSecret(clientPrivateKey, response.publicKey, DERIVATION_NAME)
 
         // Step 6: Client decrypts the payload using the shared secret
         val decrypted = sut.decrypt(
@@ -82,7 +133,6 @@ class CryptoTest {
     fun testBlocktankEncryptedPayload() {
         val clientPrivateKey = "cc74b1a4fdcd35916c766d3318c5a93b7e33a36ebeff0463128bf284975c2680"
         val serverPublicKey = "031e9923e689a181a803486b7d8c0d4a5aad360edb70c8bb413a98458d91652213"
-        val derivationName = "bitkit-notifications"
 
         @Suppress("MaxLineLength")
         val ciphertext = ("l2fInfyw64gO12odo8iipISloQJ45Rc4WjFmpe95brdaAMDq+T/L9ZChcmMCXnR0J6BXd8sSIJe/0bmby8uSZZJuVCzwF76XHfY5oq0Y1/hKzyZTn8nG3dqfiLHnAPy1tZFQfm5ALgjwWnViYJLXoGFpXs7kLMA=").fromBase64()
@@ -97,7 +147,7 @@ class CryptoTest {
         val sharedSecretOnServer = "028ce542975d6d7b2307c92e527d507b03ffb3d897eb2e0830d29f40d5efd80ee3".fromHex()
         assertEquals(sharedSecretOnServer.toHex(), sharedSecret.toHex())
 
-        val sharedHash = sut.generateSharedSecret(clientPrivateKey.fromHex(), serverPublicKey, derivationName)
+        val sharedHash = sut.generateSharedSecret(clientPrivateKey.fromHex(), serverPublicKey, DERIVATION_NAME)
         val sharedHashOnServer = "3a9d552cb16dfae40feae644254c4ca46cab82e570de5662aacc4018e33b609b".fromHex()
         assertEquals(sharedHashOnServer.toHex(), sharedHash.toHex())
 
@@ -106,5 +156,66 @@ class CryptoTest {
         val value = sut.decrypt(encryptedPayload, sharedHash)
 
         assertEquals(decryptedPayload, value.decodeToString())
+
+        val invalidTag = encryptedPayload.tag.copyOf().apply { this[0] = (this[0].toInt() xor 1).toByte() }
+        assertFailsWith<CryptoError.DecryptionFailed> {
+            sut.decrypt(encryptedPayload.copy(tag = invalidTag), sharedHash)
+        }
+        assertFailsWith<CryptoError.DecryptionFailed> {
+            sut.decrypt(encryptedPayload.copy(tag = encryptedPayload.tag.copyOf(15)), sharedHash)
+        }
     }
+
+    @Test
+    fun `installSecurityProvider adds BouncyCastle when no BC provider is registered`() {
+        Security.removeProvider(BC)
+
+        Crypto.installSecurityProvider()
+
+        assertIs<BouncyCastleProvider>(Security.getProvider(BC))
+    }
+
+    @Test
+    fun `installSecurityProvider replaces an outdated BC provider at position 1`() {
+        val outdated = OutdatedBcProvider()
+        Security.removeProvider(BC)
+        Security.addProvider(outdated)
+
+        Crypto.installSecurityProvider()
+
+        val installed = assertIs<BouncyCastleProvider>(Security.getProviders().first())
+        assertSame(installed, Security.getProvider(BC))
+        assertTrue(Security.getProviders().none { it === outdated })
+    }
+
+    @Test
+    fun `installSecurityProvider keeps the installed provider on later calls`() {
+        Security.removeProvider(BC)
+        Security.addProvider(OutdatedBcProvider())
+        Crypto.installSecurityProvider()
+        val installed = Security.getProviders().toList()
+
+        Crypto.installSecurityProvider()
+        Crypto()
+
+        assertSameProviders(installed, Security.getProviders().toList())
+    }
+
+    private fun positionOf(provider: Provider?) = Security.getProviders().indexOfFirst { it === provider } + 1
+
+    private fun assertSameProviders(expected: List<Provider>, actual: List<Provider>) {
+        assertEquals(expected.size, actual.size)
+        expected.zip(actual).forEach { (want, got) -> assertSame(want, got) }
+    }
+
+    private class OutdatedBcProvider : Provider(BC, 1.0, "Stub for the BC provider that Android registers")
 }
+
+private const val DERIVATION_NAME = "bitkit-notifications"
+
+private data class EncryptedResponse(
+    val cipher: String,
+    val iv: String,
+    val tag: String,
+    val publicKey: String,
+)

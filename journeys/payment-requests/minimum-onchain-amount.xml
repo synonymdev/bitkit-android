@@ -1,0 +1,18 @@
+<journey name="minimum onchain payment request amount">
+  <description>
+    Requires a linked fixture issuer that can send fixed BTC requests with fresh on-chain endpoints. Fund the payer with at least 100,000 spendable sats and leave it without Lightning channels. Checks minimum amount feedback, preparation cleanup, manual retry, and another payable request. Report this journey as blocked if the issuer fixture is unavailable.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled and the fixture issuer saved as a contact and linked as identities</action>
+    <action>Set the Bitcoin display unit to sats in Settings</action>
+    <action>Have the issuer send a new one-time BTC request for 100 sats with a future expiration and a fresh on-chain endpoint</action>
+    <action>Wait for incoming preparation to finish; verify the loading confirmation closes and the amount-too-low toast (id "PaymentRequestAmountTooLowToast") states the minimum is 547 sats without showing a balance shortfall</action>
+    <action>Open the pending-request bell (id "PaymentRequestsBell") and verify the unpaid request remains listed</action>
+    <action>Tap Pay for that request and verify the amount-too-low feedback appears again without leaving a loading confirmation</action>
+    <action>Have the issuer send a different request for 546 sats bound to a fresh unused on-chain endpoint</action>
+    <action>Verify the amount-too-low feedback states the minimum is 547 sats and the loading confirmation closes</action>
+    <action>Have the issuer send a different request for 547 sats bound to a fresh unused on-chain endpoint</action>
+    <action>Verify the new request reaches an enabled confirmation rather than waiting behind a rejected request</action>
+    <action>Dismiss the confirmation without paying and verify no new payment was created</action>
+  </actions>
+</journey>

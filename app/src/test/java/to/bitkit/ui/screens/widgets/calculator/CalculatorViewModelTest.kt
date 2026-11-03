@@ -20,7 +20,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.utils.ServiceError
+import to.bitkit.utils.AppError
 import java.math.BigDecimal
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -67,7 +67,7 @@ class CalculatorViewModelTest : BaseUnitTest() {
             )
         }
         whenever(currencyRepo.convertFiatToSats(any<BigDecimal>(), anyOrNull())).thenAnswer {
-            fiatToSatsValue ?: throw ServiceError.CurrencyRateUnavailable()
+            fiatToSatsValue ?: throw AppError("Currency rate unavailable")
         }
         whenever { widgetsRepo.updateCalculatorValues(any()) }.thenAnswer {
             updateCalculatorValuesCalls++
@@ -482,6 +482,63 @@ class CalculatorViewModelTest : BaseUnitTest() {
         assertEquals(100_000_000L, widgetsData.value.calculatorValues.satsValue)
         assertEquals(BitcoinDisplayUnit.CLASSIC, widgetsData.value.calculatorValues.displayUnit)
     }
+
+    // region regression pins
+
+    /** #637 — the calculator widget must ship a non-empty default input value. */
+    @Test
+    fun `default calculator values carry a preset btc input`() {
+        assertEquals("10000", CalculatorValues().btcValue)
+    }
+
+    /** #637 — a freshly added widget (defaults only) shows the preset amount and a hydrated fiat value. */
+    @Test
+    fun `fresh widget hydrates fiat from the default btc input`() = test {
+        widgetsData.value = WidgetsData()
+        sut = createSut()
+        advanceUntilIdle()
+
+        assertEquals("10000", sut.uiState.value.btcValue)
+        assertEquals("6.25", sut.uiState.value.fiatValue)
+    }
+
+    /** #621 — switching the active input must not clear either field. */
+    @Test
+    fun `selecting the fiat input preserves both values`() = test {
+        sut = createSut()
+        advanceUntilIdle()
+        sut.onBtcInputChanged("50000")
+        advanceUntilIdle()
+        val btcBefore = sut.uiState.value.btcValue
+        val fiatBefore = sut.uiState.value.fiatValue
+
+        sut.onInputSelected(MoneyType.FIAT)
+        advanceUntilIdle()
+
+        assertEquals(btcBefore, sut.uiState.value.btcValue)
+        assertEquals(fiatBefore, sut.uiState.value.fiatValue)
+        assertEquals(MoneyType.FIAT, sut.uiState.value.activeInput)
+    }
+
+    /** #621 — and the same when focus moves back to the bitcoin input. */
+    @Test
+    fun `selecting the bitcoin input preserves both values`() = test {
+        sut = createSut()
+        advanceUntilIdle()
+        sut.onFiatInputChanged("25.00")
+        advanceUntilIdle()
+        val btcBefore = sut.uiState.value.btcValue
+        val fiatBefore = sut.uiState.value.fiatValue
+
+        sut.onInputSelected(MoneyType.BITCOIN)
+        advanceUntilIdle()
+
+        assertEquals(btcBefore, sut.uiState.value.btcValue)
+        assertEquals(fiatBefore, sut.uiState.value.fiatValue)
+        assertEquals(MoneyType.BITCOIN, sut.uiState.value.activeInput)
+    }
+
+    // endregion
 
     private fun createSut() = CalculatorViewModel(
         widgetsRepo = widgetsRepo,

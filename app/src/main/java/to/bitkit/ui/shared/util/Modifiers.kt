@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativePaint
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.node.DrawModifierNode
@@ -134,7 +135,7 @@ private class OuterGlowNode(
             }
 
             // Draw blurred shadow behind the component
-            val frameworkPaint = paint.asFrameworkPaint()
+            val frameworkPaint = paint.nativePaint
             frameworkPaint.color = glowColor.copy(alpha = 0f).toArgb()
             frameworkPaint.setShadowLayer(
                 glowRadiusPx,

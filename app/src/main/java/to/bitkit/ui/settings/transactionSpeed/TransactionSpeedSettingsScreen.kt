@@ -94,7 +94,7 @@ private fun TransactionSpeedSettingsContent(
                 title = stringResource(R.string.settings__fee__custom__label),
                 subtitle = stringResource(R.string.settings__fee__custom__description),
                 iconRes = R.drawable.ic_settings,
-                iconTint = Colors.White,
+                iconTint = Colors.White64,
                 value = SettingsButtonValue.BooleanValue(selectedSpeed is TransactionSpeed.Custom),
                 onClick = onCustomFeeClick,
                 modifier = Modifier.testTag("custom")

@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -43,10 +45,13 @@ const val PIN_CHECK_RESULT_KEY = "PIN_CHECK_RESULT_KEY"
 fun SendPinCheckScreen(
     onBack: () -> Unit,
     onSuccess: () -> Unit,
+    @StringRes descriptionRes: Int = R.string.security__pin_send,
 ) {
     val app = appViewModel ?: return
     val attemptsRemaining by app.pinAttemptsRemaining.collectAsStateWithLifecycle()
     var pin by remember { mutableStateOf("") }
+
+    BackHandler(onBack = onBack)
 
     LaunchedEffect(pin) {
         if (pin.length == Env.PIN_LENGTH) {
@@ -59,6 +64,7 @@ fun SendPinCheckScreen(
 
     PinCheckContent(
         pin = pin,
+        description = stringResource(descriptionRes),
         attemptsRemaining = attemptsRemaining,
         onKeyPress = { key ->
             if (key == KEY_DELETE) {
@@ -77,6 +83,7 @@ fun SendPinCheckScreen(
 @Composable
 private fun PinCheckContent(
     pin: String,
+    description: String,
     attemptsRemaining: Int,
     onKeyPress: (String) -> Unit,
     onBack: () -> Unit,
@@ -100,7 +107,7 @@ private fun PinCheckContent(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             BodyM(
-                text = stringResource(R.string.security__pin_send),
+                text = description,
                 color = Colors.White64,
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
@@ -156,6 +163,7 @@ private fun Preview() {
         BottomSheetPreview {
             PinCheckContent(
                 pin = "123",
+                description = stringResource(R.string.security__pin_send),
                 attemptsRemaining = 8,
                 onKeyPress = {},
                 onBack = {},
@@ -173,6 +181,7 @@ private fun PreviewAttemptsLeft() {
         BottomSheetPreview {
             PinCheckContent(
                 pin = "123",
+                description = stringResource(R.string.security__pin_send),
                 attemptsRemaining = 3,
                 onKeyPress = {},
                 onBack = {},
@@ -190,6 +199,7 @@ private fun PreviewAttemptsLast() {
         BottomSheetPreview {
             PinCheckContent(
                 pin = "123",
+                description = stringResource(R.string.security__pin_send),
                 attemptsRemaining = 1,
                 onKeyPress = {},
                 onBack = {},

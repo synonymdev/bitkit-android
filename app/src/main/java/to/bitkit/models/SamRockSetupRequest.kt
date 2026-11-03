@@ -17,7 +17,6 @@ data class SamRockSetupRequest(
     val logDescription: String,
 ) {
     companion object {
-        @Suppress("CyclomaticComplexMethod", "ReturnCount")
         fun parse(raw: String): SamRockSetupRequest? {
             val setupUrl = raw.samRockSetupUrl()
             val uri = runCatching { URI(setupUrl.trim()) }.getOrNull() ?: return null
@@ -248,7 +247,6 @@ data class SamRockSetupRequest(
             return isIpv6Literal() && IPV6_PRIVATE_PREFIXES.any(::startsWith)
         }
 
-        @Suppress("MagicNumber")
         private fun String.isPrivateIpv4Literal(): Boolean {
             val octets = split(".").map {
                 it.toIntOrNull() ?: return false

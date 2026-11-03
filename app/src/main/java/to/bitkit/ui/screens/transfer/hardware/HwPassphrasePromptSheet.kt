@@ -55,17 +55,14 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
-/**
- * Asks for the passphrase of the hidden wallet a transfer signs from. Bitkit never stores it, so
- * it is needed again whenever the Trezor session that held it is gone. What is typed stays local
- * to this sheet and is handed straight to the device session.
- */
+/** Asks for the passphrase needed to reopen a hidden hardware wallet session. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HwPassphrasePromptSheet(
     isVerifying: Boolean,
     onSubmit: (String) -> Unit,
     onDismiss: () -> Unit,
+    bodyText: String = stringResource(R.string.hardware__passphrase_sign_text),
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -92,6 +89,7 @@ fun HwPassphrasePromptSheet(
     ) {
         Content(
             isVerifying = isVerifying,
+            bodyText = bodyText,
             onSubmit = {
                 dismissKeyboard()
                 onSubmit(it)
@@ -105,6 +103,7 @@ fun HwPassphrasePromptSheet(
 @Composable
 private fun Content(
     isVerifying: Boolean,
+    bodyText: String,
     modifier: Modifier = Modifier,
     onSubmit: (String) -> Unit = {},
     onCancel: () -> Unit = {},
@@ -135,7 +134,7 @@ private fun Content(
         ) {
             Display(stringResource(R.string.hardware__passphrase_header).withAccent(accentColor = Colors.Blue))
             VerticalSpacer(8.dp)
-            BodyM(stringResource(R.string.hardware__passphrase_sign_text), color = Colors.White64)
+            BodyM(bodyText, color = Colors.White64)
             VerticalSpacer(32.dp)
             TextInput(
                 value = passphrase,
@@ -200,6 +199,9 @@ private fun Content(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Content(isVerifying = false)
+        Content(
+            isVerifying = false,
+            bodyText = stringResource(R.string.hardware__passphrase_sign_text),
+        )
     }
 }

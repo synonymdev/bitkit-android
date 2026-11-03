@@ -1,0 +1,23 @@
+<journey name="paste seed fragment">
+  <description>Proves #896: pasting part of a recovery phrase on Restore wallet spreads the words across the word fields, and every field stays editable with Backspace. Precondition: a throwaway emulator with no wallet (Restore is reachable only from onboarding; never run this on a device holding a wallet you need). Both pasted strings are BIP39 test vectors — "abandon abandon abandon" and "abandon abandon abandon abandon abandon abandon abandon abandon about". Use only these public test words, never a real wallet's phrase. Neither string can be put on the clipboard from the device: `adb shell cmd clipboard` is not implemented on the emulator image and `adb shell input text` drops characters from long strings (journeys/README.md:78-79), and a dropped character would fail the word assertions as if the app were at fault. So the clipboard is filled on the host and the emulator picks it up over clipboard sharing (Extended controls > Settings > General > "Enable clipboard sharing", on by default). Each copy action below gives the host command and is followed by a check that the words arrived whole; a short or empty paste there is a clipboard setup failure, not an app failure — re-copy and repeat the paste before reading it as a journey failure. Paste is sent as KEYCODE_PASTE (279) to the focused field.</description>
+  <actions>
+    <action>On the host, run `printf 'abandon abandon abandon' | pbcopy` (macOS) or `printf 'abandon abandon abandon' | xclip -selection clipboard` (Linux), then give the emulator window focus by clicking its title bar — not the device screen — so the shared clipboard reaches the guest</action>
+    <action>Launch to.bitkit.dev on a device with no wallet</action>
+    <action>Verify that the terms screen shows "Check1" and "Check2", then tap "Continue" — the two blocks are text, not toggles, and "Continue" is always enabled</action>
+    <action>Tap "SkipIntro"</action>
+    <action>Tap "RestoreWallet"</action>
+    <action>Tap "MultipleDevices-button"</action>
+    <action>Verify that the Restore wallet screen shows word fields "Word-0" to "Word-11", all empty</action>
+    <action>Tap "Word-0" and run `adb shell input keyevent 279`</action>
+    <action>Verify that "Word-0", "Word-1" and "Word-2" each show "abandon", "Word-3" is empty and focused, and "Word-0" does not show the whole pasted text — if the three fields are empty, or any of them shows a truncated word such as "abandn", the clipboard did not cross from the host whole: re-copy on the host, tap "Word-0" and paste again, and report a clipboard setup failure rather than an app failure if it repeats</action>
+    <action>Run `adb shell input keyevent 67`</action>
+    <action>Verify that "Word-2" is focused and still shows "abandon"</action>
+    <action>Run `adb shell input keyevent 67`</action>
+    <action>Verify that "Word-2" shows "abando", so Backspace deletes from the end of the pasted word</action>
+    <action>Run `adb shell input text n`</action>
+    <action>On the host, run `printf 'abandon abandon abandon abandon abandon abandon abandon abandon about' | pbcopy` (or the `xclip -selection clipboard` equivalent) and give the emulator window focus by clicking its title bar, then tap "Word-3" and run `adb shell input keyevent 279` — the app stays on the Restore wallet screen throughout, so nothing has to be typed on the device</action>
+    <action>Verify that "Word-0" to "Word-10" show "abandon", "Word-11" shows "about", no word field is focused and the keyboard is hidden — a truncated word or a short field count here means the nine-word copy did not cross whole, which is a clipboard setup failure: re-copy on the host and repeat the paste before reading it as an app failure</action>
+    <action>Verify that "RestoreButton" is enabled, and do not tap it</action>
+    <action>Press the device back button</action>
+  </actions>
+</journey>

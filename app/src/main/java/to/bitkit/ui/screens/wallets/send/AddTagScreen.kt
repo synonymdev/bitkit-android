@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import to.bitkit.R
+import to.bitkit.ext.sanitizeTag
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
@@ -36,6 +37,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
@@ -128,8 +130,14 @@ fun AddTagContent(
                     imeAction = ImeAction.Done
                 ),
                 keyboardActions = KeyboardActions(onDone = {
-                    onTagConfirmed(uiState.tagInput)
+                    if (uiState.canSubmit) onTagConfirmed(uiState.confirmedTag)
                 }),
+                inputTransform = String::sanitizeTag,
+                colors = AppTextFieldDefaults.semiTransparent.copy(
+                    focusedContainerColor = Colors.White06,
+                    unfocusedContainerColor = Colors.White06,
+                    errorContainerColor = Colors.White06,
+                ),
                 modifier = Modifier
                     .focusRequester(focusRequester)
                     .fillMaxWidth()
@@ -140,8 +148,8 @@ fun AddTagContent(
             Spacer(modifier = Modifier.weight(1f))
             PrimaryButton(
                 text = stringResource(R.string.wallet__tags_add_button),
-                onClick = { onTagConfirmed(uiState.tagInput) },
-                enabled = uiState.tagInput.isNotBlank(),
+                onClick = { onTagConfirmed(uiState.confirmedTag) },
+                enabled = uiState.canSubmit,
                 modifier = Modifier
                     .then(addButtonTestTag?.let { Modifier.testTag(it) } ?: Modifier)
             )

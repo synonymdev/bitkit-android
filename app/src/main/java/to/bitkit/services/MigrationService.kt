@@ -10,6 +10,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ClosedChannelDetails
+import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -41,11 +43,12 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.TradingPair
-import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.json
 import to.bitkit.env.Env
+import to.bitkit.ext.nowMillis
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
@@ -72,10 +75,27 @@ import java.io.File
 import java.security.KeyStore
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
-@Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
+@Serializable
+internal data class RNMigrationRetrySchedule(val attemptedAtMillis: Long, val delayMillis: Long) {
+    companion object {
+        private val initialDelay = 1.minutes
+        private val maximumDelay = 1.hours
+
+        fun afterAttempt(previous: RNMigrationRetrySchedule?, now: Long): RNMigrationRetrySchedule {
+            val previousDelay = previous?.delayMillis?.coerceIn(0, maximumDelay.inWholeMilliseconds) ?: 0
+            val delay = (previousDelay * 2).coerceIn(initialDelay.inWholeMilliseconds, maximumDelay.inWholeMilliseconds)
+            return RNMigrationRetrySchedule(now, delay)
+        }
+    }
+
+    fun isDue(now: Long): Boolean = now < attemptedAtMillis || now - attemptedAtMillis >= delayMillis
+}
+
 @Singleton
-class MigrationService @Inject constructor(
+class MigrationService internal constructor(
     @ApplicationContext private val context: Context,
     private val keychain: Keychain,
     private val settingsStore: SettingsStore,
@@ -86,6 +106,7 @@ class MigrationService @Inject constructor(
     private val rnBackupClient: RNBackupClient,
     private val bip39Service: Bip39Service,
     private val transferDao: TransferDao,
+    private val rnMigrationStore: DataStore<Preferences>,
 ) {
     companion object {
         private const val TAG = "Migration"
@@ -95,6 +116,7 @@ class MigrationService @Inject constructor(
         private const val RN_PENDING_BLOCKTANK_ORDER_IDS_KEY = "rnPendingBlocktankOrderIds"
         private const val RN_PENDING_PAID_ORDERS_KEY = "rnPendingPaidOrders"
         private const val RN_PENDING_METADATA_KEY = "rnPendingMetadata"
+        private const val RN_RETRY_SCHEDULE_KEY = "rnMigrationRetrySchedule"
         private const val RN_PENDING_TRANSFERS_KEY = "rnPendingTransfers"
         private const val RN_PENDING_BOOSTS_KEY = "rnPendingBoosts"
         private const val RN_CHANNEL_RECOVERY_CHECKED_KEY = "rnChannelRecoveryChecked"
@@ -106,9 +128,42 @@ class MigrationService @Inject constructor(
         private const val MS_PER_SEC = 1000
         private const val GCM_IV_LENGTH = 12
         private const val GCM_TAG_LENGTH = 128
+
+        /** Max Blocktank order IDs fetched per request. */
+        internal const val BLOCKTANK_ORDER_IDS_CHUNK = 20
     }
 
-    private val rnMigrationStore = context.rnMigrationDataStore
+    private val channelMigrationMutex = Mutex()
+
+    suspend fun lockChannelMigration() = channelMigrationMutex.lock()
+
+    fun unlockChannelMigration() = channelMigrationMutex.unlock()
+
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        keychain: Keychain,
+        settingsStore: SettingsStore,
+        widgetsStore: WidgetsStore,
+        cacheStore: CacheStore,
+        activityRepo: ActivityRepo,
+        coreService: CoreService,
+        rnBackupClient: RNBackupClient,
+        bip39Service: Bip39Service,
+        transferDao: TransferDao,
+    ) : this(
+        context,
+        keychain,
+        settingsStore,
+        widgetsStore,
+        cacheStore,
+        activityRepo,
+        coreService,
+        rnBackupClient,
+        bip39Service,
+        transferDao,
+        context.rnMigrationDataStore,
+    )
 
     private inline fun <reified T> decodeBackupData(data: ByteArray): T {
         val jsonElement = json.parseToJsonElement(String(data))
@@ -150,9 +205,6 @@ class MigrationService @Inject constructor(
     private var pendingRemoteMetadata: RNMetadata? = null
 
     @Volatile
-    private var pendingRemotePaidOrders: Map<String, String>? = null
-
-    @Volatile
     private var pendingBlocktankOrderIds: List<String>? = null
 
     suspend fun needsPostMigrationSync(): Boolean {
@@ -185,10 +237,10 @@ class MigrationService @Inject constructor(
 
         prefs[stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY)]?.let { data ->
             runCatching {
-                pendingRemotePaidOrders = json.decodeFromString<Map<String, String>>(data)
-                Logger.debug("Loaded ${pendingRemotePaidOrders?.size} pending paid orders", context = TAG)
+                val paidOrderIds = json.decodeFromString<Map<String, String>>(data).keys
+                pendingBlocktankOrderIds = (pendingBlocktankOrderIds.orEmpty() + paidOrderIds).distinct()
             }.onFailure {
-                Logger.warn("Failed to load pending paid orders", it, context = TAG)
+                Logger.warn("Failed to load pending paid order IDs", it, context = TAG)
             }
         }
 
@@ -229,14 +281,6 @@ class MigrationService @Inject constructor(
         Logger.info("Persisted ${orderIds.size} Blocktank order IDs for retry", context = TAG)
     }
 
-    private suspend fun persistPaidOrders(paidOrders: Map<String, String>) {
-        val key = stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY)
-        rnMigrationStore.edit {
-            it[key] = json.encodeToString(paidOrders)
-        }
-        pendingRemotePaidOrders = paidOrders
-    }
-
     private suspend fun persistMetadata(metadata: RNMetadata) {
         val key = stringPreferencesKey(RN_PENDING_METADATA_KEY)
         rnMigrationStore.edit {
@@ -270,7 +314,6 @@ class MigrationService @Inject constructor(
             it.remove(stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY))
         }
         pendingBlocktankOrderIds = null
-        pendingRemotePaidOrders = null
         Logger.debug("Cleared persisted Blocktank data", context = TAG)
     }
 
@@ -303,25 +346,61 @@ class MigrationService @Inject constructor(
             it.remove(stringPreferencesKey(RN_PENDING_BLOCKTANK_ORDER_IDS_KEY))
             it.remove(stringPreferencesKey(RN_PENDING_PAID_ORDERS_KEY))
             it.remove(stringPreferencesKey(RN_PENDING_METADATA_KEY))
+            it.remove(stringPreferencesKey(RN_RETRY_SCHEDULE_KEY))
             it.remove(stringPreferencesKey(RN_PENDING_TRANSFERS_KEY))
             it.remove(stringPreferencesKey(RN_PENDING_BOOSTS_KEY))
         }
         pendingBlocktankOrderIds = null
-        pendingRemotePaidOrders = null
         pendingRemoteMetadata = null
         pendingRemoteTransfers = null
         pendingRemoteBoosts = null
         Logger.debug("Cleared all persisted migration data", context = TAG)
     }
 
+    suspend fun hasPendingMigrationRetries(): Boolean {
+        loadPersistedMigrationData()
+        return !canCleanupAfterMigration
+    }
+
+    suspend fun shouldRetryPendingMigrationData(now: Long = nowMillis()): Boolean {
+        if (!hasPendingMigrationRetries()) return false
+        return readRetrySchedule()?.isDue(now) ?: true
+    }
+
+    private suspend fun readRetrySchedule(): RNMigrationRetrySchedule? {
+        val data = rnMigrationStore.data.first()[stringPreferencesKey(RN_RETRY_SCHEDULE_KEY)] ?: return null
+        return runCatching { json.decodeFromString<RNMigrationRetrySchedule>(data) }
+            .onFailure { Logger.warn("Failed to load migration retry schedule", it, context = TAG) }
+            .getOrNull()
+    }
+
+    private suspend fun recordPendingMigrationRetry() {
+        val schedule = if (canCleanupAfterMigration) {
+            null
+        } else {
+            RNMigrationRetrySchedule.afterAttempt(
+                readRetrySchedule(),
+                nowMillis(),
+            )
+        }
+        rnMigrationStore.edit {
+            val key = stringPreferencesKey(RN_RETRY_SCHEDULE_KEY)
+            if (schedule == null) it.remove(key) else it[key] = json.encodeToString(schedule)
+        }
+    }
+
     val canCleanupAfterMigration: Boolean
         get() {
-            if (pendingBlocktankOrderIds != null || pendingRemotePaidOrders != null) {
+            if (pendingBlocktankOrderIds != null) {
                 Logger.debug("Cannot cleanup: pending Blocktank data exists", context = TAG)
                 return false
             }
             if (pendingRemoteMetadata != null || pendingRemoteTransfers != null || pendingRemoteBoosts != null) {
                 Logger.debug("Cannot cleanup: pending metadata/transfers/boosts exists", context = TAG)
+                return false
+            }
+            if (peekPendingChannelMigration() != null) {
+                Logger.debug("Cannot cleanup: pending channel migration exists", context = TAG)
                 return false
             }
             return true
@@ -820,7 +899,7 @@ class MigrationService @Inject constructor(
         }
     }
 
-    private fun extractRNBlocktank(mmkvData: Map<String, String>): Pair<List<String>, Map<String, String>>? {
+    private fun extractRNBlocktank(mmkvData: Map<String, String>): List<String>? {
         val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
         return runCatching {
@@ -832,7 +911,6 @@ class MigrationService @Inject constructor(
 
             val blocktankData = json.parseToJsonElement(blocktankJsonString).jsonObject
             val orderIds = mutableListOf<String>()
-            val paidOrdersMap = mutableMapOf<String, String>()
 
             blocktankData["orders"]?.jsonArray?.forEach { orderElement ->
                 orderElement.jsonObject["id"]?.jsonPrimitive?.content?.let { id ->
@@ -840,29 +918,21 @@ class MigrationService @Inject constructor(
                 }
             }
 
-            blocktankData["paidOrders"]?.jsonObject?.forEach { (orderId, txIdElement) ->
-                val txId = txIdElement.jsonPrimitive.content
-                paidOrdersMap[orderId] = txId
+            blocktankData["paidOrders"]?.jsonObject?.keys?.forEach { orderId ->
                 if (orderId !in orderIds) {
                     orderIds.add(orderId)
                 }
             }
 
-            if (orderIds.isEmpty() && paidOrdersMap.isEmpty()) {
-                return@runCatching null
-            }
+            if (orderIds.isEmpty()) return@runCatching null
 
-            Logger.info(
-                "Extracted ${orderIds.size} order IDs and ${paidOrdersMap.size} paid orders from local blocktank",
-                context = TAG,
-            )
-            Pair(orderIds, paidOrdersMap)
+            Logger.info("Extracted ${orderIds.size} order IDs from local blocktank", context = TAG)
+            orderIds
         }.onFailure {
             Logger.error("Failed to decode RN blocktank: $it", it, context = TAG)
         }.getOrNull()
     }
 
-    @Suppress("NestedBlockDepth")
     private fun extractRNClosedChannels(mmkvData: Map<String, String>): List<RNChannel>? {
         val rootJson = mmkvData[MMKV_ROOT] ?: return null
 
@@ -893,7 +963,6 @@ class MigrationService @Inject constructor(
         }.getOrNull()
     }
 
-    @Suppress("CyclomaticComplexMethod")
     private suspend fun applyRNSettings(settings: RNSettings) {
         settingsStore.update { current ->
             current.copy(
@@ -930,20 +999,19 @@ class MigrationService @Inject constructor(
                 isBiometricEnabled = settings.biometrics ?: current.isBiometricEnabled,
                 quickPayIntroSeen = settings.quickpayIntroSeen ?: current.quickPayIntroSeen,
                 hasSeenShopIntro = settings.shopIntroSeen ?: current.hasSeenShopIntro,
-                hasSeenTransferIntro = settings.transferIntroSeen ?: current.hasSeenTransferIntro,
-                hasSeenSpendingIntro = settings.spendingIntroSeen ?: current.hasSeenSpendingIntro,
                 hasSeenSavingsIntro = settings.savingsIntroSeen ?: current.hasSeenSavingsIntro,
             )
         }
     }
 
-    private suspend fun applyRNMetadata(metadata: RNMetadata) {
+    private suspend fun applyRNMetadata(metadata: RNMetadata): Set<String> {
         val tags = metadata.tags
         if (tags.isNullOrEmpty()) {
             Logger.debug("No tags to apply in metadata", context = TAG)
-            return
+            return emptySet()
         }
 
+        val unapplied = mutableSetOf<String>()
         var applied = 0
         val allTags = tags.mapNotNull { (activityId, tagList) ->
             val onchain = activityRepo.getOnchainActivityByTxId(activityId)
@@ -964,7 +1032,8 @@ class MigrationService @Inject constructor(
                         tags = tagList,
                     )
                 } else {
-                    Logger.warn("Activity not found for tags: id=$activityId", context = TAG)
+                    Logger.warn("Activity not found for tags: id='$activityId'", context = TAG)
+                    unapplied += activityId
                     null
                 }
             }
@@ -975,9 +1044,11 @@ class MigrationService @Inject constructor(
                 coreService.activity.upsertTags(allTags)
                 Logger.info("Applied $applied/${tags.size} pending tags", context = TAG)
             }.onFailure {
-                Logger.error("Failed to upsert tags: $it", it, context = TAG)
+                Logger.error("Failed to upsert tags", it, context = TAG)
+                unapplied += tags.keys
             }
         }
+        return unapplied
     }
 
     private suspend fun applyRNTodos(todos: RNTodos) {
@@ -1107,7 +1178,6 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private suspend fun applyRNWidgetPreferences(widgetOptions: Map<String, ByteArray>) {
         widgetOptions["price"]?.let { priceData ->
             runCatching {
@@ -1249,36 +1319,20 @@ class MigrationService @Inject constructor(
             applyRNTodos(todos)
         }
 
-        extractRNBlocktank(mmkvData)?.let { (orderIds, paidOrders) ->
-            applyRNBlocktank(orderIds, paidOrders)
+        extractRNBlocktank(mmkvData)?.let { orderIds ->
+            applyRNBlocktank(orderIds)
         }
     }
 
-    private suspend fun applyRNBlocktank(orderIds: List<String>, paidOrders: Map<String, String>) {
+    private suspend fun applyRNBlocktank(orderIds: List<String>) {
         if (orderIds.isEmpty()) return
 
-        paidOrders.forEach { (orderId, txId) ->
-            cacheStore.addPaidOrder(orderId, txId)
-        }
-
         runCatching {
-            val fetchedOrders = coreService.blocktank.orders(
-                orderIds = orderIds,
-                filter = null,
-                refresh = true,
-            )
-            if (fetchedOrders.isNotEmpty()) {
-                coreService.blocktank.upsertOrderList(fetchedOrders)
-                if (paidOrders.isNotEmpty()) {
-                    createTransfersForPaidOrders(paidOrders, fetchedOrders)
-                }
-            }
+            val fetchedOrders = fetchOrdersChunked(orderIds)
+            if (fetchedOrders.isNotEmpty()) coreService.blocktank.upsertOrderList(fetchedOrders)
         }.onFailure { e ->
             Logger.warn("Failed to fetch and upsert local Blocktank orders", e, context = TAG)
             persistBlocktankOrderIds(orderIds)
-            if (paidOrders.isNotEmpty()) {
-                persistPaidOrders(paidOrders)
-            }
             Logger.info("Stored ${orderIds.size} Blocktank order IDs for retry", context = TAG)
         }
     }
@@ -1361,10 +1415,7 @@ class MigrationService @Inject constructor(
             val peers = json.decodeFromString<List<BackupPeerEntry>>(String(data))
             if (peers.isEmpty()) return emptyList()
 
-            val trustedIds = Env.trustedLnPeers.map { it.nodeId }.toSet()
-            val uris = peers
-                .filter { it.pubKey !in trustedIds }
-                .map { "${it.pubKey}@${it.address}:${it.port}" }
+            val uris = peers.map { "${it.pubKey}@${it.address}:${it.port}" }
 
             Logger.info("Migration peer recovery: fetched ${uris.size} peer(s) from remote backup", context = TAG)
             uris
@@ -1388,7 +1439,7 @@ class MigrationService @Inject constructor(
 
         val orderIds = transfers.mapNotNull { it.lspOrderId }
         val orders = runCatching {
-            coreService.blocktank.orders(orderIds = orderIds, filter = null, refresh = true)
+            fetchOrdersChunked(orderIds)
         }.onFailure {
             Logger.warn("Cannot cleanup migration transfers: Blocktank unreachable", it, context = TAG)
         }.getOrNull() ?: return
@@ -1409,6 +1460,16 @@ class MigrationService @Inject constructor(
         rnMigrationStore.edit { it[key] = "true" }
         Logger.info("Migration transfer cleanup completed", context = TAG)
     }
+
+    private suspend fun fetchOrdersChunked(orderIds: List<String>): List<IBtOrder> =
+        fetchOrdersInChunks(orderIds) { chunk, refreshActive ->
+            coreService.blocktank.orders(
+                orderIds = chunk,
+                filter = null,
+                refresh = true,
+                refreshActive = refreshActive,
+            )
+        }
 
     suspend fun cleanupAfterMigration() {
         clearPersistedMigrationData()
@@ -1599,70 +1660,20 @@ class MigrationService @Inject constructor(
         runCatching {
             val backup = decodeBackupData<RNRemoteBlocktankBackup>(data)
 
-            backup.paidOrders?.let { paidOrders ->
-                paidOrders.forEach { (orderId, txId) ->
-                    cacheStore.addPaidOrder(orderId, txId)
-                }
-                if (paidOrders.isNotEmpty()) {
-                    pendingRemotePaidOrders = paidOrders
-                }
+            val paidOrderIds = backup.paidOrders?.keys.orEmpty()
+            if (paidOrderIds.isNotEmpty()) {
+                persistBlocktankOrderIds((pendingBlocktankOrderIds.orEmpty() + paidOrderIds).distinct())
             }
         }.onFailure { e ->
             Logger.warn("Failed to decode RN remote blocktank backup: $e", context = TAG)
         }
     }
 
-    private suspend fun createTransfersForPaidOrders(
-        paidOrdersMap: Map<String, String>,
-        orders: List<com.synonym.bitkitcore.IBtOrder>,
-    ) {
-        val now = System.currentTimeMillis() / 1000
-        val transfers = paidOrdersMap.mapNotNull { (orderId, txId) ->
-            val order = orders.find { it.id == orderId }
-            when {
-                order == null -> {
-                    Logger.warn("Paid order $orderId not found in fetched orders", context = TAG)
-                    null
-                }
-
-                order.state2 != BtOrderState2.PAID -> {
-                    Logger.debug(
-                        "Skipping order $orderId with state ${order.state2} for transfer creation",
-                        context = TAG,
-                    )
-                    null
-                }
-
-                else -> TransferEntity(
-                    id = txId,
-                    type = TransferType.TO_SPENDING,
-                    amountSats = order.clientBalanceSat.toLong(),
-                    channelId = null,
-                    fundingTxId = null,
-                    lspOrderId = orderId,
-                    isSettled = false,
-                    createdAt = now,
-                    settledAt = null,
-                )
-            }
-        }
-
-        if (transfers.isNotEmpty()) {
-            runCatching {
-                transferDao.upsert(transfers)
-                Logger.info("Created ${transfers.size} transfers for paid Blocktank orders", context = TAG)
-            }.onFailure { e ->
-                Logger.error("Failed to create transfers for paid orders: $e", context = TAG)
-            }
-        }
-    }
-
-    @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     suspend fun reapplyMetadataAfterSync() {
         loadPersistedMigrationData()
 
         // Handle MMKV (local) migration data - apply activities FIRST, then metadata
-        if (hasRNMmkvData()) {
+        if (needsPostMigrationSync() && hasRNMmkvData()) {
             loadRNMmkvData()?.let { mmkvData ->
                 extractRNActivities(mmkvData)?.let { activities ->
                     Logger.info("Applying ${activities.size} MMKV activities", context = TAG)
@@ -1672,18 +1683,12 @@ class MigrationService @Inject constructor(
                 extractRNWalletBackup(mmkvData)?.let { (transfers, boosts) ->
                     if (transfers.isNotEmpty()) {
                         Logger.info("Applying ${transfers.size} local transfer markers", context = TAG)
-                        applyRemoteTransfers(transfers)
+                        persistTransfers(pendingRemoteTransfers.orEmpty() + transfers)
                     }
                     if (boosts.isNotEmpty()) {
                         Logger.info("Applying ${boosts.size} local boost markers", context = TAG)
-                        applyBoostTransactions(boosts)
+                        persistBoosts(pendingRemoteBoosts.orEmpty() + boosts)
                     }
-                }
-
-                // Apply MMKV metadata (tags) AFTER activities are created
-                extractRNMetadata(mmkvData)?.let { metadata ->
-                    Logger.info("Applying MMKV metadata (tags: ${metadata.tags?.size})", context = TAG)
-                    applyRNMetadata(metadata)
                 }
             }
         }
@@ -1697,91 +1702,61 @@ class MigrationService @Inject constructor(
 
         pendingRemoteTransfers?.let { transfers ->
             Logger.info("Applying ${transfers.size} remote transfer markers", context = TAG)
-            applyRemoteTransfers(transfers)
-            clearPersistedTransfers()
+            val remaining = applyRemoteTransfers(transfers)
+            if (remaining.isEmpty()) clearPersistedTransfers() else persistTransfers(remaining)
         }
 
         pendingRemoteBoosts?.let { boosts ->
             Logger.info("Applying ${boosts.size} remote boost markers", context = TAG)
-            applyBoostTransactions(boosts)
-            clearPersistedBoosts()
+            val remaining = applyBoostTransactions(boosts)
+            if (remaining.isEmpty()) clearPersistedBoosts() else persistBoosts(remaining)
         }
 
         // Apply remote metadata (tags) AFTER activities are created
         pendingRemoteMetadata?.let { metadata ->
             Logger.info("Applying remote metadata (tags: ${metadata.tags?.size})", context = TAG)
-            applyRNMetadata(metadata)
-            clearPersistedMetadata()
+            val remaining = unappliedRnMetadata(metadata, applyRNMetadata(metadata))
+            if (remaining == null) {
+                clearPersistedMetadata()
+            } else {
+                persistMetadata(remaining)
+            }
         }
 
-        var blocktankFetchFailed = false
         pendingBlocktankOrderIds?.let { orderIds ->
             if (orderIds.isNotEmpty()) {
                 Logger.info("Retrying ${orderIds.size} pending Blocktank orders", context = TAG)
                 runCatching {
-                    val fetchedOrders = coreService.blocktank.orders(
-                        orderIds = orderIds,
-                        filter = null,
-                        refresh = true,
-                    )
+                    val fetchedOrders = fetchOrdersChunked(orderIds)
                     if (fetchedOrders.isNotEmpty()) {
                         coreService.blocktank.upsertOrderList(fetchedOrders)
                         Logger.info("Upserted ${fetchedOrders.size} Blocktank orders after retry", context = TAG)
-
-                        pendingRemotePaidOrders?.let { paidOrders ->
-                            if (paidOrders.isNotEmpty()) {
-                                Logger.info("Creating transfers for ${paidOrders.size} paid orders", context = TAG)
-                                createTransfersForPaidOrders(paidOrders, fetchedOrders)
-                            }
-                        }
                     }
                     pendingBlocktankOrderIds = null
-                    pendingRemotePaidOrders = null
                     clearPersistedBlocktankData()
                 }.onFailure { e ->
                     Logger.warn("Still unable to fetch Blocktank orders", e, context = TAG)
-                    blocktankFetchFailed = true
                 }
             }
         }
 
-        if (!blocktankFetchFailed) {
-            pendingRemotePaidOrders?.let { paidOrders ->
-                applyRemotePaidOrders(paidOrders)
-                pendingRemotePaidOrders = null
-            }
-        }
+        recordPendingMigrationRetry()
     }
 
-    private suspend fun applyRemotePaidOrders(paidOrders: Map<String, String>) {
-        if (paidOrders.isEmpty()) return
-
-        val orderIds = paidOrders.keys.toList()
-
-        runCatching {
-            val fetchedOrders = coreService.blocktank.orders(
-                orderIds = orderIds,
-                filter = null,
-                refresh = true,
-            )
-            if (fetchedOrders.isNotEmpty()) {
-                coreService.blocktank.upsertOrderList(fetchedOrders)
-                createTransfersForPaidOrders(paidOrders, fetchedOrders)
-            }
-        }.onFailure { e ->
-            Logger.warn("Failed to fetch and process remote paid orders: $e", context = TAG)
-        }
-    }
-
-    private suspend fun applyRemoteTransfers(transfers: Map<String, String>) {
+    internal suspend fun applyRemoteTransfers(transfers: Map<String, String>): Map<String, String> {
+        val remaining = transfers.toMutableMap()
         transfers.forEach { (txId, channelId) ->
             val onchain = activityRepo.getOnchainActivityByTxId(txId) ?: return@forEach
             val updated = onchain.copy(isTransfer = true, channelId = channelId)
-            activityRepo.updateActivity(onchain.id, Activity.Onchain(updated))
+            activityRepo.updateActivity(onchain.id, Activity.Onchain(updated)).onSuccess {
+                remaining.remove(txId)
+            }
         }
+        return remaining
     }
 
-    private suspend fun applyBoostTransactions(boosts: Map<String, String>) {
+    internal suspend fun applyBoostTransactions(boosts: Map<String, String>): Map<String, String> {
+        val remaining = boosts.toMutableMap()
         var applied = 0
 
         boosts.forEach { (oldTxId, newTxId) ->
@@ -1805,9 +1780,10 @@ class MigrationService @Inject constructor(
                     boostTxIds = newOnchain.boostTxIds.filter { it != oldTxId },
                 )
 
-                runCatching {
-                    activityRepo.updateActivity(parentOnchain.id, Activity.Onchain(parentOnchain))
-                    activityRepo.updateActivity(updatedNewOnchain.id, Activity.Onchain(updatedNewOnchain))
+                runSuspendCatching {
+                    activityRepo.updateActivity(parentOnchain.id, Activity.Onchain(parentOnchain)).getOrThrow()
+                    activityRepo.updateActivity(updatedNewOnchain.id, Activity.Onchain(updatedNewOnchain)).getOrThrow()
+                    remaining.remove(oldTxId)
                     applied++
                 }.onFailure { e ->
                     Logger.error(
@@ -1827,8 +1803,9 @@ class MigrationService @Inject constructor(
                     boostTxIds = updatedBoostTxIds,
                 )
 
-                runCatching {
-                    activityRepo.updateActivity(updated.id, Activity.Onchain(updated))
+                runSuspendCatching {
+                    activityRepo.updateActivity(updated.id, Activity.Onchain(updated)).getOrThrow()
+                    remaining.remove(oldTxId)
                     applied++
                 }.onFailure { e ->
                     Logger.error("Failed to apply RBF boost for tx $newTxId: $e", e, context = TAG)
@@ -1837,6 +1814,7 @@ class MigrationService @Inject constructor(
         }
 
         Logger.info("Applied $applied/${boosts.size} boost markers", context = TAG)
+        return remaining
     }
 
     private suspend fun applyBoostedParents(boostedParents: List<String>, txId: String) {
@@ -1862,7 +1840,6 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("CyclomaticComplexMethod", "LongMethod")
     private suspend fun updateOnchainActivityMetadata(
         item: RNActivityItem,
         onchain: OnchainActivity,
@@ -1941,7 +1918,6 @@ class MigrationService @Inject constructor(
         return if (wasUpdated) updated else null
     }
 
-    @Suppress("CyclomaticComplexMethod", "NestedBlockDepth", "LongMethod")
     private suspend fun applyOnchainMetadata(items: List<RNActivityItem>) {
         val onchainItems = items.filter { it.activityType == "onchain" }
         var updatedCount = 0
@@ -2019,7 +1995,6 @@ class MigrationService @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth")
     private fun convertRNWidgetPreferences(
         widgetsDict: JsonObject?,
     ): Map<String, ByteArray> {
@@ -2169,12 +2144,19 @@ data class RNSettings(
     val hideBalanceOnOpen: Boolean? = null,
     val quickpayIntroSeen: Boolean? = null,
     val shopIntroSeen: Boolean? = null,
-    val transferIntroSeen: Boolean? = null,
-    val spendingIntroSeen: Boolean? = null,
     val savingsIntroSeen: Boolean? = null,
     val selectedAddressType: String? = null,
     val addressTypesToMonitor: List<String>? = null,
 )
+
+internal suspend fun fetchOrdersInChunks(
+    orderIds: List<String>,
+    fetch: suspend (chunk: List<String>, refreshActive: Boolean) -> List<IBtOrder>,
+): List<IBtOrder> = buildList {
+    orderIds.chunked(MigrationService.BLOCKTANK_ORDER_IDS_CHUNK).forEachIndexed { index, chunk ->
+        addAll(fetch(chunk, index == 0))
+    }
+}
 
 private fun String.normalizeRNAddressType(): String = when (this) {
     "p2tr" -> "taproot"
@@ -2189,6 +2171,13 @@ data class RNMetadata(
     val tags: Map<String, List<String>>? = null,
     val lastUsedTags: List<String>? = null,
 )
+
+internal fun unappliedRnMetadata(metadata: RNMetadata, unappliedActivityIds: Set<String>): RNMetadata? {
+    if (unappliedActivityIds.isEmpty()) return null
+    val remaining = metadata.tags.orEmpty().filterKeys { it in unappliedActivityIds }
+    if (remaining.isEmpty()) return null
+    return metadata.copy(tags = remaining, lastUsedTags = null)
+}
 
 @Serializable
 data class RNTodos(

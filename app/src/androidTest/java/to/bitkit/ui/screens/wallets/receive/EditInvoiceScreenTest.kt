@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets.receive
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onChild
 import androidx.compose.ui.test.onNodeWithTag
 import kotlinx.collections.immutable.persistentListOf
 import org.junit.Rule
@@ -19,12 +20,12 @@ class EditInvoiceScreenTest {
 
     @Test
     fun paymentRequestActionAndShowQrAreVisibleWhenEligible() {
+        val amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub())
         composeTestRule.setContent {
             AppThemeSurface {
                 EditInvoiceContent(
-                    amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),
+                    amountInputViewModel = amountInputViewModel,
                     noteText = "Dinner",
-                    isSoftKeyboardVisible = false,
                     keyboardVisible = false,
                     tags = persistentListOf(),
                     onBack = {},
@@ -40,18 +41,18 @@ class EditInvoiceScreenTest {
         }
 
         composeTestRule.onNodeWithTag("PaymentRequestSendButton").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestSendButton").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("PaymentRequestSendButton").onChild().assertIsNotEnabled()
         composeTestRule.onNodeWithTag("ShowQrReceive").assertIsDisplayed()
     }
 
     @Test
     fun paymentRequestActionIsHiddenWithoutEligibleContact() {
+        val amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub())
         composeTestRule.setContent {
             AppThemeSurface {
                 EditInvoiceContent(
-                    amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),
+                    amountInputViewModel = amountInputViewModel,
                     noteText = "",
-                    isSoftKeyboardVisible = false,
                     keyboardVisible = false,
                     tags = persistentListOf(),
                     onBack = {},

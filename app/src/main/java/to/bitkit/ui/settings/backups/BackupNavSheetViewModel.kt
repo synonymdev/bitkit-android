@@ -27,7 +27,6 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class BackupNavSheetViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -94,7 +93,6 @@ class BackupNavSheetViewModel @Inject constructor(
         }
     }
 
-    @Suppress("MagicNumber")
     fun onRevealMnemonic() {
         viewModelScope.launch {
             delay(200) // Small delay for better UX

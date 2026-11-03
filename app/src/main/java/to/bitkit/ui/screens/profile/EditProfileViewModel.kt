@@ -2,6 +2,8 @@ package to.bitkit.ui.screens.profile
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,13 +12,16 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -26,7 +31,6 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
 @HiltViewModel
 class EditProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -52,11 +56,13 @@ class EditProfileViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             val profile = pubkyRepo.profile.value
             val publicKey = pubkyRepo.publicKey.value.orEmpty()
+            val removal = if (pubkyRepo.isRingAdoptedIdentity()) ProfileRemoval.UNLINK else ProfileRemoval.DELETE
             if (profile != null) {
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         publicKey = publicKey,
+                        removal = removal,
                         name = profile.name,
                         bio = profile.bio,
                         links = profile.links.map { link ->
@@ -67,7 +73,7 @@ class EditProfileViewModel @Inject constructor(
                     )
                 }
             } else {
-                _uiState.update { it.copy(isLoading = false, publicKey = publicKey) }
+                _uiState.update { it.copy(isLoading = false, publicKey = publicKey, removal = removal) }
             }
         }
     }
@@ -155,6 +161,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     fun showDeleteConfirmation() {
+        if (_uiState.value.isBusy) return
         _uiState.update { it.copy(showDeleteDialog = true) }
     }
 
@@ -164,6 +171,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun save() {
         viewModelScope.launch {
+            if (_uiState.value.isBusy) return@launch
             _uiState.update { it.copy(isSaving = true) }
             val state = _uiState.value
 
@@ -226,66 +234,61 @@ class EditProfileViewModel @Inject constructor(
 
     fun disconnectProfile() {
         viewModelScope.launch {
-            _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
-            val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-            if (cleanupResult.isFailure) {
-                val error = requireNotNull(cleanupResult.exceptionOrNull()) {
-                    "Private Paykit cleanup failed without an error"
+            if (_uiState.value.isBusy) return@launch
+            _uiState.update { it.copy(showDeleteFailureDialog = false, isDeleting = true) }
+            try {
+                val result = runSuspendCatching {
+                    withContext(NonCancellable) {
+                        if (!pubkyRepo.forgetUnrestoredIdentity().getOrThrow()) {
+                            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG).getOrThrow()
+                            pubkyRepo.signOut().getOrThrow()
+                        }
+                        privatePaykitRepo.closeAndClear()
+                    }
                 }
-                _uiState.update { it.copy(isSaving = false) }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__disconnect_error),
-                    description = error.message,
-                )
-                return@launch
-            }
-
-            val result = pubkyRepo.signOut()
-            privatePaykitRepo.closeAndClear()
-            if (result.isSuccess) {
-                _uiState.update { it.copy(isSaving = false) }
-                _effects.emit(EditProfileEffect.DisconnectSuccess)
-            } else {
-                val error = requireNotNull(result.exceptionOrNull()) { "Disconnect failed without an error" }
-                Logger.error("Failed to disconnect profile", error, context = TAG)
-                _uiState.update { it.copy(isSaving = false) }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__disconnect_error),
-                    description = error.message,
-                )
+                if (result.isSuccess) {
+                    _effects.emit(EditProfileEffect.DisconnectSuccess)
+                } else {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__disconnect_error),
+                        description = result.exceptionOrNull()?.message,
+                    )
+                }
+            } finally {
+                _uiState.update { it.copy(isDeleting = false) }
             }
         }
     }
 
     private suspend fun attemptDeleteProfile() {
+        if (_uiState.value.isBusy) return
         _uiState.update {
             it.copy(
                 showDeleteDialog = false,
                 showDeleteFailureDialog = false,
-                isSaving = true,
+                isDeleting = true,
             )
         }
-        privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-        val result = pubkyRepo.deleteProfileWithSessionRetry()
-        if (result.isSuccess) {
-            privatePaykitRepo.closeAndClear()
-            _uiState.update { it.copy(isSaving = false) }
-            ToastEventBus.send(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.profile__delete_success),
-            )
-            _effects.emit(EditProfileEffect.DeleteSuccess)
-        } else {
-            val error = requireNotNull(result.exceptionOrNull()) { "Profile delete failed without an error" }
-            Logger.error("Failed to delete profile", error, context = TAG)
-            _uiState.update {
-                it.copy(
-                    isSaving = false,
-                    showDeleteFailureDialog = true,
+        try {
+            privatePaykitRepo.beginProfileDeletion()
+            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG, deferAppSync = true)
+            val result = pubkyRepo.deleteProfileWithSessionRetry()
+            if (result.isSuccess) {
+                privatePaykitRepo.closeAndClear()
+                ToastEventBus.send(
+                    type = Toast.ToastType.SUCCESS,
+                    title = context.getString(_uiState.value.removal.successToast),
                 )
+                _effects.emit(EditProfileEffect.DeleteSuccess)
+            } else {
+                val error = requireNotNull(result.exceptionOrNull()) { "Profile delete failed without an error" }
+                Logger.error("Failed to delete profile", error, context = TAG)
+                _uiState.update { it.copy(showDeleteFailureDialog = true) }
             }
+        } finally {
+            withContext(NonCancellable) { privatePaykitRepo.endProfileDeletion() }
+            _uiState.update { it.copy(isDeleting = false) }
         }
     }
 }
@@ -293,6 +296,7 @@ class EditProfileViewModel @Inject constructor(
 @Stable
 data class EditProfileUiState(
     val publicKey: String = "",
+    val removal: ProfileRemoval = ProfileRemoval.DELETE,
     val name: String = "",
     val bio: String = "",
     val links: ImmutableList<ProfileEditLink> = persistentListOf(),
@@ -302,11 +306,49 @@ data class EditProfileUiState(
     val newAvatarBytes: ByteArray? = null,
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
+    val isDeleting: Boolean = false,
     val showDeleteDialog: Boolean = false,
     val showDeleteFailureDialog: Boolean = false,
     val showAddLinkSheet: Boolean = false,
     val showAddTagSheet: Boolean = false,
-)
+) {
+    val isBusy: Boolean get() = isSaving || isDeleting
+}
+
+enum class ProfileRemoval(
+    @StringRes val sectionLabel: Int,
+    @StringRes val label: Int,
+    @DrawableRes val icon: Int,
+    @StringRes val confirmTitle: Int,
+    @StringRes val confirmDescription: Int,
+    @StringRes val confirmText: Int,
+    @StringRes val errorTitle: Int,
+    @StringRes val errorDescription: Int,
+    @StringRes val successToast: Int,
+) {
+    DELETE(
+        sectionLabel = R.string.profile__edit_delete_section,
+        label = R.string.profile__delete_profile,
+        icon = R.drawable.ic_trash,
+        confirmTitle = R.string.profile__delete_confirm_title,
+        confirmDescription = R.string.profile__delete_confirm_description,
+        confirmText = R.string.common__delete_yes,
+        errorTitle = R.string.profile__delete_error_title,
+        errorDescription = R.string.profile__delete_error_description,
+        successToast = R.string.profile__delete_success,
+    ),
+    UNLINK(
+        sectionLabel = R.string.profile__edit_unlink_section,
+        label = R.string.profile__unlink_pubky,
+        icon = R.drawable.ic_link,
+        confirmTitle = R.string.profile__unlink_confirm_title,
+        confirmDescription = R.string.profile__unlink_confirm_description,
+        confirmText = R.string.profile__unlink_confirm,
+        errorTitle = R.string.profile__unlink_error_title,
+        errorDescription = R.string.profile__unlink_error_description,
+        successToast = R.string.profile__unlink_success,
+    ),
+}
 
 sealed interface EditProfileEffect {
     data object SaveSuccess : EditProfileEffect

@@ -1,0 +1,45 @@
+<journey name="confirm mnemonic clear wrong word">
+  <description>
+    Proves that a wrong word on Confirm Recovery Phrase can be cleared by tapping either the red word
+    or its own chip, that nothing else can be selected while a wrong word is shown, and that correct
+    words stay locked in. Follows the Figma note on 'Backup Recovery Phrase Incorrect'.
+    Precondition: onboarded dev wallet with PIN disabled (or a PIN you know), no BIP39 passphrase.
+    Stopping before Continue leaves the backupVerified setting unchanged.
+    The route reveals the recovery phrase. Run it only on a throwaway wallet, and never copy the words
+    into logs, reports or files; refer to them by position. "Word N" below means the Nth word shown on
+    the Your Recovery Phrase screen, and "chip for word N" means the shuffled button tagged
+    "Word-(that word)". Every slot carries the testTag "SelectedWord-N" whether filled or not, but the
+    row is only clickable while it shows a wrong word, so assert on the word's colour and on whether
+    the row reacts to a tap, not on the tag being present.
+  </description>
+  <actions>
+    <action>Tap the menu icon (testTag "HeaderMenu")</action>
+    <action>Tap "Settings" (testTag "DrawerSettings")</action>
+    <action>Tap the Security tab (testTag "Tab-security")</action>
+    <action>Tap "Back up your wallet" (testTag "BackupWallet")</action>
+    <action>Tap "Tap To Reveal" (testTag "TapToReveal") and note the 12 words by position only</action>
+    <action>Tap "Continue" (testTag "ContinueShowMnemonic")</action>
+    <action>Verify that "Confirm Recovery Phrase" (testTag "backup_confirm_mnemonic_screen") is visible with 12 word chips and empty slots 1 to 12</action>
+    <action>Tap the chip for word 1</action>
+    <action>Verify that slot 1 (testTag "SelectedWord-1") shows word 1 in green</action>
+    <action>Tap the chip for word 3</action>
+    <action>Verify that slot 2 (testTag "SelectedWord-2") shows word 3 in red</action>
+    <action>Tap the chip for word 2</action>
+    <action>Verify that slot 2 still shows word 3 in red and the chip for word 2 is not selected</action>
+    <action>Tap the red word in slot 2 (testTag "SelectedWord-2")</action>
+    <action>Verify that slot 2 is empty and the chip for word 3 is back in its unselected style</action>
+    <action>Tap the chip for word 3</action>
+    <action>Verify that slot 2 shows word 3 in red</action>
+    <action>Tap the chip for word 3 again</action>
+    <action>Verify that slot 2 is empty and the chip for word 3 is back in its unselected style</action>
+    <action>Tap the green word in slot 1 (testTag "SelectedWord-1")</action>
+    <action>Verify that slot 1 still shows word 1 in green</action>
+    <action>Tap the chip for word 1</action>
+    <action>Verify that slot 1 still shows word 1 in green and slot 2 is still empty</action>
+    <action>Tap the chips for words 2 to 11 in order</action>
+    <action>Verify that slots 1 to 11 show green words and "Continue" (testTag "ContinueConfirmMnemonic") is disabled</action>
+    <action>Tap the chip for word 12</action>
+    <action>Verify that all 12 slots are green and "Continue" (testTag "ContinueConfirmMnemonic") is enabled</action>
+    <action>Press the system back button until the home screen (testTag "HomeScrollView") is visible, without tapping Continue</action>
+  </actions>
+</journey>

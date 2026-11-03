@@ -1,9 +1,12 @@
 package to.bitkit.ext
 
 import android.icu.text.MessageFormat
+import to.bitkit.env.Defaults
 import to.bitkit.utils.Logger
 
 private const val TAG = "StringExt"
+
+private val LINE_BREAK_REGEX = Regex("\\r\\n|[\\n\\u000B\\u000C\\r\\u0085\\u2028\\u2029]")
 
 fun String.ellipsisMiddle(totalLength: Int): String {
     return when {
@@ -26,6 +29,13 @@ fun String.truncate(length: Int): String {
 fun String.removeSpaces() = this.filterNot { it.isWhitespace() }
 
 fun String.spaceToNewline() = replace(" ", "\n")
+
+fun String.sanitizeTag(): String = replace(LINE_BREAK_REGEX, " ")
+    .take(Defaults.TAG_MAX_LENGTH)
+    .dropDanglingSurrogate()
+
+private fun String.dropDanglingSurrogate(): String =
+    if (isNotEmpty() && last().isHighSurrogate()) dropLast(1) else this
 
 fun String.toLongOrDefault(defaultValue: Long = 0): Long = toLongOrNull() ?: defaultValue
 

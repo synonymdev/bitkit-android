@@ -1,0 +1,26 @@
+<journey name="connections during restart">
+  <description>
+    Lightning Connections stays usable while the node restarts after the app returns from the
+    background. Every return stops the node after a 5 second debounce and starts it again, and the
+    stop alone can take tens of seconds on a device. During that window the screen keeps the last
+    known channel list with an inline "Syncing..." row under the balances, instead of hiding behind
+    the full-screen "Connecting to network" view, and a channel row still opens its detail screen.
+    Precondition: onboarded dev debug build (`to.bitkit.dev`) with at least one open Lightning
+    channel (Manual Setup to the staging LSP node). The syncing row has no test tag of its own in
+    `android layout`; find it by its text. The lifecycle lines are only in the app log or logcat
+    ("Stopping node…", "Node stopped", "Starting node…", "Node started"). On the emulator the stop
+    takes about 6 to 12 seconds and the start about 1, so dump the layout right after the relaunch.
+    Android only: iOS shows this screen without a node-running gate and has no syncing row.
+  </description>
+  <actions>
+    <action>Open the drawer with `HeaderMenu`, tap `DrawerSettings`, tap `Tab-advanced`, then tap `Channels`</action>
+    <action>Verify the "Lightning Connections" screen shows "Connection 1" under "OPEN CONNECTIONS" and no "Syncing..." row</action>
+    <action>Run `adb shell input keyevent KEYCODE_HOME`, wait 9 seconds so the debounced background stop begins, then run `adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity`</action>
+    <action>Verify at once that the "Lightning Connections" screen is visible with the "Syncing..." row under the balances and "Connection 1" still listed, and that no "Connecting to network" text is on screen</action>
+    <action>Tap the `Channel` row while "Syncing..." is still visible</action>
+    <action>Verify the "Connection 1" detail screen opens with its STATUS and BALANCE sections, and no "channel not found" toast</action>
+    <action>Tap `NavigationBack`</action>
+    <action>Verify within 60 seconds that the "Syncing..." row is gone and "Connection 1" is still listed</action>
+    <action>Verify logcat for `to.bitkit.dev` contains "Stopping node…", then "Node stopped", then "Node started" after the relaunch</action>
+  </actions>
+</journey>

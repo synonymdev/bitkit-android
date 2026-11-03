@@ -73,7 +73,7 @@ fun CenteredProfileHeader(
         )
 
         if (bio.isNotEmpty()) {
-            VerticalSpacer(8.dp)
+            VerticalSpacer(16.dp)
             BodyM(
                 text = bio,
                 color = Colors.White64,

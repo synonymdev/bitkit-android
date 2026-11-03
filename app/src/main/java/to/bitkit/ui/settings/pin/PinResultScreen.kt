@@ -2,7 +2,6 @@ package to.bitkit.ui.settings.pin
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
@@ -100,14 +100,17 @@ private fun PinResultContent(
             Spacer(modifier = Modifier.weight(1f))
 
             Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickableAlpha { onTogglePinForPayments() }
                     .testTag("ToggleBioForPayments")
             ) {
-                BodyMSB(text = stringResource(R.string.security__success_payments))
+                BodyMSB(
+                    text = stringResource(R.string.security__success_payments),
+                    modifier = Modifier.weight(1f)
+                )
+                HorizontalSpacer(8.dp)
                 Switch(
                     checked = pinForPayments,
                     onCheckedChange = null, // handled by parent
@@ -148,6 +151,19 @@ private fun PreviewNoBio() {
         PinResultContent(
             bio = false,
             pinForPayments = false,
+            onTogglePinForPayments = {},
+            onContinueClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, locale = "es", fontScale = 1.3f)
+@Composable
+private fun PreviewLongLabel() {
+    AppThemeSurface {
+        PinResultContent(
+            bio = true,
+            pinForPayments = true,
             onTogglePinForPayments = {},
             onContinueClick = {},
         )

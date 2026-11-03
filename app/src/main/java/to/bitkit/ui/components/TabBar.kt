@@ -23,9 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -51,8 +48,8 @@ import to.bitkit.ui.shared.util.primaryButtonStyle
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-private val iconToTextGap = 4.dp
-private val iconSize = 20.dp
+private val iconToTextGap = 6.dp
+private val iconSize = 16.dp
 
 const val TAB_BAR_HEIGHT = 56
 const val TAB_BAR_PADDING_BOTTOM = 8
@@ -136,7 +133,7 @@ fun BoxScope.TabBar(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.ArrowUpward,
+                                painter = painterResource(R.drawable.ic_sent),
                                 contentDescription = stringResource(R.string.wallet__send),
                                 modifier = Modifier.size(iconSize)
                             )
@@ -157,7 +154,7 @@ fun BoxScope.TabBar(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.ArrowDownward,
+                                painter = painterResource(R.drawable.ic_received),
                                 contentDescription = stringResource(R.string.wallet__receive),
                                 modifier = Modifier.size(iconSize)
                             )
@@ -197,7 +194,7 @@ fun BoxScope.TabBar(
                         painter = painterResource(R.drawable.ic_scan),
                         contentDescription = stringResource(R.string.wallet__recipient_scan),
                         tint = Colors.Gray1,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             }

@@ -5,7 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.Toast
@@ -16,7 +16,7 @@ import to.bitkit.viewmodels.AppViewModel
 fun IsOnlineTracker(
     app: AppViewModel,
 ) {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val connectivityState by app.isOnline.collectAsStateWithLifecycle(initialValue = ConnectivityState.CONNECTED)
 
     val (isFirstEmission, setIsFirstEmission) = remember { mutableStateOf(true) }
@@ -32,16 +32,16 @@ fun IsOnlineTracker(
             ConnectivityState.CONNECTED -> {
                 app.toast(
                     type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.other__connection_back_title),
-                    description = context.getString(R.string.other__connection_back_msg),
+                    title = resources.getString(R.string.other__connection_back_title),
+                    description = resources.getString(R.string.other__connection_back_msg),
                 )
             }
 
             ConnectivityState.DISCONNECTED -> {
                 app.toast(
                     type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.other__connection_issue),
-                    description = context.getString(R.string.other__connection_issue_explain),
+                    title = resources.getString(R.string.other__connection_issue),
+                    description = resources.getString(R.string.other__connection_issue_explain),
                 )
             }
 

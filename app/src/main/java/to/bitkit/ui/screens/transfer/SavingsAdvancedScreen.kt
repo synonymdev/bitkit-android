@@ -184,7 +184,7 @@ fun ChannelItem(
                     color = Colors.White64,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
-                MoneySSB(sats = balanceSat.toLong())
+                MoneySSB(sats = balanceSat.toLong(), showSymbol = true)
             }
             Switch(
                 checked = iSelected,

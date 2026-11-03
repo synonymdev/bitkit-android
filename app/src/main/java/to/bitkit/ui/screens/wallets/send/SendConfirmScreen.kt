@@ -2,10 +2,11 @@ package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,16 +37,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,8 +61,12 @@ import to.bitkit.R
 import to.bitkit.ext.commentAllowed
 import to.bitkit.ext.formatInvoiceExpiryRelative
 import to.bitkit.models.FeeRate
+import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.PaykitPaymentRequest
+import to.bitkit.ui.components.AddTagButton
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodySSB
@@ -74,11 +75,15 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
-import to.bitkit.ui.components.NumberPadActionButton
+import to.bitkit.ui.components.PaykitAmountDisplay
+import to.bitkit.ui.components.PaymentRequestInvoiceNote
+import to.bitkit.ui.components.PaymentRequestSummary
+import to.bitkit.ui.components.PaymentReviewIllustration
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SendCell
 import to.bitkit.ui.components.SwipeToConfirm
+import to.bitkit.ui.components.SyncNodeVariant
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.TextInput
@@ -89,7 +94,6 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
-import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -104,22 +108,22 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
-private const val SWIPE_ROTATION_DEGREES = 14f
-private const val IMAGE_FILL_PERCENTAGE = 0.8f
-const val HARDWARE_SIGN_CANCELLED_RESULT_KEY = "HARDWARE_SIGN_CANCELLED_RESULT_KEY"
+const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
 
-@Suppress("MagicNumber")
 @Composable
 fun SendConfirmScreen(
     savedStateHandle: SavedStateHandle,
     uiState: SendUiState,
     isNodeRunning: Boolean,
+    canAutoStart: Boolean,
     canGoBack: Boolean,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
     onNavigateToPin: () -> Unit,
+    syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
+    autoPayContent: (@Composable () -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var isLoading by rememberSaveable { mutableStateOf(false) }
@@ -139,15 +143,18 @@ fun SendConfirmScreen(
             .collect { isSuccess ->
                 isLoading = isSuccess
                 savedStateHandle.remove<Boolean>(PIN_CHECK_RESULT_KEY)
+                if (!isSuccess && uiState.isInitialSubscriptionPayment) {
+                    currentOnEvent(SendEvent.CancelInitialSubscriptionPayment)
+                }
             }
     }
 
     LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow(HARDWARE_SIGN_CANCELLED_RESULT_KEY, false)
+        savedStateHandle.getStateFlow(SEND_CONFIRM_RESET_RESULT_KEY, false)
             .collect {
                 if (!it) return@collect
                 isLoading = false
-                savedStateHandle.remove<Boolean>(HARDWARE_SIGN_CANCELLED_RESULT_KEY)
+                savedStateHandle.remove<Boolean>(SEND_CONFIRM_RESET_RESULT_KEY)
             }
     }
 
@@ -166,12 +173,25 @@ fun SendConfirmScreen(
         }
     }
 
-    Content(
+    LaunchedEffect(uiState.initialSubscriptionPaymentAutoStartPending, canAutoStart) {
+        if (!uiState.initialSubscriptionPaymentAutoStartPending || !canAutoStart) return@LaunchedEffect
+        isLoading = uiState.shouldAutomaticallyPay
+        currentOnEvent(SendEvent.StartInitialSubscriptionPayment)
+    }
+
+    LaunchedEffect(uiState.initialSubscriptionPaymentNeedsConfirmation) {
+        if (uiState.initialSubscriptionPaymentNeedsConfirmation) isLoading = false
+    }
+
+    SendConfirmContent(
         uiState = uiState,
         isNodeRunning = isNodeRunning,
         isLoading = isLoading,
         showBiometrics = showBiometrics,
         canGoBack = canGoBack,
+        syncNodeVariant = syncNodeVariant,
+        initialShowDetails = uiState.isInitialSubscriptionPayment && !uiState.shouldAutomaticallyPay,
+        autoPayContent = autoPayContent,
         onBack = onBack,
         onEvent = onEvent,
         onClickAddTag = onClickAddTag,
@@ -197,14 +217,33 @@ fun SendConfirmScreen(
 }
 
 @Composable
-private fun Content(
+internal fun AutoPayOverlay(
+    isVisible: Boolean,
+    content: (@Composable () -> Unit)?,
+) {
+    if (!isVisible || content == null) return
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .gradientBackground()
+    ) {
+        content()
+    }
+}
+
+@Composable
+internal fun SendConfirmContent(
     uiState: SendUiState,
     isNodeRunning: Boolean,
     isLoading: Boolean,
     showBiometrics: Boolean,
     modifier: Modifier = Modifier,
+    preparingRequest: PaykitPaymentRequest? = null,
+    preparingContact: PubkyProfile? = null,
     canGoBack: Boolean = true,
     initialShowDetails: Boolean = false,
+    syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
+    autoPayContent: (@Composable () -> Unit)? = null,
     onBack: () -> Unit = {},
     onEvent: (SendEvent) -> Unit = {},
     onClickAddTag: () -> Unit = {},
@@ -213,31 +252,53 @@ private fun Content(
     onBiometricsSuccess: () -> Unit = {},
     onBiometricsFailure: () -> Unit = {},
 ) {
-    Box(modifier = modifier) {
+    val isPreparing = preparingRequest != null
+    val isAutomaticPaymentLoading = uiState.shouldAutomaticallyPay &&
+        (uiState.initialSubscriptionPaymentAutoStartPending || isLoading)
+    Box(
+        modifier = modifier.testTag(
+            if (isPreparing || uiState.isPaymentRequest) "PaymentRequestConfirm" else "SendConfirm",
+        )
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .gradientBackground()
+                .then(
+                    if (isPreparing || uiState.isPaymentRequest) {
+                        Modifier.background(Colors.Gray7)
+                    } else {
+                        Modifier.gradientBackground()
+                    }
+                )
                 .navigationBarsPadding()
         ) {
             val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
 
             SendContactTopBar(
                 titleText = when {
+                    isPreparing -> stringResource(R.string.wallet__payment_request)
+                    uiState.isInitialSubscriptionPayment -> stringResource(R.string.subscriptions__review_and_subscribe)
+                    uiState.isSubscriptionPayment -> stringResource(R.string.subscriptions__subscription)
                     uiState.isPaymentRequest -> stringResource(R.string.wallet__payment_request)
                     isLnurlPay -> stringResource(R.string.wallet__lnurl_p_title)
                     else -> stringResource(R.string.wallet__send_review)
                 },
-                contact = uiState.contactPaymentProfile,
+                contact = if (isPreparing) preparingContact else uiState.contactPaymentProfile,
                 onBack = onBack.takeIf { canGoBack },
             )
 
             Spacer(Modifier.height(16.dp))
 
-            if (isNodeRunning) {
+            if (!isPreparing && isAutomaticPaymentLoading) {
+                FillHeight()
+                GradientCircularProgressIndicator(modifier = Modifier.size(32.dp).align(Alignment.CenterHorizontally))
+                FillHeight()
+            } else if (isPreparing || isNodeRunning) {
                 ContentRunning(
                     uiState = uiState,
                     isLoading = isLoading,
+                    preparingRequest = preparingRequest,
+                    preparingContact = preparingContact,
                     initialShowDetails = initialShowDetails,
                     onEvent = onEvent,
                     onClickAddTag = onClickAddTag,
@@ -246,6 +307,7 @@ private fun Content(
                 )
             } else {
                 SyncNodeView(
+                    variant = syncNodeVariant,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
@@ -254,14 +316,16 @@ private fun Content(
             }
         }
 
-        if (showBiometrics) {
+        AutoPayOverlay(isVisible = !isPreparing && isAutomaticPaymentLoading, content = autoPayContent)
+
+        if (showBiometrics && !isPreparing) {
             BiometricsView(
                 onSuccess = onBiometricsSuccess,
                 onFailure = onBiometricsFailure,
             )
         }
 
-        uiState.showSanityWarningDialog?.let { dialog ->
+        uiState.showSanityWarningDialog?.takeUnless { isPreparing }?.let { dialog ->
             AppAlertDialog(
                 title = stringResource(R.string.common__are_you_sure),
                 text = stringResource(dialog.message),
@@ -270,7 +334,11 @@ private fun Content(
                 onConfirm = { onEvent(SendEvent.ConfirmAmountWarning(dialog)) },
                 onDismiss = {
                     onEvent(SendEvent.DismissAmountWarning)
-                    onBack()
+                    if (uiState.isInitialSubscriptionPayment) {
+                        onEvent(SendEvent.CancelInitialSubscriptionPayment)
+                    } else {
+                        onBack()
+                    }
                 },
                 modifier = Modifier
                     .semantics { testTagsAsResourceId = true }
@@ -281,83 +349,134 @@ private fun Content(
 }
 
 @Composable
+@Suppress("CyclomaticComplexMethod")
 private fun ContentRunning(
     uiState: SendUiState,
     isLoading: Boolean,
     modifier: Modifier = Modifier,
+    preparingRequest: PaykitPaymentRequest? = null,
+    preparingContact: PubkyProfile? = null,
     initialShowDetails: Boolean = false,
     onEvent: (SendEvent) -> Unit = {},
     onClickAddTag: () -> Unit = {},
     onClickTag: (String) -> Unit = {},
     onSwipeToConfirm: () -> Unit = {},
 ) {
-    var showDetails by rememberSaveable { mutableStateOf(initialShowDetails) }
+    var showDetails by rememberSaveable(initialShowDetails) { mutableStateOf(initialShowDetails) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
-    val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
+    val isPreparing = preparingRequest != null
+    val isLnurlPay = !isPreparing && uiState.lnurl is LnurlParams.LnurlPay
     val isHardwareFeeLoading = uiState.hardwareWalletId != null && uiState.onchainFeeUi.isLoading
 
-    val accentColor = when (uiState.payMethod) {
-        SendMethod.ONCHAIN -> Colors.Brand
-        SendMethod.LIGHTNING -> Colors.Purple
+    val accentColor = when {
+        preparingRequest != null -> preparingRequest.preparingAccentColor()
+        uiState.payMethod == SendMethod.LIGHTNING -> Colors.Purple
+        else -> Colors.Brand
     }
 
     Column(
         modifier = modifier
             .padding(horizontal = 16.dp)
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
     ) {
-        BalanceHeaderView(
-            sats = uiState.amount.toLong(),
-            useSwipeToHide = false,
-            onClick = { onEvent(SendEvent.BackToAmount) },
-            testTag = "ReviewAmount",
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("ReviewAmount")
-        )
-
-        VerticalSpacer(44.dp)
-
-        if (isLnurlPay) {
-            LnurlPayDetails(uiState = uiState, onEvent = onEvent)
-        } else if (showDetails) {
-            when (uiState.payMethod) {
-                SendMethod.ONCHAIN -> {
-                    OnChainDetails(
-                        uiState = uiState,
-                        interactionsEnabled = !isHardwareFeeLoading,
-                        onEvent = onEvent,
-                    )
-                    VerticalSpacer(16.dp)
-                    TagsSection(uiState, onClickTag, onClickAddTag)
-                }
-
-                SendMethod.LIGHTNING -> {
-                    LightningDetails(
-                        uiState = uiState,
-                        onEvent = onEvent,
-                        onClickTag = onClickTag,
-                        onClickAddTag = onClickAddTag,
-                    )
-                }
-            }
+        if (preparingRequest != null) {
+            Caption13Up(
+                text = stringResource(R.string.wallet__payment_request_requested_amount),
+                color = Colors.White64
+            )
+            VerticalSpacer(8.dp)
+        }
+        if (preparingRequest != null && preparingRequest.amount.asset != PaykitAsset.BTC) {
+            PaykitAmountDisplay(preparingRequest.amount)
         } else {
-            Image(
-                painter = painterResource(R.drawable.coin_stack_4),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
+            BalanceHeaderView(
+                sats = (preparingRequest?.amount?.atomic ?: uiState.amount).toLong(),
+                useSwipeToHide = false,
+                onClick = {
+                    if (!isPreparing && uiState.isAmountEditable) onEvent(SendEvent.BackToAmount)
+                },
+                testTag = "ReviewAmount",
                 modifier = Modifier
-                    .fillMaxWidth(IMAGE_FILL_PERCENTAGE)
-                    .align(Alignment.CenterHorizontally)
-                    .padding(bottom = 16.dp)
-                    .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
+                    .fillMaxWidth()
+                    .testTag("ReviewAmount")
             )
         }
 
-        if (!isLnurlPay) {
-            FillHeight(min = 16.dp)
+        if (!isPreparing && uiState.isPaymentRequest && uiState.canSwitchConfirmFundingSource && !showDetails) {
+            VerticalSpacer(16.dp)
+            SendFundingSourceButton(
+                uiState = uiState,
+                onClick = { onEvent(SendEvent.PaymentMethodSelect(it)) },
+                interactionsEnabled = !isLoading && !isHardwareFeeLoading,
+                confirmation = true,
+                modifier = Modifier.align(Alignment.End).testTag("SendConfirmAssetButton")
+            )
+        }
 
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .testTag("SendConfirmContent")
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+            ) {
+                VerticalSpacer(if (isPreparing || uiState.isPaymentRequest) 24.dp else 44.dp)
+
+                if (isLnurlPay && !uiState.isPaymentRequest) {
+                    LnurlPayDetails(uiState = uiState, onEvent = onEvent)
+                } else if (showDetails && !isPreparing) {
+                    when (uiState.payMethod) {
+                        SendMethod.ONCHAIN -> {
+                            OnChainDetails(
+                                uiState = uiState,
+                                interactionsEnabled = !isLoading && !isHardwareFeeLoading,
+                                onEvent = onEvent,
+                            )
+                            VerticalSpacer(16.dp)
+                            TagsSection(uiState, onClickTag, onClickAddTag)
+                            uiState.confirmationRequestNote?.let {
+                                VerticalSpacer(16.dp)
+                                PaymentRequestInvoiceNote(note = it)
+                            }
+                        }
+
+                        SendMethod.LIGHTNING -> {
+                            LightningDetails(
+                                uiState = uiState,
+                                interactionsEnabled = !isLoading,
+                                onEvent = onEvent,
+                                onClickTag = onClickTag,
+                                onClickAddTag = onClickAddTag,
+                            )
+                            if ((uiState.lnurl as? LnurlParams.LnurlPay)?.data?.commentAllowed() == true) {
+                                LnurlCommentSection(uiState, onEvent)
+                            }
+                        }
+                    }
+                } else {
+                    if (isPreparing || uiState.isPaymentRequest) {
+                        PaymentRequestSummary(
+                            profile = if (isPreparing) preparingContact else uiState.contactPaymentProfile,
+                            note = if (isPreparing) preparingRequest.note else uiState.confirmationRequestNote,
+                            accentColor = accentColor,
+                        )
+                        VerticalSpacer(16.dp)
+                    }
+                    PaymentReviewIllustration(
+                        swipeProgress = { swipeProgress.floatValue },
+                        isPaymentRequest = isPreparing || uiState.isPaymentRequest,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        if ((!isLnurlPay || uiState.isPaymentRequest) && !isPreparing) {
             PrimaryButton(
                 text = stringResource(
                     if (showDetails) R.string.common__hide_details else R.string.common__show_details
@@ -388,21 +507,30 @@ private fun ContentRunning(
                     .align(Alignment.CenterHorizontally)
                     .testTag("SendConfirmToggleDetails")
             )
-
-            VerticalSpacer(62.dp)
-        } else {
-            FillHeight(min = 16.dp)
         }
 
+        VerticalSpacer(16.dp)
+
         SwipeToConfirm(
-            text = stringResource(R.string.wallet__send_swipe),
+            text = stringResource(
+                if (!isPreparing && uiState.isInitialSubscriptionPayment) {
+                    R.string.subscriptions__swipe_to_subscribe_and_pay
+                } else {
+                    R.string.wallet__send_swipe
+                }
+            ),
             color = accentColor,
             // an onchain refresh can lower a max amount, so the amount is not final until it settles
-            enabled = uiState.canSwipeToPay(),
-            loading = isLoading,
-            confirmed = isLoading,
+            enabled = !isPreparing && uiState.canSwipeToPay(),
+            loading = isPreparing || isLoading,
+            confirmed = !isPreparing && isLoading,
             progress = swipeProgress,
             onConfirm = onSwipeToConfirm,
+            modifier = if (isPreparing) {
+                Modifier.semantics { disabled() }.testTag("PaymentRequestPreparing")
+            } else {
+                Modifier
+            }
         )
         VerticalSpacer(16.dp)
     }
@@ -410,6 +538,7 @@ private fun ContentRunning(
 
 private fun SendUiState.canSwipeToPay() = isAmountInputValid &&
     !isFundingSourceLoading &&
+    isHardwareFeeReady &&
     !(payMethod == SendMethod.ONCHAIN && onchainFeeUi.isLoading)
 
 @Composable
@@ -464,44 +593,6 @@ private fun TagsSection(
 }
 
 @Composable
-private fun AddTagButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val shape = AppShapes.small
-    val cornerRadius = 8.dp
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = modifier
-            .clip(shape)
-            .drawBehind {
-                drawRoundRect(
-                    color = Colors.White64,
-                    style = Stroke(
-                        width = 1.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
-                    ),
-                    cornerRadius = CornerRadius(cornerRadius.toPx()),
-                )
-            }
-            .clickableAlpha(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    ) {
-        BodySSB(
-            text = stringResource(R.string.wallet__tags_add_button),
-            color = Colors.White,
-        )
-        Icon(
-            painter = painterResource(R.drawable.ic_plus),
-            contentDescription = null,
-            tint = Colors.White64,
-            modifier = Modifier.size(16.dp)
-        )
-    }
-}
-
-@Composable
 private fun OnChainDetails(
     uiState: SendUiState,
     interactionsEnabled: Boolean,
@@ -521,23 +612,22 @@ private fun OnChainDetails(
                 caption = stringResource(R.string.wallet__send_from),
                 modifier = Modifier.weight(1f)
             ) {
-                NumberPadActionButton(
-                    text = if (uiState.hardwareWalletId != null) {
-                        uiState.hardwareWalletName ?: stringResource(R.string.hardware__device_model_trezor)
-                    } else {
-                        stringResource(R.string.wallet__savings__title)
-                    },
-                    color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
-                    enabled = uiState.canSwitchFundingSource,
-                    isLoading = uiState.isFundingSourceLoading,
-                    clickable = interactionsEnabled,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
-                    onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+                SendFundingSourceButton(
+                    uiState = uiState,
+                    onClick = { onEvent(SendEvent.PaymentMethodSelect(it)) },
+                    interactionsEnabled = interactionsEnabled,
+                    confirmation = true,
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
             }
             SendCell(
-                caption = stringResource(R.string.wallet__send_to),
+                caption = stringResource(
+                    if (uiState.isPaymentRequest && !uiState.isMerchantPaymentRequest) {
+                        R.string.wallet__payment_request_contact
+                    } else {
+                        R.string.wallet__send_to
+                    }
+                ),
                 modifier = Modifier.weight(1f)
             ) {
                 if (uiState.contactPaymentProfile != null) {
@@ -565,7 +655,9 @@ private fun OnChainDetails(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickableAlpha(enabled = interactionsEnabled) { onEvent(SendEvent.SpeedAndFee) }
+                    .clickableAlpha(enabled = interactionsEnabled && !uiState.isRetainedHardwarePayment) {
+                        onEvent(SendEvent.SpeedAndFee)
+                    }
             ) {
                 SendCell(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
                     Row(
@@ -628,17 +720,22 @@ private fun OnChainDetails(
                         tint = Colors.Brand,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(stringResource(feeUi.rate.description))
+                    val confirmationRate = if (feeUi.rate == FeeRate.CUSTOM) {
+                        FeeRate.forConfirmation(uiState.speed, uiState.feeRates)
+                    } else {
+                        feeUi.rate
+                    }
+                    BodySSB(stringResource(confirmationRate.description))
                 }
             }
         }
     }
 }
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun LightningDetails(
     uiState: SendUiState,
+    interactionsEnabled: Boolean,
     onEvent: (SendEvent) -> Unit,
     onClickTag: (String) -> Unit,
     onClickAddTag: () -> Unit,
@@ -664,18 +761,22 @@ private fun LightningDetails(
                 caption = stringResource(R.string.wallet__send_from),
                 modifier = Modifier.weight(1f)
             ) {
-                NumberPadActionButton(
-                    text = stringResource(R.string.wallet__spending__title),
-                    color = Colors.Purple,
-                    enabled = uiState.canSwitchFundingSource,
-                    isLoading = uiState.isFundingSourceLoading,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
-                    onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+                SendFundingSourceButton(
+                    uiState = uiState,
+                    onClick = { onEvent(SendEvent.PaymentMethodSelect(it)) },
+                    interactionsEnabled = interactionsEnabled,
+                    confirmation = true,
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
             }
             SendCell(
-                caption = stringResource(R.string.wallet__send_to),
+                caption = stringResource(
+                    if (uiState.isPaymentRequest && !uiState.isMerchantPaymentRequest) {
+                        R.string.wallet__payment_request_contact
+                    } else {
+                        R.string.wallet__send_to
+                    }
+                ),
                 modifier = Modifier.weight(1f)
             ) {
                 if (uiState.contactPaymentProfile != null) {
@@ -771,7 +872,7 @@ private fun LightningDetails(
             }
         }
 
-        if (!isLnurlPay && !description.isNullOrEmpty()) {
+        if (!isLnurlPay && !description.isNullOrEmpty() && description.trim() != uiState.confirmationRequestNote) {
             SendCell(caption = stringResource(R.string.wallet__note)) {
                 Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     BodySSB(text = description, maxLines = 1)
@@ -785,6 +886,10 @@ private fun LightningDetails(
                 onClickTag = onClickTag,
                 onClickAddTag = onClickAddTag,
             )
+        }
+
+        uiState.confirmationRequestNote?.let {
+            PaymentRequestInvoiceNote(note = it)
         }
     }
 }
@@ -809,6 +914,9 @@ private fun ContactRecipient(
         )
     }
 }
+
+private val SendUiState.confirmationRequestNote: String?
+    get() = paymentRequestNote?.trim()?.takeIf { isPaymentRequest && it.isNotEmpty() }
 
 @Composable
 private fun LnurlPayDetails(
@@ -883,13 +991,23 @@ private fun sendUiState() = SendUiState(
     ),
 )
 
-@Suppress("MagicNumber")
+private fun PaykitPaymentRequest.preparingAccentColor(): Color {
+    val methods = acceptedPaymentEndpointIdentifiers.mapNotNull(MethodId::fromRawValue)
+    return when {
+        methods.isEmpty() -> Colors.White64
+        methods.all { it == MethodId.UsdtArbitrum } -> Colors.Usdt
+        methods.all { it == MethodId.Bolt11 || it == MethodId.Lnurl } -> Colors.Purple
+        methods.all { it.isOnchain } -> Colors.Brand
+        else -> Colors.White64
+    }
+}
+
 @Preview(showSystemUi = true, group = "onchain")
 @Composable
 private fun PreviewOnChain() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
                     speed = TransactionSpeed.Medium,
@@ -907,13 +1025,12 @@ private fun PreviewOnChain() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "onchain details")
 @Composable
 private fun PreviewOnChainDetails() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
                     speed = TransactionSpeed.Medium,
@@ -932,13 +1049,12 @@ private fun PreviewOnChainDetails() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "lightning details")
 @Composable
 private fun PreviewLightningDetails() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
@@ -955,13 +1071,12 @@ private fun PreviewLightningDetails() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "onchain", device = Devices.NEXUS_5)
 @Composable
 private fun PreviewOnChainLongFeeSmallScreen() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 2_345_678u,
                     selectedTags = persistentListOf("car", "house", "uber"),
@@ -985,7 +1100,7 @@ private fun PreviewOnChainLongFeeSmallScreen() {
 private fun PreviewOnChainFeeLoading() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
                     onchainFeeUi = OnchainFeeUi(isLoading = true),
@@ -999,13 +1114,12 @@ private fun PreviewOnChainFeeLoading() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true)
 @Composable
 private fun PreviewLightning() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
@@ -1021,12 +1135,83 @@ private fun PreviewLightning() {
     }
 }
 
+@Preview(showSystemUi = true, group = "payment request")
+@Composable
+private fun PreviewPaymentRequest() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            SendConfirmContent(
+                uiState = sendUiState().copy(
+                    amount = 21_000u,
+                    payMethod = SendMethod.LIGHTNING,
+                    isPaymentRequest = true,
+                    contactPaymentProfile = PubkyProfile.placeholder("pk8e3xqyn5ha6swnhwp4bcw4dkj").copy(
+                        name = "Anna Pleb",
+                    ),
+                    paymentRequestNote = "Lunch last week",
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true, group = "payment request")
+@Composable
+private fun PreviewPaymentRequestDetails() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            SendConfirmContent(
+                uiState = sendUiState().copy(
+                    amount = 21_000u,
+                    payMethod = SendMethod.LIGHTNING,
+                    lightningFeeSats = 1,
+                    isPaymentRequest = true,
+                    contactPaymentProfile = PubkyProfile.placeholder("pk8e3xqyn5ha6swnhwp4bcw4dkj").copy(
+                        name = "Areem Holden",
+                    ),
+                    paymentRequestNote = "Lunch last week",
+                    selectedTags = persistentListOf("Lunch"),
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                initialShowDetails = true,
+                modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true, group = "payment request")
+@Composable
+private fun PreviewPaymentRequestWithoutNote() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            SendConfirmContent(
+                uiState = sendUiState().copy(
+                    amount = 21_000u,
+                    isPaymentRequest = true,
+                    contactPaymentProfile = PubkyProfile.placeholder("pk8e3xqyn5ha6swnhwp4bcw4dkj"),
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
 @Preview(showSystemUi = true)
 @Composable
 private fun PreviewLnurl() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     payMethod = SendMethod.LIGHTNING,
                     lnurl = LnurlParams.LnurlPay(
@@ -1051,13 +1236,12 @@ private fun PreviewLnurl() {
     }
 }
 
-@Suppress("MagicNumber")
 @Preview(showSystemUi = true, group = "lnurl details")
 @Composable
 private fun PreviewLnurlDetails() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 5_000u,
                     payMethod = SendMethod.LIGHTNING,
@@ -1090,7 +1274,7 @@ private fun PreviewLnurlDetails() {
 private fun PreviewBio() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState(),
                 isNodeRunning = true,
                 isLoading = false,
@@ -1106,7 +1290,7 @@ private fun PreviewBio() {
 private fun PreviewDialog() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     showSanityWarningDialog = SanityWarning.VALUE_OVER_100_USD,
                 ),
@@ -1124,7 +1308,7 @@ private fun PreviewDialog() {
 private fun PreviewNodeNotRunning() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     payMethod = SendMethod.LIGHTNING,
                     lnurl = LnurlParams.LnurlPay(

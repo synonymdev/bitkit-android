@@ -36,7 +36,31 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        mavenLocal()
+        // Opt in per library to test locally published builds; release coordinates otherwise
+        // resolve from GitHub Packages, so native libraries match their published debug symbols.
+        val localModules = mapOf(
+            "ldk-node" to "ldk-node-android",
+            "vss" to "vss-client-android",
+            "bitkit-core" to "bitkit-core-android",
+            "paykit" to "paykit-android",
+        )
+        val selectedLocalLibraries = when (val value = providers.gradleProperty("useMavenLocal").orNull?.trim()) {
+            null, "", "false" -> emptyList()
+            "true" -> listOf("ldk-node", "vss")
+            else -> value.split(",").map { it.trim() }.distinct()
+        }
+        require(selectedLocalLibraries.all { it in localModules }) {
+            "useMavenLocal must be true, false, or a comma-separated list of: ${localModules.keys.joinToString()}"
+        }
+        if (selectedLocalLibraries.isNotEmpty()) {
+            mavenLocal {
+                content {
+                    selectedLocalLibraries.forEach {
+                        includeModule("com.synonym", localModules.getValue(it))
+                    }
+                }
+            }
+        }
         google()
         mavenCentral()
         maven {

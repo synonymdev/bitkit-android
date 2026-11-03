@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
@@ -13,10 +13,12 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.components.Subtitle
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 
 /** For pixel perfection from FIGMA, use the back arrow + 14 padding as starting point for added space under this. */
@@ -25,21 +27,22 @@ fun SheetTopBar(
     titleText: String?,
     modifier: Modifier = Modifier,
     action: (@Composable () -> Unit)? = null,
+    titleStyle: TextStyle = AppTextStyles.Subtitle,
     onBack: (() -> Unit)? = null,
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(54.dp)
+            .heightIn(min = 54.dp)
     ) {
         titleText?.let {
             Subtitle(
                 text = titleText,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
+                style = titleStyle,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = LocalMinimumInteractiveComponentSize.current)
+                    .padding(horizontal = LocalMinimumInteractiveComponentSize.current, vertical = 8.dp)
                     .align(Alignment.Center)
             )
         }

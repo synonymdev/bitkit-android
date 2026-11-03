@@ -1,18 +1,25 @@
 package to.bitkit.data
 
 import android.content.Context
+import androidx.datastore.core.DataMigration
 import androidx.datastore.core.DataStore
 import androidx.datastore.dataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
@@ -27,9 +34,13 @@ import javax.inject.Singleton
 private val Context.settingsDataStore: DataStore<SettingsData> by dataStore(
     fileName = "settings.json",
     serializer = SettingsSerializer,
+    produceMigrations = { listOf(PaykitSharingMigration) },
 )
 
-private val Context.localSettingsDataStore: DataStore<Preferences> by preferencesDataStore("local_settings")
+private val Context.localSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "local_settings",
+    produceMigrations = { listOf(PaykitUiResetMigration) },
+)
 
 @Singleton
 class SettingsStore @Inject constructor(
@@ -39,16 +50,37 @@ class SettingsStore @Inject constructor(
     private val localStore = context.localSettingsDataStore
 
     val data: Flow<SettingsData> = store.data
-    val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: false }
+    val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: true }
+
+    /** Only the Dev Settings switch stores a value, and it counts only while dev mode is on. */
+    val areAllowancesEnabled: Flow<Boolean> = combine(
+        store.data.map { it.isDevModeEnabled },
+        localStore.data.map { it[ALLOWANCES_ENABLED_KEY] },
+    ) { isDevModeEnabled, override -> PaykitFeatureFlags.areAllowancesEnabled(isDevModeEnabled, override) }
+    val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
+        it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
+    }
+    val subscriptionClockOffsetDays: Flow<Int> = localStore.data.map { it[SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY] ?: 0 }
 
     @Volatile
     var restoredMonitoredTypesFromBackup: Boolean = false
         private set
 
     suspend fun restoreFromBackup(payload: SettingsBackupV1) =
-        runCatching {
-            val data = payload.settings.resetPin().withDefaultPaykitPaymentMethods()
-            store.updateData { data }
+        runSuspendCatching {
+            val data = payload.settings.resetPin()
+                .copy(ignoresSwitchUnitToast = false, ignoresHideBalanceToast = false)
+                .withDefaultPaykitPaymentMethods()
+                .withRequiredNativeSegwitMonitoring()
+                .withPublicSharingDisabledForRestore()
+            store.updateData { current ->
+                // The received-sheet hold is armed before the backup is read, so it has to survive the
+                // settings the backup brings with it - otherwise the replayed history raises sheets.
+                data.copy(
+                    pendingRestoreActivitySeenSince = current.pendingRestoreActivitySeenSince,
+                    restoreSyncedBlockHeight = current.restoreSyncedBlockHeight,
+                )
+            }
 
             val monitored = data.addressTypesToMonitor
             val selected = data.selectedAddressType
@@ -59,11 +91,51 @@ class SettingsStore @Inject constructor(
         }
 
     suspend fun update(transform: (SettingsData) -> SettingsData) {
-        store.updateData(transform)
+        store.updateData { transform(it).withRequiredNativeSegwitMonitoring() }
+    }
+
+    suspend fun switchBalanceUnit(): BalanceUnitSwitch? {
+        var firstSwitch: BalanceUnitSwitch? = null
+        store.updateData { settings ->
+            val nextDisplay = settings.primaryDisplay.not()
+            if (!settings.ignoresSwitchUnitToast) {
+                firstSwitch = BalanceUnitSwitch(settings.primaryDisplay, nextDisplay, settings.selectedCurrency)
+            }
+            settings.copy(primaryDisplay = nextDisplay, ignoresSwitchUnitToast = true)
+        }
+        return firstSwitch
+    }
+
+    suspend fun toggleHideBalanceFromSwipe(): Boolean {
+        var firstHide = false
+        store.updateData { settings ->
+            if (!settings.enableSwipeToHideBalance) return@updateData settings
+            val hideBalance = !settings.hideBalance
+            firstHide = hideBalance && !settings.ignoresHideBalanceToast
+            settings.copy(
+                hideBalance = hideBalance,
+                ignoresHideBalanceToast = settings.ignoresHideBalanceToast || firstHide,
+            )
+        }
+        return firstHide
     }
 
     suspend fun setIsPaykitEnabled(value: Boolean) {
         localStore.edit { it[PAYKIT_ENABLED_KEY] = value }
+    }
+
+    suspend fun setAreAllowancesEnabled(value: Boolean) {
+        localStore.edit { it[ALLOWANCES_ENABLED_KEY] = value }
+    }
+
+    internal suspend fun isPaykitUiResetDone() = localStore.data.first()[PaykitUiResetMigration.MIGRATED_KEY] == true
+
+    suspend fun setPubkyProfileSetupPending(value: Boolean) {
+        localStore.edit { it[PUBKY_PROFILE_SETUP_PENDING_KEY] = value }
+    }
+
+    suspend fun setSubscriptionClockOffsetDays(days: Int) {
+        localStore.edit { it[SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY] = days }
     }
 
     suspend fun addLastUsedTag(newTag: String) {
@@ -88,8 +160,11 @@ class SettingsStore @Inject constructor(
     }
 
     suspend fun reset() {
-        store.updateData { SettingsData() }
-        localStore.edit { it.clear() }
+        store.updateData { SettingsData(hasIndependentPaykitSharing = true) }
+        localStore.edit {
+            it.clear()
+            it[PaykitUiResetMigration.MIGRATED_KEY] = true
+        }
         restoredMonitoredTypesFromBackup = false
         Logger.info("Deleted all user settings data.")
     }
@@ -97,8 +172,37 @@ class SettingsStore @Inject constructor(
     companion object {
         private const val TAG = "SettingsStore"
         private const val MAX_LAST_USED_TAGS = 10
-        private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
+        internal val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
+        private val ALLOWANCES_ENABLED_KEY = booleanPreferencesKey("allowances_enabled")
+        private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
+        private val SUBSCRIPTION_CLOCK_OFFSET_DAYS_KEY = intPreferencesKey("subscription_clock_offset_days")
     }
+}
+
+/**
+ * Shows Paykit to every wallet once, now that it is public. A stored off came from the Dev Settings switch
+ * on 2.x or 3.0.x and hid the profile and contacts. Like the Dev Settings "Enable", this only clears the flag;
+ * later Dev Settings changes stay.
+ */
+internal object PaykitUiResetMigration : DataMigration<Preferences> {
+    val MIGRATED_KEY = booleanPreferencesKey("paykit_ui_reset_v1")
+
+    override suspend fun shouldMigrate(currentData: Preferences) = currentData[MIGRATED_KEY] != true
+
+    override suspend fun migrate(currentData: Preferences): Preferences = currentData.toMutablePreferences().apply {
+        remove(SettingsStore.PAYKIT_ENABLED_KEY)
+        this[MIGRATED_KEY] = true
+    }.toPreferences()
+
+    override suspend fun cleanUp() = Unit
+}
+
+internal object PaykitSharingMigration : DataMigration<SettingsData> {
+    override suspend fun shouldMigrate(currentData: SettingsData) = !currentData.hasIndependentPaykitSharing
+
+    override suspend fun migrate(currentData: SettingsData) = currentData.withIndependentPaykitSharing()
+
+    override suspend fun cleanUp() = Unit
 }
 
 @Serializable
@@ -108,19 +212,22 @@ data class SettingsData(
     val selectedCurrency: String = "USD",
     val defaultTransactionSpeed: TransactionSpeed = TransactionSpeed.default(),
     val showEmptyBalanceView: Boolean = true,
-    val hasSeenSpendingIntro: Boolean = false,
     val hasSeenWidgetsIntro: Boolean = false,
-    val hasSeenTransferIntro: Boolean = false,
     val hasSeenSavingsIntro: Boolean = false,
     val hasSeenShopIntro: Boolean = false,
     val hasSeenProfileIntro: Boolean = false,
     val hasSeenContactsIntro: Boolean = false,
     val hasConfirmedPublicPaykitEndpoints: Boolean = false,
+    val hasIndependentPaykitSharing: Boolean = false,
+    val legacyPublicAddressQuarantinePending: Boolean = false,
     val sharesPublicPaykitEndpoints: Boolean = false,
     val sharesPrivatePaykitEndpoints: Boolean = false,
     val publicPaykitCleanupPending: Boolean = false,
     val publicPaykitLightningEnabled: Boolean = true,
     val publicPaykitOnchainEnabled: Boolean = true,
+    val publicPaykitUsdtEnabled: Boolean = true,
+    val usdtPreference: UsdtPreference = UsdtPreference.UNDECIDED,
+    val hasSeenUsdtIntro: Boolean = false,
     val publicPaykitBolt11: String = "",
     val publicPaykitBolt11PaymentHash: String = "",
     val publicPaykitBolt11ExpiresAtMillis: Long = 0,
@@ -129,17 +236,19 @@ data class SettingsData(
     val isQuickPayEnabled: Boolean = false,
     val quickPayAmount: Int = 5,
     val quickPayDailyLimitMultiplier: Int = 5,
-    val lightningSetupStep: Int = 0,
     val isPinEnabled: Boolean = false,
     val isBiometricEnabled: Boolean = false,
     val isPinForPaymentsEnabled: Boolean = false,
     val isDevModeEnabled: Boolean = Env.isDebug,
+    val disableAllToasts: Boolean = false,
     val isSavingsSwapEnabled: Boolean = false,
     val showWidgets: Boolean = true,
     val lastUsedTags: List<String> = emptyList(),
     val enableSwipeToHideBalance: Boolean = true,
     val hideBalance: Boolean = false,
     val hideBalanceOnOpen: Boolean = false,
+    val ignoresSwitchUnitToast: Boolean = false,
+    val ignoresHideBalanceToast: Boolean = false,
     val enableAutoReadClipboard: Boolean = false,
     val enableSendAmountWarning: Boolean = false,
     val backupVerified: Boolean = false,
@@ -158,6 +267,32 @@ data class SettingsData(
     val selectedAddressType: String = DEFAULT_ADDRESS_TYPE_STRING,
     val addressTypesToMonitor: List<String> = listOf(DEFAULT_ADDRESS_TYPE_STRING),
     val pendingRestoreAddressTypePrune: Boolean = false,
+    /**
+     * When a seed restore began, as epoch seconds, or 0 when no restore is being suppressed.
+     *
+     * Suppresses the on-chain received sheet for the historical transactions the post-restore sync replays. Set as
+     * the restore starts, before the node is started, because the node syncs long before the backup is read - setting
+     * it on the Get Started tap left a window where replayed transactions could still raise a sheet. Doubles as the
+     * cutoff for the sweep that marks those transactions seen, so a payment arriving mid-restore is not swept up with
+     * them. Cleared by the first on-chain sync completion whose sweep succeeds.
+     */
+    val pendingRestoreActivitySeenSince: Long = 0,
+    /**
+     * Chain tip of the first on-chain sync after the latest seed restore, or 0 when none completed.
+     *
+     * Everything confirmed at or below it was already on chain when the restore scanned the wallet, so it outlives
+     * [pendingRestoreActivitySeenSince]: LDK events are handled concurrently, and a later rescan replays those
+     * confirmations too, so their received sheets must stay silent however late they are handled.
+     */
+    val restoreSyncedBlockHeight: Long = 0,
+) {
+    val pendingRestoreActivitySeen: Boolean get() = pendingRestoreActivitySeenSince > 0
+}
+
+data class BalanceUnitSwitch(
+    val previousDisplay: PrimaryDisplay,
+    val newDisplay: PrimaryDisplay,
+    val selectedCurrency: String,
 )
 
 fun SettingsData.resetPin() = this.copy(
@@ -167,11 +302,36 @@ fun SettingsData.resetPin() = this.copy(
 )
 
 fun SettingsData.areContactPaymentsEnabled(): Boolean =
-    sharesPublicPaykitEndpoints || sharesPrivatePaykitEndpoints
+    sharesPrivatePaykitEndpoints
+
+fun SettingsData.withIndependentPaykitSharing(): SettingsData {
+    if (hasIndependentPaykitSharing) return this
+    val hadPublicState = hasPublicPaykitPublicationState()
+    return copy(
+        hasIndependentPaykitSharing = true,
+        hasConfirmedPublicPaykitEndpoints = false,
+        sharesPublicPaykitEndpoints = false,
+        publicPaykitCleanupPending = publicPaykitCleanupPending || hadPublicState,
+        legacyPublicAddressQuarantinePending = legacyPublicAddressQuarantinePending || hadPublicState,
+    )
+}
+
+fun SettingsData.withPublicSharingDisabledForRestore(): SettingsData {
+    val migrated = withIndependentPaykitSharing()
+    return migrated.copy(
+        hasConfirmedPublicPaykitEndpoints = false,
+        sharesPublicPaykitEndpoints = false,
+        publicPaykitCleanupPending = migrated.publicPaykitCleanupPending || hasPublicPaykitPublicationState(),
+    )
+}
 
 fun SettingsData.withDefaultPaykitPaymentMethods() = copy(
     publicPaykitLightningEnabled = true,
     publicPaykitOnchainEnabled = true,
+)
+
+fun SettingsData.withRequiredNativeSegwitMonitoring() = copy(
+    addressTypesToMonitor = (addressTypesToMonitor + DEFAULT_ADDRESS_TYPE_STRING).distinct(),
 )
 
 fun SettingsData.hasPublicPaykitPublicationState(): Boolean =
@@ -195,3 +355,18 @@ fun SettingsData.paykitDisabled(markPublicCleanupPending: Boolean = false) = cop
     publicPaykitBolt11PaymentHash = "",
     publicPaykitBolt11ExpiresAtMillis = 0,
 )
+
+@Serializable
+enum class UsdtPreference {
+    @SerialName("undecided")
+    UNDECIDED,
+
+    @SerialName("disabled")
+    DISABLED,
+
+    @SerialName("enabled")
+    ENABLED,
+}
+
+val SettingsData.isUsdtEnabled: Boolean
+    get() = Env.isUsdtEnabled && usdtPreference == UsdtPreference.ENABLED

@@ -7,22 +7,16 @@ import com.synonym.bitkitcore.IBtChannel
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.OutPoint
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
-import to.bitkit.data.AppCacheData
-import to.bitkit.data.CacheStore
 import to.bitkit.models.BlocktankBackupV1
+import to.bitkit.services.BlocktankService
 import to.bitkit.services.CoreService
-import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -31,10 +25,7 @@ import kotlin.test.assertTrue
 class BlocktankRepoTest : BaseUnitTest() {
 
     private val coreService: CoreService = mock()
-    private val lightningService: LightningService = mock()
-    private val currencyRepo: CurrencyRepo = mock()
-    private val cacheStore: CacheStore = mock()
-    private val lightningRepo: LightningRepo = mock()
+    private val blocktankService: BlocktankService = mock()
 
     private lateinit var sut: BlocktankRepo
 
@@ -42,29 +33,23 @@ class BlocktankRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
-        whenever(currencyRepo.currencyState).thenReturn(MutableStateFlow(CurrencyState()))
-        whenever(coreService.blocktank).thenReturn(mock())
+        whenever(coreService.blocktank).thenReturn(blocktankService)
 
-        wheneverBlocking { coreService.blocktank.info(refresh = false) }.thenReturn(mock())
-        wheneverBlocking { coreService.blocktank.info(refresh = true) }.thenReturn(mock())
+        whenever { blocktankService.info(refresh = false) }.thenReturn(mock())
+        whenever { blocktankService.info(refresh = true) }.thenReturn(mock())
 
-        wheneverBlocking { coreService.blocktank.orders(refresh = false) }.thenReturn(emptyList())
-        wheneverBlocking { coreService.blocktank.orders(refresh = true) }.thenReturn(emptyList())
+        whenever { blocktankService.orders(refresh = false) }.thenReturn(emptyList())
+        whenever { blocktankService.orders(refresh = true) }.thenReturn(emptyList())
 
-        wheneverBlocking { coreService.blocktank.cjitEntries(refresh = false) }.thenReturn(emptyList())
-        wheneverBlocking { coreService.blocktank.cjitEntries(refresh = true) }.thenReturn(emptyList())
+        whenever { blocktankService.cjitEntries(refresh = false) }.thenReturn(emptyList())
+        whenever { blocktankService.cjitEntries(refresh = true) }.thenReturn(emptyList())
     }
 
     private fun createSut(): BlocktankRepo {
         return BlocktankRepo(
             bgDispatcher = testDispatcher,
             coreService = coreService,
-            lightningService = lightningService,
-            currencyRepo = currencyRepo,
-            cacheStore = cacheStore,
             enablePolling = false,
-            lightningRepo = lightningRepo,
         )
     }
 
@@ -74,8 +59,8 @@ class BlocktankRepoTest : BaseUnitTest() {
 
         val cachedInfo = mock<IBtInfo>()
         val serverInfo = mock<IBtInfo>()
-        wheneverBlocking { coreService.blocktank.info(refresh = false) }.thenReturn(cachedInfo)
-        wheneverBlocking { coreService.blocktank.info(refresh = true) }.thenReturn(serverInfo)
+        whenever { coreService.blocktank.info(refresh = false) }.thenReturn(cachedInfo)
+        whenever { coreService.blocktank.info(refresh = true) }.thenReturn(serverInfo)
 
         sut.blocktankState.test {
             awaitItem() // Skip initial state
@@ -97,8 +82,8 @@ class BlocktankRepoTest : BaseUnitTest() {
 
         val cachedOrders = listOf<IBtOrder>(mock())
         val serverOrders = listOf<IBtOrder>(mock())
-        wheneverBlocking { coreService.blocktank.orders(refresh = false) }.thenReturn(cachedOrders)
-        wheneverBlocking { coreService.blocktank.orders(refresh = true) }.thenReturn(serverOrders)
+        whenever { coreService.blocktank.orders(refresh = false) }.thenReturn(cachedOrders)
+        whenever { coreService.blocktank.orders(refresh = true) }.thenReturn(serverOrders)
 
         sut.blocktankState.test {
             awaitItem() // Skip initial state
@@ -116,59 +101,47 @@ class BlocktankRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `refreshOrders filters paid orders based on cacheStore data`() = test {
-        sut = createSut()
-        val expectedOrders = listOf(testOrder1)
-        wheneverBlocking { coreService.blocktank.orders(refresh = true) }.thenReturn(expectedOrders)
-        val orderId = "order1"
-        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(paidOrders = mapOf(orderId to "txId"))))
-
-        sut.blocktankState.test {
-            awaitItem() // Skip initial state
-
-            sut.refreshOrders()
-
-            val state = awaitItem()
-            assertEquals(expectedOrders, state.orders)
-            assertEquals(1, state.paidOrders.size)
-            assertEquals(orderId, state.paidOrders.first().id)
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `openChannel updates state after open`() = test {
-        wheneverBlocking { coreService.blocktank.orders(refresh = true) }.thenReturn(listOf(testOrder1))
-        sut = createSut()
-        val orderId = "order1"
-        val updatedOrder = mock<IBtOrder>().apply { whenever(id).thenReturn(orderId) }
-        wheneverBlocking { coreService.blocktank.open(orderId) }.thenReturn(updatedOrder)
-
-        sut.blocktankState.test {
-            awaitItem() // Skip initial state
-
-            val result = sut.openChannel(orderId)
-            verify(coreService.blocktank).open(orderId)
-
-            assertTrue(result.isSuccess)
-            assertEquals(updatedOrder, result.getOrThrow())
-
-            // // Verify state was updated
-            val state = awaitItem()
-            assertEquals(updatedOrder, state.orders.first { it.id == orderId })
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
     fun `getOrder returns order from state after refresh`() = test {
         sut = createSut()
 
-        wheneverBlocking { coreService.blocktank.orders(refresh = true) }.thenReturn(listOf(testOrder1))
+        whenever { coreService.blocktank.orders(refresh = true) }.thenReturn(listOf(testOrder1))
         val result = sut.getOrder(testOrder1.id, refresh = true)
 
         assertTrue(result.isSuccess)
         assertEquals(testOrder1, result.getOrThrow())
+    }
+
+    @Test
+    fun `fetchOrders caches an order missing from the local cache and replaces a stale one`() = test {
+        val staleOrder = mock<IBtOrder> { on { id } doReturn "order1" }
+        val freshOrder = mock<IBtOrder> { on { id } doReturn "order1" }
+        val uncachedOrder = mock<IBtOrder> { on { id } doReturn "order2" }
+        val orderIds = listOf("order1", "order2")
+        whenever(blocktankService.orders(refresh = true)).thenReturn(listOf(staleOrder))
+        whenever(blocktankService.orders(orderIds = orderIds, refresh = true))
+            .thenReturn(listOf(freshOrder, uncachedOrder))
+        sut = createSut()
+        sut.refreshOrders()
+
+        val result = sut.fetchOrders(orderIds)
+
+        assertEquals(listOf(freshOrder, uncachedOrder), result.getOrThrow())
+        assertEquals(listOf(freshOrder, uncachedOrder), sut.blocktankState.value.orders)
+        assertEquals(uncachedOrder, sut.getOrder("order2").getOrThrow())
+    }
+
+    @Test
+    fun `fetchOrders returns failure and keeps cached orders when server throws`() = test {
+        whenever(blocktankService.orders(refresh = true)).thenReturn(listOf(testOrder1))
+        whenever(blocktankService.orders(orderIds = listOf("order2"), refresh = true))
+            .thenThrow(RuntimeException("Network error"))
+        sut = createSut()
+        sut.refreshOrders()
+
+        val result = sut.fetchOrders(listOf("order2"))
+
+        assertTrue(result.isFailure)
+        assertEquals(listOf(testOrder1), sut.blocktankState.value.orders)
     }
 
     @Test

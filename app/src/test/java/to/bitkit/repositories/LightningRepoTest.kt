@@ -1,34 +1,43 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
-import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.BlocktankException
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtInfo
-import com.synonym.bitkitcore.ILspNode
+import com.synonym.bitkitcore.IBtInfoOnchain
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlException
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.AddressTypeBalance
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Node
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PeerDetails
@@ -38,8 +47,12 @@ import org.lightningdevkit.ldknode.TxOutput
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doCallRealMethod
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.isNull
@@ -56,8 +69,10 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.WalletBackupRestorePendingError
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
+import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NodeLifecycleState
@@ -70,25 +85,39 @@ import to.bitkit.services.ElectrumProbeError
 import to.bitkit.services.ElectrumProbeService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
-import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
+import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-@Suppress("LargeClass")
+@OptIn(kotlin.time.ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class LightningRepoTest : BaseUnitTest() {
     companion object {
         private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
+
+        /** Mirrors the interval at which `LightningRepo.waitForUsableChannels` re-reads the channels. */
+        private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
+
+        /** Mirrors how long `LightningRepo.waitForUsableChannels` polls before giving up. */
+        private val CHANNELS_USABLE_TIMEOUT = 15.seconds
+
         private const val BACKGROUND_STOP_DELAY_MS = 5_000L
+
+        /** Mirrors the bounded start retry delay `LightningRepo.startNode` waits before its one retry. */
+        private const val START_RETRY_DELAY_MS = 2_000L
     }
 
     private lateinit var sut: LightningRepo
@@ -96,11 +125,10 @@ class LightningRepoTest : BaseUnitTest() {
     private val lightningService = mock<LightningService>()
     private val settingsStore = mock<SettingsStore>()
     private val coreService = mock<CoreService>()
-    private val lspNotificationsService = mock<LspNotificationsService>()
-    private val firebaseMessaging = mock<FirebaseMessaging>()
     private val keychain = mock<Keychain>()
     private val cacheStore = mock<CacheStore>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
+    private val onchainSendAttemptStore = mock<OnchainSendAttemptStore>()
     private val lnurlService = mock<LnurlService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
@@ -114,11 +142,10 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() = runBlocking {
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever { electrumProbeService.probe(any(), any()) }.thenReturn(Result.success(Unit))
-        whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
@@ -128,12 +155,11 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService = lightningService,
             settingsStore = settingsStore,
             coreService = coreService,
-            lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging,
             keychain = keychain,
             lnurlService = lnurlService,
             cacheStore = cacheStore,
             preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = onchainSendAttemptStore,
             connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = urlValidator,
@@ -154,6 +180,19 @@ class LightningRepoTest : BaseUnitTest() {
         sut.sync()
     }
 
+    @Test
+    fun `node startup failures do not dispatch invoice payment`() = test {
+        var dispatched = false
+        val beforeSend: suspend () -> Boolean = {
+            dispatched = true
+            true
+        }
+        assertIs<NodeNotRunningError>(sut.payInvoice("invoice", null, onBeforeSend = beforeSend).exceptionOrNull())
+        sut.setInitNodeLifecycleState()
+        assertIs<NodeRunTimeoutError>(sut.payInvoice("invoice", null, onBeforeSend = beforeSend).exceptionOrNull())
+        assertFalse(dispatched)
+    }
+
     private suspend fun startNodeAndCaptureEvents(): NodeEventHandler {
         var capturedHandler: NodeEventHandler? = null
         whenever { lightningService.start(anyOrNull(), any()) }.thenAnswer {
@@ -164,6 +203,132 @@ class LightningRepoTest : BaseUnitTest() {
 
         startNodeForTesting()
         return requireNotNull(capturedHandler)
+    }
+
+    private suspend fun receiveWalletForSettlementTest(): WalletRepo {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever { cacheStore.update(any()) }.thenReturn(Unit)
+        val hardware = mock<HwWalletRepo>()
+        whenever(hardware.wallets).thenReturn(MutableStateFlow(persistentListOf()))
+        val reservations = mock<PrivatePaykitAddressReservationRepo>()
+        whenever { reservations.nextReusableReceiveAddress() }.thenReturn(Result.success("new-address"))
+        whenever { reservations.isUnavailableForReusableReceive(any()) }.thenReturn(false)
+        return WalletRepo(
+            bgDispatcher = testDispatcher,
+            keychain = keychain,
+            coreService = coreService,
+            settingsStore = settingsStore,
+            lightningRepo = sut,
+            cacheStore = cacheStore,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            deriveBalanceStateUseCase = mock(),
+            wipeWalletUseCase = mock(),
+            privatePaykitAddressReservationRepo = reservations,
+            transferRepo = mock(),
+            activityRepo = mock(),
+            hwWalletRepo = hardware,
+            connectionRecovery = connectionRecoveryFixture(settingsStore),
+        )
+    }
+
+    @Test
+    fun `produced lightning settlement survives a captured unpublished receive cache snapshot`() = test {
+        val eventHandler = startNodeAndCaptureEvents()
+        var cached = AppCacheData(
+            onchainAddress = "cached-address",
+            bolt11 = "cached-invoice",
+            bolt11PaymentHash = "010203",
+            bip21 = "bitcoin:cached-address?lightning=cached-invoice",
+        )
+        val snapshotCaptured = CompletableDeferred<Unit>()
+        val releaseSnapshot = CompletableDeferred<Unit>()
+        var cacheReads = 0
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                val snapshot = cached
+                if (cacheReads++ == 0) {
+                    snapshotCaptured.complete(Unit)
+                    releaseSnapshot.await()
+                }
+                emit(snapshot)
+            }
+        )
+        whenever(cacheStore.invalidateReceiveLightningInvoice("cached-invoice")).doSuspendableAnswer {
+            cached = cached.invalidateReceiveLightningInvoice()
+            true
+        }
+        whenever(coreService.activity).thenReturn(mock())
+        val wallet = receiveWalletForSettlementTest()
+        val actionablePaidUris = mutableListOf<String>()
+        wallet.walletState.onEach {
+            if (!it.isReceiveInvoiceUpdating && it.bip21.contains("cached-invoice")) {
+                actionablePaidUris.add(it.bip21)
+            }
+        }.launchIn(backgroundScope)
+        testScheduler.runCurrent()
+        wallet.loadFromCache()
+        snapshotCaptured.await()
+
+        eventHandler(Event.PaymentSuccessful("payment", "hash", "preimage", 10uL))
+        eventHandler(Event.PaymentReceived("received", "010203", 1000uL, emptyList()))
+        assertEquals("", cached.bolt11)
+        releaseSnapshot.complete(Unit)
+        testScheduler.runCurrent()
+
+        assertEquals("", wallet.walletState.value.bolt11)
+        assertFalse(wallet.walletState.value.bip21.contains("cached-invoice"))
+        assertFalse(wallet.walletState.value.isReceiveInvoiceUpdating)
+        assertTrue(actionablePaidUris.isEmpty())
+        verify(cacheStore).invalidateReceiveLightningInvoice("cached-invoice")
+    }
+
+    @Test
+    fun `produced address settlement survives a captured unpublished receive cache snapshot`() = test {
+        val eventHandler = startNodeAndCaptureEvents()
+        var cached = AppCacheData(onchainAddress = "cached-address", bip21 = "bitcoin:cached-address")
+        val snapshotCaptured = CompletableDeferred<Unit>()
+        val releaseSnapshot = CompletableDeferred<Unit>()
+        var cacheReads = 0
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                val snapshot = cached
+                if (cacheReads++ == 0) {
+                    snapshotCaptured.complete(Unit)
+                    releaseSnapshot.await()
+                }
+                emit(snapshot)
+            }
+        )
+        whenever(cacheStore.invalidateReceiveOnchainAddress("cached-address")).doSuspendableAnswer {
+            cached = cached.invalidateReceiveOnchainAddress()
+            true
+        }
+        val details = mock<TransactionDetails>()
+        val output = mock<TxOutput>()
+        whenever(output.scriptpubkeyAddress).thenReturn("cached-address")
+        whenever(details.outputs).thenReturn(listOf(output))
+        val wallet = receiveWalletForSettlementTest()
+        val actionablePaidUris = mutableListOf<String>()
+        wallet.walletState.onEach {
+            if (!it.isReceiveInvoiceUpdating && it.bip21.contains("cached-address")) {
+                actionablePaidUris.add(it.bip21)
+            }
+        }.launchIn(backgroundScope)
+        testScheduler.runCurrent()
+        wallet.loadFromCache()
+        snapshotCaptured.await()
+
+        eventHandler(Event.OnchainTransactionReceived("txid", details))
+        assertEquals("", cached.onchainAddress)
+        releaseSnapshot.complete(Unit)
+        testScheduler.runCurrent()
+
+        assertEquals("new-address", wallet.walletState.value.onchainAddress)
+        assertFalse(wallet.walletState.value.bip21.contains("cached-address"))
+        assertFalse(wallet.walletState.value.isReceiveInvoiceUpdating)
+        assertTrue(actionablePaidUris.isEmpty())
+        verify(cacheStore).invalidateReceiveOnchainAddress("cached-address")
     }
 
     private fun lnurlPayData() = LnurlPayData(
@@ -386,6 +551,140 @@ class LightningRepoTest : BaseUnitTest() {
         verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
     }
 
+    private suspend fun stubNodeStatus(isRunning: () -> Boolean) {
+        sut.setInitNodeLifecycleState()
+        val status = mock<NodeStatus>()
+        whenever(status.isRunning).thenAnswer { isRunning() }
+        whenever(lightningService.status).thenReturn(status)
+        whenever(lightningService.startEventListener(any())).thenReturn(Result.success(Unit))
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+    }
+
+    // Regression #845: a cancelled start must not strand lifecycle state at Starting or ErrorStarting
+    @Test
+    fun `start reconciles state to Running and rethrows when cancelled while the node starts`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).doSuspendableAnswer {
+            nodeRunning = true
+            awaitCancellation()
+        }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start() }
+        runCurrent()
+        assertEquals(NodeLifecycleState.Starting, sut.lightningState.value.nodeLifecycleState)
+        job.cancelAndJoin()
+
+        assertNull(result)
+        assertTrue(job.isCancelled)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService) { startEventListener(any()) }
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start restores the initial state and rethrows when cancelled before the node runs`() = test {
+        stubNodeStatus { false }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start(shouldRetry = false) }
+        runCurrent()
+        job.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start keeps Running and rethrows when cancelled right after the node started`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            nodeRunning = true
+            Unit
+        }
+        whenever(lightningService.disconnectIdlePeers()).doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start() }
+        runCurrent()
+        job.cancelAndJoin()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, never()) { startEventListener(any()) }
+    }
+
+    @Test
+    fun `start restores the initial state when cancelled during node setup`() = test {
+        stubNodeStatus { false }
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start(shouldRetry = false) }
+        runCurrent()
+        job.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start adopts the running node when start throws AlreadyRunning`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            nodeRunning = true
+            throw LdkError(NodeException.AlreadyRunning("already running"))
+        }
+
+        val result = sut.start(shouldRetry = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        assertNotNull(sut.getStatus())
+        verifyBlocking(lightningService) { startEventListener(any()) }
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start adopts the running node on AlreadyRunning without retrying`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            nodeRunning = true
+            throw LdkError(NodeException.AlreadyRunning("already running"))
+        }
+
+        val result = sut.start()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `getStatus returns null while lifecycle state is not Running even if the node runs`() = test {
+        stubNodeStatus { true }
+
+        assertNull(sut.getStatus())
+    }
+
     @Test
     fun `stop should transition to stopped state`() = test {
         startNodeForTesting()
@@ -400,6 +699,29 @@ class LightningRepoTest : BaseUnitTest() {
             assertEquals(NodeLifecycleState.Stopped, awaitItem().nodeLifecycleState)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `stop tears down a node object left alive by a failed start`() = test {
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.stop()).thenReturn(Unit)
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+
+        val result = sut.stop()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).stop()
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `stop does not touch the service when nothing is running`() = test {
+        whenever(lightningService.node).thenReturn(null)
+
+        val result = sut.stop()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService, never()).stop()
     }
 
     @Test
@@ -449,6 +771,243 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
+    private suspend fun stubNodeForRestart() {
+        whenever(lightningService.node).thenReturn(mock())
+        whenever { lightningService.sync() }.thenReturn(Unit)
+        whenever { lightningService.stop() }.thenReturn(Unit)
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever { blocktank.info(any()) }.thenReturn(null)
+    }
+
+    // Regression #1125: a transient start error must not leave a restart in ErrorStarting
+    @Test
+    fun `restartNode retries a transient start failure and ends Running`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            Unit
+        }
+
+        val restart = async { sut.restartNode() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+        val result = restart.await()
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `restartNode ends in ErrorStarting when every bounded start attempt fails`() = test {
+        stubNodeForRestart()
+        val error = AppError("Feerate estimation update timeout")
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer { throw error }
+
+        val result = sut.restartNode()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(error, result.exceptionOrNull())
+        assertEquals(NodeLifecycleState.ErrorStarting(error), sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `restartNode skips the start retry when a stop is requested during the failed attempt`() = test {
+        stubNodeForRestart()
+        val error = AppError("Feerate estimation update timeout")
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                sut.stopDebounced()
+                throw error
+            }
+            Unit
+        }
+
+        val result = sut.restartNode()
+
+        val yieldError = assertIs<NodeStartYieldedToStopError>(result.exceptionOrNull())
+        assertEquals(error, yieldError.cause)
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        verify(lightningService, times(1)).stop()
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(2)).stop()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+
+        val foregroundResult = sut.start()
+
+        assertTrue(foregroundResult.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `channel migration restart skips the start retry when a stop is requested during the failed attempt`() = test {
+        stubNodeForRestart()
+        val error = AppError("Feerate estimation update timeout")
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                sut.stopDebounced()
+                throw error
+            }
+            Unit
+        }
+
+        val result = sut.restartNode(ChannelDataMigration(listOf(1.toUByte()), listOf(listOf(2.toUByte()))))
+
+        val yieldError = assertIs<NodeStartYieldedToStopError>(result.exceptionOrNull())
+        assertEquals(error, yieldError.cause)
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        verify(lightningService, times(1)).stop()
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(2)).stop()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+
+        val foregroundResult = sut.start()
+
+        assertTrue(foregroundResult.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `restartNode retries when a foreground cancels the stop requested during the failed attempt`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                sut.stopDebounced()
+                throw AppError("Feerate estimation update timeout")
+            }
+            Unit
+        }
+
+        val restart = async { sut.restartNode() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        sut.cancelPendingStop()
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+        val result = restart.await()
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(1)).stop()
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartNode retry does not cancel a stop requested during the retry`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            sut.stopDebounced()
+            Unit
+        }
+
+        val result = sut.restartNode()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(2)).stop()
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `channel migration restart keeps the backup across bounded start attempts`() = test {
+        stubNodeForRestart()
+        whenever(lightningService.node).thenReturn(null)
+        val migration = ChannelDataMigration(listOf(1.toUByte()), listOf(listOf(2.toUByte())))
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("transient start failure")
+            Unit
+        }
+
+        val result = sut.restartNode(migration)
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(lightningService, times(2)) {
+            setup(any(), anyOrNull(), anyOrNull(), eq(migration))
+        }
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `channel migration restart retry does not cancel a stop requested during the retry`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            sut.stopDebounced()
+            Unit
+        }
+
+        val result = sut.restartNode(ChannelDataMigration(listOf(1.toUByte()), listOf(listOf(2.toUByte()))))
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(2)).stop()
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression #1125: a caller cancelled inside the retry delay must not drop the bounded retry
+    @Test
+    fun `restartNodeDetached completes the start retry after the caller is cancelled`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            Unit
+        }
+
+        val caller = CoroutineScope(testDispatcher)
+        caller.launch { sut.restartNodeDetached() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+
+        // Back press inside the retry window clears the ViewModel and cancels its scope
+        caller.cancel()
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
     // Regression: node teardown must complete before the next start rebuilds, never overlap it
     @Test
     fun `stop tears down the node before a subsequent start rebuilds it`() = test {
@@ -460,7 +1019,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
     }
 
@@ -498,6 +1057,109 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verify(lightningService).resetNetworkGraph(0)
+    }
+
+    @Test
+    fun `pending wallet recovery blocks new receiving data while node remains available`() = test {
+        startNodeForTesting()
+        whenever(lightningService.newAddress()).thenReturn("address")
+        for (marker in listOf(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE, Keychain.Key.USDT_PENDING_BACKUP_RESTORE)) {
+            whenever(keychain.exists(marker.name)).thenReturn(true)
+            assertIs<WalletBackupRestorePendingError>(sut.newAddress().exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.newAddressForType(AddressType.P2WPKH).exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.newAddressInfoForType(AddressType.P2WPKH).exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.createInvoice(description = "test").exceptionOrNull())
+            assertIs<WalletBackupRestorePendingError>(sut.createInvoiceMsats(1000uL, "test").exceptionOrNull())
+            assertTrue(sut.revealReceiveAddresses(505, AddressType.P2WPKH).isSuccess)
+            assertTrue(sut.sync().isSuccess)
+            whenever(keychain.exists(marker.name)).thenReturn(false)
+        }
+        verify(lightningService, never()).newAddress()
+        verify(lightningService, never()).newAddressForType(any())
+        verify(lightningService, never()).newAddressInfoForType(any())
+        verify(lightningService, never()).receive(anyOrNull(), any(), any())
+        verify(lightningService, never()).receiveMsats(any(), any(), any())
+        assertEquals("address", sut.newAddress().getOrThrow())
+    }
+
+    @Test
+    fun `pending wallet recovery prevents ordinary payment admission`() = test {
+        startNodeForTesting()
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        var beforeSend = false
+        sut.payInvoice("invoice", null, onBeforeSend = {
+            beforeSend = true
+            true
+        })
+        assertFalse(beforeSend)
+        assertIs<WalletBackupRestorePendingError>(sut.sendOnChain("address", 1000uL).exceptionOrNull())
+        verify(onchainSendAttemptStore, never()).current()
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `restore beginning during payment authorization prevents dispatch`() = test {
+        startNodeForTesting()
+        val result = sut.payInvoice("invoice", null, onBeforeSend = {
+            whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+            true
+        })
+        assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `unreadable restore admission fails closed`() = test {
+        startNodeForTesting()
+        val failure = IllegalStateException("Keychain unavailable")
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenThrow(failure)
+        assertEquals(failure, sut.newAddress().exceptionOrNull())
+        verify(lightningService, never()).newAddress()
+    }
+
+    @Test
+    fun `recreated repository retains durable recovery admission`() = test {
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        repeat(2) {
+            setUp()
+            startNodeForTesting()
+            assertIs<WalletBackupRestorePendingError>(sut.newAddress().exceptionOrNull())
+        }
+        verify(lightningService, never()).newAddress()
+    }
+
+    @Test
+    fun `pending restore blocks explicit recovery channel close and fee mutations`() = test {
+        startNodeForTesting()
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        val results = listOf(
+            sut.retryOriginalOnchainSend("attempt", "wallet", 1uL, authorizeOriginal = { error("Must not authorize") }),
+            sut.closeChannel(createChannelDetails()),
+            sut.openChannel(mock(), 1000uL),
+            sut.bumpFeeByRbf("txid", 1uL),
+            sut.accelerateByCpfp("txid", 1uL, "address"),
+        )
+        results.forEach { assertIs<WalletBackupRestorePendingError>(it.exceptionOrNull()) }
+        assertFailsWith<WalletBackupRestorePendingError> { sut.prepareRelease(pendingSendAttempt()) }
+        verify(lightningService, never()).prepareRelease(any())
+    }
+
+    @Test
+    fun `restore beginning after release preparation prevents broadcast`() = test {
+        val attempt = pendingSendAttempt()
+        var broadcasts = 0
+        val native = PreparedOnchainSend(preparedOutcome(OnchainSendOutcome.Accepted("release")).receipt) {
+            broadcasts++
+            OnchainSendOutcome.Accepted("release")
+        }
+        whenever(lightningService.prepareRelease(attempt)).thenReturn(native)
+        val prepared = sut.prepareRelease(attempt)
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+        repeat(2) {
+            assertFailsWith<WalletBackupRestorePendingError> { prepared.broadcast() }
+        }
+        assertEquals(0, broadcasts)
     }
 
     @Test
@@ -606,6 +1268,23 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `payInvoice forwards the payment deadline after final authorization`() = test {
+        startNodeForTesting()
+        val deadline = kotlin.time.Instant.parse("2026-10-06T12:00:00Z")
+        whenever(lightningService.send("bolt11", 1000uL, deadline)).thenReturn("payment-id")
+        var authorized = false
+
+        val result = sut.payInvoice("bolt11", 1000uL, deadline) {
+            authorized = true
+            true
+        }
+
+        assertTrue(authorized)
+        assertEquals("payment-id", result.getOrThrow())
+        verify(lightningService).send("bolt11", 1000uL, deadline)
+    }
+
+    @Test
     fun `payInvoice should proceed after timeout when channels are not usable`() = test {
         startNodeForTesting()
         val testPaymentId = "testPaymentId"
@@ -686,6 +1365,139 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.nodeId).thenReturn(testNodeId)
 
         assertEquals(testNodeId, sut.getNodeId())
+    }
+
+    @Test
+    fun `awaitNodeId should return null without waiting when node cannot run`() = test {
+        whenever(lightningService.nodeId).thenReturn("test_node_id")
+
+        assertNull(sut.awaitNodeId())
+    }
+
+    @Test
+    fun `awaitNodeId should wait for starting node to run`() = test {
+        sut.setInitNodeLifecycleState()
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+
+        val nodeId = async { sut.awaitNodeId() }
+        runCurrent()
+        assertFalse(nodeId.isCompleted)
+
+        startNodeForTesting()
+
+        assertEquals(testNodeId, nodeId.await())
+    }
+
+    @Test
+    fun `awaitNodeId should return null when node does not start in time`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.nodeId).thenReturn("test_node_id")
+
+        assertNull(sut.awaitNodeId())
+    }
+
+    @Test
+    fun `awaitNodeId should return last known id after node stops`() = test {
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+        startNodeForTesting()
+        assertEquals(testNodeId, sut.awaitNodeId())
+
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+        whenever(lightningService.nodeId).thenReturn(null)
+
+        assertEquals(testNodeId, sut.awaitNodeId())
+    }
+
+    @Test
+    fun `getLastKnownNodeId should return remembered id while node is not running`() = test {
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+        startNodeForTesting()
+        assertEquals(testNodeId, sut.getNodeId())
+
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+
+        assertNull(sut.getNodeId())
+        assertEquals(testNodeId, sut.getLastKnownNodeId())
+    }
+
+    @Test
+    fun `getLastKnownNodeId should return null after storage wipe`() = test {
+        whenever(lightningService.nodeId).thenReturn("test_node_id")
+        startNodeForTesting()
+        assertEquals("test_node_id", sut.getNodeId())
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        assertTrue(sut.wipeStorage(0).isSuccess)
+        whenever(lightningService.nodeId).thenReturn(null)
+
+        assertNull(sut.getLastKnownNodeId())
+    }
+
+    @Test
+    fun `lastKnownChannels should keep channels after stop`() = test {
+        val channels = listOf(createChannelDetails().copy(channelId = "channel_1"))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(channels)
+        sut.syncState()
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        sut.stop()
+
+        assertTrue(sut.lightningState.value.channels.isEmpty())
+        assertEquals(channels, sut.lastKnownChannels.value)
+    }
+
+    @Test
+    fun `lastKnownChannels should keep channels when synced while stopped`() = test {
+        val channels = listOf(createChannelDetails().copy(channelId = "channel_1"))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(channels)
+        sut.syncState()
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+
+        sut.syncState()
+
+        assertEquals(channels, sut.lastKnownChannels.value)
+    }
+
+    @Test
+    fun `lastKnownChannels should be empty after storage wipe`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails()))
+        sut.syncState()
+        assertEquals(1, sut.lastKnownChannels.value.size)
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        assertTrue(sut.wipeStorage(0).isSuccess)
+
+        assertTrue(sut.lastKnownChannels.value.isEmpty())
+    }
+
+    @Test
+    fun `awaitNodeId should return last known id when restart after stop fails`() = test {
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+        startNodeForTesting()
+        assertEquals(testNodeId, sut.awaitNodeId())
+
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+        whenever(lightningService.nodeId).thenReturn(null)
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenThrow(IllegalStateException("electrum server unreachable"))
+
+        assertTrue(sut.start(shouldRetry = false).isFailure)
+        assertIs<NodeLifecycleState.ErrorStarting>(sut.lightningState.value.nodeLifecycleState)
+
+        assertEquals(testNodeId, sut.awaitNodeId())
+        assertEquals(testNodeId, sut.getLastKnownNodeId())
     }
 
     @Test
@@ -785,7 +1597,6 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(listOf(channel), sut.lightningState.value.channels)
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `waitForUsableChannels delays before returning when node cannot run`() = test {
         val wait = async { sut.waitForUsableChannels() }
@@ -802,7 +1613,6 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(wait.isCompleted)
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `waitForUsableChannels delays before returning when running node has no channels`() = test {
         whenever(lightningService.channels).thenReturn(emptyList())
@@ -823,6 +1633,84 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `waitForUsableChannels re-reads a channel that becomes usable without a node event`() = test {
+        val notUsable = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(notUsable))
+        startNodeForTesting()
+        assertFalse(sut.canSend(1000uL))
+        val usable = notUsable.copy(isUsable = true, nextOutboundHtlcLimitMsat = 2_000_000u)
+        whenever(lightningService.channels).thenReturn(listOf(usable))
+        clearInvocations(lightningService)
+
+        val wait = async { sut.waitForUsableChannels() }
+        runCurrent()
+
+        assertTrue(wait.isCompleted)
+        assertTrue(sut.canSend(1000uL))
+        verify(lightningService, never()).balances
+    }
+
+    @Test
+    fun `waitForUsableChannels polls until a channel is usable and stops at the timeout otherwise`() = test {
+        val notUsable = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(notUsable))
+        startNodeForTesting()
+
+        val wait = async { sut.waitForUsableChannels() }
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY * 3)
+        assertFalse(wait.isCompleted)
+
+        whenever(lightningService.channels).thenReturn(
+            listOf(notUsable.copy(isUsable = true, nextOutboundHtlcLimitMsat = 2_000_000u)),
+        )
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_POLL_DELAY)
+        testScheduler.runCurrent()
+        assertTrue(wait.isCompleted)
+
+        whenever(lightningService.channels).thenReturn(listOf(notUsable))
+        sut.syncState()
+        val timedOut = async { sut.waitForUsableChannels() }
+        testScheduler.advanceTimeBy(CHANNELS_USABLE_TIMEOUT - 1.milliseconds)
+        assertFalse(timedOut.isCompleted)
+        testScheduler.advanceTimeBy(1.milliseconds)
+        testScheduler.runCurrent()
+        assertTrue(timedOut.isCompleted)
+    }
+
+    @Test
+    fun `refreshChannelsAndPeers returns a failure and keeps the last channels when a read fails`() = test {
+        val channel = createChannelDetails().copy(isChannelReady = true, isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenThrow(IllegalStateException("read failed"))
+
+        val result = sut.refreshChannelsAndPeers()
+
+        assertTrue(result.isFailure)
+        assertEquals(listOf(channel), sut.lightningState.value.channels)
+    }
+
+    @Test
+    fun `refreshChannelsAndPeers runs the callback right after publishing the channels and fails with it`() = test {
+        val old = createChannelDetails().copy(isChannelReady = true, isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(old))
+        startNodeForTesting()
+        val recovered = old.copy(isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(recovered))
+        var seen: List<ChannelDetails>? = null
+
+        val result = sut.refreshChannelsAndPeers { seen = sut.lightningState.value.channels }
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(recovered), seen)
+
+        val failed = sut.refreshChannelsAndPeers { error("callback failed") }
+
+        assertTrue(failed.isFailure)
+        assertEquals(listOf(recovered), sut.lightningState.value.channels)
+    }
+
+    @Test
     fun `wipeStorage should stop node and call service wipe`() = test {
         startNodeForTesting()
         whenever(lightningService.stop()).thenReturn(Unit)
@@ -835,18 +1723,49 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `connectToTrustedPeers should fail when node is not running`() = test {
-        val result = sut.connectToTrustedPeers()
+    fun `wipeStorage holds the lifecycle lock so a start cannot rebuild the node mid-wipe`() = test {
+        startNodeForTesting()
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val release = CompletableDeferred<Unit>()
+        whenever(lightningService.wipeStorage(0)).doSuspendableAnswer { release.await() }
+
+        val wipe = launch { sut.wipeStorage(0) }
+        runCurrent()
+        whenever(lightningService.node).thenReturn(null)
+        val start = launch { sut.start() }
+        runCurrent()
+
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        release.complete(Unit)
+        wipe.join()
+        start.join()
+        verify(lightningService).wipeStorage(0)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start is refused while a wipe is in progress`() = test {
+        sut.setWiping(true)
+
+        val result = sut.start()
+
+        assertIs<WipeInProgressError>(result.exceptionOrNull())
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `disconnectIdlePeers should fail when node is not running`() = test {
+        val result = sut.disconnectIdlePeers()
         assertTrue(result.isFailure)
     }
 
     @Test
-    fun `connectToTrustedPeers should succeed when node is running`() = test {
+    fun `start disconnects idle peers instead of connecting to fixed peers`() = test {
         startNodeForTesting()
-        whenever(lightningService.connectToTrustedPeers()).thenReturn(Unit)
 
-        val result = sut.connectToTrustedPeers()
-        assertTrue(result.isSuccess)
+        verifyBlocking(lightningService) { disconnectIdlePeers() }
+        verifyBlocking(lightningService, never()) { connectPeer(any()) }
     }
 
     @Test
@@ -864,6 +1783,55 @@ class LightningRepoTest : BaseUnitTest() {
 
         val result = sut.disconnectPeer(testPeer)
         assertTrue(result.isSuccess)
+    }
+
+    @Test
+    fun `sync rethrows a cancellation without recording a sync error`() = test {
+        // Offline keeps a retry loop from running, in case the cancellation is recorded as an error
+        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.DISCONNECTED))
+        startNodeForTesting()
+        var holdSync = true
+        var syncCalls = 0
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            syncCalls++
+            if (holdSync) awaitCancellation()
+        }
+
+        val job = launch { sut.sync() }
+        runCurrent()
+        job.cancelAndJoin()
+
+        assertTrue(job.isCancelled)
+        assertNull(sut.lightningState.value.lastSyncError)
+        assertTrue(sut.lightningState.value.isSyncHealthy)
+        assertFalse(sut.lightningState.value.isSyncingWallet)
+
+        holdSync = false
+        assertTrue(sut.sync().isSuccess)
+        assertEquals(2, syncCalls)
+    }
+
+    @Test
+    fun `sync requested while a cancelled sync runs still runs`() = test {
+        // Offline keeps the retry loop from running the requested sync instead
+        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.DISCONNECTED))
+        startNodeForTesting()
+        var holdSync = true
+        var syncCalls = 0
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            syncCalls++
+            if (holdSync) awaitCancellation()
+        }
+        val job = launch { sut.sync() }
+        runCurrent()
+        assertTrue(sut.sync().isSuccess)
+
+        holdSync = false
+        job.cancelAndJoin()
+        runCurrent()
+
+        assertEquals(2, syncCalls)
+        assertNull(sut.lightningState.value.lastSyncError)
     }
 
     @Test
@@ -894,6 +1862,8 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Test
     fun `sendOnChain should cache activity meta data`() = test {
+        whenever(onchainSendAttemptStore.broadcastPreparedCandidate(any(), any(), any(), any()))
+            .doSuspendableAnswer { (it.getArgument<suspend (suspend () -> Unit) -> OnchainSendOutcome>(3))({}) }
         val mockSettingsData = SettingsData(
             defaultTransactionSpeed = TransactionSpeed.Fast,
             coinSelectAuto = false // Disable auto coin selection to simplify the test
@@ -904,14 +1874,40 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(coreService.activity).thenReturn(mock())
 
         whenever(
-            lightningService.send(
+            lightningService.prepareOnchainSend(
                 address = any(),
                 sats = any(),
                 satsPerVByte = any(),
                 utxosToSpend = anyOrNull(),
-                isMaxAmount = any()
+                isMaxAmount = any(),
+                walletIndex = any(),
+                paymentDeadlineAt = anyOrNull(),
             )
-        ).thenReturn("testPaymentId")
+        ).thenReturn(preparedOutcome(OnchainSendOutcome.Accepted("testPaymentId")))
+
+        val attempt = OnchainSendAttempt(
+            walletId = "test-wallet",
+            attemptId = "attempt-1",
+            requestId = null,
+            orderId = null,
+            address = "test_address",
+            amountSats = 1000uL,
+            isMaxAmount = false,
+            feeRateSatsPerVByte = 10uL,
+            isTransfer = true,
+            channelId = "test_channel_id",
+            tags = emptyList(),
+        )
+        whenever {
+            onchainSendAttemptStore.admit(
+                any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
+                anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        }
+            .thenReturn(attempt)
+        whenever { onchainSendAttemptStore.recordOutcome(any(), any(), any()) }
+            .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = "testPaymentId"))
 
         startNodeForTesting()
 
@@ -931,18 +1927,941 @@ class LightningRepoTest : BaseUnitTest() {
 
         // Verify the result is successful
         assertTrue(result.isSuccess)
-        assertEquals("testPaymentId", result.getOrNull())
+        assertEquals(OnchainSendOutcome.Accepted("testPaymentId"), result.getOrNull())
 
         // Verify pre-activity metadata was saved
         verifyBlocking(preActivityMetadataRepo) {
             addPreActivityMetadata(any())
         }
+
+        whenever { onchainSendAttemptStore.recordOutcome(any(), any(), any()) }
+            .thenThrow(IllegalStateException("encrypted attempt write failed"))
+        val acceptedDespiteStorageFailure = spySut.sendOnChain(
+            address = "test_address",
+            sats = 1000uL,
+            speed = TransactionSpeed.Fast,
+            isTransfer = true,
+            channelId = "test_channel_id",
+        )
+        assertIs<OnchainSendPendingError>(acceptedDespiteStorageFailure.exceptionOrNull())
     }
 
     @Test
-    fun `registerForNotifications should fail when node is not running`() = test {
-        val result = sut.registerForNotifications()
+    fun `preparation errors release an admitted send without dispatch`() = test {
+        val attempt = pendingSendAttempt()
+        val repo = prepareGuardedSend(attempt)
+        var sendError: Throwable = NodeException.InvalidAddress("invalid address")
+        whenever(
+            lightningService.prepareOnchainSend(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                paymentDeadlineAt = anyOrNull(),
+            )
+        )
+            .doSuspendableAnswer { throw sendError }
+        assertTrue(repo.sendOnChain("address", 1_000uL).exceptionOrNull() is OnchainSendNotDispatchedError)
+        verify(onchainSendAttemptStore).releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
+
+        sendError = LdkError(NodeException.PersistenceFailed("workflow storage failure"))
+        assertTrue(repo.sendOnChain("address", 1_000uL).exceptionOrNull() is OnchainSendNotDispatchedError)
+        verify(onchainSendAttemptStore, times(2)).releaseBeforeDispatch(any(), any())
+    }
+
+    @Test
+    fun `preparation cancellation releases empty admitted guard without dispatch`() = test {
+        val attempt = pendingSendAttempt()
+        val repo = prepareGuardedSend(attempt)
+        whenever(
+            lightningService.prepareOnchainSend(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                paymentDeadlineAt = anyOrNull(),
+            )
+        )
+            .thenThrow(CancellationException("screen closed"))
+        assertFailsWith<CancellationException> { repo.sendOnChain("address", 1_000uL) }
+        verify(onchainSendAttemptStore).releaseBeforeDispatch(attempt.attemptId, attempt.walletIndex)
+        verify(onchainSendAttemptStore, never()).broadcastPreparedCandidate(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `accepted callback workflow error cannot turn a paid send into retry`() = test {
+        val attempt = pendingSendAttempt()
+        val repo = prepareGuardedSend(attempt)
+        val txid = "ab".repeat(32)
+        val accepted = OnchainSendOutcome.Accepted(txid)
+        whenever(
+            lightningService.prepareOnchainSend(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                paymentDeadlineAt = anyOrNull(),
+            )
+        ).thenReturn(preparedOutcome(accepted))
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = txid))
+        val result = repo.sendOnChain("address", 1_000uL, onBroadcast = {
+            throw NodeException.PersistenceFailed("callback storage failure")
+        })
+        assertEquals(accepted, result.getOrThrow())
+        verify(onchainSendAttemptStore, never()).releaseBeforeDispatch(any(), any())
+    }
+
+    @Test
+    fun `direct send fallback cannot use a later attempt winner`() = test {
+        assertDirectSendFallbackIdentity(pendingSendAttempt().copy(attemptId = "later-attempt"), false)
+    }
+
+    @Test
+    fun `direct send fallback cannot use another wallet winner`() = test {
+        assertDirectSendFallbackIdentity(pendingSendAttempt().copy(walletId = "another-wallet"), false)
+    }
+
+    @Test
+    fun `direct send fallback retains its exact observed winner`() = test {
+        assertDirectSendFallbackIdentity(pendingSendAttempt(), true)
+    }
+
+    private suspend fun assertDirectSendFallbackIdentity(winnerIdentity: OnchainSendAttempt, matches: Boolean) {
+        val original = pendingSendAttempt()
+        val repo = prepareGuardedSend(original)
+        val originalTxid = "ab".repeat(32)
+        val winnerTxid = "cd".repeat(32)
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(preparedOutcome(OnchainSendOutcome.Unknown(originalTxid)))
+        whenever(onchainSendAttemptStore.current()).thenReturn(null).thenReturn(
+            winnerIdentity.copy(evidence = OnchainSendEvidence.Observed, txid = winnerTxid),
+        )
+        whenever(onchainSendAttemptStore.currentDurable()).thenReturn(
+            winnerIdentity.copy(evidence = OnchainSendEvidence.Observed, txid = winnerTxid),
+        )
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenThrow(IllegalStateException("original outcome raced with durable observation"))
+        val broadcasts = mutableListOf<String>()
+        val result = repo.sendOnChain("address", 1_000uL, isTransfer = true, onBroadcast = { broadcasts += it })
+        if (matches) {
+            assertEquals(OnchainSendOutcome.Accepted(winnerTxid), result.getOrThrow())
+            assertEquals(listOf(winnerTxid), broadcasts)
+        } else {
+            assertIs<OnchainSendPendingError>(result.exceptionOrNull())
+            assertTrue(broadcasts.isEmpty())
+        }
+    }
+
+    @Test
+    fun `pre-marker failure is not dispatched after exact unsent guard cleanup`() = test {
+        val txid = "ab".repeat(32)
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        var saved: String? = null
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer {
+            saved = null
+            Unit
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
+        sut = LightningRepo(
+            bgDispatcher = testDispatcher,
+            lightningService = lightningService,
+            settingsStore = settingsStore,
+            coreService = coreService,
+            keychain = keychain,
+            lnurlService = lnurlService,
+            cacheStore = cacheStore,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = store,
+            connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk,
+            urlValidator = urlValidator,
+            electrumProbeService = electrumProbeService,
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        whenever(coreService.activity).thenReturn(mock())
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        val prepared = PreparedOnchainSend(
+            OnchainPreparedReceipt(txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
+        ) { throw to.bitkit.utils.ServiceError.NodeNotSetup() }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+        startNodeForTesting()
+        val repo = spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+        val error = repo.sendOnChain("address", 1_000uL).exceptionOrNull()
+        assertNull(store.current())
+        assertIs<OnchainSendNotDispatchedError>(error)
+    }
+
+    @Test
+    fun `accepted Max result carries recorded prepared recipient amount`() = test {
+        val original = pendingSendAttempt().copy(isMaxAmount = true)
+        val repo = prepareGuardedSend(original)
+        val txid = "ab".repeat(32)
+        val prepared = PreparedOnchainSend(
+            OnchainPreparedReceipt(txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 900uL),
+        ) { beforeDispatch ->
+            beforeDispatch()
+            OnchainSendOutcome.Accepted(txid)
+        }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenReturn(original.copy(amountSats = 900uL, evidence = OnchainSendEvidence.Accepted, txid = txid))
+        val result = repo.sendOnChain("address", 1_000uL, isMaxAmount = true).getOrThrow()
+        assertEquals(OnchainSendOutcome.Accepted(txid, 900uL), result)
+    }
+
+    private fun preparedOutcome(outcome: OnchainSendOutcome) = PreparedOnchainSend(
+        OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
+    ) {
+        it()
+        outcome
+    }
+
+    @Test
+    fun `original retry delegates saved outpoints to native validation when fresh outputs are absent`() = test {
+        startNodeForTesting()
+        val originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u), OnchainSendInput("22".repeat(32), 1u))
+        val original = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Unknown,
+            txid = "aa".repeat(32),
+            originalInputs = originalInputs,
+            candidateTxids = listOf("aa".repeat(32)),
+        )
+        whenever(onchainSendAttemptStore.current()).thenReturn(original)
+        whenever(lightningService.listSpendableOutputs()).thenReturn(Result.success(emptyList()))
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenThrow(IllegalStateException("fixture stops after exact preparation request"))
+        var authorizations = 0
+        val result = sut.retryOriginalOnchainSend(original.attemptId, original.walletId, 4uL) {
+            authorizations++
+        }
         assertTrue(result.isFailure)
+        assertEquals(0, authorizations)
+        verify(lightningService).prepareOnchainSend(
+            eq(original.address),
+            eq(original.amountSats),
+            eq(4uL),
+            argThat { map { OnchainSendInput(it.outpoint.txid, it.outpoint.vout) } == originalInputs },
+            eq(false),
+            eq(original.walletIndex),
+            isNull(),
+        )
+        verify(onchainSendAttemptStore, never()).broadcastPreparedCandidate(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `unresolved original opens recovery before an unhealthy sync blocks another send`() = test {
+        startNodeForTesting()
+        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.DISCONNECTED))
+        whenever(lightningService.sync()).thenThrow(RuntimeException("exact original observation unavailable"))
+        val original = pendingSendAttempt().copy(evidence = OnchainSendEvidence.Unknown)
+        whenever(onchainSendAttemptStore.current()).thenReturn(original)
+
+        val result = sut.sendOnChain("different-address", 2_000uL)
+
+        val blocked = assertIs<OnchainSendBlockedError>(result.exceptionOrNull())
+        assertEquals(original, blocked.attempt)
+        verify(
+            onchainSendAttemptStore,
+            never()
+        ).admit(
+            any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(), anyOrNull(), any(), anyOrNull(), any(),
+            anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+    }
+
+    private fun pendingSendAttempt() = OnchainSendAttempt(
+        walletId = "test-wallet", attemptId = "attempt-1", requestId = null, orderId = null,
+        address = "address", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,
+        isTransfer = false, channelId = null, tags = emptyList(),
+    )
+
+    private suspend fun prepareGuardedSend(attempt: OnchainSendAttempt): LightningRepo {
+        whenever(onchainSendAttemptStore.broadcastPreparedCandidate(any(), any(), any(), any()))
+            .doSuspendableAnswer { (it.getArgument<suspend (suspend () -> Unit) -> OnchainSendOutcome>(3))({}) }
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        whenever(
+            onchainSendAttemptStore.admit(
+                any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
+                anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        ).thenReturn(attempt)
+        startNodeForTesting()
+        return spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+    }
+
+    @Test
+    fun `restored accepted contact is applied before acknowledging and failures stay guarded`() = test {
+        val txid = "ab".repeat(32)
+        val contact = "pubky" + "y".repeat(52)
+        val attempt = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+            restoredFromBackup = true,
+            backupFollowup = to.bitkit.models.ActiveOnchainAttemptBackup.Followup(
+                "143",
+                emptyList(),
+                kotlinx.serialization.json.JsonPrimitive(contact),
+                "123",
+            ),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        whenever(activityService.restoreSentOnchainContact(txid, attempt.walletId, contact))
+            .thenThrow(IllegalStateException("contact write failed"))
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        doReturn(Unit).whenever(activityService).restoreSentOnchainContact(txid, attempt.walletId, contact)
+        org.mockito.Mockito.clearInvocations(activityService)
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        inOrder(activityService, onchainSendAttemptStore) {
+            verify(activityService).restoreSentOnchainContact(txid, attempt.walletId, contact)
+            verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        }
+    }
+
+    @Test
+    fun `observed original activity waits for its exact fee instead of displaying zero`() = test {
+        val txid = "ab".repeat(32)
+        val attempt = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+            candidateTxids = listOf(txid),
+            candidateFeeRates = mapOf(txid to 1uL),
+            backupFollowup = to.bitkit.models.ActiveOnchainAttemptBackup.Followup(
+                "0",
+                emptyList(),
+                createdAtMillis = "123"
+            ),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        whenever(lightningService.observedOriginalSendFee(attempt)).thenReturn(null)
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(activityService, never()).createSentOnchainActivityFromSendResult(
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+        )
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        whenever(lightningService.observedOriginalSendFee(attempt)).thenReturn(141uL)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            txid,
+            attempt.address,
+            attempt.amountSats,
+            141uL,
+            1uL,
+            false,
+            null,
+            attempt.walletId,
+        )
+        verify(activityService).repairVerifiedSentOnchainFee(txid, attempt.walletId, 141uL, 1uL)
+        verify(onchainSendAttemptStore).retainWinningFee(attempt.attemptId, attempt.walletIndex, txid, 141uL)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+    }
+
+    @Test
+    fun `positive winner uses only its prepared fee while transaction history is unavailable`() = test {
+        val first = "ab".repeat(32)
+        val replacement = "cd".repeat(32)
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(lightningService.observedOriginalSendFee(any())).thenReturn(null)
+        for ((txid, fee) in listOf(first to 0uL, replacement to 281uL)) {
+            val attempt = pendingSendAttempt().copy(
+                evidence = OnchainSendEvidence.Accepted,
+                txid = txid,
+                candidateTxids = listOf(first, replacement),
+                candidateFeeRates = mapOf(first to 1uL, replacement to 3uL),
+                candidateMiningFees = mapOf(first to 0uL, replacement to 281uL),
+                backupFollowup = ActiveOnchainAttemptBackup.Followup(
+                    "0",
+                    emptyList(),
+                    createdAtMillis = "123",
+                ),
+            )
+            whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+            whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+            sut.completeAcceptedOrdinaryFollowup(txid.uppercase())
+            inOrder(onchainSendAttemptStore, activityService) {
+                verify(onchainSendAttemptStore).retainWinningFee(attempt.attemptId, attempt.walletIndex, txid, fee)
+                verify(activityService).createSentOnchainActivityFromSendResult(
+                    txid,
+                    attempt.address,
+                    attempt.amountSats,
+                    fee,
+                    attempt.winningFeeRateSatsPerVByte,
+                    false,
+                    null,
+                    attempt.walletId,
+                )
+                verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+            }
+            clearInvocations(onchainSendAttemptStore, activityService)
+        }
+        verify(lightningService, never()).observedOriginalSendFee(any())
+    }
+
+    @Test
+    fun `prepared fee does not complete unknown or mismatched shop payments`() = test {
+        val txid = "ab".repeat(32)
+        val request = PaykitPaymentRequestId("request", "payer")
+        val attempt = pendingSendAttempt().copy(
+            requestId = request,
+            evidence = OnchainSendEvidence.Unknown,
+            txid = txid,
+            candidateTxids = listOf(txid),
+            candidateMiningFees = mapOf(txid to 141uL),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        sut.completeAcceptedShopFollowup(request, txid)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted))
+        sut.completeAcceptedShopFollowup(request.copy(paymentRequestId = "other"), txid)
+        sut.completeAcceptedShopFollowup(request, "cd".repeat(32))
+        verify(onchainSendAttemptStore, never()).retainWinningFee(any(), any(), any(), any())
+        verify(preActivityMetadataRepo, never()).addPreActivityMetadata(any())
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+    }
+
+    @Test
+    fun `successor activity fee never reuses original nonzero fee and missing exact fee stays guarded`() = test {
+        val txid = "cd".repeat(32)
+        val attempt = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+            candidateTxids = listOf("ab".repeat(32), txid),
+            candidateFeeRates = mapOf("ab".repeat(32) to 1uL, txid to 3uL),
+            backupFollowup = to.bitkit.models.ActiveOnchainAttemptBackup.Followup(
+                "143",
+                emptyList(),
+                createdAtMillis = "123"
+            ),
+            candidateMiningFees = mapOf("ab".repeat(32) to 143uL),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        whenever(lightningService.observedOriginalSendFee(attempt)).thenReturn(null)
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(activityService, never()).createSentOnchainActivityFromSendResult(
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+        )
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        whenever(lightningService.observedOriginalSendFee(attempt)).thenReturn(281uL)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            txid,
+            attempt.address,
+            attempt.amountSats,
+            281uL,
+            3uL,
+            false,
+            null,
+            attempt.walletId,
+        )
+        verify(activityService).repairVerifiedSentOnchainFee(txid, attempt.walletId, 281uL, 3uL)
+        verify(onchainSendAttemptStore).retainWinningFee(attempt.attemptId, attempt.walletIndex, txid, 281uL)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+    }
+
+    @Test
+    fun `successor followup reuses its retained exact fee when backend details disappear`() = test {
+        val txid = "cd".repeat(32)
+        val attempt = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+            candidateTxids = listOf("ab".repeat(32), txid),
+            candidateFeeRates = mapOf("ab".repeat(32) to 1uL, txid to 3uL),
+            backupFollowup = to.bitkit.models.ActiveOnchainAttemptBackup.Followup(
+                "281",
+                emptyList(),
+                createdAtMillis = "123"
+            ),
+            verifiedWinningFeeSats = 281uL,
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        whenever(lightningService.observedOriginalSendFee(any())).thenReturn(null)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(lightningService, never()).observedOriginalSendFee(any())
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            txid,
+            attempt.address,
+            attempt.amountSats,
+            281uL,
+            3uL,
+            false,
+            null,
+            attempt.walletId,
+        )
+        verify(activityService).repairVerifiedSentOnchainFee(txid, attempt.walletId, 281uL, 3uL)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+    }
+
+    @Test
+    fun `accepted successor metadata uses the winning candidate authorized fee`() = test {
+        val txid = "cd".repeat(32)
+        val attempt = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+            candidateTxids = listOf("ab".repeat(32), txid),
+            candidateFeeRates = mapOf("ab".repeat(32) to 1uL, txid to 3uL),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        whenever(lightningService.observedOriginalSendFee(attempt)).thenReturn(281uL)
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        val metadata = argumentCaptor<com.synonym.bitkitcore.PreActivityMetadata>()
+        verify(preActivityMetadataRepo).addPreActivityMetadata(metadata.capture())
+        assertEquals(3uL, metadata.firstValue.feeRate)
+    }
+
+    @Test
+    fun `accepted ordinary send stays guarded until its activity is durable`() = test {
+        val txid = "ab".repeat(32)
+        val attempt = OnchainSendAttempt(
+            walletId = "test-wallet",
+            attemptId = "attempt-1",
+            requestId = null,
+            orderId = null,
+            address = "bcrt1qrecipient",
+            amountSats = 1_000uL,
+            isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL,
+            isTransfer = false,
+            channelId = null,
+            tags = emptyList(),
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+
+        whenever { activityService.getOnchainActivityByTxId(txid, attempt.walletId) }.thenReturn(mock())
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+    }
+
+    @Test
+    fun `transient accepted write failure repairs original guard without another native send`() = test {
+        val txid = "ab".repeat(32)
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        var saved: String? = null
+        var writes = 0
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
+            writes++
+            if (writes == 4) error("transient accepted write failure")
+            saved = it.getArgument(1)
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
+        sut = LightningRepo(
+            bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
+            coreService = coreService,
+            keychain = keychain, lnurlService = lnurlService,
+            cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
+            electrumProbeService = electrumProbeService,
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(eq(txid), any())).thenReturn(mock())
+        whenever(lightningService.observedOriginalSendFee(any())).thenReturn(141uL)
+        whenever(
+            lightningService.prepareOnchainSend(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                paymentDeadlineAt = anyOrNull(),
+            )
+        )
+            .thenReturn(preparedOutcome(OnchainSendOutcome.Accepted(txid)))
+        startNodeForTesting()
+        val repo = spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+
+        assertEquals(OnchainSendOutcome.Accepted(txid), repo.sendOnChain("address", 1_000uL).getOrThrow())
+        assertEquals(txid, repo.currentOnchainSendAttempt()?.txid)
+        val blocked =
+            assertIs<OnchainSendBlockedError>(repo.sendOnChain("different-address", 2_000uL).exceptionOrNull())
+        assertEquals(txid, blocked.attempt?.txid)
+        repo.completeAcceptedOrdinaryFollowup(txid)
+
+        val reopened = OnchainSendAttemptStore(
+            testDispatcher,
+            keychain,
+            lightningService,
+            kotlin.time.Clock.System
+        ).current()
+        assertEquals(txid, reopened?.txid)
+        assertEquals(OnchainSendEvidence.Accepted, reopened?.evidence)
+        assertTrue(reopened?.localFollowupComplete == true)
+        verify(lightningService, times(1)).prepareOnchainSend(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+            any(),
+            paymentDeadlineAt = anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `accepted write and fee repair failure stay Pending after restart`() = test {
+        val txid = "ab".repeat(32)
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        var saved: String? = null
+        var writes = 0
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
+            writes++
+            if (writes >= 4) error("transient accepted write failure")
+            saved = it.getArgument(1)
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
+        sut = LightningRepo(
+            bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
+            coreService = coreService,
+            keychain = keychain, lnurlService = lnurlService,
+            cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
+            electrumProbeService = electrumProbeService,
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(eq(txid), any())).thenReturn(mock())
+        whenever(lightningService.observedOriginalSendFee(any())).thenReturn(null)
+        whenever(
+            lightningService.prepareOnchainSend(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                paymentDeadlineAt = anyOrNull(),
+            )
+        )
+            .thenReturn(preparedOutcome(OnchainSendOutcome.Accepted(txid)))
+        startNodeForTesting()
+        val repo = spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+
+        assertIs<OnchainSendPendingError>(repo.sendOnChain("address", 1_000uL).exceptionOrNull())
+        val retained = requireNotNull(store.current())
+        assertIs<OnchainSendPendingError>(
+            repo.retryOriginalOnchainSend(retained.attemptId, retained.walletId, 2uL) {
+                error("A retained accepted result must not authorize another payment")
+            }.exceptionOrNull()
+        )
+        val reopened = OnchainSendAttemptStore(
+            testDispatcher,
+            keychain,
+            lightningService,
+            kotlin.time.Clock.System
+        ).current()
+        assertEquals(txid, reopened?.txid)
+        assertEquals(OnchainSendEvidence.Pending, reopened?.evidence)
+        assertTrue(reopened?.localFollowupComplete == false)
+        verify(lightningService, times(1)).prepareOnchainSend(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+            any(),
+            paymentDeadlineAt = anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `retained accepted fallback cannot report success before durable repair`() = test {
+        val txid = "ab".repeat(32)
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        var saved: String? = null
+        var writes = 0
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer {
+            writes++
+            if (writes >= 4) error("transient accepted write failure")
+            saved = it.getArgument(1)
+        }
+        val durableStore = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
+        val store = spy(durableStore)
+        doSuspendableAnswer {
+            durableStore.broadcastPreparedCandidate(
+                it.getArgument(0),
+                it.getArgument(1),
+                it.getArgument(2),
+                it.getArgument(3)
+            )
+            store.recordOutcome(it.getArgument(0), OnchainSendOutcome.Accepted(txid), it.getArgument(1))
+            error("broadcast result unavailable")
+        }.whenever(store).broadcastPreparedCandidate(any(), any(), any(), any())
+        sut = LightningRepo(
+            bgDispatcher = testDispatcher, lightningService = lightningService, settingsStore = settingsStore,
+            coreService = coreService,
+            keychain = keychain, lnurlService = lnurlService,
+            cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
+            electrumProbeService = electrumProbeService,
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(eq(txid), any())).thenReturn(mock())
+        whenever(lightningService.observedOriginalSendFee(any())).thenReturn(null)
+        whenever(
+            lightningService.prepareOnchainSend(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                paymentDeadlineAt = anyOrNull(),
+            )
+        )
+            .thenReturn(preparedOutcome(OnchainSendOutcome.Accepted(txid)))
+        startNodeForTesting()
+        val repo = spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+
+        assertIs<OnchainSendPendingError>(repo.sendOnChain("address", 1_000uL).exceptionOrNull())
+        val retained = requireNotNull(store.current())
+        assertIs<OnchainSendPendingError>(
+            repo.retryOriginalOnchainSend(retained.attemptId, retained.walletId, 2uL) {
+                error("A retained accepted result must not authorize another payment")
+            }.exceptionOrNull()
+        )
+        val reopened = OnchainSendAttemptStore(
+            testDispatcher,
+            keychain,
+            lightningService,
+            kotlin.time.Clock.System
+        ).current()
+        assertEquals(txid, reopened?.txid)
+        assertEquals(OnchainSendEvidence.Pending, reopened?.evidence)
+        assertTrue(reopened?.localFollowupComplete == false)
+        verify(lightningService, times(1)).prepareOnchainSend(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+            any(),
+            paymentDeadlineAt = anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `accepted Shop acknowledgement waits for original durable local activity`() = test {
+        val txid = "ab".repeat(32)
+        val requestId = PaykitPaymentRequestId("request-1", "counterparty", "receiver")
+        val attempt = pendingSendAttempt().copy(
+            requestId = requestId,
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid,
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+
+        sut.completeAcceptedShopFollowup(requestId.copy(paymentRequestId = "other-request"), txid)
+        sut.completeAcceptedShopFollowup(requestId, "cd".repeat(32))
+        verify(preActivityMetadataRepo, never()).addPreActivityMetadata(any())
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+
+        assertTrue(runCatching { sut.completeAcceptedShopFollowup(requestId, txid) }.isFailure)
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        sut.completeAcceptedShopFollowup(requestId, txid)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        verify(lightningService, never()).prepareOnchainSend(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+            any(),
+            paymentDeadlineAt = anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `accepted Blocktank funding finishes through the ordinary follow-up once its activity is durable`() = test {
+        val txid = "ab".repeat(32)
+        val attempt = pendingSendAttempt().copy(
+            isTransfer = true,
+            orderId = "order-1",
+            evidence = OnchainSendEvidence.Accepted,
+            txid = txid
+        )
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        sut.completeAcceptedOrdinaryFollowup(txid)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        verify(lightningService, never()).prepareOnchainSend(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+            any(),
+            paymentDeadlineAt = anyOrNull(),
+        )
+    }
+
+    @Test
+    fun `transfer send admits original balance context before native dispatch`() = test {
+        val context = OnchainTransferContext(txTotalSats = 99_000uL, preTransferOnchainSats = 125_000uL)
+        val attempt = pendingSendAttempt().copy(isTransfer = true, orderId = "order-1", transferContext = context)
+        val repo = prepareGuardedSend(attempt)
+        whenever(
+            lightningService.prepareOnchainSend(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                paymentDeadlineAt = anyOrNull(),
+            )
+        )
+            .doSuspendableAnswer {
+                verify(onchainSendAttemptStore).admit(
+                    any(), isNull(), eq("order-1"), any(), any(), any(), any(), eq(true), anyOrNull(), any(),
+                    eq(context), any(), anyOrNull(),
+                    contactPublicKey = anyOrNull(),
+                )
+                preparedOutcome(OnchainSendOutcome.Unknown("ab".repeat(32)))
+            }
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Unknown, txid = "ab".repeat(32)))
+
+        assertTrue(
+            repo.sendOnChain(
+                "address",
+                98_000uL,
+                isTransfer = true,
+                orderId = "order-1",
+                transferContext = context,
+            ).getOrThrow() is OnchainSendOutcome.Unknown
+        )
+    }
+
+    @Test
+    fun `observed ordinary send completes guard only after durable local activity`() = test {
+        val txid = "ab".repeat(32)
+        val attempt = pendingSendAttempt().copy(evidence = OnchainSendEvidence.Observed, txid = txid)
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(
+            onchainSendAttemptStore.observeExactTransaction(txid, isConfirmed = false)
+        ).thenReturn(attempt).thenReturn(null)
+        whenever(onchainSendAttemptStore.current()).thenReturn(attempt)
+        val eventHandler = startNodeAndCaptureEvents()
+        val event = Event.OnchainTransactionReceived(txid = txid, details = mock())
+
+        eventHandler(event)
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        eventHandler(event)
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+    }
+
+    @Test
+    fun `observed ordinary send retries transient followup without another node event`() = test {
+        val txid = "ab".repeat(32)
+        var attempt = pendingSendAttempt().copy(evidence = OnchainSendEvidence.Observed, txid = txid)
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(onchainSendAttemptStore.observeExactTransaction(txid, isConfirmed = false)).thenReturn(attempt)
+        whenever(onchainSendAttemptStore.current()).doSuspendableAnswer { attempt }
+        whenever(onchainSendAttemptStore.markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex))
+            .doSuspendableAnswer { attempt = attempt.copy(localFollowupComplete = true) }
+        val handler = startNodeAndCaptureEvents()
+        handler(Event.OnchainTransactionReceived(txid = txid, details = mock()))
+        verify(onchainSendAttemptStore, never()).markLocalFollowupComplete(any(), any())
+        whenever(activityService.getOnchainActivityByTxId(txid, attempt.walletId)).thenReturn(mock())
+        testScheduler.advanceTimeBy(1_001)
+        runCurrent()
+        verify(onchainSendAttemptStore).markLocalFollowupComplete(attempt.attemptId, attempt.walletIndex)
+        verify(lightningService, never()).prepareOnchainSend(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+            any(),
+            paymentDeadlineAt = anyOrNull()
+        )
     }
 
     @Test
@@ -958,9 +2877,25 @@ class LightningRepoTest : BaseUnitTest() {
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
         inOrder.verify(lightningService)
-            .setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull(), anyOrNull())
+            .setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression: the settings write after a successful restart must surface as a failed Result.
+    // Thrown out of the returned Result it escapes the caller's coroutine, which leaves the
+    // Electrum config screen spinning with no toast.
+    @Test
+    fun `restartWithElectrumServer returns failure when persisting the server fails`() = test {
+        startNodeForTesting()
+        val customServerUrl = "ssl://test.example.com:50002"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(settingsStore.update(any())).thenThrow(RuntimeException("write failed"))
+
+        val result = sut.restartWithElectrumServer(customServerUrl)
+
+        assertTrue(result.isFailure)
     }
 
     @Test
@@ -983,12 +2918,12 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
         // The switch to the new server fails.
-        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()))
             .thenThrow(RuntimeException("start failed"))
         // The background recovery (previous config) blocks until released.
         val recoveryStarted = CompletableDeferred<Unit>()
         val releaseRecovery = CompletableDeferred<Unit>()
-        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull()) }
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
             .doSuspendableAnswer {
                 recoveryStarted.complete(Unit)
                 releaseRecovery.await()
@@ -1019,7 +2954,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(probeError, result.exceptionOrNull())
         verify(lightningService, never()).stop()
         verify(lightningService, never())
-            .setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull())
+            .setup(any(), eq(badUrl), anyOrNull(), anyOrNull())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
@@ -1036,7 +2971,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull() is NodeConfigNotAppliedError)
         verify(lightningService, never())
-            .setup(any(), eq(newServerUrl), anyOrNull(), anyOrNull(), anyOrNull())
+            .setup(any(), eq(newServerUrl), anyOrNull(), anyOrNull())
     }
 
     // Two-request barrier: a change issued while the background recovery of a previous failed
@@ -1051,12 +2986,12 @@ class LightningRepoTest : BaseUnitTest() {
         val nextUrl = "ssl://next.example.com:50002"
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
-        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()))
             .thenThrow(RuntimeException("start failed"))
         // Hold the background recovery mid-flight so the second change is issued while it runs.
         val recoveryStarted = CompletableDeferred<Unit>()
         val releaseRecovery = CompletableDeferred<Unit>()
-        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull()) }
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
             .doSuspendableAnswer {
                 recoveryStarted.complete(Unit)
                 releaseRecovery.await()
@@ -1074,7 +3009,77 @@ class LightningRepoTest : BaseUnitTest() {
 
         // Success must mean the node was actually rebuilt with the requested server.
         assertTrue(result.isSuccess)
-        verify(lightningService).setup(any(), eq(nextUrl), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(lightningService).setup(any(), eq(nextUrl), anyOrNull(), anyOrNull())
+    }
+
+    // Regression: the caller is a route-scoped ViewModel, so leaving the screen mid-change cancels
+    // the rebuild. start() rethrows the cancellation, so onFailure never ran and nothing restarted
+    // the node, leaving it down until the next ON_START.
+    @Test
+    fun `restartWithElectrumServer recovers the previous config when the caller is cancelled`() = test {
+        startNodeForTesting()
+        val newUrl = "ssl://next.example.com:50002"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        // Hold the rebuild open so the caller can be cancelled while it is in flight.
+        val rebuildStarted = CompletableDeferred<Unit>()
+        whenever { lightningService.setup(any(), eq(newUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                rebuildStarted.complete(Unit)
+                awaitCancellation()
+            }
+
+        var rethrown = false
+        val change = launch {
+            try {
+                sut.restartWithElectrumServer(newUrl)
+            } catch (e: CancellationException) {
+                rethrown = true
+                throw e
+            }
+        }
+        rebuildStarted.await()
+        change.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(rethrown) // structured concurrency preserved
+        // The detached recovery rebuilt with the previous config and the node is back up.
+        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        // A cancelled change must never persist the server it failed to apply.
+        verifyBlocking(settingsStore, never()) { update(any()) }
+    }
+
+    @Test
+    fun `restartWithRgsServer recovers the previous config when the caller is cancelled`() = test {
+        startNodeForTesting()
+        val newRgsUrl = "https://next.rgs.example.com/snapshot"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val rebuildStarted = CompletableDeferred<Unit>()
+        whenever { lightningService.setup(any(), anyOrNull(), eq(newRgsUrl), anyOrNull()) }
+            .doSuspendableAnswer {
+                rebuildStarted.complete(Unit)
+                awaitCancellation()
+            }
+
+        var rethrown = false
+        val change = launch {
+            try {
+                sut.restartWithRgsServer(newRgsUrl)
+            } catch (e: CancellationException) {
+                rethrown = true
+                throw e
+            }
+        }
+        rebuildStarted.await()
+        change.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(rethrown)
+        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(settingsStore, never()) { update(any()) }
     }
 
     @Test
@@ -1089,7 +3094,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), isNull(), eq(customRgsUrl), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService).setup(any(), isNull(), eq(customRgsUrl), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
@@ -1110,7 +3115,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
         whenever(
-            lightningService.setup(any(), isNull(), eq("https://bad.rgs/snapshot"), anyOrNull(), anyOrNull()),
+            lightningService.setup(any(), isNull(), eq("https://bad.rgs/snapshot"), anyOrNull()),
         ).thenThrow(RuntimeException("Failed to start node"))
 
         val result = sut.restartWithRgsServer("https://bad.rgs/snapshot")
@@ -1126,12 +3131,11 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService = lightningService,
             settingsStore = settingsStore,
             coreService = coreService,
-            lspNotificationsService = lspNotificationsService,
-            firebaseMessaging = firebaseMessaging,
             keychain = keychain,
             lnurlService = lnurlService,
             cacheStore = cacheStore,
             preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = onchainSendAttemptStore,
             connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = failingValidator,
@@ -1174,6 +3178,93 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(30uL, result.getOrNull())
+    }
+
+    @Test
+    fun `cached Blocktank rates preserve each selected speed after a gateway failure`() = test {
+        useCachedFeesAfterGatewayFailure()
+
+        assertEquals(37uL, sut.getFeeRateForSpeed(TransactionSpeed.Fast).getOrThrow())
+        assertEquals(19uL, sut.getFeeRateForSpeed(TransactionSpeed.Medium).getOrThrow())
+        assertEquals(7uL, sut.getFeeRateForSpeed(TransactionSpeed.Slow).getOrThrow())
+    }
+
+    @Test
+    fun `ordinary send uses the selected cached fee without bypassing preparation`() = test {
+        val attempt = pendingSendAttempt().copy(feeRateSatsPerVByte = 37uL)
+        val repo = prepareGuardedSend(attempt)
+        doCallRealMethod().whenever(repo).getFeeRateForSpeed(any(), anyOrNull())
+        val blocktank = useCachedFeesAfterGatewayFailure()
+        val accepted = OnchainSendOutcome.Accepted("ab".repeat(32))
+        whenever(
+            lightningService.prepareOnchainSend(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                paymentDeadlineAt = anyOrNull(),
+            )
+        ).thenReturn(preparedOutcome(accepted))
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = accepted.txid))
+
+        assertEquals(accepted, repo.sendOnChain("address", 1_000uL, speed = TransactionSpeed.Fast).getOrThrow())
+
+        verify(blocktank).info(true)
+        verify(blocktank).info(false)
+        verify(lightningService).prepareOnchainSend(
+            "address",
+            1_000uL,
+            37uL,
+            null,
+            false,
+            attempt.walletIndex,
+            null,
+        )
+        verify(onchainSendAttemptStore).broadcastPreparedCandidate(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `either required restore marker blocks send before cached fee recovery`() = test {
+        startNodeForTesting()
+        val blocktank = useCachedFeesAfterGatewayFailure()
+        for (marker in listOf(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE, Keychain.Key.USDT_PENDING_BACKUP_RESTORE)) {
+            whenever(keychain.exists(marker.name)).thenReturn(true)
+            assertIs<WalletBackupRestorePendingError>(sut.sendOnChain("address", 1_000uL).exceptionOrNull())
+            whenever(keychain.exists(marker.name)).thenReturn(false)
+        }
+        verify(blocktank, never()).info(any())
+        verify(onchainSendAttemptStore, never()).current()
+        verify(onchainSendAttemptStore, never()).broadcastPreparedCandidate(any(), any(), any(), any())
+        verify(lightningService, never()).prepareOnchainSend(
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+            any(),
+            paymentDeadlineAt = anyOrNull(),
+        )
+    }
+
+    private suspend fun useCachedFeesAfterGatewayFailure(): BlocktankService {
+        val blocktank = spy(BlocktankService(coreService, lightningService))
+        val onchain = mock<IBtInfoOnchain>()
+        whenever(onchain.feeRates).thenReturn(FeeRates(fast = 37u, mid = 19u, slow = 7u))
+        val info = mock<IBtInfo>()
+        whenever(info.onchain).thenReturn(onchain)
+        val error = AppError(
+            BlocktankException.DataException(
+                "Failed to fetch info from Blocktank: Blocktank error: Failed to get info: " +
+                    "Client error: Request failed with status 502 Bad Gateway: gateway unavailable"
+            )
+        )
+        doThrow(error).whenever(blocktank).info(true)
+        doReturn(info).whenever(blocktank).info(false)
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        return blocktank
     }
 
     @Test
@@ -1285,63 +3376,6 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `start should load trusted peers from blocktank info`() = test {
-        sut.setInitNodeLifecycleState()
-        whenever(lightningService.node).thenReturn(null)
-
-        val blocktank = mock<BlocktankService>()
-        whenever(coreService.blocktank).thenReturn(blocktank)
-
-        val mockNodes = listOf(
-            ILspNode(
-                alias = "LSP1",
-                pubkey = "node1pubkey",
-                connectionStrings = listOf("node1pubkey@node1.example.com:9735"),
-                readonly = null,
-            ),
-            ILspNode(
-                alias = "LSP2",
-                pubkey = "node2pubkey",
-                connectionStrings = listOf("node2pubkey@node2.example.com:9735"),
-                readonly = null,
-            ),
-        )
-        val mockInfo = mock<IBtInfo> { on { nodes } doReturn mockNodes }
-        whenever(blocktank.info(refresh = false)).thenReturn(mockInfo)
-
-        val result = sut.start()
-
-        assertTrue(result.isSuccess)
-        verify(lightningService).setup(
-            any(),
-            anyOrNull(),
-            anyOrNull(),
-            argThat { peers ->
-                peers?.size == 2 &&
-                    peers.any { it.nodeId == "node1pubkey" && it.address == "node1.example.com:9735" } &&
-                    peers.any { it.nodeId == "node2pubkey" && it.address == "node2.example.com:9735" }
-            },
-            anyOrNull(),
-        )
-    }
-
-    @Test
-    fun `start should pass null trusted peers when blocktank returns null`() = test {
-        sut.setInitNodeLifecycleState()
-        whenever(lightningService.node).thenReturn(null)
-
-        val blocktank = mock<BlocktankService>()
-        whenever(coreService.blocktank).thenReturn(blocktank)
-        whenever(blocktank.info(refresh = false)).thenReturn(null)
-        whenever(blocktank.info(refresh = true)).thenReturn(null)
-
-        val result = sut.start()
-
-        assertTrue(result.isSuccess)
-        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull())
-    }
-
-    @Test
     fun `getBalanceForAddressType should succeed when node is running`() = test {
         startNodeForTesting()
         whenever(lightningService.getBalanceForAddressType(AddressType.P2WPKH))
@@ -1444,7 +3478,7 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sendMaxOnChain(sats = 99_000uL)
 
         assertTrue(result.isSuccess)
-        verify(lightningService).send("bcrt1qtest", 99_000uL, 20uL, null, true)
+        verifyPreparedSend(sats = 99_000uL, satsPerVByte = 20uL, isDrain = true)
     }
 
     @Test
@@ -1458,7 +3492,7 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sendMaxOnChain(sats = 99_000uL)
 
         assertTrue(result.isSuccess)
-        verify(lightningService).send("bcrt1qtest", 99_000uL, 20uL, null, false)
+        verifyPreparedSend(sats = 99_000uL, satsPerVByte = 20uL, isDrain = false)
     }
 
     @Test
@@ -1470,7 +3504,7 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sendMaxOnChain(sats = 99_000uL)
 
         assertTrue(result.isSuccess)
-        verify(lightningService).send("bcrt1qtest", 99_000uL, 20uL, null, false)
+        verifyPreparedSend(sats = 99_000uL, satsPerVByte = 20uL, isDrain = false)
     }
 
     @Test
@@ -1488,24 +3522,65 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sendMaxOnChain(sats = 97_800uL, feeRates = null)
 
         assertTrue(result.isSuccess)
-        verify(lightningService).send("bcrt1qtest", 97_800uL, 10uL, null, false)
+        verifyPreparedSend(sats = 97_800uL, satsPerVByte = 10uL, isDrain = false)
         verify(blocktank, times(1)).getFees()
     }
 
     private suspend fun sendMaxOnChain(
         sats: ULong,
         feeRates: FeeRates? = FeeRates(fast = 20u, mid = 10u, slow = 5u),
-    ): Result<String> {
+    ): Result<OnchainSendOutcome> {
+        val attempt = pendingSendAttempt().copy(address = "bcrt1qtest", amountSats = sats)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
         whenever(coreService.activity).thenReturn(mock())
-        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any())).thenReturn("txid")
+        whenever(onchainSendAttemptStore.broadcastPreparedCandidate(any(), any(), any(), any()))
+            .doSuspendableAnswer { (it.getArgument<suspend (suspend () -> Unit) -> OnchainSendOutcome>(3))({}) }
+        whenever(
+            onchainSendAttemptStore.admit(
+                any(), anyOrNull(), anyOrNull(), any(), any(), any(), any(), any(),
+                anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
+                contactPublicKey = anyOrNull(),
+            )
+        ).thenReturn(attempt)
+        whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
+            .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = "txid"))
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(preparedOutcome(OnchainSendOutcome.Accepted("txid")))
         return sut.sendOnChain(
             address = "bcrt1qtest",
             sats = sats,
             speed = TransactionSpeed.Fast,
             feeRates = feeRates,
             isMaxAmount = true,
+        )
+    }
+
+    private suspend fun verifyPreparedSend(sats: ULong, satsPerVByte: ULong, isDrain: Boolean) {
+        verify(onchainSendAttemptStore).admit(
+            walletId = any(),
+            requestId = anyOrNull(),
+            orderId = anyOrNull(),
+            address = eq("bcrt1qtest"),
+            amountSats = eq(sats),
+            isMaxAmount = eq(isDrain),
+            feeRateSatsPerVByte = eq(satsPerVByte),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            tags = any(),
+            transferContext = anyOrNull(),
+            beforeSendAttempt = any(),
+            payerIdentity = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+        )
+        verify(lightningService).prepareOnchainSend(
+            address = eq("bcrt1qtest"),
+            sats = eq(sats),
+            satsPerVByte = eq(satsPerVByte),
+            utxosToSpend = isNull(),
+            isMaxAmount = eq(isDrain),
+            walletIndex = any(),
+            paymentDeadlineAt = anyOrNull(),
         )
     }
 
@@ -1564,6 +3639,26 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull()?.message?.contains("currently selected") == true)
         verify(lightningService, times(0)).removeAddressTypeFromMonitor(any())
+    }
+
+    @Test
+    fun `setMonitoring should fail when disabling native SegWit required for Blocktank refunds`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "taproot",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot"),
+                )
+            )
+        )
+
+        val result = sut.setMonitoring(AddressType.P2WPKH, enabled = false)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("Blocktank refunds") == true)
+        verify(lightningService, never()).removeAddressTypeFromMonitor(any())
+        verify(lightningService, never()).getBalanceForAddressType(any())
     }
 
     @Test
@@ -1696,6 +3791,27 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateAddressType retains native SegWit monitoring`() = test {
+        startNodeForTesting()
+        val previous = SettingsData(
+            selectedAddressType = "nativeSegwit",
+            addressTypesToMonitor = listOf("nativeSegwit"),
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(previous))
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
+        val transforms = argumentCaptor<(SettingsData) -> SettingsData>()
+
+        val result = sut.updateAddressType("taproot", listOf("taproot"))
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(settingsStore) { update(transforms.capture()) }
+        assertEquals(
+            listOf("taproot", "nativeSegwit"),
+            transforms.firstValue(previous).addressTypesToMonitor,
+        )
+    }
+
+    @Test
     fun `updateAddressType should fail when setPrimaryAddressType fails`() = test {
         startNodeForTesting()
         whenever(
@@ -1802,6 +3918,24 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(lightningService, times(0)).removeAddressTypeFromMonitor(any())
+    }
+
+    @Test
+    fun `pruneEmptyAddressTypesAfterRestore keeps empty native SegWit when Taproot is selected`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "taproot",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot"),
+                )
+            )
+        )
+
+        val result = sut.pruneEmptyAddressTypesAfterRestore()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService, never()).removeAddressTypeFromMonitor(any())
     }
 
     @Test
@@ -2134,5 +4268,14 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
         // Verify start was only called once (no retry)
         verify(lightningService, times(1)).start(anyOrNull(), any())
+    }
+
+    @Test
+    fun `only a sync finished after the request counts as fresh`() {
+        assertFalse(isOnchainSyncAfter(null, 0uL))
+        assertFalse(isOnchainSyncAfter(1_800_000_000uL, 1_800_000_000uL))
+        assertTrue(isOnchainSyncAfter(1_800_000_001uL, 1_800_000_000uL))
+        // The requested sync's own success counts even when it finished in the same second.
+        assertTrue(isOnchainSyncAfter(1_800_000_000uL, 1_800_000_000uL, requestedSyncSucceeded = true))
     }
 }

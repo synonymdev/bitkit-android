@@ -27,52 +27,56 @@ import to.bitkit.ui.utils.Transitions.defaultPopEnterTrans
 import to.bitkit.ui.utils.Transitions.defaultPopExitTrans
 import kotlin.reflect.KType
 
-@Suppress("MagicNumber")
 object Transitions {
     val slideInHorizontally = slideInHorizontally(animationSpec = tween(), initialOffsetX = { it })
     val slideOutHorizontally = slideOutHorizontally(animationSpec = tween(), targetOffsetX = { it })
     val slideInVertically = slideInVertically(animationSpec = tween(), initialOffsetY = { it })
     val slideOutVertically = slideOutVertically(animationSpec = tween(), targetOffsetY = { it })
 
-    val defaultEnterTrans: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?) = {
-        slideInHorizontally(
-            initialOffsetX = { fullWidth -> fullWidth },
-            animationSpec = tween(300, easing = FastOutSlowInEasing)
-        )
-    }
+    /** Slide in from the right when a screen is pushed. */
+    val defaultEnter: EnterTransition = slideInHorizontally(
+        initialOffsetX = { fullWidth -> fullWidth },
+        animationSpec = tween(300, easing = FastOutSlowInEasing)
+    )
 
-    val defaultExitTrans: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?) = {
-        slideOutHorizontally(
-            targetOffsetX = { fullWidth -> -fullWidth / 3 },
-            animationSpec = tween(300, easing = FastOutSlowInEasing)
-        ) + fadeOut(
-            animationSpec = tween(300, easing = FastOutSlowInEasing),
-            targetAlpha = 0.8f
-        )
-    }
+    /** Slide partly out to the left and dim when a screen is covered. */
+    val defaultExit: ExitTransition = slideOutHorizontally(
+        targetOffsetX = { fullWidth -> -fullWidth / 3 },
+        animationSpec = tween(300, easing = FastOutSlowInEasing)
+    ) + fadeOut(
+        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        targetAlpha = 0.8f
+    )
 
+    /** Slide back in from the left when the screen above is popped. */
+    val defaultPopEnter: EnterTransition = slideInHorizontally(
+        initialOffsetX = { fullWidth -> -fullWidth / 3 },
+        animationSpec = tween(300, easing = FastOutSlowInEasing)
+    ) + fadeIn(
+        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        initialAlpha = 0.8f
+    )
+
+    /** Slide out to the right when a screen is popped. */
+    val defaultPopExit: ExitTransition = slideOutHorizontally(
+        targetOffsetX = { fullWidth -> fullWidth },
+        animationSpec = tween(300, easing = FastOutSlowInEasing)
+    )
+
+    val defaultEnterTrans: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?) = { defaultEnter }
+    val defaultExitTrans: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?) = { defaultExit }
     val defaultPopEnterTrans: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?) = {
-        slideInHorizontally(
-            initialOffsetX = { fullWidth -> -fullWidth / 3 },
-            animationSpec = tween(300, easing = FastOutSlowInEasing)
-        ) + fadeIn(
-            animationSpec = tween(300, easing = FastOutSlowInEasing),
-            initialAlpha = 0.8f
-        )
+        defaultPopEnter
     }
-
     val defaultPopExitTrans: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?) = {
-        slideOutHorizontally(
-            targetOffsetX = { fullWidth -> fullWidth },
-            animationSpec = tween(300, easing = FastOutSlowInEasing)
-        )
+        defaultPopExit
     }
 }
 
 /**
  * Construct a nested [NavGraph] with the default screen transitions.
  */
-@Suppress("LongParameterList", "MaxLineLength")
+@Suppress("MaxLineLength")
 inline fun <reified T : Any> NavGraphBuilder.navigationWithDefaultTransitions(
     startDestination: Any,
     typeMap: Map<KType, @JvmSuppressWildcards NavType<*>> = emptyMap(),
@@ -98,7 +102,7 @@ inline fun <reified T : Any> NavGraphBuilder.navigationWithDefaultTransitions(
 /**
  * Adds the [Composable] to the [NavGraphBuilder] with the default screen transitions.
  */
-@Suppress("LongParameterList", "MaxLineLength")
+@Suppress("MaxLineLength")
 inline fun <reified T : Any> NavGraphBuilder.composableWithDefaultTransitions(
     typeMap: Map<KType, NavType<*>> = emptyMap(),
     deepLinks: List<NavDeepLink> = emptyList(),
@@ -122,7 +126,7 @@ inline fun <reified T : Any> NavGraphBuilder.composableWithDefaultTransitions(
 /**
  * Adds a root screen that may be entered directly by URI, with the default screen transitions.
  */
-@Suppress("LongParameterList", "MaxLineLength")
+@Suppress("MaxLineLength")
 inline fun <reified T : Routes.DeepLinkable> NavGraphBuilder.deepLinkableComposable(
     typeMap: Map<KType, NavType<*>> = emptyMap(),
     deepLinks: List<NavDeepLink> = ScreenDeepLinks.linksFor(T::class),
