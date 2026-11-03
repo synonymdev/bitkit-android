@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.subscriptions
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,7 +62,6 @@ import to.bitkit.ui.components.Slider
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.screens.wallets.usdt.UsdtAuthentication
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -156,19 +154,11 @@ fun AllowanceSheet(
             }
         }
         uiState.authorization?.let {
-            BackHandler(onBack = onAuthorizationCancel)
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
-            ) {
-                UsdtAuthentication(
-                    useBiometrics = it.useBiometrics,
-                    onCancel = onAuthorizationCancel,
-                    onVerified = viewModel::onAuthorized,
-                    pinDescriptionRes = R.string.security__pin_allowance,
-                )
-            }
+            AllowanceAuthorizationOverlay(
+                authorization = it,
+                onCancel = onAuthorizationCancel,
+                onVerified = viewModel::onAuthorized,
+            )
         }
     }
 }

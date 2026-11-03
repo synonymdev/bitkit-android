@@ -17,8 +17,7 @@ env:
   FORCE_COLOR: 1
 
 jobs:
-  build:
-    if: github.event.pull_request.draft == false
+  build-and-test:
     runs-on: ubuntu-latest
 
     permissions:
@@ -81,9 +80,31 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+  compose-ui:
+    uses: ./.github/workflows/ui-tests.yml
+    with:
+      suites: ComposeUi
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: read
+
+  build:
+    if: always()
+    needs: [build-and-test, compose-ui]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require build, unit tests, and Compose UI tests
+        env:
+          BUILD_RESULT: ${{ needs.build-and-test.result }}
+          COMPOSE_RESULT: ${{ needs.compose-ui.result }}
+        run: |
+          test "$BUILD_RESULT" = success
+          test "$COMPOSE_RESULT" = success
+
   apk-comment:
-    needs: build
-    if: needs.build.outputs.artifact-url != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+    needs: build-and-test
+    if: needs.build-and-test.outputs.artifact-url != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
 
     permissions:
@@ -93,7 +114,7 @@ jobs:
       - name: Comment APK link on PR
         uses: actions/github-script@v9
         env:
-          ARTIFACT_URL: ${{ needs.build.outputs.artifact-url }}
+          ARTIFACT_URL: ${{ needs.build-and-test.outputs.artifact-url }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
           script: |

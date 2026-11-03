@@ -27,7 +27,19 @@ data class PaykitAllowanceStateBackup(
     val unannouncedOfferIds: Set<String> = emptySet(),
     val notifiedRequestIds: Set<String> = emptySet(),
     val lastTrustedTime: String? = null,
+    val ledgerRevisionFloor: ULong? = null,
+    val automaticSpends: List<AutomaticSpend> = emptyList(),
+    val endedAllowanceIds: Set<String> = emptySet(),
 ) {
+    @Serializable
+    data class AutomaticSpend(
+        val attemptId: String,
+        val counterparty: String,
+        val allowanceId: String,
+        val amountSats: ULong,
+        val admittedAt: String,
+    )
+
     @Serializable
     data class Group(
         val id: String,
@@ -96,6 +108,11 @@ data class PaykitAllowanceStateBackup(
         unannouncedOfferIds = state.acceptingOfferIds,
         notifiedRequestIds = state.notifiedRequestIds,
         lastTrustedTime = state.lastTrustedTimeMillis?.let(::isoTime),
+        ledgerRevisionFloor = state.ledgerRevisionFloor,
+        automaticSpends = state.automaticSpends.map {
+            AutomaticSpend(it.attemptId, it.counterparty, it.allowanceId, it.amountSats, isoTime(it.admittedAtMillis))
+        },
+        endedAllowanceIds = state.endedAllowanceIds,
     )
 
     fun restored(): PaykitAllowanceLocalState {
@@ -133,6 +150,17 @@ data class PaykitAllowanceStateBackup(
             lastTrustedTimeMillis = lastTrustedTime?.let(::millis),
             autoPaidSatsByAllowance = autoPaidSatsByAllowance,
             autoPaidRequestIds = autoPaidRequestIds,
+            ledgerRevisionFloor = ledgerRevisionFloor,
+            automaticSpends = automaticSpends.map {
+                PaykitAllowanceLocalState.AutomaticSpend(
+                    it.attemptId,
+                    it.counterparty,
+                    it.allowanceId,
+                    it.amountSats,
+                    millis(it.admittedAt),
+                )
+            },
+            endedAllowanceIds = endedAllowanceIds,
         )
         if (autoPaidSatsByAllowance.isNotEmpty() || autoPaidRequestIds.isNotEmpty()) return state
         // A backup written by iOS keeps no lasting totals, so they are rebuilt from the restored journal.

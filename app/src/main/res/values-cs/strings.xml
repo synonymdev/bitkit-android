@@ -272,6 +272,7 @@
     <string name="onboarding__restore_failed_header">&lt;accent&gt;Chyba&lt;/accent&gt; disponibilního zůstatku</string>
     <string name="onboarding__restore_failed_text">Bitkit obnovil vaše úspory, ale neobnovil váš aktuální disponibilní zůstatek (stav lightning) a data peněženky.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Obnovte&lt;/accent&gt;svou peněženku</string>
+    <string name="onboarding__restore_incomplete_text">Vaše peněženka a zůstatek jsou zpět, ale Bitkit nedokázal obnovit: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Kontrolní součet pro frázi pro obnovení se zdá být nesprávný. Zkontrolujte prosím svou frázi pro obnovení.</string>
     <string name="onboarding__restore_no_backup_button">Pokračovat bez zálohy</string>
     <string name="onboarding__restore_no_backup_warn">Pokud jste dříve měli lightning zálohu, bude přepsána a ztracena. To by mohlo vést ke ztrátě finančních prostředků.</string>
@@ -1459,6 +1460,9 @@
     <string name="subscriptions__allowances">Rozpočty</string>
     <string name="subscriptions__allowances_empty_description">Můžete nastavit limity útraty pro automatické vyřizování žádostí o platbu od důvěryhodných kontaktů.</string>
     <string name="subscriptions__allowances_empty_headline">Nastavte si\n&lt;accent&gt;rozpočty&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Záznamy vašich rozpočtů jsou starší než ty, které tato peněženka už použila. Požadavky budou čekat na vaše schválení, dokud platby neobnovíte.</string>
+    <string name="subscriptions__allowances_paused_resume">Obnovit</string>
+    <string name="subscriptions__allowances_paused_title">Automatické platby pozastaveny</string>
     <string name="subscriptions__cancel_subscription">Zrušit předplatné</string>
     <string name="subscriptions__choose_recipient">Vybrat příjemce</string>
     <string name="subscriptions__content_too_long">Zkraťte název nebo popis předplatného a zkuste to znovu.</string>

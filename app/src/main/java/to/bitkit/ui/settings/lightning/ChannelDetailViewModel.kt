@@ -76,7 +76,7 @@ class ChannelDetailViewModel @Inject constructor(
                 orders = blocktankRepo.blocktankState.value.orders,
                 cjitEntries = blocktankRepo.blocktankState.value.cjitEntries,
                 isClosedChannel = isClosedChannel,
-                nodeId = lightningRepo.getNodeId().orEmpty(),
+                nodeId = lightningRepo.getLastKnownNodeId().orEmpty(),
             )
         }
 
@@ -93,7 +93,7 @@ class ChannelDetailViewModel @Inject constructor(
     }
 
     private fun findChannelUi(channelId: String, closedChannels: List<ChannelUi>): ChannelUi? {
-        val channels = lightningRepo.lightningState.value.channels
+        val channels = lightningRepo.lastKnownChannels.value
         val blocktankState = blocktankRepo.blocktankState.value
 
         return resolveActiveChannel(channelId, channels)
@@ -114,7 +114,7 @@ class ChannelDetailViewModel @Inject constructor(
         channels.find { it.channelId == channelId }?.mapToUiModel(channels, connectionText)
 
     private suspend fun loadClosedChannels(): List<ChannelUi> {
-        val channels = lightningRepo.lightningState.value.channels
+        val channels = lightningRepo.lastKnownChannels.value
 
         return activityRepo.getClosedChannels(SortDirection.DESC)
             .onFailure { Logger.error("Failed to load closed channels", it, context = TAG) }
@@ -151,10 +151,9 @@ class ChannelDetailViewModel @Inject constructor(
         observerJob?.cancel()
         observerJob = viewModelScope.launch {
             combine(
-                lightningRepo.lightningState,
+                lightningRepo.lastKnownChannels,
                 blocktankRepo.blocktankState,
-            ) { lightningState, blocktankState ->
-                val channels = lightningState.channels
+            ) { channels, blocktankState ->
                 val updatedChannel = resolveActiveChannel(channelId, channels)
                 Pair(updatedChannel, blocktankState)
             }.collect { (updatedChannel, blocktankState) ->
@@ -164,7 +163,7 @@ class ChannelDetailViewModel @Inject constructor(
                             channelLoadState = ChannelLoadState.Success(updatedChannel),
                             orders = blocktankState.orders,
                             cjitEntries = blocktankState.cjitEntries,
-                            nodeId = lightningRepo.getNodeId().orEmpty(),
+                            nodeId = lightningRepo.getLastKnownNodeId().orEmpty(),
                         )
                     }
                 } else {
@@ -179,7 +178,7 @@ class ChannelDetailViewModel @Inject constructor(
                                 isClosedChannel = true,
                                 orders = blocktankState.orders,
                                 cjitEntries = blocktankState.cjitEntries,
-                                nodeId = lightningRepo.getNodeId().orEmpty(),
+                                nodeId = lightningRepo.getLastKnownNodeId().orEmpty(),
                             )
                         }
                     } else if (!isPendingOrder) {
