@@ -1370,6 +1370,10 @@ class LightningRepo @Inject constructor(
             context = TAG,
         )
 
+        // a drain spends everything spendable after the sync, so a send only drains while that still equals sats
+        val isDrain = isMaxAmount &&
+            (isTransfer || sats == estimateMaxSendOnchain(address, transactionSpeed, feeRates).getOrNull())
+
         // transfer send-all: skip UTXO selection to avoid LDK buffer; else use passed or auto-selected
         val utxosForSend = when {
             isTransfer && isMaxAmount -> null
@@ -1378,7 +1382,7 @@ class LightningRepo @Inject constructor(
 
         Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
 
-        val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount)
+        val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isDrain)
 
         val preActivityMetadata = PreActivityMetadata(
             walletId = WalletScope.default,

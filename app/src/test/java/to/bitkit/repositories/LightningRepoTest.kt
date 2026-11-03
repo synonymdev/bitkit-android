@@ -1436,6 +1436,67 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `sendOnChain should drain when the amount is the max after sync`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(spendableBalance(100_000uL))
+        whenever(lightningService.estimateSendAllFee(any(), any())).thenReturn(1_000uL)
+
+        val result = sendMaxOnChain(sats = 99_000uL)
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).send("bcrt1qtest", 99_000uL, 20uL, null, true)
+    }
+
+    @Test
+    fun `sendOnChain should not drain funds found by its own sync`() = test {
+        startNodeForTesting()
+        var spendableSats = 100_000uL
+        whenever(lightningService.balances).thenAnswer { spendableBalance(spendableSats) }
+        whenever(lightningService.sync()).thenAnswer { spendableSats = 150_000uL }
+        whenever(lightningService.estimateSendAllFee(any(), any())).thenReturn(1_000uL)
+
+        val result = sendMaxOnChain(sats = 99_000uL)
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).send("bcrt1qtest", 99_000uL, 20uL, null, false)
+    }
+
+    @Test
+    fun `sendOnChain should not drain when the max cannot be estimated`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(spendableBalance(100_000uL))
+        whenever(lightningService.estimateSendAllFee(any(), any())).thenAnswer { throw AppError("no estimate") }
+
+        val result = sendMaxOnChain(sats = 99_000uL)
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).send("bcrt1qtest", 99_000uL, 20uL, null, false)
+    }
+
+    private suspend fun sendMaxOnChain(sats: ULong): Result<String> {
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(coreService.activity).thenReturn(mock())
+        whenever(lightningService.send(any(), any(), any(), anyOrNull(), any())).thenReturn("txid")
+        return sut.sendOnChain(
+            address = "bcrt1qtest",
+            sats = sats,
+            speed = TransactionSpeed.Fast,
+            feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+            isMaxAmount = true,
+        )
+    }
+
+    private fun spendableBalance(sats: ULong) = BalanceDetails(
+        totalOnchainBalanceSats = sats,
+        spendableOnchainBalanceSats = sats,
+        totalAnchorChannelsReserveSats = 0uL,
+        totalLightningBalanceSats = 0uL,
+        lightningBalances = emptyList(),
+        pendingBalancesFromChannelClosures = emptyList(),
+    )
+
+    @Test
     fun `updateAddressType should fail when already in progress`() = test {
         startNodeForTesting()
         val settingsFlow = MutableSharedFlow<SettingsData>(replay = 1)

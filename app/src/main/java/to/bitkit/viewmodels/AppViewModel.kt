@@ -3739,17 +3739,10 @@ class AppViewModel @Inject constructor(
             speed = state.speed,
             utxosToSpend = state.selectedUtxos,
             feeRates = state.feeRates,
-            // a drain spends everything spendable at dispatch, so only drain while that equals the confirmed amount
-            isMaxAmount = state.payMethod == SendMethod.ONCHAIN &&
-                state.isMaxAmount &&
-                amount == currentMaxSendOnchain(address, state),
+            isMaxAmount = state.payMethod == SendMethod.ONCHAIN && state.isMaxAmount,
             tags = tags,
         )
     }
-
-    private suspend fun currentMaxSendOnchain(address: String, state: SendUiState): ULong =
-        lightningRepo.estimateMaxSendOnchain(address = address, speed = state.speed, feeRates = state.feeRates)
-            .getOrNull() ?: walletRepo.balanceState.value.maxSendOnchainSats
 
     private suspend fun sendLightning(
         bolt11: String,
@@ -3856,10 +3849,10 @@ class AppViewModel @Inject constructor(
         ).getOrNull()?.takeIf { it > 0uL }
 
         if (max == null) {
-            // without an estimate the cached max is the only max-send signal left
+            // the cached max is priced at the default speed, so draining on it can deliver another amount
             _sendUiState.update {
                 if (it.divergedFrom(state)) return@update it
-                it.copy(isMaxAmount = it.amount == walletRepo.balanceState.value.maxSendOnchainSats)
+                it.copy(isMaxAmount = false)
             }
             return
         }
