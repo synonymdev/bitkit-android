@@ -136,6 +136,16 @@ internal fun NavController.navigateToAmountFromConfirm() {
     }
 }
 
+/** Back from Confirm, shared by the toolbar arrow and system Back. Returns false when the sheet should close. */
+internal fun NavController.backFromConfirm(canReturnToAmount: Boolean): Boolean {
+    if (popBackStack(SendRoute.Amount, inclusive = false)) return true
+    if (canReturnToAmount) {
+        navigateToAmountFromConfirm()
+        return true
+    }
+    return popBackStack()
+}
+
 internal fun NavController.navigateToSendPending(route: SendRoute.Pending) {
     navigateTo(route) { popUpTo(graph.id) { inclusive = true } }
 }
@@ -498,6 +508,12 @@ fun SendSheet(
                         initialSubscriptionId?.let(appViewModel::subscription)
                     }
 
+                    val onConfirmBack = {
+                        if (!navController.backFromConfirm(uiState.canReturnToAmount)) appViewModel.hideSheet()
+                    }
+                    // Confirm can be the sheet's first screen, where the nav host does not handle system Back.
+                    BackHandler(enabled = uiState.canReturnToAmount, onBack = onConfirmBack)
+
                     SendConfirmScreen(
                         savedStateHandle = it.savedStateHandle,
                         uiState = uiState,
@@ -506,14 +522,7 @@ fun SendSheet(
                         canAutoStart = !isOffline && !shouldShowSyncOverlay,
                         syncNodeVariant = syncNodeVariant,
                         canGoBack = navController.previousBackStackEntry != null || uiState.canReturnToAmount,
-                        onBack = {
-                            val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
-                            when {
-                                didPopToAmount -> Unit
-                                uiState.canReturnToAmount -> navController.navigateToAmountFromConfirm()
-                                !navController.popBackStack() -> appViewModel.hideSheet()
-                            }
-                        },
+                        onBack = onConfirmBack,
                         onEvent = { e -> appViewModel.setSendEvent(e) },
                         onClickAddTag = { navController.navigateTo(SendRoute.AddTag) },
                         onClickTag = { tag -> appViewModel.removeTag(tag) },

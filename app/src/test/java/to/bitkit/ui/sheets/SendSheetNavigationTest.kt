@@ -12,6 +12,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.ui.navigateTo
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -71,6 +72,24 @@ class SendSheetNavigationTest {
             }
             navController.navigateTo(SendRoute.Confirm)
             assertTrue(navController.popBackStack(SendRoute.Amount, inclusive = false))
+        }
+    }
+
+    @Test
+    fun `back from a first confirm opens amount only when it can return to amount`() {
+        for (canReturnToAmount in listOf(true, false)) {
+            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+                navigatorProvider.addNavigator(ComposeNavigator())
+                graph = createGraph(startDestination = SendRoute.Confirm) {
+                    composable<SendRoute.Confirm> {}
+                    composable<SendRoute.Amount> {}
+                }
+            }
+
+            val handled = navController.backFromConfirm(canReturnToAmount)
+
+            assertEquals(canReturnToAmount, handled)
+            assertEquals(canReturnToAmount, navController.currentDestination?.hasRoute<SendRoute.Amount>() == true)
         }
     }
 
