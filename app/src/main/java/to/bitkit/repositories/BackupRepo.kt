@@ -12,6 +12,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
@@ -720,7 +721,13 @@ class BackupRepo @Inject constructor(
             BackupCategory.WALLET -> uploadWalletBackup()
             BackupCategory.USDT_RECOVERY -> uploadUsdtRecoveryBackup(usdtSnapshot)
             else -> runSuspendCatching {
-                vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category)).getOrThrow()
+                val data = getBackupDataBytes(category)
+                val setup = vssBackupClient.setup()
+                currentCoroutineContext().ensureActive()
+                setup.onFailure {
+                    if (it is TimeoutCancellationException) throw BackupClientSetupTimeout(it)
+                }.getOrThrow()
+                vssBackupClient.putObject(key = category.name, data = data).getOrThrow()
             }
         }
         return upload
@@ -905,22 +912,20 @@ class BackupRepo @Inject constructor(
         BackupCategory.METADATA -> getMetadataBackupDataBytes()
 
         BackupCategory.BLOCKTANK -> {
-            val blocktankState = blocktankRepo.blocktankState.first()
-
             val payload = BlocktankBackupV1(
                 createdAt = currentTimeMillis(),
-                orders = blocktankState.orders,
-                cjitEntries = blocktankState.cjitEntries,
-                info = blocktankState.info,
+                orders = coreService.blocktank.orders(refresh = false),
+                cjitEntries = coreService.blocktank.cjitEntries(refresh = false),
+                info = coreService.blocktank.info(refresh = false),
             )
 
             json.encodeToString(payload).toByteArray()
         }
 
         BackupCategory.ACTIVITY -> {
-            val activities = activityRepo.getActivities().getOrDefault(emptyList())
-            val closedChannels = activityRepo.getClosedChannels().getOrDefault(emptyList())
-            val activityTags = activityRepo.getAllActivitiesTags().getOrDefault(emptyList())
+            val activities = activityRepo.getActivities().getOrThrow()
+            val closedChannels = activityRepo.getClosedChannels().getOrThrow()
+            val activityTags = activityRepo.getAllActivitiesTags().getOrThrow()
 
             val payload = ActivityBackupV1(
                 createdAt = currentTimeMillis(),
@@ -1557,6 +1562,8 @@ class BackupRepo @Inject constructor(
 
 internal class WalletBackupSnapshotChanged : AppError("Private payment state changed during wallet snapshot")
 
+private class BackupClientSetupTimeout(cause: Throwable) : AppError("Backup client setup timed out", cause)
+
 private class PublicAddressRestoreFailed(cause: Throwable) : AppError(
     "Failed to retain public address exclusion during restore",
     cause,
@@ -1590,6 +1597,7 @@ private data class RestoredCoreBackup(
 )
 
 internal fun Throwable.isTemporaryBackupFailure(): Boolean = isPaykitTemporarilyUnavailable() || when (this) {
+    is BackupClientSetupTimeout,
     is VssException.ConnectionException,
     is VssException.NetworkException,
     is VssException.StoreException,

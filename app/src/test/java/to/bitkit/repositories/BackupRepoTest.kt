@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
@@ -83,6 +84,7 @@ import to.bitkit.di.json
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
+import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.PaykitAllowanceStateBackup
@@ -98,6 +100,7 @@ import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.WidgetsBackupV1
 import to.bitkit.services.AddressDerivationInfo
+import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkOperationLock
 import to.bitkit.services.PaykitSdkService
@@ -138,6 +141,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val coreService = mock<to.bitkit.services.CoreService>()
+    private val blocktankService = mock<BlocktankService>()
     private val lightningRepo = mock<LightningRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val paykitSdkService = mock<PaykitSdkService>()
@@ -169,6 +173,10 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() = test {
+        whenever(coreService.blocktank).thenReturn(blocktankService)
+        whenever { blocktankService.orders(refresh = false) }.thenReturn(emptyList())
+        whenever { blocktankService.cjitEntries(refresh = false) }.thenReturn(emptyList())
+        whenever { blocktankService.info(refresh = false) }.thenReturn(null)
         whenever(coreService.validateBitcoinAddress(any())).thenAnswer {
             com.synonym.bitkitcore.ValidationResult(
                 address = it.getArgument(0),
@@ -238,6 +246,199 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { vssBackupClient.listKeys() }.thenReturn(Result.success(emptyList()))
         whenever(pubkyRepo.hasIdentityForBackup()).thenReturn(false)
         sut = createSut()
+    }
+
+    @Test
+    fun `cold explicit settings backup initializes its client without observation`() = test {
+        val ready = CompletableDeferred<Unit>()
+        whenever { vssBackupClient.setup(any()) }.doSuspendableAnswer {
+            ready.complete(Unit)
+            Result.success(Unit)
+        }
+        whenever { vssBackupClient.putObject(eq(BackupCategory.SETTINGS.name), any()) }.doSuspendableAnswer {
+            ready.await()
+            Result.success(VssItem(BackupCategory.SETTINGS.name, byteArrayOf(), 1))
+        }
+        val backup = async { sut.triggerBackup(BackupCategory.SETTINGS) }
+        try {
+            runCurrent()
+            assertTrue(backup.isCompleted)
+            backup.await().getOrThrow()
+            verify(vssBackupClient, never()).setupWithRetry(any(), any(), any())
+            verify(vssBackupClientLdk, never()).setup()
+        } finally {
+            backup.cancelAndJoin()
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `cold explicit settings setup failure keeps its retry without observation`() = test {
+        val error = VssException.ConnectionException("unavailable")
+        val statuses = MutableStateFlow(mapOf(BackupCategory.SETTINGS to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        whenever { vssBackupClient.setup(any()) }
+            .thenReturn(Result.failure(error))
+            .thenReturn(Result.success(Unit))
+        try {
+            assertEquals(error, sut.triggerBackup(BackupCategory.SETTINGS).exceptionOrNull())
+            verify(vssBackupClient, never()).putObject(any(), any())
+            assertTrue(statuses.value.getValue(BackupCategory.SETTINGS).isRequired)
+            advanceTimeBy(15_000)
+            runCurrent()
+            verify(vssBackupClient, times(2)).setup(any())
+            verify(vssBackupClient).putObject(eq(BackupCategory.SETTINGS.name), any())
+            assertFalse(statuses.value.getValue(BackupCategory.SETTINGS).isRequired)
+        } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `cold explicit setup timeout keeps its retry without observation`() = test {
+        sut = createSut(dispatcher = StandardTestDispatcher(testScheduler))
+        var setupAttempts = 0
+        val statuses = MutableStateFlow(mapOf(BackupCategory.SETTINGS to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        whenever { vssBackupClient.setup(any()) }.doSuspendableAnswer {
+            setupAttempts += 1
+            if (setupAttempts == 1) runCatching { withTimeout(1) { awaitCancellation() } } else Result.success(Unit)
+        }
+        try {
+            val result = sut.triggerBackup(BackupCategory.SETTINGS)
+            assertTrue(result.exceptionOrNull()?.isTemporaryBackupFailure() == true, result.toString())
+            verify(vssBackupClient, never()).putObject(any(), any())
+            assertTrue(statuses.value.getValue(BackupCategory.SETTINGS).isRequired)
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+            verify(vssBackupClient, never()).putObject(any(), any())
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient, times(2)).setup(any())
+            verify(vssBackupClient).putObject(eq(BackupCategory.SETTINGS.name), any())
+            assertFalse(statuses.value.getValue(BackupCategory.SETTINGS).isRequired)
+        } finally {
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `reset drains cold explicit setup before resetting clients`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { vssBackupClient.setup(any()) }.doSuspendableAnswer {
+            entered.complete(Unit)
+            withContext(NonCancellable) { release.await() }
+            Result.success(Unit)
+        }
+        val backup = async { sut.triggerBackup(BackupCategory.SETTINGS) }
+        try {
+            runCurrent()
+            assertTrue(entered.isCompleted)
+            val reset = async { sut.reset() }
+            runCurrent()
+            assertFalse(reset.isCompleted)
+            verify(vssBackupClient, never()).reset()
+            release.complete(Unit)
+            reset.await()
+            assertTrue(backup.await().isFailure)
+            verify(vssBackupClient, never()).putObject(any(), any())
+            verify(vssBackupClient).reset()
+        } finally {
+            release.complete(Unit)
+            backup.cancelAndJoin()
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `caller cancellation drains cold explicit setup without upload`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { vssBackupClient.setup(any()) }.doSuspendableAnswer {
+            entered.complete(Unit)
+            withContext(NonCancellable) { release.await() }
+            Result.success(Unit)
+        }
+        val backup = async { sut.triggerBackup(BackupCategory.SETTINGS) }
+        try {
+            runCurrent()
+            assertTrue(entered.isCompleted)
+            backup.cancel()
+            runCurrent()
+            assertFalse(backup.isCompleted)
+            release.complete(Unit)
+            backup.join()
+            assertTrue(backup.isCancelled)
+            verify(vssBackupClient, never()).putObject(any(), any())
+        } finally {
+            release.complete(Unit)
+            backup.cancelAndJoin()
+            sut.reset()
+        }
+    }
+
+    @Test
+    fun `cold blocktank backup captures persisted orders before state refresh`() = test {
+        val order = previewBtOrder()
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
+        whenever { blocktankService.orders(refresh = false) }.thenReturn(listOf(order))
+
+        sut.triggerBackup(BackupCategory.BLOCKTANK).getOrThrow()
+
+        val payload = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(BackupCategory.BLOCKTANK.name), payload.capture())
+        val backup = json.decodeFromString<BlocktankBackupV1>(payload.firstValue.decodeToString())
+        assertEquals(listOf(order), backup.orders)
+        assertTrue(backup.cjitEntries.isEmpty())
+        assertNull(backup.info)
+        verify(blocktankService).orders(refresh = false)
+        verify(blocktankService).cjitEntries(refresh = false)
+        verify(blocktankService).info(refresh = false)
+    }
+
+    @Test
+    fun `cold blocktank backup refuses every unreadable cache before setup`() = test {
+        val error = AppError("Core cache is unavailable")
+        var unreadable = -1
+        whenever { blocktankService.orders(refresh = false) }.doSuspendableAnswer {
+            if (unreadable == 0) throw error
+            emptyList()
+        }
+        whenever { blocktankService.cjitEntries(refresh = false) }.doSuspendableAnswer {
+            if (unreadable == 1) throw error
+            emptyList()
+        }
+        whenever { blocktankService.info(refresh = false) }.doSuspendableAnswer {
+            if (unreadable == 2) throw error
+            null
+        }
+        repeat(3) { unavailable ->
+            unreadable = unavailable
+            assertEquals(error, sut.triggerBackup(BackupCategory.BLOCKTANK).exceptionOrNull())
+        }
+        verify(vssBackupClient, never()).setup(any())
+        verify(vssBackupClient, never()).putObject(any(), any())
+    }
+
+    @Test
+    fun `cold activity backup refuses every unavailable component before setup`() = test {
+        val error = AppError("Core is unavailable")
+        repeat(3) { unavailable ->
+            whenever { activityRepo.getActivities() }.thenReturn(
+                if (unavailable == 0) Result.failure(error) else Result.success(emptyList())
+            )
+            whenever { activityRepo.getClosedChannels() }.thenReturn(
+                if (unavailable == 1) Result.failure(error) else Result.success(emptyList())
+            )
+            whenever { activityRepo.getAllActivitiesTags() }.thenReturn(
+                if (unavailable == 2) Result.failure(error) else Result.success(emptyList())
+            )
+            assertEquals(error, sut.triggerBackup(BackupCategory.ACTIVITY).exceptionOrNull())
+        }
+        verify(vssBackupClient, never()).setup(any())
+        verify(vssBackupClient, never()).putObject(any(), any())
     }
 
     @Test
