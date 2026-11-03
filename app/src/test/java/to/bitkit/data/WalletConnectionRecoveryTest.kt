@@ -86,6 +86,29 @@ class WalletConnectionRecoveryTest : BaseUnitTest() {
     private fun instance(store: SettingsStore = settings) = WalletConnectionRecovery(keychain, db, binding, store)
 
     @Test
+    fun `receipt checks derive the wallet binding only once per admitted operation`() = test {
+        var derivations = 0
+        whenever(binding.getBackupWalletBinding(0)).thenAnswer {
+            derivations += 1
+            "original-wallet"
+        }
+        repeat(2) { operation ->
+            sut.withReceiptOperation { receipt ->
+                repeat(200) { receipt.requireCurrent() }
+                receipt.commitReceiptState { assertEquals(operation + 1, derivations) }
+            }
+        }
+    }
+
+    @Test
+    fun `receipt admission rejects unavailable wallet credentials before entering Core work`() = test {
+        whenever(binding.getBackupWalletBinding(0)).thenAnswer { throw AppError("binding unavailable") }
+        var entered = false
+        assertFailsWith<AppError> { sut.withReceiptOperation { entered = true } }
+        assertFalse(entered)
+    }
+
+    @Test
     fun `receipt work can complete while restoration holds the ordinary operation lock`() = test {
         sut.withOperation(sut.captureOwner()) {
             sut.withReceiptOperation { receipt ->

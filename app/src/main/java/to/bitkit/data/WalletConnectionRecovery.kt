@@ -92,8 +92,11 @@ class WalletConnectionRecovery @Inject constructor(
     /** Historical receipt work drains with its wallet without serializing behind restoration. */
     internal suspend fun <T> withReceiptOperation(block: suspend (Session) -> T): T {
         check(currentCoroutineContext()[ReceiptOperation] == null) { "Receipt operation is already admitted" }
-        val owner = captureOwner()
+        val owner = captureRuntimeOwner()
         return withAdmission(owner, mutex = null) { session ->
+            // Identity changes drain this admission before changing credentials. Validate the indexed
+            // namespace once; individual receipts only need the captured generation and caller's Job.
+            storeIdProvider.getBackupWalletBinding(owner.walletIndex)
             // ServiceQueue replaces the caller's Job. Keep admission until its actual worker returns.
             withContext(NonCancellable + ReceiptOperation()) {
                 session.requireCurrent()
@@ -186,7 +189,11 @@ class WalletConnectionRecovery @Inject constructor(
             checkOwner(owner)
         }
 
-        internal suspend fun requireCurrent() = checkCurrent()
+        internal fun requireCurrent() {
+            job.ensureActive()
+            check(active) { "Receipt operation ended" }
+            checkGeneration(owner.generation)
+        }
 
         internal val receiptGeneration: Long get() = owner.generation
 

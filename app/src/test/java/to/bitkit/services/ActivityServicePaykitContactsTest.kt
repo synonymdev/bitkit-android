@@ -15,11 +15,15 @@ import com.synonym.bitkitcore.getTransactionDetails
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.upsertActivity
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import org.junit.Test
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.OnchainWalletAccount
@@ -59,10 +63,10 @@ import to.bitkit.repositories.PrivatePaykitAddressReservationRepo.ReceiptAssignm
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
-import to.bitkit.utils.AppError
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Provider
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -245,15 +249,24 @@ class ActivityServicePaykitContactsTest : BaseUnitTest() {
     }
 
     @Test
-    fun `backfill refuses a replaced wallet before its final write`() = coreTest {
+    fun `backfill drains before wallet replacement and refuses its final write`() = coreTest {
         rows = listOf(Activity.Lightning(lightning()))
-        whenever(contacts.contactsForPaymentHash(any())).thenAnswer {
-            walletBinding = "replacement-wallet"
-            setOf(BUYER)
-        }
+        supervisorScope {
+            lateinit var replacement: Job
+            whenever(contacts.contactsForPaymentHash(any())).thenAnswer {
+                replacement = launch(start = CoroutineStart.UNDISPATCHED) {
+                    connectionRecovery.withIdentityChange { walletBinding = "replacement-wallet" }
+                }
+                assertFalse(replacement.isCompleted)
+                assertEquals("original-wallet", walletBinding)
+                setOf(BUYER)
+            }
 
-        assertFailsWith<AppError> { sut.backfillPaykitContacts() }
-        assertTrue(updates.isEmpty())
+            assertFailsWith<CancellationException> { sut.backfillPaykitContacts() }
+            replacement.join()
+            assertEquals("replacement-wallet", walletBinding)
+            assertTrue(updates.isEmpty())
+        }
     }
 
     @Test

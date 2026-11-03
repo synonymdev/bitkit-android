@@ -40,6 +40,7 @@ import to.bitkit.data.WalletResetRecovery
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.hasPendingWalletRestore
 import to.bitkit.ext.of
+import to.bitkit.models.BackupCategory
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.BackupRepo
@@ -520,7 +521,9 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `onBackupRestoreSuccess should reset restoreState`() = test {
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(
+            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
+        ).thenReturn(Result.success(emptySet()))
         walletState.value = walletState.value.copy(walletExists = true)
         sut.restoreWallet("mnemonic", "passphrase")
         assertEquals(RestoreState.InProgress.Wallet, sut.restoreState.value)
@@ -568,7 +571,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
         whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(
             Result.failure(testError),
-            Result.success(Unit),
+            Result.success(emptySet()),
         )
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
         sut.restoreWallet("mnemonic", "passphrase")
@@ -579,7 +582,7 @@ class WalletViewModelTest : BaseUnitTest() {
         sut.onBackupRestoreRetry()
         advanceUntilIdle()
 
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(), sut.restoreState.value)
         verify(backupRepo, times(2)).performFullRestoreFromLatestBackup(any(), anyOrNull())
         verify(lightningRepo, never()).restartNode()
     }
@@ -1154,9 +1157,11 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `completed wallet restore does not wait for optional identity activation`() = test {
+    fun `completed wallet restore retains failed categories without waiting for optional identity activation`() = test {
         val release = CompletableDeferred<Unit>()
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val failedCategories = setOf(BackupCategory.SETTINGS, BackupCategory.WIDGETS)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.success(failedCategories))
         whenever(pubkyRepo.initialize()).doSuspendableAnswer {
             release.await()
             Result.success(Unit)
@@ -1164,13 +1169,30 @@ class WalletViewModelTest : BaseUnitTest() {
         try {
             sut.onBackupRestoreRetry()
             runCurrent()
-            assertEquals(RestoreState.Completed, sut.restoreState.value)
+            assertEquals(RestoreState.Completed(failedCategories), sut.restoreState.value)
             verify(pubkyRepo).scheduleInitializationAfterRestore()
             verify(pubkyRepo, never()).initialize()
             verify(backupRepo).setRestorePending(false)
         } finally {
             release.complete(Unit)
         }
+    }
+
+    @Test
+    fun `most recent backup restore preserves failed categories while identity activates separately`() = test {
+        val failedCategories = setOf(BackupCategory.METADATA)
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.success(failedCategories))
+        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("identity unavailable") }
+
+        sut.restoreWallet("mnemonic", "passphrase")
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+
+        assertEquals(RestoreState.Completed(failedCategories), sut.restoreState.value)
+        verify(pubkyRepo).scheduleInitializationAfterRestore()
+        verify(pubkyRepo, never()).initialize()
     }
 
     @Test
@@ -1224,7 +1246,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).doSuspendableAnswer {
             calls++
             finishRestore.await()
-            Result.success(Unit)
+            Result.success(emptySet())
         }
         sut.onBackupRestoreRetry()
         sut.onBackupRestoreRetry()
@@ -1236,7 +1258,7 @@ class WalletViewModelTest : BaseUnitTest() {
             finishRestore.complete(Unit)
         }
         advanceUntilIdle()
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(), sut.restoreState.value)
     }
 
     @Test
@@ -1272,14 +1294,16 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
         whenever { migrationService.getRNRemoteBackupTimestamp() }.thenReturn(2uL)
         whenever(backupRepo.getLatestBackupTime()).thenReturn(null)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(
+            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
+        ).thenReturn(Result.success(emptySet()))
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
 
         sut.onBackupRestoreRetry()
         advanceUntilIdle()
 
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(), sut.restoreState.value)
         verify(backupRepo).performFullRestoreFromLatestBackup(any(), anyOrNull())
         verify(migrationService, never()).restoreFromRNRemoteBackup()
     }
@@ -1303,14 +1327,16 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `restore state should transition as expected`() = test {
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(
+            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
+        ).thenReturn(Result.success(emptySet()))
         assertEquals(RestoreState.Initial, sut.restoreState.value)
 
         sut.restoreWallet("mnemonic", "passphrase")
         assertEquals(RestoreState.InProgress.Wallet, sut.restoreState.value)
 
         walletState.value = walletState.value.copy(walletExists = true)
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(), sut.restoreState.value)
 
         sut.onRestoreContinue()
         assertEquals(RestoreState.Settled, sut.restoreState.value)
@@ -1320,7 +1346,9 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `restore should hold ordinary backups from its start until it completes`() = test {
         whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(
+            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
+        ).thenReturn(Result.success(emptySet()))
 
         sut.restoreWallet("mnemonic", "passphrase")
 
@@ -1331,7 +1359,7 @@ class WalletViewModelTest : BaseUnitTest() {
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
 
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(), sut.restoreState.value)
         inOrder(backupRepo) {
             verify(backupRepo).setRestorePending(true)
             verify(backupRepo).setRestorePending(false)
@@ -1353,7 +1381,9 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `backup restore should reinitialize pubky state after metadata restore`() = test {
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(
+            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
+        ).thenReturn(Result.success(emptySet()))
 
         sut.restoreWallet("mnemonic", "passphrase")
         walletState.value = walletState.value.copy(walletExists = true)
@@ -1732,7 +1762,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).doSuspendableAnswer {
             restoring.complete(Unit)
             releaseRestore.await()
-            Result.success(Unit)
+            Result.success(emptySet())
         }
         sut.openConnectionRecovery()
         advanceUntilIdle()
@@ -1742,7 +1772,7 @@ class WalletViewModelTest : BaseUnitTest() {
         assertEquals(null, sut.connectionEditor.value)
         releaseRestore.complete(Unit)
         advanceUntilIdle()
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(), sut.restoreState.value)
         verify(backupRepo).performFullRestoreFromLatestBackup(any(), anyOrNull())
     }
 
@@ -1808,7 +1838,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.validateElectrumServer(any())).thenReturn(Result.success(Unit))
         whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
         whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
-            .thenReturn(Result.success(Unit))
+            .thenReturn(Result.success(emptySet()))
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
         sut.openConnectionRecovery()
         advanceUntilIdle()
@@ -1820,7 +1850,7 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         verify(lightningRepo).restartNode(anyOrNull(), eq(0))
         verify(backupRepo).performFullRestoreFromLatestBackup(any(), anyOrNull())
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(), sut.restoreState.value)
     }
 
     @Test
@@ -1932,7 +1962,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
         whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).doSuspendableAnswer {
             releaseRestore.await()
-            Result.success(Unit)
+            Result.success(emptySet())
         }
         sut.restoreWallet("mnemonic", null)
         walletState.value = walletState.value.copy(walletExists = true)
@@ -1994,7 +2024,7 @@ class WalletViewModelTest : BaseUnitTest() {
         val finishRestore = CompletableDeferred<Unit>()
         whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).doSuspendableAnswer {
             finishRestore.await()
-            Result.success(Unit)
+            Result.success(emptySet())
         }
 
         sut.onRestoreRetry()
@@ -2009,7 +2039,7 @@ class WalletViewModelTest : BaseUnitTest() {
             finishRestore.complete(Unit)
         }
         advanceUntilIdle()
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(), sut.restoreState.value)
         assertFalse(shouldPresentWalletRecovery(false, sut.restoreState.value, sut.connectionStartupError.value))
     }
 
@@ -2031,7 +2061,9 @@ class WalletViewModelTest : BaseUnitTest() {
             finishRestart.await()
             Result.success(Unit)
         }
-        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(
+            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
+        ).thenReturn(Result.success(emptySet()))
         walletState.value = walletState.value.copy(walletExists = true)
         runCurrent()
         try {
@@ -2051,7 +2083,7 @@ class WalletViewModelTest : BaseUnitTest() {
             finishRestart.complete(Unit)
         }
         advanceUntilIdle()
-        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        assertEquals(RestoreState.Completed(), sut.restoreState.value)
         assertNull(sut.connectionStartupError.value)
         assertFalse(shouldPresentWalletRecovery(false, sut.restoreState.value, sut.connectionStartupError.value))
     }

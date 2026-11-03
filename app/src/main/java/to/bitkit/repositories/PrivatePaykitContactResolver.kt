@@ -72,7 +72,7 @@ class PrivatePaykitContactResolver @Inject constructor(
         private val lookupFailed = AtomicBoolean(false)
         val associationsComplete: Boolean get() = snapshot != null && !lookupFailed.get()
 
-        suspend fun requireCurrent() = session.requireCurrent()
+        fun requireCurrent() = session.requireCurrent()
 
         private suspend fun <T> lookupAssociations(block: suspend () -> T): T? {
             val result = runSuspendCatching { block() }
@@ -83,7 +83,7 @@ class PrivatePaykitContactResolver @Inject constructor(
 
         fun <T> commit(block: () -> T): T = session.commitReceiptState(block)
 
-        suspend fun contactForInvoice(paymentHash: String): String? {
+        fun contactForInvoice(paymentHash: String): String? {
             requireCurrent()
             val source = snapshot ?: return null
             if (paymentHash.isBlank()) return null

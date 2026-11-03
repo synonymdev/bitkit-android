@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.app.Activity
+import android.app.Application
 import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -265,7 +266,7 @@ import com.synonym.bitkitcore.Activity as BitkitActivity
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(application = android.app.Application::class, sdk = [34])
+@Config(application = Application::class, sdk = [34])
 class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private lateinit var sut: AppViewModel
@@ -3396,6 +3397,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val executor = mock<PaykitAllowanceExecutor>()
         whenever(executor.events).thenReturn(MutableSharedFlow())
         whenever(executor.localState(any())).thenReturn(PaykitAllowanceLocalState())
+        whenever(executor.isLedgerBehind(any())).thenReturn(false)
         whenever(sdk.listAllowances(any())).thenReturn(emptyList())
         val realAllowances = PaykitAllowanceRepo(
             ioDispatcher = testDispatcher,
