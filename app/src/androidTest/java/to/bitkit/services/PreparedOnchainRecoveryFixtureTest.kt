@@ -6,7 +6,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -23,6 +22,7 @@ import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.annotations.CoreServiceIntegration
 import to.bitkit.test.annotations.DeviceIntegration
+import to.bitkit.test.awaitSpendableDeposits
 import java.io.File
 import javax.inject.Inject
 
@@ -108,15 +108,12 @@ class PreparedOnchainRecoveryFixtureTest {
         lightningService.setup(walletIndex = 0)
         try {
             lightningService.start()
-            // Let the native initial background sync settle before forcing another sync in this fixture.
-            delay(15_000)
             lightningService.sync()
             val depositAddress = lightningService.newAddress()
             coreService.blocktank.regtestMine(1u)
-            coreService.blocktank.regtestDeposit(depositAddress, 100_000uL)
+            val fundingTxId = coreService.blocktank.regtestDeposit(depositAddress, 100_000uL)
             coreService.blocktank.regtestMine(6u)
-            delay(15_000)
-            lightningService.sync()
+            lightningService.awaitSpendableDeposits(mapOf(fundingTxId to 100_000uL))
             val recipient = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
             val isMax = InstrumentationRegistry.getArguments().getString("recoveryMode") == "max"
             val original = store.admit(
