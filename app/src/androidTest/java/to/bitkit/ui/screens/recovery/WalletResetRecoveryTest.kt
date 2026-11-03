@@ -88,14 +88,21 @@ class WalletResetRecoveryTest {
     @Test
     fun unknownMarkerOffersPhraseWithoutAdmittingReset() {
         var shown = 0
+        var reads = 0
         val finished = mutableListOf<String>()
         rule.setContent {
             AppThemeSurface {
                 WalletResetRecoveryContent(
-                    WalletResetRecovery.Unreadable("unknown"), false, {}, finished::add,
+                    WalletResetRecovery.Unreadable("unknown"), false, { reads++ }, finished::add,
                     onShowPhrase = { shown++ }, canShowPhrase = true,
                 )
             }
+        }
+        rule.onNodeWithTag("WalletResetReadRetry").performClick()
+        rule.runOnIdle {
+            assertEquals(1, reads)
+            assertEquals(0, shown)
+            assertEquals(emptyList(), finished)
         }
         rule.onNodeWithTag("WalletResetShowPhrase").performClick()
         rule.runOnIdle {

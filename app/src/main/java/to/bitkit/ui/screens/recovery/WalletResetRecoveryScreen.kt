@@ -241,9 +241,13 @@ internal fun WalletResetRecoveryContent(
                 modifier = Modifier.testTag("WalletResetFinish")
             )
         }
-        if (!busy && attemptId != null && !canShowPhrase) {
+        if (!busy && attemptId != null && (!canShowPhrase || recovery is WalletResetRecovery.Unreadable)) {
             VerticalSpacer(16.dp)
-            SecondaryButton(text = stringResource(R.string.common__retry), onClick = onRetry)
+            SecondaryButton(
+                text = stringResource(R.string.common__retry),
+                onClick = onRetry,
+                testTag = "WalletResetReadRetry",
+            )
         }
         if (recovery != WalletResetRecovery.Loading && recovery != WalletResetRecovery.Clear) {
             VerticalSpacer(16.dp)

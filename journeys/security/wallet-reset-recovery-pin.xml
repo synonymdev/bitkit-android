@@ -7,6 +7,7 @@
   </description>
   <actions>
     <action>Open the app and verify the unreadable recovery overview, with no ordinary wallet controls</action>
+    <action>Verify Retry remains available beside Show Seed Phrase, tap Retry while the marker is still unreadable, and verify the overview remains without opening the PIN prompt or starting a reset</action>
     <action>Tap Show Seed Phrase and verify the PIN prompt appears without displaying any seed</action>
     <action>Enter one incorrect PIN and verify the prompt remains with an attempts-remaining link</action>
     <action>Tap the attempts-remaining link and verify the recovery overview appears without a Forgot PIN sheet or reset confirmation</action>
