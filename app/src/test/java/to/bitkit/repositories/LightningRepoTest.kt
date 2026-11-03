@@ -1473,7 +1473,29 @@ class LightningRepoTest : BaseUnitTest() {
         verify(lightningService).send("bcrt1qtest", 99_000uL, 20uL, null, false)
     }
 
-    private suspend fun sendMaxOnChain(sats: ULong): Result<String> {
+    @Test
+    fun `sendOnChain should reuse the send rate when fee rates are missing`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(spendableBalance(100_000uL))
+        val blocktank = coreService.blocktank
+        whenever(blocktank.getFees()).thenReturn(
+            Result.success(FeeRates(fast = 10u, mid = 5u, slow = 1u)),
+            Result.success(FeeRates(fast = 20u, mid = 10u, slow = 5u)),
+        )
+        whenever(lightningService.estimateSendAllFee("bcrt1qtest", 10uL)).thenReturn(1_100uL)
+        whenever(lightningService.estimateSendAllFee("bcrt1qtest", 20uL)).thenReturn(2_200uL)
+
+        val result = sendMaxOnChain(sats = 97_800uL, feeRates = null)
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).send("bcrt1qtest", 97_800uL, 10uL, null, false)
+        verify(blocktank, times(1)).getFees()
+    }
+
+    private suspend fun sendMaxOnChain(
+        sats: ULong,
+        feeRates: FeeRates? = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+    ): Result<String> {
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
         whenever(coreService.activity).thenReturn(mock())
@@ -1482,7 +1504,7 @@ class LightningRepoTest : BaseUnitTest() {
             address = "bcrt1qtest",
             sats = sats,
             speed = TransactionSpeed.Fast,
-            feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+            feeRates = feeRates,
             isMaxAmount = true,
         )
     }

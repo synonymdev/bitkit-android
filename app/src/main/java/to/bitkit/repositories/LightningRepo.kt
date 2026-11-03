@@ -1372,7 +1372,15 @@ class LightningRepo @Inject constructor(
 
         // a drain spends everything spendable after the sync, so a send only drains while that still equals sats
         val isDrain = isMaxAmount &&
-            (isTransfer || sats == estimateMaxSendOnchain(address, transactionSpeed, feeRates).getOrNull())
+            (
+                isTransfer || sats == runSuspendCatching {
+                    val spendableSats = getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+                    if (spendableSats == 0uL) return@runSuspendCatching 0uL
+
+                    val fee = lightningService.estimateSendAllFee(address, satsPerVByte)
+                    spendableSats.safe() - fee.safe()
+                }.getOrNull()
+                )
 
         // transfer send-all: skip UTXO selection to avoid LDK buffer; else use passed or auto-selected
         val utxosForSend = when {
