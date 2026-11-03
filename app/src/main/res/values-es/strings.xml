@@ -251,6 +251,7 @@
     <string name="notification__service__stop">Detener App</string>
     <string name="onboarding__connection_saved">Guardado. Reintenta para continuar la restauración.</string>
     <string name="onboarding__connection_settings">Ajustes de conexión</string>
+    <string name="onboarding__restore_incomplete_text">Tu billetera y tu saldo están de vuelta, pero Bitkit no pudo restaurar: %1$s.</string>
     <string name="onboarding__tos_checkbox">Condiciones de uso</string>
     <string name="onboarding__tos_checkbox_value">Al continuar, declaras que has leído y aceptas los términos de uso.</string>
     <string name="onboarding__pp_checkbox">Política de privacidad</string>
@@ -1456,6 +1457,9 @@
     <string name="subscriptions__allowances">Asignaciones</string>
     <string name="subscriptions__allowances_empty_description">Puede establecer límites de gasto para pagar automáticamente las solicitudes de pago de contactos de confianza.</string>
     <string name="subscriptions__allowances_empty_headline">Configure\n&lt;accent&gt;asignaciones&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Tus registros de asignaciones son más antiguos que otros que este monedero ya ha usado. Las solicitudes pedirán tu aprobación hasta que reanudes.</string>
+    <string name="subscriptions__allowances_paused_resume">Reanudar</string>
+    <string name="subscriptions__allowances_paused_title">Pagos automáticos en pausa</string>
     <string name="subscriptions__cancel_subscription">Cancelar suscripción</string>
     <string name="subscriptions__choose_recipient">Elegir destinatario</string>
     <string name="subscriptions__content_too_long">Acorte el nombre o la descripción de la suscripción e inténtelo de nuevo.</string>

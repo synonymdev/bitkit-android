@@ -161,6 +161,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `payment-requests/success-dismissal.xml` | same file, journey name and actions; both platforms dismiss successful and unpaid requests without a send error or duplicate payment. |
 | `payment-requests/minimum-onchain-amount.xml` | shared — minimum amount feedback, preparation cleanup, and manual retry use the same journey and `PaymentRequestAmountTooLowToast` identifier on both platforms. |
 | No matching intermediate return route | `amount-limits/custom-fee-wallet-switch.xml` is iOS-only: Custom returns through the fee picker before confirmation. Android's `setTransactionSpeed` returns directly to confirmation. |
+| `node-lifecycle/connections-during-restart.xml` | not ported — iOS shows Lightning Connections without a node-running gate and has no syncing row |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `restore-wallet/paste-seed-fragment.xml` | not ported — the iOS Restore screen still has the 12/24-only paste guard, so the behaviour does not exist there yet |
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |

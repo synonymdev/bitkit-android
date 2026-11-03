@@ -269,6 +269,7 @@
     <string name="onboarding__restore_failed_header">Bestedingssaldo &lt;accent&gt;fout&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit heeft je spaargeld hersteld, maar kon je huidige bestedingssaldo (Lightning-status) en wallet-gegevens niet herstellen.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Herstel&lt;/accent&gt;\nje wallet</string>
+    <string name="onboarding__restore_incomplete_text">Je wallet en saldo zijn terug, maar Bitkit kon het volgende niet herstellen: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">De checksum van de herstelzin lijkt onjuist te zijn. Controleer je herstelzin nogmaals.</string>
     <string name="onboarding__restore_no_backup_button">Doorgaan zonder backup</string>
     <string name="onboarding__restore_no_backup_warn">Als je eerder een Lightning-backup had, wordt deze overschreven en verloren. Dit kan leiden tot verlies van geld.</string>
@@ -1458,6 +1459,9 @@
     <string name="subscriptions__allowances">Toelagen</string>
     <string name="subscriptions__allowances_empty_description">U kunt bestedingslimieten instellen om betaalverzoeken van vertrouwde contacten automatisch te voldoen.</string>
     <string name="subscriptions__allowances_empty_headline">Stel\n&lt;accent&gt;toelagen&lt;/accent&gt; in</string>
+    <string name="subscriptions__allowances_paused_description">Je toelagengegevens zijn ouder dan gegevens die deze wallet al heeft gebruikt. Verzoeken vragen om je goedkeuring tot je hervat.</string>
+    <string name="subscriptions__allowances_paused_resume">Hervatten</string>
+    <string name="subscriptions__allowances_paused_title">Automatische betalingen gepauzeerd</string>
     <string name="subscriptions__cancel_subscription">Abonnement opzeggen</string>
     <string name="subscriptions__choose_recipient">Ontvanger kiezen</string>
     <string name="subscriptions__content_too_long">Maak de naam of beschrijving van het abonnement korter en probeer het opnieuw.</string>

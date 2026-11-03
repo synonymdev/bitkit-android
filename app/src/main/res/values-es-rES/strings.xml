@@ -271,6 +271,7 @@
     <string name="onboarding__restore_failed_header">Error en saldo &lt;accent&gt;de gasto&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit restauró tus ahorros, pero no pudo restaurar tu saldo de gasto actual (estado Lightning) y datos del monedero.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Restaurar&lt;/accent&gt;\ntu monedero</string>
+    <string name="onboarding__restore_incomplete_text">Tu monedero y tu saldo han vuelto, pero Bitkit no ha podido restaurar: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">La suma de comprobación de la frase de recuperación parece ser incorrecta. Por favor, vuelva a comprobar su frase de recuperación.</string>
     <string name="onboarding__restore_no_backup_button">Proceder sin respaldo de la copia de seguridad</string>
     <string name="onboarding__restore_no_backup_warn">Si anteriormente tenía una copia de seguridad Lightning, ésta se sobrescribirá y se perderá. Esto podría provocar una pérdida de fondos.</string>
@@ -1456,6 +1457,9 @@
     <string name="subscriptions__allowances">Asignaciones</string>
     <string name="subscriptions__allowances_empty_description">Puedes establecer límites de gasto para pagar automáticamente las solicitudes de pago de contactos de confianza.</string>
     <string name="subscriptions__allowances_empty_headline">Configura\n&lt;accent&gt;asignaciones&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">Tus registros de asignaciones son más antiguos que otros que este monedero ya ha usado. Las solicitudes pedirán tu aprobación hasta que reanudes.</string>
+    <string name="subscriptions__allowances_paused_resume">Reanudar</string>
+    <string name="subscriptions__allowances_paused_title">Pagos automáticos en pausa</string>
     <string name="subscriptions__cancel_subscription">Cancelar suscripción</string>
     <string name="subscriptions__choose_recipient">Elegir destinatario</string>
     <string name="subscriptions__content_too_long">Acorta el nombre o la descripción de la suscripción e inténtalo de nuevo.</string>
