@@ -4561,8 +4561,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
 
-        // same rates must back both the max estimate and the send
-        verify(lightningRepo).estimateMaxSendOnchain(
+        // same rates must back the max refresh, the dispatch recheck and the send
+        verify(lightningRepo, times(2)).estimateMaxSendOnchain(
             address = address,
             speed = TransactionSpeed.Fast,
             feeRates = feeRates,
@@ -4689,7 +4689,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `max onchain send waits for the in-flight max refresh before paying`() = test {
+    fun `onchain send confirmed during a max refresh pays the confirmed amount`() = test {
         val address = "bcrt1qmaxsendrace"
         val cachedMax = 100_000uL
         val maxAtFast = 99_500uL
@@ -4710,11 +4710,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever {
             lightningRepo.sendOnChain(
                 address = address,
-                sats = maxAtFast,
+                sats = cachedMax,
                 speed = TransactionSpeed.Fast,
                 utxosToSpend = null,
                 feeRates = feeRates,
-                isMaxAmount = true,
+                isMaxAmount = false,
                 tags = emptyList(),
             )
         }.thenReturn(Result.success("txid"))
@@ -4732,22 +4732,108 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setTransactionSpeed(TransactionSpeed.Fast)
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
-
-        // the send must not go out while the max for the new speed is still being estimated
-        verifyNoOnchainSend()
-
         finishEstimate.complete(Unit)
         advanceUntilIdle()
 
         verify(lightningRepo).sendOnChain(
             address = address,
-            sats = maxAtFast,
+            sats = cachedMax,
             speed = TransactionSpeed.Fast,
             utxosToSpend = null,
             feeRates = feeRates,
-            isMaxAmount = true,
+            isMaxAmount = false,
             tags = emptyList(),
         )
+    }
+
+    @Test
+    fun `max onchain send pays exactly the confirmed amount after the max grows`() = test {
+        val address = "bcrt1qmaxsendgrown"
+        val confirmed = 100_000uL
+        val grownMax = 149_000uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = grownMax)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            )
+        }.thenReturn(Result.success(grownMax))
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = confirmed,
+                speed = TransactionSpeed.Medium,
+                utxosToSpend = null,
+                feeRates = feeRates,
+                isMaxAmount = false,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.success("txid"))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = confirmed,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(lightningRepo).sendOnChain(
+            address = address,
+            sats = confirmed,
+            speed = TransactionSpeed.Medium,
+            utxosToSpend = null,
+            feeRates = feeRates,
+            isMaxAmount = false,
+            tags = emptyList(),
+        )
+    }
+
+    @Test
+    fun `max refresh does not change the amount after switching to lightning`() = test {
+        val address = "bcrt1qmaxsendswitch"
+        val amount = 100_000uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        val finishEstimate = CompletableDeferred<Unit>()
+        balanceState.value = BalanceState(maxSendOnchainSats = amount)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+            )
+        }.doSuspendableAnswer {
+            finishEstimate.await()
+            Result.success(99_500uL)
+        }
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(20uL))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = amount,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+        sut.switchToLightning()
+        advanceUntilIdle()
+        finishEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(amount, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
     }
 
     @Test
@@ -5446,18 +5532,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         method.isAccessible = true
         method.invoke(sut)
     }
-
-    private suspend fun verifyNoOnchainSend() = verify(lightningRepo, never()).sendOnChain(
-        address = any(),
-        sats = any(),
-        speed = anyOrNull(),
-        utxosToSpend = anyOrNull(),
-        feeRates = anyOrNull(),
-        isTransfer = any(),
-        channelId = anyOrNull(),
-        isMaxAmount = any(),
-        tags = any(),
-    )
 
     private fun hardwareWallet(fundingBalanceSats: ULong) = HwWallet(
         id = HARDWARE_WALLET_ID,

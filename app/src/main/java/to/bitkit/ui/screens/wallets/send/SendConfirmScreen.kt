@@ -397,9 +397,8 @@ private fun ContentRunning(
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = accentColor,
-            enabled = uiState.isAmountInputValid &&
-                !uiState.isFundingSourceLoading &&
-                !isHardwareFeeLoading,
+            // an onchain refresh can lower a max amount, so the amount is not final until it settles
+            enabled = uiState.canSwipeToPay(),
             loading = isLoading,
             confirmed = isLoading,
             progress = swipeProgress,
@@ -408,6 +407,10 @@ private fun ContentRunning(
         VerticalSpacer(16.dp)
     }
 }
+
+private fun SendUiState.canSwipeToPay() = isAmountInputValid &&
+    !isFundingSourceLoading &&
+    !(payMethod == SendMethod.ONCHAIN && onchainFeeUi.isLoading)
 
 @Composable
 private fun LnurlCommentSection(

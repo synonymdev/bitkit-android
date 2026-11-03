@@ -3358,9 +3358,6 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        // pay the amount & drain flag the refresh settled on, not the ones it is about to replace
-        onchainSendRefreshJob?.join()
-
         val amount = _sendUiState.value.amount
 
         val lnurl = _sendUiState.value.lnurl
@@ -3742,10 +3739,17 @@ class AppViewModel @Inject constructor(
             speed = state.speed,
             utxosToSpend = state.selectedUtxos,
             feeRates = state.feeRates,
-            isMaxAmount = state.payMethod == SendMethod.ONCHAIN && state.isMaxAmount,
+            // a drain spends everything spendable at dispatch, so only drain while that equals the confirmed amount
+            isMaxAmount = state.payMethod == SendMethod.ONCHAIN &&
+                state.isMaxAmount &&
+                amount == currentMaxSendOnchain(address, state),
             tags = tags,
         )
     }
+
+    private suspend fun currentMaxSendOnchain(address: String, state: SendUiState): ULong =
+        lightningRepo.estimateMaxSendOnchain(address = address, speed = state.speed, feeRates = state.feeRates)
+            .getOrNull() ?: walletRepo.balanceState.value.maxSendOnchainSats
 
     private suspend fun sendLightning(
         bolt11: String,
@@ -3874,6 +3878,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun SendUiState.divergedFrom(snapshot: SendUiState) = amount != snapshot.amount ||
+        payMethod != snapshot.payMethod ||
         address != snapshot.address ||
         speed != snapshot.speed ||
         hardwareWalletId != snapshot.hardwareWalletId
