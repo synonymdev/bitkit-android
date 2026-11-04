@@ -14,6 +14,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
@@ -256,6 +257,34 @@ class AddContactViewModelTest : BaseUnitTest() {
         }
         verify(context).getString(R.string.contacts__pay_private_link_pending)
         verify(publicPaykitRepo, never()).beginPayment(any())
+    }
+
+    @Test
+    fun `a second pay tap while the payment resolves starts no second resolution`() = test {
+        val profile = PubkyProfile.placeholder(TEST_PUBLIC_KEY)
+        val resolution = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(context.getString(any())).thenReturn("")
+        whenever(pubkyRepo.fetchContactProfile(TEST_PUBLIC_KEY)).thenReturn(Result.success(profile))
+        whenever(publicPaykitRepo.hasPayablePublicEndpoint(TEST_PUBLIC_KEY)).thenReturn(Result.success(true))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer { resolution.await() }
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.payContact()
+        advanceUntilIdle()
+        sut.payContact()
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.isPayLoading)
+        verify(privatePaykitRepo, times(1)).beginSavedContactPayment(TEST_PUBLIC_KEY)
+
+        resolution.complete(Result.success(PublicPaykitPaymentResult.NoEndpoint))
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isPayLoading)
+        sut.payContact()
+        advanceUntilIdle()
+        verify(privatePaykitRepo, times(2)).beginSavedContactPayment(TEST_PUBLIC_KEY)
     }
 
     private fun createSut(publicKey: String = TEST_PUBLIC_KEY): AddContactViewModel {

@@ -293,6 +293,7 @@ private fun Content(
             uiState.fetchedProfile != null -> LoadedContent(
                 profile = uiState.fetchedProfile,
                 isLoading = uiState.isLoading,
+                isPayLoading = uiState.isPayLoading,
                 hasPublicPaymentEndpoint = uiState.hasPublicPaymentEndpoint,
                 onPay = onPay,
                 onSave = onSave,
@@ -466,6 +467,7 @@ private fun ErrorContent(
 private fun LoadedContent(
     profile: PubkyProfile,
     isLoading: Boolean,
+    isPayLoading: Boolean,
     hasPublicPaymentEndpoint: Boolean,
     onPay: () -> Unit,
     onSave: () -> Unit,
@@ -501,6 +503,7 @@ private fun LoadedContent(
                 SecondaryButton(
                     text = stringResource(R.string.contacts__add_pay),
                     onClick = onPay,
+                    isLoading = isPayLoading,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("AddContactPay")

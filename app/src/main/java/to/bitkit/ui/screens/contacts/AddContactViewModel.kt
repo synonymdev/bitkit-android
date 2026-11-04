@@ -58,6 +58,7 @@ class AddContactViewModel @Inject constructor(
     val effects = _effects.asSharedFlow()
 
     private var profileJob: Job? = null
+    private var payJob: Job? = null
 
     init {
         fetchProfile(publicKey)
@@ -130,40 +131,50 @@ class AddContactViewModel @Inject constructor(
 
     fun payContact() {
         val profile = _uiState.value.fetchedProfile ?: return
-        viewModelScope.launch {
-            // A profile that is already a saved contact pays the way a saved contact does; others pay publicly.
-            privatePaykitRepo.beginSavedContactPayment(profile.publicKey)
-                .onSuccess { result ->
-                    when (result) {
-                        is PublicPaykitPaymentResult.Opened ->
-                            _effects.emit(
-                                AddContactEffect.OpenPayment(
-                                    paymentRequest = result.paymentRequest,
-                                    publicKey = profile.publicKey,
-                                    privatePaymentContext = result.privatePaymentContext,
-                                    endpoints = result.endpoints,
-                                )
-                            )
-                        PublicPaykitPaymentResult.NoEndpoint ->
-                            showPayError(R.string.slashtags__error_pay_empty_msg)
-                        PublicPaykitPaymentResult.NotOpened ->
-                            showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                        PublicPaykitPaymentResult.PrivateLinkPending ->
-                            showPayError(R.string.contacts__pay_private_link_pending)
-                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
-                            showPayError(R.string.slashtags__error_pay_waiting_msg)
-                    }
-                }
-                .onFailure {
-                    val redactedPublicKey = PubkyPublicKeyFormat.redacted(profile.publicKey)
-                    Logger.warn(
-                        "Failed to begin Paykit payment for '$redactedPublicKey'",
-                        it,
-                        context = TAG,
-                    )
-                    showPayError(R.string.slashtags__error_pay_not_opened_msg)
-                }
+        if (payJob?.isActive == true || _uiState.value.isPayLoading) return
+        // A profile that is already a saved contact pays the way a saved contact does; others pay publicly.
+        payJob = viewModelScope.launch {
+            _uiState.update { it.copy(isPayLoading = true) }
+            if (!openPayment(profile)) _uiState.update { it.copy(isPayLoading = false) }
         }
+    }
+
+    private suspend fun openPayment(profile: PubkyProfile): Boolean {
+        var isOpened = false
+        privatePaykitRepo.beginSavedContactPayment(profile.publicKey)
+            .onSuccess { result ->
+                when (result) {
+                    is PublicPaykitPaymentResult.Opened -> {
+                        isOpened = true
+                        _effects.emit(
+                            AddContactEffect.OpenPayment(
+                                paymentRequest = result.paymentRequest,
+                                publicKey = profile.publicKey,
+                                privatePaymentContext = result.privatePaymentContext,
+                                endpoints = result.endpoints,
+                            )
+                        )
+                    }
+                    PublicPaykitPaymentResult.NoEndpoint ->
+                        showPayError(R.string.slashtags__error_pay_empty_msg)
+                    PublicPaykitPaymentResult.NotOpened ->
+                        showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                    PublicPaykitPaymentResult.PrivateLinkPending ->
+                        showPayError(R.string.contacts__pay_private_link_pending)
+                    PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
+                        showPayError(R.string.slashtags__error_pay_waiting_msg)
+                }
+            }
+            .onFailure {
+                val redactedPublicKey = PubkyPublicKeyFormat.redacted(profile.publicKey)
+                Logger.warn(
+                    "Failed to begin Paykit payment for '$redactedPublicKey'",
+                    it,
+                    context = TAG,
+                )
+                showPayError(R.string.slashtags__error_pay_not_opened_msg)
+            }
+        return isOpened
     }
 
     private suspend fun showPayError(messageRes: Int) {
@@ -203,6 +214,7 @@ data class AddContactUiState(
     val fetchedProfile: PubkyProfile? = null,
     val isLoading: Boolean = false,
     val hasPublicPaymentEndpoint: Boolean = false,
+    val isPayLoading: Boolean = false,
     val error: String? = null,
 )
 
