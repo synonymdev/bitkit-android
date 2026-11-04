@@ -5412,10 +5412,6 @@ class AppViewModel @Inject constructor(
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount, walletGeneration)
     }
 
-    /**
-     * An on-chain invoice with a payable amount opens on Confirm, as Amount's continue would.
-     * Manual coin selection and contact payments keep going through Amount.
-     */
     private suspend fun openOnchainConfirmForInvoiceAmount(
         amount: ULong,
         fromMainScanner: Boolean,
