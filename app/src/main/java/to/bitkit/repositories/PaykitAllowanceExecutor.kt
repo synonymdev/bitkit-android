@@ -309,10 +309,14 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     /** True while the ledger read is older than one this wallet has read, which keeps automatic payments paused. */
     suspend fun isLedgerBehind(identity: String): Boolean = withContext(ioDispatcher) {
+        runSuspendCatching { isLedgerBehindOrThrow(identity) }.getOrDefault(false)
+    }
+
+    /** Like [isLedgerBehind], but a ledger that cannot be read throws instead of counting as current. */
+    suspend fun isLedgerBehindOrThrow(identity: String): Boolean = withContext(ioDispatcher) {
         val floor = localState(identity).ledgerRevisionFloor ?: return@withContext false
-        runSuspendCatching { paykitSdkService.allowanceAccountingState() }
-            .map { ledger -> ledger == null || ledger.revision < floor }
-            .getOrDefault(false)
+        val ledger = paykitSdkService.allowanceAccountingState()
+        ledger == null || ledger.revision < floor
     }
 
     /**

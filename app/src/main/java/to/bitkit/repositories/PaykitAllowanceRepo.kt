@@ -150,8 +150,10 @@ class PaykitAllowanceRepo @Inject constructor(
     private val _automaticPaymentPause = MutableStateFlow<PaykitAllowancePause?>(null)
 
     /**
-     * Why automatic payments are paused until [resumeAutomaticPayments], or null while they run. A ledger behind this
-     * wallet comes first; a restore pauses them only while this wallet pays through an allowance.
+     * Why automatic payments are paused until [resumeAutomaticPayments], or null while no pause notice shows. A ledger
+     * behind this wallet comes first. A wallet restore pauses automatic payments on this device until Resume, but its
+     * notice shows only while the wallet pays through a proposed or accepted allowance, so an allowance created later
+     * on a restored wallet starts paused.
      */
     val automaticPaymentPause: StateFlow<PaykitAllowancePause?> = _automaticPaymentPause.asStateFlow()
 
@@ -459,11 +461,20 @@ class PaykitAllowanceRepo @Inject constructor(
 
     /**
      * Resumes automatic payments from the ledger read now and ends the pause after a wallet restore; see
-     * [PaykitAllowanceExecutor.acceptCurrentLedger].
+     * [PaykitAllowanceExecutor.acceptCurrentLedger]. Resuming from the restore notice first checks the ledger: one
+     * behind this wallet stays paused and shows its own notice, and one that cannot be read fails, so neither is
+     * accepted without the user seeing that notice.
      */
     suspend fun resumeAutomaticPayments(): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val identity = activeIdentity ?: throw PaykitAllowanceError.Unavailable
+            if (
+                _automaticPaymentPause.value == PaykitAllowancePause.RESTORED &&
+                executor.isLedgerBehindOrThrow(identity)
+            ) {
+                refresh()
+                return@runSuspendCatching
+            }
             executor.acceptCurrentLedger(identity)
             executor.resumeAfterRestore()
             executor.recover(identity)

@@ -49,6 +49,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PaykitAllowanceStateBackup
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
@@ -565,6 +566,24 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         val bounded = sut.autoPay(request, listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.STARTED, bounded)
+    }
+
+    @Test
+    fun `only the strict ledger check fails when the ledger cannot be read`() = test {
+        sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
+        var failLedgerRead = true
+        whenever(sdk.allowanceAccountingState()).doSuspendableAnswer {
+            if (failLedgerRead) throw TestAllowanceError("ledger")
+            accountingState
+        }
+
+        assertFalse(sut.isLedgerBehind(identity))
+        assertIs<TestAllowanceError>(runSuspendCatching { sut.isLedgerBehindOrThrow(identity) }.exceptionOrNull())
+
+        failLedgerRead = false
+        accountingState = fixtures.accountingState(revision = 4uL)
+
+        assertTrue(sut.isLedgerBehindOrThrow(identity))
     }
 
     @Test
