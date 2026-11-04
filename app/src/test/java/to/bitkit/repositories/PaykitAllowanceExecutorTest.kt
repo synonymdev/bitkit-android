@@ -1512,7 +1512,10 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             listOf(aboveCheckedCap, candidate(allowanceId = SECOND_ALLOWANCE_ID)),
             listOf(
                 aboveCheckedCap,
-                candidate(AllowanceAccountingBlock.SharedRule("lifetime_limit"), allowanceId = SECOND_ALLOWANCE_ID),
+                candidate(
+                    AllowanceAccountingBlock.SharedRule("no_eligible_endpoint"),
+                    allowanceId = SECOND_ALLOWANCE_ID,
+                ),
             ),
         )
 
@@ -1566,6 +1569,48 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertTrue(isManual)
         assertEquals(listOf(limitReached), events, "Limit Reached is raised once per request")
+    }
+
+    @Test
+    fun `local capacity check hands back a request whose covering allowances have all ended`() = test {
+        collectEvents()
+        sut.updateLocalState(identity) {
+            it.copy(endedAllowanceIds = setOf(PaykitAllowance.key(fixtures.counterpartyKey, ALLOWANCE_ID)))
+        }
+
+        val isManual = sut.classifyAboveLimit(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertTrue(isManual)
+        assertTrue(events.isEmpty(), "Ended allowances raise no Limit Reached")
+    }
+
+    @Test
+    fun `a request whose covering allowances have all ended stays manual without Limit Reached`() = test {
+        collectEvents()
+        sut.updateLocalState(identity) {
+            it.copy(endedAllowanceIds = setOf(PaykitAllowance.key(fixtures.counterpartyKey, ALLOWANCE_ID)))
+        }
+        val request = fixtures.paymentRequest(amountSats = 20_000uL)
+
+        val result = sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        assertTrue(events.isEmpty(), "Ended allowances raise no Limit Reached")
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+        verifyNoInteractions(payer)
+    }
+
+    @Test
+    fun `a checked allowance the SDK blocks stays manual without Limit Reached when it fits locally`() = test {
+        collectEvents()
+        candidates = listOf(candidate(AllowanceAccountingBlock.SharedRule("no_eligible_endpoint")))
+
+        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        assertTrue(events.isEmpty(), "A request the allowance still fits raises no Limit Reached")
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+        verifyNoInteractions(payer)
     }
 
     @Test

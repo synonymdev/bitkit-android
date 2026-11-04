@@ -441,9 +441,10 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     /**
      * True when [request] cannot pay automatically, checked locally while the node cannot pay yet; such a request asks
-     * at once instead of waiting for channels. It waits only while an Allowance without unchecked limits fits it, see
-     * [fittingAllowances]. Limit Reached is raised only when no matching Allowance fits at all, never while automatic
-     * payments are paused or the ledger is behind this wallet.
+     * at once instead of waiting for channels. It waits only while an Allowance it may pay through fits it: one this
+     * wallet has not seen ended, without unchecked limits, within the per-payment cap and the monthly amount. Limit
+     * Reached is raised only when no Allowance this wallet has not seen ended fits at all, never while every covering
+     * Allowance has ended, automatic payments are paused or the ledger is behind this wallet.
      */
     suspend fun classifyAboveLimit(
         request: PaykitPaymentRequest,
@@ -453,8 +454,11 @@ class PaykitAllowanceExecutor @Inject constructor(
         val amountSats = request.allowanceSats() ?: return@withContext false
         val now = clock.now()
         val local = localState(identity)
-        val matching = matchingAllowances(request, allowances, local, now)
-        if (matching.isEmpty()) return@withContext false
+        val covering = activeAllowances(request, allowances, now)
+        if (covering.isEmpty()) return@withContext false
+        val matching = covering.filterNot { it.key in local.endedAllowanceIds }
+        // Allowances seen ended never pay again, so the request asks without waiting and without Limit Reached.
+        if (matching.isEmpty()) return@withContext true
         // Paused automatic payments keep the request manual, without waiting for the node.
         if (isPausedAfterRestore()) return@withContext true
         val read = runSuspendCatching { paykitSdkService.allowanceAccountingState() }
@@ -468,24 +472,15 @@ class PaykitAllowanceExecutor @Inject constructor(
         true
     }
 
-    /** The active Allowances this wallet grants [request]'s contact, without the ones it has seen ended. */
-    private fun matchingAllowances(
+    private fun activeAllowances(
         request: PaykitPaymentRequest,
         allowances: List<PaykitAllowance>,
-        local: PaykitAllowanceLocalState,
         now: Instant,
     ): List<PaykitAllowance> = allowances.filter {
         it.isAllower && it.status(now) == PaykitAllowance.Status.ACTIVE &&
-            PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty) &&
-            it.key !in local.endedAllowanceIds
+            PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
     }
 
-    /**
-     * The [matching] Allowances that fit [amountSats] under the limits this wallet checks itself: the per-payment cap
-     * and the monthly amount, counting the ledger's and this wallet's own spending. A request pays automatically only
-     * through a fitting Allowance without unchecked limits; one that fits only Allowances with unchecked limits asks
-     * without Limit Reached, and Limit Reached is for a request that fits none.
-     */
     private fun fittingAllowances(
         amountSats: ULong,
         matching: List<PaykitAllowance>,
@@ -666,7 +661,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         val candidates = paykitSdkService.evaluateAllowanceCandidates(scope, selectionTime)
         val local = localState(identity)
         val now = clock.now()
-        val matching = matchingAllowances(request, allowances, local, now)
+        val matching = activeAllowances(request, allowances, now).filterNot { it.key in local.endedAllowanceIds }
         if (matching.isEmpty()) {
             Logger.info("Kept an incoming request manual: no active allowance, or it has ended", context = TAG)
             return PaykitAllowanceAutoPayResult.MANUAL
