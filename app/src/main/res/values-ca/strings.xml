@@ -274,6 +274,7 @@
     <string name="lightning__transfer__confirm">Si us plau\n&lt;accent&gt;confirma&lt;/accent&gt;</string>
     <string name="lightning__transfer__nav_title">Transferir fons</string>
     <string name="lightning__transfer__swipe">Desplaçar per Transferir</string>
+    <string name="lightning__transfer_hw__open_connect">Obrir Trezor Connect</string>
     <string name="lightning__transfer_in_progress">TRANSFERÈNCIA EN CURS</string>
     <string name="lightning__transfer_intro__button">Començar</string>
     <string name="lightning__transfer_intro__text">Finança el teu saldo de despesa per gaudir de transaccions instantànies i barates amb amics, família i comerciants.</string>
@@ -1288,6 +1289,8 @@
     <string name="lightning__sync_connecting">&lt;accent&gt;Connectant&lt;/accent&gt;\na la xarxa</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Torna a connectar el teu dispositiu de maquinari; sembla que s\'ha desconnectat del telèfon.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Torna a connectar el dispositiu</string>
+    <string name="lightning__transfer_hw__sign_title">Signa amb\n&lt;accent&gt;el teu dispositiu&lt;/accent&gt;</string>
+    <string name="lightning__transfer_hw__signed_title">Transacció\n&lt;accent&gt;signada&lt;/accent&gt;</string>
     <string name="lightning__transfer_ready_in">TRANSFERÈNCIA LLESTA EN %s</string>
     <string name="lightning__transfer_unavailable__nav_title">Transferència no disponible</string>
     <string name="lightning__transfer_unavailable__text">Les transferències automàtiques al teu saldo de despesa ja no estan disponibles. Fes servir el teu propi node o configura una connexió amb un altre proveïdor.</string>

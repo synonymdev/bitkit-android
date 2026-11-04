@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PrimaryDisplay
@@ -29,6 +30,7 @@ import to.bitkit.models.formatMoney
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.models.safe
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.SparkClaimSpeed
@@ -38,6 +40,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.screens.transfer.SparkFundingContract.Quote
 import to.bitkit.ui.screens.transfer.SparkFundingContract.SideEffect
 import to.bitkit.ui.screens.transfer.SparkFundingContract.UiState
+import to.bitkit.ui.screens.wallets.send.HwSendRequest
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -54,6 +57,7 @@ class SparkFundingViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val sparkRepo: SparkRepo,
     private val currencyRepo: CurrencyRepo,
+    private val hwWalletRepo: HwWalletRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "SparkFundingViewModel"
@@ -94,21 +98,35 @@ class SparkFundingViewModel @Inject constructor(
         }
     }
 
+    /** Sends from the hardware wallet [walletId] instead of Savings. */
+    fun useHardwareWallet(walletId: String) {
+        if (_uiState.value.hwWalletId == walletId) return
+        _uiState.update { it.copy(hwWalletId = walletId, isMaxLoading = true) }
+        refreshMax()
+    }
+
     /** Works out the most Savings can send to Spark after the network fee; shown as available and used by Max. */
     fun refreshMax() {
         maxJob?.cancel()
         maxJob = viewModelScope.launch {
             val max = runSuspendCatching {
-                val spendable = spendableSats()
-                if (spendable == 0uL) return@runSuspendCatching 0L
                 val address = sparkRepo.depositAddress().getOrThrow()
                 val feeRates = lightningRepo.getFeeRates().getOrThrow()
+                _uiState.value.hwWalletId?.let { walletId ->
+                    return@runSuspendCatching hwWalletRepo.maxSpendableFunding(
+                        walletId = walletId,
+                        address = address,
+                        satsPerVByte = feeRates.satsPerVByte(),
+                    ).getOrThrow().toLong()
+                }
+                val spendable = spendableSats()
+                if (spendable == 0uL) return@runSuspendCatching 0L
                 val fee = lightningRepo.estimateSendAllFee(address = address, speed = SPEED, feeRates = feeRates)
                     .getOrThrow()
                 (spendable.safe() - fee.safe()).toLong()
             }.getOrElse {
                 Logger.warn("Failed to estimate the most Spark funding can send", it, context = TAG)
-                walletRepo.balanceState.value.maxSendOnchainSats.toLong()
+                if (_uiState.value.hwWalletId != null) 0L else walletRepo.balanceState.value.maxSendOnchainSats.toLong()
             }
             _uiState.update { it.copy(maxSats = max, isMaxLoading = false) }
         }
@@ -211,7 +229,39 @@ class SparkFundingViewModel @Inject constructor(
                 _uiState.update { it.copy(isSending = false) }
                 return@launch
             }
-            send(quote)
+            val walletId = shown.hwWalletId
+            if (walletId == null) {
+                send(quote)
+                return@launch
+            }
+            _uiState.update { it.copy(isSending = false) }
+            _effects.emit(
+                SideEffect.SignHw(
+                    HwSendRequest(
+                        walletId = walletId,
+                        address = quote.address,
+                        amountSats = quote.amountSats.toULong(),
+                        satsPerVByte = quotedFeeRates?.satsPerVByte() ?: return@launch,
+                        tags = emptyList(),
+                        isTransfer = true,
+                    )
+                )
+            )
+        }
+    }
+
+    /** Hands the deposit the hardware wallet broadcast in [txid] to Spark, as [send] does for Savings. */
+    fun onHwBroadcast(txid: String, amountSats: ULong) {
+        val state = _uiState.value
+        val quote = state.quote ?: return
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                sparkRepo.onDepositBroadcast(txid, amountSats)
+                sparkRepo.followDepositClaim(txid, state.speed, quote.instantFeeSats.toULong())
+            }
+            Logger.info("Funded Spark from a hardware wallet with '$amountSats' sats in '$txid'", context = TAG)
+            _uiState.update { it.copy(txid = txid, claim = sparkRepo.depositClaims.value[txid] ?: it.claim) }
+            _effects.emit(SideEffect.Sent)
         }
     }
 
@@ -263,6 +313,7 @@ class SparkFundingViewModel @Inject constructor(
         val state = _uiState.value
         val address = sparkRepo.depositAddress().getOrThrow()
         val feeRates = lightningRepo.getFeeRates().getOrThrow()
+        state.hwWalletId?.let { return@runSuspendCatching hwQuote(it, address, feeRates) }
         val spendable = spendableSats()
         val networkFee = if (state.isMax) {
             lightningRepo.estimateSendAllFee(address = address, speed = SPEED, feeRates = feeRates).getOrThrow()
@@ -287,6 +338,27 @@ class SparkFundingViewModel @Inject constructor(
             spendableSats = spendable.toLong(),
         )
     }
+
+    private suspend fun hwQuote(walletId: String, address: String, feeRates: FeeRates): Quote {
+        val amount = _uiState.value.amountSats.toULong()
+        val satsPerVByte = feeRates.satsPerVByte()
+        val max = hwWalletRepo.maxSpendableFunding(walletId, address, satsPerVByte).getOrThrow()
+        val networkFee = hwWalletRepo.estimateFundingMiningFee(walletId, address, amount, satsPerVByte).getOrThrow()
+        val instantFee = sparkRepo.estimateDepositClaimFeeSats(amount).getOrThrow()
+        val laterFee = sparkRepo.estimateMatureClaimFeeSats().getOrThrow()
+        quotedFeeRates = feeRates
+        return Quote(
+            address = address,
+            amountSats = amount.toLong(),
+            networkFeeSats = networkFee.toLong(),
+            instantFeeSats = instantFee.toLong(),
+            laterFeeSats = laterFee.toLong(),
+            // Max is what the device can send once its own fee is paid, so it covers any amount up to it.
+            spendableSats = (max.safe() + networkFee.safe()).toLong(),
+        )
+    }
+
+    private fun FeeRates.satsPerVByte(): ULong = getSatsPerVByteFor(SPEED).toULong()
 
     private fun showQuote(quote: Quote) {
         _uiState.update { it.copy(quote = quote, amountSats = quote.amountSats) }
@@ -323,6 +395,8 @@ interface SparkFundingContract {
     @Immutable
     data class UiState(
         val isNodeRunning: Boolean = false,
+        /** The hardware wallet the transfer sends from, or null for Savings. */
+        val hwWalletId: String? = null,
         val isLoading: Boolean = false,
         val isMaxLoading: Boolean = true,
         val maxSats: Long = 0,
@@ -364,5 +438,8 @@ interface SparkFundingContract {
     sealed interface SideEffect {
         data object AmountReady : SideEffect
         data object Sent : SideEffect
+
+        /** Priced and checked; the hardware wallet signs [request] next. */
+        data class SignHw(val request: HwSendRequest) : SideEffect
     }
 }

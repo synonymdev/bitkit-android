@@ -277,6 +277,14 @@ class ContentViewTest {
     }
 
     @Test
+    fun `hardware spending start route keeps the wallet id after intro`() {
+        val walletId = "trezor-1"
+
+        assertEquals(Routes.SpendingIntroHw(walletId), transferSpendingStartRoute(false, walletId))
+        assertEquals(Routes.SpendingAmountHw(walletId), transferSpendingStartRoute(true, walletId))
+    }
+
+    @Test
     fun `setting up removes spending confirmation from the back stack`() {
         val navController = transferNavController()
         navController.navigateTo(Routes.SparkFundingNav)

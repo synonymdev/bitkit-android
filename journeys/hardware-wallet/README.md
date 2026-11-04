@@ -76,6 +76,7 @@ the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 | `connect-flow.xml` | Settings Add button → connect flow with an edited Label Funds → paired device count + name |
 | `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, rename sheet, Add button sheet/back dismiss, per-row delete confirm + re-pair |
 | `detail-overview.xml` | Detail screen overview, Transfer placeholder when funded, activity, Remove confirm + forget |
+| `transfer-to-spending.xml` | Happy-path transfer into Spark plus one scoped hardware Transfer activity |
 | `send-onchain.xml` | Normal Send flow funded by Trezor: source selection, guarded preparation, device signing, broadcast, success, and activity |
 | `receive-onchain.xml` | Trezor Receive tab: current address and QR display plus exact on-device address verification |
 | `passphrase-pairing.xml` | Passphrase button on Paired → Enter Passphrase → Passphrase Funds Found; second home tile, own label, no passphrase in logs |

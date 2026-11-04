@@ -171,9 +171,11 @@ private fun SpendingAmountNodeRunning(
         modifier = Modifier
             .padding(horizontal = 16.dp)
             .fillMaxSize()
-            .testTag("SpendingAmount")
+            .testTag(if (uiState.hwWalletId != null) "HardwareTransferAmount" else "SpendingAmount")
     ) {
         val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
+        val isHardware = uiState.hwWalletId != null
+        val tag = if (isHardware) "HardwareTransferAmount" else "SpendingAmount"
         val isReady = !uiState.isLoading && !uiState.isMaxLoading
         val hasFunds = uiState.maxSats > 0
 
@@ -193,7 +195,7 @@ private fun SpendingAmountNodeRunning(
             showSecondaryField = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("SpendingAmountNumberField")
+                .testTag("${tag}NumberField")
         )
 
         FillHeight()
@@ -201,40 +203,42 @@ private fun SpendingAmountNodeRunning(
         Row(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.testTag("SendAmountNumberPad")
+            modifier = Modifier.testTag(if (isHardware) "HardwareTransferAmountNumberPad" else "SendAmountNumberPad")
         ) {
             Column {
                 Text13Up(
                     text = stringResource(R.string.wallet__send_available),
                     color = Colors.White64,
-                    modifier = Modifier.testTag("SpendingAmountAvailable")
+                    modifier = Modifier.testTag("${tag}Available")
                 )
                 VerticalSpacer(8.dp)
                 MoneySSB(
                     sats = uiState.maxSats,
                     showSymbol = true,
-                    modifier = Modifier.testTag("SpendingAmountUnit")
+                    modifier = Modifier.testTag("${tag}Unit")
                 )
             }
             FillWidth()
             UnitButton(
                 color = Colors.Purple,
                 onClick = { amountInputViewModel.switchUnit(currencies) },
-                modifier = Modifier.testTag("SpendingNumberPadUnit")
+                modifier = Modifier.testTag(
+                    if (isHardware) "HardwareTransferAmountUnitButton" else "SpendingNumberPadUnit"
+                )
             )
             NumberPadActionButton(
                 text = stringResource(R.string.lightning__spending_amount__quarter),
                 color = Colors.Purple,
                 enabled = isReady && hasFunds,
                 onClick = onClickQuarter,
-                modifier = Modifier.testTag("SpendingAmountQuarter")
+                modifier = Modifier.testTag("${tag}Quarter")
             )
             NumberPadActionButton(
                 text = stringResource(R.string.common__max),
                 color = Colors.Purple,
                 enabled = isReady && hasFunds,
                 onClick = onClickMaxAmount,
-                modifier = Modifier.testTag("SpendingAmountMax")
+                modifier = Modifier.testTag("${tag}Max")
             )
         }
 
@@ -251,7 +255,7 @@ private fun SpendingAmountNodeRunning(
             onClick = onConfirmAmount,
             enabled = isReady && amountUiState.sats > 0 && amountUiState.sats <= uiState.maxSats,
             isLoading = uiState.isLoading,
-            modifier = Modifier.testTag("SpendingAmountContinue")
+            modifier = Modifier.testTag("${tag}Continue")
         )
 
         VerticalSpacer(16.dp)

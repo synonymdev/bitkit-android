@@ -204,6 +204,7 @@
     <string name="lightning__transfer__nav_title">Transferir fondos</string>
     <string name="lightning__transfer__confirm">Por favor,\n&lt;accent&gt;confirme&lt;/accent&gt;</string>
     <string name="lightning__transfer__swipe">Deslizar para transferir</string>
+    <string name="lightning__transfer_hw__open_connect">Abrir Trezor Connect</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_confirm__network_fee">Comisión de red</string>
     <string name="lightning__spending_confirm__quote_error_text">Bitkit no pudo obtener las comisiones actuales de esta transferencia. Comprueba tu conexión e inténtalo de nuevo.</string>
@@ -1285,6 +1286,8 @@
     <string name="lightning__sync_connecting">&lt;accent&gt;Conectando&lt;/accent&gt;\na la red</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Vuelva a conectar su dispositivo de hardware; parece que se ha desconectado de su teléfono.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Reconecte el dispositivo de hardware</string>
+    <string name="lightning__transfer_hw__sign_title">Firme con\n&lt;accent&gt;su dispositivo&lt;/accent&gt;</string>
+    <string name="lightning__transfer_hw__signed_title">Transacción\n&lt;accent&gt;firmada&lt;/accent&gt;</string>
     <string name="lightning__transfer_ready_in">TRANSFERENCIA LISTA EN %s</string>
     <string name="lightning__transfer_unavailable__nav_title">Transferencia no disponible</string>
     <string name="lightning__transfer_unavailable__text">Las transferencias automáticas a tu saldo de gasto ya no están disponibles. Usa tu propio nodo o configura una conexión con otro proveedor.</string>

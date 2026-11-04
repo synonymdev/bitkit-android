@@ -156,6 +156,8 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
+| SpendingHwSignScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Confirm HW |
+| SpendingHwSignedScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Confirmed HW |
 
 ## ui/screens/trezor
 

@@ -278,6 +278,7 @@
     <string name="lightning__transfer__confirm">Por favor\n&lt;accent&gt;confirme&lt;/accent&gt;</string>
     <string name="lightning__transfer__nav_title">Transf. fundos</string>
     <string name="lightning__transfer__swipe">Deslizar Para Transferir</string>
+    <string name="lightning__transfer_hw__open_connect">Abrir Trezor Connect</string>
     <string name="lightning__transfer_in_progress">TRANSFERÊNCIA EM ANDAMENTO</string>
     <string name="lightning__transfer_intro__button">Começar</string>
     <string name="lightning__transfer_intro__text">Use seu saldo de gastos para desfrutar de transações instantâneas e baratas com amigos, familiares e comerciantes.</string>
@@ -1293,6 +1294,8 @@
     <string name="lightning__sync_connecting">&lt;accent&gt;Conectando&lt;/accent&gt;\nà rede</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Reconecte seu dispositivo de hardware, ele parece estar desconectado do seu telefone.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Reconectar Dispositivo de Hardware</string>
+    <string name="lightning__transfer_hw__sign_title">Assine com\n&lt;accent&gt;seu dispositivo&lt;/accent&gt;</string>
+    <string name="lightning__transfer_hw__signed_title">Transação\n&lt;accent&gt;assinada&lt;/accent&gt;</string>
     <string name="lightning__transfer_ready_in">TRANSFERÊNCIA PRONTA EM %s</string>
     <string name="lightning__transfer_unavailable__nav_title">Transferência indisponível</string>
     <string name="lightning__transfer_unavailable__text">As transferências automáticas para seu saldo de gastos não estão mais disponíveis. Use seu próprio nó ou configure uma conexão com outro provedor.</string>

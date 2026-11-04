@@ -120,6 +120,7 @@
     <string name="lightning__transfer__nav_title">Transf. fundos</string>
     <string name="lightning__transfer__confirm">Por favor\n&lt;accent&gt;confirme&lt;/accent&gt;</string>
     <string name="lightning__transfer__swipe">Deslizar Para Transferir</string>
+    <string name="lightning__transfer_hw__open_connect">Abrir Trezor Connect</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__error_max__title">Saldo de gastos Máximo</string>
     <string name="lightning__spending_amount__error_min__description">Transfira mais de ₿ {amount} para cobrir as taxas de a adicionar ao seu saldo de gastos.</string>
@@ -1262,6 +1263,8 @@
     <string name="lightning__sync_connecting">&lt;accent&gt;A ligar&lt;/accent&gt;\nà rede</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Volte a ligar o seu dispositivo de hardware; parece estar desligado do telemóvel.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Voltar a ligar o dispositivo</string>
+    <string name="lightning__transfer_hw__sign_title">Assine com\n&lt;accent&gt;o seu dispositivo&lt;/accent&gt;</string>
+    <string name="lightning__transfer_hw__signed_title">Transação\n&lt;accent&gt;assinada&lt;/accent&gt;</string>
     <string name="lightning__transfer_ready_in">TRANSFERÊNCIA PRONTA EM %s</string>
     <string name="lightning__transfer_unavailable__nav_title">Transferência indisponível</string>
     <string name="lightning__transfer_unavailable__text">As transferências automáticas para o seu saldo de gastos já não estão disponíveis. Use o seu próprio nó ou configure uma ligação com outro fornecedor.</string>

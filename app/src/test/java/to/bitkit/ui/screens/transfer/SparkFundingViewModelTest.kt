@@ -23,6 +23,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.OnchainSendOutcome
@@ -43,9 +44,11 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     private val lightningRepo = mock<LightningRepo>()
     private val sparkRepo = mock<SparkRepo>()
     private val currencyRepo = mock<CurrencyRepo>()
+    private val hwWalletRepo = mock<HwWalletRepo>()
     private val feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u)
 
-    private fun createSut() = SparkFundingViewModel(context, walletRepo, lightningRepo, sparkRepo, currencyRepo)
+    private fun createSut() =
+        SparkFundingViewModel(context, walletRepo, lightningRepo, sparkRepo, currencyRepo, hwWalletRepo)
 
     @Before
     fun setUp() {
@@ -170,6 +173,34 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Later, 1_350uL)
         assertEquals("txid", sut.uiState.value.txid)
         assertTrue(sut.uiState.value.claim == SparkDepositClaim.Later)
+    }
+
+    @Test
+    fun `hardware transfer prices from the device and hands signing a transfer request`() = test {
+        whenever { hwWalletRepo.maxSpendableFunding("trezor", "bcrt1qspark", 5uL) }.thenReturn(Result.success(80_000uL))
+        whenever { hwWalletRepo.estimateFundingMiningFee("trezor", "bcrt1qspark", 50_000uL, 5uL) }
+            .thenReturn(Result.success(700uL))
+        val sut = createSut()
+        sut.useHardwareWallet("trezor")
+        advanceUntilIdle()
+        assertEquals(80_000L, sut.uiState.value.maxSats)
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        val effects = mutableListOf<SideEffect>()
+        val job = launch { sut.effects.collect { effects.add(it) } }
+
+        sut.onConfirm()
+        advanceUntilIdle()
+        job.cancel()
+
+        val request = (effects.single() as SideEffect.SignHw).request
+        assertEquals("trezor", request.walletId)
+        assertEquals("bcrt1qspark", request.address)
+        assertEquals(50_000uL, request.amountSats)
+        assertEquals(5uL, request.satsPerVByte)
+        assertTrue(request.isTransfer)
+        assertEquals(700L, sut.uiState.value.quote?.networkFeeSats)
     }
 
     private suspend fun TestScope.collectToasts(action: () -> Unit): List<Toast> {

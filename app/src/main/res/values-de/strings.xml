@@ -124,6 +124,7 @@
     <string name="lightning__transfer__nav_title">Übertrage Guthaben</string>
     <string name="lightning__transfer__confirm">Bitte\n&lt;accent&gt;bestätige&lt;/accent&gt;</string>
     <string name="lightning__transfer__swipe">Swipe zum Übertragen</string>
+    <string name="lightning__transfer_hw__open_connect">Trezor Connect öffnen</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__error_max__title">Maximaler Ausgabensaldo</string>
     <string name="lightning__spending_amount__error_min__description">Überweise mehr als ₿ {amount}, damit die Gebühren für dein Ausgabenguthaben gedeckt sind.</string>
@@ -1289,6 +1290,8 @@
     <string name="lightning__sync_connecting">&lt;accent&gt;Verbinde&lt;/accent&gt;\nmit Netzwerk</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Bitte verbinde dein Hardware-Gerät erneut, es scheint von deinem Telefon getrennt zu sein.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Hardware-Gerät neu verbinden</string>
+    <string name="lightning__transfer_hw__sign_title">Mit deinem\n&lt;accent&gt;Gerät signieren&lt;/accent&gt;</string>
+    <string name="lightning__transfer_hw__signed_title">Transaktion\n&lt;accent&gt;signiert&lt;/accent&gt;</string>
     <string name="lightning__transfer_ready_in">ÜBERTRAGUNG BEREIT IN %s</string>
     <string name="lightning__transfer_unavailable__nav_title">Übertragung nicht verfügbar</string>
     <string name="lightning__transfer_unavailable__text">Automatische Übertragungen auf dein Ausgabenkonto sind nicht mehr verfügbar. Nutze deinen eigenen Node oder richte eine Verbindung mit einem anderen Anbieter ein.</string>

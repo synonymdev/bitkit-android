@@ -135,68 +135,11 @@ private fun Content(
             Display(stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
             VerticalSpacer(8.dp)
 
-            val claimPrefix = when (state.speed) {
-                SparkClaimSpeed.Instant -> stringResource(R.string.lightning__spending_confirm__up_to)
-                SparkClaimSpeed.Later -> stringResource(R.string.lightning__spending_confirm__about)
-            }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.height(IntrinsicSize.Min)
-            ) {
-                FeeInfo(
-                    label = stringResource(R.string.lightning__spending_confirm__network_fee),
-                    amount = quote?.networkFeeSats ?: 0,
-                    modifier = Modifier.testTag("SpendingConfirmNetworkFee")
-                )
-                FeeInfo(
-                    label = stringResource(R.string.lightning__spending_confirm__spending_fee),
-                    amount = quote?.claimFeeSats(state.speed) ?: 0,
-                    prefix = claimPrefix,
-                    modifier = Modifier.testTag("SpendingConfirmSpendingFee")
-                )
-            }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.height(IntrinsicSize.Min)
-            ) {
-                FeeInfo(
-                    label = stringResource(R.string.lightning__spending_confirm__amount),
-                    amount = quote?.toSpendingSats(state.speed) ?: 0,
-                    prefix = claimPrefix.takeIf { state.speed == SparkClaimSpeed.Later },
-                    modifier = Modifier.testTag("SpendingConfirmAmount")
-                )
-                FeeInfo(
-                    label = stringResource(R.string.lightning__spending_confirm__total),
-                    amount = quote?.totalSats ?: 0,
-                    modifier = Modifier.testTag("SpendingConfirmTotal")
-                )
-            }
+            SpendingFeeGrid(quote = quote, speed = state.speed)
 
             VerticalSpacer(16.dp)
 
-            SpeedItem(
-                title = stringResource(R.string.fee__instant__title),
-                description = stringResource(R.string.lightning__spending_confirm__instant_text),
-                feePrefix = stringResource(R.string.lightning__spending_confirm__up_to),
-                feeSats = quote?.instantFeeSats,
-                icon = R.drawable.ic_speed_fast,
-                iconColor = Colors.Purple,
-                isSelected = state.speed == SparkClaimSpeed.Instant,
-                onClick = { onSpeedChange(SparkClaimSpeed.Instant) },
-                modifier = Modifier.testTag("SpendingConfirmInstant")
-            )
-            SpeedItem(
-                title = stringResource(R.string.common__later),
-                description = stringResource(R.string.lightning__spending_confirm__later_text),
-                feePrefix = stringResource(R.string.lightning__spending_confirm__about),
-                feeSats = quote?.laterFeeSats,
-                icon = R.drawable.ic_speed_normal,
-                iconColor = Colors.Purple,
-                isSelected = state.speed == SparkClaimSpeed.Later,
-                onClick = { onSpeedChange(SparkClaimSpeed.Later) },
-                modifier = Modifier.testTag("SpendingConfirmLater")
-            )
-            HorizontalDivider()
+            SpendingSpeedRows(quote = quote, speed = state.speed, onSpeedChange = onSpeedChange)
 
             VerticalSpacer(16.dp)
 
@@ -236,6 +179,84 @@ private fun Content(
             )
             VerticalSpacer(16.dp)
         }
+    }
+}
+
+/** The four fee tiles of a transfer to spending, at the selected claim [speed]. */
+@Composable
+internal fun SpendingFeeGrid(quote: Quote?, speed: SparkClaimSpeed, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        val claimPrefix = when (speed) {
+            SparkClaimSpeed.Instant -> stringResource(R.string.lightning__spending_confirm__up_to)
+            SparkClaimSpeed.Later -> stringResource(R.string.lightning__spending_confirm__about)
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.height(IntrinsicSize.Min)
+        ) {
+            FeeInfo(
+                label = stringResource(R.string.lightning__spending_confirm__network_fee),
+                amount = quote?.networkFeeSats ?: 0,
+                modifier = Modifier.testTag("SpendingConfirmNetworkFee")
+            )
+            FeeInfo(
+                label = stringResource(R.string.lightning__spending_confirm__spending_fee),
+                amount = quote?.claimFeeSats(speed) ?: 0,
+                prefix = claimPrefix,
+                modifier = Modifier.testTag("SpendingConfirmSpendingFee")
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.height(IntrinsicSize.Min)
+        ) {
+            FeeInfo(
+                label = stringResource(R.string.lightning__spending_confirm__amount),
+                amount = quote?.toSpendingSats(speed) ?: 0,
+                prefix = claimPrefix.takeIf { speed == SparkClaimSpeed.Later },
+                modifier = Modifier.testTag("SpendingConfirmAmount")
+            )
+            FeeInfo(
+                label = stringResource(R.string.lightning__spending_confirm__total),
+                amount = quote?.totalSats ?: 0,
+                modifier = Modifier.testTag("SpendingConfirmTotal")
+            )
+        }
+    }
+}
+
+/** The Instant and Later rows a transfer to spending picks its claim speed with. */
+@Composable
+internal fun SpendingSpeedRows(
+    quote: Quote?,
+    speed: SparkClaimSpeed,
+    onSpeedChange: (SparkClaimSpeed) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        SpeedItem(
+            title = stringResource(R.string.fee__instant__title),
+            description = stringResource(R.string.lightning__spending_confirm__instant_text),
+            feePrefix = stringResource(R.string.lightning__spending_confirm__up_to),
+            feeSats = quote?.instantFeeSats,
+            icon = R.drawable.ic_speed_fast,
+            iconColor = Colors.Purple,
+            isSelected = speed == SparkClaimSpeed.Instant,
+            onClick = { onSpeedChange(SparkClaimSpeed.Instant) },
+            modifier = Modifier.testTag("SpendingConfirmInstant")
+        )
+        SpeedItem(
+            title = stringResource(R.string.common__later),
+            description = stringResource(R.string.lightning__spending_confirm__later_text),
+            feePrefix = stringResource(R.string.lightning__spending_confirm__about),
+            feeSats = quote?.laterFeeSats,
+            icon = R.drawable.ic_speed_normal,
+            iconColor = Colors.Purple,
+            isSelected = speed == SparkClaimSpeed.Later,
+            onClick = { onSpeedChange(SparkClaimSpeed.Later) },
+            modifier = Modifier.testTag("SpendingConfirmLater")
+        )
+        HorizontalDivider()
     }
 }
 

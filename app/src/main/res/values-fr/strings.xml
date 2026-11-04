@@ -123,6 +123,7 @@
     <string name="lightning__transfer__nav_title">Transfert de fonds</string>
     <string name="lightning__transfer__confirm">Veuillez\n&lt;accent&gt;confirmer&lt;/accent&gt;</string>
     <string name="lightning__transfer__swipe">Glissez pour transférer</string>
+    <string name="lightning__transfer_hw__open_connect">Ouvrir Trezor Connect</string>
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__error_max__title">Seuil Maximum Épargne</string>
     <string name="lightning__spending_amount__error_min__description">Transférez plus de ₿ {amount} pour couvrir les frais d\'ajout à votre solde de dépenses.</string>
@@ -1288,6 +1289,8 @@
     <string name="lightning__sync_connecting">&lt;accent&gt;Connexion&lt;/accent&gt;\nau réseau</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Veuillez reconnecter votre appareil matériel, il semble être déconnecté de votre téléphone.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Reconnecter l\'appareil matériel</string>
+    <string name="lightning__transfer_hw__sign_title">Signez avec\n&lt;accent&gt;votre appareil&lt;/accent&gt;</string>
+    <string name="lightning__transfer_hw__signed_title">Transaction\n&lt;accent&gt;signée&lt;/accent&gt;</string>
     <string name="lightning__transfer_ready_in">TRANSFERT PRÊT DANS %s</string>
     <string name="lightning__transfer_unavailable__nav_title">Transfert indisponible</string>
     <string name="lightning__transfer_unavailable__text">Les transferts automatiques vers votre solde de dépenses ne sont plus disponibles. Utilisez votre propre nœud ou configurez une connexion avec un autre fournisseur.</string>
