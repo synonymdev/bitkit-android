@@ -1624,6 +1624,9 @@
     <string name="wallet__send_pending__cancelled_title">Płatność anulowana</string>
     <string name="wallet__send_pending__onchain_description">Wynik transakcji jest nierozstrzygnięty. Sprawdź jej status, zanim spróbujesz ponownie. Inne płatności pozostają zablokowane. Jeśli to możliwe, użyj opcji Ponów oryginalną płatność, aby zatwierdzić opłatę dla tej samej płatności.</string>
     <string name="wallet__send_pending__refusal">Rozgłoszenie odrzucone: %1$s</string>
+    <string name="wallet__send_pending__resend_paid">To żądanie płatności lub zamówienie jest już oznaczone jako opłacone, więc Bitkit nie wysłał płatności ponownie. Możesz anulować tę płatność, aby zachować jej środki w swoim portfelu.</string>
+    <string name="wallet__send_pending__resend_title">Ponów bez sprawdzania</string>
+    <string name="wallet__send_pending__resend_warning">Bitkit nie może już sprawdzić, czy to żądanie płatności, ta wycena lub to zamówienie są nadal ważne. Mogły już wygasnąć, a odbiorca może nie przyjąć spóźnionej płatności. Bitkit nie wyśle płatności, jeśli żądanie lub zamówienie jest już oznaczone jako opłacone, ale jeśli tego stanu nie da się sprawdzić, płatność może zostać wykonana dwukrotnie. Mimo to ponowić tę samą płatność?</string>
     <string name="wallet__send_pending__retry_authorize">Zatwierdź ponowienie</string>
     <string name="wallet__send_pending__retry_description">Ponów oryginalną płatność z tą samą kwotą i wejściami. Wprowadź zatwierdzaną stawkę opłaty w sat/vB. Wyższa opłata może być niedostępna; Bitkit nigdy nie zmniejszy płatności ani nie doda innych wejść.</string>
     <string name="wallet__send_pending__retry_error">Nie udało się ponowić oryginalnej płatności. Jej środki pozostają chronione. Środki mogą być niewystarczające na wybraną opłatę. Spróbuj innej opłaty lub sprawdź status transakcji.</string>

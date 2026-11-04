@@ -229,6 +229,8 @@ class OnchainSendNotDispatchedError(cause: Throwable) : AppError("On-chain send 
 class OnchainSendPendingError(cause: Throwable, val txid: String? = null) :
     AppError("On-chain send outcome is unknown; do not send again", cause)
 
+class OnchainOriginalPaidError : AppError("Original on-chain payment's request is already paid")
+
 @OptIn(ExperimentalTime::class)
 @Singleton
 class OnchainSendAttemptStore @Inject constructor(

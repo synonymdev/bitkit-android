@@ -22,6 +22,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.OnchainOriginalPaidError
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainSendAbandonPendingError
@@ -185,6 +186,7 @@ class SendPendingViewModel @Inject constructor(
                 recoveryError = null,
                 invalidFeeRate = false,
                 cancellationFailed = false,
+                isOriginalPaid = false,
                 abandonError = null,
             )
         }
@@ -209,7 +211,7 @@ class SendPendingViewModel @Inject constructor(
                 }.onFailure { error ->
                     _uiState.update {
                         if (it.recoveredTxid == null && it.recoveredTransfer == null) {
-                            it.copy(recoveryError = error.message)
+                            it.copy(recoveryError = error.message, isOriginalPaid = error is OnchainOriginalPaidError)
                         } else {
                             it
                         }
@@ -237,6 +239,7 @@ class SendPendingViewModel @Inject constructor(
                 recoveryError = null,
                 invalidFeeRate = false,
                 cancellationFailed = false,
+                isOriginalPaid = false,
                 abandonError = null,
             )
         }
@@ -457,6 +460,7 @@ data class SendPendingUiState(
     val isCancellationFinal: Boolean = false,
     val hasUnknownCancellation: Boolean = false,
     val cancellationFailed: Boolean = false,
+    val isOriginalPaid: Boolean = false,
     val isGuardReleased: Boolean = false,
     val abandonableAttempt: OnchainSendAttempt? = null,
     val isAbandoning: Boolean = false,
@@ -465,6 +469,10 @@ data class SendPendingUiState(
     /** A sent or possibly relayed cancellation may still confirm, so the original must not be retried beside it. */
     val canRetry: Boolean
         get() = recoveryAttempt != null && cancellationTxid == null && !hasUnknownCancellation
+
+    /** Only a request can be paid late; Blocktank no longer sells channels, so an order is never paid again. */
+    val canRetryWithoutChecking: Boolean
+        get() = canRetry && recoveryAttempt?.requestId != null
 
     /** An expired payment's release spends the original inputs too, so it is not sent beside another cancellation. */
     val canAbandon: Boolean
@@ -489,12 +497,12 @@ data class SendPendingUiState(
                 ).safe() + 1uL.safe(),
                 OnchainRecoveryFeeRate.maximum,
             )
-            RecoveryAction.Retry -> original.feeRateSatsPerVByte
+            RecoveryAction.Retry, RecoveryAction.RetryWithoutChecking -> original.feeRateSatsPerVByte
         }
     }
 }
 
-enum class RecoveryAction { Retry, Cancel }
+enum class RecoveryAction { Retry, RetryWithoutChecking, Cancel }
 
 enum class AbandonError { MayStillConfirm, SyncUnavailable, ReleasePending }
 

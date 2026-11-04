@@ -1624,6 +1624,9 @@
     <string name="wallet__send_pending__cancelled_title">Pago cancelado</string>
     <string name="wallet__send_pending__onchain_description">El resultado de la transacción no está resuelto. Revise su estado antes de volver a intentarlo. Los demás pagos siguen bloqueados. Si está disponible, use Reintentar pago original para autorizar una comisión para el mismo pago.</string>
     <string name="wallet__send_pending__refusal">Transmisión rechazada: %1$s</string>
+    <string name="wallet__send_pending__resend_paid">Esta solicitud de pago o pedido ya figura como pagado, por lo que Bitkit no lo volvió a enviar. Puede cancelar este pago para conservar sus fondos en su billetera.</string>
+    <string name="wallet__send_pending__resend_title">Reintentar sin verificar</string>
+    <string name="wallet__send_pending__resend_warning">Bitkit ya no puede verificar que esta solicitud de pago, cotización o pedido siga siendo válido. Es posible que haya vencido y que el destinatario no acepte un pago tardío. Bitkit no lo enviará si la solicitud o el pedido ya figuran como pagadas, pero si no se puede verificar ese estado, podría pagarse dos veces. ¿Reintentar el mismo pago de todos modos?</string>
     <string name="wallet__send_pending__retry_authorize">Autorizar reintento</string>
     <string name="wallet__send_pending__retry_description">Reintente el pago original con el mismo monto y las mismas entradas. Introduzca la tarifa que autoriza en sat/vB. Es posible que no haya una comisión mayor disponible; Bitkit nunca reducirá el pago ni añadirá otras entradas.</string>
     <string name="wallet__send_pending__retry_error">No se pudo reintentar el pago original. Sus fondos siguen protegidos. Es posible que los fondos no alcancen para la comisión elegida. Pruebe otra comisión o revise el estado de la transacción.</string>

@@ -147,7 +147,7 @@ class SendPendingObservationDeviceTest {
                                 onClose = {},
                                 onViewDetails = {},
                                 viewModel = vm,
-                                retryOriginal = { _, _, _ -> error("Observation must not invoke retry") },
+                                retryOriginal = { _, _, _, _ -> error("Observation must not invoke retry") },
                                 cancelOriginal = { _, _, _ -> error("Observation must not invoke cancellation") },
                                 onRecovered = { txid, amount -> recovered = txid to amount },
                                 savedStateHandle = SavedStateHandle(),

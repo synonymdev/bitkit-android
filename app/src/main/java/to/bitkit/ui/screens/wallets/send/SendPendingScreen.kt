@@ -58,6 +58,7 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
@@ -89,6 +90,7 @@ fun SendPendingScreen(
     retryOriginal: suspend (
         OnchainSendAttempt,
         ULong,
+        Boolean,
         suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit,
     ) -> Result<OnchainSendOutcome>,
     cancelOriginal: suspend (
@@ -158,7 +160,9 @@ fun SendPendingScreen(
             if (action == RecoveryAction.Cancel) {
                 viewModel.cancelOriginal(rate) { attempt, fee -> cancelOriginal(attempt, fee, approve) }
             } else {
-                viewModel.retryOriginal(rate) { attempt, fee -> retryOriginal(attempt, fee, approve) }
+                viewModel.retryOriginal(rate) { attempt, fee ->
+                    retryOriginal(attempt, fee, action == RecoveryAction.Retry, approve)
+                }
             }
         },
     ) { onRecover ->
@@ -171,11 +175,13 @@ fun SendPendingScreen(
             onClose = onClose,
             onViewDetails = onViewDetails,
             canRetry = uiState.canRetry,
+            canRetryWithoutChecking = uiState.canRetryWithoutChecking,
             canCancel = uiState.canCancel,
             cancellationTxid = uiState.cancellationTxid,
             isRecovering = uiState.isRecovering,
             recoveryError = uiState.abandonErrorMessage() ?: uiState.recoveryErrorMessage(),
             onRetry = { onRecover(RecoveryAction.Retry) },
+            onRetryWithoutChecking = { onRecover(RecoveryAction.RetryWithoutChecking) },
             onCancel = { onRecover(RecoveryAction.Cancel) },
             canAbandon = uiState.canAbandon,
             isAbandoning = uiState.isAbandoning,
@@ -236,6 +242,7 @@ private fun SendPendingUiState.recoveryErrorMessage(): String? {
         invalidFeeRate -> R.string.wallet__send_pending__retry_invalid_fee
         isEarlierCancellationPending -> R.string.wallet__send_pending__cancel_pending_error
         cancellationFailed -> R.string.wallet__send_pending__cancel_error
+        isOriginalPaid -> R.string.wallet__send_pending__resend_paid
         recoveryError != null -> R.string.wallet__send_pending__retry_error
         else -> return null
     }
@@ -254,6 +261,7 @@ private fun RecoveryAuthorization(
     content: @Composable ((RecoveryAction) -> Unit) -> Unit,
 ) {
     var feeAction by remember { mutableStateOf<RecoveryAction?>(null) }
+    var confirmRetryWithoutChecking by remember { mutableStateOf(false) }
     var feeInput by rememberSaveable { mutableStateOf("") }
     val settings = settingsViewModel ?: return
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
@@ -261,7 +269,7 @@ private fun RecoveryAuthorization(
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val reviewing = (feeAction != null && uiState.recoveryAttempt != null) ||
+    val reviewing = (feeAction != null && uiState.recoveryAttempt != null) || confirmRetryWithoutChecking ||
         showAbandonConfirmation || uiState.recoveryApproval != null
     LaunchedEffect(reviewing, lifecycle, beginPaymentReview) {
         if (!reviewing) return@LaunchedEffect
@@ -343,6 +351,19 @@ private fun RecoveryAuthorization(
         feeInput = uiState.suggestedFeeRate(action)?.toString().orEmpty()
         feeAction = action
     }
+    if (confirmRetryWithoutChecking) {
+        AppAlertDialog(
+            title = stringResource(R.string.common__are_you_sure),
+            text = stringResource(R.string.wallet__send_pending__resend_warning),
+            confirmText = stringResource(R.string.common__continue),
+            dismissText = stringResource(R.string.common__cancel),
+            onConfirm = {
+                confirmRetryWithoutChecking = false
+                openFeeDialog(RecoveryAction.RetryWithoutChecking)
+            },
+            onDismiss = { confirmRetryWithoutChecking = false },
+        )
+    }
     feeAction?.let { action ->
         uiState.recoveryAttempt?.let { original ->
             RecoveryFeeDialog(original, action, feeInput, { feeInput = it }, { feeAction = null }) { rate ->
@@ -359,7 +380,13 @@ private fun RecoveryAuthorization(
             }
         }
     }
-    content(openFeeDialog)
+    content { action ->
+        if (action == RecoveryAction.RetryWithoutChecking) {
+            confirmRetryWithoutChecking = true
+        } else {
+            openFeeDialog(action)
+        }
+    }
 }
 
 @Composable
@@ -377,6 +404,7 @@ private fun RecoveryFeeDialog(
         title = stringResource(
             when (action) {
                 RecoveryAction.Retry -> R.string.wallet__send_pending__retry_title
+                RecoveryAction.RetryWithoutChecking -> R.string.wallet__send_pending__resend_title
                 RecoveryAction.Cancel -> R.string.wallet__send_pending__cancel_title
             }
         ),
@@ -439,11 +467,13 @@ internal fun SendPendingContent(
     txid: String? = null,
     refusalReason: String? = null,
     canRetry: Boolean = false,
+    canRetryWithoutChecking: Boolean = false,
     canCancel: Boolean = false,
     cancellationTxid: String? = null,
     isRecovering: Boolean = false,
     recoveryError: String? = null,
     onRetry: () -> Unit = {},
+    onRetryWithoutChecking: () -> Unit = {},
     onCancel: () -> Unit = {},
     canAbandon: Boolean = false,
     isAbandoning: Boolean = false,
@@ -549,6 +579,14 @@ internal fun SendPendingContent(
                 }
                 VerticalSpacer(16.dp)
             }
+            if (canRetryWithoutChecking) {
+                TertiaryButton(
+                    text = stringResource(R.string.wallet__send_pending__resend_title),
+                    enabled = !isRecovering && !isAbandoning,
+                    onClick = onRetryWithoutChecking,
+                )
+                VerticalSpacer(16.dp)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__send_details),
@@ -619,6 +657,7 @@ private fun PreviewOnchainRecovery() {
                 txid = "ab".repeat(32),
                 refusalReason = "min relay fee not met",
                 canRetry = true,
+                canRetryWithoutChecking = true,
                 canCancel = true,
                 modifier = Modifier.sheetHeight(),
             )

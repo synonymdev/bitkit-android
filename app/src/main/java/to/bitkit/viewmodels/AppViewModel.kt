@@ -177,6 +177,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.OnchainOriginalPaidError
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
@@ -6453,9 +6454,15 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Retry the original payment over its exact inputs. Without [reauthorize], the user has accepted that its request
+     * or quote may have expired, so no expiry or payment deadline applies, but a request reported as already paid
+     * still refuses the re-send.
+     */
     suspend fun retryOriginalOnchainSend(
         original: OnchainSendAttempt,
         feeRateSatsPerVByte: ULong,
+        reauthorize: Boolean = true,
         approvePrepared: suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit = { _, _ -> },
     ): Result<OnchainSendOutcome> {
         // Blocktank no longer sells channels, so an unpaid order is never paid again.
@@ -6466,11 +6473,11 @@ class AppViewModel @Inject constructor(
                 IllegalStateException(context.getString(R.string.lightning__transfer_unavailable__nav_title))
             )
         }
-        val request = original.requestId?.let { id ->
+        val request = original.requestId?.takeIf { reauthorize }?.let { id ->
             (paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value)
                 .firstOrNull { it.id == id }
         }
-        if (original.requestId != null && request == null) {
+        if (reauthorize && original.requestId != null && request == null) {
             return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
         }
         val paymentDeadline = request?.let {
@@ -6489,7 +6496,9 @@ class AppViewModel @Inject constructor(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
                     attempt.orderId == original.orderId && attempt.payerIdentity == original.payerIdentity
             )
-            if (request != null) {
+            if (!reauthorize) {
+                ensureOriginalUnpaid(attempt)
+            } else if (request != null) {
                 val currentRequest =
                     (
                         paykitPaymentRequestRepo.pendingRequests.value +
@@ -6507,12 +6516,26 @@ class AppViewModel @Inject constructor(
                 val winner = lightningRepo.currentOnchainSendAttempt() ?: return@runSuspendCatching
                 if (request != null) {
                     paykitPaymentProofRepo.completeRecoveredOnchainPayment(request, winner)
+                } else if (winner.requestId != null) {
+                    paykitPaymentProofRepo.reconcile()
                 } else {
                     lightningRepo.completeAcceptedOrdinaryFollowup(requireNotNull(winner.txid))
                 }
             }.onFailure { Logger.warn("Failed to finish original recovered send locally", it, context = TAG) }
         }
         return result
+    }
+
+    private suspend fun ensureOriginalUnpaid(attempt: OnchainSendAttempt) {
+        val requestId = attempt.requestId ?: return
+        // The cached lists start empty, so load them first; a failed or empty lookup proves nothing, so only a
+        // request reported as paid refuses the re-send.
+        paykitPaymentRequestRepo.refresh()
+        val request = (
+            paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value
+            )
+            .firstOrNull { it.id == requestId }
+        if (request?.lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED) throw OnchainOriginalPaidError()
     }
 
     /** Spend the original inputs back to this wallet. Other sends stay blocked until that spend is final. */

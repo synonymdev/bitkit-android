@@ -1623,6 +1623,9 @@
     <string name="wallet__send_pending__nav_title">الدفعة معلقة</string>
     <string name="wallet__send_pending__onchain_description">نتيجة المعاملة لم تُحسم بعد. تحقق من حالتها قبل المحاولة مرة أخرى. تبقى المدفوعات الأخرى محظورة. إن توفر، استخدم «إعادة محاولة الدفعة الأصلية» لتفويض رسوم للدفعة نفسها.</string>
     <string name="wallet__send_pending__refusal">تم رفض البث: %1$s</string>
+    <string name="wallet__send_pending__resend_paid">طلب الدفع أو الطلبية مُعلَّم بالفعل على أنه مدفوع، لذا لم يرسل Bitkit الدفعة مرة أخرى. يمكنك إلغاء هذه الدفعة للاحتفاظ بأموالها في محفظتك.</string>
+    <string name="wallet__send_pending__resend_title">إعادة المحاولة دون تحقق</string>
+    <string name="wallet__send_pending__resend_warning">لم يعد بإمكان Bitkit التحقق من أن طلب الدفع أو العرض أو الطلبية لا يزال صالحًا. ربما انتهت صلاحيته، وقد لا يقبل المستلم دفعة متأخرة. لن يرسل Bitkit الدفعة إذا كان طلب الدفع أو الطلبية مُعلَّمًا بالفعل على أنه مدفوع، ولكن إذا تعذر التحقق من هذه الحالة، فقد تُدفع مرتين. هل تريد إعادة محاولة الدفعة نفسها على أي حال؟</string>
     <string name="wallet__send_pending__retry_authorize">تفويض إعادة المحاولة</string>
     <string name="wallet__send_pending__retry_description">أعد محاولة الدفعة الأصلية باستخدام المبلغ والمدخلات نفسها. أدخل معدل الرسوم الذي تفوّضه بوحدة sat/vB. قد لا تتوفر رسوم أعلى؛ لن يقلل Bitkit الدفعة أبدًا ولن يضيف مدخلات أخرى.</string>
     <string name="wallet__send_pending__retry_error">تعذرت إعادة محاولة الدفعة الأصلية. تبقى أموالها محمية. قد لا تكون الأموال كافية للرسوم المختارة. جرّب رسومًا أخرى أو تحقق من حالة المعاملة.</string>

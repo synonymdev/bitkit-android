@@ -163,6 +163,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.OnchainOriginalPaidError
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
 import to.bitkit.repositories.OnchainSendBlockedError
@@ -250,6 +251,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -14912,6 +14914,131 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(lightningRepo, never()).retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
         assertEquals(Sheet.TransferUnavailable, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `retry without checking resends a missing request but keeps the original identity`() = test {
+        val requestBound = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "request-attempt",
+            requestId = PaykitPaymentRequestId("expired", "payee"), orderId = null, address = "bcrt1qoriginal",
+            amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = false,
+            channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Rejected, payerIdentity = "payer",
+        )
+        var current = requestBound
+        var dispatched = 0
+        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer { invocation ->
+                val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
+                runCatching {
+                    assertNull(invocation.getArgument<kotlin.time.Instant?>(3))
+                    authorize(current)
+                    dispatched++
+                    OnchainSendOutcome.Unknown("ef".repeat(32))
+                }
+            }
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+
+        assertEquals(
+            PaykitPaymentRequestError.RequestUnavailable,
+            sut.retryOriginalOnchainSend(requestBound, 2uL).exceptionOrNull(),
+        )
+        assertEquals(0, dispatched)
+        assertTrue(sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).isSuccess)
+        current = requestBound.copy(payerIdentity = "other-payer")
+        assertTrue(sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).isFailure)
+
+        assertEquals(1, dispatched)
+        verify(paykitPaymentProofRepo, never()).authorizeOnchainRecovery(any(), any())
+    }
+
+    @Test
+    fun `retry without checking never resends a Blocktank order`() = test {
+        val order = to.bitkit.ext.mockOrder().copy(orderExpiresAt = (Clock.System.now() - 1.seconds).toString())
+        val orderBound = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "order-attempt", requestId = null, orderId = order.id,
+            address = requireNotNull(order.payment?.onchain?.address), amountSats = order.feeSat,
+            isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = true, channelId = null,
+            tags = emptyList(), evidence = OnchainSendEvidence.Rejected,
+        )
+
+        assertTrue(sut.retryOriginalOnchainSend(orderBound, 2uL, reauthorize = false).isFailure)
+
+        verify(lightningRepo, never()).retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        assertEquals(Sheet.TransferUnavailable, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `retry without checking refuses a request reported paid but not a failed or unpaid lookup`() = test {
+        val request = paymentRequest()
+        val requestBound = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "request-attempt", requestId = request.id, orderId = null,
+            address = "bcrt1qoriginal", amountSats = request.amount.atomic, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Rejected, payerIdentity = "payer",
+        )
+        var dispatched = 0
+        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer { invocation ->
+                val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
+                runCatching {
+                    authorize(requestBound)
+                    dispatched++
+                    OnchainSendOutcome.Unknown("ef".repeat(32))
+                }
+            }
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+
+        paykitPaymentRequestHistory.value =
+            listOf(request.copy(lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED))
+        assertIs<OnchainOriginalPaidError>(
+            sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).exceptionOrNull()
+        )
+        assertEquals(0, dispatched)
+
+        paykitPaymentRequestHistory.value =
+            listOf(request.copy(lifecycleState = PaymentRequestLifecycleState.ACCEPTED))
+        assertTrue(sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).isSuccess)
+        paykitPaymentRequestHistory.value = emptyList()
+        assertTrue(sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).isSuccess)
+
+        assertEquals(2, dispatched)
+        verify(paykitPaymentProofRepo, never()).authorizeOnchainRecovery(any(), any())
+    }
+
+    @Test
+    fun `retry without checking refreshes Paykit requests before treating a request as unpaid`() = test {
+        val request = paymentRequest()
+        val requestBound = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "request-attempt", requestId = request.id, orderId = null,
+            address = "bcrt1qoriginal", amountSats = request.amount.atomic, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Rejected, payerIdentity = "payer",
+        )
+        var dispatched = 0
+        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer { invocation ->
+                val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
+                runCatching {
+                    authorize(requestBound)
+                    dispatched++
+                    OnchainSendOutcome.Unknown("ef".repeat(32))
+                }
+            }
+        whenever(paykitPaymentRequestRepo.refresh()).doSuspendableAnswer {
+            paykitPaymentRequestHistory.value =
+                listOf(request.copy(lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED))
+            Result.success(Unit)
+        }
+
+        assertIs<OnchainOriginalPaidError>(
+            sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).exceptionOrNull()
+        )
+        assertEquals(0, dispatched)
+
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.failure(AppError("offline")))
+        paykitPaymentRequestHistory.value = emptyList()
+        assertTrue(sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).isSuccess)
+        assertEquals(1, dispatched)
     }
 
     @Test

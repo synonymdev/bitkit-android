@@ -29,6 +29,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainInputSpend
+import to.bitkit.repositories.OnchainOriginalPaidError
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAbandonPendingError
 import to.bitkit.repositories.OnchainSendAbandonRefusedError
@@ -505,6 +506,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertFalse(reopened.isGuardReleased)
         assertTrue(reopened.canCancel)
         assertFalse(reopened.canRetry)
+        assertFalse(reopened.canRetryWithoutChecking)
         assertEquals(4uL, reopened.suggestedFeeRate(RecoveryAction.Cancel))
 
         val replacementTxid = "cd".repeat(32)
@@ -586,6 +588,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertFalse(unknown.isEarlierCancellationPending)
         assertNull(unknown.cancellationTxid)
         assertFalse(unknown.canRetry)
+        assertFalse(unknown.canRetryWithoutChecking)
         assertTrue(unknown.canCancel)
         assertEquals(5uL, unknown.suggestedFeeRate(RecoveryAction.Cancel))
         sut.retryOriginal(2uL, retry)
@@ -598,6 +601,25 @@ class SendPendingViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertFalse(sut.uiState.value.canRetry)
         assertEquals(original, sut.uiState.value.recoveryAttempt)
+    }
+
+    @Test
+    fun `retry refused because the original is already paid says so`() = test {
+        val original = requestOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canRetryWithoutChecking)
+
+        sut.retryOriginal(2uL) { _, _ -> Result.failure(OnchainOriginalPaidError()) }
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isOriginalPaid)
+        assertEquals(original, sut.uiState.value.recoveryAttempt)
+
+        sut.retryOriginal(2uL) { _, _ -> Result.failure(OnchainSendBlockedError(original)) }
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isOriginalPaid)
+        assertNotNull(sut.uiState.value.recoveryError)
     }
 
     @Test
@@ -624,6 +646,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertFalse(pending.isGuardReleased)
         assertFalse(pending.canAbandon)
         assertFalse(pending.canRetry)
+        assertFalse(pending.canRetryWithoutChecking)
         assertTrue(pending.canCancel)
 
         sut.abandonExpired(requiresPin = false, useBiometrics = false)
@@ -712,6 +735,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertEquals(released, reopened.recoveryAttempt)
         assertEquals(released, reopened.abandonableAttempt)
         assertFalse(reopened.canRetry)
+        assertFalse(reopened.canRetryWithoutChecking)
         assertFalse(reopened.canAbandon)
         assertTrue(reopened.canCancel)
         // The release may be in a mempool, so a Cancel payment must outbid its saved rate, not only the candidate's
@@ -781,6 +805,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
         val refused = sut.uiState.value
         assertEquals(AbandonError.MayStillConfirm, refused.abandonError)
         assertFalse(refused.canRetry)
+        assertFalse(refused.canRetryWithoutChecking)
         assertFalse(refused.canAbandon)
         assertTrue(refused.canCancel)
     }
