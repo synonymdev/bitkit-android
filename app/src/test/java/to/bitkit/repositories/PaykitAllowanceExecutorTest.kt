@@ -542,6 +542,23 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an allowance with limits this wallet does not check keeps the request manual`() = test {
+        collectEvents()
+        val request = fixtures.paymentRequest()
+
+        val unchecked = sut.autoPay(request, listOf(fixtures.allowance(hasUncheckedLimits = true)), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, unchecked)
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+        verifyNoInteractions(payer)
+        assertTrue(events.isEmpty(), "Limits this wallet does not check raise no Limit Reached")
+
+        val bounded = sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.STARTED, bounded)
+    }
+
+    @Test
     fun `a ledger that goes behind this wallet during admission keeps the request manual`() = test {
         sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
         whenever(sdk.allowanceAccountingState())

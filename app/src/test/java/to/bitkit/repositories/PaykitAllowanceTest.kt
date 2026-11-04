@@ -118,6 +118,31 @@ class PaykitAllowanceTest : BaseUnitTest() {
     }
 
     @Test
+    fun `terms with only a per-payment cap and one monthly amount limit are checked by this wallet`() {
+        val allowance = checkNotNull(PaykitAllowance.from(fixtures.record()))
+
+        assertFalse(allowance.hasUncheckedLimits)
+    }
+
+    @Test
+    fun `terms with a lifetime, count or other period limit are flagged unchecked`() {
+        val unchecked = listOf(
+            fixtures.terms(lifetimeAmountLimit = "0.001"),
+            fixtures.terms(monthlyPaymentCountLimit = 3uL),
+            fixtures.terms(otherPeriodLimits = listOf(fixtures.periodLimit("0.0001", unit = "week"))),
+            fixtures.terms(otherPeriodLimits = listOf(fixtures.periodLimit("0.0002"))),
+            fixtures.terms(otherPeriodLimits = listOf(fixtures.periodLimit(null, paymentCountLimit = 5uL))),
+        )
+
+        for (terms in unchecked) {
+            val allowance = checkNotNull(PaykitAllowance.from(fixtures.record(terms = terms)))
+            assertTrue(allowance.hasUncheckedLimits)
+            assertEquals(5_000uL, allowance.perPaymentMaxSats)
+            assertEquals(50_000uL, allowance.monthlyLimitSats)
+        }
+    }
+
+    @Test
     fun `record without usable role, terms or asset is skipped`() {
         assertNull(PaykitAllowance.from(fixtures.record(localRole = null)))
         assertNull(PaykitAllowance.from(fixtures.record(localRole = AllowanceLocalRole.UNKNOWN)))
@@ -577,6 +602,9 @@ internal object PaykitAllowanceFixtures {
         expiresAt: String? = null,
         asset: String = PaykitIssuerInterop.BITCOIN_ASSET,
         allowedPaymentEndpointIdentifiers: List<String>? = listOf(lightningIdentifier),
+        lifetimeAmountLimit: String? = null,
+        monthlyPaymentCountLimit: ULong? = null,
+        otherPeriodLimits: List<AllowancePeriodLimit> = emptyList(),
     ): AllowanceTerms {
         val termsAsset = asset
         val termsActiveFrom = activeFrom
@@ -589,25 +617,39 @@ internal object PaykitAllowanceFixtures {
                 on { maximum() } doReturn max
             }
         }
-        val monthlyPeriod = mock<AllowancePeriod> {
-            on { kind() } doReturn "anchored"
-            on { every() } doReturn 1uL
-            on { unit() } doReturn "month"
-            on { anchor() } doReturn periodAnchor
-        }
-        val periodLimit = mock<AllowancePeriodLimit> {
-            on { amountLimit() } doReturn monthlyLimit
-            on { paymentCountLimit() } doReturn null
-            on { period() } doReturn monthlyPeriod
-        }
+        val monthly = periodLimit(monthlyLimit, anchor = periodAnchor, paymentCountLimit = monthlyPaymentCountLimit)
+        val lifetimeLimit = lifetimeAmountLimit
         return mock {
             on { asset() } doReturn termsAsset
             on { perPaymentAmount() } doReturn range
-            on { periodLimits() } doReturn listOf(periodLimit)
-            on { lifetimeAmountLimit() } doReturn null
+            on { periodLimits() } doReturn listOf(monthly) + otherPeriodLimits
+            on { lifetimeAmountLimit() } doReturn lifetimeLimit
             on { activeFrom() } doReturn termsActiveFrom
             on { expiresAt() } doReturn termsExpiresAt
             on { allowedPaymentEndpointIdentifiers() } doReturn allowlist
+        }
+    }
+
+    fun periodLimit(
+        amountLimit: String?,
+        unit: String = "month",
+        anchor: String? = "2026-09-01T00:00:00Z",
+        paymentCountLimit: ULong? = null,
+    ): AllowancePeriodLimit {
+        val limitAmount = amountLimit
+        val periodUnit = unit
+        val periodAnchor = anchor
+        val countLimit = paymentCountLimit
+        val limitPeriod = mock<AllowancePeriod> {
+            on { kind() } doReturn "anchored"
+            on { every() } doReturn 1uL
+            on { unit() } doReturn periodUnit
+            on { anchor() } doReturn periodAnchor
+        }
+        return mock {
+            on { amountLimit() } doReturn limitAmount
+            on { paymentCountLimit() } doReturn countLimit
+            on { period() } doReturn limitPeriod
         }
     }
 
@@ -659,6 +701,7 @@ internal object PaykitAllowanceFixtures {
         expiresAt: Instant? = null,
         lastEventAt: Instant? = null,
         isProposedByMe: Boolean = role == PaykitAllowance.Role.ALLOWER,
+        hasUncheckedLimits: Boolean = false,
     ) = PaykitAllowance(
         id = PaykitAllowance.Id(counterparty, allowanceId),
         role = role,
@@ -670,6 +713,7 @@ internal object PaykitAllowanceFixtures {
         expiresAt = expiresAt,
         allowedPaymentEndpointIdentifiers = listOf(lightningIdentifier),
         lastEventAt = lastEventAt,
+        hasUncheckedLimits = hasUncheckedLimits,
     )
 
     fun capacityAttempt(

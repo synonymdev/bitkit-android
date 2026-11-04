@@ -663,6 +663,10 @@ class PaykitAllowanceExecutor @Inject constructor(
             if (isAbovePerPaymentMax) notifyLimitReached(request, identity)
             return PaykitAllowanceAutoPayResult.MANUAL
         }
+        if (allowance.hasUncheckedLimits) {
+            Logger.info("Kept an incoming request manual: its allowance has unchecked limits", context = TAG)
+            return PaykitAllowanceAutoPayResult.MANUAL
+        }
 
         val ledger = paykitSdkService.allowanceAccountingState()
         if (!acceptsLedger(ledger, identity)) {
