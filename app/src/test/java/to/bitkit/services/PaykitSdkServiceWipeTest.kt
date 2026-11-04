@@ -1,23 +1,31 @@
 package to.bitkit.services
 
 import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
+import com.synonym.paykit.PaykitIdentitySecretKey
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaymentRequestRead
 import com.synonym.paykit.PubkyIdentityCapability
+import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkySessionAccess
 import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.paykitAuthorizerSessionCapabilities
+import com.synonym.paykit.pubkyPublicKeyFromSecret
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Test
+import org.mockito.Mockito.mockConstruction
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -34,16 +42,20 @@ import to.bitkit.data.PubkyStore
 import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.KeychainError
+import to.bitkit.ext.runSuspendCatching
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.time.Duration.Companion.seconds
 
 class PaykitSdkServiceWipeTest {
     companion object {
         private const val RING_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        private val REMOTE_STEP_TIMEOUT = 15.seconds
     }
 
     @Test
@@ -356,4 +368,61 @@ class PaykitSdkServiceWipeTest {
         assertEquals(emptyList(), service.contactRecords())
         verify(sdk, times(2)).initialize()
     }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `an abandoned cleanup whose registry read returns after the wipe saves no key generation and syncs nothing`() =
+        runTest {
+            val oldSdk = mock<PaykitSdk>()
+            val newSdk = mock<PaykitSdk>()
+            var sdk = oldSdk
+            val registryStarted = CompletableDeferred<Unit>()
+            val releaseRegistry = CompletableDeferred<Unit>()
+            val registry = mock<PaykitAppRegistry> { on { keyGeneration }.thenReturn(2uL) }
+            whenever(oldSdk.paykitAppRegistry(RING_PUBKY)).doSuspendableAnswer {
+                registryStarted.complete(Unit)
+                releaseRegistry.await()
+                registry
+            }
+            val keychain = mock<Keychain>()
+            val storageKey = "${Keychain.Key.PAYKIT_KEY_GENERATION.name}:$RING_PUBKY"
+            val root = mock<PubkyLocalSecretKey>()
+            val key = mock<PaykitIdentitySecretKey> { on { keyGeneration() }.thenReturn(2uL) }
+            whenever(root.derivePaykitIdentitySecretKey(any())).thenReturn(key)
+
+            mockStatic(Class.forName("com.synonym.paykit.Paykit_androidKt")).use { native ->
+                native.`when`<String> { pubkyPublicKeyFromSecret(root) }.thenReturn(RING_PUBKY)
+                mockConstruction(PaykitSdkSessionProvider::class.java) { provider, _ ->
+                    whenever(provider.loadLocalSecretKey()).thenReturn(root)
+                }.use {
+                    val service = PaykitSdkService(
+                        mock(),
+                        keychain,
+                        mock(),
+                        ioDispatcher = StandardTestDispatcher(testScheduler),
+                        settingsStore = mock(),
+                    ) { sdk }
+
+                    val cleanup = service.withWalletWipe {
+                        // As the wipe's remote cleanup step runs it: detached, then abandoned at its bound. It is left
+                        // running, as a native call that does not end on cancellation leaves its caller
+                        val cleanup = async(currentCoroutineContext().minusKey(Job)) {
+                            runSuspendCatching { service.syncPublicEndpoints(emptyList()) }
+                        }
+                        registryStarted.await()
+                        withTimeoutOrNull(REMOTE_STEP_TIMEOUT) { cleanup.await() }
+                        cleanup
+                    }
+                    sdk = newSdk
+                    releaseRegistry.complete(Unit)
+
+                    val failure = cleanup.await().exceptionOrNull()
+
+                    verify(keychain, never()).upsertString(eq(storageKey), any())
+                    verify(oldSdk, never()).syncPublicEndpointsWithReceivingDetails(any())
+                    verify(newSdk, never()).syncPublicEndpointsWithReceivingDetails(any())
+                    assertIs<PaykitException.Storage>(failure)
+                }
+            }
+        }
 }

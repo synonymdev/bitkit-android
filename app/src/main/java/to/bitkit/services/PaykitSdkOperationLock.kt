@@ -37,6 +37,7 @@ internal class PaykitSdkOperationLock {
 
     suspend fun <T> withLock(priority: Priority = Priority.Ordered, operation: suspend () -> T): T {
         if (ownsWipe()) return operation()
+        checkWipeOwnership()
         val admittedGeneration = admit()
         acquire(priority)
         return try {
@@ -55,6 +56,7 @@ internal class PaykitSdkOperationLock {
      */
     suspend fun <T> withoutLock(operation: suspend () -> T): T {
         if (ownsWipe()) return operation()
+        checkWipeOwnership()
         val admittedGeneration = admit()
         currentCoroutineContext().ensureActive()
         return operation().also {
@@ -119,6 +121,17 @@ internal class PaykitSdkOperationLock {
             waiters.removeAt(index)
         }
         next.ready.complete(Unit)
+    }
+
+    /**
+     * Rejects work that a wipe started and then abandoned once that wipe has ended, so it is never taken for ordinary
+     * work against the next wallet. Work that no wipe started passes.
+     */
+    internal suspend fun checkWipeOwnership() {
+        val wipeContext = currentCoroutineContext()[WipeContext]?.takeIf { it.owner === this } ?: return
+        synchronized(stateLock) {
+            if (!isWiping || wipeContext.generation != generation) throw wipeError()
+        }
     }
 
     private suspend fun ownsWipe(): Boolean {

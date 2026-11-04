@@ -1727,6 +1727,9 @@ class PaykitSdkService @Inject constructor(
     private suspend fun paykitKey(root: PubkyLocalSecretKey): PaykitIdentitySecretKey {
         val publicKey = pubkyPublicKeyFromSecret(root)
         val generation = handle().paykitAppRegistry(publicKey)?.keyGeneration ?: 1uL
+        // The registry read may return after its caller was abandoned, as by a wipe, which must not save its generation
+        currentCoroutineContext().ensureActive()
+        operationLock.checkWipeOwnership()
         val storageKey = "${Keychain.Key.PAYKIT_KEY_GENERATION.name}:$publicKey"
         val saved = keychain.loadString(storageKey)?.toULong()
         check(generation >= (saved ?: 1uL)) { "The Paykit App Registry has an older key generation" }
@@ -1829,6 +1832,7 @@ class PaykitSdkService @Inject constructor(
         val started = TimeSource.Monotonic.markNow()
         refreshPaykitKey()
         if (BuildConfig.DEBUG) Logger.debug("Prepared Paykit key duration='${started.elapsedNow()}'", context = TAG)
+        operationLock.checkWipeOwnership()
         return runSuspendCatching { block(handle()) }
             .onFailure(::invalidatePaykitKeyIfNeeded)
             .getOrThrow()
