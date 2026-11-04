@@ -1151,6 +1151,7 @@
     <string name="contacts__intro_title">Contactes\n&lt;accent&gt;dinàmics&lt;/accent&gt;</string>
     <string name="contacts__my_profile">EL MEU PERFIL</string>
     <string name="contacts__nav_title">Contactes</string>
+    <string name="contacts__pay_private_link_pending">Bitkit està configurant una connexió privada amb aquest contacte. Torna-ho a provar d\'aquí a poc o demana-li que t\'enviï una sol·licitud de pagament.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Enganxa un QR o un enllaç</string>
     <string name="contacts__scanner_status">ESCANEJANT QR I NFC</string>

@@ -15,6 +15,7 @@ import com.synonym.paykit.PaykitAppCapabilities
 import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
+import com.synonym.paykit.PaykitNoiseKeyAuthorization
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentPayload
@@ -2647,6 +2648,24 @@ class PaykitSdkServiceTest {
             }
             assertTrue(service.resolvePublicContactPayment(RING_PUBKY).payableEndpoints.isEmpty())
         }
+    }
+
+    @Test
+    fun `noise key authorization lookup reports only a missing record as absent`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        var failure: Throwable? = null
+        whenever(sdk.paykitNoiseKeyAuthorization(RING_PUBKY)).doSuspendableAnswer {
+            failure?.let { throw it }
+            mock<PaykitNoiseKeyAuthorization>()
+        }
+        assertTrue(service.hasPaykitNoiseKeyAuthorization(RING_PUBKY))
+
+        failure = PaykitException.NotFound("not_found", "No Noise key authorization")
+        assertFalse(service.hasPaykitNoiseKeyAuthorization(RING_PUBKY))
+
+        failure = PaykitException.Transport("transport", "Connection unavailable")
+        assertFailsWith<PaykitException.Transport> { service.hasPaykitNoiseKeyAuthorization(RING_PUBKY) }
     }
 
     @Test

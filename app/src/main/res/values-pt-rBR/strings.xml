@@ -1158,6 +1158,7 @@
     <string name="contacts__import_title">Importar</string>
     <string name="contacts__intro_description">Pague seus contatos com apenas um toque. Envie pagamentos diretamente, para qualquer pessoa, em qualquer lugar.</string>
     <string name="contacts__my_profile">MEU PERFIL</string>
+    <string name="contacts__pay_private_link_pending">O Bitkit está configurando uma conexão privada com este contato. Tente novamente em breve ou peça que ele envie uma solicitação de pagamento para você.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Colar QR ou Link</string>
     <string name="contacts__scanner_status">ESCANEANDO QR E NFC</string>

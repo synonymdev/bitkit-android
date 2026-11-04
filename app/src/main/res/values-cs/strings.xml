@@ -1157,6 +1157,7 @@
     <string name="contacts__intro_description">Plaťte svým kontaktům jedním klepnutím. Posílejte platby přímo, komukoli a kdekoli.</string>
     <string name="contacts__my_profile">MŮJ PROFIL</string>
     <string name="contacts__nav_title">Kontakty</string>
+    <string name="contacts__pay_private_link_pending">Bitkit nastavuje soukromé spojení s tímto kontaktem. Zkuste to za chvíli znovu nebo kontakt požádejte, aby vám poslal žádost o platbu.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Vložit QR nebo odkaz</string>
     <string name="contacts__scanner_status">SKENOVÁNÍ QR A NFC</string>

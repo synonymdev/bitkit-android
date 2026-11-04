@@ -1125,6 +1125,7 @@
     <string name="contacts__intro_description">Pague aos seus contactos com um só toque. Envie pagamentos diretamente, a qualquer pessoa, em qualquer lugar.</string>
     <string name="contacts__intro_title">Contactos\n&lt;accent&gt;dinâmicos&lt;/accent&gt;</string>
     <string name="contacts__my_profile">O MEU PERFIL</string>
+    <string name="contacts__pay_private_link_pending">O Bitkit está a configurar uma ligação privada com este contacto. Tente novamente daqui a pouco ou peça-lhe que envie um pedido de pagamento.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Colar QR ou link</string>
     <string name="contacts__scanner_status">A LER QR E NFC</string>

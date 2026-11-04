@@ -1156,6 +1156,7 @@
     <string name="contacts__import_title">Import</string>
     <string name="contacts__intro_description">Płać swoim kontaktom jednym dotknięciem. Wysyłaj płatności bezpośrednio, każdemu i wszędzie.</string>
     <string name="contacts__my_profile">MÓJ PROFIL</string>
+    <string name="contacts__pay_private_link_pending">Bitkit konfiguruje prywatne połączenie z tym kontaktem. Spróbuj ponownie za chwilę lub poproś kontakt o wysłanie żądania płatności.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Wklej kod QR lub link</string>
     <string name="contacts__scanner_status">SKANOWANIE QR I NFC</string>

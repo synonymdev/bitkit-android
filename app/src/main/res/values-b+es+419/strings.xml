@@ -1159,6 +1159,7 @@
     <string name="contacts__intro_description">Pague a sus contactos con un solo toque. Envíe pagos directamente, a cualquier persona, en cualquier lugar.</string>
     <string name="contacts__my_profile">MI PERFIL</string>
     <string name="contacts__nav_title">Contactos</string>
+    <string name="contacts__pay_private_link_pending">Bitkit está configurando una conexión privada con este contacto. Vuelva a intentarlo en breve o pídale que le envíe una solicitud de pago.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Pegar QR o enlace</string>
     <string name="contacts__scanner_status">ESCANEANDO QR Y NFC</string>

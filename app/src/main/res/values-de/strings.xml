@@ -1154,6 +1154,7 @@
     <string name="contacts__intro_description">Bezahle deine Kontakte mit nur einem Tippen. Sende Zahlungen direkt, an jeden, überall.</string>
     <string name="contacts__my_profile">MEIN PROFIL</string>
     <string name="contacts__nav_title">Kontakte</string>
+    <string name="contacts__pay_private_link_pending">Bitkit richtet eine private Verbindung mit diesem Kontakt ein. Versuche es in Kürze erneut oder bitte den Kontakt, dir eine Zahlungsanforderung zu senden.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">QR-Code oder Link einfügen</string>
     <string name="contacts__scanner_status">SCANNE QR &amp; NFC</string>

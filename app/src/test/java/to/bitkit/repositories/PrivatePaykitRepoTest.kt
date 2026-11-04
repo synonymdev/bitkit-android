@@ -164,6 +164,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paykitSdkService.syncPrivatePaymentListsWithReservations(it.getArgument(0), it.getArgument(1))
         }
         whenever { paykitSdkService.linkedPeers() }.thenReturn(emptyList())
+        whenever { paykitSdkService.hasPaykitNoiseKeyAuthorization(any()) }.thenReturn(true)
         whenever { paykitSdkService.ensureLinkWithPeer(any(), any(), eq(Priority.Ordered)) }.thenAnswer {
             LinkedPeerHandshakeReport(it.getArgument(0), LinkedPeerState.LINKED, 1uL, null)
         }
@@ -3577,7 +3578,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginSavedContactPayment uses public resolution while Noise link is not established`() = test {
+    fun `beginSavedContactPayment waits for the private link while Noise link is not established`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever {
             paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, null)
@@ -3592,8 +3593,141 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
+        assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `beginSavedContactPayment pays public endpoints only without any private payment path`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever { paykitSdkService.hasPaykitNoiseKeyAuthorization(CONTACT_KEY) }.thenReturn(false)
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
         assertEquals(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic"), result)
         verifyBlocking(publicPaykitRepo) { beginPayment(CONTACT_KEY) }
+        verifyBlocking(paykitSdkService, never()) {
+            prepareAndResolvePrivateContactPayment(any(), anyOrNull(), anyOrNull())
+        }
+    }
+
+    @Test
+    fun `beginSavedContactPayment fails without public payment when the authorization lookup fails`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever(paykitSdkService.hasPaykitNoiseKeyAuthorization(CONTACT_KEY)).doSuspendableAnswer {
+            throw PaykitException.Transport("transport", "Connection unavailable")
+        }
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY)
+
+        assertIs<PaykitException.Transport>(result.exceptionOrNull())
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        verifyBlocking(paykitSdkService, never()) {
+            prepareAndResolvePrivateContactPayment(any(), anyOrNull(), anyOrNull())
+        }
+    }
+
+    @Test
+    fun `beginSavedContactPayment keeps a contact with past private payments on the private path`() = test {
+        cacheData.update {
+            PrivatePaykitCacheData(
+                contacts = mapOf(CONTACT_KEY to PrivatePaykitContactCacheData(consumedPrivatePaymentListVersion = 3uL)),
+            )
+        }
+        sut = createSut()
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever { paykitSdkService.hasPaykitNoiseKeyAuthorization(CONTACT_KEY) }.thenReturn(false)
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, 3uL)
+        }.thenThrow(IllegalStateException("private unavailable"))
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        verifyBlocking(paykitSdkService, never()) { hasPaykitNoiseKeyAuthorization(any()) }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `beginSavedContactPayment keeps a contact with an unlinked peer record on the private path`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever { paykitSdkService.hasPaykitNoiseKeyAuthorization(CONTACT_KEY) }.thenReturn(false)
+        whenever(paykitSdkService.linkedPeers())
+            .thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.NOT_LINKED)))
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, null)
+        }.thenReturn(
+            resolution(
+                status = PrivatePaymentResolutionStatus.NO_ENDPOINT,
+                state = PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT,
+                linkState = LinkedPeerState.NOT_LINKED,
+                version = null,
+            ),
+        )
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `beginSavedContactPayment keeps a saved contact on the private path before contact sync`() = test {
+        whenever { paykitSdkService.contactRecord(CONTACT_KEY) }.thenReturn(contactRecord(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, null)
+        }.thenReturn(
+            resolution(
+                status = PrivatePaymentResolutionStatus.NO_ENDPOINT,
+                state = PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT,
+                linkState = null,
+                version = null,
+            ),
+        )
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        verifyBlocking(paykitSdkService) { prepareAndResolvePrivateContactPayment(CONTACT_KEY, null) }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `beginSavedContactPayment pays an unsaved profile through public endpoints`() = test {
+        whenever { paykitSdkService.contactRecord(CONTACT_KEY) }.thenReturn(null)
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic"), result)
+        verifyBlocking(publicPaykitRepo) { beginPayment(CONTACT_KEY) }
+        verifyBlocking(paykitSdkService, never()) {
+            prepareAndResolvePrivateContactPayment(any(), anyOrNull(), anyOrNull())
+        }
+    }
+
+    @Test
+    fun `beginSavedContactPayment reports no endpoint when a linked contact has no private list`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, null)
+        }.thenReturn(
+            resolution(
+                status = PrivatePaymentResolutionStatus.NO_ENDPOINT,
+                state = PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT,
+                linkState = LinkedPeerState.LINKED,
+                version = null,
+            ),
+        )
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.NoEndpoint, result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
     @Test
@@ -3907,7 +4041,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginSavedContactPayment only falls back after failure when Noise link is absent`() = test {
+    fun `beginSavedContactPayment waits for the private link after failure when Noise link is absent`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever {
             paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, null)
@@ -3915,8 +4049,27 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
-        assertEquals(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic"), result)
-        verifyBlocking(publicPaykitRepo) { beginPayment(CONTACT_KEY) }
+        assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `beginSavedContactPayment waits for link recovery when a linked contact requires it`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever(paykitSdkService.linkedPeers())
+            .thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, null)
+        }.doSuspendableAnswer {
+            throw PaykitException.RecoveryRequired("recovery_required", "Handshake is in progress")
+        }
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        sut.closeAndClear()
     }
 
     @Test

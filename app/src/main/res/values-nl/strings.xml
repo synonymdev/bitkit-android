@@ -1150,6 +1150,7 @@
     <string name="contacts__intro_description">Betaal uw contacten met één tik. Verstuur betalingen direct, naar iedereen, overal.</string>
     <string name="contacts__intro_title">Dynamische\n&lt;accent&gt;contacten&lt;/accent&gt;</string>
     <string name="contacts__my_profile">MIJN PROFIEL</string>
+    <string name="contacts__pay_private_link_pending">Bitkit stelt een privéverbinding met dit contact in. Probeer het zo opnieuw of vraag het contact u een betaalverzoek te sturen.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">QR of link plakken</string>
     <string name="contacts__scanner_status">QR &amp; NFC SCANNEN</string>

@@ -557,11 +557,21 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
+    /**
+     * Opens a payment to the saved contact [publicKey]. A contact with a private payment path is only paid
+     * privately: when that path is not ready yet the result is [PublicPaykitPaymentResult.PrivateLinkPending], never
+     * a payment to its public endpoints. Only a contact without any private payment path, including a missing
+     * Noise key authorization, is paid through its public endpoints.
+     */
     suspend fun beginSavedContactPayment(publicKey: String): Result<PublicPaykitPaymentResult> =
         withContext(serializedDispatcher) {
             runSuspendCatching {
-                val normalizedKey = knownSavedContact(publicKey)
+                val normalizedKey = savedContact(publicKey)
                     ?: return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
+                if (!hasPrivatePaymentPath(normalizedKey)) {
+                    Logger.info("Using public Paykit resolution for '${redacted(normalizedKey)}'", context = TAG)
+                    return@runSuspendCatching publicPaykitRepo.beginPayment(normalizedKey).getOrThrow()
+                }
                 beginSavedContactPaymentWithRetry(normalizedKey)
             }
         }
@@ -931,15 +941,17 @@ class PrivatePaykitRepo @Inject constructor(
                         paymentRequest = paymentRequest,
                     )
                 }.getOrElse {
-                    if (paymentRequest == null || !it.isPaykitRecoveryRequired()) throw it
-                    if (paymentRequest.isExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
+                    if (!isPrivateLinkPendingFailure(publicKey, paymentRequest, it)) throw it
+                    if (paymentRequest?.isExpired(clock.now()) == true) throw PaykitPaymentRequestError.RequestExpired
+                    Logger.warn(
+                        "Failed to prepare private Paykit payment for '${redacted(publicKey)}'",
+                        it,
+                        context = TAG,
+                    )
                     return@runSuspendCatching privateLinkPendingResult(publicKey)
-                } ?: return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
+                }
                 val resolution = prepared.resolution
                 val linkState = currentLinkState(publicKey, prepared.linkState)
-                if (paymentRequest == null && canUsePublicPayment(linkState, resolution.status, resolution.state)) {
-                    return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
-                }
 
                 val result = unresolvedPrivateLinkResult(
                     publicKey = publicKey,
@@ -991,32 +1003,28 @@ class PrivatePaykitRepo @Inject constructor(
         consumedVersion: ULong?,
         amount: PaymentAmountContext?,
         paymentRequest: PaykitPaymentRequest?,
-    ): PaykitPreparedPrivateContactPayment? {
-        val result = runSuspendCatching {
-            if (paymentRequest != null) {
-                paykitSdkService.prepareAndResolvePrivatePaymentRequest(
-                    counterparty = publicKey,
-                    paymentRequestId = paymentRequest.paymentRequestId,
-                    afterPrivatePaymentListVersion = consumedVersion,
-                )
-            } else {
-                paykitSdkService.prepareAndResolvePrivateContactPayment(
-                    counterparty = publicKey,
-                    afterPrivatePaymentListVersion = consumedVersion,
-                    amount = amount,
-                )
-            }
-        }
-        val error = result.exceptionOrNull() ?: return result.getOrThrow()
-        if (paymentRequest != null) throw error
-        if (!canUsePublicPayment(currentLinkState(publicKey))) throw error
-
-        Logger.warn(
-            "Using public Paykit resolution for '${redacted(publicKey)}'",
-            error,
-            context = TAG,
+    ): PaykitPreparedPrivateContactPayment = if (paymentRequest != null) {
+        paykitSdkService.prepareAndResolvePrivatePaymentRequest(
+            counterparty = publicKey,
+            paymentRequestId = paymentRequest.paymentRequestId,
+            afterPrivatePaymentListVersion = consumedVersion,
         )
-        return null
+    } else {
+        paykitSdkService.prepareAndResolvePrivateContactPayment(
+            counterparty = publicKey,
+            afterPrivatePaymentListVersion = consumedVersion,
+            amount = amount,
+        )
+    }
+
+    private suspend fun isPrivateLinkPendingFailure(
+        publicKey: String,
+        paymentRequest: PaykitPaymentRequest?,
+        error: Throwable,
+    ): Boolean = when {
+        error.isPaykitRecoveryRequired() -> true
+        paymentRequest != null -> false
+        else -> isAwaitingPrivateLink(currentLinkState(publicKey))
     }
 
     private suspend fun privatePaymentResult(
@@ -1088,6 +1096,8 @@ class PrivatePaykitRepo @Inject constructor(
     ): PublicPaykitPaymentResult? = when {
         resolution.state == PrivatePaymentResolutionState.RECOVERY_PENDING ->
             privateLinkPendingResult(publicKey)
+        paymentRequest == null && isAwaitingPrivateLink(linkState, resolution) ->
+            privateLinkPendingResult(publicKey)
         paymentRequest == null -> null
         linkState == LinkedPeerState.LINKING || linkState == LinkedPeerState.RECOVERY_REQUIRED ->
             privateLinkPendingResult(publicKey)
@@ -1116,26 +1126,42 @@ class PrivatePaykitRepo @Inject constructor(
         PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
     }?.state
 
-    private fun canUsePublicPayment(
+    private fun isAwaitingPrivateLink(
         linkState: LinkedPeerState?,
-        resolutionStatus: PrivatePaymentResolutionStatus? = null,
-        resolutionState: PrivatePaymentResolutionState? = null,
+        resolution: PaykitPrivateContactPaymentResolution? = null,
     ): Boolean {
-        if (
-            resolutionStatus == PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST ||
-            resolutionState != null && resolutionState != PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT
-        ) {
-            return false
+        if (resolution != null) {
+            if (resolution.status == PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST) return false
+            if (resolution.state != PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT) return false
         }
 
         return when (linkState) {
-            null, LinkedPeerState.NOT_LINKED, LinkedPeerState.LINKING -> true
-            LinkedPeerState.LINKED,
+            null,
+            LinkedPeerState.NOT_LINKED,
+            LinkedPeerState.LINKING,
             LinkedPeerState.RECOVERY_REQUIRED,
+            -> true
+            LinkedPeerState.LINKED,
             LinkedPeerState.BLOCKED,
             LinkedPeerState.UNKNOWN,
             -> false
         }
+    }
+
+    private suspend fun savedContact(publicKey: String): String? {
+        knownSavedContact(publicKey)?.let { return it }
+        val normalizedKey = normalizedPublicKey(publicKey) ?: return null
+        paykitSdkService.contactRecord(normalizedKey) ?: return null
+        rememberSavedContacts(listOf(normalizedKey), replacing = false)
+        return normalizedKey
+    }
+
+    private suspend fun hasPrivatePaymentPath(publicKey: String): Boolean {
+        if (ensureState().contacts[publicKey]?.hasCacheState == true) return true
+        val hasLinkedPeer = paykitSdkService.linkedPeers(Priority.Interactive).any {
+            PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
+        }
+        return hasLinkedPeer || paykitSdkService.hasPaykitNoiseKeyAuthorization(publicKey)
     }
 
     private suspend fun publishLocalEndpoints(

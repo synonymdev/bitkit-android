@@ -1174,6 +1174,7 @@
     <string name="contacts__import_title">Импорт</string>
     <string name="contacts__intro_description">Платите своим контактам одним касанием. Отправляйте платежи напрямую кому угодно и куда угодно.</string>
     <string name="contacts__my_profile">МОЙ ПРОФИЛЬ</string>
+    <string name="contacts__pay_private_link_pending">Bitkit настраивает приватное соединение с этим контактом. Попробуйте чуть позже или попросите контакт отправить вам запрос на оплату.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Вставить QR или Ссылку</string>
     <string name="contacts__scanner_status">СКАНИРОВАНИЕ QR И NFC</string>
