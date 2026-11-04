@@ -654,6 +654,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationLock.withLock {
             withPaykitKey { handle ->
+                requireNoActiveSubscriptions(handle)
                 val publicKey = requireNotNull(completeSdkCall { handle.identityStatus() }?.publicKey)
                 val current = handle.fetchPaykitProfile(publicKey)
                 completeSdkCall {
@@ -772,12 +773,15 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationLock.withLock {
             withStateRevisionTracking { handle ->
-                val now = nowMillis()
-                val requests = completeSdkCall { handle.paymentRequests() }
-                val subscriptions = requests.filter { it.hasActiveSubscription(now) }
-                requireNoProfileSubscriptions(subscriptions)
+                requireNoActiveSubscriptions(handle)
             }
         }
+    }
+
+    private suspend fun requireNoActiveSubscriptions(handle: PaykitSdk) {
+        val now = nowMillis()
+        val subscriptions = completeSdkCall { handle.paymentRequests() }.filter { it.hasActiveSubscription(now) }
+        requireNoProfileSubscriptions(subscriptions)
     }
 
     private fun PaymentRequestRecord.hasActiveSubscription(now: Long): Boolean {

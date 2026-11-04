@@ -15,6 +15,7 @@ import com.synonym.paykit.PaykitAppCapabilities
 import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
+import com.synonym.paykit.PaykitProfileRecord
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentPayload
@@ -2539,6 +2540,72 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `profile deletion rejects a subscription received after preflight`() = runTest {
+        for (role in listOf(PaymentRequestLocalRole.PAYER, PaymentRequestLocalRole.PAYEE)) {
+            val sdk = mock<PaykitSdk>()
+            val request = mock<PaymentRequestRecord> {
+                on { localRole } doReturn role
+                on { state } doReturn PaymentRequestLifecycleState.ACTIVE_RECURRING
+            }
+            val profile = mock<PaykitProfileRecord> { on { revision } doReturn "original" }
+            whenever(sdk.identityStatus())
+                .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+            whenever(sdk.fetchPaykitProfile(RING_PUBKY)).thenReturn(profile)
+            val checking = CompletableDeferred<Unit>()
+            val finishCheck = CompletableDeferred<Unit>()
+            var requests = emptyList<PaymentRequestRecord>()
+            whenever(sdk.paymentRequests()).doSuspendableAnswer {
+                if (!checking.isCompleted) {
+                    checking.complete(Unit)
+                    finishCheck.await()
+                }
+                requests
+            }
+            whenever(sdk.receivePrivateMessagesFromLinkedPeers()).thenAnswer {
+                requests = listOf(request)
+                emptyList<PrivateStreamCounterpartyIntakeReport>()
+            }
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val preflight = async { service.checkProfileDeletionAllowed() }
+            checking.await()
+            val receive = async { service.receivePrivateMessagesFromLinkedPeers(Priority.Background) }
+            runCurrent()
+            val deletion = async { runSuspendCatching { service.deletePaykitProfile() } }
+            runCurrent()
+            finishCheck.complete(Unit)
+            preflight.await()
+            receive.await()
+
+            assertIs<PubkyContactError.ActiveProfileSubscriptions>(deletion.await().exceptionOrNull())
+            verify(sdk, never()).deletePaykitProfile(any())
+            verify(sdk, never()).fetchPaykitProfile(any())
+        }
+    }
+
+    @Test
+    fun `profile deletion permits no active subscription`() = runTest {
+        for (ended in listOf(false, true)) {
+            val sdk = mock<PaykitSdk>()
+            val recurrence = mock<PaymentRequestRecurrence> { on { endsAt } doReturn "2000-01-01T00:00:00Z" }
+            val terms = mock<PaymentRequestTerms> { on { this.recurrence } doReturn recurrence }
+            val request = mock<PaymentRequestRecord> {
+                on { state } doReturn PaymentRequestLifecycleState.ACTIVE_RECURRING
+                on { this.terms } doReturn terms
+            }
+            whenever(sdk.paymentRequests()).thenReturn(if (ended) listOf(request) else emptyList())
+            whenever(sdk.identityStatus())
+                .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+            val profile = mock<PaykitProfileRecord> { on { revision } doReturn "original" }
+            whenever(sdk.fetchPaykitProfile(RING_PUBKY)).thenReturn(profile)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+
+            service.deletePaykitProfile()
+
+            verify(sdk).deletePaykitProfile("original")
+        }
+    }
+
+    @Test
     fun `profile removal fails closed when subscriptions cannot be read`() = runTest {
         val sdk = mock<PaykitSdk>()
         val error = IllegalStateException("Subscription storage unavailable")
@@ -2546,6 +2613,7 @@ class PaykitSdkServiceTest {
         val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
 
         assertSame(error, assertFailsWith<IllegalStateException> { service.checkProfileDeletionAllowed() })
+        assertSame(error, assertFailsWith<IllegalStateException> { service.deletePaykitProfile() })
         assertSame(
             error,
             assertFailsWith<IllegalStateException> {
@@ -2553,6 +2621,8 @@ class PaykitSdkServiceTest {
             }
         )
         verify(sdk, never()).removeContactsAndBlockPeers(any())
+        verify(sdk, never()).deletePaykitProfile(any())
+        verify(sdk, never()).fetchPaykitProfile(any())
     }
 
     @Test
