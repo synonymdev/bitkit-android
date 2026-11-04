@@ -133,7 +133,10 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(keychain.loadString(any())).thenAnswer {
             if (it.getArgument<String>(0) == STATE_KEY) storedState else otherKeychainValues[it.getArgument(0)]
         }
-        whenever(keychain.delete(any())).doSuspendableAnswer { otherKeychainValues.remove(it.getArgument<String>(0)).let {} }
+        whenever(keychain.delete(any())).doSuspendableAnswer {
+            otherKeychainValues.remove(it.getArgument<String>(0))
+            Unit
+        }
         whenever(keychain.upsertString(any(), any())).doSuspendableAnswer {
             if (it.getArgument<String>(0) != STATE_KEY) {
                 otherKeychainValues[it.getArgument(0)] = it.getArgument(1)

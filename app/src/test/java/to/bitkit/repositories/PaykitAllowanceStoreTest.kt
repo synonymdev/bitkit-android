@@ -35,7 +35,10 @@ class PaykitAllowanceStoreTest : BaseUnitTest() {
         whenever(keychain.upsertString(any(), any())).doSuspendableAnswer {
             values[it.getArgument(0)] = it.getArgument(1)
         }
-        whenever(keychain.delete(any())).doSuspendableAnswer { values.remove(it.getArgument<String>(0)).let {} }
+        whenever(keychain.delete(any())).doSuspendableAnswer {
+            values.remove(it.getArgument<String>(0))
+            Unit
+        }
         sut = PaykitAllowanceStore(keychain)
     }
 
