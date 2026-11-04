@@ -9400,6 +9400,50 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sut.sendUiState.value.canReturnToAmount)
     }
 
+    @Test
+    fun `hardware send sheet onchain address with payable amount estimates its fee and opens confirm`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        stubHardwareFunding()
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(250uL))
+
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(hwWalletRepo).estimateFundingMiningFee(eq(HARDWARE_WALLET_ID), eq(REGTEST_ADDRESS), eq(10_000uL), any())
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+        assertTrue(sut.sendUiState.value.canReturnToAmount)
+    }
+
+    @Test
+    fun `hardware send sheet onchain address opens amount when its fee estimate fails`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        stubHardwareFunding()
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(Exception("fee estimate failed")))
+
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToAmount, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertFalse(sut.sendUiState.value.canReturnToAmount)
+    }
+
+    private fun stubHardwareFunding() {
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }.thenReturn(Result.success(48_000uL))
+    }
+
     private suspend fun stubOnchainAmountScan(amountSats: ULong): String {
         whenever(coreService.validateBitcoinAddress(REGTEST_ADDRESS)).thenReturn(
             ValidationResult(REGTEST_ADDRESS, NetworkType.REGTEST, AddressType.P2WPKH),
