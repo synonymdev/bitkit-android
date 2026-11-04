@@ -4,6 +4,8 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.lightningdevkit.ldknode.TxInput
 import org.lightningdevkit.ldknode.TxOutput
+import to.bitkit.repositories.OnchainPreparedReceipt
+import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendInput
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -21,6 +23,37 @@ class OriginalSendFeeTest {
     fun `winning fee uses exact previous output and never original fee hint`() {
         assertEquals(281uL, exactOriginalSendFee(details, inputs) { parent })
         assertNull(exactOriginalSendFee(details, inputs) { null })
+    }
+
+    @Test
+    fun `a lost candidate is read only from exactly the original coins paying the full amount`() {
+        val attempt = OnchainSendAttempt(
+            walletId = "wallet", attemptId = "attempt", requestId = null, orderId = null, address = "bcrt1qrecipient",
+            amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = false,
+            channelId = null, tags = emptyList(), originalInputs = inputs,
+        )
+        fun paid(value: Long, address: String = attempt.address) = TxOutput("", null, address, value, 0u)
+        val payment = details.copy(outputs = listOf(paid(1000), output(18719, 1u)))
+
+        val receipt = lostCandidateReceipt("CD".repeat(32), payment, attempt) { parent }
+
+        // 281 sats over the 69 vB of this witnessless fixture is 4.07 sat/vB, rounded up
+        assertEquals(OnchainPreparedReceipt("cd".repeat(32), inputs, attempt.address, 1_000uL, 5uL, 281uL), receipt)
+        val upperCase = payment.copy(outputs = listOf(paid(1000, attempt.address.uppercase()), output(18719, 1u)))
+        assertEquals(receipt, lostCandidateReceipt("cd".repeat(32), upperCase, attempt) { parent })
+        val other = TxInput("ab".repeat(32), 0u, "", emptyList(), UInt.MAX_VALUE - 2u)
+        val refused = listOf(
+            payment.copy(outputs = listOf(paid(999), output(18720, 1u))),
+            payment.copy(outputs = listOf(paid(1000, "bcrt1qother"), output(18719, 1u))),
+            payment.copy(outputs = listOf(paid(500), paid(500), output(18719, 1u))),
+            payment.copy(inputs = listOf(input, other)),
+            payment.copy(inputs = listOf(other)),
+        )
+        for (spend in refused) {
+            assertNull(lostCandidateReceipt("cd".repeat(32), spend, attempt) { parent })
+        }
+        assertNull(lostCandidateReceipt("cd".repeat(32), payment, attempt) { null })
+        assertNull(lostCandidateReceipt("cd".repeat(32), payment, attempt.copy(originalInputs = null)) { parent })
     }
 
     @Test

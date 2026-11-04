@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.divideRoundingUp
 import to.bitkit.models.safe
 import to.bitkit.utils.AppError
 import kotlin.time.Instant
@@ -27,9 +28,6 @@ object OnchainRecoveryFeeRate {
  */
 internal fun highestFeeRateNotAbove(targetFee: ULong, fee: ULong, feeRate: ULong): ULong =
     (targetFee.safe() * feeRate.safe()) / maxOf(fee.safe() - 1uL.safe(), 1uL)
-
-private fun divideRoundingUp(dividend: ULong, divisor: ULong): ULong =
-    (dividend.safe() + (divisor.safe() - 1uL.safe()).safe()) / divisor
 
 /** The prepared native handle refused this invocation before calling native broadcast. */
 internal class PreparedOnchainSendRefused(cause: Throwable) : AppError(cause)

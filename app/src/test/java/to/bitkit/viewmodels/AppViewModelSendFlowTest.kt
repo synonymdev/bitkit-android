@@ -171,6 +171,7 @@ import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
+import to.bitkit.repositories.OnchainSendSettlement
 import to.bitkit.repositories.PaykitAllowanceEvent
 import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitBillingPeriod
@@ -15134,32 +15135,61 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onchain sync releases a finally cancelled send and tells the user`() = test {
+    fun `onchain syncs share one settlement that runs apart from event handling and tells the user`() = test {
         val released = OnchainSendAttempt(
             walletId = WalletScope.default, attemptId = "original", requestId = null, orderId = null,
             address = "bcrt1qoriginal", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,
             isTransfer = false, channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Rejected,
         )
         whenever(context.getString(R.string.wallet__send_pending__cancelled_title)).thenReturn("Payment Cancelled")
-        whenever { paykitPaymentProofRepo.releaseCancelledOnchainPayment() }.thenReturn(Result.success(null))
+        val settling = CompletableDeferred<Result<OnchainSendSettlement?>>()
+        whenever { paykitPaymentProofRepo.settleOnchainPaymentFromWallet() }.doSuspendableAnswer { settling.await() }
         clearInvocations(toastManager)
 
         emitNodeEvent(Event.SyncCompleted(syncType = SyncType.LIGHTNING_WALLET, syncedBlockHeight = 100u))
         emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
-        advanceUntilIdle()
-        verify(paykitPaymentProofRepo, times(1)).releaseCancelledOnchainPayment()
-        verify(toastManager, never()).enqueue(any())
-
-        whenever { paykitPaymentProofRepo.releaseCancelledOnchainPayment() }.thenReturn(Result.success(released))
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceTimeBy(2.seconds)
+        runCurrent()
+        // A slow read of the wallet's history holds no later node event
         emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 101u))
+        runCurrent()
+        verify(paykitPaymentProofRepo, times(1)).settleOnchainPaymentFromWallet()
+
+        settling.complete(Result.success(OnchainSendSettlement.Cancelled(released)))
         advanceUntilIdle()
 
-        verify(toastManager).enqueue(
+        // The sync that landed meanwhile is checked once more
+        verify(paykitPaymentProofRepo, times(2)).settleOnchainPaymentFromWallet()
+        verify(toastManager, times(2)).enqueue(
             check {
                 assertEquals(Toast.ToastType.SUCCESS, it.type)
                 assertEquals("Payment Cancelled", it.title)
             }
         )
+    }
+
+    @Test
+    fun `onchain sync finishes the follow-up of the candidate the wallet holds final`() = test {
+        val observed = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "original", requestId = null, orderId = null,
+            address = "bcrt1qoriginal", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,
+            isTransfer = false, channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Observed,
+            txid = "ab".repeat(32),
+        )
+        whenever { paykitPaymentProofRepo.settleOnchainPaymentFromWallet() }
+            .thenReturn(Result.success(OnchainSendSettlement.Confirmed(observed)))
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+        verify(lightningRepo).completeAcceptedOrdinaryFollowup("ab".repeat(32))
+
+        val shop = observed.copy(requestId = PaykitPaymentRequestId("request", "payee"), payerIdentity = "payer")
+        whenever { paykitPaymentProofRepo.settleOnchainPaymentFromWallet() }
+            .thenReturn(Result.success(OnchainSendSettlement.Confirmed(shop)))
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 101u))
+        advanceUntilIdle()
+        verify(paykitPaymentProofRepo).reconcile()
     }
 
     @Test

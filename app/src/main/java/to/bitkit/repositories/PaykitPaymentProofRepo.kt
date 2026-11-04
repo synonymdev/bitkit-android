@@ -517,13 +517,13 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     /**
-     * Releases the current unresolved on-chain send once a final spend of its coins pays the recipient nothing, so no
-     * candidate can ever confirm. The release removes what allowance recovery reads, so a Shop payment's manual
-     * allowance attempt is failed first; a failure leaves the guard, to be released again after a later sync. Its
-     * unproven proof is then removed with the guard.
+     * Settles the current unresolved on-chain send from the wallet's final spends of its coins, through
+     * [LightningRepo.settleOnchainSendFromWallet]. A release removes what allowance recovery reads, so a Shop payment's
+     * manual allowance attempt is failed first; a failure leaves the guard, to be released again after a later sync.
+     * Its unproven proof is then removed with the guard.
      */
-    suspend fun releaseCancelledOnchainPayment(): Result<OnchainSendAttempt?> = withContext(ioDispatcher) {
-        lightningRepo.releaseCancelledOnchainSend(
+    suspend fun settleOnchainPaymentFromWallet(): Result<OnchainSendSettlement?> = withContext(ioDispatcher) {
+        lightningRepo.settleOnchainSendFromWallet(
             beforeRelease = { attempt ->
                 attempt.requestId?.let { allowanceExecutor.get().onchainSendReleased(attempt.payerIdentity, it) }
             },
@@ -604,7 +604,7 @@ class PaykitPaymentProofRepo @Inject constructor(
      * wallet, once [wallet] shows that none of its transactions reached the mempool or the chain. Until that release,
      * or another spend of the original's coins that pays the recipient nothing, is final, a candidate may still
      * confirm, so the guard and the original proof stay and this fails with [OnchainSendAbandonPendingError].
-     * [releaseCancelledOnchainPayment] then releases both.
+     * [settleOnchainPaymentFromWallet] then releases both.
      */
     suspend fun abandonUnbroadcastOnchainPayment(
         attempt: OnchainSendAttempt,

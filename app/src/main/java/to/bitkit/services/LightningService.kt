@@ -76,6 +76,7 @@ import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.models.feeRate
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.repositories.OnchainInputSpend
@@ -1120,6 +1121,16 @@ class LightningService internal constructor(
         }
     }
 
+    /** Reads [txid] from the node wallet's own history as a payment of [attempt] that no candidate records. */
+    suspend fun readLostCandidate(attempt: OnchainSendAttempt, txid: String): OnchainPreparedReceipt? {
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        return callOnchainSend {
+            if (currentWalletIndex != attempt.walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+            val details = originalNode.getTransactionDetails(txid) ?: return@callOnchainSend null
+            lostCandidateReceipt(txid, details, attempt) { originalNode.getTransactionDetails(it) }
+        }
+    }
+
     internal suspend fun <T> callOnchainSend(block: suspend () -> T): T =
         ServiceQueue.LDK.background(ldkQueue) { runSuspendCatching { block() } }.getOrThrow()
 
@@ -1596,6 +1607,29 @@ internal fun onchainInputSpend(
         confirmations = (kind.status as? ConfirmationStatus.Confirmed)
             ?.let { if (bestHeight >= it.height) bestHeight - it.height + 1u else 1u } ?: 0u,
     )
+}
+
+/**
+ * [details] of [txid] as a payment of [attempt] that no candidate records: it spends exactly the original's coins and
+ * pays the recipient at least the amount in one output. Its fee is exact, from [previous]. Null when it is not one, or
+ * when [previous] lacks a coin's transaction.
+ */
+internal fun lostCandidateReceipt(
+    txid: String,
+    details: TransactionDetails,
+    attempt: OnchainSendAttempt,
+    previous: (String) -> TransactionDetails?,
+): OnchainPreparedReceipt? {
+    val original = attempt.originalInputs ?: return null
+    val spent = details.inputs.map { OnchainSendInput(it.txid, it.vout) }
+    if (spent.size != original.size || spent.toSet() != original.toSet()) return null
+    val paid = details.outputs
+        .filter { it.value >= 0 && it.scriptpubkeyAddress.equals(attempt.address, ignoreCase = true) }
+        .maxOfOrNull { it.value.toULong() }
+        ?.takeIf { it >= attempt.amountSats }
+        ?: return null
+    val fee = exactOriginalSendFee(details, original, previous) ?: return null
+    return OnchainPreparedReceipt(txid.lowercase(), spent, attempt.address, paid, details.feeRate(fee), fee)
 }
 
 /** Exact signed transaction inputs/prevouts, never an estimate or a backend-absence inference. */

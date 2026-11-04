@@ -882,6 +882,49 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an unrecorded final payment is adopted only while unresolved with the exact coins and full amount`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System)
+        val attempt = store.admitForTest(walletId = WalletScope.default)
+        val inputs = listOf(OnchainSendInput("11".repeat(32), 0u))
+        val original = OnchainPreparedReceipt("ab".repeat(32), inputs, attempt.address, attempt.amountSats)
+        store.retainPreparedReceipt(attempt.attemptId, 0, original, false)
+        val unknown = store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Unknown(original.txid), 0)
+        val lost = OnchainPreparedReceipt("cd".repeat(32), inputs, attempt.address, attempt.amountSats, 2uL, 282uL)
+
+        val otherCoin = OnchainSendInput("22".repeat(32), 1u)
+        for (refused in listOf(
+            lost.copy(amountSats = 999uL),
+            lost.copy(inputs = inputs + otherCoin),
+            lost.copy(inputs = listOf(otherCoin)),
+            lost.copy(address = "bcrt1qother"),
+        )) {
+            assertFailsWith<IllegalArgumentException> { store.adoptFinalCandidate(unknown, refused) }
+        }
+        assertNull(store.adoptFinalCandidate(unknown.copy(amountSats = 999uL), lost), "Only the stored attempt")
+        assertNull(store.adoptFinalCandidate(unknown, lost.copy(txid = original.txid)), "Already a candidate")
+        assertEquals(unknown, store.current())
+
+        val adopted = requireNotNull(store.adoptFinalCandidate(unknown, lost))
+
+        assertEquals(listOf(original.txid, lost.txid), adopted.candidateTxids)
+        assertEquals(2uL, adopted.candidateFeeRates[lost.txid])
+        assertEquals(282uL, adopted.candidateMiningFees[lost.txid])
+        assertEquals(OnchainSendEvidence.Unknown, adopted.evidence)
+        assertEquals(adopted, store.current())
+        val observed = requireNotNull(store.observeExactTransaction(lost.txid, isConfirmed = true))
+        assertEquals(lost.txid, observed.txid)
+        assertTrue(observed.hasPositiveEvidence)
+        assertEquals(2uL, observed.winningFeeRateSatsPerVByte)
+        assertEquals(observed, store.current())
+        assertNull(store.adoptFinalCandidate(observed, lost.copy(txid = "ef".repeat(32))), "Only an unresolved attempt")
+        assertEquals(observed, store.current())
+    }
+
+    @Test
     fun `ordinary payment is never abandoned`() = test {
         var saved: String? = null
         val keychain = mock<Keychain>()

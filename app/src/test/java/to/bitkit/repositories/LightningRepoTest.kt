@@ -93,6 +93,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
@@ -2238,7 +2239,7 @@ class LightningRepoTest : BaseUnitTest() {
         var notified = 0
 
         assertNull(
-            sut.releaseCancelledOnchainSend(
+            sut.settleOnchainSendFromWallet(
                 beforeRelease = { error("a confirming spend must not release anything") },
             ) { error("a confirming spend must not remove the proof") }.getOrThrow()
         )
@@ -2246,20 +2247,20 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(
             listOf(cancellation.copy(outputAddresses = listOf(admitted.address)), cancellation.copy(isFinal = true)),
         )
-        assertNull(sut.releaseCancelledOnchainSend { false }.getOrThrow())
+        assertNull(sut.settleOnchainSendFromWallet { false }.getOrThrow())
         assertEquals(unresolved, store.current())
         // A failure before the release keeps the guard for a later sync
         val failingLedger: suspend (OnchainSendAttempt) -> Unit = { error("ledger unavailable") }
-        assertNull(sut.releaseCancelledOnchainSend(beforeRelease = failingLedger) { true }.getOrThrow())
+        assertNull(sut.settleOnchainSendFromWallet(beforeRelease = failingLedger) { true }.getOrThrow())
         assertEquals(unresolved, store.current())
-        val released = sut.releaseCancelledOnchainSend(beforeRelease = { notified++ }) {
+        val released = sut.settleOnchainSendFromWallet(beforeRelease = { notified++ }) {
             assertEquals(unresolved, it)
             assertEquals(1, notified)
             removals++
             true
         }.getOrThrow()
 
-        assertEquals(unresolved, released)
+        assertEquals(OnchainSendSettlement.Cancelled(unresolved), released)
         assertEquals(1, removals)
         assertNull(store.current())
     }
@@ -2324,18 +2325,192 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(listOf(release))
 
         assertNull(
-            sut.releaseCancelledOnchainSend { error("an unconfirmed release must not remove the proof") }.getOrThrow()
+            sut.settleOnchainSendFromWallet { error("an unconfirmed release must not remove the proof") }.getOrThrow()
         )
         assertEquals(released, store.current())
 
         whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(listOf(release.copy(isFinal = true)))
-        val settled = sut.releaseCancelledOnchainSend {
+        val settled = sut.settleOnchainSendFromWallet {
             assertEquals(released, it)
             true
         }.getOrThrow()
 
-        assertEquals(released, settled)
+        assertEquals(OnchainSendSettlement.Cancelled(released), settled)
         assertNull(store.current())
+    }
+
+    @Test
+    fun `release check needs a sync that started after it`() = test {
+        val attempt = pendingSendAttempt()
+        whenever(lightningService.walletKnowsNoCandidate(attempt)).thenReturn(true)
+        var syncs = 0
+        // The first sync may have joined one already under way; only a second that succeeds proves a fresh view
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            syncs++
+            if (syncs == 2) throw ServiceError.NodeNotSetup()
+        }
+        assertFailsWith<OnchainSendAbandonSyncError> { sut.onchainCandidatesNeverReachedNetwork(attempt, 5.seconds) }
+        assertEquals(2, syncs)
+
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            syncs++
+            Unit
+        }
+        syncs = 0
+        assertTrue(sut.onchainCandidatesNeverReachedNetwork(attempt, 5.seconds))
+        assertEquals(2, syncs)
+    }
+
+    @Test
+    fun `release check does not take a joined sync's timestamp for a fresh view`() = test {
+        val attempt = pendingSendAttempt()
+        whenever(lightningService.walletKnowsNoCandidate(attempt)).thenReturn(true)
+        var syncedAt = 1_800_000_000uL
+        val status = mock<NodeStatus>()
+        whenever(status.latestOnchainWalletSyncTimestamp).thenAnswer { syncedAt }
+        whenever(lightningService.status).thenReturn(status)
+        val secondSync = CompletableDeferred<Unit>()
+        var syncs = 0
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            // The first joins a sync that started before the check, whose completion still moves the timestamp on
+            if (++syncs == 1) syncedAt++ else secondSync.await()
+            Unit
+        }
+
+        val check = async { sut.onchainCandidatesNeverReachedNetwork(attempt, 5.seconds) }
+        testScheduler.advanceTimeBy(2.seconds)
+        testScheduler.runCurrent()
+
+        assertFalse(check.isCompleted)
+        verify(lightningService, never()).walletKnowsNoCandidate(attempt)
+        secondSync.complete(Unit)
+        testScheduler.advanceTimeBy(1.seconds)
+        testScheduler.runCurrent()
+        assertTrue(check.await())
+        assertEquals(2, syncs)
+    }
+
+    @Test
+    fun `release check takes no baseline from a node stopped between its syncs`() = test {
+        val attempt = pendingSendAttempt()
+        whenever(lightningService.walletKnowsNoCandidate(attempt)).thenReturn(true)
+        val restarted = mock<NodeStatus>()
+        // The restarted node reports the persisted timestamp of a sync that may have started before the check
+        whenever(restarted.latestOnchainWalletSyncTimestamp).thenReturn(1_800_000_000uL)
+        var status: NodeStatus? = null
+        whenever(lightningService.status).thenAnswer { status }
+        var syncs = 0
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            // The node stops after the first sync, so the second fails, and it restarts within the wait
+            if (++syncs == 2) {
+                status = restarted
+                throw ServiceError.NodeNotSetup()
+            }
+            Unit
+        }
+
+        assertFailsWith<OnchainSendAbandonSyncError> { sut.onchainCandidatesNeverReachedNetwork(attempt, 5.seconds) }
+        assertEquals(2, syncs)
+        verify(lightningService, never()).walletKnowsNoCandidate(attempt)
+    }
+
+    @Test
+    fun `final payment of the original's coins that a restore lost completes the Shop payment`() = test {
+        val store = realAttemptStore()
+        val activityService = stubFollowupActivities()
+        val inputs = listOf(OnchainSendInput("11".repeat(32), 0u))
+        val admitted = store.admit(
+            walletId = WalletScope.default, requestId = PaykitPaymentRequestId("request", "payee"), orderId = null,
+            address = "bcrt1qrecipient", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,
+            isTransfer = false, channelId = null, tags = emptyList(), beforeSendAttempt = {}, payerIdentity = "payer",
+        )
+        val original = OnchainPreparedReceipt(feeBumpOriginal, inputs, admitted.address, 1_000uL, 1uL, 141uL)
+        store.retainPreparedReceipt(admitted.attemptId, 0, original, false)
+        val unknown = store.recordOutcome(admitted.attemptId, OnchainSendOutcome.Unknown(feeBumpOriginal), 0)
+        // The backup predates the fee bump that confirmed, so the restored attempt knows only the original
+        store.restoreActive(unknown.copy(restoredFromBackup = true))
+        val restored = requireNotNull(store.current())
+        val bump = OnchainInputSpend(feeBumpSuccessor, inputs, listOf(admitted.address, "bcrt1qchange"), false)
+        whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(listOf(bump))
+        whenever(lightningService.readLostCandidate(any(), any())).thenReturn(null)
+
+        // A bump still confirming, or one the wallet does not read as this payment, settles nothing
+        assertNull(sut.settleOnchainSendFromWallet { error("a payment must not remove the proof") }.getOrThrow())
+        verify(lightningService, never()).readLostCandidate(any(), any())
+        whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(listOf(bump.copy(isFinal = true)))
+        assertNull(sut.settleOnchainSendFromWallet { error("a payment must not remove the proof") }.getOrThrow())
+        verify(lightningService).readLostCandidate(restored, feeBumpSuccessor)
+        assertEquals(restored, store.current())
+
+        val lost = OnchainPreparedReceipt(feeBumpSuccessor, inputs, admitted.address, 1_000uL, 2uL, 282uL)
+        whenever(lightningService.readLostCandidate(restored, feeBumpSuccessor)).thenReturn(lost)
+        val settlement = sut.settleOnchainSendFromWallet { error("a payment must not remove the proof") }
+
+        val winner = assertIs<OnchainSendSettlement.Confirmed>(settlement.getOrThrow()).attempt
+        assertEquals(feeBumpSuccessor, winner.txid)
+        assertEquals(OnchainSendEvidence.Observed, winner.evidence)
+        assertEquals(listOf(feeBumpOriginal, feeBumpSuccessor), winner.candidateTxids)
+        assertEquals(winner, store.current())
+        // The Shop proof's reconciliation finishes the activity with the bump's exact fee
+        sut.finishAcceptedShopActivity(requireNotNull(admitted.requestId), feeBumpSuccessor)
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            feeBumpSuccessor,
+            admitted.address,
+            1_000uL,
+            282uL,
+            2uL,
+            false,
+            null,
+            admitted.walletId,
+        )
+    }
+
+    @Test
+    fun `final candidate in the wallet settles an unresolved send`() = test {
+        val store = realAttemptStore()
+        val activityService = stubFollowupActivities()
+        val admitted = store.admit(
+            walletId = WalletScope.default, requestId = null, orderId = null, address = "bcrt1qrecipient",
+            amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = false,
+            channelId = null, tags = emptyList(), beforeSendAttempt = {},
+        )
+        val receipt = OnchainPreparedReceipt(feeBumpOriginal, feeBumpInputs, admitted.address, 1_000uL, 1uL, 141uL)
+        store.retainPreparedReceipt(admitted.attemptId, 0, receipt, false)
+        store.recordOutcome(admitted.attemptId, OnchainSendOutcome.Unknown(feeBumpOriginal), 0)
+        val spend = OnchainInputSpend(feeBumpOriginal, feeBumpInputs, listOf(admitted.address), isFinal = false)
+        whenever(lightningService.walletSpendsOf(feeBumpInputs, 0)).thenReturn(listOf(spend))
+        assertNull(sut.settleOnchainSendFromWallet { error("a candidate must not remove the proof") }.getOrThrow())
+
+        whenever(lightningService.walletSpendsOf(feeBumpInputs, 0)).thenReturn(listOf(spend.copy(isFinal = true)))
+        val settlement = sut.settleOnchainSendFromWallet { error("a candidate must not remove the proof") }
+        val winner = assertIs<OnchainSendSettlement.Confirmed>(settlement.getOrThrow()).attempt
+        sut.completeAcceptedOrdinaryFollowup(feeBumpOriginal)
+
+        assertEquals(feeBumpOriginal, winner.txid)
+        assertEquals(OnchainSendEvidence.Observed, winner.evidence)
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            feeBumpOriginal,
+            admitted.address,
+            1_000uL,
+            141uL,
+            1uL,
+            false,
+            null,
+            admitted.walletId,
+        )
+        assertFalse(requireNotNull(store.current()).blocksNextSend)
+    }
+
+    private val feeBumpOriginal = "aa".repeat(32)
+    private val feeBumpSuccessor = "bb".repeat(32)
+    private val feeBumpInputs = listOf(OnchainSendInput("11".repeat(32), 0u))
+
+    private fun stubFollowupActivities(): ActivityService {
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever { preActivityMetadataRepo.addPreActivityMetadata(any()) }.thenReturn(Result.success(Unit))
+        whenever { activityService.getOnchainActivityByTxId(any(), any()) }.thenReturn(mock())
+        return activityService
     }
 
     private fun realAttemptStore(): OnchainSendAttemptStore {
@@ -4309,6 +4484,8 @@ class LightningRepoTest : BaseUnitTest() {
         assertFalse(isOnchainSyncAfter(null, 0uL))
         assertFalse(isOnchainSyncAfter(1_800_000_000uL, 1_800_000_000uL))
         assertTrue(isOnchainSyncAfter(1_800_000_001uL, 1_800_000_000uL))
+        // Until a first sync has succeeded, a sync from before the request may still finish
+        assertFalse(isOnchainSyncAfter(1_800_000_001uL, null))
         // The requested sync's own success counts even when it finished in the same second.
         assertTrue(isOnchainSyncAfter(1_800_000_000uL, 1_800_000_000uL, requestedSyncSucceeded = true))
     }

@@ -419,6 +419,35 @@ class OnchainSendAttemptStore @Inject constructor(
             }
         }
 
+    /**
+     * Records [receipt], a final payment of exactly the original's coins to its recipient that no candidate records,
+     * such as a fee bump dispatched after the last backup that a restore lost, as a candidate with its exact fee, so
+     * settlement can observe it as the winner. It is saved before it is observed.
+     */
+    suspend fun adoptFinalCandidate(
+        expected: OnchainSendAttempt,
+        receipt: OnchainPreparedReceipt,
+    ): OnchainSendAttempt? = withContext(ioDispatcher + NonCancellable) {
+        mutex.withLock {
+            val current = loadWithRetainedAccepted(expected.walletIndex)
+            val txid = receipt.txid.lowercase()
+            if (current != expected || !current.isUnresolved || txid in current.candidateTxids) return@withLock null
+            val inputs = requireNotNull(current.originalInputs)
+            val fee = requireNotNull(receipt.miningFeeSats)
+            val feeRate = requireNotNull(receipt.feeRateSatsPerVByte)
+            require(txid.matches(Regex("[0-9a-f]{64}")))
+            require(receipt.inputs.size == inputs.size && receipt.inputs.toSet() == inputs.toSet())
+            require(receipt.address.equals(current.address, ignoreCase = true))
+            require(receipt.amountSats >= current.amountSats)
+            require(feeRate > 0uL && feeRate <= UInt.MAX_VALUE.toULong())
+            current.copy(
+                candidateTxids = current.candidateTxids + txid,
+                candidateFeeRates = current.candidateFeeRates + (txid to feeRate),
+                candidateMiningFees = current.candidateMiningFees + (txid to fee),
+            ).also { persist(it) }
+        }
+    }
+
     suspend fun retainPreparedReceipt(
         attemptId: String,
         walletIndex: Int,

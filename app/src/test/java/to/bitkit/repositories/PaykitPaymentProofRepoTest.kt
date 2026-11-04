@@ -3134,21 +3134,21 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val attempt = unknownShopAttempt("ab".repeat(32))
         val requestId = requireNotNull(attempt.requestId)
         storedProofs = listOf(startedOnchainProof(attempt))
-        whenever(lightningRepo.releaseCancelledOnchainSend(any(), any())).doSuspendableAnswer {
+        whenever(lightningRepo.settleOnchainSendFromWallet(any(), any())).doSuspendableAnswer {
             runCatching {
                 it.getArgument<suspend (OnchainSendAttempt) -> Unit>(0).invoke(attempt)
                 check(it.getArgument<suspend (OnchainSendAttempt) -> Boolean>(1).invoke(attempt))
-                attempt
+                OnchainSendSettlement.Cancelled(attempt)
             }
         }
         whenever(allowanceExecutor.onchainSendReleased(any(), any())).thenThrow(RuntimeException("ledger"))
         val repo = paymentProofRepo()
 
-        assertTrue(repo.releaseCancelledOnchainPayment().isFailure)
+        assertTrue(repo.settleOnchainPaymentFromWallet().isFailure)
         assertEquals(listOf(startedOnchainProof(attempt)), storedProofs)
 
         reset(allowanceExecutor)
-        assertEquals(attempt, repo.releaseCancelledOnchainPayment().getOrThrow())
+        assertEquals(OnchainSendSettlement.Cancelled(attempt), repo.settleOnchainPaymentFromWallet().getOrThrow())
         verify(allowanceExecutor).onchainSendReleased(LOCAL_IDENTITY, requestId)
         assertTrue(storedProofs.isEmpty())
     }

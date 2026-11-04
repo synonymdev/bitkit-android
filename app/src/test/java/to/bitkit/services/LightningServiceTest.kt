@@ -95,6 +95,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -406,6 +407,42 @@ class LightningServiceTest : BaseUnitTest() {
             details
         }
         assertNull(sut.getTransactionDetails(txid, 0))
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `lost candidate is read only for the current wallet from the node it was requested on`() = test {
+        val txid = "cd".repeat(32)
+        val attempt = releaseAttempt(releaseCoin("11", 1_200uL))
+        whenever(node.getTransactionDetails(txid)).thenReturn(null)
+
+        assertNull(sut.readLostCandidate(attempt, txid))
+        assertFailsWith<ServiceError.NodeNotSetup> { sut.readLostCandidate(attempt.copy(walletIndex = 9), txid) }
+        verify(node, times(1)).getTransactionDetails(txid)
+
+        // A node replaced while the read waits for the LDK queue is never read
+        val queued = LightningService(
+            bgDispatcher = testDispatcher,
+            ioDispatcher = testDispatcher,
+            keychain = keychain,
+            vssStoreIdProvider = vssStoreIdProvider,
+            settingsStore = settingsStore,
+            watchOnlyAccountStore = watchOnlyAccountStore,
+            loggerLdk = loggerLdk,
+            watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
+            ldkQueue = StandardTestDispatcher(testScheduler),
+        )
+        queued.node = node
+        val read = async { runSuspendCatching { queued.readLostCandidate(attempt, txid) } }
+        val replacement = mock<Node>()
+        queued.node = replacement
+        runCurrent()
+
+        assertIs<ServiceError.NodeNotSetup>(read.await().exceptionOrNull())
+        verify(replacement, never()).getTransactionDetails(any())
+        verify(node, times(1)).getTransactionDetails(txid)
+        queued.node = null
+        assertFailsWith<ServiceError.NodeNotSetup> { queued.readLostCandidate(attempt, txid) }
     }
 
     @Test

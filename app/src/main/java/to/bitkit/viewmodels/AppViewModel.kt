@@ -186,6 +186,7 @@ import to.bitkit.repositories.OnchainSendBlockedError
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendPendingError
+import to.bitkit.repositories.OnchainSendSettlement
 import to.bitkit.repositories.PaykitAllowanceEntry
 import to.bitkit.repositories.PaykitAllowanceError
 import to.bitkit.repositories.PaykitAllowanceEvent
@@ -267,6 +268,7 @@ import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
 import java.math.BigDecimal
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
@@ -395,6 +397,8 @@ class AppViewModel @Inject constructor(
     private var amountContinuePending = false
     private var fundingSourceSwitchPending = false
     private var onchainSendRefreshJob: Job? = null
+    private var onchainSettlementJob: Job? = null
+    private val onchainSettlementRequested = AtomicBoolean(false)
     private var sendStateGeneration = 0L
 
     fun setSendEvent(event: SendEvent) {
@@ -2511,7 +2515,7 @@ class AppViewModel @Inject constructor(
         }
         if (event.syncType == SyncType.ONCHAIN_WALLET) {
             completePendingRestoreActivitySeen(event.syncedBlockHeight)
-            releaseCancelledOnchainSend()
+            scheduleOnchainSettlement()
         }
 
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
@@ -6573,15 +6577,40 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun releaseCancelledOnchainSend() {
-        paykitPaymentProofRepo.releaseCancelledOnchainPayment()
-            .onFailure { Logger.warn("Failed to check for a final on-chain send cancellation", it, context = TAG) }
+    // The check reads every on-chain payment of the wallet, so it runs apart from node event handling
+    private fun scheduleOnchainSettlement() {
+        onchainSettlementRequested.set(true)
+        if (onchainSettlementJob?.isActive == true) return
+        onchainSettlementJob = viewModelScope.launch {
+            do {
+                delay(ONCHAIN_SETTLEMENT_DEBOUNCE)
+                onchainSettlementRequested.set(false)
+                settleOnchainSendFromWallet()
+            } while (onchainSettlementRequested.get())
+        }
+    }
+
+    private suspend fun settleOnchainSendFromWallet() {
+        val settlement = paykitPaymentProofRepo.settleOnchainPaymentFromWallet()
+            .onFailure { Logger.warn("Failed to check for a final on-chain send spend", it, context = TAG) }
             .getOrNull() ?: return
-        toast(
-            type = Toast.ToastType.SUCCESS,
-            title = context.getString(R.string.wallet__send_pending__cancelled_title),
-            description = context.getString(R.string.wallet__send_pending__cancelled_description),
-        )
+        when (settlement) {
+            is OnchainSendSettlement.Cancelled -> toast(
+                type = Toast.ToastType.SUCCESS,
+                title = context.getString(R.string.wallet__send_pending__cancelled_title),
+                description = context.getString(R.string.wallet__send_pending__cancelled_description),
+            )
+            is OnchainSendSettlement.Confirmed -> {
+                val txid = settlement.attempt.txid ?: return
+                runSuspendCatching {
+                    if (settlement.attempt.requestId != null) {
+                        paykitPaymentProofRepo.reconcile()
+                    } else {
+                        lightningRepo.completeAcceptedOrdinaryFollowup(txid)
+                    }
+                }.onFailure { Logger.warn("Failed to finish final on-chain send '$txid'", it, context = TAG) }
+            }
+        }
     }
 
     fun onRecoveredTransfer(original: OnchainSendAttempt) {
@@ -8874,6 +8903,9 @@ class AppViewModel @Inject constructor(
             .map { Regex("^$it:", RegexOption.IGNORE_CASE) }
         private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
         private const val TEN_USD = 10
+
+        /** Syncs that land together share one read of the wallet's on-chain history. */
+        private val ONCHAIN_SETTLEMENT_DEBOUNCE = 1.seconds
         private const val MAX_BALANCE_FRACTION = 0.5
         private const val MAX_FEE_AMOUNT_RATIO = 0.5
         private const val HW_SEND_FALLBACK_TX_VBYTES = 1_200uL
