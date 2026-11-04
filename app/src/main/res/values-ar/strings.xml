@@ -1190,6 +1190,8 @@
     <string name="hardware__search_error">تعذر البحث عن محافظ الأجهزة. تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="hardware__send_broadcast_failed_text">تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="hardware__send_broadcast_failed_title">الدفعة غير مؤكدة</string>
+    <string name="hardware__send_broadcast_uncertain_text">ربما تم بث معاملتك. يرجى التحقق من نشاطك قبل المحاولة مرة أخرى.</string>
+    <string name="hardware__send_broadcast_uncertain_title">ربما تم إرسال المعاملة</string>
     <string name="hardware__send_confirm_address">إلى العنوان (أكّد على الجهاز)</string>
     <string name="hardware__send_onchain_only_text">يمكن لـ Trezor الإرسال إلى عنوان Bitcoin فقط من هذه المحفظة.</string>
     <string name="hardware__send_onchain_only_text_jade">يمكن لـ Jade الإرسال إلى عنوان Bitcoin فقط من هذه المحفظة.</string>

@@ -1196,6 +1196,8 @@
     <string name="hardware__search_error">Δεν ήταν δυνατή η αναζήτηση πορτοφολιών υλικού. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="hardware__send_broadcast_failed_text">Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="hardware__send_broadcast_failed_title">Η πληρωμή δεν επιβεβαιώθηκε</string>
+    <string name="hardware__send_broadcast_uncertain_text">Η συναλλαγή σου μπορεί να έχει μεταδοθεί. Έλεγξε τη δραστηριότητά σου πριν δοκιμάσεις ξανά.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Η συναλλαγή μπορεί να έχει σταλεί</string>
     <string name="hardware__send_confirm_address">ΠΡΟΣ ΔΙΕΥΘΥΝΣΗ (ΕΠΙΒΕΒΑΙΩΣΗ ΣΤΗ ΣΥΣΚΕΥΗ)</string>
     <string name="hardware__send_onchain_only_text">Το Trezor μπορεί να στείλει μόνο σε διεύθυνση Bitcoin από αυτό το πορτοφόλι.</string>
     <string name="hardware__send_onchain_only_text_jade">Το Jade μπορεί να στείλει μόνο σε διεύθυνση Bitcoin από αυτό το πορτοφόλι.</string>

@@ -196,6 +196,7 @@ fun SendConfirmScreen(
         onEvent = onEvent,
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
+        onDismissRetainedSendWarning = { isLoading = false },
         onSwipeToConfirm = {
             scope.launch {
                 isLoading = true
@@ -248,6 +249,7 @@ internal fun SendConfirmContent(
     onEvent: (SendEvent) -> Unit = {},
     onClickAddTag: () -> Unit = {},
     onClickTag: (String) -> Unit = {},
+    onDismissRetainedSendWarning: () -> Unit = {},
     onSwipeToConfirm: () -> Unit = {},
     onBiometricsSuccess: () -> Unit = {},
     onBiometricsFailure: () -> Unit = {},
@@ -327,17 +329,17 @@ internal fun SendConfirmContent(
 
         uiState.showSanityWarningDialog?.takeUnless { isPreparing }?.let { dialog ->
             AppAlertDialog(
-                title = stringResource(R.string.common__are_you_sure),
+                title = stringResource(dialog.title),
                 text = stringResource(dialog.message),
                 confirmText = stringResource(R.string.wallet__send_yes),
                 dismissText = stringResource(R.string.common__cancel),
                 onConfirm = { onEvent(SendEvent.ConfirmAmountWarning(dialog)) },
                 onDismiss = {
                     onEvent(SendEvent.DismissAmountWarning)
-                    if (uiState.isInitialSubscriptionPayment) {
-                        onEvent(SendEvent.CancelInitialSubscriptionPayment)
-                    } else {
-                        onBack()
+                    when {
+                        dialog == SanityWarning.RETAINED_HARDWARE_SEND -> onDismissRetainedSendWarning()
+                        uiState.isInitialSubscriptionPayment -> onEvent(SendEvent.CancelInitialSubscriptionPayment)
+                        else -> onBack()
                     }
                 },
                 modifier = Modifier
@@ -522,7 +524,8 @@ private fun ContentRunning(
             color = accentColor,
             enabled = !isPreparing && uiState.isAmountInputValid &&
                 !uiState.isFundingSourceLoading &&
-                uiState.isHardwareFeeReady,
+                uiState.isHardwareFeeReady &&
+                !uiState.isRetainedSendCheckPending,
             loading = isPreparing || isLoading,
             confirmed = !isPreparing && isLoading,
             progress = swipeProgress,

@@ -298,7 +298,20 @@ fun SendSheet(
                             }
                             navController.navigateTo(it.route) { popUpTo(replaced) { inclusive = true } }
                         }
-                        is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
+                        is SendEffect.NavigateToHardwareSign -> {
+                            // The last step before signing: every warning and PIN check has passed by now.
+                            val abandoned = appViewModel.sendUiState.value.retainedSendToAbandon
+                                ?.let { walletId -> hwSendViewModel.abandonRetainedPayment(walletId) }
+                                ?: Result.success(Unit)
+                            abandoned
+                                .onSuccess { navController.navigateTo(SendRoute.HardwareSign) }
+                                .onFailure { error ->
+                                    appViewModel.toast(error)
+                                    navController.currentBackStackEntry
+                                        ?.savedStateHandle
+                                        ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
+                                }
+                        }
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
                             val details = appViewModel.successSendUiState.value
@@ -489,6 +502,21 @@ fun SendSheet(
                         ?.let { id -> PaykitSubscriptionId(id.paymentRequestId, id.counterparty) }
                     val initialSubscription = remember(initialSubscriptionId) {
                         initialSubscriptionId?.let(appViewModel::subscription)
+                    }
+                    LaunchedEffect(
+                        uiState.hardwareWalletId,
+                        uiState.address,
+                        uiState.amount,
+                        uiState.incomingPaymentRequestId,
+                    ) {
+                        val walletId = uiState.hardwareWalletId ?: return@LaunchedEffect
+                        val status = hwSendViewModel.retainedSendStatus(
+                            uiState.address,
+                            uiState.amount,
+                            walletId,
+                            hasIncomingRequest = uiState.incomingPaymentRequestId != null,
+                        )
+                        appViewModel.applyRetainedSendStatus(walletId, uiState.address, uiState.amount, status)
                     }
 
                     SendConfirmScreen(

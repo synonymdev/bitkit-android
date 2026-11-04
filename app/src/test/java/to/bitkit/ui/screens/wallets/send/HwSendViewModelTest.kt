@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets.send
 import android.content.Context
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.bitkitcore.TrezorException
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -29,12 +30,14 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.KeychainError
+import to.bitkit.models.FeeRate
 import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.Toast
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwRetainedSendRepo
 import to.bitkit.repositories.HwWalletMismatchError
@@ -50,6 +53,10 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.SignedTransactionId
+import to.bitkit.viewmodels.OnchainFeeUi
+import to.bitkit.viewmodels.SanityWarning
+import to.bitkit.viewmodels.SendUiState
+import to.bitkit.viewmodels.withRetainedSendStatus
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -528,23 +535,24 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `broadcast failure warns the payment was not confirmed`() = test {
+    fun `an unknown broadcast failure warns the payment may have been sent`() = test {
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         val fixture = stubSuccessfulPayment()
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
             .thenReturn(Result.failure(BroadcastException.ElectrumException("connection failed")))
-        whenever(context.getString(R.string.hardware__send_broadcast_failed_title)).thenReturn("Payment not confirmed")
-        whenever(context.getString(R.string.hardware__send_broadcast_failed_text))
-            .thenReturn("Check your connection and try again.")
+        whenever(context.getString(R.string.hardware__send_broadcast_uncertain_title))
+            .thenReturn(BROADCAST_UNCERTAIN_TITLE)
+        whenever(context.getString(R.string.hardware__send_broadcast_uncertain_text))
+            .thenReturn(BROADCAST_UNCERTAIN_TEXT)
 
         sut.signAndBroadcast(request())
         advanceUntilIdle()
         toastJob.cancel()
 
         assertEquals(Toast.ToastType.WARNING, toasts.single().type)
-        assertEquals("Payment not confirmed", toasts.single().title)
-        assertEquals("Check your connection and try again.", toasts.single().description)
+        assertEquals(BROADCAST_UNCERTAIN_TITLE, toasts.single().title)
+        assertEquals(BROADCAST_UNCERTAIN_TEXT, toasts.single().description)
     }
 
     @Test
@@ -1566,7 +1574,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.hasPendingBroadcast)
         assertTrue(sut.uiState.value.canLeave)
         assertEquals(Toast.ToastType.WARNING, toasts.single().type)
-        assertEquals(BROADCAST_FAILED_TITLE, toasts.single().title)
+        assertEquals(BROADCAST_UNCERTAIN_TITLE, toasts.single().title)
     }
 
     @Test
@@ -1773,7 +1781,8 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.hasPendingBroadcast)
         assertTrue(sut.uiState.value.canLeave)
         assertEquals(listOf(Toast.ToastType.WARNING, Toast.ToastType.WARNING), toasts.map { it.type })
-        assertEquals(BROADCAST_FAILED_TITLE, toasts.last().title)
+        assertEquals(BROADCAST_UNCERTAIN_TITLE, toasts.last().title)
+        assertTrue(sut.offersRetry(request()))
         assertSignedOnceAndBroadcast(fixture, times = 2)
     }
 
@@ -2029,6 +2038,156 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertEquals(fixture.signedTx, retainedRecord()?.signedTx)
     }
 
+    @Test
+    fun `offers retry for a matching record in a reopened sheet without device contact`() = test {
+        val fixture = stubSuccessfulPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+
+        assertTrue(newViewModel().offersRetry(request().copy(satsPerVByte = SATS_PER_VBYTE + 5uL)))
+        verify(hwWalletRepo, never()).ensureConnected(any())
+    }
+
+    @Test
+    fun `does not offer retry for another payment or wallet`() = test {
+        val fixture = stubSuccessfulPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+
+        assertFalse(sut.offersRetry(request().copy(address = OTHER_ADDRESS)))
+        assertFalse(sut.offersRetry(request().copy(amountSats = AMOUNT_SATS + 1uL)))
+        assertFalse(sut.offersRetry(request().copy(walletId = OTHER_WALLET_ID)))
+    }
+
+    @Test
+    fun `does not offer retry for another payment after a kept attempt`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.failure(UNKNOWN_FAILURE))
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.offersRetry(request()))
+        assertFalse(sut.offersRetry(request().copy(amountSats = AMOUNT_SATS + 1uL)))
+        assertFalse(sut.offersRetry(request().copy(walletId = OTHER_WALLET_ID)))
+    }
+
+    @Test
+    fun `does not offer retry when the record is unreadable or a reopened retry was refused`() = test {
+        val fixture = stubSuccessfulPayment()
+        retainedEntries[WALLET_ID] = CORRUPT_ENTRY
+        assertFalse(sut.offersRetry(request()))
+
+        retainedEntries.remove(WALLET_ID)
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        hwRetainedSendRepo.markRetryRefused(WALLET_ID).getOrThrow()
+        assertFalse(sut.offersRetry(request()))
+    }
+
+    @Test
+    fun `offers retry in this sheet after a first attempt connect failure leaves no record`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.failure(CONNECT_FAILURE))
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertNull(retainedRecord())
+        assertTrue(sut.offersRetry(request()))
+    }
+
+    @Test
+    fun `a Shop payment offers retry only from its pending broadcast`() = test {
+        val fixture = stubSuccessfulPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+
+        assertFalse(sut.offersRetry(request().copy(paymentRequestId = SHOP_REQUEST_ID)))
+    }
+
+    @Test
+    fun `a retry status locks the original fee on the review`() {
+        val state = reviewState().withStatus(HwRetainedSendStatus.Retry(RETAINED_TX))
+
+        assertTrue(state.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Custom(RETAINED_TX.feeRate.toUInt()), state.speed)
+        assertEquals(OnchainFeeUi(FeeRate.CUSTOM, RETAINED_TX.miningFeeSats.toLong()), state.onchainFeeUi)
+        assertFalse(state.isRetainedSendCheckPending)
+        assertFalse(state.needsRetainedSendWarning)
+        assertNull(state.retainedSendToAbandon)
+    }
+
+    @Test
+    fun `a status for a payment no longer on review changes nothing`() {
+        val state = reviewState()
+
+        val stale = state.withStatus(HwRetainedSendStatus.Retry(RETAINED_TX), address = OTHER_ADDRESS)
+
+        assertEquals(state, stale)
+        assertTrue(stale.isRetainedSendCheckPending)
+    }
+
+    @Test
+    fun `a blocking status abandons only after the warning is confirmed`() {
+        val state = reviewState().withStatus(HwRetainedSendStatus.Blocking)
+        assertTrue(state.needsRetainedSendWarning)
+        assertNull(state.retainedSendToAbandon)
+
+        val confirmed = state.copy(confirmedWarnings = persistentListOf(SanityWarning.RETAINED_HARDWARE_SEND))
+
+        assertFalse(confirmed.needsRetainedSendWarning)
+        assertEquals(WALLET_ID, confirmed.retainedSendToAbandon)
+        assertNull(confirmed.copy(amount = AMOUNT_SATS + 1uL).retainedSendToAbandon)
+        assertTrue(confirmed.copy(amount = AMOUNT_SATS + 1uL).isRetainedSendCheckPending)
+    }
+
+    @Test
+    fun `reading the same blocking answer again keeps the consent and a new answer drops it`() {
+        val confirmed = reviewState()
+            .withStatus(HwRetainedSendStatus.Blocking)
+            .copy(confirmedWarnings = persistentListOf(SanityWarning.RETAINED_HARDWARE_SEND))
+
+        val reread = confirmed.withStatus(HwRetainedSendStatus.Blocking)
+        assertEquals(WALLET_ID, reread.retainedSendToAbandon)
+
+        val released = reread.withStatus(HwRetainedSendStatus.None)
+        assertTrue(released.confirmedWarnings.isEmpty())
+
+        val blockedAgain = released.withStatus(HwRetainedSendStatus.Blocking)
+        assertTrue(blockedAgain.needsRetainedSendWarning)
+    }
+
+    @Test
+    fun `leaving the retried payment unlocks the fee at the default speed`() {
+        val locked = reviewState().withStatus(HwRetainedSendStatus.Retry(RETAINED_TX))
+
+        val changed = locked
+            .copy(amount = AMOUNT_SATS + 1uL)
+            .withStatus(HwRetainedSendStatus.Blocking, amountSats = AMOUNT_SATS + 1uL)
+
+        assertFalse(changed.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Medium, changed.speed)
+        assertEquals(OnchainFeeUi(FeeRate.fromSpeed(TransactionSpeed.Medium)), changed.onchainFeeUi)
+        assertTrue(changed.needsRetainedSendWarning)
+    }
+
+    @Test
+    fun `a Shop review ignores the status and keeps its own lock`() {
+        val shop = reviewState().copy(incomingPaymentRequestId = SHOP_REQUEST_ID, isRetainedHardwarePayment = true)
+
+        val state = shop.withStatus(HwRetainedSendStatus.Blocking)
+
+        assertEquals(shop, state)
+        assertFalse(state.isRetainedSendCheckPending)
+        assertFalse(state.needsRetainedSendWarning)
+    }
+
+    private fun reviewState() = SendUiState(hardwareWalletId = WALLET_ID, address = ADDRESS, amount = AMOUNT_SATS)
+
+    private fun SendUiState.withStatus(
+        status: HwRetainedSendStatus,
+        address: String = ADDRESS,
+        amountSats: ULong = AMOUNT_SATS,
+    ) = withRetainedSendStatus(WALLET_ID, address, amountSats, status, TransactionSpeed.Medium)
+
     private suspend fun retainedRecord(walletId: String = WALLET_ID) =
         hwRetainedSendRepo.record(walletId).getOrThrow()
 
@@ -2040,6 +2199,8 @@ class HwSendViewModelTest : BaseUnitTest() {
     private fun stubBroadcastWording() {
         whenever(context.getString(any())).thenReturn("message")
         whenever(context.getString(R.string.hardware__send_broadcast_failed_title)).thenReturn(BROADCAST_FAILED_TITLE)
+        whenever(context.getString(R.string.hardware__send_broadcast_uncertain_title))
+            .thenReturn(BROADCAST_UNCERTAIN_TITLE)
     }
 
     private fun signedFixtureHex() = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))
@@ -2070,8 +2231,12 @@ class HwSendViewModelTest : BaseUnitTest() {
         const val OTHER_ADDRESS = "bcrt1qother"
         const val FIXTURE_TX_ID = "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e"
         const val BROADCAST_FAILED_TITLE = "Payment not confirmed"
+        const val BROADCAST_UNCERTAIN_TITLE = "Transaction may have been sent"
+        const val BROADCAST_UNCERTAIN_TEXT = "Your transaction may have been broadcast."
         const val CORRUPT_ENTRY = "{\"walletId\":\"hardware-wallet\""
         val RETAINED_KEY = Keychain.Key.HW_RETAINED_SEND.name
+        val SHOP_REQUEST_ID = PaykitPaymentRequestId("request", "counterparty")
+        val RETAINED_TX = HwFundingSignedTx("00", miningFeeSats = 300uL, feeRate = 7uL, totalSpent = 25_300uL)
         val UNKNOWN_FAILURE = BroadcastException.ElectrumException("Broadcast failed: response lost")
         val CONNECT_FAILURE = BroadcastException.ElectrumException("Failed to connect to Electrum: unreachable")
         val REFUSAL = BroadcastException.ElectrumException(

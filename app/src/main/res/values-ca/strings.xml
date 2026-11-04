@@ -1215,6 +1215,8 @@
     <string name="hardware__search_error">No s\'han pogut cercar carteres de maquinari. Comprova la connexió i torna-ho a provar.</string>
     <string name="hardware__send_broadcast_failed_text">Comprova la connexió i torna-ho a provar.</string>
     <string name="hardware__send_broadcast_failed_title">Pagament no confirmat</string>
+    <string name="hardware__send_broadcast_uncertain_text">És possible que la teva transacció s\'hagi difós. Comprova la teva activitat abans de tornar-ho a provar.</string>
+    <string name="hardware__send_broadcast_uncertain_title">És possible que la transacció s\'hagi enviat</string>
     <string name="hardware__send_confirm_address">A L\'ADREÇA (CONFIRMA AL DISPOSITIU)</string>
     <string name="hardware__send_onchain_only_text">Des d\'aquesta cartera, Trezor només pot enviar a una adreça Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Des d\'aquesta cartera, Jade només pot enviar a una adreça Bitcoin.</string>

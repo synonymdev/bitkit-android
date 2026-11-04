@@ -459,6 +459,19 @@ class HwSendViewModel @Inject constructor(
         }
     }
 
+    /** Whether the sign button offers a retry of [request]. Contacts no device, so a reopened sheet can ask. */
+    suspend fun offersRetry(request: HwSendRequest): Boolean {
+        if (request.paymentRequestId != null) return _uiState.value.hasPendingBroadcast
+        if (pendingBroadcast?.matches(request) == true) return true
+        val status = retainedSendStatus(
+            request.address,
+            request.amountSats,
+            request.walletId,
+            hasIncomingRequest = false,
+        )
+        return status is HwRetainedSendStatus.Retry
+    }
+
     /** Only for a user who accepted a possible second payment. Does nothing while an operation is in flight. */
     suspend fun abandonRetainedPayment(walletId: String): Result<Unit> {
         if (isOperationInFlight) return Result.success(Unit)
@@ -611,6 +624,12 @@ class HwSendViewModel @Inject constructor(
         description = context.getString(R.string.hardware__send_broadcast_failed_text),
     )
 
+    private suspend fun showBroadcastUncertainWarning() = ToastEventBus.send(
+        type = Toast.ToastType.WARNING,
+        title = context.getString(R.string.hardware__send_broadcast_uncertain_title),
+        description = context.getString(R.string.hardware__send_broadcast_uncertain_text),
+    )
+
     private suspend fun handleFailure(error: Throwable, walletId: String, mayHaveBeenSent: Boolean = false) {
         val retainedShopPayment = pendingBroadcast?.let {
             it.request.paymentRequestId != null && it.hasAttemptedBroadcast
@@ -636,7 +655,7 @@ class HwSendViewModel @Inject constructor(
             it.copy(isBroadcastUnresolved = retainedShopPayment && pendingBroadcast?.blocksNavigation == true)
         }
         when {
-            mayHaveBeenSent -> showBroadcastFailedWarning()
+            mayHaveBeenSent -> showBroadcastUncertainWarning()
             error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)
             }
