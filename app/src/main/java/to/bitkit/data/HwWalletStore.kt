@@ -74,6 +74,27 @@ class HwWalletStore @Inject constructor(
         Unit
     }
 
+    suspend fun loadHeldSends(): List<HeldHwSend> = withContext(ioDispatcher) {
+        store.data.first().heldSends
+    }
+
+    /** Stores [send], replacing a held send of the same transaction. */
+    suspend fun holdSend(send: HeldHwSend) = withContext(ioDispatcher) {
+        store.updateData { data ->
+            data.copy(heldSends = data.heldSends.filterNot { it.txId.equals(send.txId, ignoreCase = true) } + send)
+        }
+        Unit
+    }
+
+    suspend fun releaseHeldSends(txIds: Set<String>) = withContext(ioDispatcher) {
+        if (txIds.isEmpty()) return@withContext
+        store.updateData { data ->
+            val released = txIds.mapTo(mutableSetOf()) { it.lowercase() }
+            data.copy(heldSends = data.heldSends.filterNot { it.txId.lowercase() in released })
+        }
+        Unit
+    }
+
     suspend fun backupSnapshot(): Map<String, String> = withContext(ioDispatcher) {
         store.data.first().hwWalletNames()
     }
@@ -117,7 +138,30 @@ data class HwWalletData(
      * the device's own `customLabel`.
      */
     val pendingNames: Map<String, String> = emptyMap(),
+    /** Hardware sends whose broadcast may have gone out, kept until the wallet sees them. */
+    val heldSends: List<HeldHwSend> = emptyList(),
 )
+
+/**
+ * A signed hardware send whose broadcast may have reached the network, so the same payment is never signed again
+ * beside it: it is only broadcast again as these bytes.
+ */
+@Serializable
+data class HeldHwSend(
+    val walletId: String,
+    val txId: String,
+    val address: String,
+    val amountSats: ULong,
+    val satsPerVByte: ULong,
+    val tags: List<String> = emptyList(),
+    val serializedTx: String,
+    val miningFeeSats: ULong,
+    val feeRate: ULong,
+    val totalSpent: ULong,
+) {
+    fun isPaymentOf(walletId: String, address: String, amountSats: ULong): Boolean =
+        this.walletId == walletId && this.address == address && this.amountSats == amountSats
+}
 
 /**
  * Every hardware wallet name this wallet knows, keyed by wallet id: the name of each paired wallet,

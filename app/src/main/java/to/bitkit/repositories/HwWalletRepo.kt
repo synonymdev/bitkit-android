@@ -35,6 +35,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
+import to.bitkit.data.HeldHwSend
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
@@ -897,6 +898,32 @@ class HwWalletRepo @Inject constructor(
             HwFundingBroadcastResult(txId, signedTx.miningFeeSats, signedTx.feeRate, signedTx.totalSpent)
         }
     }
+
+    /**
+     * Keeps [send], whose broadcast may have gone out, across sheets and restarts, so the same payment is not signed
+     * again beside it until the wallet sees it.
+     */
+    suspend fun holdSend(send: HeldHwSend): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching { hwWalletStore.holdSend(send) }
+    }
+
+    suspend fun releaseHeldSend(txId: String): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching { hwWalletStore.releaseHeldSends(setOf(txId)) }
+    }
+
+    /** The held send of this payment the wallet has not seen yet. One its wallet has seen went out and is released. */
+    suspend fun heldSendFor(walletId: String, address: String, amountSats: ULong): Result<HeldHwSend?> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val held = hwWalletStore.loadHeldSends().filter { it.isPaymentOf(walletId, address, amountSats) }
+                if (held.isEmpty()) return@runSuspendCatching null
+                val seenTxIds = activities.value.filterIsInstance<Activity.Onchain>()
+                    .mapTo(mutableSetOf()) { it.v1.walletId to it.v1.txId.lowercase() }
+                val (seen, unseen) = held.partition { (it.walletId to it.txId.lowercase()) in seenTxIds }
+                hwWalletStore.releaseHeldSends(seen.mapTo(mutableSetOf()) { it.txId })
+                unseen.firstOrNull()
+            }
+        }
 
     /** Fresh backend observation of this exact transaction in the original hardware wallet. */
     suspend fun observeExactTransaction(
