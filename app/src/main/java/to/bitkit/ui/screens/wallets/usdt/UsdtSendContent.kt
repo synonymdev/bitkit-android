@@ -667,7 +667,10 @@ private fun UsdtConfirmationLoading(
             isPaymentRequest = isPaymentRequest,
             modifier = Modifier.weight(1f),
         )
-        state.error?.let { BodyM(state.errorMessage(it), color = Colors.Brand) }
+        state.error?.let {
+            BodyS(state.errorMessage(it), color = Colors.Brand, modifier = Modifier.testTag("UsdtError"))
+            VerticalSpacer(16.dp)
+        }
         // Also offered without an error: a review restored after process death has no quote in flight.
         if (state.error != null || !state.busy) {
             PrimaryButton(
