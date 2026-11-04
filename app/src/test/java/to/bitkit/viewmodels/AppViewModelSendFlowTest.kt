@@ -12,6 +12,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
@@ -67,6 +68,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
@@ -144,6 +146,7 @@ import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.models.USD
 import to.bitkit.models.WalletScope
@@ -15387,6 +15390,78 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
+    }
+
+    @Test
+    fun `a close the peer started records its transfer to savings and shows the close notice`() = test {
+        stubCounterpartyClose()
+        val cases = listOf(
+            ClosureReason.CounterpartyInitiatedCooperativeClosure to TransferType.COOP_CLOSE,
+            ClosureReason.CounterpartyForceClosed(peerMsg = "") to TransferType.FORCE_CLOSE,
+        )
+
+        cases.forEach { (reason, type) ->
+            emitNodeEvent(
+                Event.ChannelClosed(
+                    channelId = "closedChannelId",
+                    userChannelId = "testUserChannelId",
+                    counterpartyNodeId = null,
+                    reason = reason,
+                ),
+            )
+            advanceUntilIdle()
+
+            verify(transferRepo).createTransfer(
+                type = eq(type),
+                amountSats = eq(100_000L),
+                channelId = eq("closedChannelId"),
+                fundingTxId = anyOrNull(),
+                lspOrderId = anyOrNull(),
+                claimableAtHeight = anyOrNull(),
+                txTotalSats = anyOrNull(),
+                preTransferOnchainSats = anyOrNull(),
+            )
+            assertEquals(Sheet.ConnectionClosed, sut.currentSheet.value, "$reason")
+            sut.hideSheet()
+            advanceUntilIdle()
+        }
+    }
+
+    private suspend fun stubCounterpartyClose() {
+        whenever(transferRepo.syncTransferStates()).thenReturn(Result.success(Unit))
+        whenever(
+            transferRepo.createTransfer(
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+            ),
+        ).thenReturn(Result.success("transferId"))
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.failure(AppError("Balances not available")))
+        whenever(activityService.closedChannels(any())).thenReturn(
+            listOf(
+                ClosedChannelDetails(
+                    channelId = "closedChannelId",
+                    counterpartyNodeId = "counterpartyNodeId",
+                    fundingTxoTxid = "fundingTxid",
+                    fundingTxoIndex = 0u,
+                    channelValueSats = 100_000u,
+                    closedAt = 0u,
+                    outboundCapacityMsat = 0u,
+                    inboundCapacityMsat = 0u,
+                    counterpartyUnspendablePunishmentReserve = 0u,
+                    unspendablePunishmentReserve = 0u,
+                    forwardingFeeProportionalMillionths = 0u,
+                    forwardingFeeBaseMsat = 0u,
+                    channelName = "closedChannel",
+                    channelClosureReason = "",
+                ),
+            ),
+        )
     }
 
     @Test

@@ -13,18 +13,25 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.BalanceState
+import to.bitkit.models.TransferType
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.TransferRepo
@@ -37,6 +44,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -346,6 +354,96 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
         verify(lightningRepo).payInvoice(any(), anyOrNull())
     }
+
+    @Test
+    fun `closing the selected channels records each closed channel once`() = test {
+        val first = savingsChannel("first-channel", sats = 10_000uL)
+        val second = savingsChannel("second-channel", sats = 20_000uL)
+        whenever(lightningRepo.closeChannel(any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        sut.onTransferToSavingsConfirm(listOf(first, second), SavingsTransferMode.CLOSE)
+
+        val failed = sut.closeSelectedChannels()
+
+        assertTrue(failed.isEmpty())
+        verify(lightningRepo, times(2)).closeChannel(any(), any(), anyOrNull())
+        verifyCloseRecorded(TransferType.COOP_CLOSE, first)
+        verifyCloseRecorded(TransferType.COOP_CLOSE, second)
+    }
+
+    @Test
+    fun `a channel whose first close fails is closed by the retries and recorded once`() = test {
+        whenever(clock.now()).thenReturn(Clock.System.now())
+        val first = savingsChannel("first-channel", sats = 10_000uL)
+        val second = savingsChannel("second-channel", sats = 20_000uL)
+        whenever(lightningRepo.closeChannel(eq(first), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(lightningRepo.closeChannel(eq(second), any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("peer offline")), Result.success(Unit))
+        var gaveUp = false
+        sut.onTransferToSavingsConfirm(listOf(first, second), SavingsTransferMode.CLOSE)
+        val failed = sut.closeSelectedChannels()
+
+        sut.startCoopCloseRetries(failed) { gaveUp = true }
+        runCurrent()
+        advanceTimeBy(RETRY_INTERVAL_MS)
+        runCurrent()
+
+        assertFalse(gaveUp)
+        verify(lightningRepo, times(1)).closeChannel(eq(first), any(), anyOrNull())
+        verify(lightningRepo, times(2)).closeChannel(eq(second), any(), anyOrNull())
+        verifyCloseRecorded(TransferType.COOP_CLOSE, first)
+        verifyCloseRecorded(TransferType.COOP_CLOSE, second)
+    }
+
+    @Test
+    fun `a force close that fails for one channel records only the channels it closed`() = test {
+        val failing = savingsChannel("failing-channel", sats = 10_000uL)
+        val closing = savingsChannel("closing-channel", sats = 20_000uL)
+        whenever(lightningRepo.closeChannel(eq(failing), eq(true), anyOrNull()))
+            .thenReturn(Result.failure(AppError("force close failed")))
+        whenever(lightningRepo.closeChannel(eq(closing), eq(true), anyOrNull())).thenReturn(Result.success(Unit))
+        sut.onTransferToSavingsConfirm(listOf(failing, closing), SavingsTransferMode.CLOSE)
+
+        sut.forceTransfer {}
+        advanceUntilIdle()
+
+        verifyCloseRecorded(TransferType.FORCE_CLOSE, closing)
+        verifyNoTransferRecorded(failing)
+
+        // The channel that failed is still offered, so the next force close tries only it
+        clearInvocations(lightningRepo)
+        sut.forceTransfer {}
+        advanceUntilIdle()
+
+        verify(lightningRepo).closeChannel(eq(failing), eq(true), anyOrNull())
+        verify(lightningRepo, never()).closeChannel(eq(closing), any(), anyOrNull())
+    }
+
+    private fun savingsChannel(channelId: String, sats: ULong) =
+        createChannelDetails().copy(channelId = channelId, outboundCapacityMsat = sats * 1_000uL)
+
+    private suspend fun verifyCloseRecorded(type: TransferType, channel: ChannelDetails) =
+        verify(transferRepo).createTransfer(
+            eq(type),
+            eq(channel.amountOnClose.toLong()),
+            eq(channel.channelId),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+        )
+
+    private suspend fun verifyNoTransferRecorded(channel: ChannelDetails) =
+        verify(transferRepo, never()).createTransfer(
+            any(),
+            any(),
+            eq(channel.channelId),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+            anyOrNull(),
+        )
 
     private suspend fun stubSavingsSwapHappyPath() {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
