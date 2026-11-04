@@ -149,48 +149,50 @@ fun SubscriptionsScreen(
     val showAllowances = settingsViewModel?.areAllowancesEnabled?.collectAsStateWithLifecycle()?.value == true
     val now = rememberSubscriptionNow(subscriptions.toImmutableList())
 
-    SubscriptionsContent(
-        subscriptions = subscriptions.toImmutableList(),
-        contacts = contacts.toImmutableList(),
-        acceptedAt = appViewModel::subscriptionAcceptedAt,
-        now = now,
-        onBack = onBack,
-        initialTab = if (showPayments) SubscriptionTab.Payments else SubscriptionTab.Overview,
-        showAllowances = showAllowances,
-        pendingPaymentRequestCount = pendingPaymentRequests.size,
-        onSubscription = { subscription ->
-            if (subscription.isPayer && subscription.isProposalVisible(now)) {
-                appViewModel.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
-            } else {
-                onDetails(subscription.id)
-            }
-        },
-        onCreateSubscription = onCreateSubscription,
-        paymentsContent = { topPadding ->
-            val autoPaidRequestIds by allowancesViewModel.autoPaidRequestIds.collectAsStateWithLifecycle()
-            PaymentRequestsScreen(
-                appViewModel = appViewModel,
-                onBack = onBack,
-                onRequestPayment = onRequestPayment,
-                onAddContact = onAddContact,
-                onDetails = onPaymentRequestDetails,
-                showsNavigationBar = false,
-                topPadding = topPadding,
-                autoPaidRequestIds = autoPaidRequestIds,
-            )
-        },
-        allowancesContent = { topPadding ->
-            AllowancesScreen(
-                topPadding = topPadding,
-                onClickAdd = { appViewModel.showSheet(Sheet.Allowance(AllowanceRoute.Set)) },
-                onClickAllowance = {
-                    val route = if (it.isAnswerable) AllowanceRoute.Review(it.id) else AllowanceRoute.Details(it.id)
-                    appViewModel.showSheet(Sheet.Allowance(route))
-                },
-                viewModel = allowancesViewModel,
-            )
-        },
-    )
+    AllowanceAuthorizationHost(viewModel = allowancesViewModel) {
+        SubscriptionsContent(
+            subscriptions = subscriptions.toImmutableList(),
+            contacts = contacts.toImmutableList(),
+            acceptedAt = appViewModel::subscriptionAcceptedAt,
+            now = now,
+            onBack = onBack,
+            initialTab = if (showPayments) SubscriptionTab.Payments else SubscriptionTab.Overview,
+            showAllowances = showAllowances,
+            pendingPaymentRequestCount = pendingPaymentRequests.size,
+            onSubscription = { subscription ->
+                if (subscription.isPayer && subscription.isProposalVisible(now)) {
+                    appViewModel.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
+                } else {
+                    onDetails(subscription.id)
+                }
+            },
+            onCreateSubscription = onCreateSubscription,
+            paymentsContent = { topPadding ->
+                val autoPaidRequestIds by allowancesViewModel.autoPaidRequestIds.collectAsStateWithLifecycle()
+                PaymentRequestsScreen(
+                    appViewModel = appViewModel,
+                    onBack = onBack,
+                    onRequestPayment = onRequestPayment,
+                    onAddContact = onAddContact,
+                    onDetails = onPaymentRequestDetails,
+                    showsNavigationBar = false,
+                    topPadding = topPadding,
+                    autoPaidRequestIds = autoPaidRequestIds,
+                )
+            },
+            allowancesContent = { topPadding ->
+                AllowancesScreen(
+                    topPadding = topPadding,
+                    onClickAdd = { appViewModel.showSheet(Sheet.Allowance(AllowanceRoute.Set)) },
+                    onClickAllowance = {
+                        val route = if (it.isAnswerable) AllowanceRoute.Review(it.id) else AllowanceRoute.Details(it.id)
+                        appViewModel.showSheet(Sheet.Allowance(route))
+                    },
+                    viewModel = allowancesViewModel,
+                )
+            },
+        )
+    }
 }
 
 @Composable

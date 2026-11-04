@@ -270,6 +270,7 @@
     <string name="onboarding__restore_failed_header">Conto di spesa &lt;accent&gt;errore&lt;/accent&gt;</string>
     <string name="onboarding__restore_failed_text">Bitkit ha ripristinato i tuoi risparmi, ma non è riuscito a ripristinare il conto di spesa corrente (stato Lightning) e i dati del portafoglio.</string>
     <string name="onboarding__restore_header">&lt;accent&gt;Ripristina&lt;/accent&gt;\nil tuo portafoglio</string>
+    <string name="onboarding__restore_incomplete_text">Il tuo wallet e il tuo saldo sono tornati, ma Bitkit non è riuscito a ripristinare: %1$s.</string>
     <string name="onboarding__restore_inv_checksum">Il checksum della frase di recupero sembra non essere corretto. Ti preghiamo di ricontrollare la frase di recupero.</string>
     <string name="onboarding__restore_no_backup_button">Procedi Senza Backup</string>
     <string name="onboarding__restore_no_backup_warn">Se in precedenza possedevi un backup lightning, questo verrà sovrascritto e perso. Ciò potrebbe causare una perdita di fondi.</string>
@@ -1469,6 +1470,9 @@
     <string name="subscriptions__allowances">Budget</string>
     <string name="subscriptions__allowances_empty_description">Puoi impostare limiti di spesa per soddisfare automaticamente le richieste di pagamento di contatti fidati.</string>
     <string name="subscriptions__allowances_empty_headline">Configura i tuoi\n&lt;accent&gt;budget&lt;/accent&gt;</string>
+    <string name="subscriptions__allowances_paused_description">I dati dei tuoi budget sono più vecchi di quelli che questo wallet ha già usato. Le richieste chiederanno la tua approvazione finché non riprendi.</string>
+    <string name="subscriptions__allowances_paused_resume">Riprendi</string>
+    <string name="subscriptions__allowances_paused_title">Pagamenti automatici in pausa</string>
     <string name="subscriptions__cancel_subscription">Annulla Abbonamento</string>
     <string name="subscriptions__choose_recipient">Scegli Destinatario</string>
     <string name="subscriptions__content_too_long">Accorcia il nome o la descrizione dell\'abbonamento e riprova.</string>

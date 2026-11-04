@@ -1441,6 +1441,47 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lastKnownChannels should keep channels after stop`() = test {
+        val channels = listOf(createChannelDetails().copy(channelId = "channel_1"))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(channels)
+        sut.syncState()
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        sut.stop()
+
+        assertTrue(sut.lightningState.value.channels.isEmpty())
+        assertEquals(channels, sut.lastKnownChannels.value)
+    }
+
+    @Test
+    fun `lastKnownChannels should keep channels when synced while stopped`() = test {
+        val channels = listOf(createChannelDetails().copy(channelId = "channel_1"))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(channels)
+        sut.syncState()
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+
+        sut.syncState()
+
+        assertEquals(channels, sut.lastKnownChannels.value)
+    }
+
+    @Test
+    fun `lastKnownChannels should be empty after storage wipe`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails()))
+        sut.syncState()
+        assertEquals(1, sut.lastKnownChannels.value.size)
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        assertTrue(sut.wipeStorage(0).isSuccess)
+
+        assertTrue(sut.lastKnownChannels.value.isEmpty())
+    }
+
+    @Test
     fun `awaitNodeId should return last known id when restart after stop fails`() = test {
         val testNodeId = "test_node_id"
         whenever(lightningService.nodeId).thenReturn(testNodeId)

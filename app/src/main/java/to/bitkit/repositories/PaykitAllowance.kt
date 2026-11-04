@@ -256,6 +256,7 @@ object PaykitAllowanceTime {
 object PaykitAllowanceCapacity {
     /** Allowance ids are unique per contact only, so an attempt keeps the contact it paid. */
     data class Attempt(
+        val attemptId: String,
         val counterparty: String,
         val allowanceId: String,
         val amountSats: ULong,
@@ -279,13 +280,30 @@ object PaykitAllowanceCapacity {
             .fold(0uL) { total, attempt -> total.safe() + attempt.amountSats.safe() }
     }
 
-    fun fits(amountSats: ULong, allowance: PaykitAllowance, attempts: List<Attempt>, now: Instant): Boolean {
+    /**
+     * Spending counts every attempt of the ledger's [attempts] and this wallet's own [localAttempts], each attempt
+     * once, so neither side's missing attempts hide the other's.
+     */
+    fun fits(
+        amountSats: ULong,
+        allowance: PaykitAllowance,
+        attempts: List<Attempt>,
+        now: Instant,
+        localAttempts: List<Attempt> = emptyList(),
+    ): Boolean {
         val perPaymentMax = allowance.perPaymentMaxSats ?: return false
         if (amountSats > perPaymentMax) return false
         val monthlyLimit = allowance.monthlyLimitSats ?: return false
         val anchor = allowance.monthlyAnchor ?: return false
-        val used = usedSats(allowance.counterparty, allowance.allowanceId, attempts, anchor, now)
+        val ledgerIds = attempts.mapTo(mutableSetOf()) { it.attemptId }
+        val all = attempts + localAttempts.filterNot { it.attemptId in ledgerIds }
+        val used = usedSats(allowance.counterparty, allowance.allowanceId, all, anchor, now)
         return used.safe() + amountSats.safe() <= monthlyLimit
+    }
+
+    fun attempts(spends: List<PaykitAllowanceLocalState.AutomaticSpend>): List<Attempt> = spends.map {
+        val admittedAt = Instant.fromEpochMilliseconds(it.admittedAtMillis)
+        Attempt(it.attemptId, it.counterparty, it.allowanceId, it.amountSats, admittedAt, isLive = true)
     }
 
     fun attempts(history: AllowanceAccountingHistory): List<Attempt> = history.occurrences
@@ -296,6 +314,7 @@ object PaykitAllowanceCapacity {
             val admittedAt = PaykitAllowanceTime.parse(attempt.admittedAt) ?: return@mapNotNull null
             val amountSats = PaykitAllowance.satsFromBitcoinAmount(attempt.amount.value()) ?: return@mapNotNull null
             Attempt(
+                attemptId = attempt.attemptId,
                 counterparty = counterparty,
                 allowanceId = allowanceId,
                 amountSats = amountSats,
