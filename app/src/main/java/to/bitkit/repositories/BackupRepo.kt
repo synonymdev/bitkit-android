@@ -1134,7 +1134,11 @@ class BackupRepo @Inject constructor(
             }
             val walletIndex = backupWalletIndex()
             it.onchainPaidInvoices?.let { invoices ->
-                onchainSendAttemptStore.restorePaidInvoices(invoices.map { invoice -> invoice.restored() }, walletIndex)
+                val restored = invoices.mapNotNull { invoice -> invoice.restored() }
+                if (restored.size < invoices.size) {
+                    Logger.warn("Dropped '${invoices.size - restored.size}' malformed paid invoices", context = TAG)
+                }
+                onchainSendAttemptStore.restorePaidInvoices(restored, walletIndex)
             }
             it.activeOnchainAttempt?.let { wire ->
                 validateActiveProof(wire, it.pendingProofs)

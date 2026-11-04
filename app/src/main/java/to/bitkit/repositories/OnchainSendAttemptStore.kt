@@ -21,8 +21,10 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.WalletScope
+import to.bitkit.models.safe
 import to.bitkit.services.LightningService
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.util.UUID
 import javax.inject.Inject
@@ -204,6 +206,7 @@ class OnchainSendAttemptStore @Inject constructor(
     private val clock: Clock,
 ) {
     companion object {
+        private const val TAG = "OnchainSendAttemptStore"
         private val KEY = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
         private val PAID_INVOICES_KEY = Keychain.Key.ONCHAIN_PAID_INVOICES.name
 
@@ -765,31 +768,45 @@ class OnchainSendAttemptStore @Inject constructor(
         }
     }
 
+    /** The entries to back up, or none while the record cannot be read, so the backup itself never fails on it. */
     suspend fun paidInvoicesBackupSnapshot(walletIndex: Int): List<OnchainPaidInvoice> = withContext(ioDispatcher) {
-        mutex.withLock { loadPaidInvoices(walletIndex) }
+        mutex.withLock { loadPaidInvoicesOrEmpty(walletIndex) }
     }
 
+    /** Keeps the well-formed entries of a restored backup and drops the rest. */
     suspend fun restorePaidInvoices(invoices: List<OnchainPaidInvoice>, walletIndex: Int) =
         withContext(ioDispatcher + NonCancellable) {
             mutex.withLock {
-                invoices.forEach { require(it.paymentHash.matches(HEX_HASH)) }
-                savePaidInvoices((loadPaidInvoices(walletIndex) + invoices).distinctBy { it.paymentHash }, walletIndex)
+                val (valid, malformed) = invoices.partition { it.paymentHash.matches(HEX_HASH) }
+                if (malformed.isNotEmpty()) {
+                    Logger.warn("Dropped '${malformed.size}' malformed paid invoices from a restore", context = TAG)
+                }
+                val merged = (loadPaidInvoicesOrEmpty(walletIndex) + valid).distinctBy { it.paymentHash }
+                runSuspendCatching { savePaidInvoices(merged, walletIndex) }
+                    .onFailure { Logger.warn("Failed to restore paid invoices", it, context = TAG) }
             }
         }
 
     private suspend fun rememberPaidInvoice(attempt: OnchainSendAttempt) {
         val paymentHash = attempt.lightningPaymentHash ?: return
         val expiresAt = attempt.lightningInvoiceExpiresAt ?: return
-        val paid = loadPaidInvoices(attempt.walletIndex)
+        val paid = loadPaidInvoicesOrEmpty(attempt.walletIndex)
         if (paid.any { it.paymentHash == paymentHash }) return
-        savePaidInvoices(paid + OnchainPaidInvoice(paymentHash, expiresAt), attempt.walletIndex)
+        runSuspendCatching { savePaidInvoices(paid + OnchainPaidInvoice(paymentHash, expiresAt), attempt.walletIndex) }
+            .onFailure { Logger.warn("Failed to record paid invoice '$paymentHash'", it, context = TAG) }
     }
+
+    private fun loadPaidInvoicesOrEmpty(walletIndex: Int): List<OnchainPaidInvoice> =
+        runCatching { loadPaidInvoices(walletIndex) }.getOrElse {
+            Logger.warn("Failed to read paid invoices, starting a new record", it, context = TAG)
+            emptyList()
+        }
 
     private fun loadPaidInvoices(walletIndex: Int): List<OnchainPaidInvoice> {
         val value = keychain.loadString(PAID_INVOICES_KEY, walletIndex) ?: return emptyList()
-        val now = clock.now().epochSeconds
+        val now = clock.now().epochSeconds.toULong()
         return Json.decodeFromString<List<OnchainPaidInvoice>>(value).filter {
-            it.expiresAt.toLong() + PAID_INVOICE_EXPIRY_MARGIN.inWholeSeconds > now
+            it.expiresAt.safe() + PAID_INVOICE_EXPIRY_MARGIN.inWholeSeconds.toULong().safe() > now
         }
     }
 

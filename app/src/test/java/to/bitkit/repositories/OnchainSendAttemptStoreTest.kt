@@ -20,6 +20,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.ActiveOnchainAttemptBackup
+import to.bitkit.models.PaykitPaymentStateBackup
 import to.bitkit.models.WalletScope
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
@@ -205,6 +206,56 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
             now = Instant.fromEpochSeconds(1_003_600 + 3_600)
             assertTrue(store.paidInvoiceHashes().isEmpty())
         }
+
+    @Test
+    fun `an unreadable paid-invoice record never blocks an attempt, a backup or a restore`() = test {
+        val saved = mutableMapOf<String, String>()
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(any(), eq(0))).thenAnswer { saved[it.getArgument(0)] }
+        whenever(keychain.upsertString(any(), any(), eq(0))).doSuspendableAnswer {
+            saved[it.getArgument(0)] = it.getArgument(1)
+        }
+        val paidKey = Keychain.Key.ONCHAIN_PAID_INVOICES.name
+        val hash = "ab".repeat(32)
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System)
+        saved[paidKey] = "not a record"
+
+        // Only the Lightning check refuses on it
+        assertFailsWith<Exception> { store.paidInvoiceHashes() }
+        assertTrue(store.paidInvoicesBackupSnapshot(0).isEmpty())
+
+        val admitted = store.admit(
+            walletId = WalletScope.default, requestId = null, orderId = null, address = "bcrt1qrecipient",
+            amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = false,
+            channelId = null, tags = emptyList(), beforeSendAttempt = {},
+            lightningPaymentHash = hash, lightningInvoiceExpiresAt = ULong.MAX_VALUE / 2uL,
+        )
+        val recorded = store.recordOutcome(admitted.attemptId, OnchainSendOutcome.Unknown("cd".repeat(32)), 0)
+        assertEquals(recorded, store.current())
+        assertEquals(setOf(hash), store.paidInvoiceHashes())
+
+        saved[paidKey] = "not a record"
+        val restored = OnchainPaidInvoice("ef".repeat(32), ULong.MAX_VALUE / 2uL)
+        store.restorePaidInvoices(listOf(restored), 0)
+        assertEquals(setOf(restored.paymentHash), store.paidInvoiceHashes())
+    }
+
+    @Test
+    fun `a restore keeps the well-formed paid-invoice entries and drops the rest`() = test {
+        val saved = mutableMapOf<String, String>()
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(any(), eq(0))).thenAnswer { saved[it.getArgument(0)] }
+        whenever(keychain.upsertString(any(), any(), eq(0))).doSuspendableAnswer {
+            saved[it.getArgument(0)] = it.getArgument(1)
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System)
+        val valid = OnchainPaidInvoice("ab".repeat(32), ULong.MAX_VALUE / 2uL)
+
+        store.restorePaidInvoices(listOf(OnchainPaidInvoice("010203", ULong.MAX_VALUE / 2uL), valid), 0)
+
+        assertEquals(setOf(valid.paymentHash), store.paidInvoiceHashes())
+        assertNull(PaykitPaymentStateBackup.OnchainPaidInvoiceBackup(valid.paymentHash, "soon").restored())
+    }
 
     @Test
     fun `backup proof capture blocks receipt retention until the snapshot is complete`() = test {

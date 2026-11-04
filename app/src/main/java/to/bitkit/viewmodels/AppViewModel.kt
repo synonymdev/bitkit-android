@@ -3572,18 +3572,32 @@ class AppViewModel @Inject constructor(
 
     private suspend fun lightningPaymentRefusal(paymentHash: String, refusesUnreadable: Boolean = true): AppError? {
         if (!checksInvoiceOfAddress()) return null
-        val isPaidOnchain = runSuspendCatching {
+        val holder = runSuspendCatching {
             val attempt = lightningRepo.currentOnchainSendAttempt()
-            val holdsInvoice = attempt != null && attempt.lightningPaymentHash.equals(paymentHash, ignoreCase = true) &&
-                (attempt.blocksNextSend || attempt.hasPositiveEvidence)
-            holdsInvoice || paymentHash.lowercase() in lightningRepo.onchainPaidInvoiceHashes()
+                ?.takeIf { it.lightningPaymentHash.equals(paymentHash, ignoreCase = true) }
+                ?.takeIf { it.blocksNextSend || it.hasPositiveEvidence }
+            when {
+                attempt != null -> attempt.hasPositiveEvidence
+                paymentHash.lowercase() in lightningRepo.onchainPaidInvoiceHashes() -> false
+                else -> null
+            }
         }.getOrElse {
             Logger.warn("Failed to read on-chain sends for '$paymentHash'", it, context = TAG)
             val cameWithAddress = _sendUiState.value.lightningPaymentHash.equals(paymentHash, ignoreCase = true)
             if (!refusesUnreadable || !cameWithAddress) return null
-            return AppError(context.getString(R.string.wallet__send_lightning_onchain_unreadable))
-        }
-        return if (isPaidOnchain) AppError(context.getString(R.string.wallet__send_lightning_onchain_sent)) else null
+            return LightningPaymentRefusedError(context.getString(R.string.wallet__send_lightning_onchain_unreadable))
+        } ?: return null
+        return LightningPaymentRefusedError(
+            context.getString(R.string.wallet__send_lightning_onchain_sent),
+            isPaidOnchain = holder,
+        )
+    }
+
+    private fun refusePayment(error: AppError, contactPaymentContext: ContactPaymentContext?) {
+        val isPaid = (error as? LightningPaymentRefusedError)?.isPaidOnchain == true ||
+            (error as? OnchainPaymentRefusedError)?.status == LightningPaymentStatus.SUCCEEDED
+        if (isPaid) clearActiveContactPaymentContext(retryIncomingRequest = false)
+        handlePaymentPreparationFailure(error, contactPaymentContext)
     }
 
     private suspend fun earlyPaymentRefusal(): AppError? {
@@ -6249,7 +6263,7 @@ class AppViewModel @Inject constructor(
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
         earlyPaymentRefusal()?.let {
-            handlePaymentPreparationFailure(it, contactPaymentContext)
+            refusePayment(it, contactPaymentContext)
             return
         }
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
@@ -6754,7 +6768,7 @@ class AppViewModel @Inject constructor(
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
-            handlePaymentPreparationFailure(it, contactPaymentContext)
+            refusePayment(it, contactPaymentContext)
             return
         }
         associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
@@ -9253,6 +9267,12 @@ enum class LightningPaymentStatus {
 
 /** Refuses to pay an address on-chain for this wallet's payment of the Lightning invoice the address came with. */
 class OnchainPaymentRefusedError(val status: LightningPaymentStatus, message: String) : AppError(message)
+
+/**
+ * Refuses to pay an invoice over Lightning for an on-chain payment of the address it came with, [isPaidOnchain] once
+ * that payment was accepted.
+ */
+class LightningPaymentRefusedError(message: String, val isPaidOnchain: Boolean = false) : AppError(message)
 
 sealed interface SendFundingSource {
     data object Spending : SendFundingSource

@@ -30,7 +30,8 @@ data class PaykitPaymentStateBackup(
     data class OnchainPaidInvoiceBackup(val paymentHash: String, val expiresAt: String) {
         constructor(invoice: OnchainPaidInvoice) : this(invoice.paymentHash, invoice.expiresAt.toString())
 
-        fun restored() = OnchainPaidInvoice(paymentHash, expiresAt.toULong())
+        /** The entry, or null when its expiry is malformed. */
+        fun restored(): OnchainPaidInvoice? = expiresAt.toULongOrNull()?.let { OnchainPaidInvoice(paymentHash, it) }
     }
 
     @Serializable

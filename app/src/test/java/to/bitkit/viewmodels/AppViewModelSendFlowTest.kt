@@ -16794,6 +16794,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
     }
 
+    @Test
+    fun `a request already paid on-chain completes its presentation while an open one stays deferred`() = test {
+        val request = paymentRequest()
+        val paymentHash = "010203"
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(context.getString(R.string.wallet__send_lightning_onchain_sent)).thenReturn("On-chain sent")
+        val cases = listOf(
+            invoiceAddressAttempt(paymentHash).copy(evidence = OnchainSendEvidence.Unknown) to never(),
+            invoiceAddressAttempt(paymentHash).copy(evidence = OnchainSendEvidence.Accepted, txid = "ab".repeat(32)) to
+                times(1),
+        )
+
+        for ((attempt, presented) in cases) {
+            whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(attempt)
+            clearInvocations(paykitPaymentRequestRepo)
+            setActiveContactPaymentContext(testPublicKey, privateContext, request)
+            sut.showSheet(Sheet.Send(SendRoute.Confirm))
+            runCurrent()
+            setSendState(
+                SendUiState(
+                    address = REGTEST_ADDRESS,
+                    amount = request.amount.atomic,
+                    payMethod = SendMethod.LIGHTNING,
+                    isPaymentRequest = true,
+                    decodedInvoice = lightningInvoice("lnbcrt1requestpaid", request.amount.atomic),
+                    lightningPaymentHash = paymentHash,
+                ),
+            )
+
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            verify(paykitPaymentRequestRepo, presented).markPresented(request)
+            verify(paykitPaymentRequestRepo, never()).claimForPayment(any())
+        }
+    }
+
     // The attempt is replaced by a later send, or lost in a restore, while its invoice can still be paid
     @Test
     fun `lightning is refused for an invoice whose address an earlier on-chain send paid`() = test {
