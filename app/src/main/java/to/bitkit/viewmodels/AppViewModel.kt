@@ -4161,7 +4161,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onAmountChange(amount: ULong) {
-        if (_sendUiState.value.paykitUsesUsdt || _sendUiState.value.fixedLightningAmount != null) return
+        if (_sendUiState.value.paykitUsesUsdt || !_sendUiState.value.isAmountEditable) return
         _sendUiState.update {
             it.copy(
                 amount = amount,
@@ -5266,6 +5266,7 @@ class AppViewModel @Inject constructor(
                 },
                 hardwareWalletId = hardwareWalletId,
                 hardwareAvailableSats = selectedMaxSendOnchain.takeIf { hardwareWalletId != null } ?: 0uL,
+                fixedOnchainAmount = invoice.amountSatoshis.takeIf { it > 0uL && incomingPaymentRequest == null },
             )
         }
         updateCanSwitchWallet()
@@ -5426,7 +5427,7 @@ class AppViewModel @Inject constructor(
         requireCurrentPaymentPreparation(walletGeneration)
 
         Logger.info("Found payable amount in invoice, proceeding to confirm", context = TAG)
-        _sendUiState.update { it.copy(isAmountInputValid = true, canReturnToAmount = true) }
+        _sendUiState.update { it.copy(isAmountInputValid = true) }
         navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm, walletGeneration)
         refreshOnchainSendIfNeeded(walletGeneration)
         return true
@@ -8957,7 +8958,8 @@ data class SendUiState(
     val isInitialSubscriptionPayment: Boolean = false,
     val initialSubscriptionPaymentAutoStartPending: Boolean = false,
     val requiresAmountReview: Boolean = false,
-    val canReturnToAmount: Boolean = false,
+    /** The amount of a scanned on-chain request; the payee set it, so it cannot be edited. */
+    val fixedOnchainAmount: ULong? = null,
     val initialSubscriptionPaymentNeedsConfirmation: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 ) {
@@ -8981,7 +8983,8 @@ data class SendUiState(
         get() = hardwareWalletId == null || (!onchainFeeUi.isLoading && !onchainFeeUi.requiresRefresh)
 
     val isAmountEditable: Boolean
-        get() = !isPaymentRequest && fixedLightningAmount == null
+        get() = !isPaymentRequest && fixedLightningAmount == null &&
+            !(payMethod == SendMethod.ONCHAIN && fixedOnchainAmount != null)
 
     val shouldAutomaticallyPay: Boolean
         get() = isInitialSubscriptionPayment && hardwareWalletId == null &&

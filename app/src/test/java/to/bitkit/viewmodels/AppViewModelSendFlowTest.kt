@@ -9343,7 +9343,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(10_000uL, state.amount)
         assertEquals(SendMethod.ONCHAIN, state.payMethod)
         assertTrue(state.isAmountInputValid)
-        assertTrue(state.canReturnToAmount)
+        assertFalse(state.isAmountEditable)
     }
 
     @Test
@@ -9355,7 +9355,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
-        assertFalse(sut.sendUiState.value.canReturnToAmount)
+        assertTrue(sut.sendUiState.value.isAmountEditable)
     }
 
     @Test
@@ -9367,7 +9367,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
-        assertFalse(sut.sendUiState.value.canReturnToAmount)
+        assertFalse(sut.sendUiState.value.isAmountEditable)
     }
 
     @Test
@@ -9381,7 +9381,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
         assertEquals(10_000uL, sut.sendUiState.value.amount)
-        assertFalse(sut.sendUiState.value.canReturnToAmount)
+        assertFalse(sut.sendUiState.value.isAmountEditable)
+
+        sut.setSendEvent(SendEvent.AmountChange(5_000u))
+        advanceUntilIdle()
+
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
     }
 
     @Test
@@ -9397,7 +9402,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
-        assertTrue(sut.sendUiState.value.canReturnToAmount)
+        assertFalse(sut.sendUiState.value.isAmountEditable)
     }
 
     @Test
@@ -9417,7 +9422,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         verify(hwWalletRepo).estimateFundingMiningFee(eq(HARDWARE_WALLET_ID), eq(REGTEST_ADDRESS), eq(10_000uL), any())
         assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
-        assertTrue(sut.sendUiState.value.canReturnToAmount)
+        assertFalse(sut.sendUiState.value.isAmountEditable)
     }
 
     @Test
@@ -9436,7 +9441,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(SendEffect.NavigateToAmount, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
-        assertFalse(sut.sendUiState.value.canReturnToAmount)
+        assertFalse(sut.sendUiState.value.isAmountEditable)
     }
 
     private fun stubHardwareFunding() {

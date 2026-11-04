@@ -169,6 +169,57 @@ class SendConfirmNavigationTest {
         }
     }
 
+    @Test
+    fun tappingAFixedScannedAmountDoesNotOpenAmount() {
+        val state = mutableStateOf(SendUiState(amount = 10_000u, isAmountInputValid = true, fixedOnchainAmount = 10_000u))
+        val events = mutableListOf<SendEvent>()
+        composeTestRule.setContent {
+            val context = LocalContext.current
+            val settings = viewModel {
+                SettingsViewModel(
+                    context,
+                    settingsStore,
+                    pubkyRepo,
+                    contactPaymentSettingsRepo,
+                    widgetsStore,
+                    widgetsRepo,
+                    usdtPreferences
+                )
+            }
+            AppThemeSurface {
+                CompositionLocalProvider(
+                    LocalSettingsViewModel provides settings,
+                    LocalInspectionMode provides true,
+                ) {
+                    val navController = rememberNavController()
+                    NavHost(navController = navController, startDestination = SendRoute.Confirm) {
+                        composable<SendRoute.Confirm> { entry ->
+                            SendConfirmScreen(
+                                savedStateHandle = entry.savedStateHandle,
+                                uiState = state.value,
+                                isNodeRunning = true,
+                                canAutoStart = false,
+                                canGoBack = false,
+                                onBack = {},
+                                onEvent = { events += it },
+                                onClickAddTag = {},
+                                onClickTag = {},
+                                onNavigateToPin = {},
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        composeTestRule.onNodeWithTag("ReviewAmount").performClick()
+        composeTestRule.runOnIdle { assertEquals(false, SendEvent.BackToAmount in events) }
+
+        composeTestRule.runOnIdle { state.value = state.value.copy(fixedOnchainAmount = null) }
+        composeTestRule.onNodeWithTag("ReviewAmount").performClick()
+        composeTestRule.runOnIdle { assertEquals(true, SendEvent.BackToAmount in events) }
+    }
+
     private fun swipeToConfirm() {
         val width = composeTestRule.onRoot().fetchSemanticsNode().size.width
         composeTestRule.onNodeWithTag("GRAB").performTouchInput {
