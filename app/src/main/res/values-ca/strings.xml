@@ -1177,6 +1177,8 @@
     <string name="hardware__held_sends_clear">Esborrar el registre</string>
     <string name="hardware__held_sends_clear_all">Esborrar per a totes les carteres</string>
     <string name="hardware__held_sends_clear_confirm_text">Si un pagament anterior continua pendent, Bitkit el podria enviar una segona vegada. Això no es pot desfer.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Això esborra tots els registres de pagaments retinguts de totes les carteres de maquinari, inclosos els que Bitkit encara pot llegir. Si un pagament anterior continua pendent, Bitkit el podria enviar una segona vegada. Això no es pot desfer.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Això esborra els registres de pagaments il·legibles d\'aquesta cartera i aquells la cartera dels quals Bitkit no pot llegir, que poden pertànyer a qualsevol cartera de maquinari. Els registres llegibles es mantenen. Si un pagament anterior continua pendent, Bitkit el podria enviar una segona vegada. Això no es pot desfer.</string>
     <string name="hardware__held_sends_clear_confirm_title">Vols esborrar el registre?</string>
     <string name="hardware__held_sends_record">Import: %1$s sats · Adreça: %2$s · Transacció: %3$s · Retingut: %4$s</string>
     <string name="hardware__held_sends_record_unknown">desconegut</string>

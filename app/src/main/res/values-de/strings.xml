@@ -1180,6 +1180,8 @@
     <string name="hardware__held_sends_clear">Aufzeichnung löschen</string>
     <string name="hardware__held_sends_clear_all">Für alle Wallets löschen</string>
     <string name="hardware__held_sends_clear_confirm_text">Steht eine frühere Zahlung noch aus, sendet Bitkit sie möglicherweise ein zweites Mal. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Dadurch werden alle Aufzeichnungen gehaltener Zahlungen aller Hardware-Wallets gelöscht, auch die, die Bitkit noch lesen kann. Steht eine frühere Zahlung noch aus, sendet Bitkit sie möglicherweise ein zweites Mal. Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Dadurch werden die nicht lesbaren Zahlungsaufzeichnungen dieses Wallets gelöscht sowie die, deren Wallet Bitkit nicht lesen kann und die zu jedem Hardware-Wallet gehören können. Lesbare Aufzeichnungen bleiben erhalten. Steht eine frühere Zahlung noch aus, sendet Bitkit sie möglicherweise ein zweites Mal. Dies kann nicht rückgängig gemacht werden.</string>
     <string name="hardware__held_sends_clear_confirm_title">Aufzeichnung löschen?</string>
     <string name="hardware__held_sends_record">Betrag: %1$s sats · Adresse: %2$s · Transaktion: %3$s · Gehalten: %4$s</string>
     <string name="hardware__held_sends_record_unknown">unbekannt</string>

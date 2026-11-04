@@ -1182,6 +1182,8 @@
     <string name="hardware__held_sends_clear">Wyczyść zapis</string>
     <string name="hardware__held_sends_clear_all">Wyczyść dla wszystkich portfeli</string>
     <string name="hardware__held_sends_clear_confirm_text">Jeśli wcześniejsza płatność nadal oczekuje, Bitkit może wysłać ją po raz drugi. Tej operacji nie można cofnąć.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Spowoduje to usunięcie wszystkich zapisów wstrzymanych płatności wszystkich portfeli sprzętowych, także tych, które Bitkit nadal potrafi odczytać. Jeśli wcześniejsza płatność nadal oczekuje, Bitkit może wysłać ją po raz drugi. Tej operacji nie można cofnąć.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Spowoduje to usunięcie nieczytelnych zapisów płatności tego portfela oraz tych, których portfela Bitkit nie potrafi odczytać i które mogą należeć do dowolnego portfela sprzętowego. Czytelne zapisy pozostaną. Jeśli wcześniejsza płatność nadal oczekuje, Bitkit może wysłać ją po raz drugi. Tej operacji nie można cofnąć.</string>
     <string name="hardware__held_sends_clear_confirm_title">Wyczyścić zapis?</string>
     <string name="hardware__held_sends_record">Kwota: %1$s sats · Adres: %2$s · Transakcja: %3$s · Wstrzymana: %4$s</string>
     <string name="hardware__held_sends_record_unknown">nieznane</string>

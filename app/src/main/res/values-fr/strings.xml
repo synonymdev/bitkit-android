@@ -1179,6 +1179,8 @@
     <string name="hardware__held_sends_clear">Effacer l\'enregistrement</string>
     <string name="hardware__held_sends_clear_all">Effacer pour tous les portefeuilles</string>
     <string name="hardware__held_sends_clear_confirm_text">Si un paiement précédent est encore en attente, Bitkit pourrait l\'envoyer une seconde fois. Cette action est irréversible.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Cela supprime tous les enregistrements de paiements retenus de tous les portefeuilles matériels, y compris ceux que Bitkit peut encore lire. Si un paiement précédent est encore en attente, Bitkit pourrait l\'envoyer une seconde fois. Cette action est irréversible.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Cela supprime les enregistrements de paiement illisibles de ce portefeuille et ceux dont Bitkit ne peut pas lire le portefeuille, qui peuvent appartenir à n\'importe quel portefeuille matériel. Les enregistrements lisibles sont conservés. Si un paiement précédent est encore en attente, Bitkit pourrait l\'envoyer une seconde fois. Cette action est irréversible.</string>
     <string name="hardware__held_sends_clear_confirm_title">Effacer l\'enregistrement ?</string>
     <string name="hardware__held_sends_record">Montant : %1$s sats · Adresse : %2$s · Transaction : %3$s · Retenu : %4$s</string>
     <string name="hardware__held_sends_record_unknown">inconnu</string>

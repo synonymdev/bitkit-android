@@ -1158,6 +1158,8 @@
     <string name="hardware__held_sends_clear">Διαγραφή εγγραφής</string>
     <string name="hardware__held_sends_clear_all">Διαγραφή για όλα τα πορτοφόλια</string>
     <string name="hardware__held_sends_clear_confirm_text">Αν μια προηγούμενη πληρωμή εκκρεμεί ακόμη, το Bitkit μπορεί να τη στείλει δεύτερη φορά. Αυτό δεν αναιρείται.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Αυτό διαγράφει όλες τις εγγραφές πληρωμών σε αναμονή όλων των πορτοφολιών υλικού, ακόμη και όσες μπορεί ακόμη να διαβάσει το Bitkit. Αν μια προηγούμενη πληρωμή εκκρεμεί ακόμη, το Bitkit μπορεί να τη στείλει δεύτερη φορά. Αυτό δεν αναιρείται.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Αυτό διαγράφει τις μη αναγνώσιμες εγγραφές πληρωμών αυτού του πορτοφολιού και εκείνες των οποίων το πορτοφόλι δεν μπορεί να διαβάσει το Bitkit, που μπορεί να ανήκουν σε οποιοδήποτε πορτοφόλι υλικού. Οι αναγνώσιμες εγγραφές παραμένουν. Αν μια προηγούμενη πληρωμή εκκρεμεί ακόμη, το Bitkit μπορεί να τη στείλει δεύτερη φορά. Αυτό δεν αναιρείται.</string>
     <string name="hardware__held_sends_clear_confirm_title">Διαγραφή της εγγραφής;</string>
     <string name="hardware__held_sends_record">Ποσό: %1$s sats · Διεύθυνση: %2$s · Συναλλαγή: %3$s · Σε αναμονή: %4$s</string>
     <string name="hardware__held_sends_record_unknown">άγνωστο</string>

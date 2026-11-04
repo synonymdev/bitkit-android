@@ -1183,6 +1183,8 @@
     <string name="hardware__held_sends_clear">Smazat záznam</string>
     <string name="hardware__held_sends_clear_all">Smazat pro všechny peněženky</string>
     <string name="hardware__held_sends_clear_confirm_text">Pokud dřívější platba stále čeká, Bitkit ji může odeslat podruhé. Tuto akci nelze vrátit zpět.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Tímto se smažou všechny záznamy držených plateb všech hardwarových peněženek, včetně těch, které Bitkit stále dokáže přečíst. Pokud dřívější platba stále čeká, Bitkit ji může odeslat podruhé. Tuto akci nelze vrátit zpět.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Tímto se smažou nečitelné záznamy plateb této peněženky a ty, jejichž peněženku Bitkit nedokáže přečíst a které mohou patřit kterékoli hardwarové peněžence. Čitelné záznamy zůstanou. Pokud dřívější platba stále čeká, Bitkit ji může odeslat podruhé. Tuto akci nelze vrátit zpět.</string>
     <string name="hardware__held_sends_clear_confirm_title">Smazat záznam?</string>
     <string name="hardware__held_sends_record">Částka: %1$s sats · Adresa: %2$s · Transakce: %3$s · Drženo: %4$s</string>
     <string name="hardware__held_sends_record_unknown">neznámé</string>

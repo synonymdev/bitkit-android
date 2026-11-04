@@ -1152,6 +1152,8 @@
     <string name="hardware__held_sends_clear">مسح السجل</string>
     <string name="hardware__held_sends_clear_all">مسح لجميع المحافظ</string>
     <string name="hardware__held_sends_clear_confirm_text">إذا كانت دفعة سابقة لا تزال معلقة، فقد يرسلها Bitkit مرة ثانية. لا يمكن التراجع عن ذلك.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">يحذف هذا كل سجلات الدفعات المحجوزة لجميع محافظ الأجهزة، بما فيها التي لا يزال Bitkit قادرًا على قراءتها. إذا كانت دفعة سابقة لا تزال معلقة، فقد يرسلها Bitkit مرة ثانية. لا يمكن التراجع عن ذلك.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">يحذف هذا سجلات الدفعات غير المقروءة لهذه المحفظة وتلك التي لا يستطيع Bitkit قراءة محفظتها، والتي قد تخص أي محفظة أجهزة. تبقى السجلات المقروءة. إذا كانت دفعة سابقة لا تزال معلقة، فقد يرسلها Bitkit مرة ثانية. لا يمكن التراجع عن ذلك.</string>
     <string name="hardware__held_sends_clear_confirm_title">مسح السجل؟</string>
     <string name="hardware__held_sends_record">المبلغ: %1$s sats · العنوان: %2$s · المعاملة: %3$s · محجوزة: %4$s</string>
     <string name="hardware__held_sends_record_unknown">غير معروف</string>

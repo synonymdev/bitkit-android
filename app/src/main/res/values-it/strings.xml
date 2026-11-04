@@ -1179,6 +1179,8 @@
     <string name="hardware__held_sends_clear">Cancella registro</string>
     <string name="hardware__held_sends_clear_all">Cancella per tutti i wallet</string>
     <string name="hardware__held_sends_clear_confirm_text">Se un pagamento precedente è ancora in sospeso, Bitkit potrebbe inviarlo una seconda volta. L\'operazione non può essere annullata.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Questo elimina tutti i registri dei pagamenti trattenuti di tutti gli hardware wallet, compresi quelli che Bitkit riesce ancora a leggere. Se un pagamento precedente è ancora in sospeso, Bitkit potrebbe inviarlo una seconda volta. L\'operazione non può essere annullata.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Questo elimina i registri di pagamento illeggibili di questo wallet e quelli di cui Bitkit non riesce a leggere il wallet, che possono appartenere a qualsiasi hardware wallet. I registri leggibili restano. Se un pagamento precedente è ancora in sospeso, Bitkit potrebbe inviarlo una seconda volta. L\'operazione non può essere annullata.</string>
     <string name="hardware__held_sends_clear_confirm_title">Cancellare il registro?</string>
     <string name="hardware__held_sends_record">Importo: %1$s sats · Indirizzo: %2$s · Transazione: %3$s · Trattenuto: %4$s</string>
     <string name="hardware__held_sends_record_unknown">sconosciuto</string>

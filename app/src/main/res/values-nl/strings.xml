@@ -1176,6 +1176,8 @@
     <string name="hardware__held_sends_clear">Gegevens wissen</string>
     <string name="hardware__held_sends_clear_all">Wissen voor alle wallets</string>
     <string name="hardware__held_sends_clear_confirm_text">Als een eerdere betaling nog in behandeling is, kan Bitkit haar een tweede keer verzenden. Dit kan niet ongedaan worden gemaakt.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Hiermee worden alle gegevens van vastgehouden betalingen van alle hardwarewallets verwijderd, ook die Bitkit nog kan lezen. Als een eerdere betaling nog in behandeling is, kan Bitkit haar een tweede keer verzenden. Dit kan niet ongedaan worden gemaakt.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Hiermee worden de onleesbare betalingsgegevens van deze wallet verwijderd, en die waarvan Bitkit de wallet niet kan lezen en die bij elke hardwarewallet kunnen horen. Leesbare gegevens blijven bewaard. Als een eerdere betaling nog in behandeling is, kan Bitkit haar een tweede keer verzenden. Dit kan niet ongedaan worden gemaakt.</string>
     <string name="hardware__held_sends_clear_confirm_title">Gegevens wissen?</string>
     <string name="hardware__held_sends_record">Bedrag: %1$s sats · Adres: %2$s · Transactie: %3$s · Vastgehouden: %4$s</string>
     <string name="hardware__held_sends_record_unknown">onbekend</string>

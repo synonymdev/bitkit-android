@@ -1200,6 +1200,8 @@
     <string name="hardware__held_sends_clear">Очистить запись</string>
     <string name="hardware__held_sends_clear_all">Очистить для всех кошельков</string>
     <string name="hardware__held_sends_clear_confirm_text">Если предыдущий платёж ещё ожидает подтверждения, Bitkit может отправить его второй раз. Это действие нельзя отменить.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Будут удалены все записи об удерживаемых платежах всех аппаратных кошельков, включая те, которые Bitkit ещё может прочитать. Если предыдущий платёж ещё ожидает подтверждения, Bitkit может отправить его второй раз. Это действие нельзя отменить.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Будут удалены нечитаемые записи о платежах этого кошелька и те, чей кошелёк Bitkit не может прочитать и которые могут относиться к любому аппаратному кошельку. Читаемые записи сохранятся. Если предыдущий платёж ещё ожидает подтверждения, Bitkit может отправить его второй раз. Это действие нельзя отменить.</string>
     <string name="hardware__held_sends_clear_confirm_title">Очистить запись?</string>
     <string name="hardware__held_sends_record">Сумма: %1$s sats · Адрес: %2$s · Транзакция: %3$s · Удержан: %4$s</string>
     <string name="hardware__held_sends_record_unknown">неизвестно</string>

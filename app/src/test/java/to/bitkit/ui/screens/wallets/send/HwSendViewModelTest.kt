@@ -735,6 +735,46 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a broadcast again the wallet saw meanwhile is completed as sent instead of dispatched`() = test {
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(context.getString(any())).thenReturn("message")
+        whenever(context.getString(R.string.hardware__send_broadcast_accepted)).thenReturn("accepted")
+        whenever(context.getString(R.string.hardware__send_not_sent_title)).thenReturn("not sent")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)),
+            Result.success(fixture.broadcast),
+        )
+        val events = mutableListOf<HeldHwSendEvent>()
+        backgroundScope.launch { sut.heldSendEvents.collect { events += it } }
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        // The wallet sees the transaction, and its stored hold is released, while the broadcast again writes its hold
+        val seen = MutableStateFlow<ImmutableList<Activity>>(persistentListOf(sentActivity()))
+        whenever(hwWalletRepo.holdSend(any())).doSuspendableAnswer {
+            whenever(hwWalletRepo.activities).thenReturn(seen)
+            Result.success(Unit)
+        }
+        sut.retryUnresolvedSend(SIGNED_TXID)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+        assertEquals(
+            listOf<HeldHwSendEvent>(HeldHwSendEvent.Completed(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS))),
+            events,
+        )
+        assertTrue(toasts.none { it.title == "accepted" || it.title == "not sent" })
+        inOrder(hwWalletRepo) {
+            verify(hwWalletRepo, times(2)).holdSend(heldSend(fixture.signedTx))
+            verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
+        }
+        assertTrue(sut.uiState.value.retryingSendTxIds.isEmpty())
+    }
+
+    @Test
     fun `a broadcast that never answers stops blocking broadcast again after two minutes`() = test {
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
@@ -1093,8 +1133,12 @@ class HwSendViewModelTest : BaseUnitTest() {
             sut.clearUnreadableHeldSends()
             advanceUntilIdle()
             assertTrue(sut.uiState.value.unreadableHeldSends?.isConfirming == true)
+            // A fast double tap does not answer the second confirmation too
+            sut.clearUnreadableHeldSends()
+            advanceUntilIdle()
             verify(hwWalletRepo, never()).clearUnreadableHeldSends(any())
 
+            now += 1.seconds
             sut.clearUnreadableHeldSends()
             advanceUntilIdle()
 
@@ -1105,6 +1149,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     @Test
     fun `an unreadable hold file is offered to be cleared for all wallets`() = test {
         whenever(context.getString(any())).thenReturn("text")
+        whenever(context.getString(R.string.hardware__held_sends_clear_confirm_text_file)).thenReturn("every record")
         stubSuccessfulPayment()
         whenever(hwWalletRepo.heldSendFor(WALLET_ID, ADDRESS, AMOUNT_SATS))
             .thenReturn(Result.failure(HwHeldSendsUnreadableError(walletId = null)))
@@ -1113,6 +1158,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         val prompt = assertNotNull(sut.uiState.value.unreadableHeldSends)
+        assertEquals("every record", prompt.confirmMessage)
         assertTrue(prompt.clearsAllWallets)
         assertEquals(WALLET_ID, prompt.walletId)
         verify(hwWalletRepo, never()).signFunding(any(), any())

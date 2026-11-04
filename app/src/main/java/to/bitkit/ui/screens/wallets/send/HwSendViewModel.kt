@@ -94,6 +94,9 @@ class HwSendViewModel @Inject constructor(
         val COMPOSE_TIMEOUT = 45.seconds
         val SIGN_TIMEOUT = 120.seconds
 
+        /** How long the second confirmation of a clear of unreadable held sends ignores taps. */
+        val CLEAR_CONFIRM_DELAY = 1.seconds
+
         /** How long the sheet waits for a broadcast before showing it as pending; the broadcast itself runs on. */
         val BROADCAST_WAIT = 60.seconds
     }
@@ -114,6 +117,7 @@ class HwSendViewModel @Inject constructor(
 
     private var pendingBroadcast: PendingHwSendBroadcast? = null
     private val unresolvedSends = mutableMapOf<String, UnresolvedHwSend>()
+    private var clearConfirmableAt: Instant? = null
     private var signingWalletId: String? = null
     private var signingJob: Job? = null
     private var signingAttempt = 0
@@ -528,18 +532,17 @@ class HwSendViewModel @Inject constructor(
 
     private suspend fun releaseIfNeverConfirming(unresolved: UnresolvedHwSend, error: Throwable): Boolean {
         if (!isProvenNeverConfirming(unresolved.payment, error)) return false
-        if (unresolvedSends[unresolved.send.txId] !== unresolved) return true
-        // A transaction the wallet has seen went out, whatever a node says about it now
-        if (isSeenByWallet(unresolved.send.walletId, unresolved.send.txId)) {
-            completeUnresolvedSend(unresolved)
-            return true
-        }
         releaseUnresolvedSend(unresolved, R.string.hardware__send_broadcast_rejected_text)
         return true
     }
 
     private suspend fun releaseUnresolvedSend(unresolved: UnresolvedHwSend, @StringRes description: Int) {
         if (unresolvedSends[unresolved.send.txId] !== unresolved) return
+        // A transaction the wallet has seen went out, whatever this broadcast's answer says
+        if (isSeenByWallet(unresolved.send.walletId, unresolved.send.txId)) {
+            completeUnresolvedSend(unresolved)
+            return
+        }
         Logger.warn("Released held hardware send '${unresolved.send.txId}' that was never sent", context = TAG)
         forgetUnresolvedSend(unresolved)
         releaseHeldSend(unresolved.send.txId)
@@ -646,6 +649,12 @@ class HwSendViewModel @Inject constructor(
                     isNotSent = true
                     Logger.warn("Skipped broadcast again of '${send.txId}' without its hold", it, context = TAG)
                     toastBroadcastFailed()
+                    return@launch
+                }
+                // The wallet may have seen it, and its hold been released, since this was asked for: it went out
+                if (isSeenByWallet(send.walletId, send.txId)) {
+                    isNotSent = true
+                    completeUnresolvedSend(unresolved)
                     return@launch
                 }
                 val outcome = hwWalletRepo.broadcastFunding(unresolved.payment.signedTx)
@@ -755,10 +764,13 @@ class HwSendViewModel @Inject constructor(
     fun clearUnreadableHeldSends() {
         val prompt = _uiState.value.unreadableHeldSends ?: return
         if (!prompt.isConfirming) {
-            // A clear that may send a payment twice is asked a second time
+            // A clear that may send a payment twice is asked a second time, which a fast double tap cannot answer
+            val confirmableAt = clock.now() + CLEAR_CONFIRM_DELAY
             _uiState.update { it.copy(unreadableHeldSends = prompt.copy(isConfirming = true)) }
+            clearConfirmableAt = confirmableAt
             return
         }
+        if (clearConfirmableAt?.let { clock.now() < it } == true) return
         _uiState.update { it.copy(unreadableHeldSends = null) }
         viewModelScope.launch {
             hwWalletRepo.clearUnreadableHeldSends(prompt.walletId).onFailure {
@@ -792,6 +804,13 @@ class HwSendViewModel @Inject constructor(
             walletId = this.walletId ?: walletId,
             message = (listOf(explanation) + details).joinToString("\n\n"),
             clearsAllWallets = clearsAllWallets,
+            confirmMessage = context.getString(
+                when {
+                    this.walletId == null -> R.string.hardware__held_sends_clear_confirm_text_file
+                    clearsAllWallets -> R.string.hardware__held_sends_clear_confirm_text_unknown_wallet
+                    else -> R.string.hardware__held_sends_clear_confirm_text
+                },
+            ),
         )
     }
 
@@ -1076,6 +1095,8 @@ data class UnreadableHeldSendsPrompt(
     val walletId: String,
     val message: String,
     val clearsAllWallets: Boolean,
+    /** What the second confirmation says gets cleared. */
+    val confirmMessage: String,
     val isConfirming: Boolean = false,
 )
 

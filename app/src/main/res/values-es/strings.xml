@@ -1173,6 +1173,8 @@
     <string name="hardware__held_sends_clear">Borrar registro</string>
     <string name="hardware__held_sends_clear_all">Borrar para todos los monederos</string>
     <string name="hardware__held_sends_clear_confirm_text">Si un pago anterior sigue pendiente, Bitkit podría enviarlo por segunda vez. Esto no se puede deshacer.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Esto elimina todos los registros de pagos retenidos de todos los monederos de hardware, incluidos los que Bitkit aún puede leer. Si un pago anterior sigue pendiente, Bitkit podría enviarlo por segunda vez. Esto no se puede deshacer.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Esto elimina los registros de pagos ilegibles de este monedero y aquellos cuyo monedero Bitkit no puede leer, que pueden pertenecer a cualquier monedero de hardware. Los registros legibles se conservan. Si un pago anterior sigue pendiente, Bitkit podría enviarlo por segunda vez. Esto no se puede deshacer.</string>
     <string name="hardware__held_sends_clear_confirm_title">¿Borrar el registro?</string>
     <string name="hardware__held_sends_record">Importe: %1$s sats · Dirección: %2$s · Transacción: %3$s · Retenido: %4$s</string>
     <string name="hardware__held_sends_record_unknown">desconocido</string>

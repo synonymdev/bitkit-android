@@ -143,11 +143,7 @@ fun HwSendSignScreen(
                     R.string.hardware__held_sends_unreadable_title
                 },
             ),
-            text = if (prompt.isConfirming) {
-                stringResource(R.string.hardware__held_sends_clear_confirm_text)
-            } else {
-                prompt.message
-            },
+            text = if (prompt.isConfirming) prompt.confirmMessage else prompt.message,
             confirmText = clearText,
             confirmTextColor = Colors.Red,
             onConfirm = viewModel::clearUnreadableHeldSends,

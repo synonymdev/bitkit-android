@@ -1150,6 +1150,8 @@
     <string name="hardware__held_sends_clear">Limpar registo</string>
     <string name="hardware__held_sends_clear_all">Limpar para todas as carteiras</string>
     <string name="hardware__held_sends_clear_confirm_text">Se um pagamento anterior ainda estiver pendente, a Bitkit poderá enviá-lo uma segunda vez. Isto não pode ser anulado.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">Isto apaga todos os registos de pagamentos retidos de todas as carteiras de hardware, incluindo os que a Bitkit ainda consegue ler. Se um pagamento anterior ainda estiver pendente, a Bitkit poderá enviá-lo uma segunda vez. Isto não pode ser anulado.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">Isto apaga os registos de pagamento ilegíveis desta carteira e aqueles cuja carteira a Bitkit não consegue ler, que podem pertencer a qualquer carteira de hardware. Os registos legíveis mantêm-se. Se um pagamento anterior ainda estiver pendente, a Bitkit poderá enviá-lo uma segunda vez. Isto não pode ser anulado.</string>
     <string name="hardware__held_sends_clear_confirm_title">Limpar o registo?</string>
     <string name="hardware__held_sends_record">Montante: %1$s sats · Endereço: %2$s · Transação: %3$s · Retido: %4$s</string>
     <string name="hardware__held_sends_record_unknown">desconhecido</string>

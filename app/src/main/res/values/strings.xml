@@ -191,6 +191,8 @@
     <string name="hardware__held_sends_clear">Clear record</string>
     <string name="hardware__held_sends_clear_all">Clear for all wallets</string>
     <string name="hardware__held_sends_clear_confirm_text">If an earlier payment is still pending, Bitkit may send it a second time. This cannot be undone.</string>
+    <string name="hardware__held_sends_clear_confirm_text_file">This deletes every held payment record of all hardware wallets, including the ones Bitkit can still read. If an earlier payment is still pending, Bitkit may send it a second time. This cannot be undone.</string>
+    <string name="hardware__held_sends_clear_confirm_text_unknown_wallet">This deletes the unreadable payment records of this wallet and those whose wallet Bitkit cannot read, which may belong to any hardware wallet. Readable records stay. If an earlier payment is still pending, Bitkit may send it a second time. This cannot be undone.</string>
     <string name="hardware__held_sends_clear_confirm_title">Clear the record?</string>
     <string name="hardware__held_sends_record">Amount: %1$s sats · Address: %2$s · Transaction: %3$s · Held: %4$s</string>
     <string name="hardware__held_sends_record_unknown">unknown</string>
