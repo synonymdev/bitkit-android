@@ -228,7 +228,9 @@ class OnchainSendCoordinator(
                 if (inputs.isNullOrEmpty() || attempt.candidateTxids.isEmpty()) throw OnchainSendBlockedError(attempt)
                 require(OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte))
                 val rateFloor = attempt.highestSpendFeeRate
-                if (feeRateSatsPerVByte <= rateFloor) throw OnchainSendCancelUnderbidsError(rateFloor)
+                if (feeRateSatsPerVByte <= rateFloor) {
+                    throw OnchainSendCancelUnderbidsError(rateFloor, attempt.highestSpendFee)
+                }
                 val prepared = prepareCancellation(attempt, feeRateSatsPerVByte)
                 val receipt = prepared.receipt.copy(feeRateSatsPerVByte = feeRateSatsPerVByte)
                 require(receipt.inputs.size == inputs.size && receipt.inputs.toSet() == inputs.toSet())
@@ -241,11 +243,11 @@ class OnchainSendCoordinator(
                     val floor = replacedFee.safe() + divideRoundingUp(fee, feeRateSatsPerVByte).safe()
                     if (fee < floor) {
                         val payingRate = highestFeeRateNotAbove(floor.safe() - 1uL.safe(), fee, feeRateSatsPerVByte)
-                        throw OnchainSendCancelUnderbidsError(maxOf(payingRate, rateFloor))
+                        throw OnchainSendCancelUnderbidsError(maxOf(payingRate, rateFloor), floor.safe() - 1uL.safe())
                     }
                 }
                 approvePrepared(receipt)
-                store.broadcastCancellation(attempt.attemptId, attempt.walletIndex, receipt) { prepared.broadcast() }
+                store.broadcastCancellation(attempt.attemptId, attempt.walletIndex, receipt) { prepared.broadcast(it) }
             }
         }
     }
@@ -272,7 +274,9 @@ class OnchainSendCoordinator(
                     ?: throw OnchainSendBlockedError(attempt)
                 require(OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte))
                 val rateFloor = attempt.highestSpendFeeRate
-                if (feeRateSatsPerVByte <= rateFloor) throw OnchainSendCancelUnderbidsError(rateFloor)
+                if (feeRateSatsPerVByte <= rateFloor) {
+                    throw OnchainSendCancelUnderbidsError(rateFloor, attempt.highestSpendFee)
+                }
                 approve()
                 store.bumpCancellation(attempt.attemptId, attempt.walletIndex, feeRateSatsPerVByte) {
                     bump(pending.txid, feeRateSatsPerVByte)

@@ -942,14 +942,15 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
     fun `retry is refused beside a release or Cancel payment that may be in a mempool`() = test {
         val f = Fixture()
         val dispatched = f.dispatchedUnknown()
-        val coordinator = OnchainSendCoordinator(f.store, object : OnchainPreparedSender {
+        val sender = object : OnchainPreparedSender {
             override suspend fun prepareInitial(attempt: OnchainSendAttempt): PreparedOnchainSend = error("unused")
             override suspend fun prepareRecovery(
                 attempt: OnchainSendAttempt,
                 feeRateSatsPerVByte: ULong,
                 paymentDeadlineAt: Instant?,
             ): PreparedOnchainSend = error("a payment beside a cancellation must not be prepared")
-        }, testDispatcher)
+        }
+        val coordinator = OnchainSendCoordinator(f.store, sender, testDispatcher)
         for (sent in listOf(
             dispatched.copy(releaseApproved = true, releaseTxid = "77".repeat(32)),
             dispatched.copy(cancellationTxid = cancelTxid),

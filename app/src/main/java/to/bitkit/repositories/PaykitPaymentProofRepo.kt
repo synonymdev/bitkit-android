@@ -559,29 +559,64 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     /**
-     * Checks the proof of an unresolved Shop payment that is about to be sent again without its request: exactly one
-     * started proof of this attempt, which no submission or verified acceptance has used yet.
+     * Authorizes Retry without checking, which re-sends the original payment once its request or quote may have
+     * expired: only expiry and the payment deadline are waived. The original payer must be signed in, before and after
+     * the request's record is read, and exactly one started proof of this attempt must exist that no submission or
+     * verified acceptance has used. A request its payee canceled or rejected, or one already paid for this payment or
+     * billing period, is never paid again, and a subscription period must be one of its started periods.
      */
-    suspend fun ensureOnchainResendAllowed(attempt: OnchainSendAttempt): Result<Unit> = withContext(ioDispatcher) {
-        runSuspendCatching {
-            val current = lightningRepo.currentOnchainSendAttempt()
-            operationMutex.withLock {
-                val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
-                if (current != attempt || !attempt.isUnresolved || attempt.candidateTxids.isEmpty()) {
-                    throw PaykitPaymentRequestError.OperationInProgress
-                }
-                if (attempt.walletId != WalletScope.default || attempt.payerIdentity == null ||
-                    !PubkyPublicKeyFormat.matches(identity, attempt.payerIdentity)
+    suspend fun authorizeUncheckedOnchainRecovery(attempt: OnchainSendAttempt): Result<Unit> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val proof = resendProof(attempt)
+                val record = payerRecord(attempt) ?: throw PaykitPaymentRequestError.RequestUnavailable
+                if (record.state == PaymentRequestLifecycleState.PROOF_SUBMITTED ||
+                    record.paymentProofs.any { it.billingPeriod.matches(proof.billingPeriod) }
                 ) {
-                    throw PaykitPaymentRequestError.OperationInProgress
+                    throw OnchainOriginalPaidError()
                 }
-                val proof = loadProofs().singleOrNull {
-                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.matchesOriginalShopAttempt(attempt)
-                } ?: throw PaykitPaymentRequestError.RequestUnavailable
-                if (proof.proofData != null || proof.onchainAcceptanceVerified) {
-                    throw PaykitPaymentRequestError.OperationInProgress
+                if (record.state == PaymentRequestLifecycleState.CANCELED ||
+                    record.state == PaymentRequestLifecycleState.REJECTED
+                ) {
+                    throw PaykitPaymentRequestError.RequestUnavailable
                 }
+                val now = Clock.System.now()
+                val period = proof.billingPeriod
+                if (period == null) {
+                    runCatching { record.toPaykitPaymentRequestHistory(now) }.getOrNull()
+                        ?: throw PaykitPaymentRequestError.RequestUnavailable
+                } else {
+                    // A period of an active subscription that has started, whatever its own deadline
+                    val subscription = record.toPaykitSubscription()?.takeIf {
+                        it.isPayer && it.recurrence.unit.isSupported && it.recurrence.canMaterializePeriods
+                    } ?: throw PaykitPaymentRequestError.RequestUnavailable
+                    val isStartedPeriod = period.startsAt <= now &&
+                        subscription.requestsThrough(now, period.startsAt).any { it.billingPeriod == period }
+                    if (!isStartedPeriod) throw PaykitPaymentRequestError.RequestUnavailable
+                }
+                resendProof(attempt)
+            }.map {}
+        }
+
+    private suspend fun resendProof(attempt: OnchainSendAttempt): PendingPaykitPaymentProof {
+        val current = lightningRepo.currentOnchainSendAttempt()
+        return operationMutex.withLock {
+            val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
+            if (current != attempt || !attempt.isUnresolved || attempt.candidateTxids.isEmpty()) {
+                throw PaykitPaymentRequestError.OperationInProgress
             }
+            if (attempt.walletId != WalletScope.default || attempt.payerIdentity == null ||
+                !PubkyPublicKeyFormat.matches(identity, attempt.payerIdentity)
+            ) {
+                throw PaykitPaymentRequestError.OperationInProgress
+            }
+            val proof = loadProofs().singleOrNull {
+                PubkyPublicKeyFormat.matches(it.identity, identity) && it.matchesOriginalShopAttempt(attempt)
+            } ?: throw PaykitPaymentRequestError.RequestUnavailable
+            if (proof.proofData != null || proof.onchainAcceptanceVerified) {
+                throw PaykitPaymentRequestError.OperationInProgress
+            }
+            proof
         }
     }
 
@@ -613,8 +648,11 @@ class PaykitPaymentProofRepo @Inject constructor(
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (!onchainRequestHasEnded(attempt)) throw OnchainSendAbandonRefusedError(requestOpen = true)
+            // A Cancel payment, or a release the wallet holds, already spends these coins and may still confirm
             val pendingRelease = attempt.releaseTxid
-            if (pendingRelease != null && wallet.walletKnowsTransaction(pendingRelease)) {
+            if (attempt.cancellationTxid != null ||
+                pendingRelease != null && wallet.walletKnowsTransaction(pendingRelease)
+            ) {
                 throw OnchainSendAbandonPendingError()
             }
             if (!wallet.onchainCandidatesNeverReachedNetwork(attempt)) {

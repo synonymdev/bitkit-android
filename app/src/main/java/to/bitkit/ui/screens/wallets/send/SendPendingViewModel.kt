@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.SyncType
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.TransactionSpeed
@@ -94,6 +96,7 @@ class SendPendingViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 recoveryAttempt = attempt,
+                                cancellationTxid = attempt.cancellationTxid ?: attempt.releaseTxid,
                                 hasUnknownCancellation = attempt.hasSentCancellation,
                                 cancellationFeeRate = listOfNotNull(
                                     attempt.releaseFeeRateSatsPerVByte,
@@ -143,7 +146,13 @@ class SendPendingViewModel @Inject constructor(
     }
 
     private fun observeCancellation(original: OnchainSendAttempt) {
-        viewModelScope.launch { showKnownCancellation(original) }
+        viewModelScope.launch { showKnownCancellation(original, afterSync = true) }
+        viewModelScope.launch {
+            // Each wallet sync shows whether the wallet holds the cancellation, or never saw one that was sent
+            lightningRepo.nodeEvents
+                .filter { it is Event.SyncCompleted && it.syncType == SyncType.ONCHAIN_WALLET }
+                .collect { showKnownCancellation(original, afterSync = true) }
+        }
         viewModelScope.launch {
             lightningRepo.onchainSendAttemptUpdates.collect {
                 runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.onSuccess { current ->
@@ -157,14 +166,23 @@ class SendPendingViewModel @Inject constructor(
         }
     }
 
-    private suspend fun showKnownCancellation(original: OnchainSendAttempt) {
+    private suspend fun showKnownCancellation(original: OnchainSendAttempt, afterSync: Boolean = false) {
         lightningRepo.findOnchainSendCancellation(original).onSuccess { spend ->
-            if (spend != null) {
-                _uiState.update {
+            _uiState.update {
+                if (spend != null) {
                     it.copy(
                         cancellationTxid = spend.txid,
                         isCancellationFinal = spend.isFinal,
+                        isCancellationHeld = !spend.isFinal,
+                        isCancellationUnheld = false,
                         cancellationConfirmations = spend.confirmations,
+                    )
+                } else {
+                    // A server refusal other than non-final reads as unknown, so a sent cancellation the synced
+                    // wallet still lacks may never have reached the network
+                    it.copy(
+                        isCancellationHeld = false,
+                        isCancellationUnheld = it.isCancellationUnheld || (afterSync && it.cancellationTxid != null),
                     )
                 }
             }
@@ -206,6 +224,7 @@ class SendPendingViewModel @Inject constructor(
                 invalidFeeRate = false,
                 cancellationFailed = false,
                 speedUpFailed = false,
+                cancelFeeTooLowSats = null,
                 isOriginalPaid = false,
                 isOriginalStatusUnknown = false,
                 abandonError = null,
@@ -265,6 +284,7 @@ class SendPendingViewModel @Inject constructor(
                 invalidFeeRate = false,
                 cancellationFailed = false,
                 speedUpFailed = false,
+                cancelFeeTooLowSats = null,
                 isOriginalPaid = false,
                 isOriginalStatusUnknown = false,
                 abandonError = null,
@@ -278,22 +298,29 @@ class SendPendingViewModel @Inject constructor(
                 val dispatchedFeeRate = outcome?.let { feeRateSatsPerVByte }
                 // Only a higher rate outbids what it replaces, such as a release that added other coins.
                 val underbidFeeRate = (result.exceptionOrNull() as? OnchainSendCancelUnderbidsError)?.feeRate
-                // A cancellation the wallet now knows, such as the release, holds the original's coins, so none
-                // builds over them until it confirms or drops out.
-                if (outcome !is OnchainSendOutcome.Accepted) showKnownCancellation(original)
-                // A refused or unknown cancellation leaves the guard unchanged, and another fee rate may still work.
+                val underbid = result.exceptionOrNull() as? OnchainSendCancelUnderbidsError
+                // An accepted or unknown cancellation may be in a mempool, so it shows as sent and holds the retries
+                // back; a refused one leaves the guard unchanged, and another fee rate may still work.
                 _uiState.update {
                     val feeRate = listOfNotNull(it.cancellationFeeRate, dispatchedFeeRate, underbidFeeRate).maxOrNull()
-                    if (outcome is OnchainSendOutcome.Accepted) {
-                        it.copy(cancellationTxid = outcome.txid, cancellationFeeRate = feeRate)
-                    } else {
-                        it.copy(
-                            cancellationFailed = true,
+                    when (outcome) {
+                        is OnchainSendOutcome.Accepted, is OnchainSendOutcome.Unknown -> it.copy(
+                            cancellationTxid = outcome.txid,
                             cancellationFeeRate = feeRate,
-                            hasUnknownCancellation = it.hasUnknownCancellation || outcome is OnchainSendOutcome.Unknown,
+                            isCancellationUnheld = false,
+                            hasUnknownCancellation = it.hasUnknownCancellation ||
+                                outcome is OnchainSendOutcome.Unknown,
+                        )
+                        else -> it.copy(
+                            cancellationFailed = underbid == null,
+                            cancelFeeTooLowSats = underbid?.feeSats,
+                            cancellationFeeRate = feeRate,
                         )
                     }
                 }
+                // A cancellation the wallet now holds, such as the release, keeps the original's coins, so it is
+                // sped up rather than built over again.
+                showKnownCancellation(original)
             } finally {
                 _uiState.update { it.copy(isRecovering = false) }
             }
@@ -317,6 +344,7 @@ class SendPendingViewModel @Inject constructor(
                 invalidFeeRate = false,
                 cancellationFailed = false,
                 speedUpFailed = false,
+                cancelFeeTooLowSats = null,
                 isOriginalPaid = false,
                 isOriginalStatusUnknown = false,
                 abandonError = null,
@@ -325,15 +353,19 @@ class SendPendingViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val result = runSuspendCatching { speedUp(original, feeRateSatsPerVByte).getOrThrow() }
-                val underbidFeeRate = (result.exceptionOrNull() as? OnchainSendCancelUnderbidsError)?.feeRate
+                val underbid = result.exceptionOrNull() as? OnchainSendCancelUnderbidsError
                 _uiState.update {
                     val txid = result.getOrNull()
                     val sentFeeRate = feeRateSatsPerVByte.takeIf { txid != null }
-                    val feeRate = listOfNotNull(it.cancellationFeeRate, sentFeeRate, underbidFeeRate).maxOrNull()
+                    val feeRate = listOfNotNull(it.cancellationFeeRate, sentFeeRate, underbid?.feeRate).maxOrNull()
                     if (txid != null) {
                         it.copy(cancellationTxid = txid, cancellationFeeRate = feeRate, cancellationConfirmations = 0u)
                     } else {
-                        it.copy(speedUpFailed = true, cancellationFeeRate = feeRate)
+                        it.copy(
+                            speedUpFailed = underbid == null,
+                            cancelFeeTooLowSats = underbid?.feeSats,
+                            cancellationFeeRate = feeRate,
+                        )
                     }
                 }
                 if (result.isFailure) showKnownCancellation(original)
@@ -535,6 +567,9 @@ data class SendPendingUiState(
     val cancellationTxid: String? = null,
     val cancellationFeeRate: ULong? = null,
     val isCancellationFinal: Boolean = false,
+    val isCancellationHeld: Boolean = false,
+    val isCancellationUnheld: Boolean = false,
+    val cancelFeeTooLowSats: ULong? = null,
     val cancellationConfirmations: UInt = 0u,
     val normalFeeRate: ULong? = null,
     val speedUpFailed: Boolean = false,
@@ -551,12 +586,9 @@ data class SendPendingUiState(
     val canRetry: Boolean
         get() = recoveryAttempt != null && cancellationTxid == null && !hasUnknownCancellation
 
-    /**
-     * Only a one-time request can be paid late. Blocktank no longer sells channels, so an order is never paid again,
-     * and a subscription period may have been paid unseen by Lightning or an allowance.
-     */
+    /** Only a request can be paid late; Blocktank no longer sells channels, so an order is never paid again. */
     val canRetryWithoutChecking: Boolean
-        get() = canRetry && recoveryAttempt?.requestId?.let { it.billingPeriodStartsAt == null } == true
+        get() = canRetry && recoveryAttempt?.requestId != null
 
     /** An expired payment's release spends the original inputs too, so it is not sent beside another cancellation. */
     val canAbandon: Boolean
@@ -567,11 +599,15 @@ data class SendPendingUiState(
      * of the network; meanwhile it can be sped up instead. One the wallet never saw can still be replaced.
      */
     val canCancel: Boolean
-        get() = recoveryAttempt != null && cancellationTxid == null
+        get() = recoveryAttempt != null && !isCancellationHeld && !isCancellationFinal
+
+    /** Before anything is sent, Pending says the payment can be cancelled. */
+    val showsCancelHint: Boolean
+        get() = canCancel && cancellationTxid == null && !hasUnknownCancellation
 
     /** Speeding up replaces the pending cancellation, and keeps every output in this wallet. */
     val canSpeedUpCancellation: Boolean
-        get() = recoveryAttempt != null && cancellationTxid != null && !isCancellationFinal
+        get() = recoveryAttempt != null && isCancellationHeld && !isCancellationFinal
 
     /** A final cancellation should have released the guard, so one still held needs another sync or attention. */
     val isReleaseStalled: Boolean
@@ -579,7 +615,7 @@ data class SendPendingUiState(
 
     /** A known cancellation holds the original inputs until it confirms or drops out, so a new one fails meanwhile. */
     val isEarlierCancellationPending: Boolean
-        get() = cancellationFailed && cancellationTxid != null && !isCancellationFinal
+        get() = cancellationFailed && isCancellationHeld && !isCancellationFinal
 
     fun suggestedFeeRate(action: RecoveryAction): ULong? {
         val original = recoveryAttempt ?: return null

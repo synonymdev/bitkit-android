@@ -183,9 +183,11 @@ fun SendPendingScreen(
             canRetryWithoutChecking = uiState.canRetryWithoutChecking,
             canCancel = uiState.canCancel,
             canSpeedUpCancellation = uiState.canSpeedUpCancellation,
+            showsCancelHint = uiState.showsCancelHint,
             cancellationTxid = uiState.cancellationTxid,
             cancellationConfirmations = uiState.cancellationConfirmations,
             isReleaseStalled = uiState.isReleaseStalled,
+            isCancellationUnheld = uiState.isCancellationUnheld,
             isRecovering = uiState.isRecovering,
             recoveryError = uiState.abandonErrorMessage() ?: uiState.recoveryErrorMessage(),
             onRetry = { onRecover(RecoveryAction.Retry) },
@@ -250,11 +252,13 @@ private fun SendPendingUiState.abandonErrorMessage(): String? = abandonError?.le
 
 @Composable
 private fun SendPendingUiState.recoveryErrorMessage(): String? {
+    cancelFeeTooLowSats?.let {
+        if (!invalidFeeRate) return stringResource(R.string.wallet__send_pending__cancel_fee_too_low, it.toString())
+    }
     val message = when {
         invalidFeeRate -> R.string.wallet__send_pending__retry_invalid_fee
         isEarlierCancellationPending -> R.string.wallet__send_pending__cancel_pending_error
-        speedUpFailed -> R.string.wallet__send_pending__cancel_speed_up_error
-        cancellationFailed -> R.string.wallet__send_pending__cancel_error
+        speedUpFailed || cancellationFailed -> R.string.wallet__send_pending__cancel_error
         isOriginalPaid -> R.string.wallet__send_pending__resend_paid
         isOriginalStatusUnknown -> R.string.wallet__send_pending__resend_unchecked
         recoveryError != null -> R.string.wallet__send_pending__retry_error
@@ -381,7 +385,9 @@ private fun RecoveryAuthorization(
     }
     feeAction?.let { action ->
         uiState.recoveryAttempt?.let { original ->
-            RecoveryFeeDialog(original, action, feeInput, { feeInput = it }, { feeAction = null }) { rate ->
+            val currentRate = maxOf(uiState.cancellationFeeRate ?: 0uL, original.highestSpendFeeRate)
+            val onFeeChange: (String) -> Unit = { feeInput = it }
+            RecoveryFeeDialog(original, action, currentRate, feeInput, onFeeChange, { feeAction = null }) { rate ->
                 feeAction = null
                 if (action == RecoveryAction.SpeedUpCancellation) {
                     return@RecoveryFeeDialog speedUp(rate) {
@@ -416,6 +422,7 @@ private fun RecoveryAuthorization(
 private fun RecoveryFeeDialog(
     original: OnchainSendAttempt,
     action: RecoveryAction,
+    currentCancellationFeeRate: ULong,
     feeInput: String,
     onFeeChange: (String) -> Unit,
     onClose: () -> Unit,
@@ -429,7 +436,7 @@ private fun RecoveryFeeDialog(
                 RecoveryAction.Retry -> R.string.wallet__send_pending__retry_title
                 RecoveryAction.RetryWithoutChecking -> R.string.wallet__send_pending__resend_title
                 RecoveryAction.Cancel -> R.string.wallet__send_pending__cancel_title
-                RecoveryAction.SpeedUpCancellation -> R.string.wallet__send_pending__cancel_speed_up_title
+                RecoveryAction.SpeedUpCancellation -> R.string.wallet__send_pending__cancel_speed_up
             }
         ),
         confirmText = stringResource(R.string.common__continue),
@@ -441,14 +448,15 @@ private fun RecoveryFeeDialog(
     ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
             BodyM(
-                stringResource(
-                    when (action) {
-                        RecoveryAction.Cancel -> R.string.wallet__send_pending__cancel_description
-                        RecoveryAction.SpeedUpCancellation -> R.string.wallet__send_pending__cancel_speed_up_description
-                        RecoveryAction.Retry, RecoveryAction.RetryWithoutChecking ->
-                            R.string.wallet__send_pending__retry_description
-                    }
-                ),
+                when (action) {
+                    RecoveryAction.Cancel -> stringResource(R.string.wallet__send_pending__cancel_description)
+                    RecoveryAction.SpeedUpCancellation -> stringResource(
+                        R.string.wallet__send_pending__cancel_speed_up_note,
+                        currentCancellationFeeRate.toString(),
+                    )
+                    RecoveryAction.Retry, RecoveryAction.RetryWithoutChecking ->
+                        stringResource(R.string.wallet__send_pending__retry_description)
+                },
                 color = Colors.White64,
             )
             VerticalSpacer(16.dp)
@@ -498,9 +506,11 @@ internal fun SendPendingContent(
     canRetryWithoutChecking: Boolean = false,
     canCancel: Boolean = false,
     canSpeedUpCancellation: Boolean = false,
+    showsCancelHint: Boolean = false,
     cancellationTxid: String? = null,
     cancellationConfirmations: UInt = 0u,
     isReleaseStalled: Boolean = false,
+    isCancellationUnheld: Boolean = false,
     isRecovering: Boolean = false,
     recoveryError: String? = null,
     onRetry: () -> Unit = {},
@@ -560,7 +570,7 @@ internal fun SendPendingContent(
                             BodyM(stringResource(R.string.wallet__send_pending__txid, it), color = Colors.White64)
                         }
                     }
-                    if (canRetry) {
+                    if (showsCancelHint) {
                         VerticalSpacer(16.dp)
                         BodyM(stringResource(R.string.wallet__send_pending__cancel_hint), color = Colors.White64)
                     }
@@ -568,9 +578,11 @@ internal fun SendPendingContent(
                         VerticalSpacer(16.dp)
                         if (isReleaseStalled) {
                             BodyM(
-                                stringResource(R.string.wallet__send_pending__cancel_release_stalled),
+                                stringResource(R.string.wallet__send_pending__cancel_final_held),
                                 color = Colors.White64,
                             )
+                        } else if (isCancellationUnheld) {
+                            BodyM(stringResource(R.string.wallet__send_pending__cancel_unheld), color = Colors.White64)
                         } else {
                             BodyM(stringResource(R.string.wallet__send_pending__cancel_pending), color = Colors.White64)
                             BodyM(
@@ -612,7 +624,7 @@ internal fun SendPendingContent(
             }
             if (canSpeedUpCancellation) {
                 SecondaryButton(
-                    text = stringResource(R.string.wallet__send_pending__cancel_speed_up_title),
+                    text = stringResource(R.string.wallet__send_pending__cancel_speed_up),
                     enabled = !isRecovering && !isAbandoning,
                     onClick = onSpeedUpCancellation,
                     modifier = Modifier.fillMaxWidth(),
@@ -714,6 +726,7 @@ private fun PreviewOnchainRecovery() {
                 canRetry = true,
                 canRetryWithoutChecking = true,
                 canCancel = true,
+                showsCancelHint = true,
                 modifier = Modifier.sheetHeight(),
             )
         }

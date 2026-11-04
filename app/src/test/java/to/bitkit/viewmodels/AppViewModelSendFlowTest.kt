@@ -543,7 +543,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
-        whenever(paykitPaymentProofRepo.ensureOnchainResendAllowed(any())).thenReturn(Result.success(Unit))
         clearInvocations(paykitUsdtPayments)
         sut.startPaykitPaymentRequestPolling()
         try {
@@ -14940,7 +14939,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 }
             }
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
-        whenever(paykitPaymentProofRepo.ensureOnchainResendAllowed(any())).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.authorizeUncheckedOnchainRecovery(any())).thenReturn(Result.success(Unit))
 
         assertEquals(
             PaykitPaymentRequestError.RequestUnavailable,
@@ -14972,7 +14971,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `retry without checking refuses a request reported paid but not a failed or unpaid lookup`() = test {
+    fun `retry without checking refuses a request its record reports paid`() = test {
         val request = paymentRequest()
         val requestBound = OnchainSendAttempt(
             walletId = WalletScope.default, attemptId = "request-attempt", requestId = request.id, orderId = null,
@@ -14991,22 +14990,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 }
             }
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
-        whenever(paykitPaymentProofRepo.ensureOnchainResendAllowed(any())).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.authorizeUncheckedOnchainRecovery(any())).thenReturn(Result.success(Unit))
 
-        paykitPaymentRequestHistory.value =
-            listOf(request.copy(lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED))
+        whenever(paykitPaymentProofRepo.authorizeUncheckedOnchainRecovery(any()))
+            .thenReturn(Result.failure(OnchainOriginalPaidError()))
         assertIs<OnchainOriginalPaidError>(
             sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).exceptionOrNull()
         )
         assertEquals(0, dispatched)
 
-        paykitPaymentRequestHistory.value =
-            listOf(request.copy(lifecycleState = PaymentRequestLifecycleState.ACCEPTED))
-        assertTrue(sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).isSuccess)
-        paykitPaymentRequestHistory.value = emptyList()
+        whenever(paykitPaymentProofRepo.authorizeUncheckedOnchainRecovery(any())).thenReturn(Result.success(Unit))
         assertTrue(sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).isSuccess)
 
-        assertEquals(2, dispatched)
+        assertEquals(1, dispatched)
         verify(paykitPaymentProofRepo, never()).authorizeOnchainRecovery(any(), any())
     }
 
@@ -15029,17 +15025,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                     OnchainSendOutcome.Unknown("ef".repeat(32))
                 }
             }
-        whenever(paykitPaymentProofRepo.ensureOnchainResendAllowed(any())).thenReturn(Result.success(Unit))
+        var refreshed = false
         whenever(paykitPaymentRequestRepo.refresh()).doSuspendableAnswer {
-            paykitPaymentRequestHistory.value =
-                listOf(request.copy(lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED))
+            refreshed = true
             Result.success(Unit)
+        }
+        // The record is read only after a fresh refresh
+        whenever(paykitPaymentProofRepo.authorizeUncheckedOnchainRecovery(any())).doSuspendableAnswer {
+            if (refreshed) Result.failure(OnchainOriginalPaidError()) else Result.success(Unit)
         }
 
         assertIs<OnchainOriginalPaidError>(
             sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).exceptionOrNull()
         )
         assertEquals(0, dispatched)
+        whenever(paykitPaymentProofRepo.authorizeUncheckedOnchainRecovery(any())).thenReturn(Result.success(Unit))
 
         // A request status that cannot be read is never taken as unpaid
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.failure(AppError("offline")))
@@ -15054,7 +15054,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `retry without checking keeps the local proof checks and never resends a subscription period`() = test {
+    fun `retry without checking keeps the local proof checks`() = test {
         val request = paymentRequest()
         val requestBound = OnchainSendAttempt(
             walletId = WalletScope.default, attemptId = "request-attempt", requestId = request.id, orderId = null,
@@ -15073,7 +15073,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 }
             }
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
-        whenever(paykitPaymentProofRepo.ensureOnchainResendAllowed(requestBound))
+        whenever(paykitPaymentProofRepo.authorizeUncheckedOnchainRecovery(requestBound))
             .thenReturn(Result.failure(PaykitPaymentRequestError.OperationInProgress))
 
         assertEquals(
@@ -15081,16 +15081,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).exceptionOrNull(),
         )
         assertEquals(0, dispatched)
-
-        val period = requestBound.copy(
-            attemptId = "period-attempt",
-            requestId = request.id.copy(billingPeriodStartsAt = "2027-01-01T00:00:00Z"),
-        )
-        assertIs<OnchainSendBlockedError>(
-            sut.retryOriginalOnchainSend(period, 2uL, reauthorize = false).exceptionOrNull()
-        )
-        verify(lightningRepo, never())
-            .retryOriginalOnchainSend(eq(period.attemptId), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test

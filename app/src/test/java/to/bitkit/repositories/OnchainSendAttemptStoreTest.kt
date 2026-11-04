@@ -1052,7 +1052,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val store = OnchainSendAttemptStore(testDispatcher, inMemoryKeychain(), mock(), Clock.System)
         val unresolved = store.dispatchedForTest(outcome = OnchainSendOutcome.Unknown(firstTxid))
         var broadcasts = 0
-        val cancel: suspend () -> OnchainSendOutcome = {
+        val cancel: suspend (suspend () -> Unit) -> OnchainSendOutcome = {
             broadcasts++
             OnchainSendOutcome.Accepted(finalCancellation.txid)
         }
@@ -1139,9 +1139,17 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertIs<OnchainSendOutcome.Rejected>(refused)
         assertEquals(accepted, store.current())
 
-        // A failure that may have dispatched keeps the newer record, as it may be in a mempool
+        // A failure before dispatch sent nothing, so the earlier record stands
         assertFailsWith<IllegalStateException> {
-            store.broadcastCancellation(unresolved.attemptId, 0, higher) { error("connection lost") }
+            store.broadcastCancellation(unresolved.attemptId, 0, higher) { error("node stopped") }
+        }
+        assertEquals(accepted, store.current())
+        // A failure once dispatch began keeps the newer record, as it may be in a mempool
+        assertFailsWith<IllegalStateException> {
+            store.broadcastCancellation(unresolved.attemptId, 0, higher) { beforeDispatch ->
+                beforeDispatch()
+                error("connection lost")
+            }
         }
         assertEquals(higher.txid, store.current()?.cancellationTxid)
         assertEquals(9uL, store.current()?.cancellationFeeRateSatsPerVByte)
@@ -1172,6 +1180,31 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertFailsWith<OnchainSendBlockedError> {
             store.bumpCancellation(unresolved.attemptId, 0, 8uL) { error("a paid attempt is not bumped") }
         }
+    }
+
+    @Test
+    fun `a saved release or Cancel payment keeps a retry and another release out`() = test {
+        val store = OnchainSendAttemptStore(testDispatcher, inMemoryKeychain(), mock(), Clock.System)
+        val unresolved = store.dispatchedForTest(outcome = OnchainSendOutcome.Unknown(firstTxid))
+        val approved = requireNotNull(store.approveRelease(unresolved))
+        // An approval alone sends nothing, so a retry may still be saved beside it
+        val retry = OnchainPreparedReceipt("56".repeat(32), originalInputs, approved.address, approved.amountSats, 2uL)
+        val retried = store.retainPreparedReceipt(approved.attemptId, 0, retry, isRecovery = true)
+        store.discardUnsubmittedRetryCandidate(approved, retry.txid)
+        assertEquals(approved, store.current())
+        assertTrue(retried.candidateTxids.contains(retry.txid))
+
+        store.broadcastCancellation(approved.attemptId, 0, cancelReceipt) {
+            OnchainSendOutcome.Unknown(cancelReceipt.txid)
+        }
+        val sent = requireNotNull(store.current())
+
+        assertFailsWith<OnchainSendBlockedError> {
+            store.retainPreparedReceipt(sent.attemptId, 0, retry, isRecovery = true)
+        }
+        val release = cancelReceipt.copy(txid = "77".repeat(32), address = "bcrt1qrelease")
+        assertNull(store.recordRelease(sent, release), "No release goes beside a Cancel payment")
+        assertEquals(sent, store.current())
     }
 
     private val firstTxid = "ab".repeat(32)

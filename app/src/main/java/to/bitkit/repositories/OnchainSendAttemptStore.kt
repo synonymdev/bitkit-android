@@ -205,9 +205,9 @@ class OnchainSendAbandonPendingError : AppError("The release transaction was sen
  * A Cancel payment replaces the candidates, and any release or earlier Cancel payment, a node may still hold. Nodes
  * refuse a replacement that pays a lower fee rate than one of them, or that does not pay more than its fee by at
  * least its own size at 1 sat/vB, which a Cancel payment over only the original's coins can miss at a higher rate.
- * Any rate above [feeRate] pays enough.
+ * Any rate above [feeRate] pays enough, and the fee must be above [feeSats].
  */
-class OnchainSendCancelUnderbidsError(val feeRate: ULong) :
+class OnchainSendCancelUnderbidsError(val feeRate: ULong, val feeSats: ULong) :
     AppError("A Cancel payment must pay more than the transactions it replaces.")
 
 /**
@@ -409,7 +409,9 @@ class OnchainSendAttemptStore @Inject constructor(
             mutex.withLock {
                 val current = loadWithRetainedAccepted(expected.walletIndex)
                 val isCandidate = current?.candidateTxids?.any { it.equals(release.txid, ignoreCase = true) } == true
-                val releasable = current == expected && current.canBeAbandoned && current.releaseApproved
+                // A Cancel payment that may be in a mempool already spends these coins, so no release goes beside it
+                val releasable = current == expected && current.canBeAbandoned && current.releaseApproved &&
+                    current.cancellationTxid == null
                 if (!releasable || isCandidate) return@withLock null
                 current.copy(
                     releaseTxid = release.txid.lowercase(),
@@ -468,6 +470,8 @@ class OnchainSendAttemptStore @Inject constructor(
             if (current.requestId != null) require(!current.payerIdentity.isNullOrBlank())
             require(receipt.amountSats > 0uL)
             if (isRecovery) {
+                // A release or Cancel payment that may be in a mempool can still confirm, so no payment goes beside it
+                if (current.hasSentCancellation) throw OnchainSendBlockedError(current)
                 requireNotNull(current.originalInputs)
                 require(current.candidateTxids.isNotEmpty())
                 require(receipt.inputs.toSet() == current.originalInputs.toSet())
@@ -614,14 +618,14 @@ class OnchainSendAttemptStore @Inject constructor(
 
     /**
      * Dispatch a spend of the guarded inputs back to this wallet only while no candidate has positive evidence. It is
-     * saved first, so a restart cannot forget a cancellation that may have reached a mempool; only a refusal undoes
-     * that.
+     * saved first, so a restart cannot forget a cancellation that may have reached a mempool; only a refusal, or a
+     * failure before [broadcast] calls its dispatch hook, undoes that.
      */
     suspend fun broadcastCancellation(
         attemptId: String,
         walletIndex: Int,
         cancellation: OnchainPreparedReceipt,
-        broadcast: suspend () -> OnchainSendOutcome,
+        broadcast: suspend (beforeDispatch: suspend () -> Unit) -> OnchainSendOutcome,
     ): OnchainSendOutcome = withContext(ioDispatcher + NonCancellable) {
         mutex.withLock {
             val current = loadWithRetainedAccepted(walletIndex)
@@ -632,22 +636,28 @@ class OnchainSendAttemptStore @Inject constructor(
             val txid = cancellation.txid.lowercase()
             require(txid.matches(Regex("[0-9a-f]{64}")) && txid !in current.candidateTxids)
             persist(current.withCancellation(txid, cancellation.feeRateSatsPerVByte, cancellation.miningFeeSats))
-            // Observation waits on this mutex, so no candidate gains positive evidence before dispatch.
-            val outcome = broadcast()
-            if (outcome is OnchainSendOutcome.Rejected) {
-                // A refused cancellation reached no mempool through this node, so the earlier record stands.
-                loadWithRetainedAccepted(walletIndex)?.takeIf { it.attemptId == attemptId }?.let {
-                    persist(
-                        it.copy(
-                            cancellationTxid = current.cancellationTxid,
-                            cancellationFeeRateSatsPerVByte = current.cancellationFeeRateSatsPerVByte,
-                            cancellationMiningFeeSats = current.cancellationMiningFeeSats,
-                        )
-                    )
-                }
+            // Observation waits on this mutex, so no candidate gains positive evidence before the outcome is saved.
+            var dispatched = false
+            val outcome = runSuspendCatching { broadcast { dispatched = true } }.getOrElse {
+                if (!dispatched) restoreEarlierCancellation(current)
+                throw it
             }
+            // A refused cancellation reached no mempool through this node, so the earlier record stands.
+            if (outcome is OnchainSendOutcome.Rejected) restoreEarlierCancellation(current)
             outcome
         }
+    }
+
+    private suspend fun restoreEarlierCancellation(earlier: OnchainSendAttempt) {
+        val current = loadWithRetainedAccepted(earlier.walletIndex)?.takeIf { it.attemptId == earlier.attemptId }
+            ?: return
+        persist(
+            current.copy(
+                cancellationTxid = earlier.cancellationTxid,
+                cancellationFeeRateSatsPerVByte = earlier.cancellationFeeRateSatsPerVByte,
+                cancellationMiningFeeSats = earlier.cancellationMiningFeeSats,
+            )
+        )
     }
 
     /**

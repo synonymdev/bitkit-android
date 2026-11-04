@@ -25,7 +25,7 @@
     <action>Enter a valid fee rate that the funded fixture can support and tap Continue</action>
     <action>Verify the exact prepared mining fee in sats is shown without a recipient amount; tap Authorize cancellation, accept any normal fee warnings, and verify the normal payment PIN screen appears before dispatch</action>
     <action>Enter the fixture's normal payment PIN without recording entered digits</action>
-    <action>Verify Pending shows Cancellation sent with its transaction ID and its confirmations out of 6, says it can be sped up if it is slow to confirm, and no longer offers Retry original payment or Retry without checking</action>
+    <action>Verify Pending shows Cancellation sent with its transaction ID, says the payment can be cancelled again if the cancellation drops out of the network without confirming, no longer offers Retry original payment or Retry without checking, and still offers Cancel payment</action>
     <action>Wait for the wallet to sync, then verify Pending offers Speed up cancellation instead of Cancel payment</action>
     <action>Tap Speed up cancellation, verify the dialog prefills a fee rate above the cancellation just sent and at least the normal fee rate, tap Continue, and complete the normal payment PIN screen</action>
     <action>Verify Pending shows Cancellation sent with a new cancellation transaction ID and still offers Speed up cancellation</action>

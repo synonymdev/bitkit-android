@@ -3507,10 +3507,16 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val attempt = unknownShopAttempt("ab".repeat(32))
         val proof = startedOnchainProof(attempt)
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        val accepted = paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED).let {
+            val reference = mock<PaymentReference> { on { exportText() }.thenReturn("payment-reference") }
+            it.copy(terms = requireNotNull(it.terms).copy(paymentReference = reference))
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(accepted))
         val repo = paymentProofRepo()
 
         storedProofs = listOf(proof)
-        assertTrue(repo.ensureOnchainResendAllowed(attempt).isSuccess)
+        val allowed = repo.authorizeUncheckedOnchainRecovery(attempt)
+        assertTrue(allowed.isSuccess, "Refused with '${allowed.exceptionOrNull()}'")
         for ((proofs, refusal) in listOf(
             emptyList<PendingPaykitPaymentProof>() to PaykitPaymentRequestError.RequestUnavailable,
             listOf(proof, proof.copy(paymentAppId = "other")) to PaykitPaymentRequestError.RequestUnavailable,
@@ -3518,14 +3524,83 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             listOf(proof.copy(onchainAcceptanceVerified = true)) to PaykitPaymentRequestError.OperationInProgress,
         )) {
             storedProofs = proofs
-            assertEquals(refusal, repo.ensureOnchainResendAllowed(attempt).exceptionOrNull())
+            assertEquals(refusal, repo.authorizeUncheckedOnchainRecovery(attempt).exceptionOrNull())
         }
         storedProofs = listOf(proof)
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt.copy(attemptId = "other"))
         assertEquals(
             PaykitPaymentRequestError.OperationInProgress,
-            repo.ensureOnchainResendAllowed(attempt).exceptionOrNull(),
+            repo.authorizeUncheckedOnchainRecovery(attempt).exceptionOrNull(),
         )
+    }
+
+    @Test
+    fun `a resend without its request refuses a paid, ended or missing request`() = test {
+        val attempt = unknownShopAttempt("ab".repeat(32))
+        storedProofs = listOf(startedOnchainProof(attempt))
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        val repo = paymentProofRepo()
+        suspend fun refusalFor(records: List<PaymentRequestRecord>): Throwable? {
+            whenever(paykitSdkService.paymentRequests()).thenReturn(records)
+            return repo.authorizeUncheckedOnchainRecovery(attempt).exceptionOrNull()
+        }
+        val proofRecord = mock<PaymentProofRecord> { on { billingPeriod } doReturn null }
+
+        assertIs<OnchainOriginalPaidError>(
+            refusalFor(listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.PROOF_SUBMITTED)))
+        )
+        assertIs<OnchainOriginalPaidError>(refusalFor(listOf(paymentRequestRecord(listOf(proofRecord)))))
+        for (ended in listOf(PaymentRequestLifecycleState.CANCELED, PaymentRequestLifecycleState.REJECTED)) {
+            assertEquals(
+                PaykitPaymentRequestError.RequestUnavailable,
+                refusalFor(listOf(paymentRequestRecord(state = ended))),
+            )
+        }
+        assertEquals(PaykitPaymentRequestError.RequestUnavailable, refusalFor(emptyList()))
+    }
+
+    @Test
+    fun `a resend of a subscription period needs one that started and is unpaid`() = test {
+        val (record, period) = recurringShopRecord(Clock.System.now() + 1.days)
+        val attempt = recurringAttempt(period)
+        val proof = startedOnchainProof(attempt).copy(billingPeriod = period, conversionQuoteId = "quote-1")
+        storedProofs = listOf(proof)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        val repo = paymentProofRepo()
+
+        assertTrue(repo.authorizeUncheckedOnchainRecovery(attempt).isSuccess)
+
+        val periodProof = mock<PaymentProofRecord> { on { billingPeriod } doReturn period.sdkValue }
+        val paidRecord = record.copy(paymentProofs = listOf(periodProof))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paidRecord))
+        assertIs<OnchainOriginalPaidError>(repo.authorizeUncheckedOnchainRecovery(attempt).exceptionOrNull())
+
+        val future = PaykitBillingPeriod(Clock.System.now() + 1.days, Clock.System.now() + 31.days)
+        storedProofs = listOf(proof.copy(billingPeriod = future))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        assertEquals(
+            PaykitPaymentRequestError.RequestUnavailable,
+            repo.authorizeUncheckedOnchainRecovery(attempt).exceptionOrNull(),
+        )
+    }
+
+    @Test
+    fun `an expired cancel beside a saved Cancel payment waits for it without checking the network`() = test {
+        val attempt = unknownShopAttempt("ab".repeat(32)).copy(cancellationTxid = "ef".repeat(32))
+        val proof = startedOnchainProof(attempt)
+        storedProofs = listOf(proof)
+        whenever(paykitSdkService.paymentRequests())
+            .thenReturn(listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.CANCELED)))
+        stubAbandon()
+        val wallet = FakeReleaseWallet()
+
+        val result = paymentProofRepo().abandonUnbroadcastOnchainPayment(attempt, wallet) {}
+
+        assertIs<OnchainSendAbandonPendingError>(result.exceptionOrNull())
+        assertNull(wallet.checked)
+        assertEquals(0, wallet.prepared)
+        assertEquals(listOf(proof), storedProofs)
     }
 
     @Test
