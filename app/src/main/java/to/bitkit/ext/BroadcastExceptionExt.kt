@@ -18,8 +18,9 @@ fun Throwable.isDefiniteHardwarePreBroadcastFailure(): Boolean = generateSequenc
 
 /**
  * Whether a hardware broadcast proves it sent nothing: core could not decode the transaction or connect to the
- * server. Any other failure may follow the write, and a node that refused the transaction still saw it, so the payment
- * may still confirm.
+ * server. Any other failure may follow the write, so the payment may still confirm. A node refusing the first broadcast
+ * of a transaction proves the same, as an Electrum server and its node keep nothing they refused, and a missing coin
+ * there is one already spent; a refusal of a later broadcast proves nothing about the earlier ones.
  */
 fun Throwable.isHardwareBroadcastNotSent(): Boolean = isDefiniteHardwarePreBroadcastFailure() ||
     generateSequence(this) { it.cause }.any {
