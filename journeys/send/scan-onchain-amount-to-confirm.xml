@@ -7,8 +7,8 @@
     Precondition: an onboarded dev wallet with between 200 000 and 1 000 000 confirmed sats in
     Savings, funded through the lsp regtest deposit and mine (see ../README.md), Coin Selection set
     to Autopilot (the default), no hardware wallet selected, and a regtest address the wallet does
-    not own. Manual coin selection keeps going through Amount and then the coin selection screen;
-    see ../coin-selection/manual-coin-selection.xml. Start on the wallet home screen.
+    not own. With manual coin selection the link also opens Confirm, and the swipe opens the coin
+    selection screen; see ../coin-selection/manual-coin-selection.xml. Start on the wallet home screen.
     The Confirm screen is identified by its "Confirm" title and the amount (testTag "ReviewAmount");
     the Send Amount screen by its number field (testTag "SendNumberField").
   </description>
@@ -25,5 +25,7 @@
     <action>Tap Back (testTag "NavigationBack") and verify the recipient field (testTag "RecipientInput") still holds the URI and the Send Amount screen is not shown; close the sheet without sending</action>
     <action>Run adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;regtest address&gt;?amount=0.01" to.bitkit.dev</action>
     <action>Verify the Insufficient Savings toast appears (screenshot) and neither the Send Amount nor the Confirm screen opens</action>
+    <action>Run adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;regtest address&gt;?amount=0.000005" to.bitkit.dev</action>
+    <action>Verify the Amount Too Low toast (testTag "AmountTooLowToast") says the minimum is 547 sats, and neither the Send Amount nor the Confirm screen opens</action>
   </actions>
 </journey>
