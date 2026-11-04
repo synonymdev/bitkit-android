@@ -243,7 +243,8 @@
     <string name="lightning__spark_exit__done_title">Exit\n&lt;accent&gt;complete&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__errors">Some transactions were rejected: {error}</string>
     <string name="lightning__spark_exit__failed_leaves">{count} amounts the Spark operators could not sign for stayed on Spark.</string>
-    <string name="lightning__spark_exit__failed_text">Nothing could be recovered. Your balance stays on Spark.</string>
+    <string name="lightning__spark_exit__failed_stays">{amount} stays on Spark.</string>
+    <string name="lightning__spark_exit__failed_text">Nothing could be recovered.</string>
     <string name="lightning__spark_exit__failed_title">Exit\n&lt;accent&gt;stopped&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__fees">Network fees</string>
     <string name="lightning__spark_exit__fund_external">Fund from another wallet</string>

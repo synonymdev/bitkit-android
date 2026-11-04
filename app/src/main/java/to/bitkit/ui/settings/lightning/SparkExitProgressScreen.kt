@@ -98,7 +98,11 @@ private fun Content(
                 Display(text = progressTitle(record?.phase).withAccent())
                 VerticalSpacer(8.dp)
                 BodyM(
-                    text = progressText(record, uiState.progressFunding).withAccentBoldBright(),
+                    text = progressText(
+                        record = record,
+                        progressFunding = uiState.progressFunding,
+                        outsideExitSats = uiState.outsideExitSats,
+                    ).withAccentBoldBright(),
                     color = Colors.White64,
                 )
                 VerticalSpacer(24.dp)
@@ -270,6 +274,7 @@ private fun progressTitle(phase: SparkExitRecord.Phase?): String = stringResourc
 private fun progressText(
     record: SparkExitRecord?,
     progressFunding: SparkExitFundingState?,
+    outsideExitSats: ULong?,
 ): String = when (record?.phase) {
     SparkExitRecord.Phase.Done -> listOfNotNull(
         stringResource(R.string.lightning__spark_exit__done_text),
@@ -280,7 +285,11 @@ private fun progressText(
             stringResource(R.string.lightning__spark_exit__failed_leaves).replace("{count}", "$it")
         },
     ).joinToString(" ")
-    is SparkExitRecord.Phase.Failed -> stringResource(R.string.lightning__spark_exit__failed_text)
+    is SparkExitRecord.Phase.Failed -> sparkExitFailedText(
+        nothingText = stringResource(R.string.lightning__spark_exit__failed_text),
+        staysText = stringResource(R.string.lightning__spark_exit__failed_stays),
+        outsideAmount = outsideExitSats?.let { sparkExitAmountText(it) },
+    )
     is SparkExitRecord.Phase.NeedsFunding -> when (val funding = progressFunding) {
         // A payment that covers it waits to confirm: nothing to ask for.
         is SparkExitFundingState.Ask -> stringResource(R.string.lightning__spark_exit__needs_funding_text)
@@ -289,6 +298,13 @@ private fun progressText(
     }
     else -> stringResource(R.string.lightning__spark_exit__progress_text)
 }
+
+/**
+ * The stopped exit's text: nothing was recovered, and what Spark still holds beyond the exit when it holds any. Lost
+ * leaves are gone, so they are not said to stay on Spark.
+ */
+internal fun sparkExitFailedText(nothingText: String, staysText: String, outsideAmount: String?): String =
+    listOfNotNull(nothingText, outsideAmount?.let { staysText.replace("{amount}", it) }).joinToString(" ")
 
 @Preview(showSystemUi = true)
 @Composable
