@@ -561,8 +561,10 @@ class PrivatePaykitRepo @Inject constructor(
      * Opens a payment to the saved contact [publicKey]. A contact with a private payment path is only paid
      * privately: when that path is not ready yet the result is [PublicPaykitPaymentResult.PrivateLinkPending], never
      * a payment to its public endpoints. Only a contact without any private payment path, including a missing
-     * Noise key authorization, is paid through its public endpoints, as is every contact while this wallet's own
-     * identity can only make public payments.
+     * Noise key authorization, is paid through its public endpoints. While this wallet's own identity can only make
+     * public payments, a contact without any private payment record is paid publicly and one with such a record fails
+     * instead. A key that is not a saved contact is paid publicly, as is a key not registered yet while this wallet
+     * has no identity.
      */
     suspend fun beginSavedContactPayment(publicKey: String): Result<PublicPaykitPaymentResult> =
         withContext(serializedDispatcher) {
@@ -962,6 +964,7 @@ class PrivatePaykitRepo @Inject constructor(
                 ) ?: privatePaymentResult(
                     publicKey = publicKey,
                     resolution = resolution,
+                    linkState = linkState,
                     consumedVersion = consumedVersion,
                     paymentRequest = paymentRequest,
                 )
@@ -1031,6 +1034,7 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun privatePaymentResult(
         publicKey: String,
         resolution: PaykitPrivateContactPaymentResolution,
+        linkState: LinkedPeerState?,
         consumedVersion: ULong?,
         paymentRequest: PaykitPaymentRequest?,
     ): PublicPaykitPaymentResult {
@@ -1080,6 +1084,9 @@ class PrivatePaykitRepo @Inject constructor(
                 context = TAG,
             )
             return PublicPaykitPaymentResult.WaitingForUpdatedPaymentList
+        }
+        if (resolution.state == PrivatePaymentResolutionState.AVAILABLE && isAwaitingPrivateLink(linkState)) {
+            return privateLinkPendingResult(publicKey)
         }
 
         return if (acceptedEndpoints.isEmpty()) {
@@ -1151,21 +1158,28 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun savedContact(publicKey: String): String? {
         knownSavedContact(publicKey)?.let { return it }
+        if (paykitSdkService.identityStatus(Priority.Interactive)?.publicKey == null) return null
         val normalizedKey = normalizedPublicKey(publicKey) ?: return null
         paykitSdkService.contactRecord(normalizedKey) ?: return null
-        rememberSavedContacts(listOf(normalizedKey), replacing = false)
+        if (!isDeletingProfile) rememberSavedContacts(listOf(normalizedKey), replacing = false)
         return normalizedKey
     }
 
     private suspend fun hasPrivatePaymentPath(publicKey: String): Boolean {
         val identity = paykitSdkService.identityStatus(Priority.Interactive)
         if (identity?.publicKey == null) throw PublicPaykitError.SessionNotActive
-        if (identity.capability == PubkyIdentityCapability.PUBLIC_ONLY) return false
+        if (identity.capability == PubkyIdentityCapability.PUBLIC_ONLY) {
+            if (hasPrivatePaymentRecord(publicKey)) throw PublicPaykitError.SessionNotActive
+            return false
+        }
+        return hasPrivatePaymentRecord(publicKey) || paykitSdkService.hasPaykitNoiseKeyAuthorization(publicKey)
+    }
+
+    private suspend fun hasPrivatePaymentRecord(publicKey: String): Boolean {
         if (ensureState().contacts[publicKey]?.hasCacheState == true) return true
-        val hasLinkedPeer = paykitSdkService.linkedPeers(Priority.Interactive).any {
+        return paykitSdkService.linkedPeers(Priority.Interactive).any {
             PubkyPublicKeyFormat.matches(it.counterparty, publicKey)
         }
-        return hasLinkedPeer || paykitSdkService.hasPaykitNoiseKeyAuthorization(publicKey)
     }
 
     private suspend fun publishLocalEndpoints(

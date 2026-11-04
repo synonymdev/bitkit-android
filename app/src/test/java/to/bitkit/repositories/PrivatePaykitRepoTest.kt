@@ -3613,15 +3613,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginSavedContactPayment pays publicly without a private attempt for a public-only identity`() = test {
-        cacheData.update {
-            PrivatePaykitCacheData(
-                contacts = mapOf(CONTACT_KEY to PrivatePaykitContactCacheData(consumedPrivatePaymentListVersion = 3uL)),
-            )
-        }
-        sut = createSut()
+    fun `beginSavedContactPayment pays a contact without private records publicly for a public-only identity`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
         whenever(paykitSdkService.identityStatus())
             .thenReturn(IdentityStatus(OWN_KEY, PubkyIdentityCapability.PUBLIC_ONLY))
 
@@ -3633,7 +3626,147 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             prepareAndResolvePrivateContactPayment(any(), anyOrNull(), anyOrNull())
         }
         verifyBlocking(paykitSdkService, never()) { hasPaykitNoiseKeyAuthorization(any()) }
-        verifyBlocking(paykitSdkService, never()) { linkedPeers(Priority.Interactive) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment fails for a public-only identity when the contact has private state`() = test {
+        cacheData.update {
+            PrivatePaykitCacheData(
+                contacts = mapOf(CONTACT_KEY to PrivatePaykitContactCacheData(consumedPrivatePaymentListVersion = 3uL)),
+            )
+        }
+        sut = createSut()
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever(paykitSdkService.identityStatus())
+            .thenReturn(IdentityStatus(OWN_KEY, PubkyIdentityCapability.PUBLIC_ONLY))
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY)
+
+        assertEquals(PublicPaykitError.SessionNotActive, result.exceptionOrNull())
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        verifyBlocking(paykitSdkService, never()) {
+            prepareAndResolvePrivateContactPayment(any(), anyOrNull(), anyOrNull())
+        }
+        verifyBlocking(paykitSdkService, never()) { hasPaykitNoiseKeyAuthorization(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment fails for a public-only identity when the contact has a linked peer`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever(paykitSdkService.linkedPeers())
+            .thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.NOT_LINKED)))
+        whenever(paykitSdkService.identityStatus())
+            .thenReturn(IdentityStatus(OWN_KEY, PubkyIdentityCapability.PUBLIC_ONLY))
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY)
+
+        assertEquals(PublicPaykitError.SessionNotActive, result.exceptionOrNull())
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        verifyBlocking(paykitSdkService, never()) { hasPaykitNoiseKeyAuthorization(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment keeps a signed out or unknown identity on the contact decision`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, null)
+        }.thenReturn(
+            resolution(
+                status = PrivatePaymentResolutionStatus.NO_ENDPOINT,
+                state = PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT,
+                linkState = LinkedPeerState.LINKING,
+                version = null,
+            ),
+        )
+
+        try {
+            for (capability in listOf(PubkyIdentityCapability.SIGNED_OUT, PubkyIdentityCapability.UNKNOWN)) {
+                whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(OWN_KEY, capability))
+
+                val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+                assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, result, "Capability '$capability'")
+            }
+            verifyBlocking(paykitSdkService, times(2)) { prepareAndResolvePrivateContactPayment(CONTACT_KEY, null) }
+            verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        } finally {
+            sut.closeAndClear()
+        }
+    }
+
+    @Test
+    fun `beginSavedContactPayment fails for a saved contact when this identity has no public key`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever(paykitSdkService.identityStatus())
+            .thenReturn(IdentityStatus(null, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY)
+
+        assertEquals(PublicPaykitError.SessionNotActive, result.exceptionOrNull())
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment pays an unsaved key publicly without a contact lookup when there is no identity`() =
+        test {
+            for (identity in listOf(null, IdentityStatus(null, PubkyIdentityCapability.SIGNED_OUT))) {
+                whenever(paykitSdkService.identityStatus()).thenReturn(identity)
+
+                val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+                assertEquals(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic"), result)
+            }
+            verifyBlocking(publicPaykitRepo, times(2)) { beginPayment(CONTACT_KEY) }
+            verifyBlocking(paykitSdkService, never()) { contactRecord(any()) }
+        }
+
+    @Test
+    fun `beginSavedContactPayment does not register a saved contact while the profile is being deleted`() = test {
+        whenever(paykitSdkService.contactRecord(CONTACT_KEY)).thenReturn(contactRecord(CONTACT_KEY))
+        whenever(paykitSdkService.hasPaykitNoiseKeyAuthorization(CONTACT_KEY)).thenReturn(false)
+        sut.beginProfileDeletion()
+
+        repeat(2) {
+            val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+            assertEquals(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic"), result)
+        }
+
+        verifyBlocking(paykitSdkService, times(2)) { contactRecord(CONTACT_KEY) }
+        sut.endProfileDeletion()
+    }
+
+    @Test
+    fun `beginSavedContactPayment waits for the link when private details exist but none is payable yet`() = test {
+        whenever(paykitSdkService.contactRecord(CONTACT_KEY)).thenReturn(contactRecord(CONTACT_KEY))
+        val unestablished = listOf(
+            null,
+            LinkedPeerState.NOT_LINKED,
+            LinkedPeerState.LINKING,
+            LinkedPeerState.RECOVERY_REQUIRED,
+        )
+
+        for (linkState in unestablished + LinkedPeerState.LINKED) {
+            whenever {
+                paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, null)
+            }.thenReturn(
+                resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL, linkState = linkState),
+            )
+            clearInvocations(pubkyService)
+            try {
+                val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+                if (linkState in unestablished) {
+                    assertEquals(PublicPaykitPaymentResult.PrivateLinkPending, result, "Link state '$linkState'")
+                    verifyBlocking(pubkyService) { currentPublicKey() }
+                } else {
+                    assertEquals(PublicPaykitPaymentResult.NotOpened, result)
+                    verifyBlocking(pubkyService, never()) { currentPublicKey() }
+                }
+            } finally {
+                sut.closeAndClear()
+            }
+        }
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
     @Test
