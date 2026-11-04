@@ -1611,7 +1611,7 @@
     <string name="wallet__send_pending__blocked_new_send">O novo pagamento não foi enviado. Conclua o pagamento anterior antes de tentar novamente.</string>
     <string name="wallet__send_pending__cancel_authorize">Autorizar cancelamento</string>
     <string name="wallet__send_pending__cancel_confirmations">Confirmações: %1$d de 6</string>
-    <string name="wallet__send_pending__cancel_description">Cancele enviando as entradas deste pagamento de volta para a sua carteira. Introduza a taxa que autoriza em sat/vB; use uma taxa mais alta do que a original para que o cancelamento o possa substituir. Um cancelamento anterior só pode ser substituído depois de sair da rede sem ser confirmado. Os outros pagamentos onchain continuam bloqueados até um cancelamento ter 6 confirmações.</string>
+    <string name="wallet__send_pending__cancel_description">Cancele enviando as entradas deste pagamento de volta para a sua carteira. Introduza a taxa que autoriza em sat/vB; use uma taxa mais alta do que a original para que o cancelamento o possa substituir. Os outros pagamentos onchain continuam bloqueados até um cancelamento ter 6 confirmações.</string>
     <string name="wallet__send_pending__cancel_error">Não foi possível cancelar o pagamento. Os fundos continuam protegidos. Tente uma taxa mais alta ou verifique o estado da transação.</string>
     <string name="wallet__send_pending__cancel_fee_too_low">Um novo cancelamento tem de pagar uma taxa de rede superior a %1$s sats, a uma taxa por byte mais alta do que a transação que substitui. Introduza uma taxa mais alta.</string>
     <string name="wallet__send_pending__cancel_final_held">O cancelamento tem 6 confirmações. A Bitkit liberta este pagamento na próxima sincronização da carteira, e os outros pagamentos on-chain ficam então desbloqueados.</string>
@@ -1620,6 +1620,7 @@
     <string name="wallet__send_pending__cancel_pending_error">Um cancelamento anterior ainda está pendente, pelo que um novo ainda não o pode substituir. Os fundos do pagamento continuam protegidos. Aguarde que seja confirmado ou cancele novamente se sair da rede sem ser confirmado.</string>
     <string name="wallet__send_pending__cancel_speed_up">Acelerar o cancelamento</string>
     <string name="wallet__send_pending__cancel_speed_up_note">O cancelamento ainda aguarda confirmação. Substitua-o pelo mesmo cancelamento a uma taxa acima dos atuais %1$s sat/vB, para que seja confirmado mais depressa. Os fundos deste pagamento continuam a voltar para a sua carteira.</string>
+    <string name="wallet__send_pending__cancel_speed_up_review">Acelerar o cancelamento paga uma taxa de rede de cerca de %1$s sats a %2$s sat/vB. Pode adicionar moedas da sua carteira, o que aumenta a taxa.</string>
     <string name="wallet__send_pending__cancel_title">Cancelar pagamento</string>
     <string name="wallet__send_pending__cancel_unheld">Cancelamento enviado, mas a carteira não o viu na rede, por isso pode não ter chegado lá. Os fundos do pagamento continuam protegidos. Pode cancelar novamente com uma taxa mais alta.</string>
     <string name="wallet__send_pending__cancelled_description">O cancelamento tem 6 confirmações. Os pagamentos onchain estão novamente disponíveis.</string>

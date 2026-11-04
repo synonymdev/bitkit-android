@@ -26,6 +26,20 @@ class OriginalSendFeeTest {
     }
 
     @Test
+    fun `a bump that added a coin reads its fee from every input`() {
+        val addedId = "ab".repeat(32)
+        val added = TxInput(addedId, 0u, "", emptyList(), UInt.MAX_VALUE - 2u)
+        val bump = details.copy(inputs = listOf(input, added), outputs = listOf(output(1000), output(23_000, 1u)))
+        val addedParent = TransactionDetails(5000L, emptyList(), listOf(output(5_000)))
+        val parents = mapOf(parentId to parent, addedId to addedParent)
+
+        assertEquals(1_000uL, exactTransactionFee(bump) { parents[it] })
+        // The original's own inputs no longer match, so it is not read as the original send's fee
+        assertFailsWith<IllegalStateException> { exactOriginalSendFee(bump, inputs) { parents[it] } }
+        assertNull(exactTransactionFee(bump) { if (it == parentId) parent else null })
+    }
+
+    @Test
     fun `a lost candidate is read only from exactly the original coins paying the full amount`() {
         val attempt = OnchainSendAttempt(
             walletId = "wallet", attemptId = "attempt", requestId = null, orderId = null, address = "bcrt1qrecipient",

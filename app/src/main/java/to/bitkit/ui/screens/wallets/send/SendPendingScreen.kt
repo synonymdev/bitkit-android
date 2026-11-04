@@ -98,7 +98,11 @@ fun SendPendingScreen(
         ULong,
         suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit,
     ) -> Result<OnchainSendOutcome>,
-    speedUpCancellation: suspend (OnchainSendAttempt, ULong, suspend () -> Unit) -> Result<String>,
+    speedUpCancellation: suspend (
+        OnchainSendAttempt,
+        ULong,
+        suspend (ULong?, List<SanityWarning>) -> Unit,
+    ) -> Result<String>,
     onRecovered: (String, Long) -> Unit,
     savedStateHandle: SavedStateHandle,
     onNavigateToPin: () -> Unit,
@@ -215,7 +219,7 @@ private fun AbandonExpiredPayment(
     val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
-    // The cancel can take up to 30 s; its outcome is announced, not only shown above the hourglass.
+    // The cancel can take up to 2 minutes; its outcome is announced, not only shown above the hourglass.
     LaunchedEffect(abandonError) {
         // A sent release is progress, not a failure, though other payments stay blocked until it is final.
         val type = if (isAbandonSent) Toast.ToastType.SUCCESS else Toast.ToastType.WARNING
@@ -276,7 +280,7 @@ private fun RecoveryAuthorization(
     beginPaymentReview: () -> (() -> Unit),
     showAbandonConfirmation: Boolean,
     recover: (RecoveryAction, ULong, suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit) -> Unit,
-    speedUp: (ULong, suspend () -> Unit) -> Unit,
+    speedUp: (ULong, suspend (ULong?, List<SanityWarning>) -> Unit) -> Unit,
     content: @Composable ((RecoveryAction) -> Unit) -> Unit,
 ) {
     var feeAction by remember { mutableStateOf<RecoveryAction?>(null) }
@@ -343,6 +347,20 @@ private fun RecoveryAuthorization(
                 )
             }
         }
+        is RecoveryApproval.SpeedUp -> AppAlertDialog(
+            title = stringResource(R.string.wallet__send_pending__cancel_speed_up),
+            text = approval.estimatedFeeSats?.let {
+                stringResource(
+                    R.string.wallet__send_pending__cancel_speed_up_review,
+                    it.toString(),
+                    approval.feeRateSatsPerVByte.toString(),
+                )
+            } ?: "${approval.feeRateSatsPerVByte} " + stringResource(R.string.common__sat_vbyte),
+            confirmText = stringResource(R.string.wallet__send_pending__cancel_authorize),
+            dismissText = stringResource(R.string.common__cancel),
+            onConfirm = { viewModel.answerRecoveryApproval(true) },
+            onDismiss = { viewModel.answerRecoveryApproval(false) },
+        )
         is RecoveryApproval.Release -> AppAlertDialog(
             title = stringResource(R.string.wallet__send_pending__abandon),
             text = stringResource(R.string.wallet__send_pending__abandon_release)
@@ -390,8 +408,11 @@ private fun RecoveryAuthorization(
             RecoveryFeeDialog(original, action, currentRate, feeInput, onFeeChange, { feeAction = null }) { rate ->
                 feeAction = null
                 if (action == RecoveryAction.SpeedUpCancellation) {
-                    return@RecoveryFeeDialog speedUp(rate) {
+                    return@RecoveryFeeDialog speedUp(rate) { fee, warnings ->
                         viewModel.approveSpeedUp(
+                            rate,
+                            fee,
+                            warnings,
                             isPinEnabled && pinForPayments,
                             isBiometricEnabled && isBiometrySupported,
                         )

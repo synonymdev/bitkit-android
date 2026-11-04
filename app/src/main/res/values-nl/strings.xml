@@ -1615,7 +1615,7 @@
     <string name="wallet__send_pending__blocked_new_send">De nieuwe betaling is niet verzonden. Rond de vorige betaling af voordat u het opnieuw probeert.</string>
     <string name="wallet__send_pending__cancel_authorize">Annulering autoriseren</string>
     <string name="wallet__send_pending__cancel_confirmations">Bevestigingen: %1$d van 6</string>
-    <string name="wallet__send_pending__cancel_description">Annuleer door de inputs van deze betaling terug te sturen naar uw wallet. Voer het vergoedingstarief in sat/vB in dat u autoriseert; gebruik een hoger tarief dan het oorspronkelijke, zodat de annulering de betaling kan vervangen. Een eerdere annulering kan pas worden vervangen nadat deze onbevestigd uit het netwerk is verdwenen. Andere onchain-betalingen blijven geblokkeerd tot een annulering 6 bevestigingen heeft.</string>
+    <string name="wallet__send_pending__cancel_description">Annuleer door de inputs van deze betaling terug te sturen naar uw wallet. Voer het vergoedingstarief in sat/vB in dat u autoriseert; gebruik een hoger tarief dan het oorspronkelijke, zodat de annulering de betaling kan vervangen. Andere onchain-betalingen blijven geblokkeerd tot een annulering 6 bevestigingen heeft.</string>
     <string name="wallet__send_pending__cancel_error">De betaling kon niet worden geannuleerd. Het geld blijft beschermd. Probeer een hogere vergoeding of controleer de transactiestatus.</string>
     <string name="wallet__send_pending__cancel_fee_too_low">Een nieuwe annulering moet een netwerkvergoeding van meer dan %1$s sats betalen, tegen een hoger tarief dan de transactie die ze vervangt. Voer een hoger tarief in.</string>
     <string name="wallet__send_pending__cancel_final_held">De annulering heeft 6 bevestigingen. Bitkit geeft deze betaling vrij bij de volgende synchronisatie van de wallet, en dan worden andere on-chain betalingen weer mogelijk.</string>
@@ -1624,6 +1624,7 @@
     <string name="wallet__send_pending__cancel_pending_error">Een eerdere annulering is nog in behandeling, dus een nieuwe kan deze nog niet vervangen. Het geld van de betaling blijft beschermd. Wacht tot deze is bevestigd, of annuleer opnieuw als deze onbevestigd uit het netwerk verdwijnt.</string>
     <string name="wallet__send_pending__cancel_speed_up">Annulering versnellen</string>
     <string name="wallet__send_pending__cancel_speed_up_note">De annulering wacht nog op bevestiging. Vervang haar door dezelfde annulering tegen een tarief boven de huidige %1$s sat/vB, zodat ze sneller wordt bevestigd. De munten van deze betaling gaan nog steeds terug naar uw wallet.</string>
+    <string name="wallet__send_pending__cancel_speed_up_review">Het versnellen van de annulering betaalt een netwerkvergoeding van ongeveer %1$s sats bij %2$s sat/vB. Het kan munten uit uw wallet toevoegen, wat de vergoeding verhoogt.</string>
     <string name="wallet__send_pending__cancel_title">Betaling annuleren</string>
     <string name="wallet__send_pending__cancel_unheld">Annulering verzonden, maar de wallet heeft deze niet op het netwerk gezien, dus deze is daar misschien niet aangekomen. Het geld van de betaling blijft beschermd. U kunt opnieuw annuleren met een hogere vergoeding.</string>
     <string name="wallet__send_pending__cancelled_description">De annulering heeft 6 bevestigingen. Onchain-betalingen zijn weer beschikbaar.</string>

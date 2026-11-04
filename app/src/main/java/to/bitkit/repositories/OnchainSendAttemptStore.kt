@@ -77,7 +77,12 @@ data class OnchainInputSpend(
     val isFinal: Boolean,
     /** Blocks that include it, counting its own; 0 while unconfirmed. */
     val confirmations: UInt = 0u,
+    /** Its signed size, which a fee bump at a higher rate pays at least. Null when it cannot be read. */
+    val vBytes: ULong? = null,
 )
+
+/** A fee bump of a pending cancellation, with the exact fee and rate the wallet read from it, when it could. */
+data class OnchainCancellationBump(val txid: String, val miningFeeSats: ULong?, val feeRateSatsPerVByte: ULong?)
 
 @Serializable
 data class OnchainSendAttempt(
@@ -122,6 +127,8 @@ data class OnchainSendAttempt(
     val cancellationTxid: String? = null,
     val cancellationFeeRateSatsPerVByte: ULong? = null,
     val cancellationMiningFeeSats: ULong? = null,
+    // When the latest Cancel payment was sent, so only a wallet sync after it can show it never reached the network
+    val cancellationSentAtMillis: Long? = null,
 ) {
     val winningFeeRateSatsPerVByte: ULong
         get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
@@ -656,19 +663,20 @@ class OnchainSendAttemptStore @Inject constructor(
                 cancellationTxid = earlier.cancellationTxid,
                 cancellationFeeRateSatsPerVByte = earlier.cancellationFeeRateSatsPerVByte,
                 cancellationMiningFeeSats = earlier.cancellationMiningFeeSats,
+                cancellationSentAtMillis = earlier.cancellationSentAtMillis,
             )
         )
     }
 
     /**
-     * Replaces the pending cancellation [txid] at [feeRate] through [bump], which keeps every output in this wallet,
-     * and saves the replacement as the cancellation.
+     * Replaces the pending cancellation at [feeRate] through [bump], which keeps every output in this wallet, and saves
+     * the replacement as the cancellation, with its exact fee and rate when the wallet could read them.
      */
     suspend fun bumpCancellation(
         attemptId: String,
         walletIndex: Int,
         feeRate: ULong,
-        bump: suspend () -> String,
+        bump: suspend () -> OnchainCancellationBump,
     ): String = withContext(ioDispatcher + NonCancellable) {
         mutex.withLock {
             val current = loadWithRetainedAccepted(walletIndex)
@@ -677,15 +685,18 @@ class OnchainSendAttemptStore @Inject constructor(
             ) {
                 throw OnchainSendBlockedError(current)
             }
-            val txid = bump().lowercase()
+            val bumped = bump()
+            val txid = bumped.txid.lowercase()
             require(txid.matches(Regex("[0-9a-f]{64}")) && txid !in current.candidateTxids)
-            persist(current.withCancellation(txid, feeRate, null))
+            val rate = listOfNotNull(feeRate, bumped.feeRateSatsPerVByte).max()
+            persist(current.withCancellation(txid, rate, bumped.miningFeeSats))
             txid
         }
     }
 
     private fun OnchainSendAttempt.withCancellation(txid: String, feeRate: ULong?, fee: ULong?) = copy(
         cancellationTxid = txid,
+        cancellationSentAtMillis = nowMillis(clock),
         cancellationFeeRateSatsPerVByte = listOfNotNull(cancellationFeeRateSatsPerVByte, feeRate).maxOrNull(),
         cancellationMiningFeeSats = listOfNotNull(cancellationMiningFeeSats, fee).maxOrNull(),
     )
@@ -851,6 +862,7 @@ class OnchainSendAttemptStore @Inject constructor(
                     cancellationTxid = attempt.cancellationTxid,
                     cancellationFeeRateSatsPerVByte = attempt.cancellationFeeRateSatsPerVByte,
                     cancellationMiningFeeSats = attempt.cancellationMiningFeeSats,
+                    cancellationSentAtMillis = attempt.cancellationSentAtMillis,
                 ) == attempt
                 check(sameOperation && existing.candidateTxids.containsAll(attempt.candidateTxids)) {
                     "Cannot change a restored on-chain operation's original context"

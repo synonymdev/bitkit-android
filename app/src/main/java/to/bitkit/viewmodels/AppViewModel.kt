@@ -6542,9 +6542,12 @@ class AppViewModel @Inject constructor(
     suspend fun speedUpOnchainCancellation(
         original: OnchainSendAttempt,
         feeRateSatsPerVByte: ULong,
-        approve: suspend () -> Unit,
-    ): Result<String> =
-        lightningRepo.speedUpOnchainCancellation(original.attemptId, original.walletId, feeRateSatsPerVByte, approve)
+        approve: suspend (estimatedFeeSats: ULong?, List<SanityWarning>) -> Unit,
+    ): Result<String> = lightningRepo.speedUpOnchainCancellation(
+        original.attemptId,
+        original.walletId,
+        feeRateSatsPerVByte,
+    ) { fee -> approve(fee, fee?.let { recoveryFeeWarnings(it, original.amountSats) }.orEmpty()) }
 
     /** Spend the original inputs back to this wallet. Other sends stay blocked until that spend is final. */
     suspend fun cancelOriginalOnchainSend(
@@ -6557,8 +6560,10 @@ class AppViewModel @Inject constructor(
         feeRateSatsPerVByte,
     ) { approvePrepared(it, recoveryFeeWarnings(it, original.amountSats)) }
 
-    private suspend fun recoveryFeeWarnings(receipt: OnchainPreparedReceipt, amountSats: ULong): List<SanityWarning> {
-        val fee = requireNotNull(receipt.miningFeeSats)
+    private suspend fun recoveryFeeWarnings(receipt: OnchainPreparedReceipt, amountSats: ULong): List<SanityWarning> =
+        recoveryFeeWarnings(requireNotNull(receipt.miningFeeSats), amountSats)
+
+    private suspend fun recoveryFeeWarnings(fee: ULong, amountSats: ULong): List<SanityWarning> {
         check(fee <= Long.MAX_VALUE.toULong())
         val feeInUsd = currencyRepo.convertSatsToFiat(fee.toLong(), USD).getOrNull()
         return buildList {
@@ -6567,16 +6572,21 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    // The check reads every on-chain payment of the wallet, so it runs apart from node event handling
     private fun scheduleOnchainSettlement() {
         onchainSettlementRequested.set(true)
         if (onchainSettlementJob?.isActive == true) return
-        onchainSettlementJob = viewModelScope.launch {
+        val job = viewModelScope.launch {
             do {
                 delay(ONCHAIN_SETTLEMENT_DEBOUNCE)
                 onchainSettlementRequested.set(false)
                 settleOnchainSendFromWallet()
             } while (onchainSettlementRequested.get())
+        }
+        onchainSettlementJob = job
+        job.invokeOnCompletion { cause ->
+            if (cause == null && onchainSettlementJob === job && onchainSettlementRequested.get()) {
+                scheduleOnchainSettlement()
+            }
         }
     }
 
@@ -8893,8 +8903,6 @@ class AppViewModel @Inject constructor(
             .map { Regex("^$it:", RegexOption.IGNORE_CASE) }
         private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
         private const val TEN_USD = 10
-
-        /** Syncs that land together share one read of the wallet's on-chain history. */
         private val ONCHAIN_SETTLEMENT_DEBOUNCE = 1.seconds
         private const val MAX_BALANCE_FRACTION = 0.5
         private const val MAX_FEE_AMOUNT_RATIO = 0.5

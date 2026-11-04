@@ -16,6 +16,7 @@ import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
@@ -804,8 +805,10 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             cancellationTxid = cancelTxid,
             cancellationFeeRateSatsPerVByte = 5uL,
             cancellationMiningFeeSats = 300uL,
+            cancellationSentAtMillis = f.store.current()?.cancellationSentAtMillis,
         )
         assertEquals(expected, f.store.current())
+        assertNotNull(f.store.current()?.cancellationSentAtMillis)
         assertTrue(f.store.current()?.blocksNextSend == true)
     }
 
@@ -965,14 +968,21 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
-    fun `speeding up replaces only a pending cancellation at a higher rate`() = test {
+    fun `speeding up replaces only an unconfirmed cancellation at a higher rate and saves its exact fee`() = test {
         val f = Fixture()
         val dispatched = f.dispatchedUnknown()
         val sent = dispatched.copy(cancellationTxid = cancelTxid, cancellationFeeRateSatsPerVByte = 5uL)
         f.saved = Json.encodeToString(OnchainSendAttempt.serializer(), sent)
-        val pending = OnchainInputSpend(cancelTxid, listOf(input), listOf("bcrt1qown", "bcrt1qchange"), false)
+        val pending = OnchainInputSpend(
+            txid = cancelTxid,
+            inputs = listOf(input),
+            outputAddresses = listOf("bcrt1qown", "bcrt1qchange"),
+            isFinal = false,
+            vBytes = 141uL,
+        )
         val bumpedTxid = "34".repeat(32)
         val bumps = mutableListOf<Pair<String, ULong>>()
+        val estimates = mutableListOf<ULong?>()
         var approvals = 0
         val coordinator = OnchainSendCoordinator(f.store, mock(), testDispatcher)
         suspend fun speedUp(feeRate: ULong, spend: OnchainInputSpend?) = coordinator.speedUpCancellation(
@@ -980,25 +990,33 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             sent.walletId,
             feeRate,
             findPending = { spend },
-            approve = { approvals++ },
+            approve = {
+                approvals++
+                estimates += it
+            },
         ) { txid, rate ->
             bumps += txid to rate
-            bumpedTxid
+            // The bump added a coin, so it pays more than the rate on the held size
+            OnchainCancellationBump(bumpedTxid, miningFeeSats = 1_500uL, feeRateSatsPerVByte = 9uL)
         }
 
         assertIs<OnchainSendBlockedError>(speedUp(8uL, null).exceptionOrNull())
         assertIs<OnchainSendBlockedError>(speedUp(8uL, pending.copy(isFinal = true)).exceptionOrNull())
         val toRecipient = pending.copy(outputAddresses = listOf(sent.address))
         assertIs<OnchainSendBlockedError>(speedUp(8uL, toRecipient).exceptionOrNull())
+        // A confirmed cancellation cannot be replaced
+        assertIs<OnchainSendBlockedError>(speedUp(8uL, pending.copy(confirmations = 1u)).exceptionOrNull())
         assertEquals(5uL, assertIs<OnchainSendCancelUnderbidsError>(speedUp(5uL, pending).exceptionOrNull()).feeRate)
         assertEquals(0, approvals)
 
         assertEquals(bumpedTxid, speedUp(8uL, pending).getOrThrow())
 
         assertEquals(1, approvals)
+        assertEquals(listOf<ULong?>(1_128uL), estimates)
         assertEquals(listOf(cancelTxid to 8uL), bumps)
         assertEquals(bumpedTxid, f.store.current()?.cancellationTxid)
-        assertEquals(8uL, f.store.current()?.cancellationFeeRateSatsPerVByte)
+        assertEquals(9uL, f.store.current()?.cancellationFeeRateSatsPerVByte)
+        assertEquals(1_500uL, f.store.current()?.cancellationMiningFeeSats)
         assertTrue(f.store.current()?.blocksNextSend == true)
     }
 

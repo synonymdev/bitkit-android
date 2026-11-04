@@ -2,28 +2,13 @@ package to.bitkit.models
 
 import org.lightningdevkit.ldknode.TransactionDetails
 
-/** Bytes of a transaction's version and lock time. */
 private const val VERSION_AND_LOCK_TIME_BYTES = 8L
-
-/** Bytes of an input's previous outpoint and sequence. */
 private const val OUTPOINT_AND_SEQUENCE_BYTES = 40L
-
-/** Bytes of an output's value. */
 private const val OUTPUT_VALUE_BYTES = 8L
-
-/** Weight units of the segwit marker and flag. */
 private const val SEGWIT_MARKER_AND_FLAG_WU = 2L
-
-/** Weight units per non-witness byte. */
 private const val WITNESS_SCALE_FACTOR = 4L
-
-/** The largest value a one-byte compact size holds. */
 private const val COMPACT_SIZE_ONE_BYTE_MAX = 0xFCL
-
-/** The largest value a three-byte compact size holds. */
 private const val COMPACT_SIZE_THREE_BYTES_MAX = 0xFFFFL
-
-/** The largest value a five-byte compact size holds. */
 private const val COMPACT_SIZE_FIVE_BYTES_MAX = 0xFFFF_FFFFL
 
 /** The weight of this signed transaction as serialized, from its hex scripts and witness items. */
@@ -40,9 +25,11 @@ internal fun TransactionDetails.weight(): ULong {
     return (baseBytes * WITNESS_SCALE_FACTOR + SEGWIT_MARKER_AND_FLAG_WU + witnessBytes).toULong()
 }
 
+/** This signed transaction's virtual size, rounded up. */
+internal fun TransactionDetails.vBytes(): ULong = divideRoundingUp(weight(), WITNESS_SCALE_FACTOR.toULong())
+
 /** The rate that [feeSats] pays on this signed transaction, per virtual byte and rounded up. */
-internal fun TransactionDetails.feeRate(feeSats: ULong): ULong =
-    divideRoundingUp(feeSats, divideRoundingUp(weight(), WITNESS_SCALE_FACTOR.toULong()))
+internal fun TransactionDetails.feeRate(feeSats: ULong): ULong = divideRoundingUp(feeSats, vBytes())
 
 internal fun divideRoundingUp(dividend: ULong, divisor: ULong): ULong =
     (dividend.safe() + (divisor.safe() - 1uL.safe()).safe()) / divisor

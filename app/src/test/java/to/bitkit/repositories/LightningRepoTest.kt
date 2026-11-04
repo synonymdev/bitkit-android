@@ -2266,7 +2266,7 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `speeding up bumps the pending cancellation and saves its replacement`() = test {
+    fun `speeding up bumps the pending cancellation and saves its replacement's exact fee`() = test {
         val store = realAttemptStore()
         startNodeForTesting()
         val txid = "aa".repeat(32)
@@ -2287,16 +2287,25 @@ class LightningRepoTest : BaseUnitTest() {
             OnchainSendOutcome.Unknown(txid)
         }
         store.recordOutcome(admitted.attemptId, OnchainSendOutcome.Unknown(txid), 0)
-        val cancellation = OnchainInputSpend("ef".repeat(32), inputs, listOf("bcrt1qown", "bcrt1qchange"), false)
+        val cancellation = OnchainInputSpend(
+            txid = "ef".repeat(32),
+            inputs = inputs,
+            outputAddresses = listOf("bcrt1qown", "bcrt1qchange"),
+            isFinal = false,
+            vBytes = 110uL,
+        )
         whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(listOf(cancellation))
         whenever(lightningService.bumpFeeByRbf(cancellation.txid, 9uL)).thenReturn("34".repeat(32))
-        var approvals = 0
+        whenever(lightningService.walletTransactionFee("34".repeat(32), 0)).thenReturn(1_700uL to 10uL)
+        val estimates = mutableListOf<ULong?>()
 
-        val result = sut.speedUpOnchainCancellation(admitted.attemptId, admitted.walletId, 9uL) { approvals++ }
+        val result = sut.speedUpOnchainCancellation(admitted.attemptId, admitted.walletId, 9uL) { estimates += it }
 
         assertEquals("34".repeat(32), result.getOrThrow())
-        assertEquals(1, approvals)
+        assertEquals(listOf<ULong?>(990uL), estimates)
         assertEquals("34".repeat(32), store.current()?.cancellationTxid)
+        assertEquals(1_700uL, store.current()?.cancellationMiningFeeSats)
+        assertEquals(10uL, store.current()?.cancellationFeeRateSatsPerVByte)
         assertTrue(store.current()?.blocksNextSend == true)
     }
 
@@ -2359,6 +2368,23 @@ class LightningRepoTest : BaseUnitTest() {
         syncs = 0
         assertTrue(sut.onchainCandidatesNeverReachedNetwork(attempt, 5.seconds))
         assertEquals(2, syncs)
+    }
+
+    @Test
+    fun `release check fails at once when its first sync fails`() = test {
+        val attempt = pendingSendAttempt()
+        var syncs = 0
+        whenever(lightningService.sync()).doSuspendableAnswer {
+            syncs++
+            throw ServiceError.NodeNotSetup()
+        }
+        val started = testScheduler.currentTime
+
+        assertFailsWith<OnchainSendAbandonSyncError> { sut.onchainCandidatesNeverReachedNetwork(attempt, 120.seconds) }
+
+        assertTrue(testScheduler.currentTime - started < 5.seconds.inWholeMilliseconds)
+        assertEquals(1, syncs)
+        verify(lightningService, never()).walletKnowsNoCandidate(attempt)
     }
 
     @Test

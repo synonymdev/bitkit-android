@@ -1613,7 +1613,7 @@
     <string name="wallet__send_pending__blocked_new_send">El pagament nou no s\'ha enviat. Finalitza el pagament anterior abans de tornar-ho a provar.</string>
     <string name="wallet__send_pending__cancel_authorize">Autoritzar la cancel·lació</string>
     <string name="wallet__send_pending__cancel_confirmations">Confirmacions: %1$d de 6</string>
-    <string name="wallet__send_pending__cancel_description">Cancel·la el pagament retornant-ne les entrades a la teva cartera. Introdueix la taxa de tarifa que autoritzes en sat/vB; fes servir una taxa més alta que l\'original perquè la cancel·lació el pugui substituir. Una cancel·lació anterior només es pot substituir després que surti de la xarxa sense confirmar-se. Els altres pagaments onchain continuen bloquejats fins que una cancel·lació tingui 6 confirmacions.</string>
+    <string name="wallet__send_pending__cancel_description">Cancel·la el pagament retornant-ne les entrades a la teva cartera. Introdueix la taxa de tarifa que autoritzes en sat/vB; fes servir una taxa més alta que l\'original perquè la cancel·lació el pugui substituir. Els altres pagaments onchain continuen bloquejats fins que una cancel·lació tingui 6 confirmacions.</string>
     <string name="wallet__send_pending__cancel_error">No s\'ha pogut cancel·lar el pagament. Els seus fons continuen protegits. Prova una tarifa més alta o comprova l\'estat de la transacció.</string>
     <string name="wallet__send_pending__cancel_fee_too_low">Una nova cancel·lació ha de pagar una comissió de xarxa superior a %1$s sats, amb una taxa més alta que la transacció que substitueix. Introdueix una taxa més alta.</string>
     <string name="wallet__send_pending__cancel_final_held">La cancel·lació té 6 confirmacions. Bitkit allibera aquest pagament a la propera sincronització del moneder, i llavors es desbloquegen els altres pagaments on-chain.</string>
@@ -1622,6 +1622,7 @@
     <string name="wallet__send_pending__cancel_pending_error">Una cancel·lació anterior encara està pendent, així que una de nova encara no la pot substituir. Els fons del pagament continuen protegits. Espera que es confirmi o torna a cancel·lar si surt de la xarxa sense confirmar-se.</string>
     <string name="wallet__send_pending__cancel_speed_up">Accelera la cancel·lació</string>
     <string name="wallet__send_pending__cancel_speed_up_note">La cancel·lació encara espera la confirmació. Substitueix-la per la mateixa cancel·lació amb una taxa superior als seus %1$s sat/vB actuals, perquè es confirmi abans. Els fons d\'aquest pagament continuen tornant al teu moneder.</string>
+    <string name="wallet__send_pending__cancel_speed_up_review">Accelerar la cancel·lació paga una comissió de xarxa d\'uns %1$s sats a %2$s sat/vB. Pot afegir monedes del teu moneder, cosa que augmenta la comissió.</string>
     <string name="wallet__send_pending__cancel_title">Cancel·lar el pagament</string>
     <string name="wallet__send_pending__cancel_unheld">Cancel·lació enviada, però el moneder no l\'ha vista a la xarxa, així que potser no hi ha arribat. Els fons del pagament continuen protegits. Pots tornar a cancel·lar amb una comissió més alta.</string>
     <string name="wallet__send_pending__cancelled_description">La cancel·lació té 6 confirmacions. Els pagaments onchain tornen a estar disponibles.</string>

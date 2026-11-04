@@ -253,16 +253,17 @@ class OnchainSendCoordinator(
     }
 
     /**
-     * Replace the pending Cancel payment or release [findPending] reports with one paying [feeRateSatsPerVByte],
+     * Replace the unconfirmed Cancel payment or release [findPending] reports with one paying [feeRateSatsPerVByte],
      * through [bump], which keeps every output in this wallet, so the replacement still cancels every candidate.
+     * [approve] gets the fee the rate pays on the held transaction's size, which a bump that adds coins exceeds.
      */
     suspend fun speedUpCancellation(
         attemptId: String,
         walletId: String,
         feeRateSatsPerVByte: ULong,
         findPending: suspend (OnchainSendAttempt) -> OnchainInputSpend?,
-        approve: suspend () -> Unit,
-        bump: suspend (txid: String, feeRate: ULong) -> String,
+        approve: suspend (estimatedFeeSats: ULong?) -> Unit,
+        bump: suspend (txid: String, feeRate: ULong) -> OnchainCancellationBump,
     ): Result<String> = withContext(ioDispatcher) {
         runSuspendCatching {
             mutex.withLock {
@@ -270,14 +271,16 @@ class OnchainSendCoordinator(
                 if (attempt?.attemptId != attemptId || attempt.walletId != walletId || !attempt.isUnresolved) {
                     throw OnchainSendBlockedError(attempt)
                 }
-                val pending = findPending(attempt)?.takeIf { !it.isFinal && attempt.isCancelledBy(it) }
+                // A confirmed transaction cannot be replaced, so only one still in a mempool is bumped
+                val pending = findPending(attempt)
+                    ?.takeIf { it.confirmations == 0u && !it.isFinal && attempt.isCancelledBy(it) }
                     ?: throw OnchainSendBlockedError(attempt)
                 require(OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte))
                 val rateFloor = attempt.highestSpendFeeRate
                 if (feeRateSatsPerVByte <= rateFloor) {
                     throw OnchainSendCancelUnderbidsError(rateFloor, attempt.highestSpendFee)
                 }
-                approve()
+                approve(pending.vBytes?.let { it.safe() * feeRateSatsPerVByte.safe() })
                 store.bumpCancellation(attempt.attemptId, attempt.walletIndex, feeRateSatsPerVByte) {
                     bump(pending.txid, feeRateSatsPerVByte)
                 }

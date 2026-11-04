@@ -28,6 +28,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -1071,8 +1072,10 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
             cancellationTxid = finalCancellation.txid,
             cancellationFeeRateSatsPerVByte = 3uL,
             cancellationMiningFeeSats = 400uL,
+            cancellationSentAtMillis = sent.cancellationSentAtMillis,
         )
         assertEquals(expected, sent)
+        assertNotNull(sent.cancellationSentAtMillis)
         assertTrue(sent.blocksNextSend)
         assertFailsWith<OnchainSendBlockedError> {
             store.broadcastCancellation(unresolved.attemptId, 1, cancelReceipt, cancel)
@@ -1169,16 +1172,28 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         }
         val bumped = "34".repeat(32)
 
-        assertEquals(bumped, store.bumpCancellation(unresolved.attemptId, 0, 7uL) { bumped.uppercase() })
+        val sentAt = requireNotNull(store.current()?.cancellationSentAtMillis)
 
+        val txid = store.bumpCancellation(unresolved.attemptId, 0, 7uL) {
+            OnchainCancellationBump(bumped.uppercase(), miningFeeSats = 900uL, feeRateSatsPerVByte = 6uL)
+        }
+
+        assertEquals(bumped, txid)
         val current = requireNotNull(store.current())
         assertEquals(bumped, current.cancellationTxid)
         assertEquals(7uL, current.cancellationFeeRateSatsPerVByte)
-        assertEquals(400uL, current.cancellationMiningFeeSats)
-        assertFailsWith<OnchainSendBlockedError> { store.bumpCancellation("other-attempt", 0, 8uL) { bumped } }
+        assertEquals(900uL, current.cancellationMiningFeeSats)
+        assertTrue(requireNotNull(current.cancellationSentAtMillis) >= sentAt)
+        // A fee the wallet could not read keeps the highest one saved
+        store.bumpCancellation(unresolved.attemptId, 0, 8uL) { OnchainCancellationBump(bumped, null, null) }
+        assertEquals(900uL, store.current()?.cancellationMiningFeeSats)
+        assertEquals(8uL, store.current()?.cancellationFeeRateSatsPerVByte)
+        assertFailsWith<OnchainSendBlockedError> {
+            store.bumpCancellation("other-attempt", 0, 8uL) { OnchainCancellationBump(bumped, null, null) }
+        }
         store.observeExactTransaction(firstTxid)
         assertFailsWith<OnchainSendBlockedError> {
-            store.bumpCancellation(unresolved.attemptId, 0, 8uL) { error("a paid attempt is not bumped") }
+            store.bumpCancellation(unresolved.attemptId, 0, 9uL) { error("a paid attempt is not bumped") }
         }
     }
 

@@ -15125,6 +15125,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `speed-up approval carries the estimated fee and its warnings`() = test {
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "original", requestId = PaykitPaymentRequestId("gone", "payee"),
+            orderId = null, address = "bcrt1qoriginal", amountSats = 1_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown, payerIdentity = "payer",
+        )
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
+            .thenReturn(Result.failure(Exception("USD unavailable")))
+        val estimates = listOf<ULong?>(990uL, 300uL, null)
+        whenever(
+            lightningRepo.speedUpOnchainCancellation(any(), any(), any(), any())
+        ).doSuspendableAnswer { invocation ->
+            val approve = invocation.getArgument<suspend (ULong?) -> Unit>(3)
+            runCatching {
+                estimates.forEach { approve(it) }
+                "cd".repeat(32)
+            }
+        }
+        val approvals = mutableListOf<Pair<ULong?, List<SanityWarning>>>()
+
+        val result = sut.speedUpOnchainCancellation(original, 9uL) { fee, warnings -> approvals += fee to warnings }
+
+        assertEquals("cd".repeat(32), result.getOrThrow())
+        assertEquals(
+            listOf(
+                990uL to listOf(SanityWarning.FEE_OVER_HALF_VALUE),
+                300uL to emptyList(),
+                null to emptyList(),
+            ),
+            approvals,
+        )
+        verify(lightningRepo).speedUpOnchainCancellation(eq(original.attemptId), eq(original.walletId), eq(9uL), any())
+    }
+
+    @Test
     fun `onchain syncs share one settlement that runs apart from event handling and tells the user`() = test {
         val released = OnchainSendAttempt(
             walletId = WalletScope.default, attemptId = "original", requestId = null, orderId = null,

@@ -1554,7 +1554,7 @@
     <string name="wallet__send_pending__blocked_new_send">The new payment was not sent. Finish the previous payment before trying again.</string>
     <string name="wallet__send_pending__cancel_authorize">Authorize cancellation</string>
     <string name="wallet__send_pending__cancel_confirmations">Confirmations: %1$d of 6</string>
-    <string name="wallet__send_pending__cancel_description">Cancel by sending this payment\'s inputs back to your wallet. Enter the fee rate you authorize in sat/vB; use a higher rate than the original so the cancellation can replace it. An earlier cancellation can be replaced only after it drops out of the network without confirming. Other on-chain payments stay blocked until a cancellation has 6 confirmations.</string>
+    <string name="wallet__send_pending__cancel_description">Cancel by sending this payment\'s inputs back to your wallet. Enter the fee rate you authorize in sat/vB; use a higher rate than the original so the cancellation can replace it. Other on-chain payments stay blocked until a cancellation has 6 confirmations.</string>
     <string name="wallet__send_pending__cancel_error">The payment could not be cancelled. Its funds remain protected. Try a higher fee or check the transaction status.</string>
     <string name="wallet__send_pending__cancel_fee_too_low">A new cancellation must pay a network fee above %1$s sats, at a higher fee rate than the transaction it replaces. Enter a higher fee rate.</string>
     <string name="wallet__send_pending__cancel_final_held">The cancellation has 6 confirmations. Bitkit releases this payment at the next wallet sync, and other on-chain payments unlock then.</string>
@@ -1563,6 +1563,7 @@
     <string name="wallet__send_pending__cancel_pending_error">An earlier cancellation is still pending, so a new one cannot replace it yet. The payment\'s funds remain protected. Wait for it to confirm, or cancel again if it drops out of the network without confirming.</string>
     <string name="wallet__send_pending__cancel_speed_up">Speed up cancellation</string>
     <string name="wallet__send_pending__cancel_speed_up_note">The cancellation is still waiting to confirm. Replace it with the same cancellation at a fee rate above its current %1$s sat/vB, so it confirms sooner. It still sends this payment\'s coins back to your wallet.</string>
+    <string name="wallet__send_pending__cancel_speed_up_review">Speeding up the cancellation pays a network fee of about %1$s sats at %2$s sat/vB. It may add coins from your wallet, which raises the fee.</string>
     <string name="wallet__send_pending__cancel_title">Cancel payment</string>
     <string name="wallet__send_pending__cancel_unheld">Cancellation sent, but the wallet has not seen it on the network, so it may not have reached it. The payment\'s funds remain protected. You can cancel again with a higher fee.</string>
     <string name="wallet__send_pending__cancelled_description">The cancellation has 6 confirmations. On-chain payments are available again.</string>

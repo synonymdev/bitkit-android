@@ -94,6 +94,32 @@ class SendPendingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `speed-up fee estimate and warnings precede its payment authentication`() = test {
+        val authorization = async {
+            sut.approveSpeedUp(
+                feeRateSatsPerVByte = 9uL,
+                estimatedFeeSats = 990uL,
+                warnings = listOf(SanityWarning.FEE_OVER_HALF_VALUE),
+                requiresPin = true,
+                useBiometrics = false,
+            )
+        }
+        advanceUntilIdle()
+        assertEquals(RecoveryApproval.SpeedUp(9uL, 990uL), sut.uiState.value.recoveryApproval)
+        sut.answerRecoveryApproval(true)
+        advanceUntilIdle()
+        assertEquals(RecoveryApproval.Warning(SanityWarning.FEE_OVER_HALF_VALUE), sut.uiState.value.recoveryApproval)
+        sut.answerRecoveryApproval(true)
+        advanceUntilIdle()
+        assertEquals(RecoveryApproval.Pin, sut.uiState.value.recoveryApproval)
+        assertEquals(true, sut.openRecoveryPin())
+        sut.answerRecoveryPin(true)
+        advanceUntilIdle()
+        authorization.await()
+        assertNull(sut.uiState.value.recoveryApproval)
+    }
+
+    @Test
     fun `exact prepared fee and warnings precede original retry payment authentication`() = test {
         val receipt = OnchainPreparedReceipt(
             "ab".repeat(32),
@@ -514,11 +540,11 @@ class SendPendingViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `reopened confirming cancellation can be sped up and stays guarded`() = test {
+    fun `reopened unconfirmed cancellation can be sped up and stays guarded`() = test {
         val original = pendingOriginal().copy(candidateFeeRates = mapOf("ab".repeat(32) to 3uL))
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
-        val confirming = OnchainInputSpend(cancelTxid, original.originalInputs.orEmpty(), listOf("own"), false)
-        whenever(lightningRepo.findOnchainSendCancellation(original)).thenReturn(Result.success(confirming))
+        val unconfirmed = OnchainInputSpend(cancelTxid, original.originalInputs.orEmpty(), listOf("own"), false)
+        whenever(lightningRepo.findOnchainSendCancellation(original)).thenReturn(Result.success(unconfirmed))
 
         sut.initOnchain(original.txid, amount)
         advanceUntilIdle()
@@ -548,6 +574,32 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertEquals(7uL, replaced.suggestedFeeRate(RecoveryAction.SpeedUpCancellation))
         assertEquals(original, replaced.recoveryAttempt)
         assertFalse(replaced.isGuardReleased)
+    }
+
+    @Test
+    fun `confirming cancellation can no longer be sped up or replaced`() = test {
+        val original = pendingOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        val confirming = OnchainInputSpend(cancelTxid, original.originalInputs.orEmpty(), listOf("own"), false, 1u)
+        whenever(lightningRepo.findOnchainSendCancellation(original)).thenReturn(Result.success(confirming))
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        var speedUps = 0
+
+        sut.speedUpCancellation(6uL) { _, _ ->
+            speedUps++
+            Result.success("cd".repeat(32))
+        }
+        advanceUntilIdle()
+
+        val state = sut.uiState.value
+        assertEquals(1u, state.cancellationConfirmations)
+        assertFalse(state.canSpeedUpCancellation)
+        assertFalse(state.canCancel)
+        assertFalse(state.canRetry)
+        assertEquals(0, speedUps)
+        assertEquals(cancelTxid, state.cancellationTxid)
+        assertEquals(original, state.recoveryAttempt)
     }
 
     @Test
@@ -624,11 +676,11 @@ class SendPendingViewModelTest : BaseUnitTest() {
     fun `a failed speed-up says so and suggests a rate that outbids`() = test {
         val original = pendingOriginal()
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
-        val confirming = OnchainInputSpend(cancelTxid, original.originalInputs.orEmpty(), listOf("own"), false, 2u)
-        whenever(lightningRepo.findOnchainSendCancellation(original)).thenReturn(Result.success(confirming))
+        val held = OnchainInputSpend(cancelTxid, original.originalInputs.orEmpty(), listOf("own"), false)
+        whenever(lightningRepo.findOnchainSendCancellation(original)).thenReturn(Result.success(held))
         sut.initOnchain(original.txid, amount)
         advanceUntilIdle()
-        assertEquals(2u, sut.uiState.value.cancellationConfirmations)
+        assertTrue(sut.uiState.value.canSpeedUpCancellation)
 
         sut.speedUpCancellation(3uL) { _, _ -> Result.failure(OnchainSendCancelUnderbidsError(9uL, 1_000uL)) }
         advanceUntilIdle()
@@ -682,6 +734,8 @@ class SendPendingViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertTrue(sut.uiState.value.canRetry)
 
+        whenever(lightningRepo.currentOnchainSendAttempt())
+            .thenReturn(original.copy(cancellationTxid = cancelTxid, cancellationSentAtMillis = SENT_AT_MILLIS))
         sut.cancelOriginal(4uL) { _, _ -> Result.success(OnchainSendOutcome.Unknown(cancelTxid)) }
         advanceUntilIdle()
         // It may have been relayed, so it shows as sent
@@ -698,8 +752,14 @@ class SendPendingViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(0, retries)
 
-        // A sync whose wallet still lacks it says it may not have reached the network, and offers a higher fee
+        // A sync that finished before the cancellation was sent says nothing about it
+        whenever(lightningRepo.latestOnchainWalletSyncTimestamp()).thenReturn(SYNC_BEFORE_SENT_SECS)
         nodeEvents.emit(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isCancellationUnheld)
+        // A later sync whose wallet still lacks it says it may not have reached the network, and offers a higher fee
+        whenever(lightningRepo.latestOnchainWalletSyncTimestamp()).thenReturn(SYNC_AFTER_SENT_SECS)
+        nodeEvents.emit(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 101u))
         advanceUntilIdle()
         assertTrue(sut.uiState.value.isCancellationUnheld)
         assertTrue(sut.uiState.value.canCancel)
@@ -716,8 +776,9 @@ class SendPendingViewModelTest : BaseUnitTest() {
 
     @Test
     fun `speed-up is withdrawn once a sync no longer finds the held cancellation`() = test {
-        val original = pendingOriginal()
+        val original = pendingOriginal().copy(cancellationTxid = cancelTxid, cancellationSentAtMillis = SENT_AT_MILLIS)
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        whenever(lightningRepo.latestOnchainWalletSyncTimestamp()).thenReturn(SYNC_AFTER_SENT_SECS)
         val held = OnchainInputSpend(cancelTxid, original.originalInputs.orEmpty(), listOf("own"), false)
         whenever(lightningRepo.findOnchainSendCancellation(original)).thenReturn(Result.success(held))
         sut.initOnchain(original.txid, amount)
@@ -733,6 +794,27 @@ class SendPendingViewModelTest : BaseUnitTest() {
         assertTrue(dropped.canCancel)
         assertTrue(dropped.isCancellationUnheld)
         assertFalse(dropped.canRetry)
+    }
+
+    @Test
+    fun `reopened unheld cancellation is reported only after a sync since it was sent`() = test {
+        val original = pendingOriginal().copy(cancellationTxid = cancelTxid, cancellationSentAtMillis = SENT_AT_MILLIS)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        whenever(lightningRepo.latestOnchainWalletSyncTimestamp()).thenReturn(SYNC_BEFORE_SENT_SECS)
+
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+
+        val reopened = sut.uiState.value
+        assertEquals(cancelTxid, reopened.cancellationTxid)
+        assertFalse(reopened.isCancellationUnheld)
+        assertTrue(reopened.canCancel)
+        assertFalse(reopened.canSpeedUpCancellation)
+
+        whenever(lightningRepo.latestOnchainWalletSyncTimestamp()).thenReturn(SYNC_AFTER_SENT_SECS)
+        nodeEvents.emit(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isCancellationUnheld)
     }
 
     @Test
@@ -1116,6 +1198,12 @@ class SendPendingViewModelTest : BaseUnitTest() {
     )
 
     private val cancelTxid = "ef".repeat(32)
+
+    private companion object {
+        const val SENT_AT_MILLIS = 1_800_000_000_000L
+        const val SYNC_BEFORE_SENT_SECS = 1_799_999_999uL
+        const val SYNC_AFTER_SENT_SECS = 1_800_000_001uL
+    }
 
     // Without a payer identity it cannot be cancelled as an expired Shop payment, so nothing polls its request
     private fun requestOriginal() = pendingOriginal().copy(requestId = PaykitPaymentRequestId("request", "payee"))

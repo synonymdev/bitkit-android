@@ -1893,12 +1893,18 @@ class LightningRepo @Inject constructor(
         return lost.txid
     }
 
-    /** Replace a pending cancellation of [attemptId] with one paying [feeRateSatsPerVByte], after [approve]. */
+    /** The time of the node's latest on-chain wallet sync, in seconds, when the node reports one. */
+    fun latestOnchainWalletSyncTimestamp(): ULong? = lightningService.status?.latestOnchainWalletSyncTimestamp
+
+    /**
+     * Replace a pending cancellation of [attemptId] with one paying [feeRateSatsPerVByte], after [approve], and save
+     * the replacement's exact fee, which covers any coins the bump added.
+     */
     suspend fun speedUpOnchainCancellation(
         attemptId: String,
         walletId: String,
         feeRateSatsPerVByte: ULong,
-        approve: suspend () -> Unit,
+        approve: suspend (estimatedFeeSats: ULong?) -> Unit,
     ): Result<String> = executeWhenNodeRunning("speedUpOnchainCancellation") {
         requireWalletRestoreComplete()
         recoveryCoordinator.speedUpCancellation(
@@ -1909,7 +1915,13 @@ class LightningRepo @Inject constructor(
             approve = approve,
         ) { txid, feeRate ->
             requireWalletRestoreComplete()
-            lightningService.bumpFeeByRbf(txid, feeRate)
+            val replacement = lightningService.bumpFeeByRbf(txid, feeRate)
+            val walletIndex = lightningService.currentWalletIndex
+            // An unread fee leaves the requested rate saved, which a later Cancel payment still outbids by rate
+            val exact = runSuspendCatching { lightningService.walletTransactionFee(replacement, walletIndex) }
+                .onFailure { Logger.warn("Failed to read the fee of cancellation '$replacement'", it, context = TAG) }
+                .getOrNull()
+            OnchainCancellationBump(replacement, exact?.first, exact?.second)
         }
     }
 
@@ -2030,10 +2042,12 @@ class LightningRepo @Inject constructor(
         val previousSync = AtomicReference<ULong?>(null)
         val requestedSyncSucceeded = AtomicBoolean(false)
         val waitEnded = AtomicBoolean(false)
+        val firstSyncFailed = AtomicBoolean(false)
         // The sync blocks in native code and ignores cancellation, so it runs apart and the wait keeps its limit.
         scope.launch {
             runSuspendCatching {
-                lightningService.sync()
+                // Without a first sync no baseline exists, so the check fails at once rather than waiting it out
+                runSuspendCatching { lightningService.sync() }.onFailure { firstSyncFailed.set(true) }.getOrThrow()
                 lightningService.status?.latestOnchainWalletSyncTimestamp?.let(previousSync::set)
                 // A check that already gave up starts no further sync
                 if (waitEnded.get()) return@runSuspendCatching
@@ -2042,11 +2056,13 @@ class LightningRepo @Inject constructor(
             }
         }
         withTimeoutOrNull(timeout) {
-            while (true) {
+            var isFresh = false
+            while (!isFresh && !firstSyncFailed.get()) {
                 val latestSync = lightningService.status?.latestOnchainWalletSyncTimestamp
-                if (isOnchainSyncAfter(latestSync, previousSync.get(), requestedSyncSucceeded.get())) break
-                delay(500.milliseconds)
+                isFresh = isOnchainSyncAfter(latestSync, previousSync.get(), requestedSyncSucceeded.get())
+                if (!isFresh) delay(500.milliseconds)
             }
+            isFresh.takeIf { it }
         }.also { waitEnded.set(true) } ?: throw OnchainSendAbandonSyncError()
         return lightningService.walletKnowsNoCandidate(attempt)
     }

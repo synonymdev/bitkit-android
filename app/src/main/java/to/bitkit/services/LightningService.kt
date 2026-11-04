@@ -77,6 +77,7 @@ import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.feeRate
+import to.bitkit.models.vBytes
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.repositories.OnchainInputSpend
@@ -1121,6 +1122,18 @@ class LightningService internal constructor(
         }
     }
 
+    /** Reads the exact fee and rate of the wallet's transaction [txid], when the wallet holds every coin it spent. */
+    suspend fun walletTransactionFee(txid: String, walletIndex: Int): Pair<ULong, ULong>? {
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        return callOnchainSend {
+            if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+            val details = originalNode.getTransactionDetails(txid) ?: return@callOnchainSend null
+            val fee = exactTransactionFee(details) { originalNode.getTransactionDetails(it) }
+                ?: return@callOnchainSend null
+            fee to details.feeRate(fee)
+        }
+    }
+
     /** Reads [txid] from the node wallet's own history as a payment of [attempt] that no candidate records. */
     suspend fun readLostCandidate(attempt: OnchainSendAttempt, txid: String): OnchainPreparedReceipt? {
         val originalNode = node ?: throw ServiceError.NodeNotSetup()
@@ -1603,6 +1616,7 @@ internal fun onchainInputSpend(
         txid = kind.txid.lowercase(),
         inputs = spent,
         outputAddresses = details.outputs.map { it.scriptpubkeyAddress },
+        vBytes = runCatching { details.vBytes() }.getOrNull(),
         isFinal = kind.status is ConfirmationStatus.Confirmed && payment.status == PaymentStatus.SUCCEEDED,
         confirmations = (kind.status as? ConfirmationStatus.Confirmed)
             ?.let { if (bestHeight >= it.height) bestHeight - it.height + 1u else 1u } ?: 0u,
@@ -1639,7 +1653,14 @@ internal fun exactOriginalSendFee(
     previous: (String) -> TransactionDetails?,
 ): ULong? {
     val inputs = details.inputs.map { OnchainSendInput(it.txid, it.vout) }
-    check(inputs.isNotEmpty() && inputs.distinct().size == inputs.size && inputs.toSet() == originalInputs.toSet())
+    check(inputs.toSet() == originalInputs.toSet())
+    return exactTransactionFee(details, previous)
+}
+
+/** Exact fee of [details] from the outputs its inputs spend, which [previous] reads; null when one is missing. */
+internal fun exactTransactionFee(details: TransactionDetails, previous: (String) -> TransactionDetails?): ULong? {
+    val inputs = details.inputs.map { OnchainSendInput(it.txid, it.vout) }
+    check(inputs.isNotEmpty() && inputs.distinct().size == inputs.size)
     fun checkedSum(values: List<Long>): ULong = values.fold(0uL) { sum, value ->
         check(value >= 0 && ULong.MAX_VALUE - sum >= value.toULong())
         sum + value.toULong()

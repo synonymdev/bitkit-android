@@ -53,6 +53,7 @@ class SendPendingViewModel @Inject constructor(
     companion object {
         private const val TAG = "SendPendingViewModel"
         private val ABANDON_CHECK_INTERVAL = 30.seconds
+        private const val MILLIS_PER_SECOND = 1_000L
     }
 
     private val _uiState = MutableStateFlow(SendPendingUiState())
@@ -97,6 +98,7 @@ class SendPendingViewModel @Inject constructor(
                             it.copy(
                                 recoveryAttempt = attempt,
                                 cancellationTxid = attempt.cancellationTxid ?: attempt.releaseTxid,
+                                cancellationSentAtMillis = attempt.cancellationSentAtMillis,
                                 hasUnknownCancellation = attempt.hasSentCancellation,
                                 cancellationFeeRate = listOfNotNull(
                                     attempt.releaseFeeRateSatsPerVByte,
@@ -146,12 +148,12 @@ class SendPendingViewModel @Inject constructor(
     }
 
     private fun observeCancellation(original: OnchainSendAttempt) {
-        viewModelScope.launch { showKnownCancellation(original, afterSync = true) }
+        viewModelScope.launch { showKnownCancellation(original) }
         viewModelScope.launch {
             // Each wallet sync shows whether the wallet holds the cancellation, or never saw one that was sent
             lightningRepo.nodeEvents
                 .filter { it is Event.SyncCompleted && it.syncType == SyncType.ONCHAIN_WALLET }
-                .collect { showKnownCancellation(original, afterSync = true) }
+                .collect { showKnownCancellation(original) }
         }
         viewModelScope.launch {
             lightningRepo.onchainSendAttemptUpdates.collect {
@@ -166,7 +168,8 @@ class SendPendingViewModel @Inject constructor(
         }
     }
 
-    private suspend fun showKnownCancellation(original: OnchainSendAttempt, afterSync: Boolean = false) {
+    private suspend fun showKnownCancellation(original: OnchainSendAttempt) {
+        val syncedAtMillis = lightningRepo.latestOnchainWalletSyncTimestamp()?.let { it.toLong() * MILLIS_PER_SECOND }
         lightningRepo.findOnchainSendCancellation(original).onSuccess { spend ->
             _uiState.update {
                 if (spend != null) {
@@ -178,11 +181,13 @@ class SendPendingViewModel @Inject constructor(
                         cancellationConfirmations = spend.confirmations,
                     )
                 } else {
-                    // A server refusal other than non-final reads as unknown, so a sent cancellation the synced
-                    // wallet still lacks may never have reached the network
+                    // A server refusal other than non-final reads as unknown, so a sent cancellation that a wallet
+                    // sync after it still lacks may never have reached the network
+                    val sentAt = it.cancellationSentAtMillis
+                    val syncedSinceSent = sentAt != null && syncedAtMillis != null && syncedAtMillis > sentAt
                     it.copy(
                         isCancellationHeld = false,
-                        isCancellationUnheld = it.isCancellationUnheld || (afterSync && it.cancellationTxid != null),
+                        isCancellationUnheld = it.cancellationTxid != null && syncedSinceSent,
                     )
                 }
             }
@@ -318,6 +323,9 @@ class SendPendingViewModel @Inject constructor(
                         )
                     }
                 }
+                val sentAt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+                    ?.takeIf { it.attemptId == original.attemptId }?.cancellationSentAtMillis
+                if (sentAt != null) _uiState.update { it.copy(cancellationSentAtMillis = sentAt) }
                 // A cancellation the wallet now holds, such as the release, keeps the original's coins, so it is
                 // sped up rather than built over again.
                 showKnownCancellation(original)
@@ -368,15 +376,28 @@ class SendPendingViewModel @Inject constructor(
                         )
                     }
                 }
-                if (result.isFailure) showKnownCancellation(original)
+                if (result.isFailure) {
+                    showKnownCancellation(original)
+                } else {
+                    val sentAt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+                        ?.takeIf { it.attemptId == original.attemptId }?.cancellationSentAtMillis
+                    if (sentAt != null) _uiState.update { it.copy(cancellationSentAtMillis = sentAt) }
+                }
             } finally {
                 _uiState.update { it.copy(isRecovering = false) }
             }
         }
     }
 
-    /** A speed-up shows its fee rate in the dialog the user confirmed, so only the payment's own check remains. */
-    suspend fun approveSpeedUp(requiresPin: Boolean, useBiometrics: Boolean) = withContext(Dispatchers.Main.immediate) {
+    suspend fun approveSpeedUp(
+        feeRateSatsPerVByte: ULong,
+        estimatedFeeSats: ULong?,
+        warnings: List<SanityWarning>,
+        requiresPin: Boolean,
+        useBiometrics: Boolean,
+    ) = withContext(Dispatchers.Main.immediate) {
+        requestRecoveryApproval(RecoveryApproval.SpeedUp(feeRateSatsPerVByte, estimatedFeeSats))
+        warnings.forEach { requestRecoveryApproval(RecoveryApproval.Warning(it)) }
         if (requiresPin) {
             requestRecoveryApproval(if (useBiometrics) RecoveryApproval.Biometrics else RecoveryApproval.Pin)
         }
@@ -569,6 +590,7 @@ data class SendPendingUiState(
     val isCancellationFinal: Boolean = false,
     val isCancellationHeld: Boolean = false,
     val isCancellationUnheld: Boolean = false,
+    val cancellationSentAtMillis: Long? = null,
     val cancelFeeTooLowSats: ULong? = null,
     val cancellationConfirmations: UInt = 0u,
     val normalFeeRate: ULong? = null,
@@ -607,7 +629,7 @@ data class SendPendingUiState(
 
     /** Speeding up replaces the pending cancellation, and keeps every output in this wallet. */
     val canSpeedUpCancellation: Boolean
-        get() = recoveryAttempt != null && isCancellationHeld && !isCancellationFinal
+        get() = recoveryAttempt != null && isCancellationHeld && cancellationConfirmations == 0u && !isCancellationFinal
 
     /** A final cancellation should have released the guard, so one still held needs another sync or attention. */
     val isReleaseStalled: Boolean
@@ -644,4 +666,5 @@ sealed interface RecoveryApproval {
     data object Biometrics : RecoveryApproval
     data object Pin : RecoveryApproval
     data class Release(val receipt: OnchainPreparedReceipt) : RecoveryApproval
+    data class SpeedUp(val feeRateSatsPerVByte: ULong, val estimatedFeeSats: ULong?) : RecoveryApproval
 }

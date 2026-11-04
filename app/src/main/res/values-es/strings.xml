@@ -1612,7 +1612,7 @@
     <string name="wallet__send_pending__blocked_new_send">El nuevo pago no se envió. Finalice el pago anterior antes de volver a intentarlo.</string>
     <string name="wallet__send_pending__cancel_authorize">Autorizar cancelación</string>
     <string name="wallet__send_pending__cancel_confirmations">Confirmaciones: %1$d de 6</string>
-    <string name="wallet__send_pending__cancel_description">Cancele el pago devolviendo sus entradas a su monedero. Introduzca la tasa de comisión que autoriza en sat/vB; use una tasa más alta que la original para que la cancelación pueda reemplazarlo. Una cancelación anterior solo puede reemplazarse después de que salga de la red sin confirmarse. Los demás pagos onchain siguen bloqueados hasta que una cancelación tenga 6 confirmaciones.</string>
+    <string name="wallet__send_pending__cancel_description">Cancele el pago devolviendo sus entradas a su monedero. Introduzca la tasa de comisión que autoriza en sat/vB; use una tasa más alta que la original para que la cancelación pueda reemplazarlo. Los demás pagos onchain siguen bloqueados hasta que una cancelación tenga 6 confirmaciones.</string>
     <string name="wallet__send_pending__cancel_error">No se pudo cancelar el pago. Sus fondos siguen protegidos. Pruebe una comisión más alta o compruebe el estado de la transacción.</string>
     <string name="wallet__send_pending__cancel_fee_too_low">Una nueva cancelación debe pagar una comisión de red superior a %1$s sats, con una tasa de comisión más alta que la transacción que sustituye. Introduce una tasa de comisión más alta.</string>
     <string name="wallet__send_pending__cancel_final_held">La cancelación tiene 6 confirmaciones. Bitkit libera este pago en la próxima sincronización del monedero, y entonces se desbloquean los demás pagos on-chain.</string>
@@ -1621,6 +1621,7 @@
     <string name="wallet__send_pending__cancel_pending_error">Una cancelación anterior sigue pendiente, por lo que una nueva aún no puede reemplazarla. Los fondos del pago siguen protegidos. Espere a que se confirme o vuelva a cancelar si sale de la red sin confirmarse.</string>
     <string name="wallet__send_pending__cancel_speed_up">Acelerar la cancelación</string>
     <string name="wallet__send_pending__cancel_speed_up_note">La cancelación aún espera su confirmación. Sustitúyela por la misma cancelación con una tasa de comisión superior a sus %1$s sat/vB actuales, para que se confirme antes. Los fondos de este pago siguen volviendo a tu monedero.</string>
+    <string name="wallet__send_pending__cancel_speed_up_review">Acelerar la cancelación paga una comisión de red de unos %1$s sats a %2$s sat/vB. Puede añadir monedas de su monedero, lo que aumenta la comisión.</string>
     <string name="wallet__send_pending__cancel_title">Cancelar pago</string>
     <string name="wallet__send_pending__cancel_unheld">Cancelación enviada, pero el monedero no la ha visto en la red, así que es posible que no haya llegado. Los fondos del pago siguen protegidos. Puede cancelar de nuevo con una comisión más alta.</string>
     <string name="wallet__send_pending__cancelled_description">La cancelación tiene 6 confirmaciones. Los pagos onchain vuelven a estar disponibles.</string>

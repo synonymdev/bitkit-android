@@ -553,7 +553,10 @@ class PaykitPaymentProofRepo @Inject constructor(
             proof.kind == PaykitPaymentProofKind.Onchain && proof.requestId == attempt.requestId &&
                 PubkyPublicKeyFormat.matches(proof.identity, requireNotNull(attempt.payerIdentity)) &&
                 proof.onchainWalletId == attempt.walletId &&
-                (identifier == null || attempt.candidateTxids.any { it.equals(identifier, ignoreCase = true) })
+                (
+                    identifier == null && proof.proofData == null ||
+                        attempt.candidateTxids.any { it.equals(identifier, ignoreCase = true) }
+                    )
         }
         if (original.isNotEmpty()) persist(proofs - original.toSet())
     }

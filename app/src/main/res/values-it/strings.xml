@@ -1616,7 +1616,7 @@
     <string name="wallet__send_pending__blocked_new_send">Il nuovo pagamento non è stato inviato. Completa il pagamento precedente prima di riprovare.</string>
     <string name="wallet__send_pending__cancel_authorize">Autorizza annullamento</string>
     <string name="wallet__send_pending__cancel_confirmations">Conferme: %1$d su 6</string>
-    <string name="wallet__send_pending__cancel_description">Annulla il pagamento rimandando i suoi input al tuo wallet. Inserisci il tasso di commissione che autorizzi in sat/vB; usa un tasso più alto dell\'originale affinché l\'annullamento possa sostituirlo. Un annullamento precedente può essere sostituito solo dopo che è uscito dalla rete senza essere confermato. Gli altri pagamenti onchain restano bloccati finché un annullamento non ha 6 conferme.</string>
+    <string name="wallet__send_pending__cancel_description">Annulla il pagamento rimandando i suoi input al tuo wallet. Inserisci il tasso di commissione che autorizzi in sat/vB; usa un tasso più alto dell\'originale affinché l\'annullamento possa sostituirlo. Gli altri pagamenti onchain restano bloccati finché un annullamento non ha 6 conferme.</string>
     <string name="wallet__send_pending__cancel_error">Non è stato possibile annullare il pagamento. I suoi fondi restano protetti. Prova una commissione più alta o controlla lo stato della transazione.</string>
     <string name="wallet__send_pending__cancel_fee_too_low">Un nuovo annullamento deve pagare una commissione di rete superiore a %1$s sats, con una tariffa più alta della transazione che sostituisce. Inserisci una tariffa più alta.</string>
     <string name="wallet__send_pending__cancel_final_held">L\'annullamento ha 6 conferme. Bitkit rilascia questo pagamento alla prossima sincronizzazione del wallet, e allora gli altri pagamenti on-chain vengono sbloccati.</string>
@@ -1625,6 +1625,7 @@
     <string name="wallet__send_pending__cancel_pending_error">Un annullamento precedente è ancora in attesa, quindi uno nuovo non può ancora sostituirlo. I fondi del pagamento restano protetti. Attendi che venga confermato, oppure annulla di nuovo se esce dalla rete senza essere confermato.</string>
     <string name="wallet__send_pending__cancel_speed_up">Accelera l\'annullamento</string>
     <string name="wallet__send_pending__cancel_speed_up_note">L\'annullamento è ancora in attesa di conferma. Sostituiscilo con lo stesso annullamento a una tariffa superiore agli attuali %1$s sat/vB, così viene confermato prima. I fondi di questo pagamento tornano comunque al tuo wallet.</string>
+    <string name="wallet__send_pending__cancel_speed_up_review">Velocizzare l\'annullamento paga una commissione di rete di circa %1$s sats a %2$s sat/vB. Potrebbe aggiungere monete dal tuo wallet, aumentando la commissione.</string>
     <string name="wallet__send_pending__cancel_title">Annulla pagamento</string>
     <string name="wallet__send_pending__cancel_unheld">Annullamento inviato, ma il wallet non l\'ha visto in rete, quindi potrebbe non esserci arrivato. I fondi del pagamento restano protetti. Puoi annullare di nuovo con una commissione più alta.</string>
     <string name="wallet__send_pending__cancelled_description">L\'annullamento ha 6 conferme. I pagamenti onchain sono di nuovo disponibili.</string>
