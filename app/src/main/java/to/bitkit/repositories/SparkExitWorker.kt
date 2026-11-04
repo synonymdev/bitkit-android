@@ -14,26 +14,34 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import dagger.hilt.android.qualifiers.ApplicationContext
 import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
 import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
-/** The background work that drives a Spark exit while Bitkit is closed. */
-object SparkExitWork {
-    private const val PERIODIC_WORK = "spark-exit-tick"
-    private const val REMINDER_WORK = "spark-exit-reminder"
-    internal const val INPUT_NOTIFY = "notify"
+/** Queues the background work that drives a Spark exit while Bitkit is closed. */
+@Singleton
+class SparkExitWork @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    companion object {
+        private const val PERIODIC_WORK = "spark-exit-tick"
+        private const val REMINDER_WORK = "spark-exit-reminder"
+        internal const val INPUT_NOTIFY = "notify"
 
-    /** The shortest period WorkManager runs periodic work at. */
-    private val PERIOD = 15.minutes
+        /** The shortest period WorkManager runs periodic work at. */
+        private val PERIOD = 15.minutes
+    }
 
     private val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
-    fun schedulePeriodic(context: Context) {
+    fun schedulePeriodic() {
         val request = PeriodicWorkRequestBuilder<SparkExitWorker>(PERIOD.inWholeMinutes, TimeUnit.MINUTES)
             .setConstraints(constraints)
             .build()
@@ -42,7 +50,7 @@ object SparkExitWork {
     }
 
     /** Drives the exit after [delay] and, when Bitkit is not open then, asks the user to open it. */
-    fun scheduleReminder(context: Context, delay: Duration) {
+    fun scheduleReminder(delay: Duration) {
         val request = OneTimeWorkRequestBuilder<SparkExitWorker>()
             .setInitialDelay(delay.inWholeMilliseconds.coerceAtLeast(0), TimeUnit.MILLISECONDS)
             .setConstraints(constraints)
@@ -51,7 +59,7 @@ object SparkExitWork {
         WorkManager.getInstance(context).enqueueUniqueWork(REMINDER_WORK, ExistingWorkPolicy.REPLACE, request)
     }
 
-    fun cancelAll(context: Context) {
+    fun cancelAll() {
         WorkManager.getInstance(context).run {
             cancelUniqueWork(PERIODIC_WORK)
             cancelUniqueWork(REMINDER_WORK)

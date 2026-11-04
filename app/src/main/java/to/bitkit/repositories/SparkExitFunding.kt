@@ -104,6 +104,12 @@ object SparkExitMath {
         .mapNotNull { (it.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight }
         .maxOrNull()
 
+    /** The next height above [tip] at which a timelocked step matures, for the reminder. */
+    fun nextMaturityHeight(recovery: RecoverFundsResponse, tip: UInt): UInt? = recovery.transactions
+        .mapNotNull { (it.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight }
+        .filter { it > tip }
+        .minOrNull()
+
     /** The steps already in a block, for progress. */
     fun confirmedCount(recovery: RecoverFundsResponse): Int =
         recovery.transactions.count { it.status is ExitTransactionStatus.Confirmed }

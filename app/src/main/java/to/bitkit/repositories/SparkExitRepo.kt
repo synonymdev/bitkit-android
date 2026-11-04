@@ -1,6 +1,5 @@
 package to.bitkit.repositories
 
-import android.content.Context
 import breez_sdk_spark.CpfpFundingKind
 import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.ExitLeafSelection
@@ -8,7 +7,6 @@ import breez_sdk_spark.PrepareRecoverFundsRequest
 import breez_sdk_spark.RecoveryTxKind
 import breez_sdk_spark.singleKeyCpfpSigner
 import com.synonym.bitkitcore.Activity
-import dagger.hilt.android.qualifiers.ApplicationContext
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
@@ -16,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -51,7 +50,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 @Singleton
 class SparkExitRepo @Inject constructor(
-    @ApplicationContext private val context: Context,
+    private val work: SparkExitWork,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val sparkService: SparkService,
     private val sparkRepo: SparkRepo,
@@ -91,7 +90,7 @@ class SparkExitRepo @Inject constructor(
         scope.launch {
             sparkRepo.walletWiped.collect {
                 if (it != walletIndex) return@collect
-                SparkExitWork.cancelAll(context)
+                work.cancelAll()
                 _state.update { SparkExitState() }
             }
         }
@@ -120,7 +119,8 @@ class SparkExitRepo @Inject constructor(
             isLoaded = true
             _state.update { it.copy(record = record) }
             record?.let { settleIfFinished(it) }
-            if (record?.isActive == true) SparkExitWork.schedulePeriodic(context)
+            settleOrphanedTransfers(record)
+            if (record?.isActive == true) work.schedulePeriodic()
             record
         }
     }
@@ -175,7 +175,7 @@ class SparkExitRepo @Inject constructor(
         } finally {
             tickMutex.unlock()
             // Every tick keeps the background work queued, so one failed or skipped run never ends the chain.
-            if (_state.value.isExiting) SparkExitWork.schedulePeriodic(context)
+            if (_state.value.isExiting) work.schedulePeriodic()
         }
     }
 
@@ -206,7 +206,7 @@ class SparkExitRepo @Inject constructor(
         scheduleReminder(record, previous)
         if (!record.isActive) {
             Logger.info("Ended Spark exit with phase '${record.phase}'", context = TAG)
-            SparkExitWork.cancelAll(context)
+            work.cancelAll()
             sparkRepo.setExiting(false)
         }
     }
@@ -230,6 +230,20 @@ class SparkExitRepo @Inject constructor(
         if (isFinished) transferRepo.markSettled(transferId)
     }
 
+    /**
+     * Settles exit transfers no running exit owns: a record set aside as unreadable, or one written without its
+     * transfer id before a crash, would otherwise count its amount as in transfer to Savings for good.
+     */
+    private suspend fun settleOrphanedTransfers(record: SparkExitRecord?) {
+        val owned = record?.takeIf { it.isActive }?.transferId
+        transferRepo.activeTransfers.first()
+            .filter { it.type == TransferType.SPARK_EXIT && it.id != owned }
+            .forEach {
+                Logger.warn("Settling Spark exit transfer '${it.id}' with no running exit", context = TAG)
+                transferRepo.markSettled(it.id)
+            }
+    }
+
     private suspend fun refreshFundingSeen(chain: SparkExitChain, record: SparkExitRecord) {
         val address = record.funding.firstOrNull()?.address ?: return
         _state.update { it.copy(fundingAddress = address) }
@@ -250,17 +264,20 @@ class SparkExitRepo @Inject constructor(
                 0.seconds
             }
             SparkExitRecord.Phase.Running -> {
-                val target = record.claimableAtHeight
+                // The next step to mature, not the last: each opens its own window for the operators' version.
                 val tip = _state.value.tipHeight
-                if (target != null && tip != null && target > tip) {
-                    SparkExitMath.timeUntil(target, tip, Env.network)
+                val recovery = record.recovery
+                val target = if (tip != null && recovery != null) {
+                    SparkExitMath.nextMaturityHeight(recovery, tip)
                 } else {
-                    SparkExitMath.reminderDelay(Env.network)
+                    null
                 }
+                tip?.let { height -> target?.let { SparkExitMath.timeUntil(it, height, Env.network) } }
+                    ?: SparkExitMath.reminderDelay(Env.network)
             }
             else -> return
         }
-        SparkExitWork.scheduleReminder(context, delay)
+        work.scheduleReminder(delay)
     }
 
     // endregion
@@ -351,14 +368,15 @@ class SparkExitRepo @Inject constructor(
             _state.update { it.copy(record = record, pending = null, fundingAddress = key.address) }
             isLoaded = true
             sparkRepo.setExiting(true)
-            SparkExitWork.schedulePeriodic(context)
+            work.schedulePeriodic()
             Logger.info(
                 "Started Spark exit of '${quote.exitSats}' sats over '${quote.leafIds.size}' leaves",
                 context = TAG,
             )
-            if (fundFromSavings && quote.fundingSats > 0uL) payFunding(key.address, quote.fundingSats)
+            // Driven before paying, so a failed payment from savings still leaves the exit watching its address.
             scope.launch { tick() }
             onAppForegrounded()
+            if (fundFromSavings && quote.fundingSats > 0uL) payFunding(key.address, quote.fundingSats)
         }.onFailure {
             Logger.error("Failed to start the Spark exit", it, context = TAG)
         }
@@ -402,7 +420,7 @@ class SparkExitRepo @Inject constructor(
             store.delete()
             _state.update { it.copy(record = null) }
             record.transferId?.let { transferRepo.markSettled(it) }
-            SparkExitWork.cancelAll(context)
+            work.cancelAll()
             sparkRepo.setExiting(false)
             Logger.info("Cancelled the Spark exit before it was funded", context = TAG)
         }

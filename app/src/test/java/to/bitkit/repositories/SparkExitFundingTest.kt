@@ -71,6 +71,20 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `reminder targets the next timelock to mature`() {
+        val recovery = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("a", status = ExitTransactionStatus.WaitingForTimelock(900u)),
+                SparkExitFixtures.tx("b", status = ExitTransactionStatus.WaitingForTimelock(2_400u)),
+                SparkExitFixtures.tx("c", status = ExitTransactionStatus.WaitingForTimelock(2_000u)),
+            ),
+        )
+
+        assertEquals(2_000u, SparkExitMath.nextMaturityHeight(recovery, tip = 1_000u))
+        assertNull(SparkExitMath.nextMaturityHeight(recovery, tip = 2_400u))
+    }
+
+    @Test
     fun `funding utxo must be confirmed and large enough`() {
         val utxos = listOf(
             SparkExitFixtures.utxo("small", value = 999uL),
