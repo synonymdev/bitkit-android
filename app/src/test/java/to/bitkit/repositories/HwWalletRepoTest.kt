@@ -73,6 +73,7 @@ import to.bitkit.services.TrezorWalletMode
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -2028,7 +2029,16 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         verify(trezorRepo).stopWatcher("hardware-wallet|nativeSegwit")
         verify(trezorRepo).resetState()
+        verify(hwHeldSendStore).reset()
         assertEquals(0uL, sut.totalSats.value)
+    }
+
+    @Test
+    fun `resetState fails when held sends cannot be cleared`() = test {
+        whenever(hwHeldSendStore.reset()).doSuspendableAnswer { throw HwHeldSendsUnreadableError(walletId = null) }
+        val sut = createRepo()
+
+        assertFailsWith<HwHeldSendsUnreadableError> { sut.resetState() }
     }
 
     @Test

@@ -285,6 +285,8 @@ class HwWalletRepo @Inject constructor(
         }
         trezorRepo.resetState()
         jadeRepo.resetState()
+        // A wipe forgets held sends with the rest of the wallet; one that cannot be cleared fails the wipe
+        hwHeldSendStore.reset()
     }
 
     /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */
