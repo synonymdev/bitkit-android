@@ -476,7 +476,7 @@ class HwSendViewModel @Inject constructor(
             Logger.warn("Failed to read retained hardware send for '${request.walletId}'", it, context = TAG)
             return false
         } ?: return false
-        return !record.retryWasRefused && record.isSamePayment(request.address, request.amountSats)
+        return record.isSamePayment(request.address, request.amountSats) && (record.observed || !record.retryWasRefused)
     }
 
     /** Only for a user who accepted a possible second payment. Does nothing while an operation is in flight. */
@@ -581,6 +581,11 @@ class HwSendViewModel @Inject constructor(
         val dispatch = payment?.dispatch ?: return handleFailure(error, walletId)
         val settled = payment.copy(dispatch = null)
         pendingBroadcast = settled
+        val txId = runCatching { SignedTransactionId.fromHex(settled.signedTx.serializedTx) }.getOrNull()
+        // A transaction already seen on the network is out, whatever the server replied, so this is a success.
+        if (txId != null && hwRetainedSendRepo.record(walletId).getOrNull()?.observed == true) {
+            return completeRetainedSend(settled, txId, attempt)
+        }
         val isFirstAttempt = dispatch == HwSendDispatch.FirstAttempt
         when {
             error.isHardwareBroadcastRefusalForNavigation() && isFirstAttempt -> {
@@ -588,7 +593,7 @@ class HwSendViewModel @Inject constructor(
                 clearPendingBroadcast()
                 handleFailure(error, walletId)
             }
-            error.isHardwareBroadcastRefusalForNavigation() -> settleRetryRefusal(error, settled, attempt)
+            error.isHardwareBroadcastRefusalForNavigation() -> settleRetryRefusal(error, settled, txId, attempt)
             error.isHardwareBroadcastNotSubmitted() -> {
                 if (isFirstAttempt) {
                     releaseRetainedSend(walletId)
@@ -607,24 +612,23 @@ class HwSendViewModel @Inject constructor(
     private suspend fun settleRetryRefusal(
         error: Throwable,
         payment: PendingHwSendBroadcast,
+        txId: String?,
         attempt: Int,
     ) {
-        val request = payment.request
-        val walletId = request.walletId
-        // A refusal of a transaction already seen on the network describes that transaction, so it is a success.
-        val wasObserved = hwRetainedSendRepo.record(walletId).getOrNull()?.observed == true
-        if (!wasObserved) {
-            hwRetainedSendRepo.markRetryRefused(walletId)
-                .onFailure { Logger.warn("Failed to mark retained hardware send for '$walletId'", it, context = TAG) }
-        }
-        val signedTx = payment.signedTx
-        val txId = runCatching { SignedTransactionId.fromHex(signedTx.serializedTx) }.getOrNull()
-        if (txId != null && (wasObserved || isTransactionObserved(walletId, txId))) {
-            val result = HwFundingBroadcastResult(txId, signedTx.miningFeeSats, signedTx.feeRate, signedTx.totalSpent)
-            completeSend(request, result, attempt)
+        val walletId = payment.request.walletId
+        hwRetainedSendRepo.markRetryRefused(walletId)
+            .onFailure { Logger.warn("Failed to mark retained hardware send for '$walletId'", it, context = TAG) }
+        if (txId != null && isTransactionObserved(walletId, txId)) {
+            completeRetainedSend(payment, txId, attempt)
         } else {
             handleFailure(error, walletId, mayHaveBeenSent = true)
         }
+    }
+
+    private suspend fun completeRetainedSend(payment: PendingHwSendBroadcast, txId: String, attempt: Int) {
+        val signedTx = payment.signedTx
+        val result = HwFundingBroadcastResult(txId, signedTx.miningFeeSats, signedTx.feeRate, signedTx.totalSpent)
+        completeSend(payment.request, result, attempt)
     }
 
     private suspend fun isTransactionObserved(walletId: String, txId: String): Boolean =

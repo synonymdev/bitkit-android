@@ -1951,7 +1951,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `an unknown retry failure with an observed record keeps it for another retry`() = test {
+    fun `an unknown retry failure with an observed record is a success`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.failure(UNKNOWN_FAILURE))
@@ -1962,9 +1962,53 @@ class HwSendViewModelTest : BaseUnitTest() {
         sut.signAndBroadcast(request())
         advanceUntilIdle()
 
-        assertEquals(true, retainedRecord()?.observed)
-        assertTrue(sut.offersRetry(request()))
+        assertEquals(HwSendResult(WALLET_ID, FIXTURE_TX_ID, AMOUNT_SATS), sut.results.first())
+        assertNull(retainedRecord())
         assertSignedOnceAndBroadcast(fixture, times = 2)
+    }
+
+    @Test
+    fun `a first attempt refusal with an observed record is a success with one signature`() = test {
+        val fixture = stubSuccessfulPayment()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            markObserved()
+            Result.failure(REFUSAL)
+        }
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(HwSendResult(WALLET_ID, FIXTURE_TX_ID, AMOUNT_SATS), sut.results.first())
+        assertNull(retainedRecord())
+        assertTrue(toasts.isEmpty())
+        assertSignedOnceAndBroadcast(fixture, times = 1)
+        verify(hwWalletRepo, never()).observeExactTransaction(any(), any(), anyOrNull(), anyOrNull())
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            FIXTURE_TX_ID,
+            ADDRESS,
+            AMOUNT_SATS,
+            fixture.signedTx.miningFeeSats,
+            fixture.signedTx.feeRate,
+            false,
+            null,
+            WALLET_ID,
+        )
+    }
+
+    @Test
+    fun `an observed record offers retry for the same payment even after a refused retry`() = test {
+        val fixture = stubSuccessfulPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        hwRetainedSendRepo.markRetryRefused(WALLET_ID).getOrThrow()
+        assertFalse(sut.offersRetry(request()))
+
+        markObserved()
+
+        assertTrue(sut.offersRetry(request()))
+        assertFalse(sut.offersRetry(request().copy(address = OTHER_ADDRESS)))
     }
 
     @Test
