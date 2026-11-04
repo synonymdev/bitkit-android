@@ -134,6 +134,8 @@ fun UsdtWalletScreen(
     var selectedTransferId by rememberSaveable(initialTransferId) { mutableStateOf(initialTransferId) }
     var recipient by rememberSaveable { mutableStateOf(initialRecipient) }
     var amount by rememberSaveable { mutableStateOf(initialAmount) }
+    // A scanned or linked request that names an amount fixes it; the payee set it.
+    var isAmountFixed by rememberSaveable { mutableStateOf(initialAmount.isNotEmpty()) }
     var maximumAmount by rememberSaveable { mutableStateOf<String?>(null) }
     val destinations by viewModel.destinations.collectAsStateWithLifecycle()
     var destination by rememberSaveable { mutableStateOf(UsdtDestination.ARBITRUM) }
@@ -155,6 +157,10 @@ fun UsdtWalletScreen(
             state.busy -> Unit
             state.authenticationRequired -> viewModel.cancelAuthentication()
             state.submitted -> dismiss()
+            state.quote != null && isAmountFixed -> {
+                viewModel.edit()
+                page = UsdtPage.MANUAL
+            }
             state.quote != null -> viewModel.edit()
             page in listOf(UsdtPage.AMOUNT, UsdtPage.MANUAL) -> {
                 viewModel.edit()
@@ -277,6 +283,7 @@ fun UsdtWalletScreen(
                                 if (request.chainId != null) destination = UsdtDestination.ARBITRUM
                                 recipient = request.recipient
                                 amount = request.amount?.let { usdtFormatAmount(it) } ?: amount
+                                isAmountFixed = request.amount != null
                                 page = UsdtPage.AMOUNT
                             }
                         },
@@ -296,6 +303,7 @@ fun UsdtWalletScreen(
                         onConfirm = { viewModel.confirm() }, onRetryRecovery = { viewModel.retryRecovery() },
                         onDone = dismiss,
                         hideBalance = settings.hideBalance,
+                        amountEditable = !isAmountFixed,
                         onDetails = {
                             selectedTransferId = state.quote?.id
                             dismiss()
