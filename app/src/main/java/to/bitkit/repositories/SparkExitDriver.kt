@@ -147,7 +147,8 @@ class SparkExitDriver(
 
     private suspend fun check(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
         val stored = record.recovery ?: return record.copy(phase = SparkExitRecord.Phase.AwaitingFunding(0uL))
-        val checked = sdk.check(stored)
+        val checked = sdk.check(withConfirmations(stored))
+        Logger.debug("Checked Spark exit generation '${record.generation}': '${checked.verdict}'", context = TAG)
         val updated = record.copy(recovery = checked.recovery)
         return when (checked.verdict) {
             RecoveryVerdict.Valid -> broadcastReady(updated)
@@ -163,6 +164,26 @@ class SparkExitDriver(
                 build(rebuilding, sdk)
             }
         }
+    }
+
+    /**
+     * Marks the next steps the chain host shows in a block as confirmed. The SDK asks the chain about a step only once
+     * the caller saw it in a block; otherwise it looks for who spent its input, which an Electrum-backed mempool,
+     * such as Spark's regtest, does not report.
+     */
+    private suspend fun withConfirmations(recovery: RecoverFundsResponse): RecoverFundsResponse {
+        val confirmed = recovery.transactions
+            .filter { it.status is ExitTransactionStatus.Confirmed }
+            .map { it.txid }
+            .toMutableSet()
+        val transactions = recovery.transactions.map { tx ->
+            if (tx.txid in confirmed || !tx.dependsOn.all { it in confirmed }) return@map tx
+            val status = runSuspendCatching { chain.txStatus(tx.txid) }.getOrNull()
+            if (status?.confirmed != true) return@map tx
+            confirmed += tx.txid
+            tx.copy(status = ExitTransactionStatus.Confirmed(status.blockHeight))
+        }
+        return recovery.copy(transactions = transactions)
     }
 
     private fun isRebuildDue(record: SparkExitRecord): Boolean {

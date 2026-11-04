@@ -123,6 +123,41 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `marks steps the chain host shows in a block before the sdk check`() = test {
+        val built = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("fan", kind = RecoveryTxKind.FAN_OUT),
+                SparkExitFixtures.tx(
+                    "n1",
+                    cpfp = "03c",
+                    dependsOn = listOf("fan"),
+                    status = ExitTransactionStatus.WaitingForDependencies,
+                ),
+                SparkExitFixtures.tx(
+                    "n2",
+                    cpfp = "03d",
+                    dependsOn = listOf("n1"),
+                    status = ExitTransactionStatus.WaitingForDependencies,
+                ),
+            ),
+        )
+        chain.confirmedTxids = setOf("fan", "n1")
+        sdk.checks += check(built, RecoveryVerdict.Valid)
+
+        driver().tick(running(built))
+
+        val sent = sdk.checkedRecoveries.single().transactions.map { it.status }
+        assertEquals(
+            listOf<ExitTransactionStatus>(
+                ExitTransactionStatus.Confirmed(900u),
+                ExitTransactionStatus.Confirmed(900u),
+                ExitTransactionStatus.WaitingForDependencies,
+            ),
+            sent,
+        )
+    }
+
+    @Test
     fun `retries a rejected step and surfaces it after repeated rejections`() = test {
         val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1", cpfp = "03c")))
         var record = running(recovery)

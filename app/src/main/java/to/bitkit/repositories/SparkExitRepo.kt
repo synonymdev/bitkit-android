@@ -182,6 +182,7 @@ class SparkExitRepo @Inject constructor(
     private suspend fun tickLocked(): SparkExitRecord? {
         val current = _state.value.record?.takeIf { it.isActive } ?: return _state.value.record
         val chain = chain ?: return current
+        Logger.debug("Driving Spark exit in phase '${current.phase}'", context = TAG)
         val tip = runSuspendCatching { chain.tipHeight() }.getOrNull()
         _state.update { it.copy(tipHeight = tip ?: it.tipHeight) }
         tip?.let { height -> sparkExitTip.height.update { height } }

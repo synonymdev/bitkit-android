@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import breez_sdk_spark.ExitTransactionStatus
+import breez_sdk_spark.RecoveryTxKind
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
 import kotlin.test.assertContentEquals
@@ -68,6 +69,22 @@ class SparkExitFundingTest {
         assertEquals(2_400u, SparkExitMath.claimableAtHeight(recovery))
         assertEquals(1, SparkExitMath.confirmedCount(recovery))
         assertNull(SparkExitMath.claimableAtHeight(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("d")))))
+    }
+
+    @Test
+    fun `timelocks are matured only once no refund waits`() {
+        val waiting = SparkExitFixtures.tx(
+            "r1",
+            kind = RecoveryTxKind.REFUND,
+            status = ExitTransactionStatus.WaitingForDependencies,
+        )
+        val ready = waiting.copy(status = ExitTransactionStatus.Ready)
+        val timelocked = waiting.copy(status = ExitTransactionStatus.WaitingForTimelock(2_000u))
+
+        assertFalse(SparkExitMath.areTimelocksMatured(listOf(SparkExitFixtures.tx("n1"), waiting)))
+        assertFalse(SparkExitMath.areTimelocksMatured(listOf(timelocked)))
+        assertFalse(SparkExitMath.areTimelocksMatured(listOf(SparkExitFixtures.tx("n1"))))
+        assertTrue(SparkExitMath.areTimelocksMatured(listOf(ready)))
     }
 
     @Test

@@ -1,7 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
 import android.content.Intent
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -186,12 +185,11 @@ private fun Content(
                 )
                 if (spark.showsExit) {
                     VerticalSpacer(8.dp)
-                    Box(modifier = Modifier.testTag("SparkEmergencyExit")) {
-                        TertiaryButton(
-                            text = stringResource(R.string.lightning__spark_exit__button),
-                            onClick = onEmergencyExit,
-                        )
-                    }
+                    TertiaryButton(
+                        text = stringResource(R.string.lightning__spark_exit__button),
+                        onClick = onEmergencyExit,
+                        modifier = Modifier.testTag("SparkEmergencyExit")
+                    )
                 }
                 VerticalSpacer(16.dp)
             }

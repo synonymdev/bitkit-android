@@ -337,10 +337,12 @@ fun ContentView(
                     appViewModel.checkAdoptedPubkySource()
                     appViewModel.refreshPrivatePaykitEndpoints()
                     appViewModel.startPaykitPaymentRequestPolling()
+                    appViewModel.startSparkExitDriving()
                 }
 
                 Lifecycle.Event.ON_STOP -> {
                     appViewModel.stopPaykitPaymentRequestPolling()
+                    appViewModel.stopSparkExitDriving()
                     val keptAliveByService = notificationsGranted &&
                         keepActiveInBackground &&
                         appViewModel.isForegroundServiceRunning()

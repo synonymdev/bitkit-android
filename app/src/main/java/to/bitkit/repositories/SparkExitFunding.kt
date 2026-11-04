@@ -3,6 +3,8 @@ package to.bitkit.repositories
 import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.PrepareRecoverFundsResponse
 import breez_sdk_spark.RecoverFundsResponse
+import breez_sdk_spark.RecoveryTransaction
+import breez_sdk_spark.RecoveryTxKind
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.models.safe
 import to.bitkit.utils.AppError
@@ -109,6 +111,15 @@ object SparkExitMath {
         .mapNotNull { (it.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight }
         .filter { it > tip }
         .minOrNull()
+
+    /** Whether every refund's timelock is behind it: none still waits for its parents or its height. */
+    fun areTimelocksMatured(transactions: List<RecoveryTransaction>): Boolean {
+        val refunds = transactions.filter { it.kind == RecoveryTxKind.REFUND }
+        return refunds.isNotEmpty() && refunds.none {
+            it.status == ExitTransactionStatus.WaitingForDependencies ||
+                it.status is ExitTransactionStatus.WaitingForTimelock
+        }
+    }
 
     /** The steps already in a block, for progress. */
     fun confirmedCount(recovery: RecoverFundsResponse): Int =

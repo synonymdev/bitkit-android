@@ -131,6 +131,7 @@ class FakeSparkExitRecovering : SparkExitRecovering {
     var recoverError: Throwable? = null
     val prepareRequests = mutableListOf<PrepareRecoverFundsRequest>()
     val recoverRequests = mutableListOf<RecoverFundsRequest>()
+    val checkedRecoveries = mutableListOf<RecoverFundsResponse>()
 
     override suspend fun prepare(request: PrepareRecoverFundsRequest): PrepareRecoverFundsResponse {
         prepareRequests += request
@@ -143,7 +144,10 @@ class FakeSparkExitRecovering : SparkExitRecovering {
         return builds.removeFirst()
     }
 
-    override suspend fun check(recovery: RecoverFundsResponse) = checks.removeFirst()
+    override suspend fun check(recovery: RecoverFundsResponse): CheckRecoverFundsResponse {
+        checkedRecoveries += recovery
+        return checks.removeFirst()
+    }
 }
 
 class StubCpfpSigner : CpfpSigner {

@@ -121,7 +121,7 @@ internal fun SparkExitSteps(record: SparkExitRecord, tipHeight: UInt?) {
             detail = remaining?.let {
                 stringResource(R.string.lightning__spark_exit__ready_in).replace("{duration}", it)
             },
-            isDone = isDone || (isFunded && record.claimableAtHeight == null && transactions.isNotEmpty()),
+            isDone = isDone || SparkExitMath.areTimelocksMatured(transactions),
         )
         SparkExitStep(stringResource(R.string.lightning__spark_exit__step_sweep), isDone = isDone)
     }
