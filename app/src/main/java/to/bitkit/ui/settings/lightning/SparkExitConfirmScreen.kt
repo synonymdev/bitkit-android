@@ -1,7 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,7 +16,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
@@ -64,7 +62,7 @@ private fun Content(
         )
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
@@ -77,8 +75,9 @@ private fun Content(
             )
             VerticalSpacer(32.dp)
             uiState.quote?.let { SparkExitQuoteRows(it) }
-            FillHeight()
             VerticalSpacer(32.dp)
+        }
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__spark_exit__swipe),
                 color = Colors.Brand,

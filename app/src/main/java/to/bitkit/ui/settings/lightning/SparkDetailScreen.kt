@@ -32,7 +32,6 @@ import to.bitkit.repositories.SparkWithdrawal
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.ChannelStatusUi
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.PrimaryButton
@@ -87,14 +86,13 @@ private fun Content(
         PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
             onRefresh = onRefresh,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.weight(1f)
         ) {
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .navigationBarsPadding()
                     .testTag("SparkScrollView")
             ) {
                 VerticalSpacer(16.dp)
@@ -173,26 +171,31 @@ private fun Content(
                     }
                 }
 
-                FillHeight()
                 VerticalSpacer(32.dp)
-                PrimaryButton(
-                    text = stringResource(R.string.wallet__transfer_to_savings),
-                    onClick = onTransferToSavings,
-                    enabled = spark.balanceSats > 0uL && !spark.isExiting,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("SparkTransferToSavings")
-                )
-                if (spark.showsExit) {
-                    VerticalSpacer(8.dp)
-                    TertiaryButton(
-                        text = stringResource(R.string.lightning__spark_exit__button),
-                        onClick = onEmergencyExit,
-                        modifier = Modifier.testTag("SparkEmergencyExit")
-                    )
-                }
-                VerticalSpacer(16.dp)
             }
+        }
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .navigationBarsPadding()
+        ) {
+            PrimaryButton(
+                text = stringResource(R.string.wallet__transfer_to_savings),
+                onClick = onTransferToSavings,
+                enabled = spark.balanceSats > 0uL && !spark.isExiting,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("SparkTransferToSavings")
+            )
+            if (spark.showsExit) {
+                VerticalSpacer(8.dp)
+                TertiaryButton(
+                    text = stringResource(R.string.lightning__spark_exit__button),
+                    onClick = onEmergencyExit,
+                    modifier = Modifier.testTag("SparkEmergencyExit")
+                )
+            }
+            VerticalSpacer(16.dp)
         }
     }
 }

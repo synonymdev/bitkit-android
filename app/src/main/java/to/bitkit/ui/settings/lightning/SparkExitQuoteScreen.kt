@@ -1,7 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -19,7 +18,6 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
@@ -54,7 +52,7 @@ private fun Content(
         )
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
@@ -85,8 +83,9 @@ private fun Content(
                     modifier = Modifier.testTag("SparkExitQuoteBlocked")
                 )
             }
-            FillHeight()
             VerticalSpacer(32.dp)
+        }
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
