@@ -1204,6 +1204,7 @@
     <string name="hardware__send_broadcast_accepted">Το δίκτυο αποδέχτηκε αυτή την πληρωμή. Θα ολοκληρωθεί μόλις το πορτοφόλι σου δει τη συναλλαγή.</string>
     <string name="hardware__send_broadcast_failed_text">Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="hardware__send_broadcast_failed_title">Η πληρωμή δεν επιβεβαιώθηκε</string>
+    <string name="hardware__send_broadcast_in_flight">Η τελευταία μετάδοση αυτής της πληρωμής δεν έχει απαντήσει ακόμη. Δοκίμασε ξανά σε λίγο.</string>
     <string name="hardware__send_broadcast_refused_text">Αυτή η πληρωμή μπορεί ακόμη να επιβεβαιωθεί. Παραμένει σε εκκρεμότητα μέχρι να τη δει το πορτοφόλι σου ή να ξοδευτούν αλλού τα νομίσματά της.</string>
     <string name="hardware__send_broadcast_rejected_text">Αυτή η πληρωμή δεν μπορεί να επιβεβαιωθεί ποτέ. Μπορείς να την κάνεις ξανά.</string>
     <string name="hardware__send_confirm_address">ΠΡΟΣ ΔΙΕΥΘΥΝΣΗ (ΕΠΙΒΕΒΑΙΩΣΗ ΣΤΗ ΣΥΣΚΕΥΗ)</string>

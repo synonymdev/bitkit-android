@@ -1198,6 +1198,7 @@
     <string name="hardware__send_broadcast_accepted">قبلت الشبكة هذه الدفعة. تكتمل بمجرد أن ترى محفظتك المعاملة.</string>
     <string name="hardware__send_broadcast_failed_text">تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="hardware__send_broadcast_failed_title">الدفعة غير مؤكدة</string>
+    <string name="hardware__send_broadcast_in_flight">لم يصل رد على آخر بث لهذه الدفعة بعد. حاول مرة أخرى بعد قليل.</string>
     <string name="hardware__send_broadcast_refused_text">قد تُؤكَّد هذه الدفعة لاحقًا. تبقى معلقة حتى ترى محفظتك المعاملة أو تُنفَق عملاتها في مكان آخر.</string>
     <string name="hardware__send_broadcast_rejected_text">لا يمكن تأكيد هذه الدفعة أبدًا. يمكنك إجراؤها مرة أخرى.</string>
     <string name="hardware__send_confirm_address">إلى العنوان (أكّد على الجهاز)</string>

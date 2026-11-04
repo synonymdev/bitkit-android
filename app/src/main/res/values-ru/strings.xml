@@ -1246,6 +1246,7 @@
     <string name="hardware__send_broadcast_accepted">Сеть приняла этот платёж. Он завершится, как только ваш кошелёк увидит транзакцию.</string>
     <string name="hardware__send_broadcast_failed_text">Проверьте подключение и попробуйте снова.</string>
     <string name="hardware__send_broadcast_failed_title">Платёж не подтверждён</string>
+    <string name="hardware__send_broadcast_in_flight">Последняя отправка этого платежа в сеть ещё не получила ответа. Повторите попытку чуть позже.</string>
     <string name="hardware__send_broadcast_refused_text">Этот платёж ещё может быть подтверждён. Он остаётся в ожидании, пока ваш кошелёк его не увидит или его монеты не будут потрачены в другой транзакции.</string>
     <string name="hardware__send_broadcast_rejected_text">Этот платёж никогда не будет подтверждён. Вы можете выполнить его снова.</string>
     <string name="hardware__send_confirm_address">НА АДРЕС (ПОДТВЕРДИТЕ НА УСТРОЙСТВЕ)</string>

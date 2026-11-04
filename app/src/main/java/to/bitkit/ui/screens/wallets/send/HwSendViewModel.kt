@@ -20,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -321,6 +322,7 @@ class HwSendViewModel @Inject constructor(
         // after a while, and its answer still settles the send
         val tracked = if (requestId == null) {
             checkNotNull(heldDispatches.begin(txId)) { "A broadcast of hardware send '$txId' is unanswered" }
+                .also { expireUnanswered(it) }
         } else {
             null
         }
@@ -561,6 +563,7 @@ class HwSendViewModel @Inject constructor(
     )
 
     private suspend fun releaseHeldSend(txId: String) {
+        heldDispatches.forget(txId)
         hwWalletRepo.releaseHeldSend(txId)
             .onFailure { Logger.warn("Failed to release held hardware send '$txId'", it, context = TAG) }
     }
@@ -624,7 +627,16 @@ class HwSendViewModel @Inject constructor(
         val unresolved = unresolvedSends[txId.lowercase()] ?: return
         val send = unresolved.send
         // One dispatch of the same bytes at a time, from any sheet
-        val tracked = heldDispatches.begin(send.txId) ?: return
+        val tracked = heldDispatches.begin(send.txId) ?: run {
+            viewModelScope.launch {
+                ToastEventBus.send(
+                    type = Toast.ToastType.INFO,
+                    title = context.getString(R.string.hardware__send_broadcast_in_flight),
+                )
+            }
+            return
+        }
+        expireUnanswered(tracked)
         viewModelScope.launch {
             var isNotSent = false
             try {
@@ -657,6 +669,13 @@ class HwSendViewModel @Inject constructor(
             } finally {
                 heldDispatches.finish(tracked, isNotSent)
             }
+        }
+    }
+
+    private fun expireUnanswered(dispatch: HwHeldDispatch) {
+        viewModelScope.launch {
+            delay(HwHeldDispatchTracker.ANSWER_BOUND)
+            heldDispatches.expire(dispatch)
         }
     }
 

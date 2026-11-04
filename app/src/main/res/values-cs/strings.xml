@@ -1229,6 +1229,7 @@
     <string name="hardware__send_broadcast_accepted">Síť tuto platbu přijala. Dokončí se, jakmile vaše peněženka transakci uvidí.</string>
     <string name="hardware__send_broadcast_failed_text">Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="hardware__send_broadcast_failed_title">Platba nebyla potvrzena</string>
+    <string name="hardware__send_broadcast_in_flight">Poslední odeslání této platby do sítě zatím neodpovědělo. Zkuste to za chvíli znovu.</string>
     <string name="hardware__send_broadcast_refused_text">Tato platba může být stále potvrzena. Zůstává čekající, dokud ji vaše peněženka neuvidí nebo dokud nebudou její mince utraceny jinde.</string>
     <string name="hardware__send_broadcast_rejected_text">Tato platba nikdy nemůže být potvrzena. Můžete ji provést znovu.</string>
     <string name="hardware__send_confirm_address">NA ADRESU (POTVRĎTE NA ZAŘÍZENÍ)</string>

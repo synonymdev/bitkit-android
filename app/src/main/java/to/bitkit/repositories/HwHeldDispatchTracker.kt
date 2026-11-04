@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Every dispatch of a held hardware send's signed bytes in this process, by txid. A broadcast proving it sent nothing
@@ -17,6 +18,14 @@ import javax.inject.Singleton
  */
 @Singleton
 class HwHeldDispatchTracker @Inject constructor() {
+    companion object {
+        /**
+         * How long a dispatch may go unanswered before it counts as possibly sent, which lets the same bytes be
+         * broadcast again; that is harmless, and a possibly sent dispatch never releases a hold.
+         */
+        val ANSWER_BOUND = 2.minutes
+    }
+
     private val lock = Any()
     private val dispatches = mutableListOf<HwHeldDispatch>()
     private val _inFlight = MutableStateFlow<ImmutableSet<String>>(persistentSetOf())
@@ -39,7 +48,20 @@ class HwHeldDispatchTracker @Inject constructor() {
         synchronized(lock) {
             if (dispatch.outcome != HwHeldDispatch.Outcome.IN_FLIGHT) return
             dispatch.outcome = if (isNotSent) HwHeldDispatch.Outcome.NOT_SENT else HwHeldDispatch.Outcome.MAY_HAVE_SENT
+            // A dispatch proven not sent never keeps a hold, so only the possibly sent ones are remembered
+            if (isNotSent) dispatches.remove(dispatch)
             publish()
+        }
+    }
+
+    /** Counts [dispatch] as possibly sent once it has gone [ANSWER_BOUND] without an answer. */
+    fun expire(dispatch: HwHeldDispatch) = finish(dispatch, isNotSent = false)
+
+    /** Forgets the answered dispatches of [txId], once its hold is released. */
+    fun forget(txId: String) {
+        synchronized(lock) {
+            val key = txId.lowercase()
+            dispatches.removeAll { it.txId == key && it.outcome != HwHeldDispatch.Outcome.IN_FLIGHT }
         }
     }
 

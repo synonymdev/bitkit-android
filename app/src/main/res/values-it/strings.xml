@@ -1227,6 +1227,7 @@
     <string name="hardware__send_broadcast_accepted">La rete ha accettato questo pagamento. Si completerà non appena il tuo wallet vedrà la transazione.</string>
     <string name="hardware__send_broadcast_failed_text">Controlla la connessione e riprova.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento non confermato</string>
+    <string name="hardware__send_broadcast_in_flight">L\'ultima trasmissione di questo pagamento non ha ancora risposto. Riprova tra un momento.</string>
     <string name="hardware__send_broadcast_refused_text">Questo pagamento potrebbe ancora essere confermato. Resta in sospeso finché il tuo wallet non lo vede o le sue monete non vengono spese altrove.</string>
     <string name="hardware__send_broadcast_rejected_text">Questo pagamento non potrà mai essere confermato. Puoi effettuarlo di nuovo.</string>
     <string name="hardware__send_confirm_address">ALL\'INDIRIZZO (CONFERMA SUL DISPOSITIVO)</string>

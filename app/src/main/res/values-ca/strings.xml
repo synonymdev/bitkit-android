@@ -1223,6 +1223,7 @@
     <string name="hardware__send_broadcast_accepted">La xarxa ha acceptat aquest pagament. Es completarà quan la teva cartera vegi la transacció.</string>
     <string name="hardware__send_broadcast_failed_text">Comprova la connexió i torna-ho a provar.</string>
     <string name="hardware__send_broadcast_failed_title">Pagament no confirmat</string>
+    <string name="hardware__send_broadcast_in_flight">L\'última difusió d\'aquest pagament encara no ha respost. Torna-ho a provar d\'aquí a un moment.</string>
     <string name="hardware__send_broadcast_refused_text">Aquest pagament encara es podria confirmar. Continua pendent fins que la teva cartera el vegi o les seves monedes es gastin en una altra transacció.</string>
     <string name="hardware__send_broadcast_rejected_text">Aquest pagament no es podrà confirmar mai. Pots tornar-lo a fer.</string>
     <string name="hardware__send_confirm_address">A L\'ADREÇA (CONFIRMA AL DISPOSITIU)</string>

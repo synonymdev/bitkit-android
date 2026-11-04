@@ -239,6 +239,7 @@
     <string name="hardware__send_broadcast_accepted">The network accepted this payment. It completes once your wallet sees the transaction.</string>
     <string name="hardware__send_broadcast_failed_text">Check your connection and try again.</string>
     <string name="hardware__send_broadcast_failed_title">Payment not confirmed</string>
+    <string name="hardware__send_broadcast_in_flight">The last broadcast of this payment has not answered yet. Try again in a moment.</string>
     <string name="hardware__send_broadcast_refused_text">This payment may still confirm. It stays pending until your wallet sees it or its coins are spent elsewhere.</string>
     <string name="hardware__send_broadcast_rejected_text">This payment can never confirm. You can make it again.</string>
     <string name="hardware__send_confirm_address">TO ADDRESS (CONFIRM ON DEVICE)</string>

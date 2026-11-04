@@ -1226,6 +1226,7 @@
     <string name="hardware__send_broadcast_accepted">Das Netzwerk hat diese Zahlung angenommen. Sie wird abgeschlossen, sobald dein Wallet die Transaktion sieht.</string>
     <string name="hardware__send_broadcast_failed_text">Überprüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardware__send_broadcast_failed_title">Zahlung nicht bestätigt</string>
+    <string name="hardware__send_broadcast_in_flight">Die letzte Übertragung dieser Zahlung hat noch nicht geantwortet. Versuche es gleich noch einmal.</string>
     <string name="hardware__send_broadcast_refused_text">Diese Zahlung kann noch bestätigt werden. Sie bleibt ausstehend, bis dein Wallet sie sieht oder ihre Coins anderweitig ausgegeben werden.</string>
     <string name="hardware__send_broadcast_rejected_text">Diese Zahlung kann nie bestätigt werden. Du kannst sie erneut ausführen.</string>
     <string name="hardware__send_confirm_address">AN ADRESSE (AM GERÄT BESTÄTIGEN)</string>

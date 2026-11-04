@@ -1225,6 +1225,7 @@
     <string name="hardware__send_broadcast_accepted">Le réseau a accepté ce paiement. Il sera finalisé dès que votre portefeuille verra la transaction.</string>
     <string name="hardware__send_broadcast_failed_text">Vérifiez votre connexion et réessayez.</string>
     <string name="hardware__send_broadcast_failed_title">Paiement non confirmé</string>
+    <string name="hardware__send_broadcast_in_flight">La dernière diffusion de ce paiement n\'a pas encore répondu. Réessayez dans un instant.</string>
     <string name="hardware__send_broadcast_refused_text">Ce paiement peut encore être confirmé. Il reste en attente jusqu\'à ce que votre portefeuille le voie ou que ses pièces soient dépensées ailleurs.</string>
     <string name="hardware__send_broadcast_rejected_text">Ce paiement ne pourra jamais être confirmé. Vous pouvez le refaire.</string>
     <string name="hardware__send_confirm_address">VERS L\'ADRESSE (CONFIRMER SUR L\'APPAREIL)</string>

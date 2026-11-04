@@ -732,6 +732,38 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a broadcast that never answers stops blocking broadcast again after two minutes`() = test {
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(context.getString(any())).thenReturn("message")
+        whenever(context.getString(R.string.hardware__send_broadcast_in_flight)).thenReturn("in flight")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            withContext(NonCancellable) { CompletableDeferred<Result<HwFundingBroadcastResult>>().await() }
+        }.thenReturn(Result.success(fixture.broadcast))
+
+        sut.signAndBroadcast(request())
+        advanceTimeBy(61.seconds)
+        runCurrent()
+        sut.retryUnresolvedSend(SIGNED_TXID)
+        runCurrent()
+
+        assertEquals(1, toasts.count { it.title == "in flight" })
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+
+        advanceTimeBy(60.seconds)
+        runCurrent()
+        assertTrue(sut.uiState.value.retryingSendTxIds.isEmpty())
+        sut.retryUnresolvedSend(SIGNED_TXID)
+        runCurrent()
+        toastJob.cancel()
+
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
+        assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
+        verify(hwWalletRepo, never()).releaseHeldSend(any())
+    }
+
+    @Test
     fun `a late proof that nothing was sent keeps the hold when the same bytes may have gone out before`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()

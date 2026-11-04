@@ -1228,6 +1228,7 @@
     <string name="hardware__send_broadcast_accepted">Sieć przyjęła tę płatność. Zostanie zakończona, gdy Twój portfel zobaczy transakcję.</string>
     <string name="hardware__send_broadcast_failed_text">Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_title">Płatność niepotwierdzona</string>
+    <string name="hardware__send_broadcast_in_flight">Ostatnie rozesłanie tej płatności jeszcze nie otrzymało odpowiedzi. Spróbuj ponownie za chwilę.</string>
     <string name="hardware__send_broadcast_refused_text">Ta płatność nadal może zostać potwierdzona. Pozostaje oczekująca, dopóki Twój portfel jej nie zobaczy lub jej monety nie zostaną wydane gdzie indziej.</string>
     <string name="hardware__send_broadcast_rejected_text">Ta płatność nigdy nie zostanie potwierdzona. Możesz wykonać ją ponownie.</string>
     <string name="hardware__send_confirm_address">NA ADRES (POTWIERDŹ NA URZĄDZENIU)</string>

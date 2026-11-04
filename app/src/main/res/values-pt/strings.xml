@@ -1196,6 +1196,7 @@
     <string name="hardware__send_broadcast_accepted">A rede aceitou este pagamento. Fica concluído assim que a sua carteira vir a transação.</string>
     <string name="hardware__send_broadcast_failed_text">Verifique a ligação e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento não confirmado</string>
+    <string name="hardware__send_broadcast_in_flight">A última transmissão deste pagamento ainda não respondeu. Tente novamente dentro de momentos.</string>
     <string name="hardware__send_broadcast_refused_text">Este pagamento ainda pode ser confirmado. Continua pendente até a sua carteira o ver ou as suas moedas serem gastas noutro lado.</string>
     <string name="hardware__send_broadcast_rejected_text">Este pagamento nunca poderá ser confirmado. Pode fazê-lo novamente.</string>
     <string name="hardware__send_confirm_address">PARA O ENDEREÇO (CONFIRME NO DISPOSITIVO)</string>
