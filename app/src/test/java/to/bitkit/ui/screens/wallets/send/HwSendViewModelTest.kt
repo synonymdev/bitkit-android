@@ -398,6 +398,27 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `Shop broadcast unanswered past the wait keeps its signed payment guarded`() = test {
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val original = request().copy(paymentRequestId = PaykitPaymentRequestId("request", "counterparty"))
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer { awaitCancellation() }
+
+        sut.signAndBroadcast(original)
+        advanceTimeBy(121.seconds)
+        runCurrent()
+        toastJob.cancel()
+
+        assertFalse(sut.uiState.value.isSigning)
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
+        assertEquals(Toast.ToastType.WARNING, toasts.single().type)
+        verify(hwWalletRepo, never()).holdSend(any())
+    }
+
+    @Test
     fun `Shop invalid broadcast failure retains original signed payment across cancel`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
@@ -522,9 +543,59 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a broadcast that succeeds after two minutes is recorded as sent without a retry prompt`() = test {
+    fun `a broadcast unanswered for two minutes shows as pending and completes once it answers`() = test {
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val broadcastResult = CompletableDeferred<Result<HwFundingBroadcastResult>>()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            withContext(NonCancellable) { broadcastResult.await() }
+        }
+        val events = mutableListOf<HeldHwSendEvent>()
+        backgroundScope.launch { sut.heldSendEvents.collect { events += it } }
+        val held = HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)
+
+        sut.signAndBroadcast(request())
+        advanceTimeBy(119.seconds)
+        runCurrent()
+        assertFalse(sut.uiState.value.canLeave)
+
+        advanceTimeBy(2.seconds)
+        runCurrent()
+        assertTrue(sut.uiState.value.canLeave)
+        assertFalse(sut.uiState.value.isSigning)
+        assertEquals(held, sut.uiState.value.unresolvedSend)
+        assertEquals(listOf(held), sut.uiState.value.unresolvedSends)
+        verify(hwWalletRepo, never()).releaseHeldSend(any())
+
+        sut.cancel()
+        broadcastResult.complete(Result.success(fixture.broadcast))
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertTrue(toasts.isEmpty())
+        assertEquals(listOf<HeldHwSendEvent>(HeldHwSendEvent.Completed(held)), events)
+        assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
+        inOrder(activityService, hwWalletRepo) {
+            verify(activityService).createSentOnchainActivityFromSendResult(
+                txid = SIGNED_TXID,
+                address = ADDRESS,
+                amount = AMOUNT_SATS,
+                fee = fixture.signedTx.miningFeeSats,
+                feeRate = fixture.signedTx.feeRate,
+                isTransfer = false,
+                channelId = null,
+                walletId = WALLET_ID,
+            )
+            verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
+        }
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `a broadcast that answers a refusal after the wait keeps its send held`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
         val broadcastResult = CompletableDeferred<Result<HwFundingBroadcastResult>>()
@@ -535,27 +606,49 @@ class HwSendViewModelTest : BaseUnitTest() {
         sut.signAndBroadcast(request())
         advanceTimeBy(121.seconds)
         runCurrent()
-        assertTrue(sut.uiState.value.isBroadcastUnresolved)
-        assertFalse(sut.uiState.value.canLeave)
-
-        broadcastResult.complete(Result.success(fixture.broadcast))
+        broadcastResult.complete(Result.failure(BroadcastException.ElectrumException(NODE_REFUSAL)))
         advanceUntilIdle()
-        toastJob.cancel()
 
-        assertTrue(toasts.isEmpty())
-        verify(activityService).createSentOnchainActivityFromSendResult(
-            txid = fixture.broadcast.txId,
+        assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
+        verify(hwWalletRepo, never()).releaseHeldSend(any())
+        verify(activityService, never()).createSentOnchainActivityFromSendResult(
+            txid = SIGNED_TXID,
             address = ADDRESS,
             amount = AMOUNT_SATS,
-            fee = fixture.broadcast.miningFeeSats,
-            feeRate = fixture.broadcast.feeRate,
+            fee = fixture.signedTx.miningFeeSats,
+            feeRate = fixture.signedTx.feeRate,
             isTransfer = false,
             channelId = null,
             walletId = WALLET_ID,
         )
-        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
-        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
-        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+    }
+
+    @Test
+    fun `a sent hardware send is recorded before its hold is released`() = test {
+        val fixture = stubSuccessfulPayment()
+        val unresolvedWhileHolding = mutableListOf<Boolean>()
+        whenever(hwWalletRepo.holdSend(any())).doSuspendableAnswer {
+            unresolvedWhileHolding += sut.uiState.value.isBroadcastUnresolved
+            Result.success(Unit)
+        }
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertEquals(listOf(true), unresolvedWhileHolding)
+        inOrder(activityService, hwWalletRepo) {
+            verify(activityService).createSentOnchainActivityFromSendResult(
+                txid = fixture.broadcast.txId,
+                address = ADDRESS,
+                amount = AMOUNT_SATS,
+                fee = fixture.broadcast.miningFeeSats,
+                feeRate = fixture.broadcast.feeRate,
+                isTransfer = false,
+                channelId = null,
+                walletId = WALLET_ID,
+            )
+            verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
+        }
     }
 
     @Test
@@ -751,7 +844,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             verify(hwWalletRepo).broadcastFundingAtBoundary(any(), anyOrNull(), any())
         }
         verify(hwWalletRepo, never()).releaseHeldSend(any())
-        assertFalse(sut.uiState.value.canLeave)
+        assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
     }
 
     @Test

@@ -14,8 +14,11 @@ import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -26,7 +29,9 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.R
 import to.bitkit.data.HeldHwSend
 import to.bitkit.ext.isBroadcastConnectivityFailure
@@ -53,11 +58,14 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.AppError
 import to.bitkit.utils.HwErrorPresenter
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.SignedTransactionId
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import kotlin.coroutines.ContinuationInterceptor
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -76,6 +84,9 @@ class HwSendViewModel @Inject constructor(
         const val TAG = "HwSendViewModel"
         val COMPOSE_TIMEOUT = 45.seconds
         val SIGN_TIMEOUT = 120.seconds
+
+        /** How long the sheet waits for a broadcast before showing it as pending; the broadcast itself runs on. */
+        val BROADCAST_WAIT = 120.seconds
     }
 
     val wallets: StateFlow<ImmutableList<HwWallet>>
@@ -216,9 +227,14 @@ class HwSendViewModel @Inject constructor(
                         return@runCatching
                     }
                     val result = broadcast(payment, onPaymentDeadlineExpired) ?: return@runCatching
-                    if (signingAttempt != attempt) return@runCatching
-                    runSuspendCatching { persistResult(request, result) }
-                        .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
+                    if (signingAttempt == attempt) {
+                        runSuspendCatching { persistResult(request, result) }
+                            .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
+                    }
+                    // Released once the send is recorded, so an app killed before that still holds it
+                    if (request.paymentRequestId == null) {
+                        releaseHeldSend(SignedTransactionId.fromHex(payment.signedTx.serializedTx))
+                    }
                     if (signingAttempt != attempt) return@runCatching
                     pendingResult.update {
                         HwSendResult(
@@ -291,39 +307,37 @@ class HwSendViewModel @Inject constructor(
         val request = payment.request
         val requestId = request.paymentRequestId
         val txId = SignedTransactionId.fromHex(payment.signedTx.serializedTx)
+        _uiState.update { it.copy(isBroadcastUnresolved = true) }
         // Written before the broadcast, so a send that may have gone out stays held even if the app dies during it
         if (requestId == null) hwWalletRepo.holdSend(payment.toHeldSend(txId)).getOrThrow()
-        _uiState.update { it.copy(isBroadcastUnresolved = true) }
-        // No deadline: the broadcast runs to its end on the core queue, so one could only discard the outcome of a
-        // payment that went out. The sheet stays unresolved until it answers.
-        var isDispatched = false
-        val outcome = hwWalletRepo.broadcastFundingAtBoundary(payment.signedTx, request.paymentDeadlineAt) {
-            requestId?.let {
-                check(
-                    paykitPaymentProofRepo.markHardwareOnchainDispatch(
-                        it,
-                        request.walletId,
-                        txId,
-                        request.paymentIdentity,
-                        request.address,
-                        request.amountSats,
-                    )
-                ) { "Original hardware payment is no longer eligible for dispatch" }
+        // The broadcast runs to its end on the core queue, so it is never cancelled: the sheet stops waiting for it
+        // after a while, and its answer still settles the send
+        val isDispatched = AtomicBoolean(false)
+        val isAbandoned = AtomicBoolean(false)
+        val sheetDispatcher = requireNotNull(currentCoroutineContext()[ContinuationInterceptor])
+        val dispatch = viewModelScope.async {
+            hwWalletRepo.broadcastFundingAtBoundary(payment.signedTx, request.paymentDeadlineAt) {
+                markDispatched(payment, isDispatched)
+                withContext(sheetDispatcher) {
+                    if (!isAbandoned.get()) {
+                        pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
+                    }
+                }
             }
-            isDispatched = true
-            pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
         }
+        val outcome = withTimeoutOrNull(BROADCAST_WAIT) { dispatch.await() }
+            ?: return abandonBroadcastWait(payment, dispatch, isAbandoned)
         val error = outcome.exceptionOrNull()
         val isDeadlineExpired = error != null &&
             generateSequence(error) { it.cause }.any { it is ServiceError.PaymentDeadlineExpired }
         // A failure before the dispatch sent nothing, while one after it may follow the write
-        val isOutcomeUnknown = requestId == null && error != null && isDispatched && !isDeadlineExpired &&
+        val isOutcomeUnknown = requestId == null && error != null && isDispatched.get() && !isDeadlineExpired &&
             !error.isHardwareBroadcastNotSent()
         if (isOutcomeUnknown) {
             Logger.warn("Held hardware send '$txId' after an unknown broadcast outcome", context = TAG)
             watchUnresolvedSend(payment)
             _uiState.update { it.copy(isBroadcastUnresolved = false) }
-        } else if (requestId == null && !isDeadlineExpired) {
+        } else if (requestId == null && error != null && !isDeadlineExpired) {
             releaseHeldSend(txId)
         }
         return outcome.getOrElse { error ->
@@ -346,6 +360,52 @@ class HwSendViewModel @Inject constructor(
             if (isOutcomeUnknown) return null
             throw error
         }
+    }
+
+    private suspend fun markDispatched(payment: PendingHwSendBroadcast, isDispatched: AtomicBoolean) {
+        val request = payment.request
+        request.paymentRequestId?.let {
+            check(
+                paykitPaymentProofRepo.markHardwareOnchainDispatch(
+                    it,
+                    request.walletId,
+                    SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                    request.paymentIdentity,
+                    request.address,
+                    request.amountSats,
+                )
+            ) { "Original hardware payment is no longer eligible for dispatch" }
+        }
+        isDispatched.set(true)
+    }
+
+    private fun abandonBroadcastWait(
+        payment: PendingHwSendBroadcast,
+        dispatch: Deferred<Result<HwFundingBroadcastResult>>,
+        isAbandoned: AtomicBoolean,
+    ): HwFundingBroadcastResult? {
+        isAbandoned.set(true)
+        if (payment.request.paymentRequestId != null) {
+            // A Shop payment keeps its retained receipt and its guarded sheet; only its exact observation completes it
+            pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
+            throw HwBroadcastWaitExpiredError()
+        }
+        val unresolved = watchUnresolvedSend(payment)
+        Logger.warn("Stopped waiting for broadcast of held hardware send '${unresolved.send.txId}'", context = TAG)
+        _uiState.update { it.copy(isBroadcastUnresolved = false) }
+        viewModelScope.launch { settleLateBroadcast(unresolved, dispatch.await()) }
+        return null
+    }
+
+    private suspend fun settleLateBroadcast(
+        unresolved: UnresolvedHwSend,
+        outcome: Result<HwFundingBroadcastResult>,
+    ) {
+        outcome
+            .onSuccess { completeUnresolvedSend(unresolved) }
+            .onFailure {
+                Logger.warn("Kept held hardware send '${unresolved.send.txId}' after its late failure", it, context = TAG)
+            }
     }
 
     private suspend fun releaseHeldSend(txId: String) {
@@ -708,8 +768,11 @@ class HwSendViewModel @Inject constructor(
                 title = context.getString(R.string.lightning__transfer_hw__reconnect_error_title),
                 description = context.getString(R.string.lightning__transfer_hw__reconnect_error_description),
             )
-            pendingBroadcast != null &&
-                (error.isBroadcastConnectivityFailure() || error is TimeoutCancellationException) -> ToastEventBus.send(
+            pendingBroadcast != null && (
+                error.isBroadcastConnectivityFailure() ||
+                    error is TimeoutCancellationException ||
+                    error is HwBroadcastWaitExpiredError
+                ) -> ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.hardware__send_broadcast_failed_title),
                 description = context.getString(R.string.hardware__send_broadcast_failed_text),
@@ -790,6 +853,8 @@ data class HwSendRequest(
 
     fun isPaymentOf(other: HwSendRequest): Boolean = isPaymentOf(other.walletId, other.address, other.amountSats)
 }
+
+private class HwBroadcastWaitExpiredError : AppError("Hardware broadcast did not answer in time")
 
 private class UnresolvedHwSend(val payment: PendingHwSendBroadcast, val send: HwSendResult) {
     var watch: Job? = null
