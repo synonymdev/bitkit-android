@@ -5,6 +5,7 @@ import breez_sdk_spark.CheckRecoverFundsRequest
 import breez_sdk_spark.CheckRecoverFundsResponse
 import breez_sdk_spark.ClaimDepositOutcome
 import breez_sdk_spark.ClaimDepositRequest
+import breez_sdk_spark.Config
 import breez_sdk_spark.ConnectRequest
 import breez_sdk_spark.CpfpSigner
 import breez_sdk_spark.DepositInfo
@@ -68,6 +69,23 @@ class SparkService @Inject constructor(
 ) {
     companion object {
         private const val TAG = "SparkService"
+
+        /**
+         * Bitkit's settings over the SDK's [defaults]. Breez's real-time data sync server and its Lightning address
+         * (LNURL) server stay off on every network.
+         */
+        internal fun configure(defaults: Config, apiKey: String?, isExiting: Boolean): Config = defaults.apply {
+            this.apiKey = apiKey
+            realTimeSyncServerUrl = null
+            lnurlDomain = null
+            // Lowering it below the spread keeps the deposit from being claimed early, and does not hold back its
+            // claim at maturity.
+            maxDepositClaimFee = MaxFee(
+                onchain = MaxOnchainFee.NetworkRecommended(DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB),
+                proportionalPpm = null,
+            )
+            leafOptimizationConfig = leafOptimizationConfig.copy(autoEnabled = !isExiting)
+        }
 
         /** Leeway in sat/vB over the recommended fee that an automatic deposit claim may pay. */
         private const val DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB = 2uL
@@ -136,16 +154,7 @@ class SparkService @Inject constructor(
         val network = sparkNetwork() ?: throw SparkError.Unsupported()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-        val config = defaultConfig(network).apply {
-            apiKey = Env.breezApiKey
-            // Lowering it below the spread keeps the deposit from being claimed early, and does not hold back its
-            // claim at maturity.
-            maxDepositClaimFee = MaxFee(
-                onchain = MaxOnchainFee.NetworkRecommended(DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB),
-                proportionalPpm = null,
-            )
-            leafOptimizationConfig = leafOptimizationConfig.copy(autoEnabled = !isExiting)
-        }
+        val config = configure(defaultConfig(network), Env.breezApiKey, isExiting)
         val storageDir = File(Env.sparkStoragePath(walletIndex)).apply { mkdirs() }.path
         val connected = connect(ConnectRequest(config, Seed.Mnemonic(mnemonic, passphrase), storageDir))
         listenerId = connected.addEventListener(
