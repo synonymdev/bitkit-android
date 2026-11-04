@@ -312,7 +312,7 @@
     <string name="lightning__savings">Ahorro</string>
     <string name="lightning__spending_label">Saldo para gastos</string>
     <string name="lightning__spending_learn_more__text">Instantáneo paga al proveedor para añadir tu transferencia a tu saldo para gastos antes de que se confirme, normalmente en unos minutos.\n\nMás tarde espera 3 confirmaciones, unos 30 minutos, con una comisión menor.</string>
-    <string name="lightning__spending_learn_more__title">Instantáneo\n&lt;accent&gt;o más tarde&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__receiving_label">Capacidad de recepción</string>
     <string name="lightning__node_info">Nodo Lightning</string>
     <string name="lightning__node_id">ID del nodo LDK</string>

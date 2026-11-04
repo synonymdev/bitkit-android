@@ -337,7 +337,7 @@
     <string name="lightning__spending_intro__title">Převést\n&lt;accent&gt;do výdajů&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Disponibilní zůstatek</string>
     <string name="lightning__spending_learn_more__text">Okamžitě platí poskytovateli za přidání převodu do zůstatku pro výdaje ještě před potvrzením, obvykle během pár minut.\n\nPozději čeká na 3 potvrzení, asi 30 minut, s nižším poplatkem.</string>
-    <string name="lightning__spending_learn_more__title">Okamžitě\n&lt;accent&gt;nebo později&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Status</string>
     <string name="lightning__support">Podpora</string>
     <string name="lightning__total_anchor_channels_reserve">Celková rezerva kotevních kanálů</string>

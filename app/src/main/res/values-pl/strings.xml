@@ -257,7 +257,7 @@
     <string name="lightning__savings">Oszczędności</string>
     <string name="lightning__spending_label">Saldo wydatków</string>
     <string name="lightning__spending_learn_more__text">Natychmiast płaci dostawcy za dodanie przelewu do salda wydatków jeszcze przed potwierdzeniem, zwykle w kilka minut.\n\nPóźniej czeka na 3 potwierdzenia, około 30 minut, z niższą opłatą.</string>
-    <string name="lightning__spending_learn_more__title">Natychmiast\n&lt;accent&gt;lub później&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__receiving_label">Zdolność odbioru</string>
     <string name="lightning__node_info">Węzeł Lightning</string>
     <string name="lightning__node_id">Identyfikator węzła LDK</string>

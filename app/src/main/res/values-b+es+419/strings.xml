@@ -337,7 +337,7 @@
     <string name="lightning__spending_intro__title">Transferir\n&lt;accent&gt;a gastos&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Saldo para gastos</string>
     <string name="lightning__spending_learn_more__text">Instantáneo le paga al proveedor para agregar tu transferencia a tu saldo para gastos antes de que se confirme, normalmente en unos minutos.\n\nDespués espera 3 confirmaciones, unos 30 minutos, con una comisión menor.</string>
-    <string name="lightning__spending_learn_more__title">Instantáneo\n&lt;accent&gt;o después&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Estatus</string>
     <string name="lightning__support">Soporte</string>
     <string name="lightning__total_anchor_channels_reserve">Reserva total de canales ancla</string>

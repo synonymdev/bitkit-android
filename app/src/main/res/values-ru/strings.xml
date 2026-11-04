@@ -346,7 +346,7 @@
     <string name="lightning__spending_intro__title">Перевод\n&lt;accent&gt;на Расходы&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Баланс Расходов</string>
     <string name="lightning__spending_learn_more__text">Мгновенно платит провайдеру, чтобы зачислить перевод на баланс расходов до подтверждения, обычно за несколько минут.\n\nПозже ждёт 3 подтверждений, около 30 минут, с меньшей комиссией.</string>
-    <string name="lightning__spending_learn_more__title">Мгновенно\n&lt;accent&gt;или позже&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Статус</string>
     <string name="lightning__support">Поддержка</string>
     <string name="lightning__total_anchor_channels_reserve">Общий резерв Anchor каналов</string>

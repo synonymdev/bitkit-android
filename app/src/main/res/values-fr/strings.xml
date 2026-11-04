@@ -255,7 +255,7 @@
     <string name="lightning__savings">Épargner</string>
     <string name="lightning__spending_label">Solde Dépenses</string>
     <string name="lightning__spending_learn_more__text">Instantané paie le fournisseur pour ajouter votre transfert à votre solde de dépenses avant sa confirmation, généralement en quelques minutes.\n\nPlus tard attend 3 confirmations, environ 30 minutes, pour des frais moins élevés.</string>
-    <string name="lightning__spending_learn_more__title">Instantané\n&lt;accent&gt;ou plus tard&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__receiving_label">Capacité de réception</string>
     <string name="lightning__rgs_snapshot_time">Heure de l\'instantané Rapid Gossip Sync</string>
     <string name="lightning__scores_sync_time">Heure de synchronisation des scores de routage</string>

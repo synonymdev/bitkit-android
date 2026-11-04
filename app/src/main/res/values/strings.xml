@@ -495,7 +495,7 @@
     <string name="lightning__spending_intro__title">Transfer\n&lt;accent&gt;to spending&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Spending balance</string>
     <string name="lightning__spending_learn_more__text">Instant pays the provider to add your transfer to your spending balance before it confirms, usually within a few minutes.\n\nLater waits for 3 confirmations, about 30 minutes, at a lower fee.</string>
-    <string name="lightning__spending_learn_more__title">Instant\n&lt;accent&gt;or later&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Status</string>
     <string name="lightning__support">Support</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Connecting&lt;/accent&gt;\nto network</string>

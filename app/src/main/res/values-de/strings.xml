@@ -256,7 +256,7 @@
     <string name="lightning__savings">Sparkonto</string>
     <string name="lightning__spending_label">Ausgabenguthaben</string>
     <string name="lightning__spending_learn_more__text">Sofort bezahlt den Anbieter dafür, deine Überweisung schon vor der Bestätigung deinem Ausgabenguthaben hinzuzufügen, meist innerhalb weniger Minuten.\n\nSpäter wartet auf 3 Bestätigungen, etwa 30 Minuten, zu einer niedrigeren Gebühr.</string>
-    <string name="lightning__spending_learn_more__title">Sofort\n&lt;accent&gt;oder später&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__receiving_label">Empfangskapazität</string>
     <string name="lightning__node_info">Lightning Node</string>
     <string name="lightning__node_id">LDK Node ID</string>

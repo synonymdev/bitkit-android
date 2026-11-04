@@ -330,7 +330,7 @@
     <string name="lightning__spending_intro__title">تحويل\n&lt;accent&gt;إلى الإنفاق&lt;/accent&gt;</string>
     <string name="lightning__spending_label">رصيد الإنفاق</string>
     <string name="lightning__spending_learn_more__text">يدفع الفوري للمزوّد لإضافة تحويلك إلى رصيد الإنفاق قبل تأكيده، عادةً خلال دقائق.\n\nأما لاحقًا فينتظر 3 تأكيدات، نحو 30 دقيقة، برسوم أقل.</string>
-    <string name="lightning__spending_learn_more__title">فوري\n&lt;accent&gt;أو لاحقًا&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">الحالة</string>
     <string name="lightning__support">الدعم</string>
     <string name="lightning__total_anchor_channels_reserve">إجمالي احتياطي قنوات Anchor</string>

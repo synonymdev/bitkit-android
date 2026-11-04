@@ -330,7 +330,7 @@
     <string name="lightning__spending_intro__title">Μεταφορά\n&lt;accent&gt;σε δαπάνες&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Υπόλοιπο δαπανών</string>
     <string name="lightning__spending_learn_more__text">Το Άμεσα πληρώνει τον πάροχο για να προσθέσει τη μεταφορά σου στο υπόλοιπο δαπανών πριν επιβεβαιωθεί, συνήθως μέσα σε λίγα λεπτά.\n\nΤο Αργότερα περιμένει 3 επιβεβαιώσεις, περίπου 30 λεπτά, με χαμηλότερη χρέωση.</string>
-    <string name="lightning__spending_learn_more__title">Άμεσα\n&lt;accent&gt;ή αργότερα&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Κατάσταση</string>
     <string name="lightning__support">Υποστήριξη</string>
     <string name="lightning__total_anchor_channels_reserve">Συνολικό αποθεματικό anchor καναλιών</string>

@@ -22,7 +22,7 @@
     <action>Tap "25%" (testTag "SpendingAmountQuarter") and verify the amount is a quarter of the available amount; tap "Max" (testTag "SpendingAmountMax") and verify it equals the available amount</action>
     <action>Tap "Continue" (testTag "SpendingAmountContinue") and verify the confirm screen shows "Network fees", "Spending fee", "To spending" and "Total", with "Instant" (testTag "SpendingConfirmInstant") selected and its fee shown as "up to"</action>
     <action>Tap "Later" (testTag "SpendingConfirmLater") and verify the Spending fee shows "≈" with a lower amount and "To spending" grows by the difference</action>
-    <action>Tap "Learn More" (testTag "SpendingConfirmMore"), verify the "Instant or later" screen with the spending balance bar, and tap "Understood" (testTag "LiquidityContinue")</action>
+    <action>Tap "Learn More" (testTag "SpendingConfirmMore"), verify the "Transfer speed" screen with the spending balance bar, and tap "Understood" (testTag "LiquidityContinue")</action>
     <action>Verify the confirm screen still shows Later selected; go back to the wallet home</action>
     <action>Tap the Savings balance card (testTag "ActivitySavings"), tap "Transfer To Spending" (testTag "TransferToSpending") and verify the amount screen opens directly, with no intro</action>
   </actions>

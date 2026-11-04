@@ -335,7 +335,7 @@
     <string name="lightning__spending_intro__title">Trasferisci\n&lt;accent&gt;alle spese&lt;/accent&gt;</string>
     <string name="lightning__spending_label">Conto di spesa</string>
     <string name="lightning__spending_learn_more__text">Istantanea paga il fornitore per aggiungere il tuo trasferimento al conto di spesa prima della conferma, di solito in pochi minuti.\n\nPiù tardi attende 3 conferme, circa 30 minuti, con una commissione più bassa.</string>
-    <string name="lightning__spending_learn_more__title">Istantanea\n&lt;accent&gt;o più tardi&lt;/accent&gt;</string>
+    <string name="lightning__spending_learn_more__title">Transfer\n&lt;accent&gt;speed&lt;/accent&gt;</string>
     <string name="lightning__status">Stato</string>
     <string name="lightning__support">Supporto</string>
     <string name="lightning__total_anchor_channels_reserve">Riserva Totale Canali Anchor</string>
