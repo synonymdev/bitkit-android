@@ -79,6 +79,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         private const val ONCHAIN_ADDRESS = "bcrt1qallowancetestaddress"
         private const val PAYMENT_APP_ID = "bitkit"
         private val PAYMENT_HASH = "ab".repeat(32)
+        private val STATE_KEY = Keychain.Key.PAYKIT_ALLOWANCE_STATE.name
     }
 
     private val fixtures = PaykitAllowanceFixtures
@@ -87,6 +88,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     private val payer = mock<PaykitAllowancePayer>()
     private val keychain = mock<Keychain>()
     private var storedState: String? = null
+    private val otherKeychainValues = mutableMapOf<String, String>()
     private var failSave: (String) -> Boolean = { false }
     private var now = fixtures.now
     private val clock = object : Clock {
@@ -127,8 +129,15 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     private suspend fun stubLedger() {
-        whenever(keychain.loadString(any())).thenAnswer { storedState }
+        whenever(keychain.loadString(any())).thenAnswer {
+            if (it.getArgument<String>(0) == STATE_KEY) storedState else otherKeychainValues[it.getArgument(0)]
+        }
+        whenever(keychain.delete(any())).doSuspendableAnswer { otherKeychainValues.remove(it.getArgument<String>(0)).let {} }
         whenever(keychain.upsertString(any(), any())).doSuspendableAnswer {
+            if (it.getArgument<String>(0) != STATE_KEY) {
+                otherKeychainValues[it.getArgument(0)] = it.getArgument(1)
+                return@doSuspendableAnswer Unit
+            }
             val state = it.getArgument<String>(1)
             if (failSave(state)) throw TestAllowanceError("save")
             storedState = state

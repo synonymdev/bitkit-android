@@ -328,9 +328,7 @@ class PaykitAllowanceExecutor @Inject constructor(
     fun isPausedAfterRestore(): Boolean = store.isPausedAfterRestore()
 
     /** Lets automatic payments run again after a wallet restore. The restored spends still count toward the limits. */
-    suspend fun resumeAfterRestore(): Unit = withContext(ioDispatcher) {
-        stateMutex.withLock { store.resumeAfterRestore() }
-    }
+    suspend fun resumeAfterRestore(): Unit = withContext(ioDispatcher) { store.resumeAfterRestore() }
 
     // endregion
 
