@@ -419,6 +419,7 @@ class AppViewModel @Inject constructor(
     }
 
     private val _isAuthenticated = MutableStateFlow(false)
+    private val backgroundLocks = AtomicLong(0L)
     val isAuthenticated = _isAuthenticated.asStateFlow()
 
     val wipeState = wipeCoordinator.state
@@ -7746,6 +7747,7 @@ class AppViewModel @Inject constructor(
      * Runs without suspending so the lock is applied before the activity can resume.
      */
     fun lockOnBackground() {
+        backgroundLocks.incrementAndGet()
         if (!isPinEnabled.value) return
         if (!walletRepo.walletExists()) return
         if (lightningRepo.isRecoveryMode.value) return
@@ -7753,7 +7755,18 @@ class AppViewModel @Inject constructor(
         Logger.debug("Locked app on background", context = TAG)
     }
 
-    suspend fun validatePin(pin: String): Boolean = when (pinVerifier.verify(pin)) {
+    suspend fun validatePin(pin: String): Boolean {
+        val locksBeforeCheck = backgroundLocks.get()
+        val result = pinVerifier.verify(pin)
+        // A check that ends after the app went to the background must not unlock it past that lock
+        if (backgroundLocks.get() != locksBeforeCheck) {
+            Logger.info("Discarded a PIN check that ended after the app was locked", context = TAG)
+            return false
+        }
+        return pinResultIsCorrect(result)
+    }
+
+    private suspend fun pinResultIsCorrect(result: PinResult): Boolean = when (result) {
         PinResult.Correct -> true
         is PinResult.Incorrect, PinResult.LockedOut -> false
         PinResult.Unavailable -> {

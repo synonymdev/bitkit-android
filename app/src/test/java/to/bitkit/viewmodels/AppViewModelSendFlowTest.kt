@@ -10173,6 +10173,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a PIN check that ends after the app was locked does not unlock it`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        advanceUntilIdle()
+        val releaseCheck = CompletableDeferred<Unit>()
+        whenever(pinVerifier.verify("1234")).doSuspendableAnswer {
+            releaseCheck.await()
+            PinResult.Correct
+        }
+        val check = async { sut.validatePin("1234") }
+        runCurrent()
+
+        sut.lockOnBackground()
+        releaseCheck.complete(Unit)
+
+        assertFalse(check.await())
+        verify(pinVerifier).verify("1234")
+        whenever(pinVerifier.verify("1234")).thenReturn(PinResult.Correct)
+        assertTrue(sut.validatePin("1234"))
+    }
+
+    @Test
     fun `lockOnBackground keeps auth in recovery mode`() = test {
         settingsData.value = SettingsData(isPinEnabled = true)
         isRecoveryMode.value = true
