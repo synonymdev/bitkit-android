@@ -9477,6 +9477,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(20_000uL, sut.sendUiState.value.amount)
     }
 
+    @Test
+    fun `speed change keeps a scanned hardware amount that equals the hardware maximum`() = test {
+        val input = stubOnchainAmountScan(amountSats = 48_000u)
+        stubHardwareFunding()
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(250uL))
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.AddressContinue(input))
+        advanceUntilIdle()
+        assertEquals(48_000uL, sut.sendUiState.value.hardwareAvailableSats)
+
+        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }.thenReturn(Result.success(46_000uL))
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(46_000uL, sut.sendUiState.value.hardwareAvailableSats)
+        assertEquals(48_000uL, sut.sendUiState.value.amount)
+    }
+
     private fun stubHardwareFunding() {
         hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
         whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }.thenReturn(Result.success(48_000uL))
