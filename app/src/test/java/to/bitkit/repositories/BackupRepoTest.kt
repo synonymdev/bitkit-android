@@ -246,9 +246,13 @@ class BackupRepoTest : BaseUnitTest() {
             sut.startObservingBackups()
             runCurrent()
             verify(vssBackupClient, times(1)).setupWithRetry(any(), any(), any())
+            assertTrue(statuses.value.getValue(BackupCategory.SETTINGS).running)
             val recovery = connectionRecoveryFixture(settingsStore, keychain, vssClients)
             assertFailsWith<BackupRepoTestError> {
-                recovery.withIdentityChange { throw BackupRepoTestError("credentials unchanged") }
+                recovery.withIdentityChange {
+                    assertFalse(statuses.value.getValue(BackupCategory.SETTINGS).running)
+                    throw BackupRepoTestError("credentials unchanged")
+                }
             }
             runCurrent()
             verify(vssBackupClient, times(2)).setupWithRetry(any(), any(), any())
@@ -387,6 +391,7 @@ class BackupRepoTest : BaseUnitTest() {
             runCurrent()
 
             assertTrue(statuses.value.getValue(BackupCategory.WALLET).isRequired)
+            assertTrue(statuses.value.getValue(BackupCategory.WALLET).running)
             verify(privatePaykitRepo, never()).backupSnapshot()
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
 
@@ -2027,6 +2032,83 @@ class BackupRepoTest : BaseUnitTest() {
 
             verify(context, atLeastOnce()).getString(R.string.settings__backup__failed_title)
         } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `scheduled backup stays running until completion or observation stops`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            advanceTimeBy(4_999)
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            verify(vssBackupClient, never()).putObject(eq(category.name), any())
+
+            sut.stopObservingBackups()
+            runCurrent()
+            assertFalse(statuses.value.getValue(category).running)
+            assertTrue(statuses.value.getValue(category).isRequired)
+
+            sut.startObservingBackups()
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).running)
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `delayed startup cleanup preserves a newly scheduled backup status`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        val finishSetup = CompletableDeferred<Unit>()
+        val finishCleanup = CompletableDeferred<Unit>()
+        var cleanupEntered = false
+        whenever(vssBackupClient.setupWithRetry(any(), any(), any())).doSuspendableAnswer {
+            finishSetup.await()
+            Result.success(Unit)
+        }
+        whenever(cacheStore.backupStatuses).thenReturn(statuses)
+        whenever(cacheStore.updateBackupStatus(any(), any())).doSuspendableAnswer {
+            val updatedCategory = it.getArgument<BackupCategory>(0)
+            val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
+            if (updatedCategory == category && !cleanupEntered) {
+                cleanupEntered = true
+                finishCleanup.await()
+            }
+            statuses.update { current ->
+                current + (updatedCategory to transform(current[updatedCategory] ?: BackupItemStatus()))
+            }
+        }
+        stubBackupObservers()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            assertTrue(cleanupEntered)
+            assertTrue(statuses.value.getValue(category).running)
+
+            finishCleanup.complete(Unit)
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            finishCleanup.complete(Unit)
+            finishSetup.complete(Unit)
             sut.stopObservingBackups()
         }
     }
