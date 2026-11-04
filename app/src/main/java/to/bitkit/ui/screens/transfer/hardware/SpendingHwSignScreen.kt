@@ -106,7 +106,11 @@ fun SpendingHwSignScreen(
         onBackClick = { if (hwState.canLeave && !state.isSending) onBackClick() },
         onLearnMoreClick = { if (!isBusy) onLearnMoreClick() },
         onSpeedChange = { if (!isBusy) viewModel.onSpeedChange(it) },
-        onOpenConnect = viewModel::onConfirm,
+        onOpenConnect = {
+            // A pending broadcast resumes only for the exact request it was signed for.
+            val pending = request?.takeIf { hwState.hasPendingBroadcast }
+            if (pending != null) hwSendViewModel.signAndBroadcast(pending) else viewModel.onConfirm()
+        },
     )
 
     if (hwState.isPassphraseRequired) {

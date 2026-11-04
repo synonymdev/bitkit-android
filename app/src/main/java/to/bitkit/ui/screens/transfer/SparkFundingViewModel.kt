@@ -216,9 +216,18 @@ class SparkFundingViewModel @Inject constructor(
                 return@launch
             }
             showQuote(quote)
+            if (!quote.isCovered) {
+                Logger.info("Refused transfer that savings no longer cover", context = TAG)
+                toast(
+                    title = R.string.lightning__spending_amount__error_balance__title,
+                    description = context.getString(R.string.lightning__spending_amount__error_balance__description),
+                )
+                _uiState.update { it.copy(isSending = false) }
+                return@launch
+            }
             val totalRise = quote.totalSats - shownQuote.totalSats
             val spendingDrop = shownQuote.toSpendingSats(shown.speed) - quote.toSpendingSats(shown.speed)
-            if (totalRise > 0 || spendingDrop > 0 || !quote.isCovered) {
+            if (totalRise > 0 || spendingDrop > 0) {
                 Logger.info("Asking for another swipe, fees rose since shown", context = TAG)
                 toast(
                     title = R.string.lightning__spending_confirm__fees_changed_title,

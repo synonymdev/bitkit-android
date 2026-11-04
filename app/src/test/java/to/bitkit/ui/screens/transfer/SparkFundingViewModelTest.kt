@@ -55,6 +55,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         whenever(context.getString(any())).thenReturn("text {amount}")
         whenever(context.getString(R.string.lightning__spending_amount__error_min__title)).thenReturn("Too small")
         whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_title)).thenReturn("Changed")
+        whenever(context.getString(R.string.lightning__spending_amount__error_balance__title)).thenReturn("Short")
         whenever(walletRepo.balanceState).thenReturn(MutableStateFlow(BalanceState(maxSendOnchainSats = 100_000u)))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(currencyRepo.currencyState).thenReturn(MutableStateFlow(CurrencyState()))
@@ -139,6 +140,21 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
         )
+    }
+
+    @Test
+    fun `swipe refuses with real copy when savings no longer cover the transfer`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        whenever { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balances(40_000uL)))
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertEquals("Short", toasts.single().title)
+        assertEquals(false, sut.uiState.value.isSending)
     }
 
     @Test
