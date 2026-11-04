@@ -132,7 +132,7 @@ class SparkRepo @Inject constructor(
     suspend fun stop() = withContext(bgDispatcher) {
         runSuspendCatching { sparkService.disconnect() }
             .onFailure { Logger.warn("Failed to stop Spark wallet", it, context = TAG) }
-        _state.update { it.copy(isReady = false) }
+        _state.update { it.copy(isReady = false, hasSynced = false) }
     }
 
     suspend fun wipe(walletIndex: Int) = withContext(bgDispatcher) {
@@ -456,8 +456,12 @@ class SparkRepo @Inject constructor(
             ?.toNodeEvent()
     }
 
-    /** False while Spark is supported but not connected, so its empty payment list proves nothing. */
-    fun canListPayments(): Boolean = !sparkService.isSupported || sparkService.isConnected
+    /**
+     * False while Spark is supported but not connected or not yet synced, since its payment list is read from local
+     * storage that a restored wallet fills only on its first sync, so a missing payment proves nothing until then.
+     */
+    fun canListPayments(): Boolean =
+        !sparkService.isSupported || (sparkService.isConnected && _state.value.hasSynced)
 
     /**
      * Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed.
@@ -506,7 +510,10 @@ class SparkRepo @Inject constructor(
     private suspend fun onSdkEvent(event: SdkEvent) {
         runSuspendCatching {
             when (event) {
-                is SdkEvent.Synced -> refresh()
+                is SdkEvent.Synced -> {
+                    _state.update { it.copy(hasSynced = true) }
+                    refresh()
+                }
                 is SdkEvent.PaymentSucceeded -> onPayment(event.payment)
                 is SdkEvent.PaymentFailed -> onPayment(event.payment)
                 is SdkEvent.PaymentPending -> recordActivity(event.payment)
@@ -597,6 +604,8 @@ class SparkRepo @Inject constructor(
 data class SparkState(
     val isSupported: Boolean = false,
     val isReady: Boolean = false,
+    /** Spark synced its payments at least once since it connected, so its payment list is complete. */
+    val hasSynced: Boolean = false,
     val balanceSats: ULong = 0uL,
     /** Deposits seen on-chain that Spark claims into [balanceSats] after 3 confirmations. */
     val pendingDepositSats: ULong = 0uL,

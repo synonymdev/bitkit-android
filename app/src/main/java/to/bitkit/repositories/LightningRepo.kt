@@ -147,6 +147,9 @@ class LightningRepo @Inject constructor(
     /** Whether Spark is connected and can send and receive Lightning payments. */
     val isSparkReady: Flow<Boolean> get() = sparkRepo.state.map { it.isReady }.distinctUntilChanged()
 
+    /** Whether Spark synced its payments since it connected, so its payment list is complete. */
+    val isSparkSynced: Flow<Boolean> get() = sparkRepo.state.map { it.hasSynced }.distinctUntilChanged()
+
     private val scope = appScope(bgDispatcher, TAG)
 
     private val _eventHandlers = ConcurrentHashMap.newKeySet<NodeEventHandler>()
@@ -2351,7 +2354,7 @@ class LightningRepo @Inject constructor(
     /** Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed. */
     suspend fun sparkLightningSend(paymentHash: String): SparkLightningSend = sparkRepo.lightningSend(paymentHash)
 
-    /** False while Spark is supported but not connected, so its empty payment list proves nothing. */
+    /** False while Spark is supported but its payment list is not complete yet, so a missing payment proves nothing. */
     fun canListSparkPayments(): Boolean = sparkRepo.canListPayments()
 
     /**

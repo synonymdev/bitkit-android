@@ -174,7 +174,7 @@ class PaykitAllowanceRepo @Inject constructor(
                 .collect { settleAttemptsLeftOpen() }
         }
         // Attempts recovery left open while the node or Spark could not list payments are settled once both can.
-        scope.launch { lightningRepo.isSparkReady.filter { it }.collect { settleAttemptsLeftOpen() } }
+        scope.launch { lightningRepo.isSparkSynced.filter { it }.collect { settleAttemptsLeftOpen() } }
     }
 
     private suspend fun settleAttemptsLeftOpen() {

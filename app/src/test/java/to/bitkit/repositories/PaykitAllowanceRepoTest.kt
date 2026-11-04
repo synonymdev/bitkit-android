@@ -63,7 +63,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     private val executorEvents = MutableSharedFlow<PaykitAllowanceEvent>(extraBufferCapacity = 8)
     private val nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 8)
     private val lightningState = MutableStateFlow(LightningState())
-    private val isSparkReady = MutableStateFlow(false)
+    private val isSparkSynced = MutableStateFlow(false)
     private val terms = fixtures.terms()
     private val clock = object : Clock {
         override fun now(): Instant = PaykitAllowanceFixtures.now
@@ -98,7 +98,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         whenever(executor.classifyAboveLimit(any(), any(), any())).thenReturn(false)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
-        whenever(lightningRepo.isSparkReady).thenReturn(isSparkReady)
+        whenever(lightningRepo.isSparkSynced).thenReturn(isSparkSynced)
         whenever(activityRepo.setContact(any(), any(), any(), any())).thenReturn(Result.success(Unit))
         whenever(sdk.listAllowances(any())).thenAnswer { records }
         whenever(sdk.linkedPeers()).thenReturn(emptyList())
@@ -897,12 +897,12 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `spark becoming ready settles attempts left open while it could not list payments`() = test {
+    fun `spark syncing settles attempts left open while it could not list payments`() = test {
         sut.activate(identity)
         whenever(executor.activeIdentity).thenReturn(identity)
         clearInvocations(executor)
 
-        isSparkReady.value = true
+        isSparkSynced.value = true
 
         verify(executor).recover(identity)
         verify(executor).settleOpenLightningAttempts()

@@ -339,13 +339,18 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `lightning send lookup reads spark's payments and waits while spark cannot list them`() = test {
+    fun `lightning send lookup reads spark's payments and waits until spark has synced them`() = test {
         val sut = createSut()
         assertEquals(SparkLightningSend.Unavailable, sut.lightningSend("hash"))
 
         whenever(sparkService.isConnected).thenReturn(true)
         val failed = sentPayment(fees = 0).copy(id = "failed", status = PaymentStatus.FAILED)
+        sut.start(0).getOrThrow()
         whenever { sparkService.listPayments() }.thenReturn(listOf(failed, sentPayment(fees = 1)))
+        // A restored wallet lists its payments only after its first sync.
+        assertEquals(SparkLightningSend.Unavailable, sut.lightningSend("hash"))
+
+        sparkEvents.emit(SdkEvent.Synced)
         assertEquals(SparkLightningSend.Found(PaymentStatus.COMPLETED, "preimage"), sut.lightningSend("HASH"))
         assertEquals(SparkLightningSend.NotFound, sut.lightningSend("other"))
 
