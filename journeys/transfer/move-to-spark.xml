@@ -8,8 +8,8 @@
     the button.
 
     The "too large to route" state (testTag "MoveToSparkTrySmaller") needs a route that cannot carry the balance; on a
-    direct channel to the Spark service provider every amount routes, so it is covered by MoveToSparkRepoTest and the
-    MoveToSparkScreen previews rather than here.
+    direct channel to the Spark service provider every amount routes, so it is covered by the quote's unit tests and the
+    PR's manual test rather than here.
 
     Precondition: dev build pointed at a local Spark regtest (spark-sdk regtest/local), and a wallet with an open
     channel to that stack's SSP Lightning node that holds most of its capacity on the wallet's side (open it from
