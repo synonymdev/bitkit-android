@@ -12,6 +12,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.hasPendingWalletRestore
@@ -30,6 +31,7 @@ class WalletConnectionRecovery @Inject constructor(
     private val db: AppDb,
     private val storeIdProvider: VssStoreIdProvider,
     private val settingsStore: SettingsStore,
+    private val vssClients: VssClientCoordinator,
 ) {
     companion object {
         internal const val KEY = "WALLET_CONNECTION_RECOVERY"
@@ -130,7 +132,7 @@ class WalletConnectionRecovery @Inject constructor(
                 currentCoroutineContext().ensureActive()
                 beginWipe()
                 currentCoroutineContext().ensureActive()
-                block()
+                vssClients.withSuspendedClients { block() }
             } finally {
                 storeIdProvider.clearCache()
                 endWipe()
