@@ -17,13 +17,18 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.KeychainError
 import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
@@ -31,6 +36,7 @@ import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.HwRetainedSendRepo
 import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PaykitPaymentProofRepo
@@ -46,6 +52,9 @@ import to.bitkit.utils.ServiceError
 import to.bitkit.utils.SignedTransactionId
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -62,7 +71,10 @@ class HwSendViewModelTest : BaseUnitTest() {
     private val activityService = mock<ActivityService>()
     private val activityRepo = mock<ActivityRepo>()
     private val proofRepo = mock<PaykitPaymentProofRepo>()
+    private val keychain = mock<Keychain>()
+    private val retainedEntries = mutableMapOf<String, String>()
 
+    private lateinit var hwRetainedSendRepo: HwRetainedSendRepo
     private lateinit var sut: HwSendViewModel
     private var now = Instant.parse("2026-10-06T11:59:59Z")
 
@@ -105,18 +117,34 @@ class HwSendViewModelTest : BaseUnitTest() {
                 hwWalletRepo.broadcastFunding(it.getArgument(0), it.getArgument(1))
             }
         whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
-        sut = HwSendViewModel(
-            context = context,
-            hwWalletRepo = hwWalletRepo,
-            preActivityMetadataRepo = preActivityMetadataRepo,
-            coreService = coreService,
-            activityRepo = activityRepo,
-            paykitPaymentProofRepo = proofRepo,
-            clock = object : Clock {
-                override fun now() = now
-            },
-        )
+        whenever { hwWalletRepo.observeExactTransaction(any(), any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(false))
+        whenever(keychain.loadScopedString(eq(RETAINED_KEY), any())).thenAnswer {
+            retainedEntries[it.getArgument(1)]
+        }
+        whenever { keychain.upsertScopedString(eq(RETAINED_KEY), any(), any()) }.doSuspendableAnswer {
+            retainedEntries[it.getArgument(2)] = it.getArgument(1)
+        }
+        whenever { keychain.deleteScoped(eq(RETAINED_KEY), any()) }.doSuspendableAnswer {
+            retainedEntries.remove(it.getArgument<String>(1))
+            Unit
+        }
+        hwRetainedSendRepo = HwRetainedSendRepo(testDispatcher, keychain)
+        sut = newViewModel()
     }
+
+    private fun newViewModel() = HwSendViewModel(
+        context = context,
+        hwWalletRepo = hwWalletRepo,
+        preActivityMetadataRepo = preActivityMetadataRepo,
+        coreService = coreService,
+        activityRepo = activityRepo,
+        paykitPaymentProofRepo = proofRepo,
+        hwRetainedSendRepo = hwRetainedSendRepo,
+        clock = object : Clock {
+            override fun now() = now
+        },
+    )
 
     @Test
     fun `signing reconnects and retries once after THP channel failure`() = test {
@@ -520,7 +548,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `cancel drops the signed transaction after a failed broadcast`() = test {
+    fun `cancel keeps the signed transaction after an unknown broadcast outcome`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
         whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
@@ -536,13 +564,15 @@ class HwSendViewModelTest : BaseUnitTest() {
         sut.cancel()
         advanceUntilIdle()
 
-        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.canLeave)
         verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
 
         sut.signAndBroadcast(request())
         advanceUntilIdle()
 
-        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
     }
 
     @Test
@@ -873,17 +903,7 @@ class HwSendViewModelTest : BaseUnitTest() {
                 paymentIdentity = "original-identity"
             )
         )) {
-            sut = HwSendViewModel(
-                context = context,
-                hwWalletRepo = hwWalletRepo,
-                preActivityMetadataRepo = preActivityMetadataRepo,
-                coreService = coreService,
-                activityRepo = activityRepo,
-                paykitPaymentProofRepo = proofRepo,
-                clock = object : Clock {
-                    override fun now() = now
-                },
-            )
+            sut = newViewModel()
             sut.signAndBroadcast(next)
             advanceUntilIdle()
         }
@@ -1482,6 +1502,546 @@ class HwSendViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx, original.paymentDeadlineAt)
     }
 
+    @Test
+    fun `a new view model with the same repository rebroadcasts without signing`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(UNKNOWN_FAILURE),
+            Result.success(fixture.broadcast),
+        )
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        sut = newViewModel()
+        val attempts = mutableListOf<Boolean>()
+        sut.signAndBroadcast(
+            request(),
+            prepareContactPayment = { error("must keep the original preparation") },
+            authorizeContactPayment = {
+                attempts += it
+                true
+            },
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf(true), attempts)
+        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
+        assertSignedOnceAndBroadcast(fixture, times = 2)
+        verify(hwWalletRepo, times(1)).ensureConnected(WALLET_ID)
+        assertNull(retainedRecord())
+    }
+
+    @Test
+    fun `a changed fee rebroadcasts the original bytes`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.failure(UNKNOWN_FAILURE))
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        for (viewModel in listOf(sut, newViewModel())) {
+            viewModel.signAndBroadcast(request().copy(satsPerVByte = SATS_PER_VBYTE + 5uL, tags = listOf("new-tag")))
+            advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.canLeave)
+        }
+
+        assertSignedOnceAndBroadcast(fixture, times = 3)
+    }
+
+    @Test
+    fun `a task failure keeps the send and warns it may have been sent`() = test {
+        val fixture = stubSuccessfulPayment()
+        stubBroadcastWording()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.TaskException("task failed")))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(fixture.signedTx, retainedRecord()?.signedTx)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.canLeave)
+        assertEquals(Toast.ToastType.WARNING, toasts.single().type)
+        assertEquals(BROADCAST_FAILED_TITLE, toasts.single().title)
+    }
+
+    @Test
+    fun `a timeout then cancel then retry rebroadcasts the same bytes`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
+        val timeout = runCatching { withTimeout(Duration.ZERO) { Unit } }
+            .exceptionOrNull() as TimeoutCancellationException
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(timeout),
+            Result.success(fixture.broadcast),
+        )
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        assertEquals(fixture.signedTx, retainedRecord()?.signedTx)
+        assertTrue(sut.uiState.value.canLeave)
+
+        sut.cancel()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertSignedOnceAndBroadcast(fixture, times = 2)
+    }
+
+    @Test
+    fun `a different address or amount is refused with no device contact`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.failure(UNKNOWN_FAILURE))
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        for (viewModel in listOf(sut, newViewModel())) {
+            for (different in listOf(request().copy(address = OTHER_ADDRESS), request().copy(amountSats = 1uL))) {
+                viewModel.signAndBroadcast(different)
+                advanceUntilIdle()
+                assertTrue(viewModel.uiState.value.canLeave)
+            }
+        }
+
+        verify(hwWalletRepo, times(1)).needsPassphrase(WALLET_ID)
+        verify(hwWalletRepo, times(1)).ensureConnected(WALLET_ID)
+        verify(hwWalletRepo, times(1)).composeFundingTransaction(any(), any(), any(), any())
+        assertSignedOnceAndBroadcast(fixture, times = 1)
+        assertEquals(fixture.signedTx, retainedRecord()?.signedTx)
+    }
+
+    @Test
+    fun `a first attempt connect failure leaves no record and leaving drops the bytes`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.failure(CONNECT_FAILURE))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertNull(retainedRecord())
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.canLeave)
+
+        sut.cancel()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
+    }
+
+    @Test
+    fun `a first attempt connect failure then a refusal drops and signs again`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(CONNECT_FAILURE),
+            Result.failure(REFUSAL),
+            Result.success(fixture.broadcast),
+        )
+        val attempts = mutableListOf<Boolean>()
+        val authorize: suspend (Boolean) -> Boolean = {
+            attempts += it
+            true
+        }
+
+        sut.signAndBroadcast(request(), authorizeContactPayment = authorize)
+        advanceUntilIdle()
+        sut.signAndBroadcast(request(), authorizeContactPayment = authorize)
+        advanceUntilIdle()
+
+        assertEquals(listOf(false, false), attempts)
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        assertNull(retainedRecord())
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.canLeave)
+
+        sut.signAndBroadcast(request(), authorizeContactPayment = authorize)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
+    }
+
+    @Test
+    fun `a first attempt refusal releases and shows the refusal itself`() = test {
+        val fixture = stubSuccessfulPayment()
+        stubBroadcastWording()
+        whenever(context.getString(R.string.common__error)).thenReturn("Error")
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.InvalidTransaction("invalid transaction")),
+        )
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertNull(retainedRecord())
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.canLeave)
+        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+    }
+
+    @Test
+    fun `a connect failure on a retry keeps the record unchanged`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(UNKNOWN_FAILURE),
+            Result.failure(CONNECT_FAILURE),
+        )
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        val record = assertNotNull(retainedRecord())
+        assertFalse(record.retryWasRefused)
+        assertEquals(fixture.signedTx, record.signedTx)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.canLeave)
+        assertSignedOnceAndBroadcast(fixture, times = 2)
+    }
+
+    @Test
+    fun `a retry refusal that is observed completes with the retained transaction`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(UNKNOWN_FAILURE),
+            Result.failure(REFUSAL),
+        )
+        whenever(hwWalletRepo.observeExactTransaction(WALLET_ID, FIXTURE_TX_ID)).thenReturn(Result.success(true))
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        val result = sut.results.first()
+        assertEquals(HwSendResult(WALLET_ID, FIXTURE_TX_ID, AMOUNT_SATS), result)
+        assertNull(retainedRecord())
+        verify(hwWalletRepo, times(1)).observeExactTransaction(WALLET_ID, FIXTURE_TX_ID)
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            FIXTURE_TX_ID,
+            ADDRESS,
+            AMOUNT_SATS,
+            fixture.signedTx.miningFeeSats,
+            fixture.signedTx.feeRate,
+            false,
+            null,
+            WALLET_ID,
+        )
+        sut.completeBroadcast()
+        assertTrue(sut.uiState.value.canLeave)
+        assertSignedOnceAndBroadcast(fixture, times = 2)
+    }
+
+    @Test
+    fun `a retry refusal that is not observed stays retained and blocking`() = test {
+        val fixture = stubSuccessfulPayment()
+        stubBroadcastWording()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(UNKNOWN_FAILURE),
+            Result.failure(REFUSAL),
+        )
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(true, retainedRecord()?.retryWasRefused)
+        assertEquals(fixture.signedTx, retainedRecord()?.signedTx)
+        verify(hwWalletRepo, times(1)).observeExactTransaction(WALLET_ID, FIXTURE_TX_ID)
+        assertEquals(HwRetainedSendStatus.Blocking, sut.retainedSendStatus(ADDRESS, AMOUNT_SATS, WALLET_ID, false))
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.canLeave)
+        assertEquals(listOf(Toast.ToastType.WARNING, Toast.ToastType.WARNING), toasts.map { it.type })
+        assertEquals(BROADCAST_FAILED_TITLE, toasts.last().title)
+        assertSignedOnceAndBroadcast(fixture, times = 2)
+    }
+
+    @Test
+    fun `another wallet is unaffected and its record survives`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.disconnectStaleSession(any())).thenReturn(Result.success(Unit))
+        val otherSigned = fixture.signedTx.copy(serializedTx = "ab".repeat(100))
+        whenever(hwWalletRepo.needsPassphrase(OTHER_WALLET_ID)).thenReturn(false)
+        whenever(hwWalletRepo.ensureConnected(OTHER_WALLET_ID)).thenReturn(Result.success(connectedDevice()))
+        whenever(hwWalletRepo.composeFundingTransaction(OTHER_WALLET_ID, OTHER_ADDRESS, 1_000uL, SATS_PER_VBYTE))
+            .thenReturn(Result.success(fixture.funding))
+        whenever(hwWalletRepo.signFunding(OTHER_WALLET_ID, fixture.funding)).thenReturn(Result.success(otherSigned))
+        whenever(hwWalletRepo.broadcastFunding(otherSigned)).thenReturn(Result.failure(UNKNOWN_FAILURE))
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(UNKNOWN_FAILURE),
+            Result.success(fixture.broadcast),
+        )
+        val otherRequest = request().copy(walletId = OTHER_WALLET_ID, address = OTHER_ADDRESS, amountSats = 1_000uL)
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        sut.cancel()
+        advanceUntilIdle()
+        sut.signAndBroadcast(otherRequest)
+        advanceUntilIdle()
+        sut.cancel()
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).signFunding(OTHER_WALLET_ID, fixture.funding)
+        verify(hwWalletRepo).broadcastFunding(otherSigned)
+        assertEquals(fixture.signedTx, retainedRecord()?.signedTx)
+        assertEquals(otherSigned, retainedRecord(OTHER_WALLET_ID)?.signedTx)
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertSignedOnceAndBroadcast(fixture, times = 2)
+        assertNull(retainedRecord())
+        assertEquals(otherSigned, retainedRecord(OTHER_WALLET_ID)?.signedTx)
+    }
+
+    @Test
+    fun `success releases the record`() = test {
+        val fixture = stubSuccessfulPayment()
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
+        assertNull(retainedRecord())
+    }
+
+    @Test
+    fun `the record is written before the native broadcast`() = test {
+        val fixture = stubSuccessfulPayment()
+        var recordAtDispatch: HwFundingSignedTx? = null
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            recordAtDispatch = retainedRecord()?.signedTx
+            Result.success(fixture.broadcast)
+        }
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertEquals(fixture.signedTx, recordAtDispatch)
+    }
+
+    @Test
+    fun `a failed record write aborts before dispatch`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        stubSuccessfulPayment()
+        whenever(keychain.upsertScopedString(eq(RETAINED_KEY), any(), any())).doSuspendableAnswer {
+            throw KeychainError.FailedToSave(RETAINED_KEY)
+        }
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, never()).broadcastFunding(any(), anyOrNull())
+        assertFalse(sut.uiState.value.isBroadcastUnresolved)
+        assertTrue(sut.uiState.value.canLeave)
+    }
+
+    @Test
+    fun `an unreadable or corrupt record fails closed with no device contact`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        stubSuccessfulPayment()
+
+        retainedEntries[WALLET_ID] = CORRUPT_ENTRY
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+
+        retainedEntries.remove(WALLET_ID)
+        whenever(keychain.loadScopedString(RETAINED_KEY, WALLET_ID)).thenAnswer {
+            throw KeychainError.FailedToLoad(RETAINED_KEY)
+        }
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canLeave)
+
+        verify(hwWalletRepo, never()).needsPassphrase(any())
+        verify(hwWalletRepo, never()).ensureConnected(any())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), anyOrNull())
+    }
+
+    @Test
+    fun `first attempt expiry in the broadcast queue releases the record`() = test {
+        val fixture = stubSuccessfulPayment()
+        val deadline = Instant.parse("2026-10-06T12:00:00Z")
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx, deadline))
+            .thenReturn(Result.failure(AppError(ServiceError.PaymentDeadlineExpired())))
+
+        sut.signAndBroadcast(request().copy(paymentDeadlineAt = deadline))
+        advanceUntilIdle()
+
+        assertNull(retainedRecord())
+    }
+
+    @Test
+    fun `a transaction observed elsewhere lets the next attempt sign anew`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(UNKNOWN_FAILURE),
+            Result.success(fixture.broadcast),
+        )
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        hwRetainedSendRepo.releaseIfObserved(WALLET_ID, listOf(FIXTURE_TX_ID)).getOrThrow()
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
+    }
+
+    @Test
+    fun `retained status reports none for a wallet without a record or an incoming request`() = test {
+        val fixture = stubSuccessfulPayment()
+        assertEquals(HwRetainedSendStatus.None, sut.retainedSendStatus(ADDRESS, AMOUNT_SATS, WALLET_ID, false))
+
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+        retainedEntries[WALLET_ID] = CORRUPT_ENTRY
+        clearInvocations(keychain)
+
+        assertEquals(HwRetainedSendStatus.None, sut.retainedSendStatus(ADDRESS, AMOUNT_SATS, WALLET_ID, true))
+        verify(keychain, never()).loadScopedString(any(), any())
+    }
+
+    @Test
+    fun `retained status offers a retry only for the same payment`() = test {
+        val fixture = stubSuccessfulPayment()
+        hwRetainedSendRepo.retain(WALLET_ID, ADDRESS, AMOUNT_SATS, fixture.signedTx).getOrThrow()
+
+        val status = sut.retainedSendStatus(ADDRESS, AMOUNT_SATS, WALLET_ID, false)
+
+        assertEquals(fixture.signedTx, assertIs<HwRetainedSendStatus.Retry>(status).signedTx)
+        assertEquals(
+            HwRetainedSendStatus.Blocking,
+            sut.retainedSendStatus(OTHER_ADDRESS, AMOUNT_SATS, WALLET_ID, false),
+        )
+        assertEquals(HwRetainedSendStatus.Blocking, sut.retainedSendStatus(ADDRESS, 1uL, WALLET_ID, false))
+        assertEquals(HwRetainedSendStatus.None, sut.retainedSendStatus(OTHER_ADDRESS, 1uL, OTHER_WALLET_ID, false))
+    }
+
+    @Test
+    fun `retained status blocks on an unreadable or corrupt entry`() = test {
+        retainedEntries[WALLET_ID] = CORRUPT_ENTRY
+        assertEquals(HwRetainedSendStatus.Blocking, sut.retainedSendStatus(ADDRESS, AMOUNT_SATS, WALLET_ID, false))
+
+        whenever(keychain.loadScopedString(RETAINED_KEY, WALLET_ID)).thenAnswer {
+            throw KeychainError.FailedToLoad(RETAINED_KEY)
+        }
+        assertEquals(HwRetainedSendStatus.Blocking, sut.retainedSendStatus(ADDRESS, AMOUNT_SATS, WALLET_ID, false))
+    }
+
+    @Test
+    fun `abandon discards the record so a different payment signs`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(UNKNOWN_FAILURE),
+            Result.success(fixture.broadcast),
+        )
+        whenever(hwWalletRepo.composeFundingTransaction(WALLET_ID, OTHER_ADDRESS, AMOUNT_SATS, SATS_PER_VBYTE))
+            .thenReturn(Result.success(fixture.funding))
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        sut.abandonRetainedPayment(WALLET_ID).getOrThrow()
+
+        assertNull(retainedRecord())
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        sut.signAndBroadcast(request().copy(address = OTHER_ADDRESS))
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
+    }
+
+    @Test
+    fun `abandon clears a corrupt entry and signing continues`() = test {
+        val fixture = stubSuccessfulPayment()
+        retainedEntries[WALLET_ID] = CORRUPT_ENTRY
+
+        sut.abandonRetainedPayment(WALLET_ID).getOrThrow()
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
+    }
+
+    @Test
+    fun `abandon does nothing while an operation is in flight`() = test {
+        val fixture = stubSuccessfulPayment()
+        val finish = CompletableDeferred<Result<HwFundingBroadcastResult>>()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer { finish.await() }
+
+        sut.signAndBroadcast(request())
+        runCurrent()
+        sut.abandonRetainedPayment(WALLET_ID).getOrThrow()
+
+        assertEquals(fixture.signedTx, retainedRecord()?.signedTx)
+        finish.complete(Result.success(fixture.broadcast))
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `a kept ordinary send does not block a Shop payment`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(UNKNOWN_FAILURE),
+            Result.success(fixture.broadcast),
+        )
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        sut.cancel()
+        advanceUntilIdle()
+
+        sut.signAndBroadcast(
+            request().copy(
+                paymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+                paymentIdentity = "original-identity",
+            )
+        )
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
+        assertEquals(fixture.signedTx, retainedRecord()?.signedTx)
+    }
+
+    private suspend fun retainedRecord(walletId: String = WALLET_ID) =
+        hwRetainedSendRepo.record(walletId).getOrThrow()
+
+    private suspend fun assertSignedOnceAndBroadcast(fixture: PaymentFixture, times: Int) {
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(times)).broadcastFunding(fixture.signedTx)
+    }
+
+    private fun stubBroadcastWording() {
+        whenever(context.getString(any())).thenReturn("message")
+        whenever(context.getString(R.string.hardware__send_broadcast_failed_title)).thenReturn(BROADCAST_FAILED_TITLE)
+    }
+
     private fun signedFixtureHex() = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))
         .bufferedReader().readText().trim()
 
@@ -1506,5 +2066,17 @@ class HwSendViewModelTest : BaseUnitTest() {
         const val ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
         const val AMOUNT_SATS = 25_000uL
         const val SATS_PER_VBYTE = 2uL
+        const val OTHER_WALLET_ID = "other-hardware-wallet"
+        const val OTHER_ADDRESS = "bcrt1qother"
+        const val FIXTURE_TX_ID = "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e"
+        const val BROADCAST_FAILED_TITLE = "Payment not confirmed"
+        const val CORRUPT_ENTRY = "{\"walletId\":\"hardware-wallet\""
+        val RETAINED_KEY = Keychain.Key.HW_RETAINED_SEND.name
+        val UNKNOWN_FAILURE = BroadcastException.ElectrumException("Broadcast failed: response lost")
+        val CONNECT_FAILURE = BroadcastException.ElectrumException("Failed to connect to Electrum: unreachable")
+        val REFUSAL = BroadcastException.ElectrumException(
+            """Broadcast failed: Electrum server error: "sendrawtransaction RPC error -25: """ +
+                """bad-txns-inputs-missingorspent"""",
+        )
     }
 }

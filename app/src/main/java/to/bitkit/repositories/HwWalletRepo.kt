@@ -96,6 +96,7 @@ class HwWalletRepo @Inject constructor(
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val hwWalletStore: HwWalletStore,
     private val settingsStore: SettingsStore,
+    private val hwRetainedSendRepo: HwRetainedSendRepo,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
@@ -1040,6 +1041,9 @@ class HwWalletRepo @Inject constructor(
                     "Hardware wallet '$walletId' still present after removal"
                 }
             }
+        }.onSuccess {
+            hwRetainedSendRepo.release(walletId)
+                .onFailure { Logger.warn("Failed to release retained send of '$walletId'", it, context = TAG) }
         }.onFailure {
             watcherSyncRequests.tryEmit(Unit)
         }
@@ -1117,6 +1121,15 @@ class HwWalletRepo @Inject constructor(
         syncWatchers()
     }
 
+    private suspend fun releaseObservedRetainedSend(walletId: String, activities: List<Activity>) {
+        val txIds = activities.mapNotNull { activity ->
+            (activity as? Activity.Onchain)?.v1?.takeIf { it.doesExist }?.txId
+        }
+        if (txIds.isEmpty()) return
+        hwRetainedSendRepo.releaseIfObserved(walletId, txIds)
+            .onFailure { Logger.warn("Failed to release observed send of '$walletId'", it, context = TAG) }
+    }
+
     private fun observeWatcherEvents() {
         scope.launch {
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
@@ -1126,6 +1139,7 @@ class HwWalletRepo @Inject constructor(
                     val activities = event.activities
                         .filter { it.walletId() == walletId }
                         .toImmutableList()
+                    releaseObservedRetainedSend(walletId, activities)
                     val transactionDetails = event.transactionDetails
                         .filter { it.walletId == walletId }
                         .toImmutableList()

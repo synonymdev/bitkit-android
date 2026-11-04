@@ -10,7 +10,6 @@ import kotlinx.serialization.json.Json
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
-import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.utils.AppError
 import to.bitkit.utils.SignedTransactionId
@@ -36,7 +35,7 @@ data class HwRetainedSend(
     val signedTx: HwFundingSignedTx
         get() = HwFundingSignedTx(serializedTx, miningFeeSats, feeRate, totalSpent)
 
-    fun broadcastResult(txId: String) = HwFundingBroadcastResult(txId, miningFeeSats, feeRate, totalSpent)
+    fun isSamePayment(address: String, amountSats: ULong) = this.address == address && this.amountSats == amountSats
 
     override fun toString() = "HwRetainedSend(walletId='$walletId', retryWasRefused='$retryWasRefused')"
 }
@@ -108,12 +107,11 @@ class HwRetainedSendRepo @Inject constructor(
     }
 
     /**
-     * Only for a user who accepted a second payment. This is the one path that deletes an undecodable entry, otherwise
-     * the wallet stays blocked until a full wipe. A failed read deletes nothing, because it says nothing about the
-     * stored data and may recover on its own.
+     * Only for a user who accepted a second payment. This is the one path that deletes an entry it cannot read,
+     * otherwise the wallet stays blocked until a full wipe.
      */
     suspend fun abandon(walletId: String): Result<Unit> = locked {
-        runCatching { load(walletId) }.onFailure { if (it !is HwRetainedSendError.Undecodable) throw it }
+        // Keychain wraps decrypt failures as FailedToLoad, so an undecryptable entry looks like a plain read failure.
         keychain.deleteScoped(KEY, walletId)
     }
 

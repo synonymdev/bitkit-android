@@ -11,7 +11,6 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.KeychainError
-import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.SignedTransactionId
@@ -64,10 +63,9 @@ class HwRetainedSendRepoTest : BaseUnitTest() {
         assertEquals(AMOUNT_SATS, record.amountSats)
         assertFalse(record.retryWasRefused)
         assertEquals(signedTx, record.signedTx)
-        assertEquals(
-            HwFundingBroadcastResult("txid", signedTx.miningFeeSats, signedTx.feeRate, signedTx.totalSpent),
-            record.broadcastResult("txid"),
-        )
+        assertTrue(record.isSamePayment(ADDRESS, AMOUNT_SATS))
+        assertFalse(record.isSamePayment("bcrt1qother", AMOUNT_SATS))
+        assertFalse(record.isSamePayment(ADDRESS, AMOUNT_SATS + 1uL))
     }
 
     @Test
@@ -208,10 +206,21 @@ class HwRetainedSendRepoTest : BaseUnitTest() {
         assertEquals(failure, sut.markRetryRefused(WALLET).exceptionOrNull())
         assertEquals(failure, sut.release(WALLET).exceptionOrNull())
         assertEquals(failure, sut.releaseIfObserved(WALLET, listOf("ff")).exceptionOrNull())
-        assertEquals(failure, sut.abandon(WALLET).exceptionOrNull())
 
         verify(keychain, never()).deleteScoped(any(), any())
         verify(keychain, never()).upsertScopedString(any(), any(), any())
+    }
+
+    @Test
+    fun `abandon deletes only that wallet's entry after a read failure`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        sut.retain(OTHER_WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        whenever(keychain.loadScopedString(KEY, WALLET)).thenAnswer { throw KeychainError.FailedToLoad(KEY) }
+
+        sut.abandon(WALLET).getOrThrow()
+
+        assertFalse(WALLET in entries)
+        assertEquals(signedTx, sut.record(OTHER_WALLET).getOrThrow()?.signedTx)
     }
 
     @Test

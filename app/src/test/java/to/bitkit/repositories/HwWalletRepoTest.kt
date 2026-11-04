@@ -46,6 +46,7 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.keychain.KeychainError
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.models.HwFundingAddressType
@@ -88,6 +89,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val hwWalletStore = mock<HwWalletStore>()
     private val settingsStore = mock<SettingsStore>()
+    private val hwRetainedSendRepo = mock<HwRetainedSendRepo>()
 
     private lateinit var storeData: MutableStateFlow<HwWalletData>
     private lateinit var settingsData: MutableStateFlow<SettingsData>
@@ -156,6 +158,8 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever { activityRepo.getTagMetadataForWallet(any()) }.thenReturn(Result.success(emptyList()))
         whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }.thenReturn(Result.success(Unit))
         whenever { hwWalletStore.setPendingName(any(), anyOrNull()) }.thenReturn(Unit)
+        whenever { hwRetainedSendRepo.release(any()) }.thenReturn(Result.success(Unit))
+        whenever { hwRetainedSendRepo.releaseIfObserved(any(), any()) }.thenReturn(Result.success(Unit))
     }
 
     @Test
@@ -302,6 +306,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         preActivityMetadataRepo = preActivityMetadataRepo,
         hwWalletStore = hwWalletStore,
         settingsStore = settingsStore,
+        hwRetainedSendRepo = hwRetainedSendRepo,
         ioDispatcher = testDispatcher,
     )
 
@@ -1877,6 +1882,84 @@ class HwWalletRepoTest : BaseUnitTest() {
         verify(trezorRepo).stopWatcher("hardware-wallet|nativeSegwit")
         verify(activityRepo).deleteForWallet(HARDWARE_WALLET_ID)
         verify(trezorRepo).forgetDevice(eq("dev1"), eq("zpubNS"), anyOrNull())
+    }
+
+    @Test
+    fun `removeDevice releases the retained send after removal succeeds`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID)
+
+        assertTrue(result.isSuccess)
+        verify(hwRetainedSendRepo).release(HARDWARE_WALLET_ID)
+    }
+
+    @Test
+    fun `removeDevice succeeds when releasing the retained send fails`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever(hwRetainedSendRepo.release(HARDWARE_WALLET_ID))
+            .thenReturn(Result.failure(KeychainError.FailedToLoad("retained")))
+        val sut = createRepo()
+
+        assertTrue(sut.removeDevice(HARDWARE_WALLET_ID).isSuccess)
+    }
+
+    @Test
+    fun `a failed removeDevice keeps the retained send`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val sut = createRepo()
+
+        assertTrue(sut.removeDevice("unknown-wallet").isFailure)
+
+        verify(hwRetainedSendRepo, never()).release(any())
+    }
+
+    @Test
+    fun `watcher event releases the retained send with the wallet's existing transactions only`() = test {
+        val sut = createRepo()
+        val removed = watcherActivity(amount = 1uL, txid = "removed").let {
+            it.copy(v1 = it.v1.copy(doesExist = false))
+        }
+        val otherWallet = watcherActivity(amount = 1uL, txid = "other-wallet", walletId = HIDDEN_WALLET_ID)
+
+        watcherEvents.emit(
+            "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 1uL),
+                activities = listOf(watcherActivity(amount = 1uL, txid = "seen"), removed, otherWallet),
+                transactionDetails = emptyList(),
+                txCount = 3u,
+                blockHeight = 850_000u,
+                accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
+            )
+        )
+
+        verify(hwRetainedSendRepo).releaseIfObserved(HARDWARE_WALLET_ID, listOf("seen"))
+    }
+
+    @Test
+    fun `watcher event still persists when the retained send release fails`() = test {
+        whenever(hwRetainedSendRepo.releaseIfObserved(any(), any()))
+            .thenReturn(Result.failure(KeychainError.FailedToLoad("retained")))
+        val sut = createRepo()
+
+        watcherEvents.emit(
+            "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 1uL),
+                activities = listOf(watcherActivity(amount = 1uL, txid = "seen")),
+                transactionDetails = emptyList(),
+                txCount = 1u,
+                blockHeight = 850_000u,
+                accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
+            )
+        )
+
+        assertEquals(1, sut.wallets.value.single().activities.size)
+        verify(activityRepo).persistHwSnapshot(any<String>(), any<List<Activity>>(), any<List<TransactionDetails>>())
     }
 
     @Test
