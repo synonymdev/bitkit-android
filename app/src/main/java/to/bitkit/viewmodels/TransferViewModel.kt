@@ -315,7 +315,7 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun withdrawSparkToSavings() {
-        val balance = sparkRepo.state.value.balanceSats
+        val balance = sparkRepo.state.value.spendingSats
         if (balance == 0uL) return
         val address = lightningRepo.newAddress().getOrElse {
             Logger.error("Failed to get address for Spark withdrawal", it, context = TAG)

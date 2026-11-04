@@ -115,10 +115,10 @@ class LightningConnectionsViewModel @Inject constructor(
                         pendingConnections = channels.filterPending()
                             .map { it.mapToUiModel(channels, connectionText) }
                             .reversed().toImmutableList(),
-                        localBalance = calculateLocalBalance(channels).safe() + sparkState.balanceSats.safe(),
+                        localBalance = calculateLocalBalance(channels).safe() + sparkState.spendingSats.safe(),
                         remoteBalance = channels.calculateRemoteBalance(),
                         spark = sparkState.toUi(lightningRepo),
-                        isSparkReceiving = sparkState.isReady,
+                        isSparkReceiving = sparkState.isUsable,
                     )
                 }
             }
@@ -238,7 +238,12 @@ data class SparkUi(
     val balanceSats: ULong,
     val deposits: ImmutableList<SparkDepositUi> = persistentListOf(),
     val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
+    val recoverableFundsSats: ULong = 0uL,
+    val isExiting: Boolean = false,
 ) {
+    /** The emergency exit is offered while Spark holds funds, and leads to its progress once one runs. */
+    val showsExit get() = balanceSats > 0uL || recoverableFundsSats > 0uL || isExiting
+
     val pendingDeposits get() = deposits.filterNot { it.deposit.isClaimed }
     val claimedDeposits get() = deposits.filter { it.deposit.isClaimed }
 }
@@ -250,15 +255,19 @@ data class SparkDepositUi(
 )
 
 internal suspend fun SparkState.toUi(lightningRepo: LightningRepo): SparkUi? {
-    if (!isReady) return null
+    // An emergency exit keeps Spark listed, also while it cannot connect, so its progress stays reachable.
+    if (!isReady && !isExiting) return null
     // On regtest Spark always shows, so testers reach its deposit address to fund it from the faucet.
-    if (balanceSats == 0uL && deposits.isEmpty() && Env.network != Network.REGTEST) return null
+    val hasExit = isExiting || recoverableFundsSats > 0uL
+    if (balanceSats == 0uL && deposits.isEmpty() && !hasExit && Env.network != Network.REGTEST) return null
     return SparkUi(
         balanceSats = balanceSats,
         deposits = deposits.map {
             SparkDepositUi(it, if (it.isClaimed) null else lightningRepo.onchainConfirmations(it.txid))
         }.toImmutableList(),
         withdrawals = withdrawals,
+        recoverableFundsSats = recoverableFundsSats,
+        isExiting = isExiting,
     )
 }
 

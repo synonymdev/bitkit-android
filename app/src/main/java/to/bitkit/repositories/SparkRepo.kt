@@ -115,11 +115,24 @@ class SparkRepo @Inject constructor(
     /** Fires once Spark connects and whenever its unilateral exit data changes, so the exit data backup is redone. */
     val exitStateChanged: SharedFlow<Unit> = _exitStateChanged.asSharedFlow()
 
+    /** The wallet Spark last started for. */
+    @Volatile
+    var walletIndex: Int = 0
+        private set
+
+    private val _walletWiped = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+
+    /** Fires with the wallet index once its Spark wallet, and any emergency exit of it, was wiped. */
+    val walletWiped: SharedFlow<Int> = _walletWiped.asSharedFlow()
+
     suspend fun start(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         if (!sparkService.isSupported) return@withContext Result.success(Unit)
+        this@SparkRepo.walletIndex = walletIndex
         runSuspendCatching {
             if (eventsJob == null) eventsJob = scope.launch { sparkService.events.collect { onSdkEvent(it) } }
-            sparkService.connect(walletIndex)
+            val isExiting = exitStore(walletIndex).isActive()
+            _state.update { it.copy(isExiting = isExiting) }
+            sparkService.connect(walletIndex, isExiting)
             importRestoredExitState(walletIndex)
             _exitStateChanged.emit(Unit)
             refresh()
@@ -138,10 +151,31 @@ class SparkRepo @Inject constructor(
     suspend fun wipe(walletIndex: Int) = withContext(bgDispatcher) {
         runSuspendCatching { sparkService.wipeStorage(walletIndex) }
             .onFailure { Logger.error("Failed to wipe Spark wallet", it, context = TAG) }
+        runSuspendCatching { exitStore(walletIndex).delete() }
+            .onFailure { Logger.error("Failed to wipe Spark exit record", it, context = TAG) }
         _state.update { SparkState(isSupported = sparkService.isSupported) }
+        _walletWiped.emit(walletIndex)
     }
 
-    fun canReceive(): Boolean = _state.value.isReady
+    /**
+     * Takes Spark off the Lightning rail while an emergency exit runs, so no payment moves leaves the exit is
+     * spending, and connects Spark again so its leaf optimization follows: off while exiting, on once it ends.
+     */
+    suspend fun setExiting(isExiting: Boolean): Result<Unit> = withContext(bgDispatcher) {
+        if (_state.value.isExiting == isExiting && sparkService.isConnected) return@withContext Result.success(Unit)
+        _state.update { it.copy(isExiting = isExiting) }
+        runSuspendCatching {
+            sparkService.disconnect()
+            sparkService.connect(walletIndex, isExiting)
+            refresh()
+        }.onFailure {
+            Logger.error("Failed to reconnect Spark with exit '$isExiting'", it, context = TAG)
+        }
+    }
+
+    private fun exitStore(walletIndex: Int) = SparkExitStore(File(Env.sparkExitRecordPath(walletIndex)))
+
+    fun canReceive(): Boolean = _state.value.isReady && !_state.value.isExiting
 
     fun canSend(amountSats: ULong): Boolean = _state.value.isReady && _state.value.sendableSats >= amountSats
 
@@ -176,6 +210,7 @@ class SparkRepo @Inject constructor(
         runSuspendCatching {
             ensurePaymentDeadline(paymentDeadlineAt)
             if (!sparkService.isConnected) throw SparkError.SendRefused("Spark is not connected")
+            if (_state.value.isExiting) throw SparkError.SendRefused("Spark is in an emergency exit")
             val prepared = runSuspendCatching { sparkService.prepareSend(bolt11, amountSats) }
                 .getOrElse { throw SparkError.SendRefused("Spark could not prepare the payment", it) }
             val method = prepared.paymentMethod as? SendPaymentMethod.Bolt11Invoice
@@ -306,6 +341,7 @@ class SparkRepo @Inject constructor(
     /** Moves the whole Spark balance to the on-chain [address], fees included, for Spending to Savings. */
     suspend fun withdrawAll(address: String): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
+            if (_state.value.isExiting) throw SparkError.SendRefused("Spark is in an emergency exit")
             val prepared = sparkService.prepareSend(address, _state.value.balanceSats, FeePolicy.FEES_INCLUDED)
             sparkService.send(prepared)
             refresh()
@@ -612,9 +648,17 @@ data class SparkState(
     val deposits: ImmutableList<SparkDeposit> = persistentListOf(),
     val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
     val recoverableFundsSats: ULong = 0uL,
+    /** An emergency exit is moving the balance on-chain: Spark then neither sends nor receives. */
+    val isExiting: Boolean = false,
 ) {
     /** The most Spark can send once its service fee is paid, so a payment near the full balance isn't offered. */
-    val sendableSats: ULong get() = SparkFees.sendableSats(balanceSats)
+    val sendableSats: ULong get() = if (isExiting) 0uL else SparkFees.sendableSats(balanceSats)
+
+    /** Spark can take payments and transfers: connected, and no emergency exit runs. */
+    val isUsable: Boolean get() = isReady && !isExiting
+
+    /** The balance Spending counts; during an emergency exit it is in transfer to Savings instead. */
+    val spendingSats: ULong get() = if (isExiting) 0uL else balanceSats
 }
 
 object SparkFees {

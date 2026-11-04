@@ -1,0 +1,29 @@
+<journey name="spark emergency exit">
+  <description>
+    Verifies the Spark emergency exit up to the swipe. With a Spark balance, the Spark connection screen shows
+    "Emergency exit" (testTag "SparkEmergencyExit") under "Transfer to Savings". It opens the explainer, then the
+    quote, which asks the SDK's prepareRecoverFunds for every leaf and lists "Amount to exit", "Network fees",
+    "You receive about" and, when the exit needs CPFP fee funding, "Fee funding needed". Continue leads to the
+    funding screen, whose "Fund from another wallet" shows the funding address as a QR code. The journey stops before
+    the swipe: starting an exit takes the Spark balance out of Spending for days. The states after the swipe are
+    covered by SparkExitDriverTest and the SparkExitProgressScreen previews.
+
+    Precondition: dev build with Spark connected on its regtest (no key needed) and a Spark balance, funded at the
+    deposit address the Spark connection screen shows (testTag "SparkDepositAddress") from Lightspark's regtest
+    faucet. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the menu icon (testTag "HeaderMenu")</action>
+    <action>Tap Settings (testTag "DrawerSettings")</action>
+    <action>Tap the Advanced tab (testTag "Tab-advanced")</action>
+    <action>Tap Lightning Connections (testTag "Channels")</action>
+    <action>Tap the Spark connection (testTag "SparkConnection")</action>
+    <action>Scroll down and verify "Transfer to Savings" (testTag "SparkTransferToSavings") is enabled and "Emergency exit" (testTag "SparkEmergencyExit") shows under it</action>
+    <action>Tap "Emergency exit" and verify the "Leave Spark on-chain" explainer says the exit takes up to 2 weeks</action>
+    <action>Tap "Continue" (testTag "SparkExitIntroContinue") and verify the "Exit quote" screen shows "Getting a quote…" and then "Amount to exit", "Network fees" and "You receive about"</action>
+    <action>Verify no reason shows in red (testTag "SparkExitQuoteBlocked") and "Continue" (testTag "SparkExitQuoteContinue") is enabled</action>
+    <action>Tap "Continue" and verify the "Fund the fees" screen names the fee funding amount, with "Pay from savings" (testTag "SparkExitFundSavings") and "Fund from another wallet" (testTag "SparkExitFundExternal")</action>
+    <action>Tap "Fund from another wallet" and verify a QR code and a bcrt1 address (testTag "SparkExitFundingAddress") show, and "Continue" (testTag "SparkExitFundingContinue") is disabled</action>
+    <action>Go back to the Spark connection screen and verify "Transfer to Savings" is still enabled: nothing started</action>
+  </actions>
+</journey>

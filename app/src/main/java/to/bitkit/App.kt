@@ -18,6 +18,7 @@ import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.services.BluetoothInit
 import to.bitkit.services.PubkyAuthHandlerRegistrar
 import to.bitkit.utils.Crypto
@@ -46,6 +47,10 @@ internal open class App : Application(), Configuration.Provider {
     @Inject
     lateinit var hwWalletRepo: Lazy<HwWalletRepo>
 
+    /** Resolved like [hwWalletRepo]; drives a Spark emergency exit while Bitkit is in the foreground. */
+    @Inject
+    lateinit var sparkExitRepo: Lazy<SparkExitRepo>
+
     override val workManagerConfiguration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -71,8 +76,14 @@ internal open class App : Application(), Configuration.Provider {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
                 when (event) {
-                    Lifecycle.Event.ON_START -> hwWalletRepo.get().onAppForegrounded()
-                    Lifecycle.Event.ON_STOP -> hwWalletRepo.get().onAppBackgrounded()
+                    Lifecycle.Event.ON_START -> {
+                        hwWalletRepo.get().onAppForegrounded()
+                        sparkExitRepo.get().onAppForegrounded()
+                    }
+                    Lifecycle.Event.ON_STOP -> {
+                        hwWalletRepo.get().onAppBackgrounded()
+                        sparkExitRepo.get().onAppBackgrounded()
+                    }
                     else -> Unit
                 }
             },

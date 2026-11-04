@@ -88,7 +88,7 @@ fun SavingsConfirmScreen(
 
     val sparkState by wallet.sparkState.collectAsStateWithLifecycle()
     val channelsAmount = channels.sumOf { it.amountOnClose }
-    val amount = channelsAmount + sparkState.balanceSats
+    val amount = channelsAmount + sparkState.spendingSats
 
     val swapState by transfer.savingsSwapState.collectAsStateWithLifecycle()
 

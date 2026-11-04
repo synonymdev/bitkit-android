@@ -1,0 +1,142 @@
+package to.bitkit.repositories
+
+import breez_sdk_spark.ExitTransactionStatus
+import org.junit.Test
+import org.lightningdevkit.ldknode.Network
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+
+class SparkExitFundingTest {
+    @Test
+    fun `quote splits what arrives from what it costs`() {
+        val quote = SparkExitQuote(SparkExitFixtures.prepared(funding = 20_000uL))
+
+        assertEquals(100_000uL, quote.exitSats)
+        assertEquals(9_000uL, quote.networkFeeSats)
+        assertEquals(91_000uL, quote.receiveSats)
+        assertEquals(20_000uL, quote.fundingSats)
+        assertEquals(111_000uL, quote.incomingSats)
+        assertEquals(300uL, quote.leftBehindSats)
+        assertEquals(listOf("leaf-1"), quote.leafIds)
+        assertTrue(quote.isWorthExiting)
+    }
+
+    @Test
+    fun `quote is not worth exiting when fees reach the value or nothing is left`() {
+        val expensive = SparkExitQuote(SparkExitFixtures.prepared(totalFeeSats = 100_000uL))
+
+        assertFalse(expensive.isWorthExiting)
+        assertEquals(0uL, expensive.receiveSats)
+        assertFalse(SparkExitQuote(SparkExitFixtures.prepared(leaves = emptyList())).isWorthExiting)
+    }
+
+    @Test
+    fun `cooperative only quote needs no funding`() {
+        assertEquals(0uL, SparkExitQuote(SparkExitFixtures.prepared(funding = null)).fundingSats)
+    }
+
+    @Test
+    fun `shortfall counts what the funding address already holds`() {
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.NeedsFunding(23_000uL)).copy(
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL)
+            ),
+        )
+
+        assertEquals(20_000uL, record.fundedSats)
+        assertEquals(3_000uL, record.fundingShortfallSats)
+        assertNull(record.copy(phase = SparkExitRecord.Phase.NeedsFunding(20_000uL)).fundingShortfallSats)
+        assertNull(record.copy(phase = SparkExitRecord.Phase.Running).fundingShortfallSats)
+    }
+
+    @Test
+    fun `claimable height is the latest timelock`() {
+        val recovery = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("a", status = ExitTransactionStatus.WaitingForTimelock(2_000u)),
+                SparkExitFixtures.tx("b", status = ExitTransactionStatus.WaitingForTimelock(2_400u)),
+                SparkExitFixtures.tx("c", status = ExitTransactionStatus.Confirmed(5u)),
+            ),
+        )
+
+        assertEquals(2_400u, SparkExitMath.claimableAtHeight(recovery))
+        assertEquals(1, SparkExitMath.confirmedCount(recovery))
+        assertNull(SparkExitMath.claimableAtHeight(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("d")))))
+    }
+
+    @Test
+    fun `funding utxo must be confirmed and large enough`() {
+        val utxos = listOf(
+            SparkExitFixtures.utxo("small", value = 999uL),
+            SparkExitFixtures.utxo("pending", value = 50_000uL, confirmed = false),
+            SparkExitFixtures.utxo("ok", value = 1_000uL),
+            SparkExitFixtures.utxo("big", value = 2_000uL),
+        )
+
+        assertEquals("big", SparkExitMath.fundingUtxo(utxos, requiredSats = 1_000uL)?.txid)
+        assertNull(SparkExitMath.fundingUtxo(utxos, requiredSats = 2_001uL))
+    }
+
+    @Test
+    fun `savings must cover the funding and its fee`() {
+        assertTrue(SparkExitMath.canFundFromSavings(10_500uL, 10_000uL, 500uL))
+        assertFalse(SparkExitMath.canFundFromSavings(10_499uL, 10_000uL, 500uL))
+        assertFalse(SparkExitMath.canFundFromSavings(10_000uL, 0uL, 0uL))
+    }
+
+    @Test
+    fun `eta uses the network's block time`() {
+        assertEquals(100.minutes, SparkExitMath.timeUntil(110u, 100u, Network.BITCOIN))
+        assertEquals(5.minutes, SparkExitMath.timeUntil(110u, 100u, Network.REGTEST))
+        assertEquals(Duration.ZERO, SparkExitMath.timeUntil(90u, 100u, Network.BITCOIN))
+    }
+
+    @Test
+    fun `funding key derives on its own account`() {
+        assertEquals("m/84'/1'/7797'/0/0", SparkExitFundingKey.path(0, Network.REGTEST))
+        assertEquals("m/84'/0'/7797'/0/3", SparkExitFundingKey.path(3, Network.BITCOIN))
+    }
+
+    @Test
+    fun `decodes a compressed wif`() {
+        val key = SparkExitFundingKey.secretKey("KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn")
+
+        assertContentEquals(ByteArray(31) + byteArrayOf(1), key)
+    }
+
+    @Test
+    fun `rejects a wif with a bad checksum or an uncompressed key`() {
+        assertFailsWith<SparkExitFundingKey.InvalidWif> {
+            SparkExitFundingKey.secretKey("KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWo")
+        }
+        assertFailsWith<SparkExitFundingKey.InvalidWif> {
+            SparkExitFundingKey.secretKey("5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf")
+        }
+        assertFailsWith<SparkExitFundingKey.InvalidWif> { SparkExitFundingKey.secretKey("0OIl") }
+    }
+
+    @Test
+    fun `cpfp child txids ignore witness data`() {
+        val segwit = "0200000000010111111111111111111111111111111111111111111111111111111111111111110000000000" +
+            "ffffffff01e80300000000000016001422222222222222222222222222222222222222220202abcd0301020300000000"
+        val recovery = SparkExitFixtures.recovery(
+            listOf(
+                SparkExitFixtures.tx("a", cpfp = SparkExitFixtures.PARENT_HEX),
+                SparkExitFixtures.tx("b", cpfp = segwit),
+                SparkExitFixtures.tx("c", cpfp = "02zz"),
+                SparkExitFixtures.tx("d"),
+            ),
+        )
+
+        assertEquals(
+            listOf(SparkExitFixtures.PARENT_TXID, SparkExitFixtures.PARENT_TXID),
+            SparkExitTxids.cpfpChildTxids(recovery),
+        )
+    }
+}

@@ -198,6 +198,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
 | `transfer/spending-confirm-amount-change.xml` | same file — both platforms show the same "Fees changed" info toast; closing the received sheet re-sizes iOS's Spending Confirm, so the lower amounts can show before the swipe |
+| `transfer/spark-emergency-exit.xml` | not ported yet — iOS ships the same screens and identifiers in synonymdev/bitkit-ios#1128, without a journey |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS

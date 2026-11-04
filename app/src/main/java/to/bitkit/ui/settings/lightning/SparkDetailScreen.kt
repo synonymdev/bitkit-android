@@ -1,6 +1,7 @@
 package to.bitkit.ui.settings.lightning
 
 import android.content.Intent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +37,7 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -48,6 +50,7 @@ import to.bitkit.ui.utils.getBlockExplorerUrl
 fun SparkDetailScreen(
     onBack: () -> Unit,
     onTransferToSavings: () -> Unit,
+    onEmergencyExit: (isExiting: Boolean) -> Unit,
     viewModel: SparkDetailViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -60,6 +63,7 @@ fun SparkDetailScreen(
         onOpenTx = { txId -> context.startActivity(Intent(Intent.ACTION_VIEW, getBlockExplorerUrl(txId).toUri())) },
         onCopyText = { context.setClipboardText(it) },
         onTransferToSavings = onTransferToSavings,
+        onEmergencyExit = { onEmergencyExit(uiState.spark?.isExiting == true) },
     )
 }
 
@@ -72,6 +76,7 @@ private fun Content(
     onOpenTx: (String) -> Unit = {},
     onCopyText: (String) -> Unit = {},
     onTransferToSavings: () -> Unit = {},
+    onEmergencyExit: () -> Unit = {},
 ) {
     val spark = uiState.spark ?: SparkUi(balanceSats = 0uL)
     ScreenColumn {
@@ -174,11 +179,20 @@ private fun Content(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__transfer_to_savings),
                     onClick = onTransferToSavings,
-                    enabled = spark.balanceSats > 0uL,
+                    enabled = spark.balanceSats > 0uL && !spark.isExiting,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("SparkTransferToSavings")
                 )
+                if (spark.showsExit) {
+                    VerticalSpacer(8.dp)
+                    Box(modifier = Modifier.testTag("SparkEmergencyExit")) {
+                        TertiaryButton(
+                            text = stringResource(R.string.lightning__spark_exit__button),
+                            onClick = onEmergencyExit,
+                        )
+                    }
+                }
                 VerticalSpacer(16.dp)
             }
         }

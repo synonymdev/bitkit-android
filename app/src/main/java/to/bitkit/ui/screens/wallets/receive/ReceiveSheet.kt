@@ -149,7 +149,7 @@ fun ReceiveSheet(
                         onUsdtSelected = onUsdtSelected,
                         walletState = walletState,
                         lightningState = lightningState,
-                        canReceiveWithSpark = sparkState.isReady,
+                        canReceiveWithSpark = sparkState.isUsable,
                         onClickReceiveCjit = { navController.navigateTo(ReceiveRoute.TransferUnavailable) },
                         onClickEditInvoice = {
                             editInvoiceSourceTab = it
