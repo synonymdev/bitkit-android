@@ -6456,6 +6456,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `switching to savings restores the scanned onchain amount over a typed one`() = test {
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        setUnifiedState(amount = 5_000u, payMethod = SendMethod.LIGHTNING)
+        setSendState(sut.sendUiState.value.copy(fixedOnchainAmount = 10_000u))
+
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
+    }
+
+    @Test
     fun `swipe after switching to savings opens manual coin selection`() = test {
         settingsData.value = SettingsData(coinSelectAuto = false)
         balanceState.value = BalanceState(

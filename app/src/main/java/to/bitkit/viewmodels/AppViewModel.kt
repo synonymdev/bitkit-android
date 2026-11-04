@@ -4372,6 +4372,9 @@ class AppViewModel @Inject constructor(
             fixedContactLightningAmount(current)?.let {
                 return PaykitAmount(PaykitAsset.BTC, it)
             }
+        } else if (source != SendFundingSource.Usdt) {
+            // An amount typed on Spending must not replace the payee's on-chain amount.
+            current.fixedOnchainAmount?.let { return PaykitAmount(PaykitAsset.BTC, it) }
         }
         val input = activeIncomingPaymentRequest()?.amount ?: if (current.paykitUsesUsdt) {
             runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, current.paykitAmount) }.getOrNull()
