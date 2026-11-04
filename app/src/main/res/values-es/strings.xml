@@ -214,6 +214,7 @@
     <string name="lightning__spark_exit__notification_funding">Your emergency exit needs more fee funding. Open Bitkit to fund it.</string>
     <string name="lightning__spark_exit__notification_late">Your emergency exit fell behind in the background. Open Bitkit to continue it.</string>
     <string name="lightning__spark_exit__notification_offline">Your emergency exit can\'t continue without internet. Connect and open Bitkit before {time} to keep it on track.</string>
+    <string name="lightning__spark_exit__notification_rejected">Some of your emergency exit\'s transactions were refused. Open Bitkit before {time} to see why.</string>
     <string name="lightning__spark_exit__notification_restricted">Android stops Bitkit from running in the background. Open Bitkit before {time} to keep your emergency exit on track.</string>
     <string name="lightning__spark_exit__notification_title">Emergency exit</string>
     <string name="lightning__spark_exit__partial_text">{count} small amounts stayed on Spark.</string>

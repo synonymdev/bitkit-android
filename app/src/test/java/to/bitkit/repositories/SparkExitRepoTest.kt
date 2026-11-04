@@ -9,6 +9,7 @@ import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.utils.io.errors.IOException
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -24,6 +25,7 @@ import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.entities.TransferEntity
@@ -114,12 +116,13 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     /** Spark's regtest mempool, where nothing is confirmed yet and every single transaction is accepted. */
-    private fun regtestMempool(posts: MutableList<String>) = HttpClient(
+    private fun regtestMempool(posts: MutableList<String>, refusal: String? = null) = HttpClient(
         MockEngine { request ->
             val url = request.url.toString()
             when {
                 request.method == HttpMethod.Post && url.endsWith("/api/tx") -> {
                     posts += String(request.body.toByteArray())
+                    if (refusal != null) return@MockEngine respond(refusal, HttpStatusCode.BadRequest)
                     respond(String(request.body.toByteArray()).removePrefix("02"))
                 }
                 url.endsWith("/blocks/tip/height") -> respond("1000")
@@ -130,10 +133,10 @@ class SparkExitRepoTest : BaseUnitTest() {
     ) { defaultRequest { contentType(ContentType.Application.Json) } }
 
     /** Spark in a process the worker woke: not connected until the run starts it, which never touches the node. */
-    private suspend fun coldSpark(sdk: FakeSparkExitRecovering): SparkService {
+    private suspend fun coldSpark(sdk: FakeSparkExitRecovering, connects: Boolean = true): SparkService {
         var isConnected = false
         whenever(sparkRepo.start(any())).thenAnswer {
-            isConnected = true
+            isConnected = connects
             Result.success(Unit)
         }
         return mock<SparkService> {
@@ -173,5 +176,28 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         assertEquals(listOf("02n1"), posts)
         assertEquals(1, restarted.checkedRecoveries.size)
+    }
+
+    @Test
+    fun `a background run whose steps keep being refused lets the deadline alarm fire`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1")))
+        store.save(SparkExitFixtures.record(Phase.Running).adopt(recovery, 0L))
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(listOf(transfer("transfer-1"))))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(false))
+        whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val posts = mutableListOf<String>()
+        val refusal = """sendrawtransaction RPC error: {"code":-26,"message":"min relay fee not met"}"""
+
+        repeat(SparkExitDriver.REJECTIONS_TO_SURFACE) {
+            // The operators are down: Spark does not connect, and the keyless pass publishes alone.
+            val spark = coldSpark(FakeSparkExitRecovering(), connects = false)
+            createSut(spark, regtestMempool(posts, refusal)).runInBackground().getOrThrow()
+        }
+
+        assertEquals(3, posts.size)
+        assertEquals(3, store.load()?.broadcastLog?.single()?.rejections)
+        // The first two refusals still count as runs that kept up; the third surfaces and stops pushing the alarm.
+        verify(work, times(2)).armDeadline(any(), any())
     }
 }

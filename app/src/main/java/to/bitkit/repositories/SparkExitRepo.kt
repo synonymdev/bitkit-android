@@ -198,8 +198,10 @@ class SparkExitRepo @Inject constructor(
         )
         val updated = driver.tick(current)
         _state.update { it.copy(record = updated, lastError = null) }
-        // A rebuild needs the SDK; every other running step can go out from the stored recovery without it.
-        val isOnTrack = tip != null && (recovering != null || !updated.isRebuilding)
+        // A rebuild needs the SDK; every other running step can go out from the stored recovery without it. Steps
+        // refused again and again keep the exit from moving, however often it runs.
+        val canMove = recovering != null || !updated.isRebuilding
+        val isOnTrack = tip != null && canMove && updated.surfacedRejection == null
         afterTick(updated, current, isOnTrack)
         return updated
     }

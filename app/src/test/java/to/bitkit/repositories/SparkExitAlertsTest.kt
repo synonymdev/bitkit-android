@@ -11,6 +11,20 @@ class SparkExitAlertsTest {
 
     @Test
     fun `names why a running exit fell behind, the most specific first`() {
+        val refused = running.copy(
+            broadcastLog = listOf(
+                SparkExitRecord.BroadcastAttempt(
+                    generation = running.generation,
+                    txid = "n1",
+                    attempts = 3,
+                    rejections = 3,
+                    lastAttemptAt = 0L,
+                    lastOutcome = "rejected: min relay fee not met",
+                    isAccepted = false,
+                ),
+            ),
+        )
+        assertEquals(SparkExitAlert.Rejected, SparkExitAlerts.reason(refused, isOnline = false, unlimited))
         assertEquals(SparkExitAlert.Offline, SparkExitAlerts.reason(running, isOnline = false, unlimited))
         assertEquals(
             SparkExitAlert.Restricted,
@@ -20,8 +34,9 @@ class SparkExitAlertsTest {
             SparkExitAlert.Battery,
             SparkExitAlerts.reason(running, isOnline = true, unlimited.copy(isPowerSaveMode = true)),
         )
+        // Battery optimization is Android's default, so alone it is no cause to name.
         assertEquals(
-            SparkExitAlert.Battery,
+            SparkExitAlert.Behind,
             SparkExitAlerts.reason(running, isOnline = true, unlimited.copy(isOptimized = true)),
         )
         assertEquals(SparkExitAlert.Behind, SparkExitAlerts.reason(running, isOnline = true, unlimited))

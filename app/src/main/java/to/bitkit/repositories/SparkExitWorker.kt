@@ -235,7 +235,7 @@ data class SparkExitBackgroundLimits(
 )
 
 /** Why the user is asked to open Bitkit. */
-enum class SparkExitAlert { Funding, Offline, Restricted, Battery, Behind }
+enum class SparkExitAlert { Funding, Rejected, Offline, Restricted, Battery, Behind }
 
 object SparkExitAlerts {
     /** Why a running exit fell behind its deadline, or null when it needs nothing from the user. */
@@ -244,9 +244,11 @@ object SparkExitAlerts {
         return when {
             record.phase is SparkExitRecord.Phase.NeedsFunding -> SparkExitAlert.Funding
             record.phase != SparkExitRecord.Phase.Running -> null
+            record.surfacedRejection != null -> SparkExitAlert.Rejected
             !isOnline -> SparkExitAlert.Offline
             limits.isRestricted -> SparkExitAlert.Restricted
-            limits.isPowerSaveMode || limits.isOptimized -> SparkExitAlert.Battery
+            // Battery optimization alone is Android's default for nearly every app, so it names no cause.
+            limits.isPowerSaveMode -> SparkExitAlert.Battery
             else -> SparkExitAlert.Behind
         }
     }
@@ -254,6 +256,7 @@ object SparkExitAlerts {
 
 private fun SparkExitAlert.textRes(hasDeadline: Boolean): Int = when (this) {
     SparkExitAlert.Funding -> R.string.lightning__spark_exit__notification_funding
+    SparkExitAlert.Rejected if hasDeadline -> R.string.lightning__spark_exit__notification_rejected
     SparkExitAlert.Offline if hasDeadline -> R.string.lightning__spark_exit__notification_offline
     SparkExitAlert.Restricted if hasDeadline -> R.string.lightning__spark_exit__notification_restricted
     SparkExitAlert.Battery if hasDeadline -> R.string.lightning__spark_exit__notification_battery
