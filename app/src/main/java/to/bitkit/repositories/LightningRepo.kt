@@ -1432,8 +1432,7 @@ class LightningRepo @Inject constructor(
      */
     suspend fun outboundPaymentStatus(paymentHash: String): Result<PaymentStatus?> = withContext(bgDispatcher) {
         runSuspendCatching {
-            val payments = checkNotNull(lightningService.listPayments()) { "Payment store unavailable" }
-            payments.firstNotNullOfOrNull { it.outboundPaymentStatus(paymentHash) }
+            lightningService.payment(paymentHash.lowercase())?.outboundPaymentStatus(paymentHash)
         }
     }
 

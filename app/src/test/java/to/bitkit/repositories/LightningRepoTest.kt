@@ -94,6 +94,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
@@ -2242,15 +2243,16 @@ class LightningRepoTest : BaseUnitTest() {
         )
 
         cases.forEachIndexed { index, (payments, status) ->
-            whenever(lightningService.listPayments()).thenReturn(payments)
+            whenever(lightningService.payment(paymentHash)).thenReturn(payments.firstOrNull())
 
             assertEquals(status, sut.outboundPaymentStatus(paymentHash).getOrThrow(), "case $index")
         }
+        verify(lightningService, never()).listPayments()
     }
 
     @Test
     fun `a payment store that cannot be read gives no lightning payment status`() = test {
-        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(lightningService.payment(any())).doSuspendableAnswer { throw ServiceError.NodeNotSetup() }
 
         assertTrue(sut.outboundPaymentStatus("ab".repeat(32)).isFailure)
     }
