@@ -21,7 +21,7 @@
     <action>Verify the "Select funds to transfer" screen lists a "Spark" row with the Spark balance and one "Connection N" row per open channel, every switch on, and "Total selected" equals the confirm amount</action>
     <action>Turn off the last "Connection N" row and verify "Total selected" drops by that row's amount</action>
     <action>Tap "Continue" and verify the confirm amount equals the new total, "Spark fee" still shows, and the button reads "Transfer all"</action>
-    <action>Tap "Advanced", turn off the "Spark" row and every "Connection N" row, and verify "Continue" is disabled</action>
+    <action>Tap "Transfer all", then tap "Advanced", turn off the "Spark" row and every "Connection N" row, and verify "Continue" is disabled</action>
     <action>Turn on the "Spark" row only and tap "Continue"</action>
     <action>Verify the confirm amount equals the Spark balance and "Spark fee" shows</action>
     <action>Tap "Transfer all" and verify the amount returns to the channels' balance plus the Spark balance, and the button reads "Advanced"</action>
