@@ -157,11 +157,11 @@ fun UsdtWalletScreen(
             state.busy -> Unit
             state.authenticationRequired -> viewModel.cancelAuthentication()
             state.submitted -> dismiss()
-            state.quote != null && isAmountFixed -> {
+            state.quote != null -> {
                 viewModel.edit()
-                page = UsdtPage.MANUAL
+                // Amount cannot change a fixed amount, so Back leaves it as well.
+                if (isAmountFixed) page = UsdtPage.MANUAL
             }
-            state.quote != null -> viewModel.edit()
             page in listOf(UsdtPage.AMOUNT, UsdtPage.MANUAL) -> {
                 viewModel.edit()
                 page = if (page == UsdtPage.AMOUNT) UsdtPage.MANUAL else UsdtPage.RECIPIENT
@@ -285,6 +285,7 @@ fun UsdtWalletScreen(
                                 amount = request.amount?.let { usdtFormatAmount(it) } ?: amount
                                 isAmountFixed = request.amount != null
                                 page = UsdtPage.AMOUNT
+                                request.amount?.let { viewModel.quote(recipient, amount, destination) }
                             }
                         },
                         onPageChange = {
@@ -304,6 +305,7 @@ fun UsdtWalletScreen(
                         onDone = dismiss,
                         hideBalance = settings.hideBalance,
                         amountEditable = !isAmountFixed,
+                        isScannedAmount = isAmountFixed,
                         onDetails = {
                             selectedTransferId = state.quote?.id
                             dismiss()

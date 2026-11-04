@@ -122,6 +122,7 @@ internal fun UsdtPaymentContent(
     onMaximum: (() -> Unit)? = null,
     hideBalance: Boolean = false,
     amountEditable: Boolean = true,
+    isScannedAmount: Boolean = false,
     isPaymentRequest: Boolean = false,
     paymentRequestNote: String? = null,
     isMerchantRequest: Boolean = false,
@@ -163,8 +164,9 @@ internal fun UsdtPaymentContent(
         }
     }
     val showSubmitted = pending || (completed && hasShownSubmitted)
-    // A payment request's amount is fixed, so its review waits for the quote on a confirm screen, not on Amount.
-    val preparingConfirmation = quote == null && page == UsdtPage.AMOUNT && isPaymentRequest && !amountEditable
+    // A fixed amount (a payment request, or a scanned or linked one) waits for its quote on a confirm screen.
+    val preparingConfirmation = quote == null && page == UsdtPage.AMOUNT && !amountEditable &&
+        (isPaymentRequest || isScannedAmount)
     if (showSuccess && completed && quote != null) {
         NewTransactionSheetView(
             details = NewTransactionSheetDetails(
@@ -235,6 +237,7 @@ internal fun UsdtPaymentContent(
                 state,
                 fundingSource,
                 onReview,
+                isPaymentRequest,
             )
             page == UsdtPage.AMOUNT -> UsdtAmountContent(
                 amount,
@@ -643,6 +646,7 @@ private fun UsdtConfirmationLoading(
     state: UsdtSendState,
     fundingSource: (@Composable () -> Unit)?,
     onRetry: () -> Unit,
+    isPaymentRequest: Boolean,
 ) {
     Column(modifier = Modifier.fillMaxSize().testTag("UsdtConfirmLoading")) {
         UsdtAmountHeader(amount.ifEmpty { "0" })
@@ -651,12 +655,18 @@ private fun UsdtConfirmationLoading(
             Box(modifier = Modifier.align(Alignment.End)) { fundingSource() }
         }
         VerticalSpacer(24.dp)
-        PaymentRequestSummary(
-            profile = contact,
-            note = note?.trim()?.takeIf { it.isNotEmpty() },
-            accentColor = Colors.Usdt,
+        if (isPaymentRequest) {
+            PaymentRequestSummary(
+                profile = contact,
+                note = note?.trim()?.takeIf { it.isNotEmpty() },
+                accentColor = Colors.Usdt,
+            )
+        }
+        PaymentReviewIllustration(
+            swipeProgress = { 0f },
+            isPaymentRequest = isPaymentRequest,
+            modifier = Modifier.weight(1f),
         )
-        PaymentReviewIllustration(swipeProgress = { 0f }, isPaymentRequest = true, modifier = Modifier.weight(1f))
         state.error?.let {
             BodyM(state.errorMessage(it), color = Colors.Brand)
             PrimaryButton(
