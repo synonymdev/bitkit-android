@@ -70,7 +70,7 @@ fun MoveToSparkSheet(onLater: () -> Unit, onMove: () -> Unit, modifier: Modifier
                 modifier = Modifier.weight(1f)
             )
             PrimaryButton(
-                stringResource(R.string.lightning__move_to_spark__nav_title),
+                stringResource(R.string.lightning__move_to_spark__move_now),
                 onClick = onMove,
                 modifier = Modifier.weight(1f).testTag("MoveToSparkIntroMove")
             )

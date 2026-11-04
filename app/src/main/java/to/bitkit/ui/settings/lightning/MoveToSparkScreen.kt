@@ -5,13 +5,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -74,7 +74,6 @@ private fun Content(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState())
         ) {
             when (uiState) {
                 MoveToSparkUiState.Quoting -> Quoting()
@@ -96,21 +95,27 @@ private fun Header(title: String, text: String) {
     BodyM(text = text, color = Colors.White64)
 }
 
+/** Takes the height between the content and the bottom buttons, so the buttons stay at the screen's bottom. */
 @Composable
-private fun Illustration(@DrawableRes drawable: Int) {
-    Image(
-        painter = painterResource(drawable),
-        contentDescription = null,
-        contentScale = ContentScale.Fit,
+private fun ColumnScope.Illustration(@DrawableRes drawable: Int) {
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = Modifier
+            .weight(1f)
             .fillMaxWidth()
-            .padding(vertical = 32.dp)
-            .size(256.dp)
-    )
+            .padding(vertical = 16.dp)
+    ) {
+        Image(
+            painter = painterResource(drawable),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.sizeIn(maxWidth = 256.dp, maxHeight = 256.dp)
+        )
+    }
 }
 
 @Composable
-private fun Quoting() {
+private fun ColumnScope.Quoting() {
     Header(
         title = stringResource(R.string.lightning__move_to_spark__confirm_title),
         text = stringResource(R.string.lightning__move_to_spark__quoting),
@@ -118,15 +123,15 @@ private fun Quoting() {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
+            .weight(1f)
             .fillMaxWidth()
-            .padding(vertical = 64.dp)
     ) {
         GradientCircularProgressIndicator(modifier = Modifier.size(64.dp))
     }
 }
 
 @Composable
-private fun Confirm(quote: MoveToSparkQuote, isMoving: Boolean, onMove: () -> Unit) {
+private fun ColumnScope.Confirm(quote: MoveToSparkQuote, isMoving: Boolean, onMove: () -> Unit) {
     Header(
         title = stringResource(R.string.lightning__move_to_spark__confirm_title),
         text = stringResource(R.string.lightning__move_to_spark__confirm_text),
@@ -154,7 +159,7 @@ private fun AmountRow(label: String, sats: ULong, testTag: String) {
 }
 
 @Composable
-private fun Done(
+private fun ColumnScope.Done(
     uiState: MoveToSparkUiState.Done,
     onDone: () -> Unit,
     onMoveRest: (ULong?) -> Unit,
@@ -179,7 +184,7 @@ private fun Done(
     Illustration(R.drawable.check)
     if (uiState.hasRest) {
         Buttons(
-            secondaryText = stringResource(R.string.common__ok),
+            secondaryText = stringResource(R.string.common__later),
             onSecondary = onDone,
             primaryText = stringResource(R.string.lightning__move_to_spark__move_rest),
             onPrimary = { onMoveRest(null) },
@@ -188,16 +193,20 @@ private fun Done(
         return
     }
     Buttons(
-        secondaryText = stringResource(R.string.common__ok),
+        secondaryText = stringResource(R.string.common__later),
         onSecondary = onDone,
-        primaryText = stringResource(R.string.lightning__move_to_spark__close),
+        primaryText = stringResource(R.string.common__close),
         onPrimary = { onCloseChannel(uiState.closeChannelId) },
         primaryTestTag = "MoveToSparkClose",
     )
 }
 
 @Composable
-private fun TooLarge(uiState: MoveToSparkUiState.TooLarge, onBack: () -> Unit, onRetry: (ULong?) -> Unit) {
+private fun ColumnScope.TooLarge(
+    uiState: MoveToSparkUiState.TooLarge,
+    onBack: () -> Unit,
+    onRetry: (ULong?) -> Unit,
+) {
     val amount = sparkExitAmountText(uiState.amountSats)
     Header(
         title = stringResource(R.string.lightning__move_to_spark__too_large_title),
@@ -217,14 +226,14 @@ private fun TooLarge(uiState: MoveToSparkUiState.TooLarge, onBack: () -> Unit, o
     Buttons(
         secondaryText = stringResource(R.string.common__cancel),
         onSecondary = onBack,
-        primaryText = stringResource(R.string.lightning__move_to_spark__try, sparkExitAmountText(smallerSats)),
+        primaryText = stringResource(R.string.lightning__move_to_spark__move_half),
         onPrimary = { onRetry(smallerSats) },
         primaryTestTag = "MoveToSparkTrySmaller",
     )
 }
 
 @Composable
-private fun Failed(failure: MoveToSparkFailure, onBack: () -> Unit, onRetry: (ULong?) -> Unit) {
+private fun ColumnScope.Failed(failure: MoveToSparkFailure, onBack: () -> Unit, onRetry: (ULong?) -> Unit) {
     Header(
         title = stringResource(R.string.lightning__move_to_spark__failed_title),
         text = stringResource(
