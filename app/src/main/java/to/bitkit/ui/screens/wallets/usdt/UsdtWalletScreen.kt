@@ -134,8 +134,11 @@ fun UsdtWalletScreen(
     var selectedTransferId by rememberSaveable(initialTransferId) { mutableStateOf(initialTransferId) }
     var recipient by rememberSaveable { mutableStateOf(initialRecipient) }
     var amount by rememberSaveable { mutableStateOf(initialAmount) }
-    // A scanned or linked request that names an amount fixes it; the payee set it.
-    var isAmountFixed by rememberSaveable { mutableStateOf(isPositiveUsdtAmount(initialAmount)) }
+    // The recipient whose scanned or linked request named the amount; the payee set it, so it cannot be edited.
+    var fixedAmountRecipient by rememberSaveable {
+        mutableStateOf(initialRecipient.takeIf { isPositiveUsdtAmount(initialAmount) })
+    }
+    val isAmountFixed = fixedAmountRecipient != null
     var maximumAmount by rememberSaveable { mutableStateOf<String?>(null) }
     val destinations by viewModel.destinations.collectAsStateWithLifecycle()
     var destination by rememberSaveable { mutableStateOf(UsdtDestination.ARBITRUM) }
@@ -205,6 +208,7 @@ fun UsdtWalletScreen(
                 app?.requestUsdtEnable {
                     recipient = ""
                     amount = ""
+                    fixedAmountRecipient = null
                     viewModel.edit()
                     page = UsdtPage.RECIPIENT
                 }
@@ -282,12 +286,12 @@ fun UsdtWalletScreen(
                             viewModel.validateRecipient(value, destination) { request ->
                                 if (request.chainId != null) destination = UsdtDestination.ARBITRUM
                                 val requestAmount = request.amount?.let { usdtFormatAmount(it) }
-                                val isSameRecipient = request.recipient == recipient
-                                isAmountFixed = isUsdtAmountFixed(requestAmount, isAmountFixed, isSameRecipient)
+                                fixedAmountRecipient =
+                                    fixedUsdtAmountRecipient(request.recipient, requestAmount, fixedAmountRecipient)
                                 recipient = request.recipient
                                 amount = requestAmount ?: amount
                                 page = UsdtPage.AMOUNT
-                                if (isAmountFixed) viewModel.quote(recipient, amount, destination)
+                                if (fixedAmountRecipient != null) viewModel.quote(recipient, amount, destination)
                             }
                         },
                         onPageChange = {
@@ -352,11 +356,16 @@ internal fun isPositiveUsdtAmount(amount: String): Boolean =
     runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, amount) }.isSuccess
 
 /**
- * A request that names a positive amount fixes it. Continuing with the same recipient and no amount, as after
- * Back from review, keeps an earlier fixed amount.
+ * The recipient whose request fixes the amount. A positive requested amount fixes it for that recipient.
+ * Continuing with the same recipient and no amount, as after Back from review, keeps it; any other recipient
+ * clears it.
  */
-internal fun isUsdtAmountFixed(requestAmount: String?, wasFixed: Boolean, isSameRecipient: Boolean): Boolean =
-    requestAmount?.let(::isPositiveUsdtAmount) ?: (wasFixed && isSameRecipient)
+internal fun fixedUsdtAmountRecipient(recipient: String, requestAmount: String?, fixedRecipient: String?): String? =
+    when {
+        requestAmount != null -> recipient.takeIf { isPositiveUsdtAmount(requestAmount) }
+        fixedRecipient.equals(recipient, ignoreCase = true) -> fixedRecipient
+        else -> null
+    }
 
 @Composable
 internal fun rememberUsdtPage(initialRecipient: String, state: UsdtSendState): MutableState<UsdtPage> {

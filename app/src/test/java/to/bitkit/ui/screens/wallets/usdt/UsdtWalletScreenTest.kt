@@ -1,7 +1,9 @@
 package to.bitkit.ui.screens.wallets.usdt
 
 import org.junit.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class UsdtWalletScreenTest {
@@ -26,17 +28,25 @@ class UsdtWalletScreenTest {
         assertFalse(shouldQuoteInitialUsdtPayment("", "5"))
     }
 
+    private val otherRecipient = "0x2222222222222222222222222222222222222222"
+
     @Test
     fun `a positive requested amount is fixed and zero is not`() {
-        assertTrue(isUsdtAmountFixed(requestAmount = "0.010001", wasFixed = false, isSameRecipient = false))
-        assertFalse(isUsdtAmountFixed(requestAmount = "0", wasFixed = true, isSameRecipient = true))
+        assertEquals(recipient, fixedUsdtAmountRecipient(recipient, requestAmount = "0.010001", fixedRecipient = null))
+        assertNull(fixedUsdtAmountRecipient(recipient, requestAmount = "0", fixedRecipient = recipient))
         assertFalse(isPositiveUsdtAmount("0"))
     }
 
     @Test
-    fun `continuing with the same recipient keeps a fixed amount`() {
-        assertTrue(isUsdtAmountFixed(requestAmount = null, wasFixed = true, isSameRecipient = true))
-        assertFalse(isUsdtAmountFixed(requestAmount = null, wasFixed = true, isSameRecipient = false))
-        assertFalse(isUsdtAmountFixed(requestAmount = null, wasFixed = false, isSameRecipient = true))
+    fun `continuing with the recipient that fixed the amount keeps it`() {
+        assertEquals(recipient, fixedUsdtAmountRecipient(recipient, requestAmount = null, fixedRecipient = recipient))
+        val checksummed = recipient.uppercase().replace("0X", "0x")
+        assertEquals(recipient, fixedUsdtAmountRecipient(checksummed, requestAmount = null, fixedRecipient = recipient))
+    }
+
+    @Test
+    fun `another recipient or no earlier fixed amount leaves the amount editable`() {
+        assertNull(fixedUsdtAmountRecipient(otherRecipient, requestAmount = null, fixedRecipient = recipient))
+        assertNull(fixedUsdtAmountRecipient(recipient, requestAmount = null, fixedRecipient = null))
     }
 }
