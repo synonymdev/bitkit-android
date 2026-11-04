@@ -73,14 +73,6 @@ class PubkyAuthManifestTest {
             "pubkyauth://secret_export",
         )
         val allUrls = signupUrls + authUrls + unrelatedUrls
-        // Start from the manifest's state, whatever an earlier test in this process left enabled.
-        listOf(signupAlias, authAlias).forEach {
-            packageManager.setComponentEnabledSetting(
-                it,
-                PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
-                PackageManager.DONT_KILL_APP,
-            )
-        }
 
         assertRoutes(packageManager, application.packageName, allUrls, null)
         packageManager.setComponentEnabledSetting(
