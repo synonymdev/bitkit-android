@@ -125,7 +125,29 @@ data class HwHeldSendData(
 ) {
     /** Whether a record this cannot read may belong to [walletId], including one whose wallet cannot be read. */
     fun hasUnreadableFor(walletId: String): Boolean = unreadable.any { it.mayBelongTo(walletId) }
+
+    /**
+     * The error refusing [walletId]'s sends, with what can still be read of its unreadable records; null when none
+     * may belong to it.
+     */
+    fun unreadableErrorFor(walletId: String): HwHeldSendsUnreadableError? {
+        val records = unreadable.filter { it.mayBelongTo(walletId) }
+        if (records.isEmpty()) return null
+        return HwHeldSendsUnreadableError(
+            walletId = walletId,
+            records = records.map { it.toUnreadableHeldSend() },
+            clearsAllWallets = records.any { it.walletIdOrNull() == null },
+        )
+    }
 }
+
+/** What can still be read of a held send record that cannot be read whole. */
+data class UnreadableHeldSend(
+    val amountSats: ULong? = null,
+    val address: String? = null,
+    val txId: String? = null,
+    val heldAt: Long? = null,
+)
 
 /**
  * A signed hardware send whose broadcast may have reached the network, so the same payment is never signed again
@@ -143,17 +165,29 @@ data class HeldHwSend(
     val miningFeeSats: ULong,
     val feeRate: ULong,
     val totalSpent: ULong,
+    /** When the send was last held, in seconds since the epoch. */
+    val heldAt: Long? = null,
 ) {
     fun isPaymentOf(walletId: String, address: String, amountSats: ULong): Boolean =
         this.walletId == walletId && this.address.equals(address, ignoreCase = true) && this.amountSats == amountSats
 }
 
-private fun JsonElement.mayBelongTo(walletId: String): Boolean {
-    val recordWalletId = ((this as? JsonObject)?.get("walletId") as? JsonPrimitive)
-        ?.takeIf { it.isString }
-        ?.contentOrNull
-    return recordWalletId == null || recordWalletId == walletId
-}
+private fun JsonElement.mayBelongTo(walletId: String): Boolean = walletIdOrNull().let { it == null || it == walletId }
+
+private fun JsonElement.walletIdOrNull(): String? = stringField("walletId")
+
+private fun JsonElement.stringField(name: String): String? =
+    ((this as? JsonObject)?.get(name) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+
+private fun JsonElement.numberField(name: String): String? =
+    ((this as? JsonObject)?.get(name) as? JsonPrimitive)?.contentOrNull
+
+private fun JsonElement.toUnreadableHeldSend() = UnreadableHeldSend(
+    amountSats = numberField("amountSats")?.toULongOrNull(),
+    address = stringField("address"),
+    txId = stringField("txId"),
+    heldAt = numberField("heldAt")?.toLongOrNull(),
+)
 
 internal object HwHeldSendDataSerializer : Serializer<HwHeldSendData> {
     private const val VERSION = 1
@@ -162,13 +196,15 @@ internal object HwHeldSendDataSerializer : Serializer<HwHeldSendData> {
 
     override suspend fun readFrom(input: InputStream): HwHeldSendData = try {
         val root = json.parseToJsonElement(input.readBytes().decodeToString()).jsonObject
-        val records = root["heldSends"] as? JsonArray ?: throw SerializationException("No held sends")
+        val held = root["heldSends"] as? JsonArray ?: throw SerializationException("No held sends")
+        // Records an earlier version could not read are tried again, as a newer version may read them
+        val records = held + (root["unreadable"] as? JsonArray).orEmpty()
         val (readable, unreadable) = records.map { record ->
             record to runCatching { json.decodeFromJsonElement<HeldHwSend>(record) }.getOrNull()
         }.partition { it.second != null }
         HwHeldSendData(
             heldSends = readable.mapNotNull { it.second },
-            unreadable = unreadable.map { it.first } + (root["unreadable"] as? JsonArray).orEmpty(),
+            unreadable = unreadable.map { it.first },
         )
     } catch (error: SerializationException) {
         throw CorruptionException("Failed to read held hardware sends", error)
@@ -188,6 +224,13 @@ internal object HwHeldSendDataSerializer : Serializer<HwHeldSendData> {
     }
 }
 
-/** The held hardware sends could not be read, so no hardware send is signed: [walletId]'s, or any when null. */
-class HwHeldSendsUnreadableError(val walletId: String?, cause: Throwable? = null) :
-    AppError("Held hardware sends could not be read", cause)
+/**
+ * The held hardware sends could not be read, so no send of [walletId] is signed, or none at all when
+ * [clearsAllWallets]. [records] holds what can still be read of the records concerned.
+ */
+class HwHeldSendsUnreadableError(
+    val walletId: String?,
+    val records: List<UnreadableHeldSend> = emptyList(),
+    val clearsAllWallets: Boolean = walletId == null,
+    cause: Throwable? = null,
+) : AppError("Held hardware sends could not be read", cause)

@@ -129,11 +129,27 @@ fun HwSendSignScreen(
         )
     }
 
-    if (uiState.unreadableHeldSendsWalletId != null) {
+    uiState.unreadableHeldSends?.let { prompt ->
+        val clearText = if (prompt.clearsAllWallets) {
+            stringResource(R.string.hardware__held_sends_clear_all)
+        } else {
+            stringResource(R.string.hardware__held_sends_clear)
+        }
         AppAlertDialog(
-            title = stringResource(R.string.hardware__held_sends_unreadable_title),
-            text = stringResource(R.string.hardware__held_sends_unreadable_text),
-            confirmText = stringResource(R.string.hardware__held_sends_clear),
+            title = stringResource(
+                if (prompt.isConfirming) {
+                    R.string.hardware__held_sends_clear_confirm_title
+                } else {
+                    R.string.hardware__held_sends_unreadable_title
+                },
+            ),
+            text = if (prompt.isConfirming) {
+                stringResource(R.string.hardware__held_sends_clear_confirm_text)
+            } else {
+                prompt.message
+            },
+            confirmText = clearText,
+            confirmTextColor = Colors.Red,
             onConfirm = viewModel::clearUnreadableHeldSends,
             onDismiss = viewModel::dismissUnreadableHeldSends,
         )

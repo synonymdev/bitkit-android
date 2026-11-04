@@ -84,6 +84,30 @@ class HwHeldSendStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a record an earlier version could not read is read again`() = test {
+        val file = folder.newFile("held.json")
+        val record = json.encodeToString(HeldHwSend.serializer(), held)
+        file.writeText("""{"version":1,"heldSends":[],"unreadable":[$record]}""")
+
+        val data = store(file).load()
+
+        assertEquals(listOf(held), data.heldSends)
+        assertTrue(data.unreadable.isEmpty())
+    }
+
+    @Test
+    fun `an unreadable record tells what can still be read of it`() {
+        val record = json.parseToJsonElement(
+            """{"walletId":"wallet-jade","amountSats":5000,"address":"bc1q","txId":"AB","heldAt":1700000000}""",
+        )
+        val unreadable = HwHeldSendData(unreadable = listOf(record)).unreadableErrorFor("wallet-jade")
+
+        assertEquals(listOf(UnreadableHeldSend(5_000uL, "bc1q", "AB", 1_700_000_000L)), unreadable?.records)
+        assertFalse(unreadable?.clearsAllWallets ?: true)
+        assertNull(HwHeldSendData(unreadable = listOf(record)).unreadableErrorFor("wallet-trezor"))
+    }
+
+    @Test
     fun `a record whose wallet cannot be read refuses every wallet`() {
         val data = HwHeldSendData(unreadable = listOf(JsonObject(mapOf("txId" to JsonPrimitive("AB")))))
 

@@ -1183,7 +1183,13 @@
     <string name="hardware__found_text">¿Desea vincular este %1$s con Bitkit de forma segura?</string>
     <string name="hardware__found_title">Dispositivo encontrado</string>
     <string name="hardware__held_sends_clear">Borrar registro</string>
+    <string name="hardware__held_sends_clear_all">Borrar para todas las billeteras</string>
+    <string name="hardware__held_sends_clear_confirm_text">Si un pago anterior sigue pendiente, Bitkit podría enviarlo por segunda vez. Esto no se puede deshacer.</string>
+    <string name="hardware__held_sends_clear_confirm_title">¿Borrar el registro?</string>
+    <string name="hardware__held_sends_record">Monto: %1$s sats · Dirección: %2$s · Transacción: %3$s · Retenido: %4$s</string>
+    <string name="hardware__held_sends_record_unknown">desconocido</string>
     <string name="hardware__held_sends_unreadable_text">Bitkit no pudo leer un pago anterior de esta billetera de hardware, así que no firmará uno nuevo. Borrar ese registro permite que Bitkit vuelva a firmar. Bórrelo solo si ningún pago anterior de esta billetera sigue pendiente, o el mismo pago podría enviarse dos veces.</string>
+    <string name="hardware__held_sends_unreadable_text_all">Bitkit no pudo leer su registro de pagos anteriores con billetera de hardware, así que no firmará uno nuevo desde ninguna billetera de hardware. Borrar el registro de todas las billeteras de hardware permite que Bitkit vuelva a firmar. Bórrelo solo si ningún pago anterior con billetera de hardware sigue pendiente, o el mismo pago podría enviarse dos veces.</string>
     <string name="hardware__held_sends_unreadable_title">No se puede leer un pago anterior</string>
     <string name="hardware__intro_header">Añada su &lt;accent&gt;billetera de hardware&lt;/accent&gt;</string>
     <string name="hardware__intro_text">Conecte su dispositivo de hardware para supervisar o administrar sus fondos a largo plazo.</string>

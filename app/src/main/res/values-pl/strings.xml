@@ -1180,7 +1180,13 @@
     <string name="hardware__found_text">Czy chcesz bezpiecznie sparować to urządzenie %1$s z Bitkit?</string>
     <string name="hardware__found_title">Znaleziono urządzenie</string>
     <string name="hardware__held_sends_clear">Wyczyść zapis</string>
+    <string name="hardware__held_sends_clear_all">Wyczyść dla wszystkich portfeli</string>
+    <string name="hardware__held_sends_clear_confirm_text">Jeśli wcześniejsza płatność nadal oczekuje, Bitkit może wysłać ją po raz drugi. Tej operacji nie można cofnąć.</string>
+    <string name="hardware__held_sends_clear_confirm_title">Wyczyścić zapis?</string>
+    <string name="hardware__held_sends_record">Kwota: %1$s sats · Adres: %2$s · Transakcja: %3$s · Wstrzymana: %4$s</string>
+    <string name="hardware__held_sends_record_unknown">nieznane</string>
     <string name="hardware__held_sends_unreadable_text">Bitkit nie mógł odczytać wcześniejszej płatności z tego portfela sprzętowego, więc nie podpisze nowej. Wyczyszczenie tego zapisu pozwoli Bitkit znowu podpisywać. Wyczyść go tylko wtedy, gdy żadna wcześniejsza płatność z tego portfela nie oczekuje, w przeciwnym razie ta sama płatność może zostać wysłana dwa razy.</string>
+    <string name="hardware__held_sends_unreadable_text_all">Bitkit nie mógł odczytać swojego zapisu wcześniejszych płatności z portfeli sprzętowych, więc nie podpisze nowej z żadnego portfela sprzętowego. Wyczyszczenie zapisu dla wszystkich portfeli sprzętowych pozwoli Bitkit znowu podpisywać. Wyczyść go tylko wtedy, gdy żadna wcześniejsza płatność z portfela sprzętowego nie oczekuje, w przeciwnym razie ta sama płatność może zostać wysłana dwa razy.</string>
     <string name="hardware__held_sends_unreadable_title">Nie można odczytać wcześniejszej płatności</string>
     <string name="hardware__intro_header">Dodaj swój &lt;accent&gt;portfel sprzętowy&lt;/accent&gt;</string>
     <string name="hardware__intro_text">Połącz urządzenie sprzętowe, aby obserwować lub zarządzać swoimi długoterminowymi środkami.</string>

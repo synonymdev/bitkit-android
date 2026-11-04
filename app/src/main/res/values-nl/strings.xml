@@ -1174,7 +1174,13 @@
     <string name="hardware__found_text">Wilt u deze %1$s veilig koppelen met Bitkit?</string>
     <string name="hardware__found_title">Apparaat gevonden</string>
     <string name="hardware__held_sends_clear">Gegevens wissen</string>
+    <string name="hardware__held_sends_clear_all">Wissen voor alle wallets</string>
+    <string name="hardware__held_sends_clear_confirm_text">Als een eerdere betaling nog in behandeling is, kan Bitkit haar een tweede keer verzenden. Dit kan niet ongedaan worden gemaakt.</string>
+    <string name="hardware__held_sends_clear_confirm_title">Gegevens wissen?</string>
+    <string name="hardware__held_sends_record">Bedrag: %1$s sats · Adres: %2$s · Transactie: %3$s · Vastgehouden: %4$s</string>
+    <string name="hardware__held_sends_record_unknown">onbekend</string>
     <string name="hardware__held_sends_unreadable_text">Bitkit kon een eerdere betaling van deze hardwarewallet niet lezen en ondertekent daarom geen nieuwe. Door dat gegeven te wissen kan Bitkit weer ondertekenen. Wis het alleen als geen eerdere betaling van deze wallet nog in behandeling is, anders kan dezelfde betaling twee keer worden verzonden.</string>
+    <string name="hardware__held_sends_unreadable_text_all">Bitkit kon zijn gegevens van eerdere hardwarewalletbetalingen niet lezen en ondertekent daarom vanaf geen enkele hardwarewallet een nieuwe. Door de gegevens voor alle hardwarewallets te wissen kan Bitkit weer ondertekenen. Wis ze alleen als geen eerdere hardwarewalletbetaling nog in behandeling is, anders kan dezelfde betaling twee keer worden verzonden.</string>
     <string name="hardware__held_sends_unreadable_title">Eerdere betaling onleesbaar</string>
     <string name="hardware__intro_header">Voeg uw &lt;accent&gt;hardware wallet&lt;/accent&gt; toe</string>
     <string name="hardware__intro_text">Verbind uw hardwareapparaat om uw geld voor de lange termijn te volgen of te beheren.</string>

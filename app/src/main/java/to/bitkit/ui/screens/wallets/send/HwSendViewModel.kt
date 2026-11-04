@@ -317,7 +317,7 @@ class HwSendViewModel @Inject constructor(
         val txId = SignedTransactionId.fromHex(payment.signedTx.serializedTx)
         _uiState.update { it.copy(isBroadcastUnresolved = true) }
         // Written before the broadcast, so a send that may have gone out stays held even if the app dies during it
-        if (requestId == null) hwWalletRepo.holdSend(payment.toHeldSend(txId)).getOrThrow()
+        if (requestId == null) hwWalletRepo.holdSend(payment.toHeldSend(txId, clock.now().epochSeconds)).getOrThrow()
         // The broadcast runs to its end on the core queue, so it is never cancelled: the sheet stops waiting for it
         // after a while, and its answer still settles the send
         val tracked = if (requestId == null) {
@@ -641,7 +641,8 @@ class HwSendViewModel @Inject constructor(
             var isNotSent = false
             try {
                 // Written again first, so the send stays held whatever happened to the record since
-                hwWalletRepo.holdSend(unresolved.payment.toHeldSend(send.txId)).onFailure {
+                val heldAt = clock.now().epochSeconds
+                hwWalletRepo.holdSend(unresolved.payment.toHeldSend(send.txId, heldAt)).onFailure {
                     isNotSent = true
                     Logger.warn("Skipped broadcast again of '${send.txId}' without its hold", it, context = TAG)
                     toastBroadcastFailed()
@@ -752,17 +753,47 @@ class HwSendViewModel @Inject constructor(
      * after being told a payment they held may then be sent twice.
      */
     fun clearUnreadableHeldSends() {
-        val walletId = _uiState.value.unreadableHeldSendsWalletId ?: return
-        _uiState.update { it.copy(unreadableHeldSendsWalletId = null) }
+        val prompt = _uiState.value.unreadableHeldSends ?: return
+        if (!prompt.isConfirming) {
+            // A clear that may send a payment twice is asked a second time
+            _uiState.update { it.copy(unreadableHeldSends = prompt.copy(isConfirming = true)) }
+            return
+        }
+        _uiState.update { it.copy(unreadableHeldSends = null) }
         viewModelScope.launch {
-            hwWalletRepo.clearUnreadableHeldSends(walletId).onFailure {
-                Logger.error("Failed to clear unreadable held sends of '$walletId'", it, context = TAG)
-                _uiState.update { state -> state.copy(unreadableHeldSendsWalletId = walletId) }
+            hwWalletRepo.clearUnreadableHeldSends(prompt.walletId).onFailure {
+                Logger.error("Failed to clear unreadable held sends of '${prompt.walletId}'", it, context = TAG)
+                _uiState.update { state -> state.copy(unreadableHeldSends = prompt.copy(isConfirming = false)) }
             }
         }
     }
 
-    fun dismissUnreadableHeldSends() = _uiState.update { it.copy(unreadableHeldSendsWalletId = null) }
+    fun dismissUnreadableHeldSends() = _uiState.update { it.copy(unreadableHeldSends = null) }
+
+    private fun HwHeldSendsUnreadableError.toPrompt(walletId: String): UnreadableHeldSendsPrompt {
+        val unknown = context.getString(R.string.hardware__held_sends_record_unknown)
+        val explanation = context.getString(
+            if (clearsAllWallets) {
+                R.string.hardware__held_sends_unreadable_text_all
+            } else {
+                R.string.hardware__held_sends_unreadable_text
+            },
+        )
+        val details = records.map { record ->
+            context.getString(
+                R.string.hardware__held_sends_record,
+                record.amountSats?.toString() ?: unknown,
+                record.address ?: unknown,
+                record.txId ?: unknown,
+                record.heldAt?.toULong().formatToString() ?: unknown,
+            )
+        }
+        return UnreadableHeldSendsPrompt(
+            walletId = this.walletId ?: walletId,
+            message = (listOf(explanation) + details).joinToString("\n\n"),
+            clearsAllWallets = clearsAllWallets,
+        )
+    }
 
     fun dismissPassphrase() {
         passphraseJob?.cancel()
@@ -946,7 +977,9 @@ class HwSendViewModel @Inject constructor(
             generateSequence(error) { it.cause }.any { it is HwHeldSendsUnreadableError } -> {
                 // Nothing is signed until the user decides, knowing what it risks, to clear the unreadable record
                 Logger.warn("Refused hardware send of '$walletId' with unreadable holds", error, context = TAG)
-                _uiState.update { it.copy(unreadableHeldSendsWalletId = walletId) }
+                val unreadable = generateSequence(error) { it.cause }.filterIsInstance<HwHeldSendsUnreadableError>()
+                    .first()
+                _uiState.update { it.copy(unreadableHeldSends = unreadable.toPrompt(walletId)) }
             }
             error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)
@@ -1016,8 +1049,8 @@ data class HwSendUiState(
     val retryingSendTxIds: ImmutableSet<String> = persistentSetOf(),
     /** A payment the user tried to make again that its wallet has already sent, waiting for their choice. */
     val alreadySentSend: AlreadySentHwSend? = null,
-    /** The wallet whose sends are refused because an earlier held send of it cannot be read. */
-    val unreadableHeldSendsWalletId: String? = null,
+    /** Sends refused because an earlier held send cannot be read, waiting for the user to clear its record. */
+    val unreadableHeldSends: UnreadableHeldSendsPrompt? = null,
 ) {
     /**
      * Whether the sign sheet may be dismissed. Connecting or unlocking can be abandoned, and leaving
@@ -1037,6 +1070,14 @@ data class HwSendResult(
 )
 
 data class AlreadySentHwSend(val send: HwSendResult, val sentAt: String)
+
+/** What the user is told before clearing unreadable held send records, asked a second time once [isConfirming]. */
+data class UnreadableHeldSendsPrompt(
+    val walletId: String,
+    val message: String,
+    val clearsAllWallets: Boolean,
+    val isConfirming: Boolean = false,
+)
 
 sealed interface HeldHwSendEvent {
     val send: HwSendResult
@@ -1082,7 +1123,7 @@ private data class PendingHwSendBroadcast(
         hasAttemptedBroadcast && this.request.paymentRequestId != null &&
         this.request.copy(satsPerVByte = request.satsPerVByte, tags = request.tags) == request
 
-    fun toHeldSend(txId: String) = HeldHwSend(
+    fun toHeldSend(txId: String, heldAt: Long) = HeldHwSend(
         walletId = request.walletId,
         txId = txId,
         address = request.address,
@@ -1093,6 +1134,7 @@ private data class PendingHwSendBroadcast(
         miningFeeSats = signedTx.miningFeeSats,
         feeRate = signedTx.feeRate,
         totalSpent = signedTx.totalSpent,
+        heldAt = heldAt,
     )
 }
 

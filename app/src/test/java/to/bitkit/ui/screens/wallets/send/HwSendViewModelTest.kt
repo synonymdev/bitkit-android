@@ -27,6 +27,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -36,6 +37,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.HeldHwSend
 import to.bitkit.data.HwHeldSendsUnreadableError
+import to.bitkit.data.UnreadableHeldSend
 import to.bitkit.ext.create
 import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingBroadcastResult
@@ -62,6 +64,7 @@ import to.bitkit.utils.ServiceError
 import to.bitkit.utils.SignedTransactionId
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -1062,25 +1065,57 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a send whose held records cannot be read is never signed and offers an explicit clear`() = test {
+    fun `a send whose held records cannot be read is never signed and is cleared only on a second confirmation`() =
+        test {
+            whenever(context.getString(any())).thenReturn("text")
+            whenever(context.getString(R.string.hardware__held_sends_record_unknown)).thenReturn("unknown")
+            whenever(context.getString(eq(R.string.hardware__held_sends_record), any(), any(), any(), any()))
+                .thenAnswer { "record ${it.getArgument<Any>(1)} ${it.getArgument<Any>(2)} ${it.getArgument<Any>(3)}" }
+            stubSuccessfulPayment()
+            val unreadable = HwHeldSendsUnreadableError(
+                walletId = WALLET_ID,
+                records = listOf(UnreadableHeldSend(amountSats = AMOUNT_SATS, txId = SIGNED_TXID)),
+                clearsAllWallets = false,
+            )
+            whenever(hwWalletRepo.heldSendFor(WALLET_ID, ADDRESS, AMOUNT_SATS)).thenReturn(Result.failure(unreadable))
+            whenever(hwWalletRepo.clearUnreadableHeldSends(WALLET_ID)).thenReturn(Result.success(Unit))
+
+            sut.signAndBroadcast(request())
+            advanceUntilIdle()
+
+            verify(hwWalletRepo, never()).signFunding(any(), any())
+            verify(hwWalletRepo, never()).broadcastFundingAtBoundary(any(), anyOrNull(), any())
+            val prompt = assertNotNull(sut.uiState.value.unreadableHeldSends)
+            assertEquals(WALLET_ID, prompt.walletId)
+            assertFalse(prompt.clearsAllWallets)
+            assertTrue(prompt.message.contains("record $AMOUNT_SATS unknown $SIGNED_TXID"))
+
+            sut.clearUnreadableHeldSends()
+            advanceUntilIdle()
+            assertTrue(sut.uiState.value.unreadableHeldSends?.isConfirming == true)
+            verify(hwWalletRepo, never()).clearUnreadableHeldSends(any())
+
+            sut.clearUnreadableHeldSends()
+            advanceUntilIdle()
+
+            verify(hwWalletRepo).clearUnreadableHeldSends(WALLET_ID)
+            assertNull(sut.uiState.value.unreadableHeldSends)
+        }
+
+    @Test
+    fun `an unreadable hold file is offered to be cleared for all wallets`() = test {
+        whenever(context.getString(any())).thenReturn("text")
         stubSuccessfulPayment()
         whenever(hwWalletRepo.heldSendFor(WALLET_ID, ADDRESS, AMOUNT_SATS))
-            .thenReturn(Result.failure(HwHeldSendsUnreadableError(WALLET_ID)))
-        whenever(hwWalletRepo.clearUnreadableHeldSends(WALLET_ID)).thenReturn(Result.success(Unit))
+            .thenReturn(Result.failure(HwHeldSendsUnreadableError(walletId = null)))
 
         sut.signAndBroadcast(request())
         advanceUntilIdle()
 
+        val prompt = assertNotNull(sut.uiState.value.unreadableHeldSends)
+        assertTrue(prompt.clearsAllWallets)
+        assertEquals(WALLET_ID, prompt.walletId)
         verify(hwWalletRepo, never()).signFunding(any(), any())
-        verify(hwWalletRepo, never()).broadcastFundingAtBoundary(any(), anyOrNull(), any())
-        assertEquals(WALLET_ID, sut.uiState.value.unreadableHeldSendsWalletId)
-        verify(hwWalletRepo, never()).clearUnreadableHeldSends(any())
-
-        sut.clearUnreadableHeldSends()
-        advanceUntilIdle()
-
-        verify(hwWalletRepo).clearUnreadableHeldSends(WALLET_ID)
-        assertNull(sut.uiState.value.unreadableHeldSendsWalletId)
     }
 
     @Test
@@ -2468,6 +2503,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         miningFeeSats = signedTx.miningFeeSats,
         feeRate = signedTx.feeRate,
         totalSpent = signedTx.totalSpent,
+        heldAt = now.epochSeconds,
     )
 
     private fun request() = HwSendRequest(

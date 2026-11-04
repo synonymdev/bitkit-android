@@ -928,7 +928,7 @@ class HwWalletRepo @Inject constructor(
         withContext(ioDispatcher) {
             runSuspendCatching {
                 val data = hwHeldSendStore.load()
-                if (data.hasUnreadableFor(walletId)) throw HwHeldSendsUnreadableError(walletId)
+                data.unreadableErrorFor(walletId)?.let { throw it }
                 data.heldSends.firstOrNull { it.isPaymentOf(walletId, address, amountSats) }
             }
         }
