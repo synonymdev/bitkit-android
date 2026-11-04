@@ -1022,7 +1022,7 @@
     <string name="wallet__send_max_spending__title">Резервный баланс</string>
     <string name="wallet__send_onchain_lightning_paid">Lightning-платёж по этому счёту уже прошёл успешно, поэтому Bitkit не будет оплачивать его повторно onchain.</string>
     <string name="wallet__send_onchain_lightning_pending">Lightning-платёж по этому счёту ещё может завершиться. Чтобы не оплатить его дважды, Bitkit не будет оплачивать его onchain, пока этот платёж не завершится неудачей.</string>
-    <string name="wallet__send_onchain_lightning_unknown">Bitkit нужно проверить Lightning-платёж по этому счёту, прежде чем оплачивать его onchain. Попробуйте снова, когда кошелёк запустится.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit не может проверить Lightning-платёж по этому счёту, пока кошелёк не запустится, поэтому пока не будет оплачивать адрес. Попробуйте снова позже или вставьте только адрес, чтобы оплатить его без счёта.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Переводы на баланс расходов больше недоступны. Bitkit сначала проверяет сеть, а затем возвращает монеты этого перевода в ваш кошелёк, чтобы исходный перевод никогда не подтвердился. За это взимается сетевая комиссия.</string>
     <string name="wallet__send_pending__description">Этот платеж занимает больше времени, чем ожидалось. Вы можете продолжать использовать Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Платеж в ожидании</string>

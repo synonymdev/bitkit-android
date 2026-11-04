@@ -721,7 +721,7 @@
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_onchain_lightning_paid">Um pagamento Lightning desta fatura já foi concluído com sucesso, por isso Bitkit não a pagará novamente onchain.</string>
     <string name="wallet__send_onchain_lightning_pending">Um pagamento Lightning desta fatura ainda pode ser concluído. Para evitar pagá-la duas vezes, Bitkit não a pagará onchain, a menos que esse pagamento falhe.</string>
-    <string name="wallet__send_onchain_lightning_unknown">Bitkit precisa de verificar o pagamento Lightning desta fatura antes de a pagar onchain. Tente novamente quando a carteira tiver iniciado.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit não consegue verificar o pagamento Lightning desta fatura até a carteira iniciar, por isso ainda não pagará o endereço. Tente novamente depois, ou cole apenas o endereço para o pagar sem a fatura.</string>
     <string name="wallet__send_max_spending__description">O valor máximo utilizável é um pouco menor devido a um saldo de reserva obrigatório.</string>
     <string name="wallet__send_review">Confirmar</string>
     <string name="wallet__send_confirming_in">Confirmando em</string>

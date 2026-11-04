@@ -981,7 +981,7 @@
     <string name="wallet__send_max_spending__title">Αποθεματικό υπόλοιπο</string>
     <string name="wallet__send_onchain_lightning_paid">Μια πληρωμή Lightning αυτού του τιμολογίου έχει ήδη ολοκληρωθεί με επιτυχία, οπότε το Bitkit δεν θα το πληρώσει ξανά onchain.</string>
     <string name="wallet__send_onchain_lightning_pending">Μια πληρωμή Lightning αυτού του τιμολογίου μπορεί ακόμα να ολοκληρωθεί. Για να μην πληρωθεί δύο φορές, το Bitkit δεν θα το πληρώσει onchain, εκτός αν αποτύχει αυτή η πληρωμή.</string>
-    <string name="wallet__send_onchain_lightning_unknown">Το Bitkit πρέπει να ελέγξει την πληρωμή Lightning αυτού του τιμολογίου πριν το πληρώσει onchain. Δοκίμασε ξανά όταν ξεκινήσει το πορτοφόλι.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Το Bitkit δεν μπορεί να ελέγξει την πληρωμή Lightning αυτού του τιμολογίου μέχρι να ξεκινήσει το πορτοφόλι, οπότε δεν θα πληρώσει ακόμα τη διεύθυνση. Δοκίμασε ξανά τότε ή επικόλλησε μόνο τη διεύθυνση για να την πληρώσεις χωρίς το τιμολόγιο.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Οι μεταφορές στο υπόλοιπο δαπανών δεν είναι πλέον διαθέσιμες. Το Bitkit ελέγχει πρώτα το δίκτυο και μετά επιστρέφει τα νομίσματα αυτής της μεταφοράς στο πορτοφόλι σας, ώστε η αρχική μεταφορά να μην επιβεβαιωθεί ποτέ. Αυτό έχει χρέωση δικτύου.</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Πληρωμή\n&lt;accent&gt;τιμολογίου...&lt;/accent&gt;</string>

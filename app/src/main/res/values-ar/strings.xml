@@ -976,7 +976,7 @@
     <string name="wallet__send_max_spending__title">الرصيد الاحتياطي</string>
     <string name="wallet__send_onchain_lightning_paid">نجحت بالفعل دفعة Lightning لهذه الفاتورة، لذا لن يدفعها Bitkit مرة أخرى عبر Onchain.</string>
     <string name="wallet__send_onchain_lightning_pending">قد تكتمل دفعة Lightning لهذه الفاتورة لاحقًا. لتجنّب دفعها مرتين، لن يدفعها Bitkit عبر Onchain ما لم تفشل تلك الدفعة.</string>
-    <string name="wallet__send_onchain_lightning_unknown">يحتاج Bitkit إلى التحقق من دفعة Lightning لهذه الفاتورة قبل دفعها عبر Onchain. حاول مرة أخرى بعد بدء تشغيل المحفظة.</string>
+    <string name="wallet__send_onchain_lightning_unknown">لا يستطيع Bitkit التحقق من دفعة Lightning لهذه الفاتورة حتى تبدأ المحفظة، لذا لن يدفع إلى العنوان الآن. حاول مرة أخرى حينها، أو الصق العنوان وحده لدفعه دون الفاتورة.</string>
     <string name="wallet__send_pending__abandon_transfer_note">لم تعد التحويلات إلى رصيد الإنفاق متاحة. يتحقق Bitkit أولًا من الشبكة، ثم يعيد عملات هذا التحويل إلى محفظتك حتى لا يتأكد التحويل الأصلي أبدًا. يكلّف ذلك رسوم شبكة.</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">جارٍ دفع\n&lt;accent&gt;الفاتورة...&lt;/accent&gt;</string>

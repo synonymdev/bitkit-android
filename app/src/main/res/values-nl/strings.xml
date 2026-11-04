@@ -998,7 +998,7 @@
     <string name="wallet__send_max_spending__title">Reservesaldo</string>
     <string name="wallet__send_onchain_lightning_paid">Een Lightning-betaling van deze factuur is al geslaagd, dus Bitkit betaalt deze niet nogmaals onchain.</string>
     <string name="wallet__send_onchain_lightning_pending">Een Lightning-betaling van deze factuur kan nog worden voltooid. Om dubbel betalen te voorkomen, betaalt Bitkit deze niet onchain, tenzij die betaling mislukt.</string>
-    <string name="wallet__send_onchain_lightning_unknown">Bitkit moet de Lightning-betaling van deze factuur controleren voordat deze onchain wordt betaald. Probeer het opnieuw zodra de wallet is gestart.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit kan de Lightning-betaling van deze factuur pas controleren als de wallet is gestart, dus betaalt het adres nog niet. Probeer het dan opnieuw, of plak alleen het adres om het zonder de factuur te betalen.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Overboekingen naar je bestedingssaldo zijn niet meer beschikbaar. Bitkit controleert eerst het netwerk en stuurt de munten van deze overboeking dan terug naar je wallet, zodat de oorspronkelijke overboeking nooit bevestigd wordt. Dit kost netwerkkosten.</string>
     <string name="wallet__send_pending__description">Deze betaling duurt iets langer dan verwacht. U kunt Bitkit blijven gebruiken.</string>
     <string name="wallet__send_pending__nav_title">Betaling Onderweg</string>

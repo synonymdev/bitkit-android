@@ -854,7 +854,7 @@
     <string name="wallet__send_max_spending__title">Reserve-Saldo</string>
     <string name="wallet__send_onchain_lightning_paid">Eine Lightning-Zahlung dieser Rechnung war bereits erfolgreich, daher bezahlt Bitkit sie nicht noch einmal onchain.</string>
     <string name="wallet__send_onchain_lightning_pending">Eine Lightning-Zahlung dieser Rechnung kann noch abgeschlossen werden. Damit sie nicht doppelt bezahlt wird, bezahlt Bitkit sie nicht onchain, es sei denn, diese Zahlung schlägt fehl.</string>
-    <string name="wallet__send_onchain_lightning_unknown">Bitkit muss die Lightning-Zahlung dieser Rechnung prüfen, bevor es sie onchain bezahlt. Versuche es erneut, sobald das Wallet gestartet ist.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit kann die Lightning-Zahlung dieser Rechnung erst prüfen, wenn das Wallet gestartet ist, und bezahlt die Adresse daher noch nicht. Versuche es dann erneut oder füge nur die Adresse ein, um sie ohne die Rechnung zu bezahlen.</string>
     <string name="wallet__send_pending__description">Diese Zahlung dauert länger als erwartet. Du kannst Bitkit weiterhin verwenden.</string>
     <string name="wallet__send_pending__nav_title">Zahlung ausstehend</string>
     <string name="wallet__send_max_spending__description">Der maximal auszahlbare Betrag ist etwas niedriger, da eine Reserve erforderlich ist.</string>

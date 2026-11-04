@@ -867,7 +867,7 @@
     <string name="wallet__send_max_spending__title">Saldo de Reserva</string>
     <string name="wallet__send_onchain_lightning_paid">Un pago Lightning de esta factura ya se ha completado, así que Bitkit no la volverá a pagar onchain.</string>
     <string name="wallet__send_onchain_lightning_pending">Un pago Lightning de esta factura aún podría completarse. Para evitar pagarla dos veces, Bitkit no la pagará onchain a menos que ese pago falle.</string>
-    <string name="wallet__send_onchain_lightning_unknown">Bitkit necesita comprobar el pago Lightning de esta factura antes de pagarla onchain. Inténtelo de nuevo cuando el monedero se haya iniciado.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit no puede comprobar el pago Lightning de esta factura hasta que el monedero se haya iniciado, así que todavía no pagará la dirección. Inténtelo de nuevo entonces o pegue solo la dirección para pagarla sin la factura.</string>
     <string name="wallet__send_address_placeholder">Introduce una factura, dirección o clave de perfil</string>
     <string name="wallet__send_available">Disponible</string>
     <string name="wallet__send_error_create_tx">No se puede emitir la transacción. Por favor, inténtalo de nuevo.</string>

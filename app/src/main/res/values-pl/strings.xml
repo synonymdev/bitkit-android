@@ -857,7 +857,7 @@
     <string name="wallet__send_max_spending__title">Saldo rezerwy</string>
     <string name="wallet__send_onchain_lightning_paid">Płatność Lightning tej faktury już się powiodła, więc Bitkit nie opłaci jej ponownie onchain.</string>
     <string name="wallet__send_onchain_lightning_pending">Płatność Lightning tej faktury może jeszcze zostać zrealizowana. Aby uniknąć podwójnej płatności, Bitkit nie opłaci jej onchain, chyba że ta płatność się nie powiedzie.</string>
-    <string name="wallet__send_onchain_lightning_unknown">Bitkit musi sprawdzić płatność Lightning tej faktury przed opłaceniem jej onchain. Spróbuj ponownie po uruchomieniu portfela.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit nie może sprawdzić płatności Lightning tej faktury, dopóki portfel się nie uruchomi, więc jeszcze nie opłaci adresu. Spróbuj ponownie później albo wklej sam adres, aby zapłacić bez faktury.</string>
     <string name="wallet__send_pending__description">Ta płatność trwa nieco dłużej niż oczekiwano. Możesz kontynuować korzystanie z Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Płatność w toku</string>
     <string name="wallet__send_max_spending__description">Maksymalna kwota do wydania jest nieco niższa ze względu na wymagane saldo rezerwowe.</string>

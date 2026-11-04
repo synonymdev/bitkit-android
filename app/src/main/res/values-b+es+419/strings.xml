@@ -1007,7 +1007,7 @@
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_onchain_lightning_paid">Un pago Lightning de esta factura ya se completó, así que Bitkit no la volverá a pagar onchain.</string>
     <string name="wallet__send_onchain_lightning_pending">Un pago Lightning de esta factura aún podría completarse. Para evitar pagarla dos veces, Bitkit no la pagará onchain a menos que ese pago falle.</string>
-    <string name="wallet__send_onchain_lightning_unknown">Bitkit necesita verificar el pago Lightning de esta factura antes de pagarla onchain. Vuelva a intentarlo cuando la billetera se haya iniciado.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit no puede verificar el pago Lightning de esta factura hasta que la billetera se haya iniciado, así que todavía no pagará la dirección. Vuelva a intentarlo entonces, o pegue solo la dirección para pagarla sin la factura.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Las transferencias al saldo de gasto ya no están disponibles. Bitkit primero revisa la red y luego devuelve las monedas de esta transferencia a tu billetera para que la transferencia original nunca se confirme. Esto tiene una comisión de red.</string>
     <string name="wallet__send_pending__description">Este pago está tardando un poco más de lo esperado. Puede seguir utilizando Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pago pendiente</string>
