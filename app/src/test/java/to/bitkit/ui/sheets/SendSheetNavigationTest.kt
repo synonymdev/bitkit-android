@@ -94,6 +94,22 @@ class SendSheetNavigationTest {
     }
 
     @Test
+    fun `return to amount opens amount from a first confirm only when it can return to amount`() {
+        for (canReturnToAmount in listOf(true, false)) {
+            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+                navigatorProvider.addNavigator(ComposeNavigator())
+                graph = createGraph(startDestination = SendRoute.Confirm) {
+                    composable<SendRoute.Confirm> {}
+                    composable<SendRoute.Amount> {}
+                }
+            }
+
+            assertEquals(canReturnToAmount, navController.returnToAmount(canReturnToAmount))
+            assertEquals(canReturnToAmount, navController.currentDestination?.hasRoute<SendRoute.Amount>() == true)
+        }
+    }
+
+    @Test
     fun `pending clears earlier send screens after prepared amount review`() {
         for (start in listOf(SendRoute.Confirm, SendRoute.ContactSelect, SendRoute.Amount)) {
             val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {

@@ -136,15 +136,17 @@ internal fun NavController.navigateToAmountFromConfirm() {
     }
 }
 
-/** Back from Confirm, shared by the toolbar arrow and system Back. Returns false when the sheet should close. */
-internal fun NavController.backFromConfirm(canReturnToAmount: Boolean): Boolean {
+/** Returns to Amount, opening it in place of a Confirm reached without it. Returns false when there is none. */
+internal fun NavController.returnToAmount(canReturnToAmount: Boolean): Boolean {
     if (popBackStack(SendRoute.Amount, inclusive = false)) return true
-    if (canReturnToAmount) {
-        navigateToAmountFromConfirm()
-        return true
-    }
-    return popBackStack()
+    if (!canReturnToAmount) return false
+    navigateToAmountFromConfirm()
+    return true
 }
+
+/** Back from Confirm, shared by the toolbar arrow and system Back. Returns false when the sheet should close. */
+internal fun NavController.backFromConfirm(canReturnToAmount: Boolean): Boolean =
+    returnToAmount(canReturnToAmount) || popBackStack()
 
 internal fun NavController.navigateToSendPending(route: SendRoute.Pending) {
     navigateTo(route) { popUpTo(graph.id) { inclusive = true } }
@@ -316,6 +318,8 @@ fun SendSheet(
                             navController.navigateTo(it.route) { popUpTo(replaced) { inclusive = true } }
                         }
                         is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
+                        is SendEffect.PopBack if it.route == SendRoute.Amount ->
+                            navController.returnToAmount(appViewModel.sendUiState.value.canReturnToAmount)
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
                             val details = appViewModel.successSendUiState.value
