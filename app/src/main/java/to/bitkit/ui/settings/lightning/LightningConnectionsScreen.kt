@@ -211,15 +211,6 @@ private fun Content(
                         SyncingRow()
                     }
 
-                    if (uiState.canMoveToSpark) {
-                        VerticalSpacer(16.dp)
-                        PrimaryButton(
-                            text = stringResource(R.string.lightning__move_to_spark__nav_title),
-                            onClick = onClickMoveToSpark,
-                            modifier = Modifier.testTag("MoveToSpark")
-                        )
-                    }
-
                     uiState.spark?.let { spark ->
                         VerticalSpacer(16.dp)
                         Caption13Up(stringResource(R.string.lightning__spark), color = Colors.White64)
@@ -245,6 +236,15 @@ private fun Content(
                             status = ChannelStatusUi.OPEN,
                             channels = uiState.openChannels,
                             onClickChannel = onClickChannel,
+                        )
+                    }
+
+                    if (uiState.canMoveToSpark) {
+                        VerticalSpacer(16.dp)
+                        PrimaryButton(
+                            text = stringResource(R.string.lightning__move_to_spark__nav_title),
+                            onClick = onClickMoveToSpark,
+                            modifier = Modifier.testTag("MoveToSpark")
                         )
                     }
 
