@@ -1196,6 +1196,7 @@
     <string name="hardware__search_error">Δεν ήταν δυνατή η αναζήτηση πορτοφολιών υλικού. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="hardware__send_broadcast_failed_text">Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="hardware__send_broadcast_failed_title">Η πληρωμή δεν επιβεβαιώθηκε</string>
+    <string name="hardware__send_broadcast_refused_text">Το δίκτυο απέρριψε αυτή τη συναλλαγή, για παράδειγμα επειδή τα νομίσματά της έχουν ήδη δαπανηθεί. Η πληρωμή παραμένει σε εκκρεμότητα μέχρι το πορτοφόλι σου να δει τη συναλλαγή.</string>
     <string name="hardware__send_confirm_address">ΠΡΟΣ ΔΙΕΥΘΥΝΣΗ (ΕΠΙΒΕΒΑΙΩΣΗ ΣΤΗ ΣΥΣΚΕΥΗ)</string>
     <string name="hardware__send_onchain_only_text">Το Trezor μπορεί να στείλει μόνο σε διεύθυνση Bitcoin από αυτό το πορτοφόλι.</string>
     <string name="hardware__send_onchain_only_text_jade">Το Jade μπορεί να στείλει μόνο σε διεύθυνση Bitcoin από αυτό το πορτοφόλι.</string>
@@ -1607,6 +1608,7 @@
     <string name="wallet__send_from">Από</string>
     <string name="wallet__send_pending__blocked_new_send">Η νέα πληρωμή δεν στάλθηκε. Ολοκλήρωσε την προηγούμενη πληρωμή πριν δοκιμάσεις ξανά.</string>
     <string name="wallet__send_pending__description">Αυτή η πληρωμή διαρκεί λίγο περισσότερο από το αναμενόμενο. Μπορείς να συνεχίσεις να χρησιμοποιείς το Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">Το Bitkit δεν μπόρεσε να επιβεβαιώσει ότι το δίκτυο έλαβε αυτή την πληρωμή. Θα ολοκληρωθεί μόλις το πορτοφόλι σου δει τη συναλλαγή. Αν δεν εμφανιστεί, χρησιμοποίησε την Επανάληψη αρχικής πληρωμής για να στείλεις ξανά την ίδια υπογεγραμμένη συναλλαγή. Οι άλλες πληρωμές από πορτοφόλι υλικού παραμένουν μπλοκαρισμένες μέχρι τότε.</string>
     <string name="wallet__send_pending__nav_title">Πληρωμή σε εκκρεμότητα</string>
     <string name="wallet__send_pending__onchain_description">Το αποτέλεσμα της συναλλαγής δεν έχει επιλυθεί. Έλεγξε την κατάστασή της πριν δοκιμάσεις ξανά. Οι άλλες πληρωμές παραμένουν μπλοκαρισμένες. Αν είναι διαθέσιμο, χρησιμοποίησε την Επανάληψη αρχικής πληρωμής για να εγκρίνεις τέλος για την ίδια πληρωμή.</string>
     <string name="wallet__send_pending__refusal">Η μετάδοση απορρίφθηκε: %1$s</string>

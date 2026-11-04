@@ -56,6 +56,7 @@ fun HwSendSignScreen(
     beginPaymentSubmission: () -> (() -> Unit),
     paymentDeadlineAt: Instant?,
     onBack: () -> Unit,
+    onPaymentPending: (HwSendResult) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val wallets by viewModel.wallets.collectAsStateWithLifecycle()
@@ -85,6 +86,9 @@ fun HwSendSignScreen(
     }
     // Without this the sheet's NavHost pops the route itself, ignoring the guard and skipping onBack
     BackHandler(onBack = onBackRequest)
+    uiState.unresolvedSend?.let { send ->
+        LaunchedEffect(send) { onPaymentPending(send) }
+    }
 
     val signAndBroadcast = {
         viewModel.signAndBroadcast(

@@ -1006,6 +1006,7 @@
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_pending__abandon_transfer_note">Las transferencias al saldo de gasto ya no están disponibles. Bitkit primero revisa la red y luego devuelve las monedas de esta transferencia a tu billetera para que la transferencia original nunca se confirme. Esto tiene una comisión de red.</string>
     <string name="wallet__send_pending__description">Este pago está tardando un poco más de lo esperado. Puede seguir utilizando Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit no pudo confirmar que la red recibiera este pago. Se completará cuando su billetera vea la transacción. Si no aparece, use Reintentar pago original para enviar de nuevo la misma transacción firmada. Los demás pagos con billetera de hardware siguen bloqueados hasta entonces.</string>
     <string name="wallet__send_pending__nav_title">Pago pendiente</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagando\n&lt;accent&gt;factura...&lt;/accent&gt;</string>
@@ -1222,6 +1223,7 @@
     <string name="hardware__search_error">No se pudieron buscar billeteras de hardware. Revise su conexión y vuelva a intentarlo.</string>
     <string name="hardware__send_broadcast_failed_text">Revise su conexión y vuelva a intentarlo.</string>
     <string name="hardware__send_broadcast_failed_title">Pago no confirmado</string>
+    <string name="hardware__send_broadcast_refused_text">La red rechazó esta transacción, por ejemplo porque sus monedas ya se gastaron. El pago sigue pendiente hasta que su billetera vea la transacción.</string>
     <string name="hardware__send_confirm_address">A LA DIRECCIÓN (CONFIRME EN EL DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">Desde esta billetera, Trezor solo puede enviar a una dirección de Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Desde esta billetera, Jade solo puede enviar a una dirección de Bitcoin.</string>

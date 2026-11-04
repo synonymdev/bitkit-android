@@ -231,6 +231,7 @@
     <string name="hardware__search_error">Could not search for hardware wallets. Check your connection and try again.</string>
     <string name="hardware__send_broadcast_failed_text">Check your connection and try again.</string>
     <string name="hardware__send_broadcast_failed_title">Payment not confirmed</string>
+    <string name="hardware__send_broadcast_refused_text">The network refused this transaction, for example because its coins were already spent. The payment stays pending until your wallet sees it.</string>
     <string name="hardware__send_confirm_address">TO ADDRESS (CONFIRM ON DEVICE)</string>
     <string name="hardware__send_onchain_only_text">Trezor can only send to a Bitcoin address from this wallet.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade can only send to a Bitcoin address from this wallet.</string>
@@ -1554,6 +1555,7 @@
     <string name="wallet__send_pending__abandon_transfer_note">Transfers to spending are no longer available. Bitkit first checks the network, then sends this transfer\'s coins back to your wallet so the original transfer can never confirm. This costs a network fee.</string>
     <string name="wallet__send_pending__blocked_new_send">The new payment was not sent. Finish the previous payment before trying again.</string>
     <string name="wallet__send_pending__description">This payment is taking a bit longer than expected. You can continue using Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit could not confirm that the network received this payment. It completes once your wallet sees the transaction. If it does not appear, use Retry original payment to send the same signed transaction again. Other hardware wallet payments remain blocked until then.</string>
     <string name="wallet__send_pending__nav_title">Payment Pending</string>
     <string name="wallet__send_pending__onchain_description">The transaction outcome is unresolved. Check its status before trying again. Other payments remain blocked. If available, use Retry original payment to authorize a fee for the same payment.</string>
     <string name="wallet__send_pending__refusal">Broadcast refused: %1$s</string>

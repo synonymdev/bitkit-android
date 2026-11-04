@@ -997,6 +997,7 @@
     <string name="wallet__send_max_spending__title">Reservesaldo</string>
     <string name="wallet__send_pending__abandon_transfer_note">Overboekingen naar je bestedingssaldo zijn niet meer beschikbaar. Bitkit controleert eerst het netwerk en stuurt de munten van deze overboeking dan terug naar je wallet, zodat de oorspronkelijke overboeking nooit bevestigd wordt. Dit kost netwerkkosten.</string>
     <string name="wallet__send_pending__description">Deze betaling duurt iets langer dan verwacht. U kunt Bitkit blijven gebruiken.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit kon niet bevestigen dat het netwerk deze betaling heeft ontvangen. De betaling wordt voltooid zodra uw wallet de transactie ziet. Verschijnt deze niet, gebruik dan ‘Oorspronkelijke betaling opnieuw proberen’ om dezelfde ondertekende transactie opnieuw te verzenden. Andere betalingen met een hardwarewallet blijven tot dan geblokkeerd.</string>
     <string name="wallet__send_pending__nav_title">Betaling Onderweg</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Factuur\n&lt;accent&gt;betalen...&lt;/accent&gt;</string>
@@ -1213,6 +1214,7 @@
     <string name="hardware__search_error">Kon niet zoeken naar hardwarewallets. Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="hardware__send_broadcast_failed_text">Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="hardware__send_broadcast_failed_title">Betaling niet bevestigd</string>
+    <string name="hardware__send_broadcast_refused_text">Het netwerk heeft deze transactie geweigerd, bijvoorbeeld omdat de munten ervan al zijn uitgegeven. De betaling blijft in behandeling totdat uw wallet de transactie ziet.</string>
     <string name="hardware__send_confirm_address">NAAR ADRES (BEVESTIG OP APPARAAT)</string>
     <string name="hardware__send_onchain_only_text">Trezor kan vanuit deze wallet alleen naar een Bitcoin-adres versturen.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade kan vanuit deze wallet alleen naar een Bitcoin-adres versturen.</string>

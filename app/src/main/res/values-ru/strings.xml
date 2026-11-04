@@ -1021,6 +1021,7 @@
     <string name="wallet__send_max_spending__title">Резервный баланс</string>
     <string name="wallet__send_pending__abandon_transfer_note">Переводы на баланс расходов больше недоступны. Bitkit сначала проверяет сеть, а затем возвращает монеты этого перевода в ваш кошелёк, чтобы исходный перевод никогда не подтвердился. За это взимается сетевая комиссия.</string>
     <string name="wallet__send_pending__description">Этот платеж занимает больше времени, чем ожидалось. Вы можете продолжать использовать Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit не удалось подтвердить, что сеть получила этот платёж. Он завершится, как только ваш кошелёк увидит транзакцию. Если она не появится, используйте «Повторить исходный платёж», чтобы снова отправить ту же подписанную транзакцию. Другие платежи с аппаратного кошелька до тех пор остаются заблокированными.</string>
     <string name="wallet__send_pending__nav_title">Платеж в ожидании</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Оплата
@@ -1237,6 +1238,7 @@
     <string name="hardware__search_error">Не удалось найти аппаратные кошельки. Проверьте подключение и попробуйте снова.</string>
     <string name="hardware__send_broadcast_failed_text">Проверьте подключение и попробуйте снова.</string>
     <string name="hardware__send_broadcast_failed_title">Платёж не подтверждён</string>
+    <string name="hardware__send_broadcast_refused_text">Сеть отклонила эту транзакцию, например потому, что её монеты уже потрачены. Платёж остаётся в ожидании, пока ваш кошелёк не увидит транзакцию.</string>
     <string name="hardware__send_confirm_address">НА АДРЕС (ПОДТВЕРДИТЕ НА УСТРОЙСТВЕ)</string>
     <string name="hardware__send_onchain_only_text">Trezor может отправлять из этого кошелька только на Bitcoin-адрес.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade может отправлять из этого кошелька только на Bitcoin-адрес.</string>

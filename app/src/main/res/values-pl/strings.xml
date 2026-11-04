@@ -856,6 +856,7 @@
     <string name="wallet__send_available_spending">Dostępne (na wydawanie)</string>
     <string name="wallet__send_max_spending__title">Saldo rezerwy</string>
     <string name="wallet__send_pending__description">Ta płatność trwa nieco dłużej niż oczekiwano. Możesz kontynuować korzystanie z Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit nie mógł potwierdzić, że sieć otrzymała tę płatność. Zostanie ona zakończona, gdy Twój portfel zobaczy transakcję. Jeśli się nie pojawi, użyj opcji Ponów oryginalną płatność, aby ponownie wysłać tę samą podpisaną transakcję. Inne płatności z portfela sprzętowego pozostają do tego czasu zablokowane.</string>
     <string name="wallet__send_pending__nav_title">Płatność w toku</string>
     <string name="wallet__send_max_spending__description">Maksymalna kwota do wydania jest nieco niższa ze względu na wymagane saldo rezerwowe.</string>
     <string name="wallet__send_review">Potwierdź</string>
@@ -1219,6 +1220,7 @@
     <string name="hardware__search_error">Nie udało się wyszukać portfeli sprzętowych. Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_text">Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_title">Płatność niepotwierdzona</string>
+    <string name="hardware__send_broadcast_refused_text">Sieć odrzuciła tę transakcję, na przykład dlatego, że jej środki zostały już wydane. Płatność pozostaje oczekująca, dopóki Twój portfel nie zobaczy transakcji.</string>
     <string name="hardware__send_confirm_address">NA ADRES (POTWIERDŹ NA URZĄDZENIU)</string>
     <string name="hardware__send_onchain_only_text">Trezor może wysyłać z tego portfela tylko na adres Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade może wysyłać z tego portfela tylko na adres Bitcoin.</string>

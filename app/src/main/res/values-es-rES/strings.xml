@@ -1213,6 +1213,7 @@
     <string name="hardware__search_error">No se pudieron buscar monederos de hardware. Comprueba tu conexión e inténtalo de nuevo.</string>
     <string name="hardware__send_broadcast_failed_text">Comprueba tu conexión e inténtalo de nuevo.</string>
     <string name="hardware__send_broadcast_failed_title">Pago no confirmado</string>
+    <string name="hardware__send_broadcast_refused_text">La red ha rechazado esta transacción, por ejemplo porque sus monedas ya se han gastado. El pago sigue pendiente hasta que tu monedero vea la transacción.</string>
     <string name="hardware__send_confirm_address">A LA DIRECCIÓN (CONFIRMA EN EL DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">Trezor solo puede enviar a una dirección de Bitcoin desde este monedero.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade solo puede enviar a una dirección de Bitcoin desde este monedero.</string>
@@ -1609,6 +1610,7 @@
     <string name="wallet__send_from">Desde</string>
     <string name="wallet__send_pending__blocked_new_send">El nuevo pago no se envió. Finaliza el pago anterior antes de volver a intentarlo.</string>
     <string name="wallet__send_pending__description">Este pago está tardando un poco más de lo esperado. Puedes seguir usando Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit no pudo confirmar que la red recibiera este pago. Se completará cuando tu monedero vea la transacción. Si no aparece, usa Reintentar el pago original para enviar de nuevo la misma transacción firmada. Los demás pagos con monedero de hardware siguen bloqueados hasta entonces.</string>
     <string name="wallet__send_pending__nav_title">Pago pendiente</string>
     <string name="wallet__send_pending__onchain_description">El resultado de la transacción está sin resolver. Comprueba su estado antes de volver a intentarlo. Los demás pagos siguen bloqueados. Si está disponible, usa Reintentar el pago original para autorizar una comisión para el mismo pago.</string>
     <string name="wallet__send_pending__refusal">Difusión rechazada: %1$s</string>

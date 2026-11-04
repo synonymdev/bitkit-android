@@ -854,6 +854,7 @@
     <string name="wallet__send_available_spending">Disponible (dépenses)</string>
     <string name="wallet__send_max_spending__title">Solde Réserve</string>
     <string name="wallet__send_pending__description">Ce paiement prend un peu plus de temps que prévu. Vous pouvez continuer à utiliser Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit n\'a pas pu confirmer que le réseau a reçu ce paiement. Il sera finalisé dès que votre portefeuille verra la transaction. Si elle n\'apparaît pas, utilisez Réessayer le paiement d\'origine pour renvoyer la même transaction signée. Les autres paiements avec un portefeuille matériel restent bloqués d\'ici là.</string>
     <string name="wallet__send_pending__nav_title">Paiement en attente</string>
     <string name="wallet__send_max_spending__description">Le montant maximum pouvant être dépensé est un peu moins élevé en raison d\'un solde de Réserve requis.</string>
     <string name="wallet__send_review">Confirmer</string>
@@ -1216,6 +1217,7 @@
     <string name="hardware__search_error">Impossible de rechercher des portefeuilles matériels. Vérifiez votre connexion et réessayez.</string>
     <string name="hardware__send_broadcast_failed_text">Vérifiez votre connexion et réessayez.</string>
     <string name="hardware__send_broadcast_failed_title">Paiement non confirmé</string>
+    <string name="hardware__send_broadcast_refused_text">Le réseau a refusé cette transaction, par exemple parce que ses fonds ont déjà été dépensés. Le paiement reste en attente jusqu\'à ce que votre portefeuille voie la transaction.</string>
     <string name="hardware__send_confirm_address">VERS L\'ADRESSE (CONFIRMER SUR L\'APPAREIL)</string>
     <string name="hardware__send_onchain_only_text">Trezor ne peut envoyer qu\'à une adresse Bitcoin depuis ce portefeuille.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade ne peut envoyer qu\'à une adresse Bitcoin depuis ce portefeuille.</string>

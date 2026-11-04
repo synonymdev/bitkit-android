@@ -48,6 +48,32 @@ class BroadcastExceptionExtTest {
     }
 
     @Test
+    fun `only an undecodable transaction, a failed connect or a node refusal proves nothing was sent`() = runTest {
+        val notSent = listOf(
+            BroadcastException.InvalidHex("Invalid transaction hex: odd number of digits"),
+            BroadcastException.InvalidTransaction("Invalid transaction data: unexpected end of file"),
+            BroadcastException.ElectrumException("Failed to connect to Electrum: I/O error: Connection refused"),
+            BroadcastException.ElectrumException("Broadcast failed: min relay fee not met"),
+        )
+        for (error in notSent) {
+            assertTrue(AppError(error).isHardwareBroadcastNotSent())
+        }
+        val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
+        val maybeSent = listOf(
+            BroadcastException.ElectrumException(
+                "Broadcast failed: Made one or multiple attempts, all errored:\n\t- Broken pipe (os error 32)\n",
+            ),
+            BroadcastException.ElectrumException("Broadcast failed: Failed to connect to Electrum: lookalike"),
+            BroadcastException.TaskException("Broadcast task failed: task 7 panicked"),
+            AppError("unknown result"),
+            timeout,
+        )
+        for (error in maybeSent) {
+            assertFalse(error.isHardwareBroadcastNotSent())
+        }
+    }
+
+    @Test
     fun `recognized backend refusals allow navigation without proving no dispatch`() {
         val reasons = listOf(
             "min relay fee not met",

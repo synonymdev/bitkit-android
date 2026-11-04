@@ -1190,6 +1190,7 @@
     <string name="hardware__search_error">تعذر البحث عن محافظ الأجهزة. تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="hardware__send_broadcast_failed_text">تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="hardware__send_broadcast_failed_title">الدفعة غير مؤكدة</string>
+    <string name="hardware__send_broadcast_refused_text">رفضت الشبكة هذه المعاملة، على سبيل المثال لأن عملاتها أُنفقت بالفعل. تبقى الدفعة معلّقة حتى ترى محفظتك المعاملة.</string>
     <string name="hardware__send_confirm_address">إلى العنوان (أكّد على الجهاز)</string>
     <string name="hardware__send_onchain_only_text">يمكن لـ Trezor الإرسال إلى عنوان Bitcoin فقط من هذه المحفظة.</string>
     <string name="hardware__send_onchain_only_text_jade">يمكن لـ Jade الإرسال إلى عنوان Bitcoin فقط من هذه المحفظة.</string>
@@ -1610,6 +1611,7 @@
     <string name="wallet__send_from">من</string>
     <string name="wallet__send_pending__blocked_new_send">لم يتم إرسال الدفعة الجديدة. أكمل الدفعة السابقة قبل المحاولة مرة أخرى.</string>
     <string name="wallet__send_pending__description">تستغرق هذه الدفعة وقتًا أطول قليلاً من المتوقع. يمكنك متابعة استخدام Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">تعذّر على Bitkit التأكد من أن الشبكة استلمت هذه الدفعة. تكتمل الدفعة بمجرد أن ترى محفظتك المعاملة. إن لم تظهر، استخدم «إعادة محاولة الدفعة الأصلية» لإرسال المعاملة الموقّعة نفسها مرة أخرى. تبقى مدفوعات محفظة الأجهزة الأخرى محظورة حتى ذلك الحين.</string>
     <string name="wallet__send_pending__nav_title">الدفعة معلقة</string>
     <string name="wallet__send_pending__onchain_description">نتيجة المعاملة لم تُحسم بعد. تحقق من حالتها قبل المحاولة مرة أخرى. تبقى المدفوعات الأخرى محظورة. إن توفر، استخدم «إعادة محاولة الدفعة الأصلية» لتفويض رسوم للدفعة نفسها.</string>
     <string name="wallet__send_pending__refusal">تم رفض البث: %1$s</string>

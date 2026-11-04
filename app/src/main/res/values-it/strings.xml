@@ -1002,6 +1002,7 @@
     <string name="wallet__send_max_spending__title">Saldo di Riserva</string>
     <string name="wallet__send_pending__abandon_transfer_note">I trasferimenti al saldo di spesa non sono più disponibili. Bitkit controlla prima la rete, poi rimanda le monete di questo trasferimento al tuo wallet, così il trasferimento originale non potrà mai essere confermato. Questo costa una commissione di rete.</string>
     <string name="wallet__send_pending__description">Questo pagamento sta richiedendo un po\' più tempo del previsto. Puoi continuare a utilizzare Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit non è riuscito a confermare che la rete abbia ricevuto questo pagamento. Si completerà non appena il tuo wallet vedrà la transazione. Se non compare, usa Riprova pagamento originale per inviare di nuovo la stessa transazione firmata. Gli altri pagamenti con hardware wallet restano bloccati fino ad allora.</string>
     <string name="wallet__send_pending__nav_title">Pagamento in sospeso</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagamento\n&lt;accent&gt;fattura...&lt;/accent&gt;</string>
@@ -1218,6 +1219,7 @@
     <string name="hardware__search_error">Impossibile cercare hardware wallet. Controlla la connessione e riprova.</string>
     <string name="hardware__send_broadcast_failed_text">Controlla la connessione e riprova.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento non confermato</string>
+    <string name="hardware__send_broadcast_refused_text">La rete ha rifiutato questa transazione, ad esempio perché le sue monete sono già state spese. Il pagamento resta in sospeso finché il tuo wallet non vede la transazione.</string>
     <string name="hardware__send_confirm_address">ALL\'INDIRIZZO (CONFERMA SUL DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">Da questo wallet, Trezor può inviare solo a un indirizzo Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Da questo wallet, Jade può inviare solo a un indirizzo Bitcoin.</string>

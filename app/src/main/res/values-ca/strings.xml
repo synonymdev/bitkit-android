@@ -1215,6 +1215,7 @@
     <string name="hardware__search_error">No s\'han pogut cercar carteres de maquinari. Comprova la connexió i torna-ho a provar.</string>
     <string name="hardware__send_broadcast_failed_text">Comprova la connexió i torna-ho a provar.</string>
     <string name="hardware__send_broadcast_failed_title">Pagament no confirmat</string>
+    <string name="hardware__send_broadcast_refused_text">La xarxa ha rebutjat aquesta transacció, per exemple perquè les seves monedes ja s\'han gastat. El pagament continua pendent fins que la teva cartera vegi la transacció.</string>
     <string name="hardware__send_confirm_address">A L\'ADREÇA (CONFIRMA AL DISPOSITIU)</string>
     <string name="hardware__send_onchain_only_text">Des d\'aquesta cartera, Trezor només pot enviar a una adreça Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Des d\'aquesta cartera, Jade només pot enviar a una adreça Bitcoin.</string>
@@ -1610,6 +1611,7 @@
     <string name="wallet__send_from">Des de</string>
     <string name="wallet__send_pending__blocked_new_send">El pagament nou no s\'ha enviat. Finalitza el pagament anterior abans de tornar-ho a provar.</string>
     <string name="wallet__send_pending__description">Aquest pagament està trigant una mica més del previst. Pots continuar utilitzant Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit no ha pogut confirmar que la xarxa hagi rebut aquest pagament. Es completarà quan la teva cartera vegi la transacció. Si no apareix, utilitza Reintentar el pagament original per tornar a enviar la mateixa transacció signada. Els altres pagaments amb cartera de maquinari continuen bloquejats fins aleshores.</string>
     <string name="wallet__send_pending__onchain_description">El resultat de la transacció està sense resoldre. Comprova\'n l\'estat abans de tornar-ho a provar. Els altres pagaments continuen bloquejats. Si està disponible, utilitza Reintentar el pagament original per autoritzar una tarifa per al mateix pagament.</string>
     <string name="wallet__send_pending__refusal">Difusió rebutjada: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autoritzar el reintent</string>

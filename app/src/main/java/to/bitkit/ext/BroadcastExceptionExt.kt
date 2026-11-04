@@ -16,7 +16,18 @@ fun Throwable.isDefiniteHardwarePreBroadcastFailure(): Boolean = generateSequenc
     it is BroadcastException.InvalidHex || it is BroadcastException.InvalidTransaction
 }
 
-// A recognized node refusal permits leaving the sheet, but never proves non-delivery.
+/**
+ * Whether a hardware broadcast proves it sent nothing: core could not decode the transaction or connect to the
+ * server, or the node refused it. Any other failure may follow the write, so the payment may still confirm. A refusal
+ * is proof only when no earlier broadcast of the same bytes may have reached the network.
+ */
+fun Throwable.isHardwareBroadcastNotSent(): Boolean = isHardwareBroadcastRefusalForNavigation() ||
+    generateSequence(this) { it.cause }.any {
+        it is BroadcastException.ElectrumException && it.errorDetails.startsWith("Failed to connect to Electrum: ")
+    }
+
+// A recognized node refusal permits leaving the sheet. It never proves that an earlier, uncertain dispatch of the
+// same bytes was not delivered, so it never releases a Shop payment's guard.
 fun Throwable.isHardwareBroadcastRefusalForNavigation(): Boolean =
     isDefiniteHardwarePreBroadcastFailure() || generateSequence(this) { it.cause }.any {
         if (it !is BroadcastException.ElectrumException) return@any false

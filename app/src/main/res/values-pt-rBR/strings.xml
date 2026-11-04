@@ -1006,6 +1006,7 @@
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_pending__abandon_transfer_note">As transferências para o saldo de gastos não estão mais disponíveis. O Bitkit primeiro verifica a rede e depois devolve as moedas desta transferência para sua carteira, para que a transferência original nunca seja confirmada. Isso tem uma taxa de rede.</string>
     <string name="wallet__send_pending__description">Esse pagamento está demorando mais do que o esperado. Enquanto isso, você pode continuar usando a Bitkit.</string>
+    <string name="wallet__send_pending__hardware_description">A Bitkit não conseguiu confirmar que a rede recebeu este pagamento. Ele será concluído assim que sua carteira vir a transação. Se ela não aparecer, use Tentar novamente o pagamento original para enviar de novo a mesma transação assinada. Outros pagamentos com carteira de hardware continuam bloqueados até lá.</string>
     <string name="wallet__send_pending__nav_title">Pagamento Pendente</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagando \n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
@@ -1221,6 +1222,7 @@
     <string name="hardware__search_error">Não foi possível procurar carteiras de hardware. Verifique sua conexão e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_text">Verifique sua conexão e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento não confirmado</string>
+    <string name="hardware__send_broadcast_refused_text">A rede recusou esta transação, por exemplo porque suas moedas já foram gastas. O pagamento continua pendente até que sua carteira veja a transação.</string>
     <string name="hardware__send_confirm_address">PARA O ENDEREÇO (CONFIRME NO DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">O Trezor só pode enviar para um endereço Bitcoin a partir desta carteira.</string>
     <string name="hardware__send_onchain_only_text_jade">O Jade só pode enviar para um endereço Bitcoin a partir desta carteira.</string>

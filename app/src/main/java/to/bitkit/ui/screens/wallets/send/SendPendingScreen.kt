@@ -97,6 +97,9 @@ fun SendPendingScreen(
     onNavigateToPin: () -> Unit,
     beginPaymentReview: () -> (() -> Unit),
     onRecoveredTransfer: (OnchainSendAttempt) -> Unit = {},
+    canRetryHardwareSend: Boolean = false,
+    isRetryingHardwareSend: Boolean = false,
+    onRetryHardwareSend: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -166,6 +169,9 @@ fun SendPendingScreen(
             canAbandon = uiState.abandonableAttempt != null,
             isAbandoning = uiState.isAbandoning,
             onAbandon = { showAbandonConfirmation = true },
+            canRetryHardwareSend = canRetryHardwareSend,
+            isRetryingHardwareSend = isRetryingHardwareSend,
+            onRetryHardwareSend = onRetryHardwareSend,
         )
     }
 }
@@ -407,6 +413,9 @@ internal fun SendPendingContent(
     canAbandon: Boolean = false,
     isAbandoning: Boolean = false,
     onAbandon: () -> Unit = {},
+    canRetryHardwareSend: Boolean = false,
+    isRetryingHardwareSend: Boolean = false,
+    onRetryHardwareSend: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -437,10 +446,10 @@ internal fun SendPendingContent(
                 VerticalSpacer(32.dp)
                 BodyM(
                     stringResource(
-                        if (isOnchain) {
-                            R.string.wallet__send_pending__onchain_description
-                        } else {
-                            R.string.wallet__send_pending__description
+                        when {
+                            canRetryHardwareSend -> R.string.wallet__send_pending__hardware_description
+                            isOnchain -> R.string.wallet__send_pending__onchain_description
+                            else -> R.string.wallet__send_pending__description
                         },
                     ),
                     color = Colors.White64,
@@ -464,6 +473,16 @@ internal fun SendPendingContent(
                 VerticalSpacer(16.dp)
             }
             VerticalSpacer(16.dp)
+            if (canRetryHardwareSend) {
+                SecondaryButton(
+                    text = stringResource(R.string.wallet__send_pending__retry_title),
+                    isLoading = isRetryingHardwareSend,
+                    enabled = !isRetryingHardwareSend,
+                    onClick = onRetryHardwareSend,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                VerticalSpacer(16.dp)
+            }
             if (canRetry) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__send_pending__retry_title),
