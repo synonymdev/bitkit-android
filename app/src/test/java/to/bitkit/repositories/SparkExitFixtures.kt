@@ -122,6 +122,13 @@ class FakeSparkExitChain : SparkExitChain {
         broadcasts += tx
         return outcome
     }
+
+    override suspend fun broadcastHex(hex: String): SparkExitBroadcastOutcome {
+        rawBroadcasts += hex
+        return outcome
+    }
+
+    val rawBroadcasts = mutableListOf<String>()
 }
 
 class FakeSparkExitRecovering : SparkExitRecovering {

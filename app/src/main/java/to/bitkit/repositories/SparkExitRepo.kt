@@ -36,6 +36,7 @@ import to.bitkit.services.SparkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.SignedTransactionId
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -198,6 +199,8 @@ class SparkExitRepo @Inject constructor(
         )
         val updated = driver.tick(current)
         _state.update { it.copy(record = updated, lastError = null) }
+        // Spark's balance next to the exit's leaves shows value that reached Spark after the quote.
+        if (recovering != null) _state.update { it.copy(sparkBalanceSats = sparkRepo.state.value.balanceSats) }
         // A rebuild needs the SDK; every other running step can go out from the stored recovery without it. Steps
         // refused again and again keep the exit from moving, however often it runs.
         val canMove = recovering != null || !updated.isRebuilding
@@ -210,6 +213,9 @@ class SparkExitRepo @Inject constructor(
         record.transferId?.let { transferRepo.updateClaimableAtHeight(it, record.claimableAtHeight) }
         settleIfFinished(record)
         updateAlerts(record, previous, isOnTrack)
+        if (record.phase == SparkExitRecord.Phase.Done && previous.phase != SparkExitRecord.Phase.Done) {
+            if (record.leftover.isNotEmpty()) sweepLeftover()
+        }
         if (!record.isActive) {
             Logger.info("Ended Spark exit with phase '${record.phase}'", context = TAG)
             work.cancelAll()
@@ -294,6 +300,7 @@ class SparkExitRepo @Inject constructor(
     suspend fun loadQuote(): Result<SparkExitQuote> = withContext(bgDispatcher) {
         runSuspendCatching {
             val recovering = sparkService.exitRecovering() ?: throw SparkError.NotConnected()
+            sparkRepo.awaitSettledLeaves().getOrThrow()
             val feeRate = maxOf(1uL, sparkService.fastestFeeRate())
             val destination = _state.value.pending?.destination ?: lightningRepo.newAddress().getOrThrow()
             val prepared = recovering.prepare(
@@ -432,6 +439,44 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
+    /**
+     * Moves the fee funding a finished exit left at its funding address to the exit's savings address, signed with the
+     * funding key: change from a branch whose refund the operators published, or funding a rebuild no longer needed.
+     * Runs once when the exit ends, background runs included, and again from the result screen. Returns the sweep's
+     * txid, or null when nothing confirmed is left or it would not cover its fee and dust.
+     */
+    suspend fun sweepLeftover(): Result<String?> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val record = _state.value.record?.takeIf { it.phase == SparkExitRecord.Phase.Done }
+                ?: return@runSuspendCatching null
+            val chain = requireNotNull(chain) { "No chain host for this network" }
+            val address = record.funding.firstOrNull()?.address ?: return@runSuspendCatching null
+            val inputs = chain.utxos(address)
+                .filter { it.status.confirmed }
+                .map { SparkExitSweep.Input(it.txid, it.vout, it.value) }
+            val feeRate = runSuspendCatching { sparkService.fastestFeeRate() }.getOrDefault(record.feeRateSatPerVbyte)
+            val plan = SparkExitSweep.plan(inputs, record.destination, feeRate) ?: return@runSuspendCatching null
+            val signed = signer().signPsbt(SparkExitSweep.psbt(plan, address))
+            val hex = SparkExitSweep.signedTxHex(plan, signed)
+            val outcome = chain.broadcastHex(hex)
+            if (outcome != SparkExitBroadcastOutcome.Accepted) {
+                throw SparkExitError("Leftover fee funding sweep was not accepted: '${outcome.summary}'")
+            }
+            val txid = SignedTransactionId.fromHex(hex)
+            val swept = plan.inputs.map { "${it.txid}:${it.vout}" }.toSet()
+            val updated = record.copy(leftover = record.leftover.filterNot { "${it.txid}:${it.vout}" in swept })
+            store.save(updated)
+            _state.update { it.copy(record = updated) }
+            Logger.info(
+                "Swept '${plan.amountSats}' sats of Spark exit fee funding to savings in '$txid'",
+                context = TAG
+            )
+            txid
+        }.onFailure {
+            Logger.error("Failed to sweep the Spark exit's leftover fee funding", it, context = TAG)
+        }
+    }
+
     // endregion
 
     // region keys
@@ -473,6 +518,17 @@ data class SparkExitState(
     val fundingSeenSats: ULong = 0uL,
     val fundingAddress: String? = null,
     val lastError: String? = null,
+    /** Spark's balance as last seen while the SDK drove the exit. */
+    val sparkBalanceSats: ULong? = null,
 ) {
     val isExiting: Boolean get() = record?.isActive == true
+
+    /** Value on Spark beyond the leaves the exit spends, such as a swap that landed after the quote: it stays there. */
+    val leftOutSats: ULong?
+        get() {
+            val leaves = record?.takeIf { it.isActive }?.recovery?.leaves ?: return null
+            val balance = sparkBalanceSats ?: return null
+            val exiting = leaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
+            return (balance - exiting).takeIf { balance > exiting }
+        }
 }

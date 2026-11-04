@@ -61,6 +61,7 @@ fun SparkExitProgressScreen(
         onCancel = viewModel::cancel,
         onDone = onDone,
         onNotificationSettings = context::openNotificationSettings,
+        onSweepLeftover = viewModel::sweepLeftover,
     )
 }
 
@@ -73,6 +74,7 @@ private fun Content(
     onCancel: () -> Unit = {},
     onDone: () -> Unit = {},
     onNotificationSettings: () -> Unit = {},
+    onSweepLeftover: () -> Unit = {},
 ) {
     val record = uiState.record
     ScreenColumn {
@@ -97,7 +99,7 @@ private fun Content(
                 VerticalSpacer(8.dp)
                 BodyM(text = progressText(record).withAccentBoldBright(), color = Colors.White64)
                 VerticalSpacer(24.dp)
-                record?.let { ProgressDetails(it, uiState) }
+                record?.let { ProgressDetails(it, uiState, onSweepLeftover) }
                 if (record?.isActive == true) {
                     BackgroundNotes(
                         limits = uiState.backgroundLimits,
@@ -128,7 +130,7 @@ private fun Content(
 }
 
 @Composable
-private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) {
+private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, onSweepLeftover: () -> Unit) {
     SparkExitSteps(record = record, tipHeight = uiState.tipHeight)
     val address = record.funding.firstOrNull()?.address
     val shortfall = record.fundingShortfallSats
@@ -140,6 +142,15 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) 
         VerticalSpacer(16.dp)
         BodyS(text = stringResource(R.string.lightning__spark_exit__errors).replace("{error}", it), color = Colors.Red)
     }
+    uiState.leftOutSats?.let {
+        VerticalSpacer(16.dp)
+        BodyS(
+            text = stringResource(
+                R.string.lightning__spark_exit__left_out
+            ).replace("{amount}", sparkExitAmountText(it)),
+            color = Colors.White64,
+        )
+    }
     if (record.phase == SparkExitRecord.Phase.Done && address != null) {
         record.leftover.forEach {
             VerticalSpacer(16.dp)
@@ -148,6 +159,15 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) 
                     .replace("{amount}", sparkExitAmountText(it.valueSats))
                     .replace("{address}", address),
                 color = Colors.White64,
+            )
+        }
+        if (record.leftover.isNotEmpty()) {
+            VerticalSpacer(16.dp)
+            SecondaryButton(
+                text = stringResource(R.string.lightning__spark_exit__leftover_sweep),
+                onClick = onSweepLeftover,
+                isLoading = uiState.isSweeping,
+                testTag = "SparkExitSweepLeftover",
             )
         }
     }

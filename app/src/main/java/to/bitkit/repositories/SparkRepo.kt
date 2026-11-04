@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.AutoOptimizationEvent
 import breez_sdk_spark.ClaimDeferredReason
 import breez_sdk_spark.ClaimDepositOutcome
 import breez_sdk_spark.FeePolicy
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
@@ -54,6 +56,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import breez_sdk_spark.PaymentType as SparkPaymentType
@@ -84,6 +87,12 @@ class SparkRepo @Inject constructor(
         private const val CLAIM_POLL_ATTEMPTS = 60
 
         private val SEND_STATUS_PRIORITY = listOf(PaymentStatus.COMPLETED, PaymentStatus.PENDING, PaymentStatus.FAILED)
+
+        /** How long the SDK leaves the counter-swap of a leaf swap cut short unclaimed (its 300 s), plus a margin. */
+        private val COUNTER_SWAP_GRACE = 330.seconds
+
+        /** The longest an exit quote waits for a running leaf optimization to end. */
+        private val OPTIMIZATION_WAIT = 2.minutes
     }
 
     private val scope = appScope(bgDispatcher, TAG)
@@ -95,6 +104,13 @@ class SparkRepo @Inject constructor(
     private val sendsRecordedWithoutFee = ConcurrentHashMap.newKeySet<String>()
 
     private var eventsJob: Job? = null
+
+    /** The SDK is swapping leaves with the operators; their value is in flight until it ends. */
+    private val isOptimizing = MutableStateFlow(false)
+
+    /** When a leaf swap was last cut short, which leaves its counter-swap unclaimed for [COUNTER_SWAP_GRACE]. */
+    @Volatile
+    private var optimizationCutShortAt: Instant? = null
 
     /** Watchers of the claims of deposits this app sent, by txid; they outlive the screens that start them. */
     private val claimJobs = ConcurrentHashMap<String, Job>()
@@ -143,6 +159,7 @@ class SparkRepo @Inject constructor(
     }
 
     suspend fun stop() = withContext(bgDispatcher) {
+        onOptimizationCutShort()
         runSuspendCatching { sparkService.disconnect() }
             .onFailure { Logger.warn("Failed to stop Spark wallet", it, context = TAG) }
         _state.update { it.copy(isReady = false, hasSynced = false) }
@@ -165,12 +182,46 @@ class SparkRepo @Inject constructor(
         if (_state.value.isExiting == isExiting && sparkService.isConnected) return@withContext Result.success(Unit)
         _state.update { it.copy(isExiting = isExiting) }
         runSuspendCatching {
+            onOptimizationCutShort()
             sparkService.disconnect()
             sparkService.connect(walletIndex, isExiting)
             refresh()
         }.onFailure {
             Logger.error("Failed to reconnect Spark with exit '$isExiting'", it, context = TAG)
         }
+    }
+
+    /**
+     * Waits until every leaf is in the wallet for an emergency exit quote, which exits the leaves listed then: no leaf
+     * optimization running, and the counter-swap of one cut short claimed, which a sync does once the SDK's grace
+     * period ran out. Value still in flight would otherwise be left out of the exit.
+     */
+    suspend fun awaitSettledLeaves(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            if (withTimeoutOrNull(OPTIMIZATION_WAIT) { isOptimizing.first { !it } } == null) {
+                Logger.warn("Quoting the Spark exit while a leaf optimization still runs", context = TAG)
+            }
+            optimizationCutShortAt?.let { delay(it + COUNTER_SWAP_GRACE - clock.now()) }
+            sparkService.syncWallet()
+            refresh()
+        }
+    }
+
+    private fun onOptimization(event: AutoOptimizationEvent) {
+        when (event) {
+            is AutoOptimizationEvent.Started, is AutoOptimizationEvent.RoundCompleted -> isOptimizing.update { true }
+            AutoOptimizationEvent.Completed, AutoOptimizationEvent.Skipped -> isOptimizing.update { false }
+            AutoOptimizationEvent.Cancelled, is AutoOptimizationEvent.Failed -> {
+                optimizationCutShortAt = clock.now()
+                isOptimizing.update { false }
+            }
+        }
+    }
+
+    private fun onOptimizationCutShort() {
+        if (!isOptimizing.value) return
+        optimizationCutShortAt = clock.now()
+        isOptimizing.update { false }
     }
 
     private fun exitStore(walletIndex: Int) = SparkExitStore(File(Env.sparkExitRecordPath(walletIndex)))
@@ -560,6 +611,7 @@ class SparkRepo @Inject constructor(
                 is SdkEvent.NewDeposits -> refresh()
                 is SdkEvent.UnilateralExitStateChanged -> _exitStateChanged.emit(Unit)
                 is SdkEvent.ClaimedDeposits -> refresh()
+                is SdkEvent.AutoOptimization -> onOptimization(event.optimizationEvent)
                 else -> Unit
             }
         }.onFailure {

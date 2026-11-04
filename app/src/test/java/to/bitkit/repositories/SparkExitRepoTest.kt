@@ -13,6 +13,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.utils.io.errors.IOException
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Rule
@@ -49,6 +50,7 @@ class SparkExitRepoTest : BaseUnitTest() {
     private val sparkRepo = mock<SparkRepo> {
         on { walletWiped } doReturn MutableSharedFlow()
         on { walletIndex } doReturn 0
+        on { state } doReturn MutableStateFlow(SparkState())
     }
     private val work = mock<SparkExitWork>()
 

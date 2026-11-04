@@ -53,6 +53,9 @@ interface SparkExitChain {
     suspend fun utxos(address: String): List<EsploraUtxo>
     suspend fun txStatus(txid: String): EsploraTxStatus
     suspend fun broadcast(tx: RecoveryTransaction): SparkExitBroadcastOutcome
+
+    /** A transaction of the app's own, such as the sweep of leftover fee funding, as a single `/tx`. */
+    suspend fun broadcastHex(hex: String): SparkExitBroadcastOutcome
 }
 
 class SparkExitChainError(message: String) : AppError(message)
@@ -110,6 +113,15 @@ class EsploraSparkExitChain(
             // null: this host cannot take it (no package endpoint, unreachable).
             if (attempt == SparkExitBroadcastOutcome.Accepted) return attempt
             attempt?.let { outcomes += it }
+        }
+        return outcomes.firstOrNull { it is SparkExitBroadcastOutcome.Rejected }
+            ?: outcomes.firstOrNull()
+            ?: SparkExitBroadcastOutcome.RetryLater("no chain host reachable")
+    }
+
+    override suspend fun broadcastHex(hex: String): SparkExitBroadcastOutcome {
+        val outcomes = hosts.mapNotNull { host ->
+            submitSingle(host, hex).also { if (it == SparkExitBroadcastOutcome.Accepted) return it }
         }
         return outcomes.firstOrNull { it is SparkExitBroadcastOutcome.Rejected }
             ?: outcomes.firstOrNull()

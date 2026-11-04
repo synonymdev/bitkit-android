@@ -257,7 +257,9 @@
     <string name="lightning__spark_exit__intro_text">Use this only if Spark stops working for you. It moves your spending balance to savings &lt;accent&gt;without the Spark operators&lt;/accent&gt;.\n\nIt takes &lt;accent&gt;up to 4 weeks&lt;/accent&gt;, costs on-chain fees paid from savings, and very small amounts can stay behind. It runs in the background, and Bitkit notifies you if it needs you.</string>
     <string name="lightning__spark_exit__intro_title">Leave Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Stays on Spark</string>
+    <string name="lightning__spark_exit__left_out">{amount} more on Spark is not part of this exit. It reached Spark after the quote and stays there.</string>
     <string name="lightning__spark_exit__leftover">{amount} of fee funding is still at {address}.</string>
+    <string name="lightning__spark_exit__leftover_sweep">Move to savings</string>
     <string name="lightning__spark_exit__nav_title">Emergency Exit</string>
     <string name="lightning__spark_exit__needs_funding_text">The exit needs &lt;accent&gt;{amount}&lt;/accent&gt; more to pay its fees. Fund it to continue.</string>
     <string name="lightning__spark_exit__needs_funding_title">More fees\n&lt;accent&gt;needed&lt;/accent&gt;</string>
