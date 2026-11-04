@@ -1124,7 +1124,7 @@
     <string name="contacts__add_error_fetch">Kontaktinformationen konnten nicht abgerufen werden. Bitte überprüfe den öffentlichen Schlüssel und versuche es erneut.</string>
     <string name="contacts__add_error_invalid_key">Ungültiges Format des pubky-Schlüssels. Bitte überprüfe ihn und versuche es erneut.</string>
     <string name="contacts__add_error_self">Du kannst deinen eigenen pubky nicht als Kontakt hinzufügen.</string>
-    <string name="contacts__add_privacy_notice">Bitte beachte, dass du und %1$s euch gegenseitig als Kontakte hinzufügen müsst, bevor ihr euch privat bezahlen könnt. Zahlungen über diesen Bildschirm sind öffentlich sichtbar.</string>
+    <string name="contacts__add_privacy_notice">Bitte beachte, dass du und %1$s euch gegenseitig als Kontakte hinzufügen müsst, bevor ihr euch privat bezahlen könnt. Wenn du ohne Speichern bezahlst, ist die Zahlung öffentlich sichtbar.</string>
     <string name="contacts__add_pay">Bezahlen</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">pubky einfügen</string>

@@ -107,7 +107,7 @@
     <string name="contacts__add_error_fetch">Could not retrieve contact info. Please check the public key and try again.</string>
     <string name="contacts__add_error_invalid_key">Invalid pubky key format. Please check and try again.</string>
     <string name="contacts__add_error_self">You can\'t add your own pubky as a contact.</string>
-    <string name="contacts__add_privacy_notice">Please note that you and %1$s must add each other as contacts before you can pay each other privately. Payments from this screen are visible publicly.</string>
+    <string name="contacts__add_privacy_notice">Please note that you and %1$s must add each other as contacts before you can pay each other privately. If you pay without saving, the payment is visible publicly.</string>
     <string name="contacts__add_pay">Pay</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Paste a pubky</string>

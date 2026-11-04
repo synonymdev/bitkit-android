@@ -1117,7 +1117,7 @@
     <string name="contacts__add_error_fetch">No se pudo obtener la información del contacto. Compruebe la clave pública e inténtelo de nuevo.</string>
     <string name="contacts__add_error_invalid_key">Formato de clave pubky no válido. Compruébelo e inténtelo de nuevo.</string>
     <string name="contacts__add_error_self">No puede añadir su propio pubky como contacto.</string>
-    <string name="contacts__add_privacy_notice">Tenga en cuenta que usted y %1$s deben añadirse mutuamente como contactos antes de poder pagarse de forma privada. Los pagos desde esta pantalla son visibles públicamente.</string>
+    <string name="contacts__add_privacy_notice">Tenga en cuenta que usted y %1$s deben añadirse mutuamente como contactos antes de poder pagarse de forma privada. Si paga sin guardar, el pago será visible públicamente.</string>
     <string name="contacts__add_pay">Pagar</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Pegar un pubky</string>

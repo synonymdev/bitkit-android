@@ -1127,7 +1127,7 @@
     <string name="contacts__add_error_fetch">Nelze načíst informace o kontaktu. Zkontrolujte prosím veřejný klíč a zkuste to znovu.</string>
     <string name="contacts__add_error_invalid_key">Neplatný formát klíče pubky. Zkontrolujte ho prosím a zkuste to znovu.</string>
     <string name="contacts__add_error_self">Nemůžete přidat svůj vlastní pubky jako kontakt.</string>
-    <string name="contacts__add_privacy_notice">Upozorňujeme, že vy a %1$s se musíte navzájem přidat jako kontakty, než si budete moci platit soukromě. Platby z této obrazovky jsou veřejně viditelné.</string>
+    <string name="contacts__add_privacy_notice">Upozorňujeme, že vy a %1$s se musíte navzájem přidat jako kontakty, než si budete moci platit soukromě. Pokud zaplatíte bez uložení, platba bude veřejně viditelná.</string>
     <string name="contacts__add_pay">Zaplatit</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Vložte pubky</string>

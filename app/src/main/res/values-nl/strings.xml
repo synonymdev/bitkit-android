@@ -1119,7 +1119,7 @@
     <string name="contacts__add_error_fetch">Kon contactgegevens niet ophalen. Controleer de publieke sleutel en probeer het opnieuw.</string>
     <string name="contacts__add_error_invalid_key">Ongeldig formaat van pubky-sleutel. Controleer en probeer het opnieuw.</string>
     <string name="contacts__add_error_self">U kunt uw eigen pubky niet als contact toevoegen.</string>
-    <string name="contacts__add_privacy_notice">Let op: u en %1$s moeten elkaar als contact toevoegen voordat u elkaar privé kunt betalen. Betalingen vanaf dit scherm zijn openbaar zichtbaar.</string>
+    <string name="contacts__add_privacy_notice">Let op: u en %1$s moeten elkaar als contact toevoegen voordat u elkaar privé kunt betalen. Als u betaalt zonder op te slaan, is de betaling openbaar zichtbaar.</string>
     <string name="contacts__add_pay">Betalen</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Plak een pubky</string>

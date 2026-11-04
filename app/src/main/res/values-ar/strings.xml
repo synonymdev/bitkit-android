@@ -1093,7 +1093,7 @@
     <string name="contacts__add_error_fetch">تعذر جلب معلومات جهة الاتصال. يرجى التحقق من المفتاح العام والمحاولة مرة أخرى.</string>
     <string name="contacts__add_error_invalid_key">تنسيق مفتاح pubky غير صالح. يرجى التحقق والمحاولة مرة أخرى.</string>
     <string name="contacts__add_error_self">لا يمكنك إضافة pubky الخاص بك كجهة اتصال.</string>
-    <string name="contacts__add_privacy_notice">يرجى ملاحظة أنه يجب عليك وعلى %1$s إضافة بعضكما كجهتي اتصال قبل أن تتمكنا من الدفع لبعضكما بشكل خاص. الدفعات من هذه الشاشة مرئية للعامة.</string>
+    <string name="contacts__add_privacy_notice">يرجى ملاحظة أنه يجب عليك وعلى %1$s إضافة بعضكما كجهتي اتصال قبل أن تتمكنا من الدفع لبعضكما بشكل خاص. إذا دفعت دون الحفظ، فستكون الدفعة مرئية للعامة.</string>
     <string name="contacts__add_pay">دفع</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">الصق pubky</string>

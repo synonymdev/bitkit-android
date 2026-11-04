@@ -1127,7 +1127,7 @@
     <string name="contacts__add_error_fetch">Nie udało się pobrać danych kontaktu. Sprawdź klucz publiczny i spróbuj ponownie.</string>
     <string name="contacts__add_error_invalid_key">Nieprawidłowy format klucza pubky. Sprawdź go i spróbuj ponownie.</string>
     <string name="contacts__add_error_self">Nie możesz dodać własnego pubky jako kontaktu.</string>
-    <string name="contacts__add_privacy_notice">Pamiętaj, że Ty i %1$s musicie dodać się nawzajem do kontaktów, zanim będziecie mogli płacić sobie prywatnie. Płatności z tego ekranu są widoczne publicznie.</string>
+    <string name="contacts__add_privacy_notice">Pamiętaj, że Ty i %1$s musicie dodać się nawzajem do kontaktów, zanim będziecie mogli płacić sobie prywatnie. Jeśli zapłacisz bez zapisywania, płatność będzie widoczna publicznie.</string>
     <string name="contacts__add_pay">Zapłać</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Wklej pubky</string>
