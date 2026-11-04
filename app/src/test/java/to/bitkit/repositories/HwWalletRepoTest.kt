@@ -9,16 +9,19 @@ import com.synonym.bitkitcore.CompletedTransaction
 import com.synonym.bitkitcore.ComposeAccount
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
+import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.JadeTransportKind
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.TransactionDetail
 import com.synonym.bitkitcore.TransactionDetails
+import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorSignedTx
+import com.synonym.bitkitcore.TxDetailInput
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.coroutines.CompletableDeferred
@@ -26,7 +29,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -76,6 +78,8 @@ class HwWalletRepoTest : BaseUnitTest() {
     private companion object {
         const val HARDWARE_WALLET_ID = "hardware-wallet"
         const val HELD_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
+        const val HELD_TXID = "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e"
+        const val HELD_INPUT_TXID = "167c8b8b6169007fd94edc121d606c829cbb5d6b51075bb0c664911848a0c5f7"
         const val HIDDEN_WALLET_ID = "hidden-wallet"
         const val JADE_WALLET_ID = "jade-wallet"
         val WATCHER_RECEIVE_ADDRESS = AddressInfo(
@@ -349,7 +353,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a held send blocks its payment until the wallet sees its transaction`() = test {
+    fun `a held send stays held for its payment even once the wallet sees it`() = test {
         val held = HeldHwSend(
             walletId = HARDWARE_WALLET_ID,
             txId = "T1",
@@ -363,11 +367,6 @@ class HwWalletRepoTest : BaseUnitTest() {
         )
         storeData.value = storeData.value.copy(heldSends = listOf(held))
         whenever(hwWalletStore.loadHeldSends()).thenAnswer { storeData.value.heldSends }
-        whenever(hwWalletStore.releaseHeldSends(any())).doSuspendableAnswer { call ->
-            val txIds = call.getArgument<Set<String>>(0).map { it.lowercase() }
-            val kept = storeData.value.heldSends.filterNot { it.txId.lowercase() in txIds }
-            storeData.update { it.copy(heldSends = kept) }
-        }
         val sut = createRepo()
 
         assertEquals(held, sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_000uL).getOrThrow())
@@ -387,9 +386,79 @@ class HwWalletRepoTest : BaseUnitTest() {
             )
         )
 
-        assertNull(sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_000uL).getOrThrow())
-        assertTrue(storeData.value.heldSends.isEmpty())
+        // The send screen records a seen send before it is released, so it is never signed again unrecorded
+        assertEquals(held, sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_000uL).getOrThrow())
+        verify(hwWalletStore, never()).releaseHeldSends(any())
     }
+
+    @Test
+    fun `a held send is proven unconfirmable only by a final spend of its coin by another transaction`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val held = requireNotNull(javaClass.getResourceAsStream("/hardware-signed-transaction.hex"))
+            .bufferedReader().readText().trim()
+        val spender = "cd".repeat(32)
+        stubHistory(
+            historyTx(HELD_INPUT_TXID, blockHeight = 100u, confirmations = 10u, sent = 0uL),
+            historyTx(spender, blockHeight = 105u, confirmations = 6u, sent = 25_000uL),
+        )
+        stubDetail(spender, HELD_INPUT_TXID to 1u)
+        val sut = createRepo()
+
+        assertTrue(sut.isSpentByAnotherTransaction(HARDWARE_WALLET_ID, held).getOrThrow())
+
+        stubDetail(spender, HELD_INPUT_TXID to 0u)
+        assertFalse(sut.isSpentByAnotherTransaction(HARDWARE_WALLET_ID, held).getOrThrow())
+
+        stubDetail(spender, HELD_INPUT_TXID to 1u)
+        stubHistory(
+            historyTx(HELD_INPUT_TXID, blockHeight = 100u, confirmations = 10u, sent = 0uL),
+            historyTx(spender, blockHeight = 105u, confirmations = 5u, sent = 25_000uL),
+        )
+        assertFalse(sut.isSpentByAnotherTransaction(HARDWARE_WALLET_ID, held).getOrThrow())
+
+        stubHistory(
+            historyTx(HELD_INPUT_TXID, blockHeight = 100u, confirmations = 10u, sent = 0uL),
+            historyTx(spender, blockHeight = 105u, confirmations = 6u, sent = 25_000uL),
+            historyTx(HELD_TXID, blockHeight = null, confirmations = 0u, sent = 25_000uL),
+        )
+        assertFalse(sut.isSpentByAnotherTransaction(HARDWARE_WALLET_ID, held).getOrThrow())
+
+        whenever(
+            trezorRepo.getTransactionHistory("zpubNS", Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        ).thenReturn(Result.failure(AppError("Electrum unreachable")))
+        assertTrue(sut.isSpentByAnotherTransaction(HARDWARE_WALLET_ID, held).isFailure)
+    }
+
+    private suspend fun stubHistory(vararg transactions: HistoryTransaction) {
+        val history = mock<TransactionHistoryResult> { on { this.transactions }.thenReturn(transactions.toList()) }
+        whenever(
+            trezorRepo.getTransactionHistory("zpubNS", Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        ).thenReturn(Result.success(history))
+    }
+
+    private suspend fun stubDetail(txid: String, vararg inputs: Pair<String, UInt>) {
+        val detailInputs = inputs.map { (inputTxid, vout) ->
+            mock<TxDetailInput> {
+                on { this.txid }.thenReturn(inputTxid)
+                on { this.vout }.thenReturn(vout)
+            }
+        }
+        val detail = mock<TransactionDetail> {
+            on { this.txid }.thenReturn(txid)
+            on { this.inputs }.thenReturn(detailInputs)
+        }
+        whenever(
+            trezorRepo.getTransactionDetail("zpubNS", txid, Env.network.toCoreNetwork(), AccountType.NATIVE_SEGWIT)
+        ).thenReturn(Result.success(detail))
+    }
+
+    private fun historyTx(txid: String, blockHeight: UInt?, confirmations: UInt, sent: ULong) =
+        mock<HistoryTransaction> {
+            on { this.txid }.thenReturn(txid)
+            on { this.blockHeight }.thenReturn(blockHeight)
+            on { this.confirmations }.thenReturn(confirmations)
+            on { this.sent }.thenReturn(sent)
+        }
 
     @Test
     fun `transactions changed event sets device balance and maps activity`() = test {

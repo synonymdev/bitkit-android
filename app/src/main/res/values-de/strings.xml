@@ -1216,10 +1216,14 @@
     <string name="hardware__remove_keep_error">Die Tags dieses Wallets konnten nicht in deinem Backup behalten werden. Versuche es erneut oder entferne es, ohne sie zu behalten.</string>
     <string name="hardware__rename_error">Das Hardware-Wallet konnte nicht umbenannt werden. Bitte versuche es erneut.</string>
     <string name="hardware__search_error">Die Suche nach Hardware-Wallets ist fehlgeschlagen. Überprüfe deine Verbindung und versuche es erneut.</string>
+    <string name="hardware__send_broadcast_accepted">Das Netzwerk hat diese Zahlung angenommen. Sie wird abgeschlossen, sobald dein Wallet die Transaktion sieht.</string>
     <string name="hardware__send_broadcast_failed_text">Überprüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardware__send_broadcast_failed_title">Zahlung nicht bestätigt</string>
-    <string name="hardware__send_broadcast_refused_text">Das Netzwerk hat diese Transaktion abgelehnt, zum Beispiel weil ihre Coins bereits ausgegeben wurden. Die Zahlung bleibt ausstehend, bis dein Wallet die Transaktion sieht.</string>
+    <string name="hardware__send_broadcast_refused_text">Diese Zahlung kann noch bestätigt werden. Sie bleibt ausstehend, bis dein Wallet sie sieht oder ihre Coins anderweitig ausgegeben werden.</string>
+    <string name="hardware__send_broadcast_rejected_text">Diese Zahlung kann nie bestätigt werden. Du kannst sie erneut ausführen.</string>
     <string name="hardware__send_confirm_address">AN ADRESSE (AM GERÄT BESTÄTIGEN)</string>
+    <string name="hardware__send_not_sent_text">Das Netzwerk hat diese Zahlung nicht erhalten. Du kannst sie erneut ausführen.</string>
+    <string name="hardware__send_not_sent_title">Zahlung nicht gesendet</string>
     <string name="hardware__send_onchain_only_text">Trezor kann von diesem Wallet nur an eine Bitcoin-Adresse senden.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade kann von diesem Wallet nur an eine Bitcoin-Adresse senden.</string>
     <string name="hardware__send_onchain_only_title">Bitcoin-Adresse erforderlich</string>

@@ -1194,10 +1194,14 @@
     <string name="hardware__remove_keep_error">Δεν ήταν δυνατή η διατήρηση των ετικετών αυτού του πορτοφολιού στο αντίγραφο ασφαλείας. Δοκίμασε ξανά ή αφαίρεσέ το χωρίς να τις διατηρήσεις.</string>
     <string name="hardware__rename_error">Δεν ήταν δυνατή η μετονομασία του πορτοφολιού υλικού. Δοκίμασε ξανά.</string>
     <string name="hardware__search_error">Δεν ήταν δυνατή η αναζήτηση πορτοφολιών υλικού. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
+    <string name="hardware__send_broadcast_accepted">Το δίκτυο αποδέχτηκε αυτή την πληρωμή. Θα ολοκληρωθεί μόλις το πορτοφόλι σου δει τη συναλλαγή.</string>
     <string name="hardware__send_broadcast_failed_text">Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="hardware__send_broadcast_failed_title">Η πληρωμή δεν επιβεβαιώθηκε</string>
-    <string name="hardware__send_broadcast_refused_text">Το δίκτυο απέρριψε αυτή τη συναλλαγή, για παράδειγμα επειδή τα νομίσματά της έχουν ήδη δαπανηθεί. Η πληρωμή παραμένει σε εκκρεμότητα μέχρι το πορτοφόλι σου να δει τη συναλλαγή.</string>
+    <string name="hardware__send_broadcast_refused_text">Αυτή η πληρωμή μπορεί ακόμη να επιβεβαιωθεί. Παραμένει σε εκκρεμότητα μέχρι να τη δει το πορτοφόλι σου ή να ξοδευτούν αλλού τα νομίσματά της.</string>
+    <string name="hardware__send_broadcast_rejected_text">Αυτή η πληρωμή δεν μπορεί να επιβεβαιωθεί ποτέ. Μπορείς να την κάνεις ξανά.</string>
     <string name="hardware__send_confirm_address">ΠΡΟΣ ΔΙΕΥΘΥΝΣΗ (ΕΠΙΒΕΒΑΙΩΣΗ ΣΤΗ ΣΥΣΚΕΥΗ)</string>
+    <string name="hardware__send_not_sent_text">Το δίκτυο δεν έλαβε αυτή την πληρωμή. Μπορείς να την κάνεις ξανά.</string>
+    <string name="hardware__send_not_sent_title">Η πληρωμή δεν στάλθηκε</string>
     <string name="hardware__send_onchain_only_text">Το Trezor μπορεί να στείλει μόνο σε διεύθυνση Bitcoin από αυτό το πορτοφόλι.</string>
     <string name="hardware__send_onchain_only_text_jade">Το Jade μπορεί να στείλει μόνο σε διεύθυνση Bitcoin από αυτό το πορτοφόλι.</string>
     <string name="hardware__send_onchain_only_title">Απαιτείται διεύθυνση Bitcoin</string>

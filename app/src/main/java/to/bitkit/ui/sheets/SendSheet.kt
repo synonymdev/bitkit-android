@@ -261,6 +261,7 @@ fun SendSheet(
                     when (event) {
                         is HeldHwSendEvent.Completed ->
                             showHardwareSuccess(send.txId, send.amountSats, send.walletId, isShopPayment = false)
+                        is HeldHwSendEvent.Released -> appViewModel.hideSheet()
                     }
                 }
             }
@@ -327,10 +328,10 @@ fun SendSheet(
                             navController.navigateTo(it.route) { popUpTo(replaced) { inclusive = true } }
                         }
                         is SendEffect.NavigateToHardwareSign -> {
-                            // A send whose broadcast may have gone out is finished before a new one is signed
+                            // A payment whose broadcast may have gone out is broadcast again instead of signed anew
                             val state = appViewModel.sendUiState.value
                             val unresolvedSend = state.hardwareWalletId?.let { walletId ->
-                                hwSendViewModel.refuseNewSend(walletId, state.address, state.amount)
+                                hwSendViewModel.resumeHeldSend(walletId, state.address, state.amount)
                             }
                             if (unresolvedSend == null) {
                                 navController.navigateTo(SendRoute.HardwareSign)

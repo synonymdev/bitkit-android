@@ -1215,10 +1215,14 @@
     <string name="hardware__remove_keep_error">Impossible de garder les étiquettes de ce portefeuille dans votre sauvegarde. Réessayez ou retirez-le sans les garder.</string>
     <string name="hardware__rename_error">Impossible de renommer le portefeuille matériel. Veuillez réessayer.</string>
     <string name="hardware__search_error">Impossible de rechercher des portefeuilles matériels. Vérifiez votre connexion et réessayez.</string>
+    <string name="hardware__send_broadcast_accepted">Le réseau a accepté ce paiement. Il sera finalisé dès que votre portefeuille verra la transaction.</string>
     <string name="hardware__send_broadcast_failed_text">Vérifiez votre connexion et réessayez.</string>
     <string name="hardware__send_broadcast_failed_title">Paiement non confirmé</string>
-    <string name="hardware__send_broadcast_refused_text">Le réseau a refusé cette transaction, par exemple parce que ses fonds ont déjà été dépensés. Le paiement reste en attente jusqu\'à ce que votre portefeuille voie la transaction.</string>
+    <string name="hardware__send_broadcast_refused_text">Ce paiement peut encore être confirmé. Il reste en attente jusqu\'à ce que votre portefeuille le voie ou que ses pièces soient dépensées ailleurs.</string>
+    <string name="hardware__send_broadcast_rejected_text">Ce paiement ne pourra jamais être confirmé. Vous pouvez le refaire.</string>
     <string name="hardware__send_confirm_address">VERS L\'ADRESSE (CONFIRMER SUR L\'APPAREIL)</string>
+    <string name="hardware__send_not_sent_text">Le réseau n\'a pas reçu ce paiement. Vous pouvez le refaire.</string>
+    <string name="hardware__send_not_sent_title">Paiement non envoyé</string>
     <string name="hardware__send_onchain_only_text">Trezor ne peut envoyer qu\'à une adresse Bitcoin depuis ce portefeuille.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade ne peut envoyer qu\'à une adresse Bitcoin depuis ce portefeuille.</string>
     <string name="hardware__send_onchain_only_title">Adresse Bitcoin requise</string>

@@ -1186,10 +1186,14 @@
     <string name="hardware__remove_keep_error">Não foi possível manter as etiquetas desta carteira na cópia de segurança. Tente novamente ou remova-a sem as manter.</string>
     <string name="hardware__rename_error">Não foi possível mudar o nome da carteira de hardware. Tente novamente.</string>
     <string name="hardware__search_error">Não foi possível procurar carteiras de hardware. Verifique a ligação e tente novamente.</string>
+    <string name="hardware__send_broadcast_accepted">A rede aceitou este pagamento. Fica concluído assim que a sua carteira vir a transação.</string>
     <string name="hardware__send_broadcast_failed_text">Verifique a ligação e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento não confirmado</string>
-    <string name="hardware__send_broadcast_refused_text">A rede recusou esta transação, por exemplo porque as suas moedas já foram gastas. O pagamento continua pendente até a sua carteira ver a transação.</string>
+    <string name="hardware__send_broadcast_refused_text">Este pagamento ainda pode ser confirmado. Continua pendente até a sua carteira o ver ou as suas moedas serem gastas noutro lado.</string>
+    <string name="hardware__send_broadcast_rejected_text">Este pagamento nunca poderá ser confirmado. Pode fazê-lo novamente.</string>
     <string name="hardware__send_confirm_address">PARA O ENDEREÇO (CONFIRME NO DISPOSITIVO)</string>
+    <string name="hardware__send_not_sent_text">A rede não recebeu este pagamento. Pode fazê-lo novamente.</string>
+    <string name="hardware__send_not_sent_title">Pagamento não enviado</string>
     <string name="hardware__send_onchain_only_text">O Trezor só pode enviar para um endereço Bitcoin a partir desta carteira.</string>
     <string name="hardware__send_onchain_only_text_jade">O Jade só pode enviar para um endereço Bitcoin a partir desta carteira.</string>
     <string name="hardware__send_onchain_only_title">Endereço Bitcoin necessário</string>

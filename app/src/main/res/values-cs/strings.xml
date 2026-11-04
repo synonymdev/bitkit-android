@@ -1219,10 +1219,14 @@
     <string name="hardware__remove_keep_error">Tagy této peněženky se nepodařilo ponechat v záloze. Zkuste to znovu, nebo ji odeberte bez jejich ponechání.</string>
     <string name="hardware__rename_error">Hardwarovou peněženku se nepodařilo přejmenovat. Zkuste to prosím znovu.</string>
     <string name="hardware__search_error">Hardwarové peněženky se nepodařilo vyhledat. Zkontrolujte připojení a zkuste to znovu.</string>
+    <string name="hardware__send_broadcast_accepted">Síť tuto platbu přijala. Dokončí se, jakmile vaše peněženka transakci uvidí.</string>
     <string name="hardware__send_broadcast_failed_text">Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="hardware__send_broadcast_failed_title">Platba nebyla potvrzena</string>
-    <string name="hardware__send_broadcast_refused_text">Síť tuto transakci odmítla, například proto, že její mince už byly utraceny. Platba zůstává nevyřízená, dokud ji vaše peněženka neuvidí.</string>
+    <string name="hardware__send_broadcast_refused_text">Tato platba může být stále potvrzena. Zůstává čekající, dokud ji vaše peněženka neuvidí nebo dokud nebudou její mince utraceny jinde.</string>
+    <string name="hardware__send_broadcast_rejected_text">Tato platba nikdy nemůže být potvrzena. Můžete ji provést znovu.</string>
     <string name="hardware__send_confirm_address">NA ADRESU (POTVRĎTE NA ZAŘÍZENÍ)</string>
+    <string name="hardware__send_not_sent_text">Síť tuto platbu nepřijala. Můžete ji provést znovu.</string>
+    <string name="hardware__send_not_sent_title">Platba nebyla odeslána</string>
     <string name="hardware__send_onchain_only_text">Trezor může z této peněženky posílat pouze na bitcoinovou adresu.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade může z této peněženky posílat pouze na bitcoinovou adresu.</string>
     <string name="hardware__send_onchain_only_title">Je vyžadována bitcoinová adresa</string>

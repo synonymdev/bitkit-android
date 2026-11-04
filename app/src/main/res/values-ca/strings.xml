@@ -1213,10 +1213,14 @@
     <string name="hardware__remove_keep_error">No s\'han pogut conservar les etiquetes d\'aquesta cartera a la còpia de seguretat. Torna-ho a provar o elimina-la sense conservar-les.</string>
     <string name="hardware__rename_error">No s\'ha pogut canviar el nom de la cartera de maquinari. Torna-ho a provar.</string>
     <string name="hardware__search_error">No s\'han pogut cercar carteres de maquinari. Comprova la connexió i torna-ho a provar.</string>
+    <string name="hardware__send_broadcast_accepted">La xarxa ha acceptat aquest pagament. Es completarà quan la teva cartera vegi la transacció.</string>
     <string name="hardware__send_broadcast_failed_text">Comprova la connexió i torna-ho a provar.</string>
     <string name="hardware__send_broadcast_failed_title">Pagament no confirmat</string>
-    <string name="hardware__send_broadcast_refused_text">La xarxa ha rebutjat aquesta transacció, per exemple perquè les seves monedes ja s\'han gastat. El pagament continua pendent fins que la teva cartera vegi la transacció.</string>
+    <string name="hardware__send_broadcast_refused_text">Aquest pagament encara es podria confirmar. Continua pendent fins que la teva cartera el vegi o les seves monedes es gastin en una altra transacció.</string>
+    <string name="hardware__send_broadcast_rejected_text">Aquest pagament no es podrà confirmar mai. Pots tornar-lo a fer.</string>
     <string name="hardware__send_confirm_address">A L\'ADREÇA (CONFIRMA AL DISPOSITIU)</string>
+    <string name="hardware__send_not_sent_text">La xarxa no ha rebut aquest pagament. Pots tornar-lo a fer.</string>
+    <string name="hardware__send_not_sent_title">Pagament no enviat</string>
     <string name="hardware__send_onchain_only_text">Des d\'aquesta cartera, Trezor només pot enviar a una adreça Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Des d\'aquesta cartera, Jade només pot enviar a una adreça Bitcoin.</string>
     <string name="hardware__send_onchain_only_title">Cal una adreça Bitcoin</string>

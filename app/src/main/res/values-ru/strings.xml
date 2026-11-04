@@ -1236,10 +1236,14 @@
     <string name="hardware__remove_keep_error">Не удалось сохранить теги этого кошелька в резервной копии. Попробуйте снова или удалите его без сохранения тегов.</string>
     <string name="hardware__rename_error">Не удалось переименовать аппаратный кошелёк. Пожалуйста, попробуйте снова.</string>
     <string name="hardware__search_error">Не удалось найти аппаратные кошельки. Проверьте подключение и попробуйте снова.</string>
+    <string name="hardware__send_broadcast_accepted">Сеть приняла этот платёж. Он завершится, как только ваш кошелёк увидит транзакцию.</string>
     <string name="hardware__send_broadcast_failed_text">Проверьте подключение и попробуйте снова.</string>
     <string name="hardware__send_broadcast_failed_title">Платёж не подтверждён</string>
-    <string name="hardware__send_broadcast_refused_text">Сеть отклонила эту транзакцию, например потому, что её монеты уже потрачены. Платёж остаётся в ожидании, пока ваш кошелёк не увидит транзакцию.</string>
+    <string name="hardware__send_broadcast_refused_text">Этот платёж ещё может быть подтверждён. Он остаётся в ожидании, пока ваш кошелёк его не увидит или его монеты не будут потрачены в другой транзакции.</string>
+    <string name="hardware__send_broadcast_rejected_text">Этот платёж никогда не будет подтверждён. Вы можете выполнить его снова.</string>
     <string name="hardware__send_confirm_address">НА АДРЕС (ПОДТВЕРДИТЕ НА УСТРОЙСТВЕ)</string>
+    <string name="hardware__send_not_sent_text">Сеть не получила этот платёж. Вы можете выполнить его снова.</string>
+    <string name="hardware__send_not_sent_title">Платёж не отправлен</string>
     <string name="hardware__send_onchain_only_text">Trezor может отправлять из этого кошелька только на Bitcoin-адрес.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade может отправлять из этого кошелька только на Bitcoin-адрес.</string>
     <string name="hardware__send_onchain_only_title">Нужен Bitcoin-адрес</string>

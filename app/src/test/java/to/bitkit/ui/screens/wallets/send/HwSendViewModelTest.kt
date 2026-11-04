@@ -45,6 +45,7 @@ import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.Toast
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.HwHeldDispatchTracker
 import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PaykitPaymentProofRepo
@@ -79,6 +80,8 @@ class HwSendViewModelTest : BaseUnitTest() {
     private val proofRepo = mock<PaykitPaymentProofRepo>()
     private val walletActivities = MutableStateFlow<ImmutableList<Activity>>(persistentListOf())
     private val hwWallets = MutableStateFlow<ImmutableList<HwWallet>>(persistentListOf(hwWallet(WALLET_ID)))
+
+    private val heldDispatches = HwHeldDispatchTracker()
 
     private lateinit var sut: HwSendViewModel
     private var now = Instant.parse("2026-10-06T11:59:59Z")
@@ -127,18 +130,22 @@ class HwSendViewModelTest : BaseUnitTest() {
         whenever { hwWalletRepo.heldSendFor(any(), any(), any()) }.thenReturn(Result.success(null))
         whenever { hwWalletRepo.holdSend(any()) }.thenReturn(Result.success(Unit))
         whenever { hwWalletRepo.releaseHeldSend(any()) }.thenReturn(Result.success(Unit))
-        sut = HwSendViewModel(
-            context = context,
-            hwWalletRepo = hwWalletRepo,
-            preActivityMetadataRepo = preActivityMetadataRepo,
-            coreService = coreService,
-            activityRepo = activityRepo,
-            paykitPaymentProofRepo = proofRepo,
-            clock = object : Clock {
-                override fun now() = now
-            },
-        )
+        whenever { hwWalletRepo.isSpentByAnotherTransaction(any(), any()) }.thenReturn(Result.success(false))
+        sut = createViewModel()
     }
+
+    private fun createViewModel() = HwSendViewModel(
+        context = context,
+        hwWalletRepo = hwWalletRepo,
+        preActivityMetadataRepo = preActivityMetadataRepo,
+        coreService = coreService,
+        activityRepo = activityRepo,
+        paykitPaymentProofRepo = proofRepo,
+        heldDispatches = heldDispatches,
+        clock = object : Clock {
+            override fun now() = now
+        },
+    )
 
     @Test
     fun `signing reconnects and retries once after THP channel failure`() = test {
@@ -398,24 +405,34 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `Shop broadcast unanswered past the wait keeps its signed payment guarded`() = test {
+    fun `Shop broadcast unanswered past the wait stays guarded and its late answer still lands`() = test {
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
         val original = request().copy(paymentRequestId = PaykitPaymentRequestId("request", "counterparty"))
-        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer { awaitCancellation() }
+        val late = CompletableDeferred<Result<HwFundingBroadcastResult>>()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            withContext(NonCancellable) { late.await() }
+        }
 
         sut.signAndBroadcast(original)
-        advanceTimeBy(121.seconds)
+        advanceTimeBy(61.seconds)
         runCurrent()
-        toastJob.cancel()
 
         assertFalse(sut.uiState.value.isSigning)
         assertTrue(sut.uiState.value.isBroadcastUnresolved)
         assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
         assertEquals(Toast.ToastType.WARNING, toasts.single().type)
         verify(hwWalletRepo, never()).holdSend(any())
+
+        late.complete(Result.success(fixture.broadcast))
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        val result = sut.results.first()
+        assertEquals(fixture.broadcast.txId, result.txId)
+        assertEquals(original.paymentRequestId, result.paymentRequestId)
     }
 
     @Test
@@ -543,7 +560,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a broadcast unanswered for two minutes shows as pending and completes once it answers`() = test {
+    fun `a broadcast unanswered for a minute shows as pending until the wallet sees it`() = test {
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         whenever(context.getString(any())).thenReturn("message")
@@ -557,7 +574,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         val held = HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)
 
         sut.signAndBroadcast(request())
-        advanceTimeBy(119.seconds)
+        advanceTimeBy(59.seconds)
         runCurrent()
         assertFalse(sut.uiState.value.canLeave)
 
@@ -567,10 +584,15 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isSigning)
         assertEquals(held, sut.uiState.value.unresolvedSend)
         assertEquals(listOf(held), sut.uiState.value.unresolvedSends)
-        verify(hwWalletRepo, never()).releaseHeldSend(any())
 
         sut.cancel()
         broadcastResult.complete(Result.success(fixture.broadcast))
+        advanceUntilIdle()
+        assertTrue(events.isEmpty())
+        assertEquals(listOf(held), sut.uiState.value.unresolvedSends)
+        verify(hwWalletRepo, never()).releaseHeldSend(any())
+
+        walletActivities.value = persistentListOf(sentActivity())
         advanceUntilIdle()
         toastJob.cancel()
 
@@ -595,21 +617,50 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a broadcast that answers a refusal after the wait keeps its send held`() = test {
+    fun `a late answer proving the first broadcast sent nothing releases its send`() = test {
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         whenever(context.getString(any())).thenReturn("message")
+        whenever(context.getString(R.string.hardware__send_not_sent_text)).thenReturn("not sent")
         val fixture = stubSuccessfulPayment()
         val broadcastResult = CompletableDeferred<Result<HwFundingBroadcastResult>>()
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
             withContext(NonCancellable) { broadcastResult.await() }
         }
+        val events = mutableListOf<HeldHwSendEvent>()
+        backgroundScope.launch { sut.heldSendEvents.collect { events += it } }
 
         sut.signAndBroadcast(request())
-        advanceTimeBy(121.seconds)
+        advanceTimeBy(61.seconds)
         runCurrent()
         broadcastResult.complete(Result.failure(BroadcastException.ElectrumException(NODE_REFUSAL)))
         advanceUntilIdle()
+        toastJob.cancel()
+
+        val held = HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)
+        assertEquals(listOf<HeldHwSendEvent>(HeldHwSendEvent.Released(held)), events)
+        assertEquals(1, toasts.count { it.description == "not sent" })
+        assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
+        verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
+    }
+
+    @Test
+    fun `a late answer that may have gone out keeps its send held`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val first = CompletableDeferred<Result<HwFundingBroadcastResult>>()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            withContext(NonCancellable) { first.await() }
+        }
+
+        sut.signAndBroadcast(request())
+        advanceTimeBy(61.seconds)
+        runCurrent()
+        first.complete(Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)))
+        advanceUntilIdle()
 
         assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
+        assertTrue(sut.uiState.value.retryingSendTxIds.isEmpty())
         verify(hwWalletRepo, never()).releaseHeldSend(any())
         verify(activityService, never()).createSentOnchainActivityFromSendResult(
             txid = SIGNED_TXID,
@@ -621,6 +672,108 @@ class HwSendViewModelTest : BaseUnitTest() {
             channelId = null,
             walletId = WALLET_ID,
         )
+    }
+
+    @Test
+    fun `a broadcast that answers a refusal no node can accept after the wait releases its send`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val broadcastResult = CompletableDeferred<Result<HwFundingBroadcastResult>>()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            withContext(NonCancellable) { broadcastResult.await() }
+        }
+        val events = mutableListOf<HeldHwSendEvent>()
+        backgroundScope.launch { sut.heldSendEvents.collect { events += it } }
+
+        sut.signAndBroadcast(request())
+        advanceTimeBy(61.seconds)
+        runCurrent()
+        broadcastResult.complete(Result.failure(BroadcastException.ElectrumException(SCRIPT_REFUSAL)))
+        advanceUntilIdle()
+
+        val held = HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)
+        assertEquals(listOf<HeldHwSendEvent>(HeldHwSendEvent.Released(held)), events)
+        assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
+        verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
+    }
+
+    @Test
+    fun `a payment resumed from another sheet is not broadcast again while its first broadcast is unanswered`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val first = CompletableDeferred<Result<HwFundingBroadcastResult>>()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            withContext(NonCancellable) { first.await() }
+        }.thenReturn(Result.success(fixture.broadcast))
+        val otherSheet = createViewModel()
+
+        sut.signAndBroadcast(request())
+        advanceTimeBy(61.seconds)
+        runCurrent()
+        whenever(hwWalletRepo.heldSendFor(WALLET_ID, ADDRESS, AMOUNT_SATS))
+            .thenReturn(Result.success(heldSend(fixture.signedTx)))
+        sut.retryUnresolvedSend(SIGNED_TXID)
+        otherSheet.signAndBroadcast(request())
+        runCurrent()
+
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+        assertTrue(SIGNED_TXID in sut.uiState.value.retryingSendTxIds)
+        assertTrue(SIGNED_TXID in otherSheet.uiState.value.retryingSendTxIds)
+
+        first.complete(Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)))
+        advanceUntilIdle()
+        otherSheet.retryUnresolvedSend(SIGNED_TXID)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
+        verify(hwWalletRepo, times(1)).signFunding(any(), any())
+        verify(hwWalletRepo, never()).releaseHeldSend(any())
+    }
+
+    @Test
+    fun `a late proof that nothing was sent keeps the hold when the same bytes may have gone out before`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val first = CompletableDeferred<Result<HwFundingBroadcastResult>>()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            withContext(NonCancellable) { first.await() }
+        }
+        val earlier = requireNotNull(heldDispatches.begin(SIGNED_TXID))
+        heldDispatches.finish(earlier, isNotSent = false)
+
+        sut.signAndBroadcast(request())
+        advanceTimeBy(61.seconds)
+        runCurrent()
+        first.complete(Result.failure(BroadcastException.ElectrumException(CONNECT_FAILURE)))
+        advanceUntilIdle()
+
+        assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
+        verify(hwWalletRepo, never()).releaseHeldSend(any())
+    }
+
+    @Test
+    fun `a broadcast again writes its hold first and is skipped when that write fails`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)),
+            Result.success(fixture.broadcast),
+        )
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        whenever(hwWalletRepo.holdSend(any())).thenReturn(Result.failure(AppError("Store unwritable")))
+        sut.retryUnresolvedSend(SIGNED_TXID)
+        advanceUntilIdle()
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
+
+        whenever(hwWalletRepo.holdSend(any())).thenReturn(Result.success(Unit))
+        sut.retryUnresolvedSend(SIGNED_TXID)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(3)).holdSend(heldSend(fixture.signedTx))
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
+        assertTrue(sut.uiState.value.retryingSendTxIds.isEmpty())
     }
 
     @Test
@@ -677,8 +830,36 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `cancel drops the signed transaction after a node refusal`() = test {
+    fun `cancel drops the signed transaction after a first broadcast the node refused`() = test {
         assertCancelReleasesSignedTransaction(BroadcastException.ElectrumException(NODE_REFUSAL))
+    }
+
+    @Test
+    fun `a refusal no node can accept releases the send and says it was not sent`() = test {
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(context.getString(any())).thenReturn("message")
+        whenever(context.getString(R.string.hardware__send_broadcast_rejected_text)).thenReturn("rejected")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException(SCRIPT_REFUSAL)),
+            Result.success(fixture.broadcast),
+        )
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertEquals(1, toasts.count { it.description == "rejected" })
+        assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.uiState.value.canLeave)
+        verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
     }
 
     @Test
@@ -797,35 +978,35 @@ class HwSendViewModelTest : BaseUnitTest() {
         }
 
     @Test
-    fun `a new send of a payment held before a restart is refused and retried only as the same bytes`() = test {
+    fun `a payment held before a restart is broadcast again as the same bytes instead of signed`() = test {
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         whenever(context.getString(any())).thenReturn("message")
-        whenever(context.getString(R.string.wallet__send_pending__blocked_new_send)).thenReturn("blocked")
+        whenever(context.getString(R.string.hardware__send_broadcast_accepted)).thenReturn("accepted")
         val fixture = stubSuccessfulPayment()
         whenever(hwWalletRepo.heldSendFor(WALLET_ID, ADDRESS, AMOUNT_SATS))
             .thenReturn(Result.success(heldSend(fixture.signedTx)))
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.success(fixture.broadcast))
         val results = mutableListOf<HwSendResult>()
         backgroundScope.launch { sut.heldSendEvents.collect { results += it.send } }
+        val held = HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)
 
         sut.signAndBroadcast(request())
         advanceUntilIdle()
 
         verify(hwWalletRepo, never()).signFunding(any(), any())
-        verify(hwWalletRepo, never()).broadcastFunding(any(), anyOrNull())
-        assertEquals(1, toasts.count { it.description == "blocked" })
-        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.uiState.value.unresolvedSend)
-        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.refuseNewSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
+        verify(hwWalletRepo).broadcastFunding(fixture.signedTx)
+        assertEquals(1, toasts.count { it.title == "accepted" })
+        assertEquals(held, sut.uiState.value.unresolvedSend)
+        assertTrue(results.isEmpty())
 
-        sut.retryUnresolvedSend(SIGNED_TXID)
+        walletActivities.value = persistentListOf(sentActivity())
         advanceUntilIdle()
         toastJob.cancel()
 
-        verify(hwWalletRepo).broadcastFunding(fixture.signedTx)
         verify(hwWalletRepo, never()).signFunding(any(), any())
         verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
-        assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), results)
+        assertEquals(listOf(held), results)
     }
 
     @Test
@@ -862,12 +1043,13 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a held send retried from pending stays held on any failure and completes once sent`() = test {
+    fun `a held send broadcast again stays held on any failure and completes once the wallet sees it`() = test {
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         whenever(context.getString(any())).thenReturn("message")
         whenever(context.getString(R.string.hardware__send_broadcast_failed_text)).thenReturn("try again")
         whenever(context.getString(R.string.hardware__send_broadcast_refused_text)).thenReturn("refused")
+        whenever(context.getString(R.string.hardware__send_broadcast_accepted)).thenReturn("accepted")
         val fixture = stubSuccessfulPayment()
         whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
@@ -893,11 +1075,14 @@ class HwSendViewModelTest : BaseUnitTest() {
             assertTrue(sut.uiState.value.retryingSendTxIds.isEmpty())
         }
         assertTrue(results.isEmpty())
-        assertEquals(1, toasts.count { it.description == "try again" })
-        assertEquals(1, toasts.count { it.description == "refused" })
+        assertEquals(0, toasts.count { it.description == "try again" })
+        assertEquals(2, toasts.count { it.description == "refused" })
 
         sut.retryUnresolvedSend(SIGNED_TXID)
         advanceUntilIdle()
+        assertEquals(1, toasts.count { it.title == "accepted" })
+        assertEquals(listOf(held), sut.uiState.value.unresolvedSends)
+        assertTrue(results.isEmpty())
         walletActivities.value = persistentListOf(sentActivity())
         advanceUntilIdle()
         toastJob.cancel()
@@ -947,33 +1132,144 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a new send is refused while one is held and points to the held payment`() = test {
+    fun `a held send whose coins another transaction spent for good is released on retry`() = test {
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         whenever(context.getString(any())).thenReturn("message")
-        whenever(context.getString(R.string.wallet__send_pending__blocked_new_send)).thenReturn("blocked")
+        whenever(context.getString(R.string.hardware__send_broadcast_rejected_text)).thenReturn("rejected")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)),
+            Result.failure(BroadcastException.ElectrumException(INPUTS_SPENT)),
+            Result.failure(BroadcastException.ElectrumException(INPUTS_SPENT)),
+        )
+        whenever(hwWalletRepo.isSpentByAnotherTransaction(WALLET_ID, fixture.signedTx.serializedTx))
+            .thenReturn(Result.failure(AppError("Electrum unreachable")), Result.success(true))
+        val events = mutableListOf<HeldHwSendEvent>()
+        backgroundScope.launch { sut.heldSendEvents.collect { events += it } }
+        val held = HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        sut.retryUnresolvedSend(SIGNED_TXID)
+        advanceUntilIdle()
+        assertEquals(listOf(held), sut.uiState.value.unresolvedSends)
+        verify(hwWalletRepo, never()).releaseHeldSend(any())
+
+        sut.retryUnresolvedSend(SIGNED_TXID)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(listOf<HeldHwSendEvent>(HeldHwSendEvent.Released(held)), events)
+        assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
+        assertEquals(1, toasts.count { it.description == "rejected" })
+        verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
+        assertNull(sut.resumeHeldSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
+    }
+
+    @Test
+    fun `a dust refusal of a broadcast again keeps the hold, as a miner may still confirm it`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        whenever(context.getString(R.string.hardware__send_broadcast_refused_text)).thenReturn("refused")
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)),
+            Result.failure(BroadcastException.ElectrumException(DUST_REFUSAL)),
+        )
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        sut.retryUnresolvedSend(SIGNED_TXID)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
+        assertEquals(1, toasts.count { it.description == "refused" })
+        verify(hwWalletRepo, never()).releaseHeldSend(any())
+    }
+
+    @Test
+    fun `a held payment the wallet has seen is recorded as sent instead of signed again`() = test {
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.heldSendFor(WALLET_ID, ADDRESS, AMOUNT_SATS))
+            .thenReturn(Result.success(heldSend(fixture.signedTx)))
+        walletActivities.value = persistentListOf(sentActivity())
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.results.first())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFunding(any(), anyOrNull())
+        inOrder(activityService, hwWalletRepo) {
+            verify(activityService).createSentOnchainActivityFromSendResult(
+                txid = SIGNED_TXID,
+                address = ADDRESS,
+                amount = AMOUNT_SATS,
+                fee = fixture.signedTx.miningFeeSats,
+                feeRate = fixture.signedTx.feeRate,
+                isTransfer = false,
+                channelId = null,
+                walletId = WALLET_ID,
+            )
+            verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
+        }
+    }
+
+    @Test
+    fun `a held send the wallet has seen completes instead of being released`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)),
+            Result.failure(BroadcastException.ElectrumException(SCRIPT_REFUSAL)),
+        )
+        val events = mutableListOf<HeldHwSendEvent>()
+        backgroundScope.launch { sut.heldSendEvents.collect { events += it } }
+        val seen = MutableStateFlow<ImmutableList<Activity>>(persistentListOf(sentActivity()))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        // The wallet's history shows the transaction before its watch has run
+        whenever(hwWalletRepo.activities).thenReturn(seen)
+        sut.retryUnresolvedSend(SIGNED_TXID)
+        advanceUntilIdle()
+
+        val held = HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)
+        assertEquals(listOf<HeldHwSendEvent>(HeldHwSendEvent.Completed(held)), events)
+    }
+
+    @Test
+    fun `a new send of a held payment is broadcast again and points to the held payment`() = test {
+        whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
         whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
-        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
-            .thenReturn(Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)))
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)),
+            Result.success(fixture.broadcast),
+        )
 
-        assertNull(sut.refuseNewSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
+        assertNull(sut.resumeHeldSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
         sut.signAndBroadcast(request())
         advanceUntilIdle()
         sut.cancel()
         advanceUntilIdle()
 
-        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.refuseNewSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
+        assertEquals(
+            HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS),
+            sut.resumeHeldSend(WALLET_ID, ADDRESS.uppercase(), AMOUNT_SATS),
+        )
         advanceUntilIdle()
-        assertEquals(1, toasts.count { it.description == "blocked" })
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
+        verify(hwWalletRepo, times(1)).signFunding(any(), any())
 
         walletActivities.value = persistentListOf(sentActivity())
         advanceUntilIdle()
-        sut.completeBroadcast()
-        toastJob.cancel()
 
-        assertNull(sut.refuseNewSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
-        assertEquals(1, toasts.count { it.description == "blocked" })
+        assertNull(sut.resumeHeldSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
     }
 
     @Test
@@ -995,8 +1291,8 @@ class HwSendViewModelTest : BaseUnitTest() {
         sut.cancel()
         advanceUntilIdle()
 
-        assertNull(sut.refuseNewSend(WALLET_ID, ADDRESS, other.amountSats))
-        assertNull(sut.refuseNewSend(OTHER_WALLET_ID, ADDRESS, AMOUNT_SATS))
+        assertNull(sut.resumeHeldSend(WALLET_ID, ADDRESS, other.amountSats))
+        assertNull(sut.resumeHeldSend(OTHER_WALLET_ID, ADDRESS, AMOUNT_SATS))
         sut.signAndBroadcast(other)
         advanceUntilIdle()
 
@@ -1019,7 +1315,7 @@ class HwSendViewModelTest : BaseUnitTest() {
 
         assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
         assertNull(sut.uiState.value.unresolvedSend)
-        assertNull(sut.refuseNewSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
+        assertNull(sut.resumeHeldSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
         verify(hwWalletRepo, never()).releaseHeldSend(any())
     }
 
@@ -1076,7 +1372,6 @@ class HwSendViewModelTest : BaseUnitTest() {
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         whenever(context.getString(any())).thenReturn("message")
         whenever(context.getString(R.string.hardware__send_broadcast_failed_text)).thenReturn("try again")
-        whenever(context.getString(R.string.wallet__send_pending__blocked_new_send)).thenReturn("blocked")
         val fixture = stubSuccessfulPayment()
         whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
@@ -1099,8 +1394,8 @@ class HwSendViewModelTest : BaseUnitTest() {
         toastJob.cancel()
 
         verify(hwWalletRepo, times(1)).signFunding(any(), any())
-        verify(hwWalletRepo, times(1)).broadcastFunding(any(), anyOrNull())
-        assertEquals(1, toasts.count { it.description == "blocked" })
+        // The same payment again is the same signed bytes broadcast again
+        verify(hwWalletRepo, times(2)).broadcastFunding(fixture.signedTx)
         assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.uiState.value.unresolvedSend)
         assertEquals(held, sut.uiState.value.unresolvedSends)
         assertTrue(sut.uiState.value.canLeave)
@@ -1444,6 +1739,7 @@ class HwSendViewModelTest : BaseUnitTest() {
                 coreService = coreService,
                 activityRepo = activityRepo,
                 paykitPaymentProofRepo = proofRepo,
+                heldDispatches = heldDispatches,
                 clock = object : Clock {
                     override fun now() = now
                 },
@@ -2109,6 +2405,10 @@ class HwSendViewModelTest : BaseUnitTest() {
             "Broadcast failed: Made one or multiple attempts, all errored:\n\t- Broken pipe (os error 32)\n"
         const val NODE_REFUSAL = "Broadcast failed: Electrum server error: " +
             """"sendrawtransaction RPC error -26: min relay fee not met, 110 < 141""""
+        const val SCRIPT_REFUSAL = "Broadcast failed: Electrum server error: " +
+            """"sendrawtransaction RPC error -26: mandatory-script-verify-flag-failed (Signature must be zero)""""
+        const val DUST_REFUSAL = "Broadcast failed: Electrum server error: " +
+            """"sendrawtransaction RPC error -26: dust""""
         const val INPUTS_SPENT = "Broadcast failed: Electrum server error: " +
             """"sendrawtransaction RPC error -25: bad-txns-inputs-missingorspent""""
         const val ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"

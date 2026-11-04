@@ -1209,10 +1209,14 @@
     <string name="hardware__remove_keep_error">No se pudieron conservar las etiquetas de este monedero en su copia de seguridad. Inténtelo de nuevo o elimínelo sin conservarlas.</string>
     <string name="hardware__rename_error">No se pudo cambiar el nombre del monedero de hardware. Inténtelo de nuevo.</string>
     <string name="hardware__search_error">No se pudieron buscar monederos de hardware. Compruebe su conexión e inténtelo de nuevo.</string>
+    <string name="hardware__send_broadcast_accepted">La red aceptó este pago. Se completará cuando su monedero vea la transacción.</string>
     <string name="hardware__send_broadcast_failed_text">Compruebe su conexión e inténtelo de nuevo.</string>
     <string name="hardware__send_broadcast_failed_title">Pago no confirmado</string>
-    <string name="hardware__send_broadcast_refused_text">La red ha rechazado esta transacción, por ejemplo porque sus monedas ya se han gastado. El pago sigue pendiente hasta que su monedero vea la transacción.</string>
+    <string name="hardware__send_broadcast_refused_text">Este pago aún podría confirmarse. Sigue pendiente hasta que su monedero lo vea o sus monedas se gasten en otra transacción.</string>
+    <string name="hardware__send_broadcast_rejected_text">Este pago nunca podrá confirmarse. Puede hacerlo de nuevo.</string>
     <string name="hardware__send_confirm_address">A LA DIRECCIÓN (CONFIRME EN EL DISPOSITIVO)</string>
+    <string name="hardware__send_not_sent_text">La red no recibió este pago. Puede hacerlo de nuevo.</string>
+    <string name="hardware__send_not_sent_title">Pago no enviado</string>
     <string name="hardware__send_onchain_only_text">Trezor solo puede enviar a una dirección de Bitcoin desde este monedero.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade solo puede enviar a una dirección de Bitcoin desde este monedero.</string>
     <string name="hardware__send_onchain_only_title">Se requiere una dirección de Bitcoin</string>

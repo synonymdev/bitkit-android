@@ -229,10 +229,14 @@
     <string name="hardware__remove_keep_error">Could not keep this wallet\'s tags in your backup. Try again, or remove it without keeping them.</string>
     <string name="hardware__rename_error">Could not rename the hardware wallet. Please try again.</string>
     <string name="hardware__search_error">Could not search for hardware wallets. Check your connection and try again.</string>
+    <string name="hardware__send_broadcast_accepted">The network accepted this payment. It completes once your wallet sees the transaction.</string>
     <string name="hardware__send_broadcast_failed_text">Check your connection and try again.</string>
     <string name="hardware__send_broadcast_failed_title">Payment not confirmed</string>
-    <string name="hardware__send_broadcast_refused_text">The network refused this transaction, for example because its coins were already spent. The payment stays pending until your wallet sees it.</string>
+    <string name="hardware__send_broadcast_refused_text">This payment may still confirm. It stays pending until your wallet sees it or its coins are spent elsewhere.</string>
+    <string name="hardware__send_broadcast_rejected_text">This payment can never confirm. You can make it again.</string>
     <string name="hardware__send_confirm_address">TO ADDRESS (CONFIRM ON DEVICE)</string>
+    <string name="hardware__send_not_sent_text">The network did not receive this payment. You can make it again.</string>
+    <string name="hardware__send_not_sent_title">Payment not sent</string>
     <string name="hardware__send_onchain_only_text">Trezor can only send to a Bitcoin address from this wallet.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade can only send to a Bitcoin address from this wallet.</string>
     <string name="hardware__send_onchain_only_title">Bitcoin address required</string>

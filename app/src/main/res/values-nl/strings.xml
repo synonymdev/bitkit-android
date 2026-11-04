@@ -1212,10 +1212,14 @@
     <string name="hardware__remove_keep_error">Kon de tags van deze wallet niet in uw backup bewaren. Probeer het opnieuw, of verwijder de wallet zonder ze te bewaren.</string>
     <string name="hardware__rename_error">Kon de naam van de hardwarewallet niet wijzigen. Probeer het opnieuw.</string>
     <string name="hardware__search_error">Kon niet zoeken naar hardwarewallets. Controleer uw verbinding en probeer het opnieuw.</string>
+    <string name="hardware__send_broadcast_accepted">Het netwerk heeft deze betaling geaccepteerd. Ze wordt voltooid zodra uw wallet de transactie ziet.</string>
     <string name="hardware__send_broadcast_failed_text">Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="hardware__send_broadcast_failed_title">Betaling niet bevestigd</string>
-    <string name="hardware__send_broadcast_refused_text">Het netwerk heeft deze transactie geweigerd, bijvoorbeeld omdat de munten ervan al zijn uitgegeven. De betaling blijft in behandeling totdat uw wallet de transactie ziet.</string>
+    <string name="hardware__send_broadcast_refused_text">Deze betaling kan nog worden bevestigd. Ze blijft in behandeling totdat uw wallet haar ziet of de munten ervan elders worden uitgegeven.</string>
+    <string name="hardware__send_broadcast_rejected_text">Deze betaling kan nooit worden bevestigd. U kunt haar opnieuw uitvoeren.</string>
     <string name="hardware__send_confirm_address">NAAR ADRES (BEVESTIG OP APPARAAT)</string>
+    <string name="hardware__send_not_sent_text">Het netwerk heeft deze betaling niet ontvangen. U kunt haar opnieuw uitvoeren.</string>
+    <string name="hardware__send_not_sent_title">Betaling niet verzonden</string>
     <string name="hardware__send_onchain_only_text">Trezor kan vanuit deze wallet alleen naar een Bitcoin-adres versturen.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade kan vanuit deze wallet alleen naar een Bitcoin-adres versturen.</string>
     <string name="hardware__send_onchain_only_title">Bitcoin-adres vereist</string>

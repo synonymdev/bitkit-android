@@ -1218,10 +1218,14 @@
     <string name="hardware__remove_keep_error">Nie udało się zachować tagów tego portfela w kopii zapasowej. Spróbuj ponownie lub usuń go bez ich zachowywania.</string>
     <string name="hardware__rename_error">Nie udało się zmienić nazwy portfela sprzętowego. Spróbuj ponownie.</string>
     <string name="hardware__search_error">Nie udało się wyszukać portfeli sprzętowych. Sprawdź połączenie i spróbuj ponownie.</string>
+    <string name="hardware__send_broadcast_accepted">Sieć przyjęła tę płatność. Zostanie zakończona, gdy Twój portfel zobaczy transakcję.</string>
     <string name="hardware__send_broadcast_failed_text">Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_title">Płatność niepotwierdzona</string>
-    <string name="hardware__send_broadcast_refused_text">Sieć odrzuciła tę transakcję, na przykład dlatego, że jej środki zostały już wydane. Płatność pozostaje oczekująca, dopóki Twój portfel nie zobaczy transakcji.</string>
+    <string name="hardware__send_broadcast_refused_text">Ta płatność nadal może zostać potwierdzona. Pozostaje oczekująca, dopóki Twój portfel jej nie zobaczy lub jej monety nie zostaną wydane gdzie indziej.</string>
+    <string name="hardware__send_broadcast_rejected_text">Ta płatność nigdy nie zostanie potwierdzona. Możesz wykonać ją ponownie.</string>
     <string name="hardware__send_confirm_address">NA ADRES (POTWIERDŹ NA URZĄDZENIU)</string>
+    <string name="hardware__send_not_sent_text">Sieć nie otrzymała tej płatności. Możesz wykonać ją ponownie.</string>
+    <string name="hardware__send_not_sent_title">Płatność nie została wysłana</string>
     <string name="hardware__send_onchain_only_text">Trezor może wysyłać z tego portfela tylko na adres Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade może wysyłać z tego portfela tylko na adres Bitcoin.</string>
     <string name="hardware__send_onchain_only_title">Wymagany adres Bitcoin</string>
