@@ -44,6 +44,8 @@ class OnchainInputSpendTest {
                 outputAddresses = listOf("bcrt1qown", null),
                 isFinal = true,
                 confirmations = 6u,
+                // One input and two outputs, without a witness
+                vBytes = 69uL,
             ),
             onchainInputSpend(payment(PaymentStatus.SUCCEEDED, confirmed), details, listOf(guarded), 105u),
         )
