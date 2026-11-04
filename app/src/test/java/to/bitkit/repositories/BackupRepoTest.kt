@@ -66,6 +66,7 @@ import to.bitkit.data.backup.UsdtRecoveryBackupStore
 import to.bitkit.data.backup.UsdtRecoveryBackupV1
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
@@ -117,6 +118,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val cacheStore = mock<CacheStore>()
     private val vssBackupClient = mock<VssBackupClient>()
+    private val vssClients = VssClientCoordinator()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
     private val settingsStore = mock<SettingsStore>()
     private val widgetsStore = mock<WidgetsStore>()
@@ -179,6 +181,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { cacheStore.updateBackupStatus(any(), any()) }.thenReturn(Unit)
         whenever { cacheStore.update(any()) }.thenReturn(Unit)
         whenever(cacheStore.data).thenReturn(cacheData)
+        whenever(cacheStore.backupStatuses).thenReturn(cacheData.map { it.backupStatuses })
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever { settingsStore.update(any()) }.thenReturn(Unit)
         whenever(widgetsStore.data).thenReturn(widgetsData)
@@ -229,6 +232,65 @@ class BackupRepoTest : BaseUnitTest() {
         assertFalse(PaykitException.Storage("wallet_wipe_in_progress", "wipe").isTemporaryBackupFailure())
         assertFalse(AppError(PaykitException.Storage("wallet_wipe_in_progress", "wipe")).isTemporaryBackupFailure())
         assertFalse(PaykitException.Storage("unknown", "profile_removal_in_progress").isTemporaryBackupFailure())
+    }
+
+    @Test
+    fun `explicit first wallet backup does not wait for node observers`() = test {
+        val statuses = MutableStateFlow(mapOf(BackupCategory.WALLET to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        sut.scheduleFullBackup()
+        advanceTimeBy(5_000)
+        runCurrent()
+        verify(vssBackupClient).setup()
+        verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.WALLET.name), any())
+        verify(vssBackupClient, never()).setupWithRetry(any(), any(), any())
+    }
+
+    @Test
+    fun `observer bootstrap requeues a required backup after a failed identity transition`() = test {
+        val statuses = MutableStateFlow(mapOf(BackupCategory.SETTINGS to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            verify(vssBackupClient, times(1)).setupWithRetry(any(), any(), any())
+            val recovery = connectionRecoveryFixture(settingsStore, keychain, vssClients)
+            assertFailsWith<BackupRepoTestError> {
+                recovery.withIdentityChange { throw BackupRepoTestError("credentials unchanged") }
+            }
+            runCurrent()
+            verify(vssBackupClient, times(2)).setupWithRetry(any(), any(), any())
+            verify(vssBackupClientLdk, times(2)).setup()
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.SETTINGS.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `backup failure status drains before replacement credentials`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var replaced = false
+        var crossed = false
+        whenever(cacheStore.updateBackupStatus(eq(BackupCategory.WALLET), any())).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            crossed = replaced
+            Unit
+        }
+        whenever(pubkyRepo.hasIdentityForBackup()).thenReturn(true)
+        assertTrue(sut.persistWalletBackup().isFailure)
+        entered.await()
+        val recovery = connectionRecoveryFixture(settingsStore, keychain, vssClients)
+        recovery.withIdentityChange { replaced = true }
+        release.complete(Unit)
+        runCurrent()
+        assertTrue(replaced)
+        assertFalse(crossed)
     }
 
     @Test
@@ -3166,6 +3228,7 @@ class BackupRepoTest : BaseUnitTest() {
         ioDispatcher = ioDispatcher,
         cacheStore = cacheStore,
         vssBackupClient = vssBackupClient,
+        vssClients = vssClients,
         vssBackupClientLdk = vssBackupClientLdk,
         settingsStore = settingsStore,
         widgetsStore = widgetsStore,
@@ -3194,7 +3257,7 @@ class BackupRepoTest : BaseUnitTest() {
         lightningService = lightningService,
         clock = clock,
         db = db,
-        connectionRecovery = connectionRecoveryFixture(settingsStore, keychain),
+        connectionRecovery = connectionRecoveryFixture(settingsStore, keychain, vssClients),
     )
 
     private class BackupRepoTestError(message: String) : AppError(message)

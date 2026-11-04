@@ -71,6 +71,7 @@ import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.WalletBackupRestorePendingError
 import to.bitkit.ext.createChannelDetails
@@ -135,6 +136,7 @@ class LightningRepoTest : BaseUnitTest() {
     private val lnurlService = mock<LnurlService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
+    private val vssClients = VssClientCoordinator()
     private val electrumProbeService = mock<ElectrumProbeService>()
     private val urlValidator = UrlValidator { Result.success(Unit) }
     private val probePaymentA = "probe-payment-a"
@@ -166,7 +168,7 @@ class LightningRepoTest : BaseUnitTest() {
             preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = onchainSendAttemptStore,
             connectivityRepo = connectivityRepo,
-            vssBackupClientLdk = vssBackupClientLdk,
+            vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients,
             urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
             profileRemovalStore = profileRemovalStore,
@@ -1101,22 +1103,60 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `detached restart drains its old stop without starting replacement wallet`() = test {
+        startNodeForTesting()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(lightningService.stop()).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+        }
+        val restart = launch { sut.restartNodeDetached() }
+        entered.await()
+        var replaced = false
+        val recovery = connectionRecoveryFixture(settingsStore, vssClients = vssClients)
+        val transition = launch { recovery.withIdentityChange { replaced = true } }
+        runCurrent()
+        assertFalse(replaced)
+        release.complete(Unit)
+        transition.join()
+        restart.join()
+        assertTrue(replaced)
+        assertTrue(restart.isCancelled)
+        verify(lightningService, times(1)).start(anyOrNull(), any())
+        verify(vssBackupClientLdk, never()).deleteObjects(any(), any())
+    }
+
+    @Test
+    fun `manual graph reset cannot delete after wallet identity replacement`() = test {
+        val entered = CompletableDeferred<Unit>()
+        whenever(lightningService.resetNetworkGraph(any())).doSuspendableAnswer {
+            entered.complete(Unit)
+            awaitCancellation()
+        }
+        val reset = launch { sut.resetNetworkGraph() }
+        entered.await()
+        val recovery = connectionRecoveryFixture(settingsStore, vssClients = vssClients)
+        recovery.withIdentityChange {}
+        reset.join()
+        assertTrue(reset.isCancelled)
+        verify(vssBackupClientLdk, never()).deleteObjects(any(), any())
+    }
+
+    @Test
     fun `resetNetworkGraph clears local cache and VSS copy`() = test {
-        whenever(vssBackupClientLdk.setup(any())).thenReturn(Result.success(Unit))
-        whenever(vssBackupClientLdk.deleteObject(any(), any())).thenReturn(Result.success(true))
+        whenever(vssBackupClientLdk.deleteObjects(any(), any())).thenReturn(Result.success(Unit))
 
         val result = sut.resetNetworkGraph()
 
         assertTrue(result.isSuccess)
         verify(lightningService).resetNetworkGraph(0)
-        verify(vssBackupClientLdk).setup(0)
-        verify(vssBackupClientLdk).deleteObject(eq("network_graph"), any())
+        verify(vssBackupClientLdk).deleteObjects(listOf("network_graph"), 0)
     }
 
     @Test
     fun `resetNetworkGraph fails when VSS delete fails`() = test {
-        whenever(vssBackupClientLdk.setup(any())).thenReturn(Result.success(Unit))
-        whenever(vssBackupClientLdk.deleteObject(any(), any()))
+        whenever(vssBackupClientLdk.deleteObjects(any(), any()))
             .thenReturn(Result.failure(RuntimeException("vss unavailable")))
 
         val result = sut.resetNetworkGraph()
@@ -2148,7 +2188,7 @@ class LightningRepoTest : BaseUnitTest() {
             preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = store,
             connectivityRepo = connectivityRepo,
-            vssBackupClientLdk = vssBackupClientLdk,
+            vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients,
             urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
             profileRemovalStore = profileRemovalStore,
@@ -2575,7 +2615,7 @@ class LightningRepoTest : BaseUnitTest() {
             keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
-            vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
+            vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
             profileRemovalStore = profileRemovalStore,
         )
@@ -2646,7 +2686,7 @@ class LightningRepoTest : BaseUnitTest() {
             keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
-            vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
+            vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
             profileRemovalStore = profileRemovalStore,
         )
@@ -2728,7 +2768,7 @@ class LightningRepoTest : BaseUnitTest() {
             keychain = keychain, lnurlService = lnurlService,
             cacheStore = cacheStore, preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = store, connectivityRepo = connectivityRepo,
-            vssBackupClientLdk = vssBackupClientLdk, urlValidator = urlValidator,
+            vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients, urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
             profileRemovalStore = profileRemovalStore,
         )
@@ -3207,7 +3247,7 @@ class LightningRepoTest : BaseUnitTest() {
             preActivityMetadataRepo = preActivityMetadataRepo,
             onchainSendAttemptStore = onchainSendAttemptStore,
             connectivityRepo = connectivityRepo,
-            vssBackupClientLdk = vssBackupClientLdk,
+            vssBackupClientLdk = vssBackupClientLdk, vssClients = vssClients,
             urlValidator = failingValidator,
             electrumProbeService = electrumProbeService,
             profileRemovalStore = profileRemovalStore,
