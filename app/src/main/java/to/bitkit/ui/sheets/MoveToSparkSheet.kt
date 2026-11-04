@@ -2,13 +2,13 @@ package to.bitkit.ui.sheets
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,16 +39,19 @@ fun MoveToSparkSheet(onLater: () -> Unit, onMove: () -> Unit, modifier: Modifier
         modifier = modifier.sheetHeight().navigationBarsPadding().testTag("MoveToSparkIntro")
     ) {
         SheetTopBar(stringResource(R.string.lightning__move_to_spark__nav_title))
-        Column(
-            verticalArrangement = Arrangement.Bottom,
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
-        ) {
-            Image(
-                painter = painterResource(R.drawable.lightning),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(256.dp).align(Alignment.CenterHorizontally)
-            )
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
+            // The illustration shrinks on small screens so the copy below it stays whole.
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.lightning),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.sizeIn(maxWidth = 256.dp, maxHeight = 256.dp)
+                )
+            }
             VerticalSpacer(32.dp)
             Display(
                 stringResource(R.string.lightning__move_to_spark__intro_title).withAccent(accentColor = Colors.Purple)

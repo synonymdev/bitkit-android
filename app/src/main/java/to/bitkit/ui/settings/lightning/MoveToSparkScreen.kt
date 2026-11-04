@@ -90,7 +90,7 @@ private fun Content(
 @Composable
 private fun Header(title: String, text: String) {
     VerticalSpacer(32.dp)
-    Display(text = title.withAccent())
+    Display(text = title.withAccent(accentColor = Colors.Purple))
     VerticalSpacer(8.dp)
     BodyM(text = text, color = Colors.White64)
 }
