@@ -1119,7 +1119,7 @@
     <string name="contacts__add_error_fetch">Kon contactgegevens niet ophalen. Controleer de publieke sleutel en probeer het opnieuw.</string>
     <string name="contacts__add_error_invalid_key">Ongeldig formaat van pubky-sleutel. Controleer en probeer het opnieuw.</string>
     <string name="contacts__add_error_self">U kunt uw eigen pubky niet als contact toevoegen.</string>
-    <string name="contacts__add_privacy_notice">Let op: u en %1$s moeten elkaar als contact toevoegen om elkaar privé te kunnen betalen. Anders is de betaling openbaar zichtbaar.</string>
+    <string name="contacts__add_privacy_notice">Let op: u en %1$s moeten elkaar als contact toevoegen voordat u elkaar privé kunt betalen. Betalingen vanaf dit scherm zijn openbaar zichtbaar.</string>
     <string name="contacts__add_pay">Betalen</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Plak een pubky</string>
@@ -1150,7 +1150,7 @@
     <string name="contacts__intro_description">Betaal uw contacten met één tik. Verstuur betalingen direct, naar iedereen, overal.</string>
     <string name="contacts__intro_title">Dynamische\n&lt;accent&gt;contacten&lt;/accent&gt;</string>
     <string name="contacts__my_profile">MIJN PROFIEL</string>
-    <string name="contacts__pay_private_link_pending">Bitkit stelt een privéverbinding met dit contact in. Probeer het zo opnieuw of vraag het contact u een betaalverzoek te sturen.</string>
+    <string name="contacts__pay_private_link_pending">Bitkit is nog een privéverbinding met dit contact aan het instellen. Zorg dat het contact u ook heeft toegevoegd, of vraag het contact u een betaalverzoek te sturen.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">QR of link plakken</string>
     <string name="contacts__scanner_status">QR &amp; NFC SCANNEN</string>

@@ -1124,7 +1124,7 @@
     <string name="contacts__add_error_fetch">Kontaktinformationen konnten nicht abgerufen werden. Bitte überprüfe den öffentlichen Schlüssel und versuche es erneut.</string>
     <string name="contacts__add_error_invalid_key">Ungültiges Format des pubky-Schlüssels. Bitte überprüfe ihn und versuche es erneut.</string>
     <string name="contacts__add_error_self">Du kannst deinen eigenen pubky nicht als Kontakt hinzufügen.</string>
-    <string name="contacts__add_privacy_notice">Bitte beachte, dass du und %1$s euch gegenseitig als Kontakte hinzufügen müsst, um euch privat bezahlen zu können. Andernfalls ist die Zahlung öffentlich sichtbar.</string>
+    <string name="contacts__add_privacy_notice">Bitte beachte, dass du und %1$s euch gegenseitig als Kontakte hinzufügen müsst, bevor ihr euch privat bezahlen könnt. Zahlungen über diesen Bildschirm sind öffentlich sichtbar.</string>
     <string name="contacts__add_pay">Bezahlen</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">pubky einfügen</string>
@@ -1154,7 +1154,7 @@
     <string name="contacts__intro_description">Bezahle deine Kontakte mit nur einem Tippen. Sende Zahlungen direkt, an jeden, überall.</string>
     <string name="contacts__my_profile">MEIN PROFIL</string>
     <string name="contacts__nav_title">Kontakte</string>
-    <string name="contacts__pay_private_link_pending">Bitkit richtet eine private Verbindung mit diesem Kontakt ein. Versuche es in Kürze erneut oder bitte den Kontakt, dir eine Zahlungsanforderung zu senden.</string>
+    <string name="contacts__pay_private_link_pending">Bitkit richtet noch eine private Verbindung mit diesem Kontakt ein. Stelle sicher, dass der Kontakt dich ebenfalls hinzugefügt hat, oder bitte ihn, dir eine Zahlungsanforderung zu senden.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">QR-Code oder Link einfügen</string>
     <string name="contacts__scanner_status">SCANNE QR &amp; NFC</string>

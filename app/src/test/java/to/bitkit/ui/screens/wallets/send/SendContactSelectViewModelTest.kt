@@ -98,7 +98,7 @@ class SendContactSelectViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pending private link explains that the private connection is being set up`() = test {
+    fun `pending private link explains that the contact must add this wallet too`() = test {
         val context: Context = mock()
         val contacts: PubkyRepo = mock()
         val payments: PrivatePaykitRepo = mock()

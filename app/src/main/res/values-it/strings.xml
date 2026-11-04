@@ -1124,7 +1124,7 @@
     <string name="contacts__add_error_fetch">Impossibile recuperare le informazioni del contatto. Controlla la chiave pubblica e riprova.</string>
     <string name="contacts__add_error_invalid_key">Formato della chiave pubky non valido. Controlla e riprova.</string>
     <string name="contacts__add_error_self">Non puoi aggiungere il tuo pubky come contatto.</string>
-    <string name="contacts__add_privacy_notice">Tieni presente che tu e %1$s dovete aggiungervi a vicenda come contatti per pagarvi in modo privato. Altrimenti, il pagamento sarà visibile pubblicamente.</string>
+    <string name="contacts__add_privacy_notice">Tieni presente che tu e %1$s dovete aggiungervi a vicenda come contatti prima di poter pagarvi in modo privato. I pagamenti da questa schermata sono visibili pubblicamente.</string>
     <string name="contacts__add_pay">Paga</string>
     <string name="contacts__add_pubky_label">PUBKY</string>
     <string name="contacts__add_pubky_placeholder">Incolla un pubky</string>
@@ -1153,7 +1153,7 @@
     <string name="contacts__import_title">Importa</string>
     <string name="contacts__intro_description">Paga i tuoi contatti con un semplice tocco. Invia pagamenti direttamente, a chiunque, ovunque.</string>
     <string name="contacts__my_profile">IL MIO PROFILO</string>
-    <string name="contacts__pay_private_link_pending">Bitkit sta configurando una connessione privata con questo contatto. Riprova a breve oppure chiedigli di inviarti una richiesta di pagamento.</string>
+    <string name="contacts__pay_private_link_pending">Bitkit sta ancora configurando una connessione privata con questo contatto. Assicurati che anche lui ti abbia aggiunto come contatto oppure chiedigli di inviarti una richiesta di pagamento.</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Incolla QR o Link</string>
     <string name="contacts__scanner_status">SCANSIONE QR E NFC</string>
