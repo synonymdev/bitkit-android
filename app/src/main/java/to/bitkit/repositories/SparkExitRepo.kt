@@ -283,10 +283,8 @@ class SparkExitRepo @Inject constructor(
      * funding is notified once, at once.
      */
     private fun updateAlerts(record: SparkExitRecord, previous: SparkExitRecord, isOnTrack: Boolean) {
-        when (SparkExitAlerts.loss(record, previous)) {
-            SparkExitAlert.Lost -> work.notify(SparkExitAlert.Lost, amountSats = record.lostSats)
-            SparkExitAlert.Failed -> work.notify(SparkExitAlert.Failed)
-            else -> Unit
+        SparkExitAlerts.losses(record, previous).forEach {
+            work.notify(it, amountSats = record.lostSats.takeIf { _ -> it == SparkExitAlert.Lost })
         }
         when (record.phase) {
             SparkExitRecord.Phase.Running -> {
@@ -471,7 +469,7 @@ class SparkExitRepo @Inject constructor(
     suspend fun markResultSeen(): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
             tickMutex.withLock {
-                val record = _state.value.record?.takeIf { !it.isActive && it.hasLoss && !it.isResultSeen }
+                val record = _state.value.record?.takeIf { it.hasUnseenResult }
                     ?: return@withLock
                 val seen = record.copy(isResultSeen = true)
                 store.save(seen)

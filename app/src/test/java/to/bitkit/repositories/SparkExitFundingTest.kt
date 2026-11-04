@@ -235,7 +235,10 @@ class SparkExitFundingTest {
         assertEquals(SparkExitFundingState.Paid("paid"), SparkExitMath.fundingState(record, utxos = null))
         // Confirmed but short: only the rest is asked for.
         val paidShort = listOf(SparkExitFixtures.utxo("paid", value = 15_000uL))
-        assertEquals(SparkExitFundingState.Ask(5_000uL, 15_000uL), SparkExitMath.fundingState(record, paidShort))
+        assertEquals(
+            SparkExitFundingState.Ask(5_000uL, 15_000uL, 20_000uL),
+            SparkExitMath.fundingState(record, paidShort)
+        )
         // Once adopted, a later shortfall no longer reads as paid.
         val topUp = record.copy(
             phase = SparkExitRecord.Phase.NeedsFunding(30_000uL),
@@ -250,7 +253,10 @@ class SparkExitFundingTest {
         val seen = listOf(SparkExitFixtures.utxo("ext", value = 20_000uL, confirmed = false))
         assertEquals(SparkExitFundingState.Seen("ext"), SparkExitMath.fundingState(record, seen))
         val partial = listOf(SparkExitFixtures.utxo("ext", value = 8_000uL, confirmed = false))
-        assertEquals(SparkExitFundingState.Ask(12_000uL, 8_000uL), SparkExitMath.fundingState(record, partial))
+        assertEquals(
+            SparkExitFundingState.Ask(12_000uL, 8_000uL, 20_000uL),
+            SparkExitMath.fundingState(record, partial)
+        )
         assertNull(SparkExitMath.fundingState(record.copy(phase = SparkExitRecord.Phase.Running), seen))
     }
 
@@ -294,6 +300,13 @@ class SparkExitFundingTest {
     fun `a top up under dust is asked as the funding output's dust limit`() {
         val record = SparkExitFixtures.record()
         val almost = listOf(SparkExitFixtures.utxo("ext", value = 19_932uL))
-        assertEquals(SparkExitFundingState.Ask(294uL, 19_932uL), SparkExitMath.fundingState(record, almost))
+        val ask = SparkExitFundingState.Ask(294uL, 19_932uL, 20_000uL)
+        assertEquals(ask, SparkExitMath.fundingState(record, almost))
+        // The hint names the shortfall as it is and asks for dust at least.
+        assertEquals(SparkExitPartialFunding(19_932uL, 20_000uL, 294uL), ask.partial)
+        assertEquals(
+            SparkExitPartialFunding(19_932uL, 20_000uL, 294uL),
+            SparkExitMath.partialFunding(19_932uL, 20_000uL)
+        )
     }
 }

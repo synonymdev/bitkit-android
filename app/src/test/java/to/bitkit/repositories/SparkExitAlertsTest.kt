@@ -54,14 +54,20 @@ class SparkExitAlertsTest {
     }
 
     @Test
-    fun `posts a lost leaf or a failed exit once, the lost leaves when both happen together`() {
+    fun `posts each lost leaf event, and a failure unless every leaf was claimed`() {
         val lost = running.copy(lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 16_384uL)))
-        val failed = lost.copy(phase = Phase.Failed(SparkExitDriver.LOST_REASON))
+        val claimed = lost.copy(phase = Phase.Failed(SparkExitDriver.LOST_REASON))
+        val stopped = running.copy(phase = Phase.Failed(SparkExitDriver.NO_LEAF_REASON))
 
-        assertEquals(SparkExitAlert.Lost, SparkExitAlerts.loss(lost, running))
-        assertEquals(SparkExitAlert.Lost, SparkExitAlerts.loss(failed, running))
-        assertEquals(SparkExitAlert.Failed, SparkExitAlerts.loss(failed, lost))
-        assertNull(SparkExitAlerts.loss(failed, failed))
-        assertNull(SparkExitAlerts.loss(SparkExitFixtures.record(Phase.Done), running))
+        assertEquals(listOf(SparkExitAlert.Lost), SparkExitAlerts.losses(lost, running))
+        assertEquals(listOf(SparkExitAlert.Lost), SparkExitAlerts.losses(claimed, running))
+        assertEquals(emptyList(), SparkExitAlerts.losses(claimed, lost))
+        assertEquals(listOf(SparkExitAlert.Failed), SparkExitAlerts.losses(stopped, running))
+        assertEquals(
+            listOf(SparkExitAlert.Lost, SparkExitAlert.Failed),
+            SparkExitAlerts.losses(stopped.copy(lostLeaves = lost.lostLeaves), running),
+        )
+        assertEquals(emptyList(), SparkExitAlerts.losses(stopped, stopped))
+        assertEquals(emptyList(), SparkExitAlerts.losses(SparkExitFixtures.record(Phase.Done), running))
     }
 }

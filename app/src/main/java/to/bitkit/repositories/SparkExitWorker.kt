@@ -247,14 +247,18 @@ private val ALWAYS_POSTED = setOf(SparkExitAlert.Lost, SparkExitAlert.Failed)
 
 object SparkExitAlerts {
     /**
-     * What a tick that moved the exit from [previous] to [record] lost, posted once: leaves an older owner claimed, or,
-     * failing for another reason, the exit itself. A tick that does both posts only the lost leaves, with their amount.
+     * What a tick that moved the exit from [previous] to [record] lost, each posted once: leaves an older owner
+     * claimed, and the exit failing, unless it failed because every leaf was claimed, which the lost leaves say.
      */
-    fun loss(record: SparkExitRecord, previous: SparkExitRecord): SparkExitAlert? = when {
-        record.lostLeaves.size > previous.lostLeaves.size -> SparkExitAlert.Lost
-        record.phase is SparkExitRecord.Phase.Failed && previous.phase !is SparkExitRecord.Phase.Failed ->
-            SparkExitAlert.Failed
-        else -> null
+    fun losses(record: SparkExitRecord, previous: SparkExitRecord): List<SparkExitAlert> {
+        val phase = record.phase
+        return listOfNotNull(
+            SparkExitAlert.Lost.takeIf { record.lostLeaves.size > previous.lostLeaves.size },
+            SparkExitAlert.Failed.takeIf {
+                phase is SparkExitRecord.Phase.Failed && phase.reason != SparkExitDriver.LOST_REASON &&
+                    previous.phase !is SparkExitRecord.Phase.Failed
+            },
+        )
     }
 
     /** Why a running exit fell behind its deadline, or null when it needs nothing from the user. */

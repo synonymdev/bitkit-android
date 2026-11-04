@@ -172,10 +172,11 @@ data class SparkExitRecord(
      */
     val showsResult: Boolean
         get() = isActive || isLeftoverSweepPending || (leftover.isNotEmpty() && leftoverSweep?.rejection != null) ||
-            (hasLoss && !isResultSeen)
+            hasUnseenResult
 
-    /** The exit failed or lost leaves, which the user is shown at least once. */
-    val hasLoss: Boolean get() = phase is Phase.Failed || lostLeaves.isNotEmpty()
+    /** The exit ended failed or with leaves lost, and the user has not opened its result yet. */
+    val hasUnseenResult: Boolean
+        get() = !isActive && (phase is Phase.Failed || lostSats > 0uL) && !isResultSeen
 
     /** Background runs and the foreground loop keep going while the exit runs and until its leftover is swept. */
     val needsDriving: Boolean get() = isActive || isLeftoverSweepPending
