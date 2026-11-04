@@ -176,6 +176,7 @@ import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.MoveToSparkRepo
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
@@ -261,6 +262,7 @@ import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
 import to.bitkit.utils.timedsheets.sheets.BackupTimedSheet
 import to.bitkit.utils.timedsheets.sheets.HighBalanceTimedSheet
+import to.bitkit.utils.timedsheets.sheets.MoveToSparkTimedSheet
 import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
@@ -328,6 +330,8 @@ class AppViewModel @Inject constructor(
     private val usdtSheet: UsdtTimedSheet,
     private val usdtPreferences: UsdtPreferencesRepo,
     private val highBalanceSheet: HighBalanceTimedSheet,
+    private val moveToSparkSheet: MoveToSparkTimedSheet,
+    private val moveToSparkRepo: MoveToSparkRepo,
     private val formatMoneyValue: FormatMoneyValue,
     private val widgetsRepo: WidgetsRepo,
     private val timeSource: TimeSource,
@@ -565,6 +569,7 @@ class AppViewModel @Inject constructor(
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val paymentRequestPresentationCompletionJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
+        registerSheet(moveToSparkSheet)
         registerSheet(appUpdateSheet)
         registerSheet(usdtSheet)
         registerSheet(backupSheet)
@@ -733,7 +738,12 @@ class AppViewModel @Inject constructor(
                 sheet == null && authenticated && !forgotPin && receipt == NewTransactionSheetDetails.EMPTY
             }.collect {
                 if (it) retryUsdtIntro()
+                if (it) retryMoveToSparkIntro()
             }
+        }
+        viewModelScope.launch {
+            // Channels and Spark load after Home first checks its sheets, so the intro is checked again once they can.
+            moveToSparkRepo.canMove.collect { if (it) retryMoveToSparkIntro() }
         }
         viewModelScope.launch {
             pubkyRepo.sessionRestorationFailed.collect { failed ->
@@ -2856,6 +2866,7 @@ class AppViewModel @Inject constructor(
             refreshPaymentActivity(paymentHash)
             // A failed automatic Allowance payment falls back to the request's manual flow without a send error.
             if (isAutomaticAllowancePayment(paymentHash)) return
+            if (moveToSparkRepo.isMovePayment(paymentHash)) return
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
@@ -2903,6 +2914,7 @@ class AppViewModel @Inject constructor(
         event.paymentHash.let { paymentHash ->
             closeSettledReceiveSheet(receiveSheetToClose)
             activityRepo.notifyPaymentActivityChanged()
+            if (moveToSparkRepo.isMovePayment(paymentHash)) return
             privatePaykitRepo.contactPublicKeyForPrivateInvoicePaymentHash(paymentHash)?.let { publicKey ->
                 activityRepo.setContact(
                     contactPublicKey = publicKey,
@@ -2953,6 +2965,8 @@ class AppViewModel @Inject constructor(
         refreshPaymentActivity(paymentHash)
         // An automatic Allowance payment settles headlessly; the allowance repo posts its notice and contact tag.
         if (isAutomaticAllowancePayment(paymentHash)) return
+        // A move to Spark reports its outcome on its own screen.
+        if (moveToSparkRepo.isMovePayment(paymentHash)) return
         if (!pendingPaymentRepo.isPending(paymentHash)) {
             notifyPaymentSentOnLightning(event)
             return
@@ -8801,6 +8815,10 @@ class AppViewModel @Inject constructor(
 
     private suspend fun retryUsdtIntro() {
         if (!isUsdtIntroPresented && usdtSheet.shouldShow()) timedSheetManager.reevaluate()
+    }
+
+    private suspend fun retryMoveToSparkIntro() {
+        if (moveToSparkSheet.shouldShow()) timedSheetManager.reevaluate()
     }
 
     private fun canShowTimedSheet() = _isAuthenticated.value && !_showForgotPinSheet.value &&

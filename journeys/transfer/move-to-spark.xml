@@ -1,0 +1,29 @@
+<journey name="move to spark">
+  <description>
+    Verifies the post-update "Move to Spark" sheet and the move itself. With an LDK channel that can send at least
+    1,000 sats and Spark connected, Home shows the "Move To Spark" sheet once (testTag "MoveToSparkIntro"); Spending
+    and Lightning Connections show a "Move To Spark" button (testTag "MoveToSpark") while the channel can still send.
+    The move quotes the routing fee over the channel only, pays the amount to a new invoice of the user's own Spark
+    wallet, and then offers to close the emptied connection. A wallet without such a channel never gets the sheet or
+    the button.
+
+    The "too large to route" state (testTag "MoveToSparkTrySmaller") needs a route that cannot carry the balance; on a
+    direct channel to the Spark service provider every amount routes, so it is covered by MoveToSparkRepoTest and the
+    MoveToSparkScreen previews rather than here.
+
+    Precondition: dev build pointed at a local Spark regtest (spark-sdk regtest/local), and a wallet with an open
+    channel to that stack's SSP Lightning node that holds most of its capacity on the wallet's side (open it from
+    Lightning Connections, Manual Setup, with the node URI the stack prints). Start on the wallet home screen with the
+    app freshly launched.
+  </description>
+  <actions>
+    <action>Wait on Home and verify the "Move To Spark" sheet (testTag "MoveToSparkIntro") shows, saying Blocktank is closing its Lightning connections</action>
+    <action>Tap "Later" (testTag "MoveToSparkIntroLater") and verify the sheet closes</action>
+    <action>Relaunch the app, wait on Home and verify the sheet does not show again</action>
+    <action>Open the Spending wallet and verify the "Move To Spark" button (testTag "MoveToSpark") shows</action>
+    <action>Tap "Move To Spark" and verify the screen shows an amount (testTag "MoveToSparkAmount") and a routing fee (testTag "MoveToSparkFee")</action>
+    <action>Swipe to move (testTag "MoveToSparkSwipe") and verify "Moved to Spark" shows the moved amount (testTag "MoveToSparkMoved") and "Close Connection" (testTag "MoveToSparkClose")</action>
+    <action>Tap "Close Connection", then "Close" on the close confirmation, and verify Lightning Connections shows no open connection and the Spark balance grew by the moved amount</action>
+    <action>Go back to Home, open Spending and verify the "Move To Spark" button is gone</action>
+  </actions>
+</journey>
