@@ -13,6 +13,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class SparkExitFundingTest {
     @Test
@@ -148,11 +149,20 @@ class SparkExitFundingTest {
 
     @Test
     fun `deadline warns halfway through the operators' window of the next step`() {
-        val mainnet = SparkExitMath.deadline(2.hours, Network.BITCOIN, period = 15.minutes)
+        val mainnet = SparkExitMath.deadline(2.hours, Network.BITCOIN)
         assertEquals(SparkExitDeadline(warnIn = 6.hours + 10.minutes, deadlineIn = 10.hours + 20.minutes), mainnet)
-        // Never before two background runs could have happened, even where the window is shorter.
-        val regtest = SparkExitMath.deadline(Duration.ZERO, Network.REGTEST, period = 15.minutes)
-        assertEquals(SparkExitDeadline(warnIn = 30.minutes, deadlineIn = 25.minutes), regtest)
+        val regtest = SparkExitMath.deadline(Duration.ZERO, Network.REGTEST)
+        assertEquals(SparkExitDeadline(warnIn = 12.5.minutes, deadlineIn = 25.minutes), regtest)
+    }
+
+    @Test
+    fun `deadline warns within half of the 50-block window on every network`() {
+        listOf(Network.BITCOIN to 10.minutes, Network.REGTEST to 30.seconds).forEach { (network, block) ->
+            val maturity = 3.hours
+            val deadline = SparkExitMath.deadline(maturity, network)
+            assertTrue(deadline.warnIn - maturity <= block * 25, "$network warns too late")
+            assertEquals(block * 50, deadline.deadlineIn - maturity)
+        }
     }
 
     @Test
@@ -214,5 +224,53 @@ class SparkExitFundingTest {
             listOf(SparkExitFixtures.PARENT_TXID, SparkExitFixtures.PARENT_TXID),
             SparkExitTxids.cpfpChildTxids(recovery),
         )
+    }
+
+    @Test
+    fun `progress waits for a payment from savings and asks only for what is still missing`() {
+        val record = SparkExitFixtures.record().copy(fundingPaymentTxid = "paid")
+        val paidPending = listOf(SparkExitFixtures.utxo("paid", value = 20_000uL, confirmed = false))
+        assertEquals(SparkExitFundingState.Paid("paid"), SparkExitMath.fundingState(record, paidPending))
+        assertEquals(SparkExitFundingState.Paid("paid"), SparkExitMath.fundingState(record, utxos = null))
+        // Confirmed but short: only the rest is asked for.
+        val paidShort = listOf(SparkExitFixtures.utxo("paid", value = 15_000uL))
+        assertEquals(SparkExitFundingState.Ask(5_000uL), SparkExitMath.fundingState(record, paidShort))
+        // Once adopted, a later shortfall no longer reads as paid.
+        val topUp = record.copy(
+            phase = SparkExitRecord.Phase.NeedsFunding(30_000uL),
+            funding = listOf(record.funding.single().copy(txid = "paid", vout = 0u, valueSats = 20_000uL)),
+        )
+        assertEquals(SparkExitFundingState.Ask(10_000uL), SparkExitMath.fundingState(topUp, emptyList()))
+    }
+
+    @Test
+    fun `progress waits for an external payment seen in the mempool`() {
+        val record = SparkExitFixtures.record()
+        val seen = listOf(SparkExitFixtures.utxo("ext", value = 20_000uL, confirmed = false))
+        assertEquals(SparkExitFundingState.Seen("ext"), SparkExitMath.fundingState(record, seen))
+        val partial = listOf(SparkExitFixtures.utxo("ext", value = 8_000uL, confirmed = false))
+        assertEquals(SparkExitFundingState.Ask(12_000uL), SparkExitMath.fundingState(record, partial))
+        assertNull(SparkExitMath.fundingState(record.copy(phase = SparkExitRecord.Phase.Running), seen))
+    }
+
+    @Test
+    fun `quote names what it skips and spark's balance beyond every leaf it lists`() {
+        val prepared = SparkExitFixtures.prepared()
+        val beyond = SparkExitQuote(prepared, sparkBalanceSats = 150_000uL)
+        assertEquals(50_000uL, beyond.unexitableSats)
+        assertEquals(49_700uL, beyond.beyondLeavesSats)
+        assertEquals(300uL, SparkExitQuote(prepared, sparkBalanceSats = 100_300uL).unexitableSats)
+        assertEquals(300uL, SparkExitQuote(prepared).unexitableSats)
+        assertNull(SparkExitQuote(SparkExitFixtures.prepared(skipped = emptyList())).unexitableSats)
+    }
+
+    @Test
+    fun `each exit takes a funding key index no earlier exit used`() {
+        assertEquals(0u, SparkExitMath.nextFundingIndex(kept = null, stored = null))
+        val old = SparkExitFixtures.record(SparkExitRecord.Phase.Done)
+        assertEquals(1u, SparkExitMath.nextFundingIndex(kept = null, stored = old))
+        assertEquals(4u, SparkExitMath.nextFundingIndex(kept = 4, stored = old))
+        val later = old.copy(funding = old.funding.map { it.copy(index = 6u) })
+        assertEquals(7u, SparkExitMath.nextFundingIndex(kept = 4, stored = later))
     }
 }

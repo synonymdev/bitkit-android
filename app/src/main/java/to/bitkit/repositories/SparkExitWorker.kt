@@ -110,7 +110,7 @@ class SparkExitWork @Inject constructor(
             val deadlineAt = preferences.getLong(KEY_DEADLINE_AT, 0L)
             if (record.phase == SparkExitRecord.Phase.Running && (warnAt == 0L || !isDeadlineArmed())) {
                 if (warnAt == 0L) {
-                    armDeadline(SparkExitMath.deadline(Duration.ZERO, Env.network, PERIOD), now)
+                    armDeadline(SparkExitMath.deadline(Duration.ZERO, Env.network), now)
                 } else {
                     setAlarm(maxOf(warnAt, now), deadlineAt)
                 }
@@ -168,7 +168,7 @@ class SparkExitWork @Inject constructor(
             ExistingWorkPolicy.KEEP,
             OneTimeWorkRequestBuilder<SparkExitWorker>().setConstraints(constraints).build(),
         )
-        armDeadline(SparkExitMath.deadline(Duration.ZERO, Env.network, PERIOD))
+        armDeadline(SparkExitMath.deadline(Duration.ZERO, Env.network))
     }
 
     /** Posts the exit's notification, unless Bitkit is on screen, where the progress screen says the same. */
@@ -235,7 +235,7 @@ data class SparkExitBackgroundLimits(
 )
 
 /** Why the user is asked to open Bitkit. */
-enum class SparkExitAlert { Funding, Rejected, Offline, Restricted, Battery, Behind }
+enum class SparkExitAlert { Funding, Lost, Rejected, Offline, Restricted, Battery, Behind }
 
 object SparkExitAlerts {
     /** Why a running exit fell behind its deadline, or null when it needs nothing from the user. */
@@ -256,6 +256,7 @@ object SparkExitAlerts {
 
 private fun SparkExitAlert.textRes(hasDeadline: Boolean): Int = when (this) {
     SparkExitAlert.Funding -> R.string.lightning__spark_exit__notification_funding
+    SparkExitAlert.Lost -> R.string.lightning__spark_exit__notification_lost
     SparkExitAlert.Rejected if hasDeadline -> R.string.lightning__spark_exit__notification_rejected
     SparkExitAlert.Offline if hasDeadline -> R.string.lightning__spark_exit__notification_offline
     SparkExitAlert.Restricted if hasDeadline -> R.string.lightning__spark_exit__notification_restricted

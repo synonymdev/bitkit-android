@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.bitkit.repositories.SparkExitBackgroundLimits
+import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
@@ -48,6 +49,7 @@ class SparkExitViewModel @Inject constructor(
                         record = exit.record,
                         tipHeight = exit.tipHeight,
                         fundingSeenSats = exit.fundingSeenSats,
+                        fundingState = exit.fundingState,
                         fundingAddress = exit.fundingAddress,
                         canCancel = sparkExitRepo.canCancel,
                         outsideExitSats = exit.outsideExitSats,
@@ -158,6 +160,8 @@ data class SparkExitUiState(
     val record: SparkExitRecord? = null,
     val tipHeight: UInt? = null,
     val fundingSeenSats: ULong = 0uL,
+    /** What progress shows while the exit needs fee funding. */
+    val fundingState: SparkExitFundingState? = null,
     val fundingAddress: String? = null,
     val canCancel: Boolean = false,
     val backgroundLimits: SparkExitBackgroundLimits = SparkExitBackgroundLimits(),
@@ -178,6 +182,13 @@ data class SparkExitUiState(
         }
 
     val rejection: String? get() = record?.surfacedRejection
+
+    /** The fee funding progress shows, asking for the whole shortfall until the funding address was read. */
+    val progressFunding: SparkExitFundingState?
+        get() {
+            val shortfall = record?.fundingShortfallSats ?: return null
+            return fundingState ?: SparkExitFundingState.Ask(shortfall)
+        }
 }
 
 enum class SparkExitQuoteBlock { Error, Nothing, Uneconomic }

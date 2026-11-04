@@ -2010,8 +2010,8 @@ private fun NavGraphBuilder.lightningConnections(
                         navController.navigateToTransferSavingsIntro()
                     }
                 },
-                onEmergencyExit = { isExiting ->
-                    navController.navigateTo(if (isExiting) Routes.SparkExitProgress else Routes.SparkExitIntro)
+                onEmergencyExit = { showsResult ->
+                    navController.navigateTo(if (showsResult) Routes.SparkExitProgress else Routes.SparkExitIntro)
                 },
             )
         }

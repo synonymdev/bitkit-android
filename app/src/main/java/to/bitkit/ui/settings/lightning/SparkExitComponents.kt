@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -96,6 +97,23 @@ internal fun SparkExitFundingAddress(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+}
+
+/** A line of progress with the transaction it is about, whose id copies on tap. */
+@Composable
+internal fun SparkExitTxNote(text: String, txid: String, @StringRes txidRes: Int, testTag: String) {
+    val context = LocalContext.current
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        BodyS(text = text, color = Colors.White64, modifier = Modifier.testTag(testTag))
+        CaptionB(
+            text = stringResource(txidRes).replace("{txid}", txid),
+            maxLines = 1,
+            overflow = TextOverflow.MiddleEllipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickableAlpha { context.setClipboardText(txid) }
+        )
     }
 }
 

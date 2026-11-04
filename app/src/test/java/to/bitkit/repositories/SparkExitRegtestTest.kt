@@ -45,7 +45,7 @@ class SparkExitRegtestTest : BaseUnitTest() {
 
         val outcome = chain.broadcast(tx)
 
-        assertIs<SparkExitBroadcastOutcome.RetryLater>(outcome)
+        assertIs<SparkExitBroadcastOutcome.InputsMissing>(outcome)
         assertTrue("missingorspent" in outcome.reason, outcome.reason)
     }
 }

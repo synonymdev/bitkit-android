@@ -36,9 +36,22 @@ sealed interface SparkExitBroadcastOutcome {
         override val summary = "accepted"
     }
 
-    /** Not final yet (timelock), or its parent is not visible yet: the next tick tries again. */
+    /** The host or node could not take it now: the next tick tries again. */
     data class RetryLater(val reason: String) : SparkExitBroadcastOutcome {
         override val summary get() = "retry: $reason"
+    }
+
+    /** Its relative timelock has not matured (`non-BIP68-final`): sent again once it has, never a rejection. */
+    data class NotMature(val reason: String) : SparkExitBroadcastOutcome {
+        override val summary get() = "not mature: $reason"
+    }
+
+    /**
+     * An input is missing or already spent: its parent is not visible yet, or, once every parent confirmed, someone
+     * else (the operators) spent it first. Never a rejection.
+     */
+    data class InputsMissing(val reason: String) : SparkExitBroadcastOutcome {
+        override val summary get() = "inputs missing: $reason"
     }
 
     /** Refused for good at this fee or policy; a later check or rebuild replaces it. */
@@ -103,10 +116,7 @@ class EsploraSparkExitChain(
         for (host in hosts) {
             val child = tx.cpfpTxHex
             val attempt = if (child != null) {
-                submitPackage(
-                    host,
-                    listOf(tx.txHex, child)
-                )
+                submitPackage(host, listOf(tx.txHex, child), tx.txid)
             } else {
                 submitSingle(host, tx.txHex)
             }
@@ -128,12 +138,16 @@ class EsploraSparkExitChain(
             ?: SparkExitBroadcastOutcome.RetryLater("no chain host reachable")
     }
 
-    private suspend fun submitPackage(host: String, hexes: List<String>): SparkExitBroadcastOutcome? {
+    private suspend fun submitPackage(
+        host: String,
+        hexes: List<String>,
+        parentTxid: String,
+    ): SparkExitBroadcastOutcome? {
         val body = JsonArray(hexes.map(::JsonPrimitive)).toString()
         for (path in listOf("/v1/txs/package", "/txs/package")) {
             val response = post("$host$path", TextContent(body, ContentType.Application.Json)) ?: return null
             if (response.status.value in NOT_HERE) continue
-            return SparkExitBroadcastClassifier.pkg(response.status.value, response.bodyAsText())
+            return SparkExitBroadcastClassifier.pkg(response.status.value, response.bodyAsText(), parentTxid)
         }
         return null
     }
@@ -186,13 +200,8 @@ object SparkExitBroadcastClassifier {
         "txn-same-nonwitness-data-in-mempool",
         "already in block chain",
     )
-    private val waitMessages = listOf(
-        "non-BIP68-final",
-        "non-final",
-        "bad-txns-inputs-missingorspent",
-        "missing-inputs",
-        "missingorspent",
-    )
+    private val notMatureMessages = listOf("non-BIP68-final", "non-final")
+    private val inputsMissingMessages = listOf("bad-txns-inputs-missingorspent", "missing-inputs", "missingorspent")
     private val json = Json { ignoreUnknownKeys = true }
 
     fun single(status: Int, body: String): SparkExitBroadcastOutcome {
@@ -200,15 +209,29 @@ object SparkExitBroadcastClassifier {
         return unavailable(status) ?: classify(body)
     }
 
-    fun pkg(status: Int, body: String): SparkExitBroadcastOutcome {
+    /**
+     * A package's outcome. Missing inputs count only on the step itself, [parentTxid]: reported on the CPFP child
+     * alone (its fee funding or chained change), they say nothing about the step, which is then retried.
+     */
+    fun pkg(status: Int, body: String, parentTxid: String? = null): SparkExitBroadcastOutcome {
         unavailable(status)?.let { return it }
         val root = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull()
         if (status !in 200..299 || root == null) return classify(body)
         val message = (root["package_msg"] as? JsonPrimitive)?.contentOrNull
         if (message == "success") return SparkExitBroadcastOutcome.Accepted
         val results = (root["tx-results"] as? JsonObject)?.values?.mapNotNull { it as? JsonObject }.orEmpty()
-        val errors = results.mapNotNull { (it["error"] as? JsonPrimitive)?.contentOrNull }
-        if (errors.isEmpty()) {
+        val outcomes = results.mapNotNull { result ->
+            val error = (result["error"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            val txid = (result["txid"] as? JsonPrimitive)?.contentOrNull
+            val isChild = parentTxid != null && txid != null && txid != parentTxid
+            val outcome = classify(error)
+            if (isChild && outcome is SparkExitBroadcastOutcome.InputsMissing) {
+                SparkExitBroadcastOutcome.RetryLater(error)
+            } else {
+                outcome
+            }
+        }
+        if (outcomes.isEmpty()) {
             return if (results.isEmpty()) {
                 SparkExitBroadcastOutcome.RetryLater(
                     body
@@ -217,8 +240,9 @@ object SparkExitBroadcastClassifier {
                 SparkExitBroadcastOutcome.Accepted
             }
         }
-        val outcomes = errors.map(::classify)
-        return outcomes.firstOrNull { it is SparkExitBroadcastOutcome.Rejected }
+        // A child reports missing inputs, or another error, when its parent is the one not yet mature.
+        return outcomes.firstOrNull { it is SparkExitBroadcastOutcome.NotMature }
+            ?: outcomes.firstOrNull { it is SparkExitBroadcastOutcome.Rejected }
             ?: outcomes.firstOrNull { it != SparkExitBroadcastOutcome.Accepted }
             ?: SparkExitBroadcastOutcome.Accepted
     }
@@ -235,7 +259,10 @@ object SparkExitBroadcastClassifier {
 
     fun classify(text: String): SparkExitBroadcastOutcome = when {
         knownMessages.any { it in text } || hasRpcCode(-27, text) -> SparkExitBroadcastOutcome.Accepted
-        waitMessages.any { it in text } || hasRpcCode(-25, text) -> SparkExitBroadcastOutcome.RetryLater(text)
+        notMatureMessages.any { it in text } -> SparkExitBroadcastOutcome.NotMature(text)
+        inputsMissingMessages.any { it in text } || hasRpcCode(-25, text) -> SparkExitBroadcastOutcome.InputsMissing(
+            text
+        )
         else -> SparkExitBroadcastOutcome.Rejected(text)
     }
 

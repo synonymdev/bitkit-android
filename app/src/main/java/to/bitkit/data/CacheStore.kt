@@ -175,6 +175,11 @@ data class AppCacheData(
      * leaves value in flight.
      */
     val sparkOptimizationActivityAt: Long? = null,
+    /**
+     * The funding key index the next Spark emergency exit takes, per `{network}/wallet{n}`, so each exit pays its fees
+     * from an address of its own.
+     */
+    val sparkExitNextFundingIndexes: Map<String, Int> = mapOf(),
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts

@@ -49,7 +49,7 @@ import to.bitkit.ui.utils.getBlockExplorerUrl
 fun SparkDetailScreen(
     onBack: () -> Unit,
     onTransferToSavings: () -> Unit,
-    onEmergencyExit: (isExiting: Boolean) -> Unit,
+    onEmergencyExit: (showsResult: Boolean) -> Unit,
     viewModel: SparkDetailViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -62,7 +62,7 @@ fun SparkDetailScreen(
         onOpenTx = { txId -> context.startActivity(Intent(Intent.ACTION_VIEW, getBlockExplorerUrl(txId).toUri())) },
         onCopyText = { context.setClipboardText(it) },
         onTransferToSavings = onTransferToSavings,
-        onEmergencyExit = { onEmergencyExit(uiState.spark?.isExiting == true) },
+        onEmergencyExit = { onEmergencyExit(uiState.spark?.showsExitResult == true) },
     )
 }
 

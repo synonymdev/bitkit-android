@@ -98,6 +98,17 @@ object SparkExitFixtures {
         expectedSats = 111_000uL,
     )
 
+    /**
+     * A version 3 transaction spending output 0 of [parent] with [csv] blocks of relative timelock in its nSequence,
+     * as a refund spends its node.
+     */
+    fun csvTxHex(parent: String, csv: Int): String {
+        fun le32(value: Long) = (0 until 4).joinToString("") { "%02x".format((value shr (8 * it)) and 0xff) }
+        val prevout = parent.chunked(2).reversed().joinToString("")
+        return "03000000" + "01" + prevout + le32(0) + "00" + le32(csv.toLong()) +
+            "01" + "e803000000000000" + "00" + le32(0)
+    }
+
     fun utxo(txid: String, vout: UInt = 0u, value: ULong, confirmed: Boolean = true) =
         EsploraUtxo(txid, vout, value, EsploraTxStatus(confirmed, if (confirmed) 100u else null))
 }
@@ -105,17 +116,24 @@ object SparkExitFixtures {
 class FakeSparkExitChain : SparkExitChain {
     var tip = 1_000u
     val utxosByAddress = mutableMapOf<String, List<EsploraUtxo>>()
+    var utxosError: Throwable? = null
     var confirmedTxids = setOf<String>()
+
+    /** Block heights of confirmed transactions; 900 for any other. */
+    val heights = mutableMapOf<String, UInt>()
     var outcome: SparkExitBroadcastOutcome = SparkExitBroadcastOutcome.Accepted
     val broadcasts = mutableListOf<RecoveryTransaction>()
     var onBroadcast: () -> Unit = {}
 
     override suspend fun tipHeight() = tip
 
-    override suspend fun utxos(address: String) = utxosByAddress[address].orEmpty()
+    override suspend fun utxos(address: String): List<EsploraUtxo> {
+        utxosError?.let { throw it }
+        return utxosByAddress[address].orEmpty()
+    }
 
     override suspend fun txStatus(txid: String) =
-        EsploraTxStatus(txid in confirmedTxids, if (txid in confirmedTxids) 900u else null)
+        EsploraTxStatus(txid in confirmedTxids, if (txid in confirmedTxids) heights[txid] ?: 900u else null)
 
     override suspend fun broadcast(tx: RecoveryTransaction): SparkExitBroadcastOutcome {
         onBroadcast()
@@ -140,8 +158,12 @@ class FakeSparkExitRecovering : SparkExitRecovering {
     val recoverRequests = mutableListOf<RecoverFundsRequest>()
     val checkedRecoveries = mutableListOf<RecoverFundsResponse>()
 
+    /** Errors the next prepares throw, in order, before [preparedResponse] is returned. */
+    val prepareErrors = ArrayDeque<Throwable>()
+
     override suspend fun prepare(request: PrepareRecoverFundsRequest): PrepareRecoverFundsResponse {
         prepareRequests += request
+        prepareErrors.removeFirstOrNull()?.let { throw it }
         return preparedResponse
     }
 

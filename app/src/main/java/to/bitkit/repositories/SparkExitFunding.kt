@@ -67,8 +67,11 @@ object SparkExitFundingKey {
     }
 }
 
-/** What an exit costs and returns, from a `prepareRecoverFunds` quote. */
-data class SparkExitQuote(val prepared: PrepareRecoverFundsResponse) {
+/**
+ * What an exit costs and returns, from a `prepareRecoverFunds` quote, next to Spark's balance when it was taken
+ * ([sparkBalanceSats]), so value the quote cannot exit is named rather than silently left out.
+ */
+data class SparkExitQuote(val prepared: PrepareRecoverFundsResponse, val sparkBalanceSats: ULong? = null) {
     /** The value of the leaves the exit takes on-chain. */
     val exitSats: ULong get() = prepared.recoverableValueSats
 
@@ -89,6 +92,19 @@ data class SparkExitQuote(val prepared: PrepareRecoverFundsResponse) {
     val leftBehindSats: ULong get() = prepared.skipped.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
 
     val leafIds: List<String> get() = prepared.leaves.map { it.leafId }
+
+    /**
+     * What the quote cannot exit now: the leaves it skips, and Spark's balance beyond every leaf it lists, such as a
+     * counter-swap still unclaimed. Null when nothing.
+     */
+    val unexitableSats: ULong? get() = SparkExitMath.unexitableSats(sparkBalanceSats, this)
+
+    /** Spark's balance beyond every leaf the quote lists, skipped ones included. */
+    val beyondLeavesSats: ULong?
+        get() {
+            val leaves = prepared.leaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
+            return SparkExitMath.outsideExitSats(leaves.safe() + leftBehindSats.safe(), sparkBalanceSats)
+        }
 
     /** Breez's rule: only exit when the value is more than its fees. */
     val isWorthExiting: Boolean get() = prepared.leaves.isNotEmpty() && exitSats > networkFeeSats
@@ -119,6 +135,29 @@ object SparkExitMath {
                 it.status is ExitTransactionStatus.WaitingForTimelock
         }
     }
+
+    /**
+     * The first block that can include [tx], as the SDK computes it: for each input with a BIP 68 block lock, the
+     * confirmation height of the transaction it spends plus the lock, the highest of them. [parentHeights] holds the
+     * heights read for the parents, null where unknown, which leaves the whole step unknown. A transaction that cannot
+     * be decoded counts [RecoveryTransaction.csvTimelockBlocks] from each of its `dependsOn`. Zero when nothing is
+     * locked.
+     */
+    fun spendableAtHeight(tx: RecoveryTransaction, parentHeights: Map<String, UInt?>): UInt? {
+        val locks = SparkExitTxInputs.decode(tx.txHex)
+            ?.filter { it.relativeLockBlocks > 0u }
+            ?.map { it.prevTxid to it.relativeLockBlocks }
+            ?: tx.dependsOn.map { it to (tx.csvTimelockBlocks ?: 0u) }
+        var spendable = 0u
+        for ((parent, blocks) in locks) {
+            val height = parentHeights[parent] ?: return null
+            spendable = maxOf(spendable, height + blocks)
+        }
+        return spendable
+    }
+
+    /** Nodes accept a transaction that would be valid in the next block. */
+    fun isMature(spendableAtHeight: UInt, tip: UInt): Boolean = tip + 1u >= spendableAtHeight
 
     /** The steps already in a block, for progress. */
     fun confirmedCount(recovery: RecoverFundsResponse): Int =
@@ -153,10 +192,38 @@ object SparkExitMath {
         return fundedSats.safe() + maxOf(missing, 1uL).safe()
     }
 
+    /** The skipped leaves of [quote] plus Spark's [balanceSats] beyond every leaf it lists, or null when nothing. */
+    fun unexitableSats(balanceSats: ULong?, quote: SparkExitQuote): ULong? {
+        val beyond = quote.copy(sparkBalanceSats = balanceSats).beyondLeavesSats ?: 0uL
+        return (quote.leftBehindSats.safe() + beyond.safe()).takeIf { it > 0uL }
+    }
+
     /** Spark's balance beyond the exit's leaves while it still counts them, or null. */
     fun outsideExitSats(leafTotalSats: ULong?, balanceSats: ULong?): ULong? {
         if (leafTotalSats == null || balanceSats == null || balanceSats <= leafTotalSats) return null
         return balanceSats - leafTotalSats
+    }
+
+    /**
+     * What progress shows while the exit still needs fee funding, or null when it does not. [utxos] is what the funding
+     * address holds, null when it could not be read. A payment from savings that has not confirmed, or new funding
+     * covering the shortfall that has not, is waited for; only what is still missing is asked for.
+     */
+    fun fundingState(record: SparkExitRecord, utxos: List<EsploraUtxo>?): SparkExitFundingState? {
+        val shortfall = record.fundingShortfallSats ?: return null
+        record.fundingPaymentTxid?.let { txid ->
+            val isAdopted = record.funding.any { it.txid == txid }
+            val isConfirmed = utxos?.any { it.txid == txid && it.status.confirmed } == true
+            if (!isAdopted && !isConfirmed) return SparkExitFundingState.Paid(txid)
+        }
+        val fresh = utxos?.let { newFunding(it, record) }.orEmpty()
+        val seen = fresh.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+        if (fresh.isNotEmpty() && seen >= shortfall) {
+            // Covered: waiting for it to confirm, or for the next tick to take it once it has.
+            val txid = (fresh.firstOrNull { !it.status.confirmed } ?: fresh.first()).txid
+            return SparkExitFundingState.Seen(txid)
+        }
+        return SparkExitFundingState.Ask(shortfall - seen)
     }
 
     /** Every confirmed UTXO of new funding, the largest first, once together they cover [requiredSats]. */
@@ -177,6 +244,12 @@ object SparkExitMath {
     private const val OPERATOR_WINDOW_BLOCKS = 50
 
     /**
+     * How many blocks a matured refund leads an older state's refund of the same leaf by, the hard limit while the
+     * operators are down.
+     */
+    private const val OLDER_STATE_LEAD_BLOCKS = 100
+
+    /**
      * About how long until a step can be published: zero while one already can (its parents confirmed, and ready or
      * its timelock behind [tip]) or when it is unknown, else until the next step matures.
      */
@@ -195,27 +268,48 @@ object SparkExitMath {
         return timeUntil(maturity, height, network)
     }
 
-    /** How long the operators leave a matured step to us: about 8 hours on mainnet, 25 minutes on Spark's regtest. */
+    /**
+     * How long a matured step is ours to publish: the smaller of the operators' window and an older state's lead, about
+     * 8 hours on mainnet, 25 minutes on Spark's regtest.
+     */
     fun operatorWindow(network: Network): Duration =
-        (if (network == Network.REGTEST) REGTEST_BLOCK_TIME else BLOCK_TIME) * OPERATOR_WINDOW_BLOCKS
+        (if (network == Network.REGTEST) REGTEST_BLOCK_TIME else BLOCK_TIME) *
+            minOf(OPERATOR_WINDOW_BLOCKS, OLDER_STATE_LEAD_BLOCKS)
 
     /**
      * When Bitkit warns that the background run fell behind, and the deadline it names: [untilMaturity] is how long
      * until the next step matures, zero while steps already wait to be published. The deadline is the end of the
-     * operators' window; the warning comes halfway through it, and never before two background runs could have
-     * happened, so a run that is merely late does not alarm the user.
+     * window; the warning comes halfway through it, well before the operators or an older state may publish.
      */
-    fun deadline(untilMaturity: Duration, network: Network, period: Duration): SparkExitDeadline {
+    fun deadline(untilMaturity: Duration, network: Network): SparkExitDeadline {
         val window = operatorWindow(network)
-        return SparkExitDeadline(
-            warnIn = maxOf(untilMaturity + window / 2, period * 2),
-            deadlineIn = untilMaturity + window,
-        )
+        return SparkExitDeadline(warnIn = untilMaturity + window / 2, deadlineIn = untilMaturity + window)
+    }
+
+    /**
+     * The funding key index of the next exit: past the one the last exit took ([kept]), and past the [stored] record's,
+     * which covers exits started before the index was kept.
+     */
+    fun nextFundingIndex(kept: Int?, stored: SparkExitRecord?): UInt {
+        val pastStored = stored?.funding?.maxOfOrNull { it.index + 1u } ?: 0u
+        return maxOf(kept?.toUInt() ?: 0u, pastStored)
     }
 
     /** Savings can pay the fee funding when its spendable balance covers the funding and the payment's own fee. */
     fun canFundFromSavings(spendableSats: ULong, fundingSats: ULong, paymentFeeSats: ULong): Boolean =
         fundingSats > 0uL && spendableSats >= fundingSats.safe() + paymentFeeSats.safe()
+}
+
+/** The fee funding an exit still needs, as progress shows it. */
+sealed interface SparkExitFundingState {
+    /** Savings paid it in [txid], which has not confirmed yet. */
+    data class Paid(val txid: String) : SparkExitFundingState
+
+    /** A payment covering it, [txid] among them, was seen and waits to confirm. */
+    data class Seen(val txid: String) : SparkExitFundingState
+
+    /** [sats] are still missing at the funding address. */
+    data class Ask(val sats: ULong) : SparkExitFundingState
 }
 
 /** When to warn that the exit fell behind, and when its next step's operator window closes, both from now. */

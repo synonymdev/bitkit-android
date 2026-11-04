@@ -66,9 +66,23 @@ data class SparkExitRecord(
     val earlierCpfpTxids: List<String> = emptyList(),
     /** The sweep of [leftover] to [destination] once the exit ended. */
     val leftoverSweep: LeftoverSweep? = null,
+    /**
+     * Per step txid, how many rebuilds in a row reproduced a step whose input was already spent. At two, an older
+     * state of this wallet claimed its leaf, which no rebuild can recover.
+     */
+    val spentStepStrikes: Map<String, Int> = emptyMap(),
+    /** The payment from savings that funded the exit, kept so progress never asks for it again while it confirms. */
+    val fundingPaymentTxid: String? = null,
+    /** Leaves an older state of this wallet claimed on-chain; builds leave them out. */
+    val lostLeaves: List<LostLeaf> = emptyList(),
+    /** Leaves a rebuild could not exit, such as a fee-ladder leaf whose refund cannot pay its fee; left on Spark. */
+    val leftBehindLeaves: List<LeftBehindLeaf> = emptyList(),
 ) {
     companion object {
         const val CURRENT_VERSION = 1
+
+        /** Rebuilds in a row that reproduce a spent step before its leaf counts as claimed by an older state. */
+        const val LOST_AFTER_STRIKES = 2
     }
 
     sealed interface Phase {
@@ -117,6 +131,8 @@ data class SparkExitRecord(
         val lastAttemptAt: Long,
         val lastOutcome: String,
         val isAccepted: Boolean,
+        /** Its parents confirmed but an input was already spent: the keyless pass stops sending it. */
+        val isInputSpent: Boolean = false,
     )
 
     data class Leftover(
@@ -125,6 +141,10 @@ data class SparkExitRecord(
         val valueSats: ULong,
     )
 
+    data class LostLeaf(val leafId: String, val valueSats: ULong)
+
+    data class LeftBehindLeaf(val leafId: String, val valueSats: ULong, val reason: String)
+
     /** A built sweep of the leftover, saved before it is sent; a null [txid] means it was dust and nothing went. */
     data class LeftoverSweep(
         val txid: String?,
@@ -132,15 +152,23 @@ data class SparkExitRecord(
         val valueSats: ULong,
         val isAccepted: Boolean = false,
         val rejection: String? = null,
+        val isConfirmed: Boolean = false,
     )
 
-    /** The leftover still has to be swept: not built yet, or built and neither accepted nor rejected. */
+    /** The leftover still has to be swept: not built yet, or built and neither confirmed nor rejected. */
     val isLeftoverSweepPending: Boolean
         get() {
             if (leftover.isEmpty()) return false
             val sweep = leftoverSweep ?: return true
-            return sweep.txid != null && !sweep.isAccepted && sweep.rejection == null
+            return sweep.txid != null && sweep.rejection == null && !sweep.isConfirmed
         }
+
+    /**
+     * Emergency exit opens progress, not a new exit, while this one runs and until its leftover fee funding is swept
+     * and confirmed, or kept as dust. A rejected sweep keeps it too: progress names the address the leftover is at.
+     */
+    val showsResult: Boolean
+        get() = isActive || isLeftoverSweepPending || (leftover.isNotEmpty() && leftoverSweep?.rejection != null)
 
     /** Background runs and the foreground loop keep going while the exit runs and until its leftover is swept. */
     val needsDriving: Boolean get() = isActive || isLeftoverSweepPending
@@ -152,6 +180,24 @@ data class SparkExitRecord(
         }
 
     val fundingInputs: List<CpfpInput> get() = funding.mapNotNull { it.input }
+
+    /** The funding key index of this exit; records from before exits had their own index hold 0. */
+    val fundingIndex: UInt get() = funding.firstOrNull()?.index ?: 0u
+
+    /** The leaves builds select: the quote's, less those an older state claimed and those that cannot be exited. */
+    val exitLeafIds: List<String>
+        get() = leafIds - (lostLeaves.map { it.leafId } + leftBehindLeaves.map { it.leafId }).toSet()
+
+    val lostSats: ULong get() = lostLeaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
+
+    val leftBehindLeafSats: ULong get() = leftBehindLeaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
+
+    /** Leaves [leafId] on Spark for [reason], valued from the current recovery, else 0 before the first build. */
+    fun leaveBehind(leafId: String, reason: String): SparkExitRecord =
+        copy(leftBehindLeaves = leftBehindLeaves + LeftBehindLeaf(leafId, leafValueSats(leafId), reason))
+
+    /** What the exit knows of [leafId]'s value, from its current recovery, else 0. */
+    fun leafValueSats(leafId: String): ULong = recovery?.leaves?.firstOrNull { it.leafId == leafId }?.valueSats ?: 0uL
 
     val fundedSats: ULong get() = funding.fold(0uL) { sum, f -> sum.safe() + (f.valueSats ?: 0uL).safe() }
 
@@ -165,6 +211,7 @@ data class SparkExitRecord(
 
     /** Starts a new generation from a fresh build, forgetting what was broadcast for the previous one. */
     fun adopt(built: RecoverFundsResponse, atMillis: Long): SparkExitRecord = copy(
+        spentStepStrikes = spentStepStrikes(built),
         earlierCpfpTxids = (earlierCpfpTxids + recovery?.let(SparkExitTxids::cpfpChildTxids).orEmpty()).distinct(),
         generation = generation + 1,
         recovery = built,
@@ -174,6 +221,28 @@ data class SparkExitRecord(
         lastBuildAt = atMillis,
         failedLeafCount = built.failed.size,
     )
+
+    /**
+     * The strikes after adopting [built]: a step of it that had its input spent in the generation it replaces gets one
+     * more; every other step drops out.
+     */
+    fun spentStepStrikes(built: RecoverFundsResponse): Map<String, Int> {
+        val spent = broadcastLog.filter { it.generation == generation && it.isInputSpent }.map { it.txid }.toSet()
+        return built.transactions
+            .filter { it.txid in spent }
+            .associate { it.txid to (spentStepStrikes[it.txid] ?: 0) + 1 }
+    }
+
+    /** The leaves [built] would lose again: a refund of an exiting leaf reproduced with its input spent twice. */
+    fun lostLeaves(built: RecoverFundsResponse): List<LostLeaf> {
+        val strikes = spentStepStrikes(built)
+        val values = (recovery?.leaves.orEmpty() + built.leaves).associate { it.leafId to it.valueSats }
+        return built.transactions
+            .filter { it.kind == RecoveryTxKind.REFUND && (strikes[it.txid] ?: 0) >= LOST_AFTER_STRIKES }
+            .mapNotNull { it.nodeId?.takeIf { id -> id in exitLeafIds } }
+            .distinct()
+            .map { LostLeaf(it, values[it] ?: 0uL) }
+    }
 }
 
 /**
@@ -276,6 +345,7 @@ object SparkExitJson {
                             put("lastAttemptAt", it.lastAttemptAt)
                             put("lastOutcome", it.lastOutcome)
                             put("isAccepted", it.isAccepted)
+                            if (it.isInputSpent) put("isInputSpent", true)
                         },
                     )
                 }
@@ -315,6 +385,45 @@ object SparkExitJson {
                     put("valueSats", sweep.valueSats.toLong())
                     put("isAccepted", sweep.isAccepted)
                     sweep.rejection?.let { put("rejection", it) }
+                    if (sweep.isConfirmed) put("isConfirmed", true)
+                },
+            )
+        }
+        r.fundingPaymentTxid?.let { put("fundingPaymentTxid", it) }
+        if (r.spentStepStrikes.isNotEmpty()) {
+            put(
+                "spentStepStrikes",
+                buildJsonObject { r.spentStepStrikes.forEach { (txid, strikes) -> put(txid, strikes) } },
+            )
+        }
+        if (r.leftBehindLeaves.isNotEmpty()) {
+            put(
+                "leftBehindLeaves",
+                buildJsonArray {
+                    r.leftBehindLeaves.forEach {
+                        add(
+                            buildJsonObject {
+                                put("leafId", it.leafId)
+                                put("valueSats", it.valueSats.toLong())
+                                put("reason", it.reason)
+                            },
+                        )
+                    }
+                },
+            )
+        }
+        if (r.lostLeaves.isNotEmpty()) {
+            put(
+                "lostLeaves",
+                buildJsonArray {
+                    r.lostLeaves.forEach {
+                        add(
+                            buildJsonObject {
+                                put("leafId", it.leafId)
+                                put("valueSats", it.valueSats.toLong())
+                            },
+                        )
+                    }
                 },
             )
         }
@@ -351,6 +460,7 @@ object SparkExitJson {
                 lastAttemptAt = b.millis("lastAttemptAt"),
                 lastOutcome = b.string("lastOutcome"),
                 isAccepted = b.booleanOrNull("isAccepted") ?: false,
+                isInputSpent = b.booleanOrNull("isInputSpent") ?: false,
             )
         },
         transferId = o.stringOrNull("transferId"),
@@ -373,7 +483,20 @@ object SparkExitJson {
                 valueSats = it.ulong("valueSats"),
                 isAccepted = it.booleanOrNull("isAccepted") ?: false,
                 rejection = it.stringOrNull("rejection"),
+                isConfirmed = it.booleanOrNull("isConfirmed") ?: false,
             )
+        },
+        fundingPaymentTxid = o.stringOrNull("fundingPaymentTxid"),
+        spentStepStrikes = o.objectOrNull("spentStepStrikes")
+            ?.mapValues { it.value.jsonPrimitive.content.toInt() }
+            .orEmpty(),
+        lostLeaves = o.arrayOrEmpty("lostLeaves").map {
+            val l = it.jsonObject
+            SparkExitRecord.LostLeaf(l.string("leafId"), l.ulong("valueSats"))
+        },
+        leftBehindLeaves = o.arrayOrEmpty("leftBehindLeaves").map {
+            val l = it.jsonObject
+            SparkExitRecord.LeftBehindLeaf(l.string("leafId"), l.ulong("valueSats"), l.string("reason"))
         },
     )
 

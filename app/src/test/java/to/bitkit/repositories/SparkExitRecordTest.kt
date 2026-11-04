@@ -78,13 +78,27 @@ class SparkExitRecordTest {
                 phase = phase,
                 broadcastLog = listOf(
                     SparkExitRecord.BroadcastAttempt(1, "node", 2, 1, 1_700_000_100_000L, "accepted", true),
+                    SparkExitRecord.BroadcastAttempt(
+                        1,
+                        "refund",
+                        1,
+                        0,
+                        1L,
+                        "inputs missing",
+                        false,
+                        isInputSpent = true
+                    ),
                 ),
                 claimableAtHeight = 2_100u,
                 leftover = listOf(SparkExitRecord.Leftover("change", 3u, 700uL)),
                 isRebuilding = true,
                 leafTotalSats = 90_112uL,
                 earlierCpfpTxids = listOf("child"),
-                leftoverSweep = SparkExitRecord.LeftoverSweep("sweep", "02sweep", 5_035uL, rejection = "too low"),
+                leftoverSweep = SparkExitRecord.LeftoverSweep("sweep", "02sweep", 5_035uL, true, isConfirmed = true),
+                fundingPaymentTxid = "paid",
+                spentStepStrikes = mapOf("refund" to 1),
+                lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 16_384uL)),
+                leftBehindLeaves = listOf(SparkExitRecord.LeftBehindLeaf("leaf-2", 8_192uL, "its refund cannot pay")),
             )
 
             assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
@@ -165,6 +179,8 @@ class SparkExitRecordTest {
         assertEquals("transfer-1", record.transferId)
         assertNull(record.claimableAtHeight)
         assertTrue(record.broadcastLog.single().isAccepted)
+        // Written before exits had their own funding key index: it signs with index 0.
+        assertEquals(0u, record.fundingIndex)
         assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))
     }
 
@@ -174,6 +190,9 @@ class SparkExitRecordTest {
 
         assertFalse("recovery" in json)
         assertFalse("claimableAtHeight" in json)
+        assertFalse("fundingPaymentTxid" in json)
+        assertFalse("spentStepStrikes" in json)
+        assertFalse("lostLeaves" in json)
         assertEquals(
             JsonPrimitive(20_000),
             json.getValue("phase").jsonObject.getValue("awaitingFunding").jsonObject["requiredSats"]

@@ -24,17 +24,21 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
+import to.bitkit.data.CacheStore
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.models.TransferType
 import to.bitkit.repositories.SparkExitRecord.Phase
 import to.bitkit.services.CoreService
+import to.bitkit.services.OnchainService
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
 import java.io.File
@@ -62,6 +66,8 @@ class SparkExitRepoTest : BaseUnitTest() {
     private fun createSut(
         sparkService: SparkService = mock<SparkService>(),
         httpClient: HttpClient = mock<HttpClient>(),
+        keychain: Keychain = mock<Keychain>(),
+        coreService: CoreService = mock<CoreService>(),
     ) = SparkExitRepo(
         work = work,
         bgDispatcher = testDispatcher,
@@ -70,13 +76,14 @@ class SparkExitRepoTest : BaseUnitTest() {
         lightningRepo = mock<LightningRepo>(),
         transferRepo = transferRepo,
         activityRepo = mock<ActivityRepo>(),
-        coreService = mock<CoreService>(),
-        keychain = mock<Keychain>(),
+        coreService = coreService,
+        keychain = keychain,
         httpClient = httpClient,
         clock = object : Clock {
             override fun now() = Instant.fromEpochSeconds(1_800_000_000)
         },
         sparkExitTip = SparkExitTip(),
+        cacheStore = mock<CacheStore> { on { data } doReturn flowOf(AppCacheData()) },
     )
 
     private fun transfer(id: String, type: TransferType = TransferType.SPARK_EXIT) =
@@ -219,5 +226,43 @@ class SparkExitRepoTest : BaseUnitTest() {
         verify(sparkRepo, never()).start(any())
         verify(work, atLeastOnce()).schedulePeriodic()
         verify(work, never()).cancelAll()
+    }
+
+    @Test
+    fun `a restarted exit signs with the funding key of its own record`() = test {
+        val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(
+            SparkExitFixtures.record(Phase.Done).copy(
+                destination = "bcrt1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqc8gma6",
+                funding = listOf(SparkExitRecord.Funding(2u, address, "02ab")),
+                leftover = listOf(SparkExitRecord.Leftover("f0".repeat(32), 0u, 5_035uL)),
+            ),
+        )
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(true))
+        val utxo = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":5035,"status":{"confirmed":true}}]"""
+        val mempool = HttpClient(
+            MockEngine { request ->
+                val url = request.url.toString()
+                when {
+                    url.endsWith("/address/$address/utxo") -> respond(utxo)
+                    url.endsWith("/blocks/tip/height") -> respond("1000")
+                    else -> throw IOException("unreachable '$url'")
+                }
+            },
+        )
+        val keychain = mock<Keychain> { on { loadString(any()) } doReturn "mnemonic" }
+        val onchain = mock<OnchainService>()
+        whenever(onchain.deriveBitcoinAddress(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenThrow(IllegalStateException("stub"))
+        val coreService = mock<CoreService> { on { this.onchain } doReturn onchain }
+        val spark = mock<SparkService> { on { networkName } doReturn "regtest" }
+
+        createSut(spark, mempool, keychain, coreService).runInBackground().getOrThrow()
+
+        verify(
+            onchain
+        ).deriveBitcoinAddress(any(), eq(SparkExitFundingKey.path(2, Env.network)), anyOrNull(), anyOrNull())
     }
 }

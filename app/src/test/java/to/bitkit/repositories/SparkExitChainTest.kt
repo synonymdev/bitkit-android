@@ -157,7 +157,7 @@ class SparkExitChainTest : BaseUnitTest() {
             classifier.single(400, """sendrawtransaction RPC error: {"code":-27}"""),
         )
         assertEquals(
-            SparkExitBroadcastOutcome.RetryLater("""sendrawtransaction RPC error: {"code":-25}"""),
+            SparkExitBroadcastOutcome.InputsMissing("""sendrawtransaction RPC error: {"code":-25}"""),
             classifier.single(400, """sendrawtransaction RPC error: {"code":-25}"""),
         )
         assertEquals(SparkExitBroadcastOutcome.RetryLater("HTTP 503"), classifier.single(503, ""))
@@ -167,14 +167,24 @@ class SparkExitChainTest : BaseUnitTest() {
 
         val missing = failedPackage + """{"w1":{"txid":"a","error":"bad-txns-inputs-missingorspent"},""" +
             """"w2":{"txid":"b","error":"bad-txns-inputs-missingorspent"}},"replaced-transactions":[]}"""
-        assertIs<SparkExitBroadcastOutcome.RetryLater>(classifier.pkg(200, missing))
+        assertIs<SparkExitBroadcastOutcome.InputsMissing>(classifier.pkg(200, missing))
         val known = failedPackage + """{"w1":{"txid":"a","error":"txn-already-in-mempool"},""" +
             """"w2":{"txid":"b"}}}"""
         assertEquals(SparkExitBroadcastOutcome.Accepted, classifier.pkg(200, known))
         val nonFinal = failedPackage + """{"w1":{"txid":"a","error":"non-BIP68-final"}}}"""
-        assertIs<SparkExitBroadcastOutcome.RetryLater>(classifier.pkg(200, nonFinal))
+        assertIs<SparkExitBroadcastOutcome.NotMature>(classifier.pkg(200, nonFinal))
+        // A child of an immature parent can fail with any error; the parent's timelock decides.
+        val nonFinalParent = failedPackage + """{"w1":{"txid":"a","error":"non-BIP68-final"},""" +
+            """"w2":{"txid":"b","error":"min relay fee not met"}}}"""
+        assertIs<SparkExitBroadcastOutcome.NotMature>(classifier.pkg(200, nonFinalParent))
         val escaped = """{"error":"submitpackage RPC error: {\"code\":-25}"}"""
-        assertEquals(SparkExitBroadcastOutcome.RetryLater(escaped), classifier.pkg(400, escaped))
+        assertEquals(SparkExitBroadcastOutcome.InputsMissing(escaped), classifier.pkg(400, escaped))
+        // Missing inputs on the CPFP child alone say nothing about the step.
+        val childMissing = failedPackage + """{"w1":{"txid":"parent"},""" +
+            """"w2":{"txid":"child","error":"bad-txns-inputs-missingorspent"}}}"""
+        assertIs<SparkExitBroadcastOutcome.RetryLater>(classifier.pkg(200, childMissing, parentTxid = "parent"))
+        val parentMissing = failedPackage + """{"w1":{"txid":"parent","error":"bad-txns-inputs-missingorspent"}}}"""
+        assertIs<SparkExitBroadcastOutcome.InputsMissing>(classifier.pkg(200, parentMissing, parentTxid = "parent"))
         val lowFee = failedPackage + """{"w1":{"txid":"a","error":"min relay fee not met"}}}"""
         assertIs<SparkExitBroadcastOutcome.Rejected>(classifier.pkg(200, lowFee))
     }

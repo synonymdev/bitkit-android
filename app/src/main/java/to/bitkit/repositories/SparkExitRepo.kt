@@ -19,9 +19,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.async.appScope
+import to.bitkit.data.CacheStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -62,6 +64,7 @@ class SparkExitRepo @Inject constructor(
     private val httpClient: HttpClient,
     private val clock: Clock,
     private val sparkExitTip: SparkExitTip,
+    private val cacheStore: CacheStore,
 ) {
     companion object {
         private const val TAG = "SparkExitRepo"
@@ -192,7 +195,8 @@ class SparkExitRepo @Inject constructor(
         val driver = SparkExitDriver(
             chain = chain,
             recovering = recovering,
-            makeSigner = ::signer,
+            // The record's own funding key, also for exits started before each exit had an index of its own.
+            makeSigner = { signer(current.fundingIndex) },
             save = store::save,
             nowMillis = clock::nowMs,
         )
@@ -255,11 +259,21 @@ class SparkExitRepo @Inject constructor(
     private suspend fun refreshFundingSeen(chain: SparkExitChain, record: SparkExitRecord) {
         val address = record.funding.firstOrNull()?.address ?: return
         _state.update { it.copy(fundingAddress = address) }
-        if (record.fundingShortfallSats == null) return
-        val utxos = runSuspendCatching { chain.utxos(address) }.getOrNull() ?: return
+        if (record.fundingShortfallSats == null) {
+            _state.update { it.copy(fundingState = null) }
+            return
+        }
+        val utxos = runSuspendCatching { chain.utxos(address) }.getOrNull()
         // Only new funding counts as seen; adopted inputs and their CPFP change are already part of the exit.
-        val seen = SparkExitMath.newFunding(utxos, record).fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
-        _state.update { it.copy(fundingSeenSats = seen) }
+        val seen = utxos?.let { SparkExitMath.newFunding(it, record) }?.fold(0uL) { sum, utxo ->
+            sum.safe() + utxo.value.safe()
+        }
+        _state.update {
+            it.copy(
+                fundingSeenSats = seen ?: it.fundingSeenSats,
+                fundingState = SparkExitMath.fundingState(record, utxos),
+            )
+        }
     }
 
     /**
@@ -269,13 +283,15 @@ class SparkExitRepo @Inject constructor(
      * funding is notified once, at once.
      */
     private fun updateAlerts(record: SparkExitRecord, previous: SparkExitRecord, isOnTrack: Boolean) {
+        // Once for each leaf found claimed by an older state.
+        if (record.lostLeaves.size > previous.lostLeaves.size) work.notify(SparkExitAlert.Lost)
         when (record.phase) {
             SparkExitRecord.Phase.Running -> {
                 if (!isOnTrack) return
                 val tip = _state.value.tipHeight
                 val untilMaturity = SparkExitMath.untilNextMaturity(record.recovery, tip, Env.network)
                 work.armDeadline(
-                    SparkExitMath.deadline(untilMaturity, Env.network, SparkExitWork.PERIOD),
+                    SparkExitMath.deadline(untilMaturity, Env.network),
                     clock.nowMs(),
                 )
             }
@@ -310,10 +326,15 @@ class SparkExitRepo @Inject constructor(
                     selection = ExitLeafSelection.All,
                 ),
             )
-            val quote = SparkExitQuote(prepared)
-            val fundingAddress = fundingKey().address
+            val quote = SparkExitQuote(prepared, sparkRepo.state.value.balanceSats)
+            // Chosen here, so the funding screen, the fee estimate and the record all use one address.
+            val fundingIndex = nextFundingIndex()
+            val fundingAddress = fundingKey(fundingIndex).address
             _state.update {
-                it.copy(pending = SparkExitPending(quote, destination, feeRate), fundingAddress = fundingAddress)
+                it.copy(
+                    pending = SparkExitPending(quote, destination, feeRate, fundingIndex),
+                    fundingAddress = fundingAddress,
+                )
             }
             quote
         }.onFailure {
@@ -356,7 +377,7 @@ class SparkExitRepo @Inject constructor(
             if (_state.value.isExiting) throw SparkExitError("A Spark exit is already running")
             val pending = requireNotNull(_state.value.pending) { "No Spark exit quote" }
             val network = requireNotNull(sparkService.networkName) { "Spark is not available on this network" }
-            val key = fundingKey()
+            val key = fundingKey(pending.fundingIndex)
             val quote = pending.quote
             var record = SparkExitRecord(
                 network = network,
@@ -365,13 +386,19 @@ class SparkExitRepo @Inject constructor(
                 feeRateSatPerVbyte = pending.feeRate,
                 destination = pending.destination,
                 leafIds = quote.leafIds,
-                funding = listOf(SparkExitRecord.Funding(index = 0u, address = key.address, pubkey = key.pubkey)),
+                funding = listOf(
+                    SparkExitRecord.Funding(index = pending.fundingIndex, address = key.address, pubkey = key.pubkey),
+                ),
                 expectedSats = quote.incomingSats,
                 skippedLeafCount = quote.prepared.skipped.size,
                 leafTotalSats = quote.prepared.leaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() },
             )
             // Saved before the transfer exists, so a failed save never leaves a transfer counted with no exit behind.
             store.save(record)
+            cacheStore.update {
+                val next = it.sparkExitNextFundingIndexes + (fundingIndexKey to pending.fundingIndex.toInt() + 1)
+                it.copy(sparkExitNextFundingIndexes = next)
+            }
             val transferId = transferRepo.createTransfer(
                 TransferType.SPARK_EXIT,
                 quote.incomingSats.toLong()
@@ -409,6 +436,15 @@ class SparkExitRepo @Inject constructor(
                 "Spark exit funding was not accepted: '$outcome'"
             )
         }
+        // After the tick in flight, so its save cannot drop the txid; progress then waits for it instead of asking.
+        tickMutex.withLock {
+            val record = _state.value.record ?: return@withLock
+            val paid = record.copy(fundingPaymentTxid = outcome.txid)
+            store.save(paid)
+            _state.update {
+                it.copy(record = paid, fundingState = SparkExitMath.fundingState(paid, utxos = null))
+            }
+        }
         runSuspendCatching { lightningRepo.completeAcceptedOrdinaryFollowup(outcome.txid) }
             .onFailure { Logger.warn("Failed to finish the Spark exit funding locally", it, context = TAG) }
         Logger.info("Funded the Spark exit with '$sats' sats in '${outcome.txid}'", context = TAG)
@@ -445,17 +481,25 @@ class SparkExitRepo @Inject constructor(
 
     // region keys
 
-    /** Every funding UTXO goes to index 0: the SDK's single-key signer signs every funding input with one key. */
-    private suspend fun fundingKey(): SparkExitFundingKey.Derived {
+    private val fundingIndexKey get() = "${Env.network.name.lowercase()}/wallet$walletIndex"
+
+    /** A funding key index no exit of this wallet used. */
+    private suspend fun nextFundingIndex(): UInt = SparkExitMath.nextFundingIndex(
+        kept = cacheStore.data.first().sparkExitNextFundingIndexes[fundingIndexKey],
+        stored = runSuspendCatching { store.load() }.getOrNull(),
+    )
+
+    /** Every funding UTXO of one exit goes to its index: the SDK's single-key signer signs all inputs with one key. */
+    private suspend fun fundingKey(index: UInt): SparkExitFundingKey.Derived {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-        val path = SparkExitFundingKey.path(index = 0, network = Env.network)
+        val path = SparkExitFundingKey.path(index = index.toInt(), network = Env.network)
         val address = coreService.onchain.deriveBitcoinAddress(mnemonic, path, Env.network, passphrase)
         val wif = coreService.onchain.derivePrivateKey(mnemonic, path, Env.network, passphrase)
         return SparkExitFundingKey.Derived(address.address, address.publicKey, SparkExitFundingKey.secretKey(wif))
     }
 
-    private suspend fun signer(): CpfpSigner = singleKeyCpfpSigner(fundingKey().secretKey)
+    private suspend fun signer(index: UInt): CpfpSigner = singleKeyCpfpSigner(fundingKey(index).secretKey)
 
     // endregion
 }
@@ -467,6 +511,8 @@ data class SparkExitPending(
     val quote: SparkExitQuote,
     val destination: String,
     val feeRate: ULong,
+    /** The funding key index this exit takes. */
+    val fundingIndex: UInt,
 )
 
 data class SparkExitSavingsFunding(
@@ -480,6 +526,8 @@ data class SparkExitState(
     val tipHeight: UInt? = null,
     /** Confirmed or not, what reached the funding address. */
     val fundingSeenSats: ULong = 0uL,
+    /** What progress shows while the exit needs fee funding. */
+    val fundingState: SparkExitFundingState? = null,
     val fundingAddress: String? = null,
     val lastError: String? = null,
     /** Spark's balance as last seen while the SDK drove the exit. */
@@ -488,6 +536,9 @@ data class SparkExitState(
     val isSettling: Boolean = false,
 ) {
     val isExiting: Boolean get() = record?.isActive == true
+
+    /** Emergency exit opens progress rather than a new exit. */
+    val showsResult: Boolean get() = record?.showsResult == true
 
     /**
      * Spark's balance beyond the quote's leaves while the exit runs: value outside the exit, which stays on Spark. A

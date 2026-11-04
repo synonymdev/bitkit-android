@@ -52,6 +52,10 @@ class SparkExitDriver(
 
         /** The least time between two builds, so a divergence that persists does not rebuild every tick. */
         val REBUILD_INTERVAL = 10.minutes
+
+        const val LOST_REASON = "Claimed by an older state"
+
+        const val NO_LEAF_REASON = "No leaf can be exited"
     }
 
     suspend fun tick(start: SparkExitRecord): SparkExitRecord {
@@ -95,20 +99,17 @@ class SparkExitDriver(
         val first = record.funding.firstOrNull() ?: return null
         val candidates = SparkExitMath.newFunding(chain.utxos(first.address), record)
         val utxos = SparkExitMath.fundingTopUp(candidates, requiredSats) ?: return null
-        val adopted = utxos.map { first.copy(index = 0u, txid = it.txid, vout = it.vout, valueSats = it.value) }
+        val adopted = utxos.map { first.copy(txid = it.txid, vout = it.vout, valueSats = it.value) }
         val funding = if (record.funding.size == 1 && first.txid == null) adopted else record.funding + adopted
         return record.copy(funding = funding)
     }
 
-    private suspend fun build(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
-        val prepared = sdk.prepare(
-            PrepareRecoverFundsRequest(
-                feeRateSatPerVbyte = record.feeRateSatPerVbyte,
-                fundingKind = CpfpFundingKind.P2wpkh,
-                destination = record.destination,
-                selection = ExitLeafSelection.Specific(record.leafIds),
-            ),
-        )
+    private suspend fun build(start: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
+        val (record, prepared) = prepare(start, sdk)
+        if (prepared == null) {
+            val failed = record.copy(phase = SparkExitRecord.Phase.Failed(NO_LEAF_REASON), isRebuilding = false)
+            return end(failed, record)
+        }
         if (prepared.leaves.isEmpty()) {
             // A leaf the chain could not be read for comes back on a later tick; finished leaves are not listed.
             if (prepared.skipped.any { it.reason == SkippedLeafReason.Unverified }) return record
@@ -121,7 +122,7 @@ class SparkExitDriver(
                 },
             )
             // Fee funding this exit no longer spends, such as a payment adopted just before, goes back to savings.
-            return ended.copy(leftover = leftover(ended))
+            return end(ended, record)
         }
         val needsFunding = prepared.funding != null
         val built = runSuspendCatching {
@@ -130,6 +131,11 @@ class SparkExitDriver(
                 if (needsFunding) makeSigner() else null,
             )
         }.getOrElse {
+            // A leaf the SDK refuses to build is left behind, and the rest rebuilt on the next tick.
+            SparkExitUnexitable.parse(it)?.takeIf { refusal -> refusal.leafId in record.exitLeafIds }?.let { refusal ->
+                Logger.warn("Spark exit leaf '${refusal.leafId}' cannot be built: '${refusal.reason}'", context = TAG)
+                return record.leaveBehind(refusal.leafId, refusal.reason).copy(isRebuilding = true, lastBuildAt = null)
+            }
             if (it !is SdkException.InsufficientCpfpFunds) throw it
             // The SDK names the total its funding inputs must hold (CPFP cost plus change dust), not what is missing.
             // After a Redo the inputs are partly spent, so what the address still holds decides the shortfall.
@@ -143,9 +149,10 @@ class SparkExitDriver(
         if (built.transactions.isEmpty()) {
             // Cooperative leaves the operators could not co-sign now are tried again on the next tick.
             if (built.failed.isNotEmpty()) return record.copy(failedLeafCount = built.failed.size)
-            val failed = record.copy(phase = SparkExitRecord.Phase.Failed("Nothing to recover"))
-            return failed.copy(leftover = leftover(failed))
+            return end(record.copy(phase = SparkExitRecord.Phase.Failed("Nothing to recover")), record)
         }
+        val lost = record.lostLeaves(built)
+        if (lost.isNotEmpty()) return loseLeaves(record, lost)
         val adopted = record.adopt(built, nowMillis())
         // Saved before any of it is broadcast, so a crash never leaves broadcast transactions without their record.
         save(adopted)
@@ -156,6 +163,56 @@ class SparkExitDriver(
         return broadcastReady(adopted)
     }
 
+    private fun prepareRequest(record: SparkExitRecord, selection: ExitLeafSelection) = PrepareRecoverFundsRequest(
+        feeRateSatPerVbyte = record.feeRateSatPerVbyte,
+        fundingKind = CpfpFundingKind.P2wpkh,
+        destination = record.destination,
+        selection = selection,
+    )
+
+    /**
+     * Prepares the exit's leaves. A leaf the SDK refuses to exit, such as a fee-ladder leaf whose refund cannot pay its
+     * own fee at this rate, fails the whole prepare: it is dropped and the rest prepared again. When the refused leaf
+     * cannot be told, the leaves still recoverable are prepared instead, and the exit's leaves left out are dropped.
+     * The prepared response is null once no leaves remain.
+     */
+    private suspend fun prepare(
+        start: SparkExitRecord,
+        sdk: SparkExitRecovering,
+    ): Pair<SparkExitRecord, PrepareRecoverFundsResponse?> {
+        var record = start
+        while (true) {
+            val ids = record.exitLeafIds
+            if (ids.isEmpty()) return record to null
+            val result = runSuspendCatching { sdk.prepare(prepareRequest(record, ExitLeafSelection.Specific(ids))) }
+            result.getOrNull()?.let { return record to it }
+            val error = requireNotNull(result.exceptionOrNull())
+            val refusal = SparkExitUnexitable.parse(error) ?: throw error
+            Logger.warn("Spark exit leaf '${refusal.leafId}' cannot be exited: '${refusal.reason}'", context = TAG)
+            if (refusal.leafId in ids) {
+                record = record.leaveBehind(refusal.leafId, refusal.reason)
+                continue
+            }
+            val prepared = sdk.prepare(prepareRequest(record, ExitLeafSelection.RecoverableOnly))
+            val listed = prepared.leaves.map { it.leafId }.toSet()
+            ids.filter { it !in listed }.forEach {
+                record = record.leaveBehind(it, SparkExitUnexitable.NOT_RECOVERABLE)
+            }
+            return record to prepared
+        }
+    }
+
+    /**
+     * Leaves the rebuild unadopted and drops [lost] from the exit: an older state of this wallet claimed them, and
+     * every rebuild would reproduce the same spent refund. The next tick rebuilds at once without them.
+     */
+    private suspend fun loseLeaves(record: SparkExitRecord, lost: List<SparkExitRecord.LostLeaf>): SparkExitRecord {
+        Logger.warn("Spark exit leaves '${lost.map { it.leafId }}' were claimed by an older state", context = TAG)
+        val updated = record.copy(lostLeaves = record.lostLeaves + lost, isRebuilding = true, lastBuildAt = null)
+        if (updated.exitLeafIds.isNotEmpty()) return updated
+        return end(updated.copy(phase = SparkExitRecord.Phase.Failed(LOST_REASON), isRebuilding = false), updated)
+    }
+
     private suspend fun check(record: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
         val stored = record.recovery ?: return record.copy(phase = SparkExitRecord.Phase.AwaitingFunding(0uL))
         val checked = sdk.check(withConfirmations(stored))
@@ -163,7 +220,7 @@ class SparkExitDriver(
         val updated = record.copy(recovery = checked.recovery)
         return when (checked.verdict) {
             RecoveryVerdict.Valid -> broadcastReady(updated)
-            RecoveryVerdict.Done -> updated.copy(phase = SparkExitRecord.Phase.Done, leftover = leftover(updated))
+            RecoveryVerdict.Done -> end(updated.copy(phase = SparkExitRecord.Phase.Done), updated)
             is RecoveryVerdict.Redo -> {
                 Logger.warn(
                     "Rebuilding Spark exit diverged on-chain as generation '${record.generation + 1}'",
@@ -204,7 +261,14 @@ class SparkExitDriver(
      */
     private suspend fun sweepLeftover(record: SparkExitRecord): SparkExitRecord {
         val built = record.leftoverSweep
-        if (built?.txHex != null) return sendSweep(record, built, built.txHex)
+        if (built?.txHex != null) {
+            if (built.isAccepted) {
+                val status = runSuspendCatching { chain.txStatus(requireNotNull(built.txid)) }.getOrNull()
+                if (status?.confirmed == true) return record.copy(leftoverSweep = built.copy(isConfirmed = true))
+            }
+            // Sent again until it confirms; a node that already has it accepts it again.
+            return sendSweep(record, built, built.txHex)
+        }
         val address = record.funding.firstOrNull()?.address ?: return record
         val utxos = runSuspendCatching { chain.utxos(address) }.getOrNull() ?: return record
         if (utxos.isEmpty()) return record.copy(leftover = emptyList())
@@ -241,7 +305,10 @@ class SparkExitDriver(
         return when (outcome) {
             SparkExitBroadcastOutcome.Accepted -> record.copy(leftoverSweep = sweep.copy(isAccepted = true))
             is SparkExitBroadcastOutcome.Rejected -> record.copy(leftoverSweep = sweep.copy(rejection = outcome.reason))
-            is SparkExitBroadcastOutcome.RetryLater -> record
+            is SparkExitBroadcastOutcome.RetryLater,
+            is SparkExitBroadcastOutcome.NotMature,
+            is SparkExitBroadcastOutcome.InputsMissing,
+            -> record
         }
     }
 
@@ -250,10 +317,20 @@ class SparkExitDriver(
         return nowMillis() - last >= REBUILD_INTERVAL.inWholeMilliseconds
     }
 
-    private suspend fun leftover(record: SparkExitRecord): List<SparkExitRecord.Leftover> {
+    /** What is left at the funding address, null when it could not be read. */
+    private suspend fun leftover(record: SparkExitRecord): List<SparkExitRecord.Leftover>? {
         val address = record.funding.firstOrNull()?.address ?: return emptyList()
-        return runSuspendCatching { chain.utxos(address) }.getOrDefault(emptyList())
-            .map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) }
+        return runSuspendCatching { chain.utxos(address) }.getOrNull()
+            ?.map { SparkExitRecord.Leftover(it.txid, it.vout, it.value) }
+    }
+
+    /**
+     * [ended] with the leftover at its funding address, or [unchanged] while the address cannot be read: an exit that
+     * ended without its leftover read would never sweep it.
+     */
+    private suspend fun end(ended: SparkExitRecord, unchanged: SparkExitRecord): SparkExitRecord {
+        val leftover = leftover(ended) ?: return unchanged
+        return ended.copy(leftover = leftover)
     }
 
     private suspend fun broadcastReady(record: SparkExitRecord): SparkExitRecord {
@@ -263,36 +340,63 @@ class SparkExitDriver(
         recovery.transactions
             .filter { it.status == ExitTransactionStatus.Ready || it.status == ExitTransactionStatus.Unverified }
             .filter { isDue(it.txid, current) }
-            .forEach { current = broadcastAndSave(it, current) }
+            // A ready step's parents are confirmed, as the SDK saw them.
+            .forEach {
+                current = broadcastAndSave(it, current, parentsConfirmed = it.status == ExitTransactionStatus.Ready)
+            }
         return current
     }
 
     /**
-     * Without the SDK: each unconfirmed transaction whose parents are confirmed on the chain host and whose timelock
-     * has matured. A stale one is refused by nodes as a conflict, and only the current generation is stored.
+     * Without the SDK: each unconfirmed transaction whose parents are confirmed on the chain host and whose relative
+     * timelock has matured, by the SDK's own rule. A stale one is refused by nodes as a conflict, and only the current
+     * generation is stored. A step whose input someone else spent is not sent again; the next SDK check rebuilds.
      */
     private suspend fun broadcastWithoutSdk(record: SparkExitRecord): SparkExitRecord {
         val recovery = record.recovery ?: return record
         val tip = chain.tipHeight()
-        val confirmed = mutableMapOf<String, Boolean>()
-        suspend fun isConfirmed(txid: String): Boolean = confirmed.getOrPut(txid) {
-            runSuspendCatching { chain.txStatus(txid).confirmed }.getOrDefault(false)
+        val statuses = recovery.transactions
+            .mapNotNull { tx -> (tx.status as? ExitTransactionStatus.Confirmed)?.let { tx.txid to it.blockHeight } }
+            .associate { (txid, height) -> txid to EsploraTxStatus(true, height) }
+            .toMutableMap<String, EsploraTxStatus?>()
+        suspend fun status(txid: String): EsploraTxStatus? {
+            if (txid !in statuses) statuses[txid] = runSuspendCatching { chain.txStatus(txid) }.getOrNull()
+            return statuses[txid]
         }
         var current = record
         val transactions = recovery.transactions.map { tx ->
             if (tx.status is ExitTransactionStatus.Confirmed) return@map tx
-            val status = runSuspendCatching { chain.txStatus(tx.txid) }.getOrNull()
-            if (status?.confirmed == true) {
-                confirmed[tx.txid] = true
-                return@map tx.copy(status = ExitTransactionStatus.Confirmed(status.blockHeight))
+            val own = status(tx.txid)
+            if (own?.confirmed == true) return@map tx.copy(status = ExitTransactionStatus.Confirmed(own.blockHeight))
+            if (!tx.dependsOn.all { status(it)?.confirmed == true }) return@map tx
+            // A height the SDK already worked out still holds.
+            val known = (tx.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight
+            if (known != null && !SparkExitMath.isMature(known, tip)) return@map tx
+            if (tx.csvTimelockBlocks != null) {
+                val parents = SparkExitTxInputs.decode(tx.txHex)?.filter { it.relativeLockBlocks > 0u }
+                    ?.map { it.prevTxid } ?: tx.dependsOn
+                val heights = parents.associateWith { parentHeight(it, status(it)) }
+                // A parent whose height is unknown leaves maturity unknown: wait.
+                val spendable = SparkExitMath.spendableAtHeight(tx, heights) ?: return@map tx
+                if (!SparkExitMath.isMature(spendable, tip)) {
+                    return@map tx.copy(status = ExitTransactionStatus.WaitingForTimelock(spendable))
+                }
             }
-            val height = (tx.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight
-            if (height != null && height > tip) return@map tx
-            if (tx.dependsOn.all { isConfirmed(it) } && isDue(tx.txid, current)) current = broadcastAndSave(tx, current)
+            if (isInputSpent(tx.txid, current)) return@map tx
+            if (isDue(tx.txid, current)) current = broadcastAndSave(tx, current, parentsConfirmed = true)
             tx
         }
         return current.copy(recovery = recovery.copy(transactions = transactions))
     }
+
+    /** A confirmed parent's height, read from the chain host when the stored confirmation carries none. */
+    private suspend fun parentHeight(txid: String, known: EsploraTxStatus?): UInt? {
+        if (known?.confirmed != true) return null
+        return known.blockHeight ?: runSuspendCatching { chain.txStatus(txid) }.getOrNull()?.blockHeight
+    }
+
+    private fun isInputSpent(txid: String, record: SparkExitRecord): Boolean =
+        record.broadcastLog.any { it.generation == record.generation && it.txid == txid && it.isInputSpent }
 
     private fun isDue(txid: String, record: SparkExitRecord): Boolean {
         val last = record.broadcastLog
@@ -301,11 +405,23 @@ class SparkExitDriver(
         return !last.isAccepted || nowMillis() - last.lastAttemptAt >= REBROADCAST_INTERVAL.inWholeMilliseconds
     }
 
-    private suspend fun broadcastAndSave(tx: RecoveryTransaction, record: SparkExitRecord): SparkExitRecord =
-        broadcast(tx, record).also(save)
+    private suspend fun broadcastAndSave(
+        tx: RecoveryTransaction,
+        record: SparkExitRecord,
+        parentsConfirmed: Boolean,
+    ): SparkExitRecord = broadcast(tx, record, parentsConfirmed).also(save)
 
-    private suspend fun broadcast(tx: RecoveryTransaction, record: SparkExitRecord): SparkExitRecord {
+    /**
+     * Sends [tx] and logs the outcome. With every parent confirmed, missing inputs mean someone else spent one first:
+     * the operators, which a rebuild recovers, or an older state of this wallet, which rebuilds keep reproducing.
+     */
+    private suspend fun broadcast(
+        tx: RecoveryTransaction,
+        record: SparkExitRecord,
+        parentsConfirmed: Boolean,
+    ): SparkExitRecord {
         val outcome = chain.broadcast(tx)
+        val isInputSpent = parentsConfirmed && outcome is SparkExitBroadcastOutcome.InputsMissing
         Logger.info("Broadcast Spark exit '${tx.kind}' '${tx.txid}': '${outcome.summary}'", context = TAG)
         val isAccepted = outcome == SparkExitBroadcastOutcome.Accepted
         val rejection = if (outcome is SparkExitBroadcastOutcome.Rejected) 1 else 0
@@ -316,6 +432,7 @@ class SparkExitDriver(
             lastAttemptAt = nowMillis(),
             lastOutcome = outcome.summary,
             isAccepted = isAccepted,
+            isInputSpent = existing.isInputSpent || isInputSpent,
         ) ?: SparkExitRecord.BroadcastAttempt(
             generation = record.generation,
             txid = tx.txid,
@@ -324,6 +441,7 @@ class SparkExitDriver(
             lastAttemptAt = nowMillis(),
             lastOutcome = outcome.summary,
             isAccepted = isAccepted,
+            isInputSpent = isInputSpent,
         )
         val log = if (existing == null) {
             record.broadcastLog + entry
@@ -346,4 +464,70 @@ object SparkExitTxids {
         recovery.transactions.mapNotNull { tx ->
             tx.cpfpTxHex?.let { runCatching { SignedTransactionId.fromHex(it) }.getOrNull() }
         }
+}
+
+/** A leaf the SDK refused to exit, read from its untyped `SparkError`: `Leaf {id} cannot be exited: {reason}`. */
+object SparkExitUnexitable {
+    const val NOT_RECOVERABLE = "Not recoverable at this fee rate"
+
+    private val LEAF = Regex("""Leaf (\S+?) cannot be exited""")
+    private const val MARKER = "cannot be exited"
+
+    /** [leafId] is empty when the message names no leaf that can be read. */
+    data class Refusal(val leafId: String, val reason: String)
+
+    /** The refusal [error] reports, or null for any other error. */
+    fun parse(error: Throwable): Refusal? {
+        if (error !is SdkException.SparkException) return null
+        val message = error.v1
+        if (MARKER !in message) return null
+        return Refusal(LEAF.find(message)?.groupValues?.get(1).orEmpty(), message)
+    }
+}
+
+/** The inputs of a raw transaction, for relative timelocks: what each spends and its BIP 68 block lock. */
+object SparkExitTxInputs {
+    private const val DISABLE_FLAG = 1L shl 31
+    private const val TYPE_FLAG = 1L shl 22
+    private const val VALUE_MASK = 0xffffL
+
+    data class Input(val prevTxid: String, val vout: UInt, val sequence: Long) {
+        /** The relative lock in blocks, 0 when the input has none or a time-based one. */
+        val relativeLockBlocks: UInt
+            get() = if (sequence and DISABLE_FLAG != 0L || sequence and TYPE_FLAG != 0L) {
+                0u
+            } else {
+                (sequence and VALUE_MASK).toUInt()
+            }
+    }
+
+    /** The inputs, with no relative lock before version 2 (BIP 68), or null when [hex] is not a transaction. */
+    fun decode(hex: String): List<Input>? = runCatching {
+        val bytes = hex.hexToByteArray()
+        var offset = 0
+        fun take(length: Int): ByteArray {
+            require(length >= 0 && offset + length <= bytes.size)
+            return bytes.copyOfRange(offset, offset + length).also { offset += length }
+        }
+        fun le(length: Int): Long = take(
+            length
+        ).foldIndexed(0L) { i, sum, b -> sum or ((b.toLong() and 0xff) shl (8 * i)) }
+        fun compactSize(): Int = when (val prefix = le(1).toInt()) {
+            0xfd -> le(2).toInt()
+            0xfe -> le(4).toInt()
+            0xff -> error("Too many items")
+            else -> prefix
+        }
+        val version = le(4)
+        if (bytes[offset] == 0.toByte()) take(2)
+        val count = compactSize()
+        require(count > 0)
+        List(count) {
+            val prevTxid = take(32).reversedArray().toHexString()
+            val vout = le(4).toUInt()
+            take(compactSize())
+            val sequence = le(4)
+            Input(prevTxid, vout, if (version >= 2) sequence else DISABLE_FLAG)
+        }
+    }.getOrNull()
 }
