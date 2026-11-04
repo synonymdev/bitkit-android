@@ -139,6 +139,24 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `a step that can be published now puts the deadline in the current window`() {
+        val far = SparkExitFixtures.tx("far", status = ExitTransactionStatus.WaitingForTimelock(1_100u))
+        val waiting = SparkExitFixtures.recovery(listOf(far))
+        assertEquals(100.minutes * 10, SparkExitMath.untilNextMaturity(waiting, tip = 1_000u, Network.BITCOIN))
+
+        val ready = SparkExitFixtures.recovery(listOf(far, SparkExitFixtures.tx("n1")))
+        assertEquals(Duration.ZERO, SparkExitMath.untilNextMaturity(ready, tip = 1_000u, Network.BITCOIN))
+
+        val matured = SparkExitFixtures.tx("r1", status = ExitTransactionStatus.WaitingForTimelock(990u))
+        val behindTip = SparkExitFixtures.recovery(listOf(far, matured))
+        assertEquals(Duration.ZERO, SparkExitMath.untilNextMaturity(behindTip, tip = 1_000u, Network.BITCOIN))
+
+        val blocked = SparkExitFixtures.tx("n2", dependsOn = listOf("n1"))
+        val waitingForParent = SparkExitFixtures.recovery(listOf(far, blocked))
+        assertEquals(100.minutes * 10, SparkExitMath.untilNextMaturity(waitingForParent, tip = 1_000u, Network.BITCOIN))
+    }
+
+    @Test
     fun `funding key derives on its own account`() {
         assertEquals("m/84'/1'/7797'/0/0", SparkExitFundingKey.path(0, Network.REGTEST))
         assertEquals("m/84'/0'/7797'/0/3", SparkExitFundingKey.path(3, Network.BITCOIN))

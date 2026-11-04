@@ -137,11 +137,23 @@ object SparkExitMath {
     /** About how many blocks after a step matures the operators may publish their own version of it. */
     private const val OPERATOR_WINDOW_BLOCKS = 50
 
-    /** About how long until the next step matures; zero when none waits for a height above [tip], or it is unknown. */
+    /**
+     * About how long until a step can be published: zero while one already can (its parents confirmed, and ready or
+     * its timelock behind [tip]) or when it is unknown, else until the next step matures.
+     */
     fun untilNextMaturity(recovery: RecoverFundsResponse?, tip: UInt?, network: Network): Duration {
         if (recovery == null || tip == null) return Duration.ZERO
-        val height = nextMaturityHeight(recovery, tip) ?: return Duration.ZERO
-        return timeUntil(height, tip, network)
+        val height: UInt = tip
+        val confirmed = recovery.transactions.filter { it.status is ExitTransactionStatus.Confirmed }.map { it.txid }
+        val isPublishable = recovery.transactions.any { tx ->
+            val maturesAt = (tx.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight
+            val isDue = tx.status == ExitTransactionStatus.Ready || tx.status == ExitTransactionStatus.Unverified ||
+                (maturesAt != null && maturesAt <= height)
+            isDue && tx.dependsOn.all { it in confirmed }
+        }
+        if (isPublishable) return Duration.ZERO
+        val maturity = nextMaturityHeight(recovery, height) ?: return Duration.ZERO
+        return timeUntil(maturity, height, network)
     }
 
     /** How long the operators leave a matured step to us: about 8 hours on mainnet, 25 minutes on Spark's regtest. */
