@@ -171,6 +171,39 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `marks a withdrawal's arrival as a transfer by the txid its send returned`() = test {
+        val arrival = OnchainActivity.create(
+            id = "arrival",
+            txType = ActivityPaymentType.RECEIVED,
+            txId = "withdrawal",
+            value = 4_917uL,
+            fee = 0uL,
+            address = "bc1q",
+            timestamp = 1uL,
+        )
+        whenever { activityRepo.getOnchainActivityByTxId(eq("withdrawal"), any()) }.thenReturn(arrival)
+        whenever { activityRepo.updateActivity(any(), any(), any()) }.thenReturn(Result.success(Unit))
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        val sent = sentPayment(fees = 1_470).copy(
+            method = PaymentMethod.WITHDRAW,
+            details = PaymentDetails.Withdraw("withdrawal"),
+        )
+        whenever { sparkService.send(any()) }.thenReturn(sent)
+        val sut = createSut()
+
+        assertFalse(sut.markWithdrawalAsTransfer("withdrawal"))
+        sut.withdrawAll(ADDRESS).getOrThrow()
+
+        assertTrue(sut.markWithdrawalAsTransfer("withdrawal"))
+        assertFalse(sut.markWithdrawalAsTransfer("other"))
+        val updated = argumentCaptor<Activity>()
+        verify(activityRepo).updateActivity(eq("arrival"), updated.capture(), any())
+        assertTrue((updated.firstValue as Activity.Onchain).v1.isTransfer)
+    }
+
+    @Test
     fun `lists a withdrawal with its fee and marks its arrival in Savings as a transfer`() = test {
         val arrival = OnchainActivity.create(
             id = "arrival",

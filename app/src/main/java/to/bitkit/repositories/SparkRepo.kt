@@ -105,6 +105,9 @@ class SparkRepo @Inject constructor(
     @Volatile
     private var preparedWithdrawal: PreparedWithdrawal? = null
 
+    /** Withdrawals this app sent, by txid, known before Spark lists them so their arrival reads as a transfer. */
+    private val withdrawalTxids = ConcurrentHashMap.newKeySet<String>()
+
     /** Deposits this app broadcast that Spark hasn't listed yet, by txid, so they show as pending at once. */
     private val broadcastDeposits = ConcurrentHashMap<String, ULong>()
 
@@ -421,8 +424,9 @@ class SparkRepo @Inject constructor(
     suspend fun withdrawAll(address: String): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
             if (_state.value.isExiting) throw SparkError.SendRefused("Spark is in an emergency exit")
-            sparkService.send(prepareWithdrawAll(address))
+            val payment = sparkService.send(prepareWithdrawAll(address))
             preparedWithdrawal = null
+            (payment.details as? PaymentDetails.Withdraw)?.txId?.let { withdrawalTxids += it }
             refresh()
         }.onFailure {
             Logger.error("Failed to withdraw from Spark", it, context = TAG)
@@ -570,6 +574,20 @@ class SparkRepo @Inject constructor(
             )
         }
         .toImmutableList()
+
+    /**
+     * Marks the on-chain receive [txid] as a transfer from Spending when it is a Spark withdrawal, so it shows no
+     * Received sheet and reads as a transfer in Activity. Returns whether it is one.
+     */
+    suspend fun markWithdrawalAsTransfer(txid: String): Boolean = withContext(bgDispatcher) {
+        val isWithdrawal = txid in withdrawalTxids || _state.value.withdrawals.any { it.txid == txid }
+        if (!isWithdrawal) return@withContext false
+        val activities = activityRepo.get()
+        activities.getOnchainActivityByTxId(txid)?.takeUnless { it.isTransfer }?.let {
+            activities.updateActivity(it.id, Activity.Onchain(it.copy(isTransfer = true)))
+        }
+        true
+    }
 
     private suspend fun markTransfers(payments: List<Payment>) {
         val activities = activityRepo.get()
