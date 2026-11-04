@@ -74,6 +74,10 @@ class TransferViewModel @Inject constructor(
     private val _sparkWithdrawFeeSats = MutableStateFlow<ULong?>(null)
     val sparkWithdrawFeeSats = _sparkWithdrawFeeSats.asStateFlow()
 
+    private var sparkFeeJob: Job? = null
+    private var sparkFeeBalanceSats: ULong? = null
+    private var sparkAddress: String? = null
+
     private val isNodeRunning = lightningRepo.lightningState.map { it.nodeStatus?.isRunning ?: false }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
@@ -297,15 +301,31 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Prices Spark's withdrawal to savings for the confirm screen; null until priced or when it can't be. */
-    fun loadSparkWithdrawFee() {
-        viewModelScope.launch {
-            _sparkWithdrawFeeSats.update { null }
-            val address = walletRepo.getOnchainAddress().ifBlank { lightningRepo.newAddress().getOrNull() }
-                ?: return@launch
-            sparkRepo.estimateWithdrawAllFeeSats(address)
-                .onSuccess { fee -> _sparkWithdrawFeeSats.update { fee } }
-                .onFailure { Logger.warn("Failed to estimate Spark withdrawal fee", it, context = TAG) }
+    fun loadSparkWithdrawFee(balanceSats: ULong) {
+        val isPriced = sparkFeeJob?.isActive == true || _sparkWithdrawFeeSats.value != null
+        if (balanceSats == sparkFeeBalanceSats && isPriced) return
+        sparkFeeJob?.cancel()
+        sparkFeeBalanceSats = balanceSats
+        _sparkWithdrawFeeSats.update { null }
+        sparkFeeJob = viewModelScope.launch {
+            val address = sparkWithdrawAddress() ?: return@launch
+            val result = withTimeoutOrNull(SWAP_QUOTE_TIMEOUT) { sparkRepo.estimateWithdrawAllFeeSats(address) }
+            if (result == null) Logger.warn("Timed out estimating Spark withdrawal fee", context = TAG)
+            result
+                ?.onSuccess { fee -> _sparkWithdrawFeeSats.update { fee } }
+                ?.onFailure { Logger.warn("Failed to estimate Spark withdrawal fee", it, context = TAG) }
+            if (result?.isSuccess != true) sparkFeeBalanceSats = null
         }
+    }
+
+    /** One Savings address for Spark's withdrawal, priced on the confirm screen and then paid to. */
+    private suspend fun sparkWithdrawAddress(): String? {
+        sparkAddress?.let { return it }
+        val address = walletRepo.getOnchainAddress().ifBlank { null }
+            ?: lightningRepo.newAddress()
+                .onFailure { Logger.error("Failed to get address for Spark withdrawal", it, context = TAG) }
+                .getOrNull()
+        return address?.also { sparkAddress = it }
     }
 
     /**
@@ -343,13 +363,16 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun withdrawSparkToSavings() {
+        sparkFeeJob?.cancel()
         val balance = sparkRepo.state.value.spendingSats
         if (balance == 0uL) return
-        val address = lightningRepo.newAddress().getOrElse {
-            Logger.error("Failed to get address for Spark withdrawal", it, context = TAG)
-            return
-        }
-        sparkRepo.withdrawAll(address).onFailure { ToastEventBus.send(it) }
+        val address = sparkWithdrawAddress() ?: return
+        sparkRepo.withdrawAll(address)
+            .onSuccess {
+                sparkAddress = null
+                sparkFeeBalanceSats = null
+            }
+            .onFailure { ToastEventBus.send(it) }
     }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {

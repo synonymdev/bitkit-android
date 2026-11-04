@@ -106,7 +106,7 @@ fun SavingsConfirmScreen(
     }
 
     LaunchedEffect(withdrawsSpark, sparkSats) {
-        if (withdrawsSpark) transfer.loadSparkWithdrawFee()
+        if (withdrawsSpark) transfer.loadSparkWithdrawFee(sparkSats)
     }
 
     Box {

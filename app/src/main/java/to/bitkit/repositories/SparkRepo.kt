@@ -9,8 +9,10 @@ import breez_sdk_spark.Payment
 import breez_sdk_spark.PaymentDetails
 import breez_sdk_spark.PaymentMethod
 import breez_sdk_spark.PaymentStatus
+import breez_sdk_spark.PrepareSendPaymentResponse
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.SdkException
+import breez_sdk_spark.SendOnchainFeeQuote
 import breez_sdk_spark.SendPaymentMethod
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.LightningActivity
@@ -93,9 +95,15 @@ class SparkRepo @Inject constructor(
 
         /** The longest an exit quote waits for a running leaf optimization to end. */
         private val OPTIMIZATION_WAIT = 2.minutes
+
+        /** Seconds a withdrawal quote must still hold to be reused, so it can't expire mid-send. */
+        private const val QUOTE_EXPIRY_MARGIN_SECS = 30uL
     }
 
     private val scope = appScope(bgDispatcher, TAG)
+
+    @Volatile
+    private var preparedWithdrawal: PreparedWithdrawal? = null
 
     /** Deposits this app broadcast that Spark hasn't listed yet, by txid, so they show as pending at once. */
     private val broadcastDeposits = ConcurrentHashMap<String, ULong>()
@@ -413,8 +421,8 @@ class SparkRepo @Inject constructor(
     suspend fun withdrawAll(address: String): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
             if (_state.value.isExiting) throw SparkError.SendRefused("Spark is in an emergency exit")
-            val prepared = sparkService.prepareSend(address, _state.value.balanceSats, FeePolicy.FEES_INCLUDED)
-            sparkService.send(prepared)
+            sparkService.send(prepareWithdrawAll(address))
+            preparedWithdrawal = null
             refresh()
         }.onFailure {
             Logger.error("Failed to withdraw from Spark", it, context = TAG)
@@ -424,11 +432,28 @@ class SparkRepo @Inject constructor(
     /** The fee [withdrawAll] pays at its speed, which comes out of the balance it moves. */
     suspend fun estimateWithdrawAllFeeSats(address: String): Result<ULong> = withContext(bgDispatcher) {
         runSuspendCatching {
-            val prepared = sparkService.prepareSend(address, _state.value.balanceSats, FeePolicy.FEES_INCLUDED)
-            val speed = (prepared.paymentMethod as SendPaymentMethod.BitcoinAddress).feeQuote.speedMedium
+            val speed = prepareWithdrawAll(address).withdrawalQuote().speedMedium
             speed.userFeeSat.safe() + speed.l1BroadcastFeeSat.safe()
         }
     }
+
+    /**
+     * Reuses the provider's withdrawal quote while it holds for the same address and balance, so the fee the confirm
+     * screen shows is the one the withdrawal pays; asking for a second quote while one held took minutes on regtest.
+     */
+    private suspend fun prepareWithdrawAll(address: String): PrepareSendPaymentResponse {
+        val balanceSats = _state.value.balanceSats
+        val nowSecs = clock.now().epochSeconds.toULong()
+        preparedWithdrawal
+            ?.takeIf { it.address == address && it.balanceSats == balanceSats }
+            ?.takeIf { it.response.withdrawalQuote().expiresAt > nowSecs.safe() + QUOTE_EXPIRY_MARGIN_SECS.safe() }
+            ?.let { return it.response }
+        return sparkService.prepareSend(address, balanceSats, FeePolicy.FEES_INCLUDED)
+            .also { preparedWithdrawal = PreparedWithdrawal(address, balanceSats, it) }
+    }
+
+    private fun PrepareSendPaymentResponse.withdrawalQuote(): SendOnchainFeeQuote =
+        (paymentMethod as SendPaymentMethod.BitcoinAddress).feeQuote
 
     /**
      * Lists a deposit the app just broadcast as pending right away, then syncs so Spark sees it sooner than its
@@ -717,6 +742,12 @@ class SparkRepo @Inject constructor(
         }
     }
 }
+
+private class PreparedWithdrawal(
+    val address: String,
+    val balanceSats: ULong,
+    val response: PrepareSendPaymentResponse,
+)
 
 data class SparkState(
     val isSupported: Boolean = false,

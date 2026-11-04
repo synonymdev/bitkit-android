@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.ReverseSwapResponse
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceTimeBy
@@ -19,8 +20,10 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
@@ -181,12 +184,33 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `loadSparkWithdrawFee publishes spark's withdrawal fee`() = test {
+    fun `loadSparkWithdrawFee prices spark's withdrawal once per balance`() = test {
         whenever(sparkRepo.estimateWithdrawAllFeeSats(CLAIM_ADDRESS)).thenReturn(Result.success(SPARK_FEE))
 
-        sut.loadSparkWithdrawFee()
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
+        sut.loadSparkWithdrawFee(SPARK_SATS)
         advanceUntilIdle()
 
+        assertEquals(SPARK_FEE, sut.sparkWithdrawFeeSats.value)
+        verify(sparkRepo, times(1)).estimateWithdrawAllFeeSats(CLAIM_ADDRESS)
+    }
+
+    @Test
+    fun `loadSparkWithdrawFee gives up on an estimate that never returns`() = test {
+        var calls = 0
+        whenever(sparkRepo.estimateWithdrawAllFeeSats(CLAIM_ADDRESS)).doSuspendableAnswer {
+            if (calls++ == 0) awaitCancellation()
+            Result.success(SPARK_FEE)
+        }
+
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceTimeBy(16.seconds)
+        runCurrent()
+
+        assertNull(sut.sparkWithdrawFeeSats.value)
+        sut.loadSparkWithdrawFee(SPARK_SATS)
+        advanceUntilIdle()
         assertEquals(SPARK_FEE, sut.sparkWithdrawFeeSats.value)
     }
 

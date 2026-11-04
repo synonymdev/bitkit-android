@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import breez_sdk_spark.AutoOptimizationEvent
+import breez_sdk_spark.BitcoinAddressDetails
 import breez_sdk_spark.Bolt11InvoiceDetails
 import breez_sdk_spark.ClaimDeferredReason
 import breez_sdk_spark.ClaimDepositOutcome
@@ -18,6 +19,8 @@ import breez_sdk_spark.PaymentType
 import breez_sdk_spark.PrepareSendPaymentResponse
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.SdkException
+import breez_sdk_spark.SendOnchainFeeQuote
+import breez_sdk_spark.SendOnchainSpeedFeeQuote
 import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
@@ -70,6 +73,10 @@ import com.synonym.bitkitcore.PaymentType as ActivityPaymentType
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SparkRepoTest : BaseUnitTest() {
+    private companion object {
+        const val ADDRESS = "bcrt1qsavings"
+    }
+
     private val sparkService = mock<SparkService>()
     private val activityRepo = mock<ActivityRepo>()
     private val sparkEvents = MutableSharedFlow<SdkEvent>()
@@ -417,6 +424,39 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark withdrawal pays the quote its fee estimate priced while it holds`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val held = withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(held)
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut()
+
+        assertEquals(500uL, sut.estimateWithdrawAllFeeSats(ADDRESS).getOrThrow())
+        sut.withdrawAll(ADDRESS).getOrThrow()
+
+        verify(sparkService, times(1)).prepareSend(any(), anyOrNull(), anyOrNull())
+        verify(sparkService).send(held)
+    }
+
+    @Test
+    fun `a spark withdrawal asks again once its quote expired or the address changed`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val expiring = withdrawal(expiresAt = now.epochSeconds.toULong() + 10uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(expiring)
+        val sut = createSut()
+
+        sut.estimateWithdrawAllFeeSats(ADDRESS).getOrThrow()
+        sut.estimateWithdrawAllFeeSats(ADDRESS).getOrThrow()
+        verify(sparkService, times(2)).prepareSend(any(), anyOrNull(), anyOrNull())
+
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(withdrawal(expiresAt = now.epochSeconds.toULong() + 600uL))
+        sut.estimateWithdrawAllFeeSats(ADDRESS).getOrThrow()
+        sut.estimateWithdrawAllFeeSats("bcrt1qother").getOrThrow()
+        verify(sparkService, times(4)).prepareSend(any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
     fun `a spark send past its deadline never leaves`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         val prepared = prepared(feeSats = 0uL)
@@ -470,6 +510,18 @@ class SparkRepoTest : BaseUnitTest() {
             tokenIdentifier = null,
             conversionEstimate = null,
             feePolicy = FeePolicy.FEES_EXCLUDED,
+        )
+    }
+
+    private fun withdrawal(expiresAt: ULong): PrepareSendPaymentResponse {
+        val speed = SendOnchainSpeedFeeQuote(userFeeSat = 300uL, l1BroadcastFeeSat = 200uL)
+        val quote = SendOnchainFeeQuote("quote", expiresAt, speed, speed, speed, isEstimate = false)
+        return PrepareSendPaymentResponse(
+            paymentMethod = SendPaymentMethod.BitcoinAddress(mock<BitcoinAddressDetails>(), quote),
+            amount = BigInteger.valueOf(100),
+            tokenIdentifier = null,
+            conversionEstimate = null,
+            feePolicy = FeePolicy.FEES_INCLUDED,
         )
     }
 
