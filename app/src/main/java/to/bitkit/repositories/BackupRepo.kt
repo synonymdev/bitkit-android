@@ -156,7 +156,12 @@ class BackupRepo @Inject constructor(
 
     private val backupJobs = ConcurrentHashMap.newKeySet<Job>()
     private val backupJobLock = Any()
-    private val pendingBackups = ConcurrentHashMap<BackupCategory, VssClientCoordinator.Owner>()
+    private val pendingBackups = ConcurrentHashMap<BackupCategory, PendingBackup>()
+    private class PendingBackup(val owner: VssClientCoordinator.Owner) {
+        @Volatile
+        var admitted = false
+    }
+
     private val statusObserverJobs = mutableListOf<Job>()
     private val dataListenerJobs = mutableListOf<Job>()
     private var periodicCheckJob: Job? = null
@@ -269,7 +274,7 @@ class BackupRepo @Inject constructor(
         launchForWallet {
             BackupCategory.entries.forEach { category ->
                 cacheStore.updateBackupStatus(category) { status ->
-                    if (status.running && category !in runningBackups && !pendingBackups.containsKey(category)) {
+                    if (status.running && category !in runningBackups && pendingBackups[category]?.admitted != true) {
                         Logger.debug("Clearing stale running flag for: '$category'", context = TAG)
                         status.copy(running = false)
                     } else {
@@ -523,39 +528,42 @@ class BackupRepo @Inject constructor(
         val owner = expectedOwner ?: runCatching { vssClients.captureOwner() }.getOrNull() ?: return
         val job = synchronized(backupJobLock) {
             if (requireObservation && !isObserving) return
+            val pending = PendingBackup(owner)
             var reserved = false
             pendingBackups.compute(category) { _, previous ->
-                previous?.takeIf { it.generation >= owner.generation } ?: owner.also { reserved = true }
+                previous?.takeIf { it.owner.generation >= owner.generation } ?: pending.also { reserved = true }
             }
             if (!reserved) return
             Logger.debug("Scheduling backup for: '$category'", context = TAG)
             scope.launch(start = CoroutineStart.LAZY) {
                 try {
                     vssClients.withWallet(owner) {
+                        pending.admitted = true
                         try {
                             cacheStore.updateBackupStatus(category) { it.copy(running = true) }
                             delay(BACKUP_DEBOUNCE)
                             if (category == BackupCategory.WALLET) {
                                 paykitSdkService.isPaymentSubmissionActive.first { !it }
                             }
-                            pendingBackups.remove(category, owner)
+                            pendingBackups.remove(category, pending)
                             val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
                             if (status.copy(running = category in runningBackups).shouldBackup(category)) {
                                 triggerBackup(category)
                             }
                         } finally {
                             withContext(NonCancellable) {
-                                pendingBackups.remove(category, owner)
+                                pendingBackups.remove(category, pending)
                                 cacheStore.updateBackupStatus(category) {
                                     it.copy(
-                                        running = category in runningBackups || pendingBackups.containsKey(category)
+                                        running = category in runningBackups ||
+                                            pendingBackups[category]?.admitted == true
                                     )
                                 }
                             }
                         }
                     }
                 } finally {
-                    pendingBackups.remove(category, owner)
+                    pendingBackups.remove(category, pending)
                 }
             }.also { scheduled ->
                 backupJobs.add(scheduled)
