@@ -185,6 +185,13 @@ class SparkExitChainTest : BaseUnitTest() {
         assertIs<SparkExitBroadcastOutcome.RetryLater>(classifier.pkg(200, childMissing, parentTxid = "parent"))
         val parentMissing = failedPackage + """{"w1":{"txid":"parent","error":"bad-txns-inputs-missingorspent"}}}"""
         assertIs<SparkExitBroadcastOutcome.InputsMissing>(classifier.pkg(200, parentMissing, parentTxid = "parent"))
+        // The step's own missing inputs decide over its child's error, in either order.
+        val parentFirst = failedPackage + """{"w1":{"txid":"parent","error":"bad-txns-inputs-missingorspent"},""" +
+            """"w2":{"txid":"child","error":"package-not-validated"}}}"""
+        assertIs<SparkExitBroadcastOutcome.InputsMissing>(classifier.pkg(200, parentFirst, parentTxid = "parent"))
+        val childFirst = failedPackage + """{"w2":{"txid":"child","error":"package-not-validated"},""" +
+            """"w1":{"txid":"parent","error":"bad-txns-inputs-missingorspent"}}}"""
+        assertIs<SparkExitBroadcastOutcome.InputsMissing>(classifier.pkg(200, childFirst, parentTxid = "parent"))
         val lowFee = failedPackage + """{"w1":{"txid":"a","error":"min relay fee not met"}}}"""
         assertIs<SparkExitBroadcastOutcome.Rejected>(classifier.pkg(200, lowFee))
     }

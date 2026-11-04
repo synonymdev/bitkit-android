@@ -210,8 +210,8 @@ object SparkExitBroadcastClassifier {
     }
 
     /**
-     * A package's outcome. Missing inputs count only on the step itself, [parentTxid]: reported on the CPFP child
-     * alone (its fee funding or chained change), they say nothing about the step, which is then retried.
+     * A package's outcome. An error on the step itself, [parentTxid], decides it. Missing inputs reported on the CPFP
+     * child alone (its fee funding or chained change) say nothing about the step, which is then retried.
      */
     fun pkg(status: Int, body: String, parentTxid: String? = null): SparkExitBroadcastOutcome {
         unavailable(status)?.let { return it }
@@ -220,6 +220,11 @@ object SparkExitBroadcastClassifier {
         val message = (root["package_msg"] as? JsonPrimitive)?.contentOrNull
         if (message == "success") return SparkExitBroadcastOutcome.Accepted
         val results = (root["tx-results"] as? JsonObject)?.values?.mapNotNull { it as? JsonObject }.orEmpty()
+        // The step's own error decides, whatever its child reports and in whatever order the results come.
+        val own = results.firstOrNull { (it["txid"] as? JsonPrimitive)?.contentOrNull == parentTxid }
+        (own?.get("error") as? JsonPrimitive)?.contentOrNull?.let(::classify)
+            ?.takeIf { it != SparkExitBroadcastOutcome.Accepted }
+            ?.let { return it }
         val outcomes = results.mapNotNull { result ->
             val error = (result["error"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
             val txid = (result["txid"] as? JsonPrimitive)?.contentOrNull
