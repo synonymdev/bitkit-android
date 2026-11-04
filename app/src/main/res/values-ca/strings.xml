@@ -1356,6 +1356,8 @@
     <string name="lightning__savings_confirm__spark_fee">Tarifa de Spark</string>
     <string name="lightning__savings_settling__text">La teva transferència s\'ha iniciat i &lt;accent&gt;s\'està liquidant onchain&lt;/accent&gt;. El teu saldo d\'estalvis s\'actualitzarà automàticament quan es completi.</string>
     <string name="lightning__savings_settling__title">Transferència\n&lt;accent&gt;en camí&lt;/accent&gt;</string>
+    <string name="lightning__savings_spark_failed">El saldo de Spark no s\'ha pogut moure a estalvis i es queda al saldo de despesa.</string>
+    <string name="lightning__savings_spark_failed_channels">El saldo de Spark no s\'ha pogut moure a estalvis i es queda al saldo de despesa. Les teves connexions s\'estan movent a estalvis.</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Connectant&lt;/accent&gt;\na la xarxa</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Torna a connectar el teu dispositiu de maquinari; sembla que s\'ha desconnectat del telèfon.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Torna a connectar el dispositiu</string>

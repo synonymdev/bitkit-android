@@ -1356,6 +1356,8 @@
     <string name="lightning__savings_confirm__spark_fee">Frais Spark</string>
     <string name="lightning__savings_settling__text">Votre transfert a été initié et est &lt;accent&gt;en cours de règlement on-chain&lt;/accent&gt;. Votre solde d\'épargne se mettra à jour automatiquement une fois terminé.</string>
     <string name="lightning__savings_settling__title">Transfert\n&lt;accent&gt;en cours&lt;/accent&gt;</string>
+    <string name="lightning__savings_spark_failed">Votre solde Spark n\'a pas pu être transféré vers l\'épargne et reste dans votre solde de dépenses.</string>
+    <string name="lightning__savings_spark_failed_channels">Votre solde Spark n\'a pas pu être transféré vers l\'épargne et reste dans votre solde de dépenses. Vos connexions sont en cours de transfert vers l\'épargne.</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Connexion&lt;/accent&gt;\nau réseau</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Veuillez reconnecter votre appareil matériel, il semble être déconnecté de votre téléphone.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Reconnecter l\'appareil matériel</string>

@@ -1354,6 +1354,8 @@
     <string name="lightning__savings_confirm__spark_fee">Comisión de Spark</string>
     <string name="lightning__savings_settling__text">Tu transferencia se ha iniciado y se está &lt;accent&gt;liquidando en cadena&lt;/accent&gt;. Tu saldo de ahorro se actualizará automáticamente cuando se complete.</string>
     <string name="lightning__savings_settling__title">Transferencia\n&lt;accent&gt;en camino&lt;/accent&gt;</string>
+    <string name="lightning__savings_spark_failed">Tu saldo de Spark no se ha podido pasar a ahorros y se queda en tu saldo de gastos.</string>
+    <string name="lightning__savings_spark_failed_channels">Tu saldo de Spark no se ha podido pasar a ahorros y se queda en tu saldo de gastos. Tus conexiones se están pasando a ahorros.</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Conectando&lt;/accent&gt;\na la red</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Vuelve a conectar tu dispositivo de hardware; parece que se ha desconectado de tu teléfono.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Reconecta el dispositivo de hardware</string>

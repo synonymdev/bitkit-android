@@ -84,6 +84,10 @@ class TransferViewModel @Inject constructor(
     private var channelsToClose = emptyList<ChannelDetails>()
     private var withdrawsSpark = false
 
+    /** Spark's part of the last Transfer to Savings failed, so its balance stayed in Spending. */
+    private val _isSparkWithdrawFailed = MutableStateFlow(false)
+    val isSparkWithdrawFailed = _isSparkWithdrawFailed.asStateFlow()
+
     /**
      * How the LN -> onchain "transfer to savings" is executed. Closing a channel is the
      * default because it always works; swapping funds out keeps channels open and is used
@@ -339,6 +343,7 @@ class TransferViewModel @Inject constructor(
         _savingsTransferMode.update { mode }
         // Drop any outcome from an earlier attempt so the progress screen cannot act on it.
         _savingsSwapResult.update { null }
+        _isSparkWithdrawFailed.update { false }
         _savingsSelection.update { SavingsSelection() }
         channelsToClose = channels
         withdrawsSpark = withdrawSpark
@@ -364,13 +369,17 @@ class TransferViewModel @Inject constructor(
         sparkFeeJob?.join()
         val balance = sparkRepo.state.value.spendingSats
         if (balance == 0uL) return
-        val address = sparkWithdrawAddress() ?: return
+        val address = sparkWithdrawAddress()
+        if (address == null) {
+            _isSparkWithdrawFailed.update { true }
+            return
+        }
         sparkRepo.withdrawAll(address)
             .onSuccess {
                 sparkAddress = null
                 sparkFeeBalanceSats = null
             }
-            .onFailure { ToastEventBus.send(it) }
+            .onFailure { _isSparkWithdrawFailed.update { true } }
     }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {

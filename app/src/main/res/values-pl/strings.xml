@@ -1359,6 +1359,8 @@
     <string name="lightning__savings_confirm__spark_fee">Opłata Spark</string>
     <string name="lightning__savings_settling__text">Twój transfer został zainicjowany i jest &lt;accent&gt;rozliczany on-chain&lt;/accent&gt;. Saldo oszczędności zaktualizuje się automatycznie po jego zakończeniu.</string>
     <string name="lightning__savings_settling__title">Transfer\n&lt;accent&gt;w drodze&lt;/accent&gt;</string>
+    <string name="lightning__savings_spark_failed">Nie udało się przenieść salda Spark do oszczędności; pozostaje w saldzie wydatków.</string>
+    <string name="lightning__savings_spark_failed_channels">Nie udało się przenieść salda Spark do oszczędności; pozostaje w saldzie wydatków. Twoje połączenia są przenoszone do oszczędności.</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Łączenie&lt;/accent&gt;\nz siecią</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Połącz ponownie urządzenie sprzętowe, wygląda na to, że zostało odłączone od telefonu.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Połącz ponownie urządzenie</string>

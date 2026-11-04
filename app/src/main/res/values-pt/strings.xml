@@ -1330,6 +1330,8 @@
     <string name="lightning__savings_confirm__spark_fee">Taxa do Spark</string>
     <string name="lightning__savings_settling__text">A sua transferência foi iniciada e está a ser &lt;accent&gt;liquidada on-chain&lt;/accent&gt;. O saldo de poupança será atualizado automaticamente quando terminar.</string>
     <string name="lightning__savings_settling__title">Transferência\n&lt;accent&gt;a caminho&lt;/accent&gt;</string>
+    <string name="lightning__savings_spark_failed">Não foi possível mover o saldo do Spark para a poupança; continua no saldo de gastos.</string>
+    <string name="lightning__savings_spark_failed_channels">Não foi possível mover o saldo do Spark para a poupança; continua no saldo de gastos. As suas ligações estão a ser movidas para a poupança.</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;A ligar&lt;/accent&gt;\nà rede</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Volte a ligar o seu dispositivo de hardware; parece estar desligado do telemóvel.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Voltar a ligar o dispositivo</string>

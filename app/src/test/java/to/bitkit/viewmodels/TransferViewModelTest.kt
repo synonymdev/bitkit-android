@@ -136,6 +136,21 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a failed spark withdrawal is reported while the selected channels still close`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        whenever { sparkRepo.withdrawAll(any()) }.thenReturn(Result.failure(AppError(PAY_ERROR)))
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = true)
+
+        assertTrue(sut.closeSelectedChannels().isEmpty())
+
+        assertTrue(sut.isSparkWithdrawFailed.value)
+        verify(lightningRepo).closeChannel(CHANNEL_A, false, null)
+
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        assertFalse(sut.isSparkWithdrawFailed.value)
+    }
+
+    @Test
     fun `transfer to savings with channels and spark moves both`() = test {
         sparkState.value = SparkState(balanceSats = SPARK_SATS)
         sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A, CHANNEL_B), withdrawSpark = true)

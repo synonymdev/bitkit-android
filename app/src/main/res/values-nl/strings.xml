@@ -1355,6 +1355,8 @@
     <string name="lightning__savings_confirm__spark_fee">Spark-vergoeding</string>
     <string name="lightning__savings_settling__text">Uw overboeking is gestart en wordt &lt;accent&gt;on-chain afgehandeld&lt;/accent&gt;. Uw spaargeld wordt automatisch bijgewerkt zodra deze is voltooid.</string>
     <string name="lightning__savings_settling__title">Overboeking\n&lt;accent&gt;onderweg&lt;/accent&gt;</string>
+    <string name="lightning__savings_spark_failed">Je Spark-saldo kon niet naar sparen en blijft in je bestedingssaldo.</string>
+    <string name="lightning__savings_spark_failed_channels">Je Spark-saldo kon niet naar sparen en blijft in je bestedingssaldo. Je verbindingen gaan naar sparen.</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Verbinden&lt;/accent&gt;\nmet netwerk</string>
     <string name="lightning__transfer_hw__reconnect_error_description">Verbind uw hardwareapparaat opnieuw, de verbinding met uw telefoon lijkt verbroken.</string>
     <string name="lightning__transfer_hw__reconnect_error_title">Hardwareapparaat opnieuw verbinden</string>
