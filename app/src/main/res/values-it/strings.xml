@@ -998,6 +998,7 @@
     <string name="wallet__send_instant_failed">Pagamento fallito</string>
     <string name="wallet__send_invoice">Invoice</string>
     <string name="wallet__send_invoice_expiration">Scadenza invoice</string>
+    <string name="wallet__send_lightning_onchain_sent">Un pagamento onchain all\'indirizzo di questa fattura potrebbe essere già stato inviato, quindi Bitkit non pagherà anche la fattura via Lightning.</string>
     <string name="wallet__send_max_spending__description">L\'importo massimo spendibile e\' leggermente inferiore a causa di un saldo di riserva richiesto.</string>
     <string name="wallet__send_max_spending__title">Saldo di Riserva</string>
     <string name="wallet__send_onchain_lightning_paid">Un pagamento Lightning di questa fattura è già andato a buon fine, quindi Bitkit non la pagherà di nuovo onchain.</string>

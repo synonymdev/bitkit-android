@@ -996,6 +996,7 @@
     <string name="wallet__send_instant_failed">Pagament fallit</string>
     <string name="wallet__send_invoice">Factura</string>
     <string name="wallet__send_invoice_expiration">Caducitat de la factura</string>
+    <string name="wallet__send_lightning_onchain_sent">És possible que ja s\'hagi enviat un pagament onchain a l\'adreça d\'aquesta factura, així que Bitkit no pagarà també la factura per Lightning.</string>
     <string name="wallet__send_max_spending__description">L\'import màxim gastable és una mica inferior a causa d\'un saldo de reserva requerit.</string>
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_onchain_lightning_paid">Un pagament Lightning d\'aquesta factura ja s\'ha completat, així que Bitkit no la tornarà a pagar onchain.</string>

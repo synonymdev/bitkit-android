@@ -1000,6 +1000,7 @@
     <string name="wallet__send_instant_failed">Platba se nezdařila</string>
     <string name="wallet__send_invoice">Faktura</string>
     <string name="wallet__send_invoice_expiration">Expirace faktury</string>
+    <string name="wallet__send_lightning_onchain_sent">Na adresu této faktury už mohla odejít onchain platba, takže Bitkit fakturu nezaplatí ještě přes Lightning.</string>
     <string name="wallet__send_max_spending__description">Maximální částka, kterou lze utratit, je o něco nižší kvůli požadovanému zůstatku rezervy.</string>
     <string name="wallet__send_max_spending__title">Zůstatek rezervy</string>
     <string name="wallet__send_onchain_lightning_paid">Lightning platba této faktury již proběhla úspěšně, takže ji Bitkit znovu onchain nezaplatí.</string>

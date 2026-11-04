@@ -182,6 +182,7 @@ import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
 import to.bitkit.repositories.OnchainSendBlockedError
+import to.bitkit.repositories.OnchainSendEvidence
 import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendPendingError
@@ -3566,6 +3567,16 @@ class AppViewModel @Inject constructor(
         return OnchainPaymentRefusedError(status, context.getString(refusalRes))
     }
 
+    private suspend fun lightningPaymentRefusal(paymentHash: String): AppError? {
+        val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }
+            .onFailure { Logger.warn("Failed to read on-chain send for '$paymentHash'", it, context = TAG) }
+            .getOrElse { return AppError(context.getString(R.string.wallet__send_lightning_onchain_sent)) }
+        val paysInvoice = attempt != null && attempt.initialDispatchAttempted &&
+            attempt.evidence != OnchainSendEvidence.Rejected &&
+            attempt.lightningPaymentHash.equals(paymentHash, ignoreCase = true)
+        return if (paysInvoice) AppError(context.getString(R.string.wallet__send_lightning_onchain_sent)) else null
+    }
+
     private fun showAddressValidationError(
         @StringRes titleRes: Int,
         @StringRes descriptionRes: Int,
@@ -6019,6 +6030,7 @@ class AppViewModel @Inject constructor(
         }
         if (hasActiveContactPaymentContext()) return false
         val invoiceHash = invoice?.paymentHash?.toHex()?.takeIf { it.isNotBlank() }
+        if (invoiceHash != null && lightningPaymentRefusal(invoiceHash) != null) return false
         val open = invoiceHash != null && quickPayRepo.hasOpen(invoiceHash)
         val canApply = open || canApplyQuickPay(amountSats)
         requireCurrentPaymentPreparation(walletGeneration)
@@ -6714,6 +6726,13 @@ class AppViewModel @Inject constructor(
         var proofRequest = preparedPaymentProofRequest
         var createdMetadataPaymentId: String? = null
         val paymentHash = decodedInvoice.paymentHash.toHex()
+        lightningPaymentRefusal(paymentHash)?.let {
+            releasePrivatePaymentListIfNeeded(contactPaymentContext)
+            cancelPaymentProofPreparation(proofRequest)
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
         associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)

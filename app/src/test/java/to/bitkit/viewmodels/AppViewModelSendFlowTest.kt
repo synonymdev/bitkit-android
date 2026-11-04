@@ -16532,6 +16532,79 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verifyOnchainSend(REGTEST_ADDRESS, 10_000uL, lightningPaymentHash = paymentHash)
     }
 
+    // The address was paid on-chain first, then the same code was scanned and paid over Lightning
+    @Test
+    fun `lightning pays an invoice only while no on-chain payment of its address may have gone out`() = test {
+        val bolt11 = "lnbcrt1onchainfirst"
+        val paymentHash = "010203"
+        val attempt = invoiceAddressAttempt(paymentHash)
+        whenever(context.getString(R.string.wallet__send_lightning_onchain_sent)).thenReturn("On-chain sent")
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        val send = SendUiState(
+            address = bolt11,
+            amount = 1_000uL,
+            isAmountInputValid = true,
+            payMethod = SendMethod.LIGHTNING,
+            decodedInvoice = lightningInvoice(bolt11, 1_000uL),
+        )
+        val refusals = listOf<suspend () -> OnchainSendAttempt?>(
+            { attempt.copy(evidence = OnchainSendEvidence.Pending) },
+            { attempt.copy(evidence = OnchainSendEvidence.Unknown) },
+            { attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = "ab".repeat(32)) },
+            { throw AppError("On-chain send store unreadable") },
+        )
+
+        var current: suspend () -> OnchainSendAttempt? = { null }
+        whenever { lightningRepo.currentOnchainSendAttempt() }.doSuspendableAnswer { current() }
+
+        refusals.forEachIndexed { index, refusal ->
+            current = refusal
+            sut.showSheet(Sheet.Send(SendRoute.Confirm))
+            runCurrent()
+            setSendState(send)
+            clearInvocations(toastManager)
+
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            verify(toastManager).enqueue(argThat { description == "On-chain sent" })
+            assertNull(sut.currentSheet.value, "case $index")
+        }
+        verify(lightningRepo, never()).payInvoice(bolt11 = bolt11, sats = null)
+
+        // A rejected attempt, or one that never dispatched, sent nothing
+        val allowed = listOf(
+            attempt.copy(evidence = OnchainSendEvidence.Rejected),
+            attempt.copy(initialDispatchAttempted = false),
+            attempt.copy(lightningPaymentHash = null),
+        )
+        allowed.forEach { attempt ->
+            current = { attempt }
+            sut.showSheet(Sheet.Send(SendRoute.Confirm))
+            runCurrent()
+            setSendState(send)
+
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+        }
+        verify(lightningRepo, times(allowed.size)).payInvoice(bolt11 = bolt11, sats = null)
+    }
+
+    @Test
+    fun `quickpay is skipped while an on-chain payment of the invoice's address may have gone out`() = test {
+        val bolt11 = "lnbcrt1quickpayonchainfirst"
+        enableQuickPay(canApply = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(invoiceAddressAttempt("010203"))
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
     @Test
     fun `an on-chain-only send is never held back for a lightning payment`() = test {
         val uri = "bitcoin:$REGTEST_ADDRESS"
@@ -17003,6 +17076,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         isAmountInputValid = true,
         payMethod = SendMethod.ONCHAIN,
         speed = TransactionSpeed.Medium,
+    )
+
+    private fun invoiceAddressAttempt(paymentHash: String) = OnchainSendAttempt(
+        walletId = WalletScope.default, attemptId = "invoice-address", requestId = null, orderId = null,
+        address = REGTEST_ADDRESS, amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,
+        isTransfer = false, channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Unknown,
+        lightningPaymentHash = paymentHash,
     )
 
     private fun hardwareSendOfInvoiceAddress(paymentHash: String) = SendUiState(

@@ -971,6 +971,7 @@
     <string name="wallet__send_instant_failed">فشل الدفع</string>
     <string name="wallet__send_invoice">الفاتورة</string>
     <string name="wallet__send_invoice_expiration">انتهاء صلاحية الفاتورة</string>
+    <string name="wallet__send_lightning_onchain_sent">ربما أُرسلت بالفعل دفعة Onchain إلى عنوان هذه الفاتورة، لذا لن يدفع Bitkit الفاتورة عبر Lightning أيضًا.</string>
     <string name="wallet__send_max_spending__description">الحد الأقصى القابل للإنفاق أقل قليلاً بسبب الرصيد الاحتياطي المطلوب.</string>
     <string name="wallet__send_max_spending__title">الرصيد الاحتياطي</string>
     <string name="wallet__send_onchain_lightning_paid">نجحت بالفعل دفعة Lightning لهذه الفاتورة، لذا لن يدفعها Bitkit مرة أخرى عبر Onchain.</string>
