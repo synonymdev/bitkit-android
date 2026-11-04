@@ -26,7 +26,6 @@ import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -86,7 +85,7 @@ private fun Content(
         PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
             onRefresh = onRefresh,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.weight(1f)
         ) {
             Column(
                 modifier = Modifier
@@ -110,25 +109,26 @@ private fun Content(
                         onNotificationSettings = onNotificationSettings,
                     )
                 }
-                FillHeight()
                 VerticalSpacer(32.dp)
-                if (uiState.canCancel) {
-                    SecondaryButton(
-                        text = stringResource(R.string.lightning__spark_exit__cancel),
-                        onClick = onCancel,
-                        testTag = "SparkExitCancel",
-                    )
-                    VerticalSpacer(16.dp)
-                }
-                PrimaryButton(
-                    text = stringResource(R.string.common__ok),
-                    onClick = onDone,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("SparkExitProgressOk")
+            }
+        }
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            if (uiState.canCancel) {
+                SecondaryButton(
+                    text = stringResource(R.string.lightning__spark_exit__cancel),
+                    onClick = onCancel,
+                    testTag = "SparkExitCancel",
                 )
                 VerticalSpacer(16.dp)
             }
+            PrimaryButton(
+                text = stringResource(R.string.common__ok),
+                onClick = onDone,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("SparkExitProgressOk")
+            )
+            VerticalSpacer(16.dp)
         }
     }
 }

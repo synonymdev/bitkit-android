@@ -1,7 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -20,7 +19,6 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.CaptionM
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -72,7 +70,7 @@ private fun Content(
         )
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
@@ -94,8 +92,9 @@ private fun Content(
                     seenSats = uiState.fundingSeenSats
                 )
             }
-            FillHeight()
             VerticalSpacer(32.dp)
+        }
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             if (uiState.showsFundingAddress) {
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),

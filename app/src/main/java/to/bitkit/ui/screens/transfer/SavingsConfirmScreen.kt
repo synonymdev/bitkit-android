@@ -6,15 +6,19 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -186,112 +190,127 @@ private fun SavingsConfirmContent(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
-
         ) {
-            VerticalSpacer(32.dp)
-            Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent())
-            VerticalSpacer(32.dp)
-
-            Caption13Up(text = stringResource(R.string.lightning__savings_confirm__label), color = Colors.White64)
-            VerticalSpacer(8.dp)
-            MoneyDisplay(sats = headlineAmount.toLong(), onClick = onAmountClick)
-
-            if (quote != null) {
-                VerticalSpacer(24.dp)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.height(IntrinsicSize.Min),
-                ) {
-                    FeeInfo(
-                        label = stringResource(R.string.lightning__savings_confirm__network_fee),
-                        amount = quote.networkFeeSat.toLong(),
-                    )
-                    FeeInfo(
-                        label = stringResource(R.string.lightning__savings_confirm__service_fee),
-                        amount = quote.swapFeeSat.toLong(),
-                    )
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.height(IntrinsicSize.Min),
-                ) {
-                    FeeInfo(
-                        label = stringResource(R.string.lightning__savings_confirm__amount),
-                        amount = headlineAmount.toLong(),
-                    )
-                    FeeInfo(
-                        label = stringResource(R.string.lightning__savings_confirm__receive),
-                        amount = receiveAmount.toLong(),
-                    )
-                }
-
-                // Adjust how much to move to savings, bounded to a payable range.
-                if (maxSat > minSat) {
-                    VerticalSpacer(28.dp)
-                    AmountSlider(
-                        value = quote.amountSat.toLong(),
-                        min = minSat.toLong(),
-                        max = maxSat.toLong(),
-                        onValueChange = onAmountChange,
-                    )
-                }
-            }
-
-            if (sparkFeeSats != null) {
-                VerticalSpacer(if (quote != null) 0.dp else 24.dp)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.height(IntrinsicSize.Min),
-                ) {
-                    FeeInfo(
-                        label = stringResource(R.string.lightning__savings_confirm__spark_fee),
-                        amount = sparkFeeSats.toLong(),
-                    )
-                }
-            }
-
-            if (hasMultiple) {
-                VerticalSpacer(24.dp)
-                if (hasSelected) {
-                    PrimaryButton(
-                        text = stringResource(R.string.lightning__savings_confirm__transfer_all),
-                        size = ButtonSize.Small,
-                        fullWidth = false,
-                        onClick = { onSelectAllClick() },
-                    )
-                } else {
-                    PrimaryButton(
-                        text = stringResource(R.string.common__advanced),
-                        size = ButtonSize.Small,
-                        fullWidth = false,
-                        onClick = { onAdvancedClick() },
-                    )
-                }
-            }
-
-            // Flexible middle: the piggybank fills the remaining space, so it shrinks when the
-            // fees/slider are shown (no squished buttons) and fills the gap while the quote loads.
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                contentAlignment = Alignment.Center,
             ) {
-                if (isPricingSwap) {
-                    GradientCircularProgressIndicator(
-                        modifier = Modifier.size(48.dp),
-                        strokeWidth = 3.dp,
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .heightIn(min = maxHeight)
+                ) {
+                    VerticalSpacer(32.dp)
+                    Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent())
+                    VerticalSpacer(32.dp)
+
+                    Caption13Up(
+                        text = stringResource(R.string.lightning__savings_confirm__label),
+                        color = Colors.White64,
                     )
-                } else {
-                    Image(
-                        painter = painterResource(R.drawable.piggybank),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
+                    VerticalSpacer(8.dp)
+                    MoneyDisplay(sats = headlineAmount.toLong(), onClick = onAmountClick)
+
+                    if (quote != null) {
+                        VerticalSpacer(24.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                        ) {
+                            FeeInfo(
+                                label = stringResource(R.string.lightning__savings_confirm__network_fee),
+                                amount = quote.networkFeeSat.toLong(),
+                            )
+                            FeeInfo(
+                                label = stringResource(R.string.lightning__savings_confirm__service_fee),
+                                amount = quote.swapFeeSat.toLong(),
+                            )
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                        ) {
+                            FeeInfo(
+                                label = stringResource(R.string.lightning__savings_confirm__amount),
+                                amount = headlineAmount.toLong(),
+                            )
+                            FeeInfo(
+                                label = stringResource(R.string.lightning__savings_confirm__receive),
+                                amount = receiveAmount.toLong(),
+                            )
+                        }
+
+                        // Adjust how much to move to savings, bounded to a payable range.
+                        if (maxSat > minSat) {
+                            VerticalSpacer(28.dp)
+                            AmountSlider(
+                                value = quote.amountSat.toLong(),
+                                min = minSat.toLong(),
+                                max = maxSat.toLong(),
+                                onValueChange = onAmountChange,
+                            )
+                        }
+                    }
+
+                    if (sparkFeeSats != null) {
+                        VerticalSpacer(if (quote != null) 0.dp else 24.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                        ) {
+                            FeeInfo(
+                                label = stringResource(R.string.lightning__savings_confirm__spark_fee),
+                                amount = sparkFeeSats.toLong(),
+                            )
+                        }
+                    }
+
+                    if (hasMultiple) {
+                        VerticalSpacer(24.dp)
+                        if (hasSelected) {
+                            PrimaryButton(
+                                text = stringResource(R.string.lightning__savings_confirm__transfer_all),
+                                size = ButtonSize.Small,
+                                fullWidth = false,
+                                onClick = { onSelectAllClick() },
+                            )
+                        } else {
+                            PrimaryButton(
+                                text = stringResource(R.string.common__advanced),
+                                size = ButtonSize.Small,
+                                fullWidth = false,
+                                onClick = { onAdvancedClick() },
+                            )
+                        }
+                    }
+
+                    // Flexible middle: the piggybank fills the remaining space, so it shrinks when the
+                    // fees/slider are shown (no squished buttons) and fills the gap while the quote loads.
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer(scaleX = -1f),
-                    )
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isPricingSwap) {
+                            GradientCircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                strokeWidth = 3.dp,
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(R.drawable.piggybank),
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer(scaleX = -1f),
+                            )
+                        }
+                    }
                 }
             }
 
