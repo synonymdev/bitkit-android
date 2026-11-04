@@ -64,7 +64,6 @@ class HwSendViewModel @Inject constructor(
         const val TAG = "HwSendViewModel"
         val COMPOSE_TIMEOUT = 45.seconds
         val SIGN_TIMEOUT = 120.seconds
-        val BROADCAST_TIMEOUT = 120.seconds
     }
 
     val wallets: StateFlow<ImmutableList<HwWallet>>
@@ -241,34 +240,34 @@ class HwSendViewModel @Inject constructor(
             }
         }
         _uiState.update { it.copy(isBroadcastUnresolved = true) }
-        return withTimeout(BROADCAST_TIMEOUT) {
-            val request = payment.request
-            val requestId = request.paymentRequestId
-            if (requestId == null) {
+        // No deadline: the broadcast runs to its end on the core queue, so one could only discard the outcome of a
+        // payment that went out. The sheet stays unresolved until it answers.
+        val request = payment.request
+        val requestId = request.paymentRequestId
+        val outcome = if (requestId == null) {
+            pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
+            hwWalletRepo.broadcastFunding(payment.signedTx, request.paymentDeadlineAt)
+        } else {
+            hwWalletRepo.broadcastFundingAtBoundary(payment.signedTx, request.paymentDeadlineAt) {
+                check(
+                    paykitPaymentProofRepo.markHardwareOnchainDispatch(
+                        requestId,
+                        request.walletId,
+                        SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                        request.paymentIdentity,
+                        request.address,
+                        request.amountSats,
+                    )
+                ) { "Original hardware payment is no longer eligible for dispatch" }
                 pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
-                hwWalletRepo.broadcastFunding(payment.signedTx, request.paymentDeadlineAt)
-            } else {
-                hwWalletRepo.broadcastFundingAtBoundary(payment.signedTx, request.paymentDeadlineAt) {
-                    check(
-                        paykitPaymentProofRepo.markHardwareOnchainDispatch(
-                            requestId,
-                            request.walletId,
-                            SignedTransactionId.fromHex(payment.signedTx.serializedTx),
-                            request.paymentIdentity,
-                            request.address,
-                            request.amountSats,
-                        )
-                    ) { "Original hardware payment is no longer eligible for dispatch" }
-                    pendingBroadcast = payment.copy(hasAttemptedBroadcast = true, isRefusedForNavigation = false)
-                }
             }
-        }.getOrElse { error ->
+        }
+        return outcome.getOrElse { error ->
             if (generateSequence(error) { it.cause }.any { it is ServiceError.PaymentDeadlineExpired }) {
-                val request = payment.request
-                val cleared = request.paymentRequestId?.let { requestId ->
+                val cleared = requestId?.let {
                     !payment.hasAttemptedBroadcast &&
                         paykitPaymentProofRepo.clearHardwareOnchainCandidateBeforeDispatch(
-                            requestId, request.walletId, SignedTransactionId.fromHex(payment.signedTx.serializedTx),
+                            it, request.walletId, SignedTransactionId.fromHex(payment.signedTx.serializedTx),
                             request.paymentIdentity, request.address, request.amountSats, payment.hasAttemptedBroadcast,
                         )
                 } ?: !payment.hasAttemptedBroadcast

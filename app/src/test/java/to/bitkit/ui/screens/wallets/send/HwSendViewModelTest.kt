@@ -10,6 +10,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
@@ -497,6 +498,43 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isBroadcastUnresolved)
         assertTrue(sut.uiState.value.hasPendingBroadcast)
         assertFalse(sut.uiState.value.isSigning)
+    }
+
+    @Test
+    fun `a broadcast that succeeds after two minutes is recorded as sent without a retry prompt`() = test {
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val broadcastResult = CompletableDeferred<Result<HwFundingBroadcastResult>>()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).doSuspendableAnswer {
+            withContext(NonCancellable) { broadcastResult.await() }
+        }
+
+        sut.signAndBroadcast(request())
+        advanceTimeBy(121.seconds)
+        runCurrent()
+        assertTrue(sut.uiState.value.isBroadcastUnresolved)
+        assertFalse(sut.uiState.value.canLeave)
+
+        broadcastResult.complete(Result.success(fixture.broadcast))
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertTrue(toasts.isEmpty())
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            txid = fixture.broadcast.txId,
+            address = ADDRESS,
+            amount = AMOUNT_SATS,
+            fee = fixture.broadcast.miningFeeSats,
+            feeRate = fixture.broadcast.feeRate,
+            isTransfer = false,
+            channelId = null,
+            walletId = WALLET_ID,
+        )
+        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo, times(1)).broadcastFunding(fixture.signedTx)
     }
 
     @Test
