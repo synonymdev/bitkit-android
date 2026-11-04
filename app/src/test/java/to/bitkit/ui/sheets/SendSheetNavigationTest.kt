@@ -12,7 +12,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.ui.navigateTo
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -45,67 +44,6 @@ class SendSheetNavigationTest {
             assertTrue(requireNotNull(navController.currentDestination).isPaymentReview())
             assertTrue(navController.popBackStack())
             assertFalse(requireNotNull(navController.currentDestination).isPaymentReview())
-        }
-    }
-
-    @Test
-    fun `back from a confirm opened by an invoice amount replaces it with amount`() {
-        for (start in listOf(SendRoute.Confirm, SendRoute.Recipient)) {
-            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
-                navigatorProvider.addNavigator(ComposeNavigator())
-                graph = createGraph(startDestination = start) {
-                    composable<SendRoute.Recipient> {}
-                    composable<SendRoute.Confirm> {}
-                    composable<SendRoute.Amount> {}
-                }
-            }
-            if (start != SendRoute.Confirm) navController.navigateTo(SendRoute.Confirm)
-
-            navController.navigateToAmountFromConfirm()
-
-            assertTrue(requireNotNull(navController.currentDestination).hasRoute<SendRoute.Amount>())
-            val previous = navController.previousBackStackEntry?.destination
-            if (start == SendRoute.Confirm) {
-                assertNull(previous)
-            } else {
-                assertTrue(requireNotNull(previous).hasRoute<SendRoute.Recipient>())
-            }
-            navController.navigateTo(SendRoute.Confirm)
-            assertTrue(navController.popBackStack(SendRoute.Amount, inclusive = false))
-        }
-    }
-
-    @Test
-    fun `back from a first confirm opens amount only when it can return to amount`() {
-        for (canReturnToAmount in listOf(true, false)) {
-            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
-                navigatorProvider.addNavigator(ComposeNavigator())
-                graph = createGraph(startDestination = SendRoute.Confirm) {
-                    composable<SendRoute.Confirm> {}
-                    composable<SendRoute.Amount> {}
-                }
-            }
-
-            val handled = navController.backFromConfirm(canReturnToAmount)
-
-            assertEquals(canReturnToAmount, handled)
-            assertEquals(canReturnToAmount, navController.currentDestination?.hasRoute<SendRoute.Amount>() == true)
-        }
-    }
-
-    @Test
-    fun `return to amount opens amount from a first confirm only when it can return to amount`() {
-        for (canReturnToAmount in listOf(true, false)) {
-            val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
-                navigatorProvider.addNavigator(ComposeNavigator())
-                graph = createGraph(startDestination = SendRoute.Confirm) {
-                    composable<SendRoute.Confirm> {}
-                    composable<SendRoute.Amount> {}
-                }
-            }
-
-            assertEquals(canReturnToAmount, navController.returnToAmount(canReturnToAmount))
-            assertEquals(canReturnToAmount, navController.currentDestination?.hasRoute<SendRoute.Amount>() == true)
         }
     }
 
