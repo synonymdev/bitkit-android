@@ -3745,6 +3745,21 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `beginSavedContactPayment fails without public payment when the saved contact lookup fails`() = test {
+        whenever(paykitSdkService.contactRecord(CONTACT_KEY)).doSuspendableAnswer {
+            throw PaykitException.SharedStateBusy("shared_state_busy", "Contacts are busy")
+        }
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY)
+
+        assertIs<PaykitException.SharedStateBusy>(result.exceptionOrNull())
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        verifyBlocking(paykitSdkService, never()) {
+            prepareAndResolvePrivateContactPayment(any(), anyOrNull(), anyOrNull())
+        }
+    }
+
+    @Test
     fun `beginSavedContactPayment pays an unsaved profile through public endpoints`() = test {
         whenever { paykitSdkService.contactRecord(CONTACT_KEY) }.thenReturn(null)
 
@@ -4026,6 +4041,33 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(PublicPaykitPaymentResult.NoEndpoint, result)
         verify(coreService, never()).decode(any())
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginPaymentRequest keeps failing when preparation fails while the peer is not linked yet`() = test {
+        val request = paymentRequest()
+        whenever(
+            paykitSdkService.prepareAndResolvePrivatePaymentRequest(
+                eq(CONTACT_KEY),
+                eq("request-id"),
+                eq(null),
+            )
+        ).doSuspendableAnswer {
+            throw PaykitException.Transport("transport", "Connection unavailable")
+        }
+
+        try {
+            for (linkState in listOf(LinkedPeerState.NOT_LINKED, LinkedPeerState.LINKING)) {
+                whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, linkState)))
+
+                val result = sut.beginPaymentRequest(request)
+
+                assertIs<PaykitException.Transport>(result.exceptionOrNull(), "Link state '$linkState'")
+            }
+            verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        } finally {
+            sut.closeAndClear()
+        }
     }
 
     @Test
