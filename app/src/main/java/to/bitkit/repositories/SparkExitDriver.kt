@@ -133,7 +133,7 @@ class SparkExitDriver(
         }.getOrElse {
             // A leaf the SDK refuses to build is left behind, and the rest rebuilt on the next tick.
             SparkExitUnexitable.parse(it)?.takeIf { refusal -> refusal.leafId in record.exitLeafIds }?.let { refusal ->
-                Logger.warn("Spark exit leaf '${refusal.leafId}' cannot be built: '${refusal.reason}'", context = TAG)
+                Logger.warn("Leaving behind Spark exit leaf '${refusal.leafId}': '${refusal.reason}'", context = TAG)
                 return record.leaveBehind(refusal.leafId, refusal.reason).copy(isRebuilding = true, lastBuildAt = null)
             }
             if (it !is SdkException.InsufficientCpfpFunds) throw it
@@ -188,7 +188,7 @@ class SparkExitDriver(
             result.getOrNull()?.let { return record to it }
             val error = requireNotNull(result.exceptionOrNull())
             val refusal = SparkExitUnexitable.parse(error) ?: throw error
-            Logger.warn("Spark exit leaf '${refusal.leafId}' cannot be exited: '${refusal.reason}'", context = TAG)
+            Logger.warn("Leaving behind Spark exit leaf '${refusal.leafId}': '${refusal.reason}'", context = TAG)
             if (refusal.leafId in ids) {
                 record = record.leaveBehind(refusal.leafId, refusal.reason)
                 continue
@@ -207,7 +207,7 @@ class SparkExitDriver(
      * every rebuild would reproduce the same spent refund. The next tick rebuilds at once without them.
      */
     private suspend fun loseLeaves(record: SparkExitRecord, lost: List<SparkExitRecord.LostLeaf>): SparkExitRecord {
-        Logger.warn("Spark exit leaves '${lost.map { it.leafId }}' were claimed by an older state", context = TAG)
+        Logger.warn("Dropping Spark exit leaves '${lost.map { it.leafId }}' claimed by an older state", context = TAG)
         val updated = record.copy(lostLeaves = record.lostLeaves + lost, isRebuilding = true, lastBuildAt = null)
         if (updated.exitLeafIds.isNotEmpty()) return updated
         return end(updated.copy(phase = SparkExitRecord.Phase.Failed(LOST_REASON), isRebuilding = false), updated)

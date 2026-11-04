@@ -39,7 +39,10 @@ fun SparkExitFundingScreen(
     onContinue: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { viewModel.loadSavingsFunding() }
+    LaunchedEffect(Unit) {
+        viewModel.onFundingShown()
+        viewModel.loadSavingsFunding()
+    }
     DisposableEffect(Unit) { onDispose { viewModel.stopWatchingFundingAddress() } }
     Content(
         uiState = uiState,

@@ -62,7 +62,11 @@ class SparkExitViewModel @Inject constructor(
 
     fun loadQuote() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isQuoting = true, hasQuoteError = false) }
+            // A new quote starts the funding choice over.
+            stopWatchingFundingAddress()
+            _uiState.update {
+                it.copy(isQuoting = true, hasQuoteError = false, fundFromSavings = false, showsFundingAddress = false)
+            }
             sparkExitRepo.loadQuote()
                 .onSuccess { quote -> _uiState.update { it.copy(quote = quote, isQuoting = false) } }
                 .onFailure { _uiState.update { it.copy(quote = null, isQuoting = false, hasQuoteError = true) } }
@@ -77,6 +81,19 @@ class SparkExitViewModel @Inject constructor(
                     _uiState.update { it.copy(savingsFeeSats = funding.feeSats, canFundFromSavings = funding.canPay) }
                 }
                 .onFailure { _uiState.update { it.copy(hasSavingsFeeFailed = true, canFundFromSavings = false) } }
+        }
+    }
+
+    /**
+     * Entering the funding step offers both choices again, unless the funding address already received a payment:
+     * then it keeps showing the address and what reached it.
+     */
+    fun onFundingShown() {
+        stopWatchingFundingAddress()
+        _uiState.update { it.copy(fundFromSavings = false, showsFundingAddress = false) }
+        viewModelScope.launch {
+            val seen = sparkExitRepo.refreshFundingAddress().getOrNull() ?: return@launch
+            if (seen > 0uL) onFundExternally()
         }
     }
 
