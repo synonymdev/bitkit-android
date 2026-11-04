@@ -7407,6 +7407,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an observed retained send gets no amount or fee exception`() = test {
+        stubRetainedRecord(observed = true)
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("insufficient funds")))
+        setSendState(nearMaxRetainedState())
+
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS))
+        sut.refreshRetainedRetryAmount()
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        assertNull(sut.sendUiState.value.retainedRetryAmountSats)
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).estimateFundingMiningFee(any(), any(), any(), any())
+        assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+    }
+
+    @Test
     fun `a shop payment never reads the retained send record`() = test {
         stubRetainedRecord()
         whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
@@ -7651,7 +7672,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         speed = TransactionSpeed.Fast,
     )
 
-    private suspend fun stubRetainedRecord(retryWasRefused: Boolean = false) {
+    private suspend fun stubRetainedRecord(retryWasRefused: Boolean = false, observed: Boolean = false) {
         whenever(hwRetainedSendRepo.record(any())).thenReturn(
             Result.success(
                 HwRetainedSend(
@@ -7663,6 +7684,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                     feeRate = RETAINED_RETRY.feeRate,
                     totalSpent = RETAINED_AMOUNT_SATS + RETAINED_RETRY.miningFeeSats,
                     retryWasRefused = retryWasRefused,
+                    observed = observed,
                 )
             )
         )

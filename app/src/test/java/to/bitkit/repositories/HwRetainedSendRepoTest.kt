@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -148,22 +149,84 @@ class HwRetainedSendRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `observing the transaction releases regardless of txid case`() = test {
+    fun `observing the transaction marks and keeps the record regardless of txid case`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        assertEquals(false, sut.record(WALLET).getOrThrow()?.observed)
+        val txId = SignedTransactionId.fromHex(hex)
+
+        sut.markObserved(WALLET, listOf("ff".repeat(32), txId.uppercase())).getOrThrow()
+
+        val record = assertNotNull(sut.record(WALLET).getOrThrow())
+        assertTrue(record.observed)
+        assertEquals(signedTx, record.signedTx)
+        verify(keychain, never()).deleteScoped(any(), any())
+    }
+
+    @Test
+    fun `marking observed is idempotent and writes once`() = test {
         sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
         val txId = SignedTransactionId.fromHex(hex)
 
-        sut.releaseIfObserved(WALLET, listOf("ff".repeat(32), txId.uppercase())).getOrThrow()
+        sut.markObserved(WALLET, listOf(txId)).getOrThrow()
+        val observedEntry = entries[WALLET]
+        clearInvocations(keychain)
+        sut.markObserved(WALLET, listOf(txId)).getOrThrow()
 
-        assertNull(sut.record(WALLET).getOrThrow())
+        assertEquals(observedEntry, entries[WALLET])
+        verify(keychain, never()).upsertScopedString(any(), any(), any())
+    }
+
+    @Test
+    fun `the observed flag survives a new repository and does not touch another wallet`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        sut.retain(OTHER_WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+
+        sut.markObserved(WALLET, listOf(SignedTransactionId.fromHex(hex))).getOrThrow()
+
+        val restarted = HwRetainedSendRepo(testDispatcher, keychain)
+        assertEquals(true, restarted.record(WALLET).getOrThrow()?.observed)
+        assertEquals(false, restarted.record(OTHER_WALLET).getOrThrow()?.observed)
+    }
+
+    @Test
+    fun `marking a refused retry and marking observed keep each other`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        val txId = SignedTransactionId.fromHex(hex)
+
+        sut.markRetryRefused(WALLET).getOrThrow()
+        sut.markObserved(WALLET, listOf(txId)).getOrThrow()
+        sut.markRetryRefused(WALLET).getOrThrow()
+
+        val record = assertNotNull(sut.record(WALLET).getOrThrow())
+        assertTrue(record.retryWasRefused)
+        assertTrue(record.observed)
+    }
+
+    @Test
+    fun `an entry stored before the observed flag existed reads as not observed`() = test {
+        sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
+        val stored = assertNotNull(entries[WALLET])
+        assertFalse("observed" in stored)
+
+        assertEquals(false, sut.record(WALLET).getOrThrow()?.observed)
+    }
+
+    @Test
+    fun `marking observed for a wallet without a record writes nothing`() = test {
+        sut.markObserved(WALLET, listOf("ff".repeat(32))).getOrThrow()
+
+        assertTrue(entries.isEmpty())
     }
 
     @Test
     fun `observing other transactions keeps the record`() = test {
         sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).getOrThrow()
 
-        sut.releaseIfObserved(WALLET, listOf("ff".repeat(32))).getOrThrow()
+        sut.markObserved(WALLET, listOf("ff".repeat(32))).getOrThrow()
 
-        assertEquals(signedTx, sut.record(WALLET).getOrThrow()?.signedTx)
+        val record = assertNotNull(sut.record(WALLET).getOrThrow())
+        assertFalse(record.observed)
+        assertEquals(signedTx, record.signedTx)
     }
 
     @Test
@@ -171,10 +234,12 @@ class HwRetainedSendRepoTest : BaseUnitTest() {
         val invalid = signedTx("not hex")
         sut.retain(WALLET, ADDRESS, AMOUNT_SATS, invalid).getOrThrow()
 
-        val result = sut.releaseIfObserved(WALLET, listOf("not hex", "", "ff".repeat(32)))
+        val result = sut.markObserved(WALLET, listOf("not hex", "", "ff".repeat(32)))
 
         assertTrue(result.isSuccess)
-        assertEquals(invalid, sut.record(WALLET).getOrThrow()?.signedTx)
+        val record = assertNotNull(sut.record(WALLET).getOrThrow())
+        assertFalse(record.observed)
+        assertEquals(invalid, record.signedTx)
     }
 
     @Test
@@ -186,7 +251,7 @@ class HwRetainedSendRepoTest : BaseUnitTest() {
         assertIs<HwRetainedSendError.Undecodable>(sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).exceptionOrNull())
         assertIs<HwRetainedSendError.Undecodable>(sut.markRetryRefused(WALLET).exceptionOrNull())
         assertIs<HwRetainedSendError.Undecodable>(sut.release(WALLET).exceptionOrNull())
-        assertIs<HwRetainedSendError.Undecodable>(sut.releaseIfObserved(WALLET, listOf("ff")).exceptionOrNull())
+        assertIs<HwRetainedSendError.Undecodable>(sut.markObserved(WALLET, listOf("ff")).exceptionOrNull())
         assertEquals(CORRUPT_ENTRY, entries[WALLET])
         assertEquals(signedTx, sut.record(OTHER_WALLET).getOrThrow()?.signedTx)
 
@@ -205,7 +270,7 @@ class HwRetainedSendRepoTest : BaseUnitTest() {
         assertEquals(failure, sut.retain(WALLET, ADDRESS, AMOUNT_SATS, signedTx).exceptionOrNull())
         assertEquals(failure, sut.markRetryRefused(WALLET).exceptionOrNull())
         assertEquals(failure, sut.release(WALLET).exceptionOrNull())
-        assertEquals(failure, sut.releaseIfObserved(WALLET, listOf("ff")).exceptionOrNull())
+        assertEquals(failure, sut.markObserved(WALLET, listOf("ff")).exceptionOrNull())
 
         verify(keychain, never()).deleteScoped(any(), any())
         verify(keychain, never()).upsertScopedString(any(), any(), any())

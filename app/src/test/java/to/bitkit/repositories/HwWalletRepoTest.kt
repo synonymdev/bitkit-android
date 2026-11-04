@@ -159,7 +159,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }.thenReturn(Result.success(Unit))
         whenever { hwWalletStore.setPendingName(any(), anyOrNull()) }.thenReturn(Unit)
         whenever { hwRetainedSendRepo.release(any()) }.thenReturn(Result.success(Unit))
-        whenever { hwRetainedSendRepo.releaseIfObserved(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { hwRetainedSendRepo.markObserved(any(), any()) }.thenReturn(Result.success(Unit))
     }
 
     @Test
@@ -1918,7 +1918,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `watcher event releases the retained send with the wallet's existing transactions only`() = test {
+    fun `watcher event marks the retained send with the wallet's existing transactions only`() = test {
         val sut = createRepo()
         val removed = watcherActivity(amount = 1uL, txid = "removed").let {
             it.copy(v1 = it.v1.copy(doesExist = false))
@@ -1937,12 +1937,13 @@ class HwWalletRepoTest : BaseUnitTest() {
             )
         )
 
-        verify(hwRetainedSendRepo).releaseIfObserved(HARDWARE_WALLET_ID, listOf("seen"))
+        verify(hwRetainedSendRepo).markObserved(HARDWARE_WALLET_ID, listOf("seen"))
+        verify(hwRetainedSendRepo, never()).release(any())
     }
 
     @Test
-    fun `watcher event still persists when the retained send release fails`() = test {
-        whenever(hwRetainedSendRepo.releaseIfObserved(any(), any()))
+    fun `watcher event still persists when marking the retained send fails`() = test {
+        whenever(hwRetainedSendRepo.markObserved(any(), any()))
             .thenReturn(Result.failure(KeychainError.FailedToLoad("retained")))
         val sut = createRepo()
 
@@ -1963,8 +1964,8 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a failed retained send release retries on the next unchanged watcher event`() = test {
-        whenever(hwRetainedSendRepo.releaseIfObserved(any(), any())).thenReturn(
+    fun `a failed retained send mark retries on the next unchanged watcher event`() = test {
+        whenever(hwRetainedSendRepo.markObserved(any(), any())).thenReturn(
             Result.failure(KeychainError.FailedToLoad("retained")),
             Result.success(Unit),
         )
@@ -1982,7 +1983,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit("hardware-wallet|nativeSegwit" to event)
         watcherEvents.emit("hardware-wallet|nativeSegwit" to event)
 
-        verify(hwRetainedSendRepo, times(2)).releaseIfObserved(HARDWARE_WALLET_ID, listOf("seen"))
+        verify(hwRetainedSendRepo, times(2)).markObserved(HARDWARE_WALLET_ID, listOf("seen"))
         verify(activityRepo).persistHwSnapshot(any<String>(), any<List<Activity>>(), any<List<TransactionDetails>>())
     }
 

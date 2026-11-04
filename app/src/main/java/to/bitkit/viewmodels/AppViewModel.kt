@@ -4714,7 +4714,7 @@ class AppViewModel @Inject constructor(
             Logger.warn("Failed to read retained hardware send for '$walletId'", it, context = TAG)
             return null
         }
-        return record?.takeIf { !it.retryWasRefused && it.address == address }
+        return record?.takeIf { !it.retryWasRefused && !it.observed && it.address == address }
     }
 
     private suspend fun maxSendOnchainWithRetainedRetry(

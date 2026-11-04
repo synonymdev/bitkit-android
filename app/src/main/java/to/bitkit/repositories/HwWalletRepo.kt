@@ -1121,10 +1121,10 @@ class HwWalletRepo @Inject constructor(
         syncWatchers()
     }
 
-    private suspend fun releaseObservedRetainedSend(walletId: String, txIds: List<String>) {
+    private suspend fun markObservedRetainedSend(walletId: String, txIds: List<String>) {
         if (txIds.isEmpty()) return
-        hwRetainedSendRepo.releaseIfObserved(walletId, txIds)
-            .onFailure { Logger.warn("Failed to release observed send of '$walletId'", it, context = TAG) }
+        hwRetainedSendRepo.markObserved(walletId, txIds)
+            .onFailure { Logger.warn("Failed to mark observed send of '$walletId'", it, context = TAG) }
     }
 
     private fun observeWatcherEvents() {
@@ -1189,7 +1189,7 @@ class HwWalletRepo @Inject constructor(
                         receivedTxs = buildReceivedTxs(previousIds, persistedActivities, updatedWatcherData),
                     )
                 } ?: return@collect
-                releaseObservedRetainedSend(outcome.walletId, outcome.observedTxIds)
+                markObservedRetainedSend(outcome.walletId, outcome.observedTxIds)
                 outcome.receivedTxs.forEach { _receivedTxs.emit(it) }
             }
         }

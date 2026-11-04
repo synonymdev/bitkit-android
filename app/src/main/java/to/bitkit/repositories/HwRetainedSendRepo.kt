@@ -31,13 +31,15 @@ data class HwRetainedSend(
     val feeRate: ULong,
     val totalSpent: ULong,
     val retryWasRefused: Boolean = false,
+    val observed: Boolean = false,
 ) {
     val signedTx: HwFundingSignedTx
         get() = HwFundingSignedTx(serializedTx, miningFeeSats, feeRate, totalSpent)
 
     fun isSamePayment(address: String, amountSats: ULong) = this.address == address && this.amountSats == amountSats
 
-    override fun toString() = "HwRetainedSend(walletId='$walletId', retryWasRefused='$retryWasRefused')"
+    override fun toString() =
+        "HwRetainedSend(walletId='$walletId', retryWasRefused='$retryWasRefused', observed='$observed')"
 }
 
 sealed class HwRetainedSendError(message: String) : AppError(message) {
@@ -100,10 +102,15 @@ class HwRetainedSendRepo @Inject constructor(
         if (load(walletId) != null) keychain.deleteScoped(KEY, walletId)
     }
 
-    /** Releases the wallet's record when one of [txIds] is its transaction. A record with invalid hex never matches. */
-    suspend fun releaseIfObserved(walletId: String, txIds: Collection<String>): Result<Unit> = locked {
-        val txId = load(walletId)?.let { runCatching { SignedTransactionId.fromHex(it.serializedTx) }.getOrNull() }
-        if (txId != null && txIds.any { it.equals(txId, ignoreCase = true) }) keychain.deleteScoped(KEY, walletId)
+    /**
+     * Marks the wallet's record when one of [txIds] is its transaction. A record with invalid hex never matches.
+     * Never deletes: a delivered transaction is when the sign button still reads Retry, and with no record to restore
+     * that retry would sign a second payment.
+     */
+    suspend fun markObserved(walletId: String, txIds: Collection<String>): Result<Unit> = locked {
+        val record = load(walletId)?.takeUnless { it.observed } ?: return@locked
+        val txId = runCatching { SignedTransactionId.fromHex(record.serializedTx) }.getOrNull() ?: return@locked
+        if (txIds.any { it.equals(txId, ignoreCase = true) }) save(record.copy(observed = true))
     }
 
     /**
