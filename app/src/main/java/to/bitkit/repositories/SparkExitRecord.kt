@@ -137,6 +137,12 @@ data class SparkExitRecord(
             return shortfall.takeIf { it > 0uL }
         }
 
+    /**
+     * What the user is asked to send to the funding address: the shortfall, raised to the dust limit, since no wallet
+     * pays a smaller output. The sweep at the end returns what the exit does not spend.
+     */
+    val fundingRequestSats: ULong? get() = fundingShortfallSats?.let { maxOf(it, SparkExitSweep.DUST_SATS) }
+
     /** Starts a new generation from a fresh build, forgetting what was broadcast for the previous one. */
     fun adopt(built: RecoverFundsResponse, atMillis: Long): SparkExitRecord = copy(
         generation = generation + 1,

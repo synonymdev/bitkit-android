@@ -58,6 +58,20 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `a shortfall below dust is asked for as dust, which a wallet can pay`() {
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.NeedsFunding(9_085uL)).copy(
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 0u, 9_035uL)
+            ),
+        )
+
+        assertEquals(50uL, record.fundingShortfallSats)
+        assertEquals(546uL, record.fundingRequestSats)
+        assertEquals(3_000uL, record.copy(phase = SparkExitRecord.Phase.NeedsFunding(12_035uL)).fundingRequestSats)
+        assertNull(record.copy(phase = SparkExitRecord.Phase.Running).fundingRequestSats)
+    }
+
+    @Test
     fun `claimable height is the latest timelock`() {
         val recovery = SparkExitFixtures.recovery(
             listOf(

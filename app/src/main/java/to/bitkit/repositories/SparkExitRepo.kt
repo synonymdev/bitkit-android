@@ -213,9 +213,7 @@ class SparkExitRepo @Inject constructor(
         record.transferId?.let { transferRepo.updateClaimableAtHeight(it, record.claimableAtHeight) }
         settleIfFinished(record)
         updateAlerts(record, previous, isOnTrack)
-        if (record.phase == SparkExitRecord.Phase.Done && previous.phase != SparkExitRecord.Phase.Done) {
-            if (record.leftover.isNotEmpty()) sweepLeftover()
-        }
+        if (!record.isActive && previous.isActive && record.leftover.isNotEmpty()) sweepLeftover()
         if (!record.isActive) {
             Logger.info("Ended Spark exit with phase '${record.phase}'", context = TAG)
             work.cancelAll()
@@ -440,15 +438,15 @@ class SparkExitRepo @Inject constructor(
     }
 
     /**
-     * Moves the fee funding a finished exit left at its funding address to the exit's savings address, signed with the
-     * funding key: change from a branch whose refund the operators published, or funding a rebuild no longer needed.
-     * Runs once when the exit ends, background runs included, and again from the result screen. Returns the sweep's
+     * Moves the fee funding an ended exit, done or failed, left at its funding address to the exit's savings address,
+     * signed with the funding key: change from a branch whose refund the operators published, funding a rebuild no
+     * longer needed, or a payment an exit with nothing to recover never spent. Runs once when the exit ends,
+     * background runs included, and again from the result screen. Returns the sweep's
      * txid, or null when nothing confirmed is left or it would not cover its fee and dust.
      */
     suspend fun sweepLeftover(): Result<String?> = withContext(bgDispatcher) {
         runSuspendCatching {
-            val record = _state.value.record?.takeIf { it.phase == SparkExitRecord.Phase.Done }
-                ?: return@runSuspendCatching null
+            val record = _state.value.record?.takeIf { !it.isActive } ?: return@runSuspendCatching null
             val chain = requireNotNull(chain) { "No chain host for this network" }
             val address = record.funding.firstOrNull()?.address ?: return@runSuspendCatching null
             val inputs = chain.utxos(address)
@@ -523,12 +521,17 @@ data class SparkExitState(
 ) {
     val isExiting: Boolean get() = record?.isActive == true
 
-    /** Value on Spark beyond the leaves the exit spends, such as a swap that landed after the quote: it stays there. */
+    /**
+     * Value on Spark the exit does not spend, which stays there: leaves too small to exit, or value that reached Spark
+     * after the quote. Leaves the exit published leave Spark's balance (a regtest exit of 90,112 sats showed only its
+     * 9,789 sats of dust), so the balance is all of it; while it still counts every exiting leaf, it is the excess.
+     */
     val leftOutSats: ULong?
         get() {
             val leaves = record?.takeIf { it.isActive }?.recovery?.leaves ?: return null
             val balance = sparkBalanceSats ?: return null
             val exiting = leaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
-            return (balance - exiting).takeIf { balance > exiting }
+            val leftOut = if (balance > exiting) balance - exiting else balance
+            return leftOut.takeIf { it > 0uL }
         }
 }

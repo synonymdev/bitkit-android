@@ -107,7 +107,7 @@ class SparkExitDriver(
         if (prepared.leaves.isEmpty()) {
             // A leaf the chain could not be read for comes back on a later tick; finished leaves are not listed.
             if (prepared.skipped.any { it.reason == SkippedLeafReason.Unverified }) return record
-            return record.copy(
+            val ended = record.copy(
                 skippedLeafCount = maxOf(record.skippedLeafCount, prepared.skipped.size),
                 phase = if (record.recovery == null) {
                     SparkExitRecord.Phase.Failed("Nothing left to recover")
@@ -115,6 +115,8 @@ class SparkExitDriver(
                     SparkExitRecord.Phase.Done
                 },
             )
+            // Fee funding this exit no longer spends, such as a payment adopted just before, goes back to savings.
+            return ended.copy(leftover = leftover(ended))
         }
         val needsFunding = prepared.funding != null
         val built = runSuspendCatching {
@@ -132,7 +134,8 @@ class SparkExitDriver(
         if (built.transactions.isEmpty()) {
             // Cooperative leaves the operators could not co-sign now are tried again on the next tick.
             if (built.failed.isNotEmpty()) return record.copy(failedLeafCount = built.failed.size)
-            return record.copy(phase = SparkExitRecord.Phase.Failed("Nothing to recover"))
+            val failed = record.copy(phase = SparkExitRecord.Phase.Failed("Nothing to recover"))
+            return failed.copy(leftover = leftover(failed))
         }
         val adopted = record.adopt(built, nowMillis())
         // Saved before any of it is broadcast, so a crash never leaves broadcast transactions without their record.

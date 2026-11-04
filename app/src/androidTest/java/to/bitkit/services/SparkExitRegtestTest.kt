@@ -20,7 +20,9 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.repositories.EsploraSparkExitChain
 import to.bitkit.repositories.SparkExitFundingKey
 import to.bitkit.repositories.SparkExitQuote
+import to.bitkit.repositories.SparkExitSweep
 import to.bitkit.test.annotations.DeviceIntegration
+import to.bitkit.utils.SignedTransactionId
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -77,5 +79,32 @@ class SparkExitRegtestTest {
             sdk.disconnect()
             storage.deleteRecursively()
         }
+    }
+
+    @Test
+    fun signsALeftoverSweepWithTheFundingKey(): Unit = runBlocking {
+        val mnemonic = onchain.generateMnemonic()
+        val path = SparkExitFundingKey.path(0, Network.REGTEST)
+        val address = onchain.deriveBitcoinAddress(mnemonic, path, Network.REGTEST, null)
+        val secret = SparkExitFundingKey.secretKey(onchain.derivePrivateKey(mnemonic, path, Network.REGTEST, null))
+        val plan = requireNotNull(
+            SparkExitSweep.plan(
+                listOf(
+                    SparkExitSweep.Input("11".repeat(32), 0u, 3_000uL),
+                    SparkExitSweep.Input("22".repeat(32), 2u, 2_035uL),
+                ),
+                destination = "bcrt1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqc8gma6",
+                feeRateSatPerVbyte = 2uL,
+            ),
+        )
+
+        val signed = singleKeyCpfpSigner(secret).signPsbt(SparkExitSweep.psbt(plan, address.address))
+        val hex = SparkExitSweep.signedTxHex(plan, signed)
+
+        // Two inputs, each a P2WPKH witness of a DER signature and the funding key.
+        val witness = Regex("02(4[4-9])30[0-9a-f]+?01(21${address.publicKey})").findAll(hex).toList()
+        assertEquals(2, witness.size, hex)
+        assertTrue(hex.startsWith("020000000001"), hex)
+        assertEquals(64, SignedTransactionId.fromHex(hex).length)
     }
 }

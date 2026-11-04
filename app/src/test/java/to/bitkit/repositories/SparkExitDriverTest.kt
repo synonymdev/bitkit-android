@@ -285,6 +285,17 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a funded exit with nothing left to recover fails with its funding as leftover`() = test {
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 25_000uL))
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = emptyList(), skipped = emptyList())
+
+        val record = driver().tick(SparkExitFixtures.record())
+
+        assertIs<Phase.Failed>(record.phase)
+        assertEquals(listOf(SparkExitRecord.Leftover("f0", 1u, 25_000uL)), record.leftover)
+    }
+
+    @Test
     fun `top up ignores cpfp change chained to the funding address`() = test {
         var record = SparkExitFixtures.record(Phase.NeedsFunding(23_000uL)).copy(
             funding = listOf(
