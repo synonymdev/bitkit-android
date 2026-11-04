@@ -3467,14 +3467,12 @@ class AppViewModel @Inject constructor(
         paymentHash.toHex().takeUnless { hasOwnLightningInvoice(this) }
 
     private suspend fun decodeLightningParam(params: Map<String, String>?): LightningInvoice? {
-        // BIP21 keys are case-insensitive, as in an uppercase QR code, while bitkit-core keeps them as written
         val paymentRequest = params?.entries?.firstOrNull { it.key.equals("lightning", ignoreCase = true) }?.value
         return paymentRequest?.let { decodeBolt11(it) }
     }
 
     private suspend fun decodeBolt11(paymentRequest: String): LightningInvoice? {
         val bolt11 = paymentRequest.trim().removeLightningSchemes()
-        // Anything else, such as an LNURL or a Lightning address, would be resolved over the network
         if (BOLT11_PREFIXES.none { bolt11.startsWith(it, ignoreCase = true) }) return null
         return runSuspendCatching { coreService.decode(bolt11) }.getOrNull()
             ?.let { it as? Scanner.Lightning }
@@ -3494,7 +3492,6 @@ class AppViewModel @Inject constructor(
             pendingPaymentRepo.isPending(paymentHash) || quickPayRepo.hasOpen(paymentHash)
         return when {
             isPending -> LightningPaymentStatus.PENDING
-            // The app's own records of a send are incomplete, so only the payment store shows that none is under way
             stored.isFailure -> LightningPaymentStatus.UNKNOWN
             else -> LightningPaymentStatus.UNPAID
         }
@@ -3531,7 +3528,6 @@ class AppViewModel @Inject constructor(
         val paymentHash = state.lightningPaymentHash ?: return true
         val generation = sendStateGeneration
         val status = readLightningPaymentStatus(paymentHash)
-        // The send may have been replaced or gone out while the payment store was read
         if (generation != sendStateGeneration || isPaymentSubmitting()) return false
         setLightningPaymentStatus(paymentHash, status)
         if (status == LightningPaymentStatus.UNPAID) return true
@@ -4386,7 +4382,6 @@ class AppViewModel @Inject constructor(
         val current = _sendUiState.value
         if (current.isRetainedHardwarePayment) return
         val nextSource = nextFundingSource(current, requested) ?: return
-        // A Lightning payment of the invoice beside the address may have started or ended since it was offered
         val paysAddress = nextSource == SendFundingSource.Savings || nextSource is SendFundingSource.Hardware
         if (paysAddress && !canPayAddressInstead(current)) return
         val canReviewInPlace = canRebindBitcoinRequestTerms(current, nextSource)
@@ -8021,7 +8016,6 @@ class AppViewModel @Inject constructor(
         if (lightningPaymentHash == null) return navigateToHardwareSign(contactPaymentContext)
         if (hardwareConfirmJob?.isActive == true) return
         val generation = sendStateGeneration
-        // The hardware wallet signs and broadcasts on its own, so the invoice beside the address is checked first
         hardwareConfirmJob = viewModelScope.launch {
             val refusal = onchainPaymentRefusal(lightningPaymentHash)
             if (generation != sendStateGeneration) return@launch
@@ -8029,7 +8023,6 @@ class AppViewModel @Inject constructor(
             if (refusal.status != LightningPaymentStatus.UNKNOWN) {
                 return@launch handlePaymentPreparationFailure(refusal, contactPaymentContext)
             }
-            // The payment store can be read once the node runs, so the send stays for Confirm to check it again
             showOnchainPaymentRefusal(refusal.status)
             setSendEffect(SendEffect.ResetConfirm)
         }
@@ -9001,7 +8994,6 @@ class AppViewModel @Inject constructor(
         private val LIGHTNING_SCHEME_PATTERNS = listOf("lightning", "lnurl", "lnurlw", "lnurlc", "lnurlp")
             .map { Regex("^$it:", RegexOption.IGNORE_CASE) }
 
-        /** Prefixes of a bolt11 invoice, regtest's and signet's included, which bitkit-core decodes locally. */
         private val BOLT11_PREFIXES = listOf("lnbc", "lntb")
         private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
         private const val TEN_USD = 10

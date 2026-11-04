@@ -195,7 +195,6 @@ class QuickPayRepo @Inject constructor(
         when (preparePay(session, invoice, invoiceHash)) {
             PreparePayResult.LIVE -> return
             PreparePayResult.REJECTED -> mutex.withLock {
-                // The invoice stays while another ask of the same request has it open
                 if (!hasOpenLocked(invoiceHash)) forgetLnurlInvoiceLocked(invoice.bolt11)
             }
             PreparePayResult.RECOVERED -> settleRecovered(invoiceHash)
@@ -384,8 +383,6 @@ class QuickPayRepo @Inject constructor(
                 parseError = null,
             )
             is QuickPayPayRequest.LnurlPay -> {
-                // A request asked again while its invoice is open, as by a recreated screen, pays that invoice again
-                // rather than a fresh one, so the invoice hash dedupes it and the node refuses to pay it twice
                 mutex.withLock { lnurlInvoicesByRequest[request] }?.let { return it }
                 lightningRepo.fetchLnurlInvoice(
                     data = request.data,
