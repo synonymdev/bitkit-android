@@ -195,7 +195,7 @@ internal fun UsdtPaymentContent(
         showSubmitted && submissionError != null -> R.string.common__error
         showSubmitted -> R.string.usdt__submitted
         (quote != null || preparingConfirmation) && isPaymentRequest -> R.string.wallet__payment_request
-        quote != null -> R.string.wallet__send_review
+        quote != null || preparingConfirmation -> R.string.wallet__send_review
         page == UsdtPage.AMOUNT -> R.string.usdt__amount
         else -> R.string.usdt__send_title
     }
