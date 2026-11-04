@@ -5,7 +5,7 @@
     instead of paying the contact's public payment details; once both sides have saved each other,
     Pay works again. Requires two disposable Bitkit identities with contact payment sharing enabled.
     The second identity publishes public payment endpoints and must not have the first identity
-    saved or linked. The message is a toast, which android layout cannot see: read it from a
+    saved or linked. The message is a toast, which the UI tree does not expose: read it from a
     screenshot taken right after the tap. No payment is sent.
   </description>
   <actions>
