@@ -25,4 +25,18 @@ class UsdtWalletScreenTest {
     fun `initial payment without recipient is not quoted`() {
         assertFalse(shouldQuoteInitialUsdtPayment("", "5"))
     }
+
+    @Test
+    fun `a positive requested amount is fixed and zero is not`() {
+        assertTrue(isUsdtAmountFixed(requestAmount = "0.010001", wasFixed = false, isSameRecipient = false))
+        assertFalse(isUsdtAmountFixed(requestAmount = "0", wasFixed = true, isSameRecipient = true))
+        assertFalse(isPositiveUsdtAmount("0"))
+    }
+
+    @Test
+    fun `continuing with the same recipient keeps a fixed amount`() {
+        assertTrue(isUsdtAmountFixed(requestAmount = null, wasFixed = true, isSameRecipient = true))
+        assertFalse(isUsdtAmountFixed(requestAmount = null, wasFixed = true, isSameRecipient = false))
+        assertFalse(isUsdtAmountFixed(requestAmount = null, wasFixed = false, isSameRecipient = true))
+    }
 }

@@ -135,7 +135,7 @@ fun UsdtWalletScreen(
     var recipient by rememberSaveable { mutableStateOf(initialRecipient) }
     var amount by rememberSaveable { mutableStateOf(initialAmount) }
     // A scanned or linked request that names an amount fixes it; the payee set it.
-    var isAmountFixed by rememberSaveable { mutableStateOf(initialAmount.isNotEmpty()) }
+    var isAmountFixed by rememberSaveable { mutableStateOf(isPositiveUsdtAmount(initialAmount)) }
     var maximumAmount by rememberSaveable { mutableStateOf<String?>(null) }
     val destinations by viewModel.destinations.collectAsStateWithLifecycle()
     var destination by rememberSaveable { mutableStateOf(UsdtDestination.ARBITRUM) }
@@ -281,11 +281,13 @@ fun UsdtWalletScreen(
                         onRecipientContinue = { value ->
                             viewModel.validateRecipient(value, destination) { request ->
                                 if (request.chainId != null) destination = UsdtDestination.ARBITRUM
+                                val requestAmount = request.amount?.let { usdtFormatAmount(it) }
+                                val isSameRecipient = request.recipient == recipient
+                                isAmountFixed = isUsdtAmountFixed(requestAmount, isAmountFixed, isSameRecipient)
                                 recipient = request.recipient
-                                amount = request.amount?.let { usdtFormatAmount(it) } ?: amount
-                                isAmountFixed = request.amount != null
+                                amount = requestAmount ?: amount
                                 page = UsdtPage.AMOUNT
-                                request.amount?.let { viewModel.quote(recipient, amount, destination) }
+                                if (isAmountFixed) viewModel.quote(recipient, amount, destination)
                             }
                         },
                         onPageChange = {
@@ -344,7 +346,17 @@ private data class InitialUsdtPayment(
 
 /** A payment request with a recipient and a positive amount opens on its review, as tapping Review would. */
 internal fun shouldQuoteInitialUsdtPayment(recipient: String, amount: String): Boolean =
-    recipient.isNotEmpty() && runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, amount) }.isSuccess
+    recipient.isNotEmpty() && isPositiveUsdtAmount(amount)
+
+internal fun isPositiveUsdtAmount(amount: String): Boolean =
+    runCatching { PaykitAmount.parseInput(PaykitAsset.USDT, amount) }.isSuccess
+
+/**
+ * A request that names a positive amount fixes it. Continuing with the same recipient and no amount, as after
+ * Back from review, keeps an earlier fixed amount.
+ */
+internal fun isUsdtAmountFixed(requestAmount: String?, wasFixed: Boolean, isSameRecipient: Boolean): Boolean =
+    requestAmount?.let(::isPositiveUsdtAmount) ?: (wasFixed && isSameRecipient)
 
 @Composable
 internal fun rememberUsdtPage(initialRecipient: String, state: UsdtSendState): MutableState<UsdtPage> {
