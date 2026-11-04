@@ -11,6 +11,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
 class SparkExitFundingTest {
@@ -126,6 +127,15 @@ class SparkExitFundingTest {
         assertEquals(100.minutes, SparkExitMath.timeUntil(110u, 100u, Network.BITCOIN))
         assertEquals(5.minutes, SparkExitMath.timeUntil(110u, 100u, Network.REGTEST))
         assertEquals(Duration.ZERO, SparkExitMath.timeUntil(90u, 100u, Network.BITCOIN))
+    }
+
+    @Test
+    fun `deadline warns halfway through the operators' window of the next step`() {
+        val mainnet = SparkExitMath.deadline(2.hours, Network.BITCOIN, period = 15.minutes)
+        assertEquals(SparkExitDeadline(warnIn = 6.hours + 10.minutes, deadlineIn = 10.hours + 20.minutes), mainnet)
+        // Never before two background runs could have happened, even where the window is shorter.
+        val regtest = SparkExitMath.deadline(Duration.ZERO, Network.REGTEST, period = 15.minutes)
+        assertEquals(SparkExitDeadline(warnIn = 30.minutes, deadlineIn = 25.minutes), regtest)
     }
 
     @Test

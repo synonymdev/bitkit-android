@@ -12,12 +12,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
@@ -26,6 +29,7 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
@@ -41,9 +45,14 @@ fun SparkExitProgressScreen(
     onDone: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     LaunchedEffect(Unit) {
         viewModel.refresh()
         viewModel.effects.collect { if (it == SparkExitEffect.Cancelled) onDone() }
+    }
+    LifecycleResumeEffect(Unit) {
+        viewModel.refreshBackgroundLimits()
+        onPauseOrDispose {}
     }
     Content(
         uiState = uiState,
@@ -51,6 +60,7 @@ fun SparkExitProgressScreen(
         onRefresh = viewModel::refresh,
         onCancel = viewModel::cancel,
         onDone = onDone,
+        onNotificationSettings = context::openNotificationSettings,
     )
 }
 
@@ -62,6 +72,7 @@ private fun Content(
     onRefresh: () -> Unit = {},
     onCancel: () -> Unit = {},
     onDone: () -> Unit = {},
+    onNotificationSettings: () -> Unit = {},
 ) {
     val record = uiState.record
     ScreenColumn {
@@ -87,6 +98,12 @@ private fun Content(
                 BodyM(text = progressText(record).withAccentBoldBright(), color = Colors.White64)
                 VerticalSpacer(24.dp)
                 record?.let { ProgressDetails(it, uiState) }
+                if (record?.isActive == true) {
+                    BackgroundNotes(
+                        limits = uiState.backgroundLimits,
+                        onNotificationSettings = onNotificationSettings,
+                    )
+                }
                 FillHeight()
                 VerticalSpacer(32.dp)
                 if (uiState.canCancel) {
@@ -137,6 +154,33 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) 
 }
 
 @Composable
+private fun BackgroundNotes(
+    limits: SparkExitBackgroundLimits,
+    onNotificationSettings: () -> Unit,
+) {
+    val notes = listOfNotNull(
+        R.string.lightning__spark_exit__note_restricted.takeIf { limits.isRestricted },
+        R.string.lightning__spark_exit__note_battery_saver.takeIf { limits.isPowerSaveMode },
+        R.string.lightning__spark_exit__note_battery_optimized.takeIf {
+            limits.isOptimized && !limits.isRestricted && !limits.isPowerSaveMode
+        },
+        R.string.lightning__spark_exit__note_notifications.takeIf { !limits.areNotificationsEnabled },
+    )
+    notes.forEach {
+        VerticalSpacer(16.dp)
+        BodyS(text = stringResource(it), color = Colors.White64)
+    }
+    if (!limits.areNotificationsEnabled) {
+        VerticalSpacer(16.dp)
+        SecondaryButton(
+            text = stringResource(R.string.lightning__spark_exit__note_notifications_button),
+            onClick = onNotificationSettings,
+            testTag = "SparkExitNotificationSettings",
+        )
+    }
+}
+
+@Composable
 private fun progressTitle(phase: SparkExitRecord.Phase?): String = stringResource(
     when (phase) {
         SparkExitRecord.Phase.Done -> R.string.lightning__spark_exit__done_title
@@ -181,6 +225,7 @@ private fun Preview() {
                     claimableAtHeight = 2_100u,
                 ),
                 tipHeight = 1_900u,
+                backgroundLimits = SparkExitBackgroundLimits(isOptimized = true, areNotificationsEnabled = false),
             ),
         )
     }

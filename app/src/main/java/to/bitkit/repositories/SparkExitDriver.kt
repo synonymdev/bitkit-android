@@ -30,7 +30,8 @@ interface SparkExitRecovering {
  * Moves an exit one step forward each tick: builds it once its fee funding confirms, broadcasts what is ready,
  * rebuilds when the chain diverged, and finishes when everything confirmed. Without the SDK (a background start, or
  * operators down at connect) it still broadcasts the stored, already signed transactions whose parents confirmed.
- * Every built recovery is saved before anything of it is broadcast.
+ * Every built recovery is saved before anything of it is broadcast, and each broadcast as it happens, so a run killed
+ * partway, as background runs can be, never sends the same transactions again before they are due.
  */
 class SparkExitDriver(
     private val chain: SparkExitChain,
@@ -204,7 +205,7 @@ class SparkExitDriver(
         recovery.transactions
             .filter { it.status == ExitTransactionStatus.Ready || it.status == ExitTransactionStatus.Unverified }
             .filter { isDue(it.txid, current) }
-            .forEach { current = broadcast(it, current) }
+            .forEach { current = broadcastAndSave(it, current) }
         return current
     }
 
@@ -229,7 +230,7 @@ class SparkExitDriver(
             }
             val height = (tx.status as? ExitTransactionStatus.WaitingForTimelock)?.spendableAtHeight
             if (height != null && height > tip) return@map tx
-            if (tx.dependsOn.all { isConfirmed(it) } && isDue(tx.txid, current)) current = broadcast(tx, current)
+            if (tx.dependsOn.all { isConfirmed(it) } && isDue(tx.txid, current)) current = broadcastAndSave(tx, current)
             tx
         }
         return current.copy(recovery = recovery.copy(transactions = transactions))
@@ -241,6 +242,9 @@ class SparkExitDriver(
             ?: return true
         return !last.isAccepted || nowMillis() - last.lastAttemptAt >= REBROADCAST_INTERVAL.inWholeMilliseconds
     }
+
+    private suspend fun broadcastAndSave(tx: RecoveryTransaction, record: SparkExitRecord): SparkExitRecord =
+        broadcast(tx, record).also(save)
 
     private suspend fun broadcast(tx: RecoveryTransaction, record: SparkExitRecord): SparkExitRecord {
         val outcome = chain.broadcast(tx)

@@ -18,6 +18,7 @@ import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.SparkExitWork
 import to.bitkit.services.BluetoothInit
 import to.bitkit.services.PubkyAuthHandlerRegistrar
 import to.bitkit.utils.Crypto
@@ -42,6 +43,9 @@ internal open class App : Application(), Configuration.Provider {
     @Inject
     lateinit var subscriptionClockOffsetSync: SubscriptionClockOffsetSync
 
+    @Inject
+    lateinit var sparkExitWork: SparkExitWork
+
     /** Resolved only once the process changes foreground state, so startup does not build the wallet graph. */
     @Inject
     lateinit var hwWalletRepo: Lazy<HwWalletRepo>
@@ -60,6 +64,7 @@ internal open class App : Application(), Configuration.Provider {
         SingletonImageLoader.setSafe { imageLoader }
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
         appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.APP_START)
+        sparkExitWork.ensureScheduled()
         // Initialize btleplug for Bluetooth support (required before any BLE usage)
         BluetoothInit.ensureInitialized()
         pubkyAuthHandlerRegistrar.start()

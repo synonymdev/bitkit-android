@@ -24,6 +24,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.rememberSubscriptionNotificationsRequest
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
@@ -38,7 +39,16 @@ fun SparkExitConfirmScreen(
     LaunchedEffect(Unit) {
         viewModel.effects.collect { if (it == SparkExitEffect.Started) onStart() }
     }
-    Content(uiState = uiState, onBack = onBack, onSwipe = viewModel::start)
+    // Asked as the exit starts: the notifications are how a stalled background run reaches the user.
+    val requestNotifications = rememberSubscriptionNotificationsRequest()
+    Content(
+        uiState = uiState,
+        onBack = onBack,
+        onSwipe = {
+            requestNotifications()
+            viewModel.start()
+        },
+    )
 }
 
 @Composable

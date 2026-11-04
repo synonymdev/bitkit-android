@@ -12,7 +12,6 @@ import to.bitkit.utils.BlockTimeHelpers
 import java.math.BigInteger
 import java.security.MessageDigest
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -135,13 +134,38 @@ object SparkExitMath {
         return blockTime * BlockTimeHelpers.blocksRemaining(height, tip)
     }
 
+    /** About how many blocks after a step matures the operators may publish their own version of it. */
+    private const val OPERATOR_WINDOW_BLOCKS = 50
+
+    /** About how long until the next step matures; zero when none waits for a height above [tip], or it is unknown. */
+    fun untilNextMaturity(recovery: RecoverFundsResponse?, tip: UInt?, network: Network): Duration {
+        if (recovery == null || tip == null) return Duration.ZERO
+        val height = nextMaturityHeight(recovery, tip) ?: return Duration.ZERO
+        return timeUntil(height, tip, network)
+    }
+
+    /** How long the operators leave a matured step to us: about 8 hours on mainnet, 25 minutes on Spark's regtest. */
+    fun operatorWindow(network: Network): Duration =
+        (if (network == Network.REGTEST) REGTEST_BLOCK_TIME else BLOCK_TIME) * OPERATOR_WINDOW_BLOCKS
+
     /**
-     * When to remind the user to open Bitkit while steps wait to be published: well inside the ~50 blocks after
-     * which the operators may publish their own version of a matured step.
+     * When Bitkit warns that the background run fell behind, and the deadline it names: [untilMaturity] is how long
+     * until the next step matures, zero while steps already wait to be published. The deadline is the end of the
+     * operators' window; the warning comes halfway through it, and never before two background runs could have
+     * happened, so a run that is merely late does not alarm the user.
      */
-    fun reminderDelay(network: Network): Duration = if (network == Network.REGTEST) 10.minutes else 4.hours
+    fun deadline(untilMaturity: Duration, network: Network, period: Duration): SparkExitDeadline {
+        val window = operatorWindow(network)
+        return SparkExitDeadline(
+            warnIn = maxOf(untilMaturity + window / 2, period * 2),
+            deadlineIn = untilMaturity + window,
+        )
+    }
 
     /** Savings can pay the fee funding when its spendable balance covers the funding and the payment's own fee. */
     fun canFundFromSavings(spendableSats: ULong, fundingSats: ULong, paymentFeeSats: ULong): Boolean =
         fundingSats > 0uL && spendableSats >= fundingSats.safe() + paymentFeeSats.safe()
 }
+
+/** When to warn that the exit fell behind, and when its next step's operator window closes, both from now. */
+data class SparkExitDeadline(val warnIn: Duration, val deadlineIn: Duration)

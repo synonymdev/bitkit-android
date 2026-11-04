@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
@@ -122,6 +123,10 @@ class SparkExitViewModel @Inject constructor(
         }
     }
 
+    fun refreshBackgroundLimits() {
+        _uiState.update { it.copy(backgroundLimits = sparkExitRepo.backgroundLimits()) }
+    }
+
     fun cancel() {
         viewModelScope.launch {
             sparkExitRepo.cancel()
@@ -153,6 +158,7 @@ data class SparkExitUiState(
     val fundingSeenSats: ULong = 0uL,
     val fundingAddress: String? = null,
     val canCancel: Boolean = false,
+    val backgroundLimits: SparkExitBackgroundLimits = SparkExitBackgroundLimits(),
 ) {
     val fundingSats: ULong get() = quote?.fundingSats ?: 0uL
 

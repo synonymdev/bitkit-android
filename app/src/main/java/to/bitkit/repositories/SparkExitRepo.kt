@@ -188,23 +188,26 @@ class SparkExitRepo @Inject constructor(
         tip?.let { height -> sparkExitTip.height.update { height } }
         refreshFundingSeen(chain, current)
         val store = store
+        val recovering = sparkService.exitRecovering()
         val driver = SparkExitDriver(
             chain = chain,
-            recovering = sparkService.exitRecovering(),
+            recovering = recovering,
             makeSigner = ::signer,
             save = store::save,
             nowMillis = clock::nowMs,
         )
         val updated = driver.tick(current)
         _state.update { it.copy(record = updated, lastError = null) }
-        afterTick(updated, current)
+        // A rebuild needs the SDK; every other running step can go out from the stored recovery without it.
+        val isOnTrack = tip != null && (recovering != null || !updated.isRebuilding)
+        afterTick(updated, current, isOnTrack)
         return updated
     }
 
-    private suspend fun afterTick(record: SparkExitRecord, previous: SparkExitRecord) {
+    private suspend fun afterTick(record: SparkExitRecord, previous: SparkExitRecord, isOnTrack: Boolean) {
         record.transferId?.let { transferRepo.updateClaimableAtHeight(it, record.claimableAtHeight) }
         settleIfFinished(record)
-        scheduleReminder(record, previous)
+        updateAlerts(record, previous, isOnTrack)
         if (!record.isActive) {
             Logger.info("Ended Spark exit with phase '${record.phase}'", context = TAG)
             work.cancelAll()
@@ -254,32 +257,32 @@ class SparkExitRepo @Inject constructor(
     }
 
     /**
-     * Brings the user back when the next timelock matures, a while later when steps wait to be published (the
-     * operators' version of a matured step can land about 50 blocks after it), and once when the exit needs more
-     * fee funding.
+     * Pushes back the warning that the exit fell behind, to halfway through the operators' window of the next step to
+     * mature (about 50 blocks after it, when they may publish their own version), or of the steps already waiting to
+     * be published. Only a run that kept the exit on track pushes it; a stalled exit lets it fire. Needing more fee
+     * funding is notified once, at once.
      */
-    private fun scheduleReminder(record: SparkExitRecord, previous: SparkExitRecord) {
-        val delay = when (record.phase) {
-            is SparkExitRecord.Phase.NeedsFunding -> {
-                if (previous.phase is SparkExitRecord.Phase.NeedsFunding) return
-                0.seconds
-            }
+    private fun updateAlerts(record: SparkExitRecord, previous: SparkExitRecord, isOnTrack: Boolean) {
+        when (record.phase) {
             SparkExitRecord.Phase.Running -> {
-                // The next step to mature, not the last: each opens its own window for the operators' version.
+                if (!isOnTrack) return
                 val tip = _state.value.tipHeight
-                val recovery = record.recovery
-                val target = if (tip != null && recovery != null) {
-                    SparkExitMath.nextMaturityHeight(recovery, tip)
-                } else {
-                    null
-                }
-                tip?.let { height -> target?.let { SparkExitMath.timeUntil(it, height, Env.network) } }
-                    ?: SparkExitMath.reminderDelay(Env.network)
+                val untilMaturity = SparkExitMath.untilNextMaturity(record.recovery, tip, Env.network)
+                work.armDeadline(
+                    SparkExitMath.deadline(untilMaturity, Env.network, SparkExitWork.PERIOD),
+                    clock.nowMs(),
+                )
             }
-            else -> return
+            is SparkExitRecord.Phase.NeedsFunding -> {
+                work.cancelDeadline()
+                if (previous.phase !is SparkExitRecord.Phase.NeedsFunding) work.notify(SparkExitAlert.Funding)
+            }
+            else -> work.cancelDeadline()
         }
-        work.scheduleReminder(delay)
     }
+
+    /** What Android lets the exit do while Bitkit is closed, for the progress screen. */
+    fun backgroundLimits(): SparkExitBackgroundLimits = work.backgroundLimits()
 
     // endregion
 

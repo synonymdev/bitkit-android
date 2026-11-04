@@ -392,4 +392,20 @@ class SparkExitDriverTest : BaseUnitTest() {
         assertIs<Phase.Done>(record.phase)
         assertTrue(saved.isEmpty())
     }
+
+    @Test
+    fun `a run killed after a broadcast does not send it again on restart`() = test {
+        val store = SparkExitStore(File(tempFolder.root, "spark-exit.json"))
+        store.save(running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"), SparkExitFixtures.tx("n2")))))
+        // The process dies while it sends the second transaction, after the first went out.
+        chain.onBroadcast = { if (chain.broadcasts.size == 1) error("killed") }
+
+        runCatching { driver(withSdk = false, save = store::save).tick(requireNotNull(store.load())) }
+        chain.onBroadcast = {}
+        val record = driver(withSdk = false, save = store::save).tick(requireNotNull(store.load()))
+
+        assertEquals(listOf("n1", "n2"), chain.broadcasts.map { it.txid })
+        assertEquals(listOf("n1", "n2"), record.broadcastLog.map { it.txid })
+        assertEquals(record, store.load())
+    }
 }
