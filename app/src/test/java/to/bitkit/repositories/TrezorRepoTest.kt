@@ -1665,10 +1665,16 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.resetState()
 
         assertTrue(result.isFailure)
-        verify(trezorTransport).clearAllDeviceCredentials()
-        verify(hwWalletStore).reset()
+        // Nothing is cleared yet, so the retried reset still sees the connect and waits for it
+        assertTrue(sut.state.value.isConnecting)
+        verify(trezorTransport, never()).clearAllDeviceCredentials()
+        verify(hwWalletStore, never()).reset()
+
         releaseConnect.complete(Unit)
         connect.await()
+        assertTrue(sut.resetState().isSuccess)
+        verify(trezorTransport).clearAllDeviceCredentials()
+        verify(hwWalletStore).reset()
     }
 
     @Test

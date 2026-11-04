@@ -253,6 +253,8 @@ class TrezorRepo @Inject constructor(
         val isConnectEnded = withTimeoutOrNull(RESET_CONNECT_MAX_WAIT) {
             while (isConnectInProgress()) delay(CONNECT_ATTEMPT_POLL_INTERVAL)
         } != null
+        // Fails before clearing anything, so the connect stays visible to the retried reset that must wait for it
+        if (!isConnectEnded) return Result.failure(AppError("Timed out waiting for a connect to end"))
 
         val knownDevices = (_state.value.knownDevices + hwWalletStore.loadKnownDevices(HwWalletVendor.TREZOR))
             .distinctBy { it.id }
@@ -283,7 +285,7 @@ class TrezorRepo @Inject constructor(
                 error = null,
             )
         }
-        return credentialsCleared.mapCatching { check(isConnectEnded) { "Timed out waiting for a connect to end" } }
+        return credentialsCleared
     }
 
     /**
