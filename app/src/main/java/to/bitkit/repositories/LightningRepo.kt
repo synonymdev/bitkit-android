@@ -1598,8 +1598,15 @@ class LightningRepo @Inject constructor(
                     paymentDeadlineAt,
                 )
                     .also { prepared ->
-                        if (!isDrain && utxosForSend != null) {
-                            check(
+                        when {
+                            // a drain also sweeps coins synced after the recheck, so it must still match sats
+                            isDrain -> if (!isTransfer) {
+                                check(prepared.receipt.amountSats == sats) {
+                                    "Drain amount '${prepared.receipt.amountSats}' differs from confirmed '$sats'"
+                                }
+                            }
+
+                            utxosForSend != null -> check(
                                 prepared.receipt.inputs.toSet() == utxosForSend.map {
                                     OnchainSendInput(it.outpoint.txid, it.outpoint.vout)
                                 }.toSet()

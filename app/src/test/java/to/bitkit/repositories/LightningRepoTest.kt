@@ -2120,8 +2120,8 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(OnchainSendOutcome.Accepted(txid, 900uL), result)
     }
 
-    private fun preparedOutcome(outcome: OnchainSendOutcome) = PreparedOnchainSend(
-        OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", 1_000uL),
+    private fun preparedOutcome(outcome: OnchainSendOutcome, amountSats: ULong = 1_000uL) = PreparedOnchainSend(
+        OnchainPreparedReceipt(outcome.txid, listOf(OnchainSendInput("11".repeat(32), 0u)), "address", amountSats),
     ) {
         it()
         outcome
@@ -3526,9 +3526,23 @@ class LightningRepoTest : BaseUnitTest() {
         verify(blocktank, times(1)).getFees()
     }
 
+    @Test
+    fun `sendOnChain should not broadcast a drain that sweeps more than the confirmed amount`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(spendableBalance(100_000uL))
+        whenever(lightningService.estimateSendAllFee(any(), any())).thenReturn(1_000uL)
+
+        val result = sendMaxOnChain(sats = 99_000uL, preparedSats = 149_000uL)
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        verify(onchainSendAttemptStore).releaseBeforeDispatch(any(), any())
+        verify(onchainSendAttemptStore, never()).broadcastPreparedCandidate(any(), any(), any(), any())
+    }
+
     private suspend fun sendMaxOnChain(
         sats: ULong,
         feeRates: FeeRates? = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+        preparedSats: ULong = sats,
     ): Result<OnchainSendOutcome> {
         val attempt = pendingSendAttempt().copy(address = "bcrt1qtest", amountSats = sats)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
@@ -3546,7 +3560,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(onchainSendAttemptStore.recordOutcome(any(), any(), any()))
             .thenReturn(attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = "txid"))
         whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
-            .thenReturn(preparedOutcome(OnchainSendOutcome.Accepted("txid")))
+            .thenReturn(preparedOutcome(OnchainSendOutcome.Accepted("txid"), preparedSats))
         return sut.sendOnChain(
             address = "bcrt1qtest",
             sats = sats,

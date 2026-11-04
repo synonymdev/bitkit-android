@@ -4502,6 +4502,7 @@ class AppViewModel @Inject constructor(
                     hardwareAvailableSats = 0uL,
                     lightningFeeSats = 0,
                     amount = amount,
+                    isMaxAmount = it.isMaxAmount && amount == it.amount,
                     isAmountInputValid = validateAmount(amount, SendMethod.LIGHTNING),
                     confirmedWarnings = persistentListOf(),
                 )
@@ -7243,7 +7244,8 @@ class AppViewModel @Inject constructor(
             }
             _sendUiState.update {
                 if (generation != sendStateGeneration || it.divergedFrom(state)) return@update it
-                it.copy(amount = max)
+                // validateAmount caps at the cached max, which a max at a cheaper speed can exceed
+                it.copy(amount = max, isAmountInputValid = max > Defaults.dustLimit.toULong())
             }
             return
         }

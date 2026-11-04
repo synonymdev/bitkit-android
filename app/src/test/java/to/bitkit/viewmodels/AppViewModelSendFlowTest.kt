@@ -118,6 +118,7 @@ import to.bitkit.data.keychain.hasPendingWalletRestore
 import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.fromHex
@@ -14458,6 +14459,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(maxAtFast, sut.sendUiState.value.amount)
         assertTrue(sut.sendUiState.value.isMaxAmount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
 
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
@@ -14475,6 +14477,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             feeRates = feeRates,
             isMaxAmount = true,
         )
+    }
+
+    @Test
+    fun `max refresh marks a max at the dust limit invalid`() = test {
+        val address = "bcrt1qmaxdust"
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(address = address, speed = TransactionSpeed.Fast, feeRates = feeRates)
+        }.thenReturn(Result.success(Defaults.dustLimit.toULong()))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = 100_000uL,
+                isAmountInputValid = true,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = feeRates,
+            ),
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertEquals(Defaults.dustLimit.toULong(), sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
     }
 
     @Test
@@ -14705,6 +14734,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
         assertEquals(amount, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isMaxAmount)
+    }
+
+    @Test
+    fun `switching to lightning clears max when the invoice amount replaces it`() = test {
+        val bolt11 = "lnbcrt1maxswitch"
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 10_000u),
+                amount = 100_000uL,
+                isMaxAmount = true,
+                payMethod = SendMethod.ONCHAIN,
+            ),
+        )
+
+        sut.switchToLightning()
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(10_000uL, sut.sendUiState.value.amount)
         assertFalse(sut.sendUiState.value.isMaxAmount)
     }
 
