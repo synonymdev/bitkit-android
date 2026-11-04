@@ -124,9 +124,13 @@ object SparkExitMath {
     fun confirmedCount(recovery: RecoverFundsResponse): Int =
         recovery.transactions.count { it.status is ExitTransactionStatus.Confirmed }
 
-    /** A confirmed UTXO at the funding address that covers [requiredSats], the largest first. */
-    fun fundingUtxo(utxos: List<EsploraUtxo>, requiredSats: ULong): EsploraUtxo? =
-        utxos.filter { it.status.confirmed && it.value >= requiredSats }.maxByOrNull { it.value }
+    /** Every confirmed UTXO at the funding address, the largest first, once together they cover [requiredSats]. */
+    fun fundingUtxos(utxos: List<EsploraUtxo>, requiredSats: ULong): List<EsploraUtxo>? {
+        val confirmed = utxos.filter { it.status.confirmed }.sortedByDescending { it.value }
+        if (confirmed.isEmpty()) return null
+        val total = confirmed.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+        return confirmed.takeIf { total >= requiredSats }
+    }
 
     /** About how long until [height]. */
     fun timeUntil(height: UInt, tip: UInt, network: Network): Duration {

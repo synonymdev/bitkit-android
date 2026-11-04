@@ -14,7 +14,6 @@ import breez_sdk_spark.RecoveryVerdict
 import breez_sdk_spark.SdkException
 import breez_sdk_spark.SkippedLeafReason
 import to.bitkit.ext.runSuspendCatching
-import to.bitkit.models.safe
 import to.bitkit.utils.Logger
 import to.bitkit.utils.SignedTransactionId
 import kotlin.time.Duration.Companion.minutes
@@ -81,17 +80,18 @@ class SparkExitDriver(
     }
 
     /**
-     * Adds a confirmed UTXO of at least [requiredSats] at the funding address that is neither a funding input yet nor
-     * CPFP change the exit chained there; null while there is none.
+     * Adds every confirmed UTXO at the funding address that is neither a funding input yet nor CPFP change the exit
+     * chained there, once together they cover [requiredSats]; null while they do not. Several small payments count:
+     * the SDK spends every funding input it is given.
      */
     private suspend fun adoptFunding(record: SparkExitRecord, requiredSats: ULong): SparkExitRecord? {
         val first = record.funding.firstOrNull() ?: return null
         val known = record.funding.mapNotNull { f -> f.txid?.let { "$it:${f.vout ?: 0u}" } }.toSet()
         val chained = record.recovery?.let(SparkExitTxids::cpfpChildTxids).orEmpty().toSet()
         val candidates = chain.utxos(first.address).filter { "${it.txid}:${it.vout}" !in known && it.txid !in chained }
-        val utxo = SparkExitMath.fundingUtxo(candidates, requiredSats) ?: return null
-        val adopted = first.copy(index = 0u, txid = utxo.txid, vout = utxo.vout, valueSats = utxo.value)
-        val funding = if (record.funding.size == 1 && first.txid == null) listOf(adopted) else record.funding + adopted
+        val utxos = SparkExitMath.fundingUtxos(candidates, requiredSats) ?: return null
+        val adopted = utxos.map { first.copy(index = 0u, txid = it.txid, vout = it.vout, valueSats = it.value) }
+        val funding = if (record.funding.size == 1 && first.txid == null) adopted else record.funding + adopted
         return record.copy(funding = funding)
     }
 
@@ -124,12 +124,10 @@ class SparkExitDriver(
             )
         }.getOrElse {
             if (it !is SdkException.InsufficientCpfpFunds) throw it
-            // The SDK names what the inputs must cover, and the earlier inputs are partly spent by now, so a new UTXO
-            // of the whole amount is asked for. What the exit does not spend comes back with the sweep.
-            Logger.warn("Needs '${it.requiredSats}' sats more fee funding for the Spark exit", context = TAG)
-            return record.copy(
-                phase = SparkExitRecord.Phase.NeedsFunding(record.fundedSats.safe() + it.requiredSats.safe())
-            )
+            // The SDK names the total its funding inputs must cover (CPFP cost plus change dust), not what is
+            // missing, so the shortfall is that total less what was already funded.
+            Logger.warn("Needs '${it.requiredSats}' sats of fee funding in total for the Spark exit", context = TAG)
+            return record.copy(phase = SparkExitRecord.Phase.NeedsFunding(maxOf(it.requiredSats, record.fundedSats)))
         }
         if (built.transactions.isEmpty()) {
             // Cooperative leaves the operators could not co-sign now are tried again on the next tick.

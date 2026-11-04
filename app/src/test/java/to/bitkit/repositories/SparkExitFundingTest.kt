@@ -103,16 +103,16 @@ class SparkExitFundingTest {
     }
 
     @Test
-    fun `funding utxo must be confirmed and large enough`() {
+    fun `funding utxos are the confirmed ones once together they cover the amount`() {
         val utxos = listOf(
             SparkExitFixtures.utxo("small", value = 999uL),
             SparkExitFixtures.utxo("pending", value = 50_000uL, confirmed = false),
-            SparkExitFixtures.utxo("ok", value = 1_000uL),
             SparkExitFixtures.utxo("big", value = 2_000uL),
         )
 
-        assertEquals("big", SparkExitMath.fundingUtxo(utxos, requiredSats = 1_000uL)?.txid)
-        assertNull(SparkExitMath.fundingUtxo(utxos, requiredSats = 2_001uL))
+        assertEquals(listOf("big", "small"), SparkExitMath.fundingUtxos(utxos, requiredSats = 2_999uL)?.map { it.txid })
+        assertNull(SparkExitMath.fundingUtxos(utxos, requiredSats = 3_000uL))
+        assertNull(SparkExitMath.fundingUtxos(emptyList(), requiredSats = 0uL))
     }
 
     @Test

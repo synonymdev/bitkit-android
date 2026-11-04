@@ -258,6 +258,33 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `asks only for what the sdk's total lacks and adopts small top ups together`() = test {
+        // A headless regtest run: the quote asked 8,541, five UTXOs held 9,035, and the SDK wanted 9,085 in total.
+        val funded = listOf(1_807uL, 1_807uL, 1_807uL, 1_807uL, 1_807uL).mapIndexed { i, value ->
+            SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f$i", 0u, value)
+        }
+        var record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
+            .copy(funding = funded)
+        sdk.checks += check(SparkExitFixtures.recovery(emptyList()), redo)
+        sdk.recoverError = SdkException.InsufficientCpfpFunds(9_085uL, "")
+
+        record = driver().tick(record)
+
+        assertEquals(Phase.NeedsFunding(9_085uL), record.phase)
+        assertEquals(50uL, record.fundingShortfallSats)
+
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = funded.map {
+            SparkExitFixtures.utxo(requireNotNull(it.txid), value = requireNotNull(it.valueSats))
+        } + listOf(SparkExitFixtures.utxo("t1", value = 30uL), SparkExitFixtures.utxo("t2", value = 20uL))
+        sdk.recoverError = null
+        sdk.builds += SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n2")))
+        record = driver().tick(record)
+
+        assertEquals(Phase.Running, record.phase)
+        assertEquals(7, sdk.recoverRequests.last().fundingInputs.size)
+    }
+
+    @Test
     fun `top up ignores cpfp change chained to the funding address`() = test {
         var record = SparkExitFixtures.record(Phase.NeedsFunding(23_000uL)).copy(
             funding = listOf(
