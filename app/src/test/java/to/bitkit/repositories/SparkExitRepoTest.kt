@@ -202,4 +202,22 @@ class SparkExitRepoTest : BaseUnitTest() {
         // The first two refusals still count as runs that kept up; the third surfaces and stops pushing the alarm.
         verify(work, times(2)).armDeadline(any(), any())
     }
+
+    @Test
+    fun `a background run of an ended exit with leftover to sweep keeps going without starting spark`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(
+            SparkExitFixtures.record(Phase.Done).copy(leftover = listOf(SparkExitRecord.Leftover("f0", 0u, 5_035uL))),
+        )
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+        whenever(transferRepo.isSettled(any())).thenReturn(Result.success(true))
+        whenever(transferRepo.updateClaimableAtHeight(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val spark = coldSpark(FakeSparkExitRecovering())
+
+        createSut(spark, regtestMempool(mutableListOf())).runInBackground().getOrThrow()
+
+        verify(sparkRepo, never()).start(any())
+        verify(work, atLeastOnce()).schedulePeriodic()
+        verify(work, never()).cancelAll()
+    }
 }

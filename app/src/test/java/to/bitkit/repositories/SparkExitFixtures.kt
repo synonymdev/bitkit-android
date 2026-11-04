@@ -157,6 +157,38 @@ class FakeSparkExitRecovering : SparkExitRecovering {
     }
 }
 
-class StubCpfpSigner : CpfpSigner {
-    override suspend fun signPsbt(psbtBytes: ByteArray) = psbtBytes
+/** Finalizes every input of a PSBT with [witness], as the SDK's single-key signer does with its signature. */
+class StubCpfpSigner(private val witness: String = P2WPKH_WITNESS) : CpfpSigner {
+    companion object {
+        /** A P2WPKH witness: two items, a 72-byte signature with its sighash flag and a 33-byte key. */
+        val P2WPKH_WITNESS = "02" + "48" + "30".repeat(71) + "01" + "21" + "02".repeat(33)
+    }
+
+    override suspend fun signPsbt(psbtBytes: ByteArray): ByteArray {
+        var offset = 5
+        fun readCompactSize(): Int {
+            val prefix = psbtBytes[offset++].toInt() and 0xff
+            if (prefix < 0xfd) return prefix
+            check(prefix == 0xfd)
+            return (psbtBytes[offset++].toInt() and 0xff) or ((psbtBytes[offset++].toInt() and 0xff) shl 8)
+        }
+        var unsignedTx = ByteArray(0)
+        fun copyMap(extra: ByteArray): ByteArray {
+            val start = offset
+            while (true) {
+                val keyLength = readCompactSize()
+                if (keyLength == 0) return psbtBytes.copyOfRange(start, offset - 1) + extra + byteArrayOf(0x00)
+                val key = psbtBytes[offset]
+                offset += keyLength
+                val valueLength = readCompactSize()
+                if (start == 5 && key == 0x00.toByte()) unsignedTx = psbtBytes.copyOfRange(offset, offset + valueLength)
+                offset += valueLength
+            }
+        }
+        val witnessBytes = witness.hexToByteArray()
+        val finalWitness = byteArrayOf(0x01, 0x08, witnessBytes.size.toByte()) + witnessBytes
+        var signed = psbtBytes.copyOfRange(0, 5) + copyMap(ByteArray(0))
+        repeat(unsignedTx[4].toInt()) { signed += copyMap(finalWitness) }
+        return signed + psbtBytes.copyOfRange(offset, psbtBytes.size)
+    }
 }

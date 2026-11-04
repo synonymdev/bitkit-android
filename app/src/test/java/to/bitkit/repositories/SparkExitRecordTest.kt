@@ -82,6 +82,9 @@ class SparkExitRecordTest {
                 claimableAtHeight = 2_100u,
                 leftover = listOf(SparkExitRecord.Leftover("change", 3u, 700uL)),
                 isRebuilding = true,
+                leafTotalSats = 90_112uL,
+                earlierCpfpTxids = listOf("child"),
+                leftoverSweep = SparkExitRecord.LeftoverSweep("sweep", "02sweep", 5_035uL, rejection = "too low"),
             )
 
             assertEquals(record, SparkExitJson.decode(SparkExitJson.encode(record)))

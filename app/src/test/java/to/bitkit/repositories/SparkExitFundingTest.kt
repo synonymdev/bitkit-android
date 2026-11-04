@@ -58,17 +58,20 @@ class SparkExitFundingTest {
     }
 
     @Test
-    fun `a shortfall below dust is asked for as dust, which a wallet can pay`() {
-        val record = SparkExitFixtures.record(SparkExitRecord.Phase.NeedsFunding(9_085uL)).copy(
-            funding = listOf(
-                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 0u, 9_035uL)
-            ),
-        )
+    fun `needed funding counts what the funding address still holds`() {
+        // The headless regtest run: 9,035 held, the SDK wants 9,085 in all.
+        assertEquals(9_085uL, SparkExitMath.neededFunding(9_085uL, fundedSats = 9_035uL, held = 9_035uL))
+        // A Redo: a 20,000 input lives on as 13,000 of change, and the rebuild needs 15,000.
+        assertEquals(22_000uL, SparkExitMath.neededFunding(15_000uL, fundedSats = 20_000uL, held = 13_000uL))
+        assertEquals(20_001uL, SparkExitMath.neededFunding(12_000uL, fundedSats = 20_000uL, held = 13_000uL))
+        assertEquals(20_000uL, SparkExitMath.neededFunding(15_000uL, fundedSats = 20_000uL, held = null))
+    }
 
-        assertEquals(50uL, record.fundingShortfallSats)
-        assertEquals(546uL, record.fundingRequestSats)
-        assertEquals(3_000uL, record.copy(phase = SparkExitRecord.Phase.NeedsFunding(12_035uL)).fundingRequestSats)
-        assertNull(record.copy(phase = SparkExitRecord.Phase.Running).fundingRequestSats)
+    @Test
+    fun `spark's balance beyond the exit's leaves is outside the exit`() {
+        assertEquals(17_097uL, SparkExitMath.outsideExitSats(leafTotalSats = 32_768uL, balanceSats = 49_865uL))
+        assertNull(SparkExitMath.outsideExitSats(leafTotalSats = 90_112uL, balanceSats = 9_789uL))
+        assertNull(SparkExitMath.outsideExitSats(leafTotalSats = null, balanceSats = 9_789uL))
     }
 
     @Test
@@ -124,9 +127,9 @@ class SparkExitFundingTest {
             SparkExitFixtures.utxo("big", value = 2_000uL),
         )
 
-        assertEquals(listOf("big", "small"), SparkExitMath.fundingUtxos(utxos, requiredSats = 2_999uL)?.map { it.txid })
-        assertNull(SparkExitMath.fundingUtxos(utxos, requiredSats = 3_000uL))
-        assertNull(SparkExitMath.fundingUtxos(emptyList(), requiredSats = 0uL))
+        assertEquals(listOf("big", "small"), SparkExitMath.fundingTopUp(utxos, requiredSats = 2_999uL)?.map { it.txid })
+        assertNull(SparkExitMath.fundingTopUp(utxos, requiredSats = 3_000uL))
+        assertNull(SparkExitMath.fundingTopUp(emptyList(), requiredSats = 0uL))
     }
 
     @Test

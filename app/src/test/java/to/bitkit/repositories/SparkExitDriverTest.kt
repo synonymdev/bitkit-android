@@ -22,11 +22,17 @@ import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class SparkExitDriverTest : BaseUnitTest() {
+    private companion object {
+        const val SWEEP_DESTINATION = "bcrt1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqc8gma6"
+        const val SWEEP_FUNDING = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+    }
+
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -265,6 +271,9 @@ class SparkExitDriverTest : BaseUnitTest() {
         }
         var record = running(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("old"))), builtAt = 0L)
             .copy(funding = funded)
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = funded.map {
+            SparkExitFixtures.utxo(requireNotNull(it.txid), value = requireNotNull(it.valueSats))
+        }
         sdk.checks += check(SparkExitFixtures.recovery(emptyList()), redo)
         sdk.recoverError = SdkException.InsufficientCpfpFunds(9_085uL, "")
 
@@ -285,14 +294,68 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a funded exit with nothing left to recover fails with its funding as leftover`() = test {
-        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] = listOf(SparkExitFixtures.utxo("f0", 1u, 25_000uL))
-        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = emptyList(), skipped = emptyList())
+    fun `a redo whose spent input lives on as change asks only for what that change lacks`() = test {
+        val built = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1", cpfp = SparkExitFixtures.PARENT_HEX)))
+        var record = running(built, builtAt = 0L).copy(
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", "f0", 1u, 20_000uL),
+            ),
+        )
+        // The input went into a CPFP child, whose 13,000 of change sits at the funding address.
+        chain.utxosByAddress[SparkExitFixtures.FUNDING_ADDRESS] =
+            listOf(SparkExitFixtures.utxo(SparkExitFixtures.PARENT_TXID, value = 13_000uL))
+        sdk.checks += check(built, redo)
+        sdk.recoverError = SdkException.InsufficientCpfpFunds(15_000uL, "")
 
-        val record = driver().tick(SparkExitFixtures.record())
+        record = driver().tick(record)
+
+        assertEquals(2_000uL, record.fundingShortfallSats)
+    }
+
+    @Test
+    fun `the tick that ends the exit sweeps its leftover to savings until a node accepts it`() = test {
+        val funding = "f0".repeat(32)
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo(funding, 1u, 25_000uL))
+        sdk.preparedResponse = SparkExitFixtures.prepared(leaves = emptyList(), skipped = emptyList())
+        chain.outcome = SparkExitBroadcastOutcome.RetryLater("unreachable")
+        val start = SparkExitFixtures.record().copy(
+            destination = SWEEP_DESTINATION,
+            funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+        )
+
+        var record = driver().tick(start)
 
         assertIs<Phase.Failed>(record.phase)
-        assertEquals(listOf(SparkExitRecord.Leftover("f0", 1u, 25_000uL)), record.leftover)
+        assertEquals(listOf(SparkExitRecord.Leftover(funding, 1u, 25_000uL)), record.leftover)
+        val sweep = assertNotNull(record.leftoverSweep)
+        assertEquals(1, chain.rawBroadcasts.size)
+        assertTrue(record.isLeftoverSweepPending)
+        assertEquals(sweep, saved.first { it.leftoverSweep != null }.leftoverSweep)
+
+        chain.outcome = SparkExitBroadcastOutcome.Accepted
+        record = driver().tick(record)
+
+        assertEquals(listOf(sweep.txHex, sweep.txHex), chain.rawBroadcasts)
+        assertTrue(assertNotNull(record.leftoverSweep).isAccepted)
+        assertFalse(record.needsDriving)
+        record = driver().tick(record)
+        assertEquals(2, chain.rawBroadcasts.size)
+    }
+
+    @Test
+    fun `a leftover under dust is not swept`() = test {
+        chain.utxosByAddress[SWEEP_FUNDING] = listOf(SparkExitFixtures.utxo("f0", 1u, 400uL))
+        val done = SparkExitFixtures.record(Phase.Done).copy(
+            destination = SWEEP_DESTINATION,
+            funding = listOf(SparkExitRecord.Funding(0u, SWEEP_FUNDING, "02ab")),
+            leftover = listOf(SparkExitRecord.Leftover("f0", 1u, 400uL)),
+        )
+
+        val record = driver().tick(done)
+
+        assertEquals(SparkExitRecord.LeftoverSweep(null, null, 400uL), record.leftoverSweep)
+        assertTrue(chain.rawBroadcasts.isEmpty())
+        assertFalse(record.needsDriving)
     }
 
     @Test

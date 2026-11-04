@@ -100,7 +100,7 @@ class SparkExitWork @Inject constructor(
     fun ensureScheduled() {
         scope.launch {
             val record = runCatching { store().load() }.getOrNull()
-            if (record?.isActive != true) {
+            if (record?.needsDriving != true) {
                 if (preferences.contains(KEY_WARN_AT)) cancelAll()
                 return@launch
             }

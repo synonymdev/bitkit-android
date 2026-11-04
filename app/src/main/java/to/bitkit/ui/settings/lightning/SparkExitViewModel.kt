@@ -50,7 +50,8 @@ class SparkExitViewModel @Inject constructor(
                         fundingSeenSats = exit.fundingSeenSats,
                         fundingAddress = exit.fundingAddress,
                         canCancel = sparkExitRepo.canCancel,
-                        leftOutSats = exit.leftOutSats,
+                        outsideExitSats = exit.outsideExitSats,
+                        isSettling = exit.isSettling,
                     )
                 }
             }
@@ -124,14 +125,6 @@ class SparkExitViewModel @Inject constructor(
         }
     }
 
-    fun sweepLeftover() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isSweeping = true) }
-            sparkExitRepo.sweepLeftover().onFailure { ToastEventBus.send(it) }
-            _uiState.update { it.copy(isSweeping = false) }
-        }
-    }
-
     fun refreshBackgroundLimits() {
         _uiState.update { it.copy(backgroundLimits = sparkExitRepo.backgroundLimits()) }
     }
@@ -168,8 +161,9 @@ data class SparkExitUiState(
     val fundingAddress: String? = null,
     val canCancel: Boolean = false,
     val backgroundLimits: SparkExitBackgroundLimits = SparkExitBackgroundLimits(),
-    val leftOutSats: ULong? = null,
-    val isSweeping: Boolean = false,
+    val outsideExitSats: ULong? = null,
+    /** The quote waits for Spark to finish moving leaves first. */
+    val isSettling: Boolean = false,
 ) {
     val fundingSats: ULong get() = quote?.fundingSats ?: 0uL
 

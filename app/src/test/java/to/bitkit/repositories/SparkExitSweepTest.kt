@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import org.junit.Test
+import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.SignedTransactionId
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -8,7 +9,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class SparkExitSweepTest {
+class SparkExitSweepTest : BaseUnitTest() {
     private val funding = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
     private val savings = "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0"
 
@@ -23,6 +24,23 @@ class SparkExitSweepTest {
             Bech32.scriptPubKey(savings).toHexString(),
         )
         assertFailsWith<SparkExitSweepError> { Bech32.scriptPubKey("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5") }
+        assertEquals(
+            "76a91477bff20c60e522dfaa3350c39b030a5d004e839a88ac",
+            AddressScript.of("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2").toHexString(),
+        )
+        assertEquals(
+            "a914b472a266d0bd89c13706a4132ccfb16f7c3b9fcb87",
+            AddressScript.of("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy").toHexString(),
+        )
+        assertFailsWith<SparkExitSweepError> { AddressScript.of("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN3") }
+    }
+
+    @Test
+    fun `dust limits follow bitcoin core per output type`() {
+        assertEquals(294uL, SparkExitSweep.dustLimit(AddressScript.of("BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4")))
+        assertEquals(330uL, SparkExitSweep.dustLimit(AddressScript.of(savings)))
+        assertEquals(540uL, SparkExitSweep.dustLimit(AddressScript.of("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy")))
+        assertEquals(546uL, SparkExitSweep.dustLimit(AddressScript.of("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2")))
     }
 
     @Test
@@ -34,12 +52,13 @@ class SparkExitSweepTest {
         // 11 overhead + 68 for the input + 9 + 34 for the P2TR output, at 2 sat/vB.
         assertEquals(244uL, plan.feeSats)
         assertEquals(4_791uL, plan.amountSats)
-        assertNull(SparkExitSweep.plan(listOf(inputs.first().copy(valueSats = 700uL)), savings, 2uL))
+        // 500 less 244 of fee is under P2TR's dust limit of 330.
+        assertNull(SparkExitSweep.plan(listOf(inputs.first().copy(valueSats = 500uL)), savings, 2uL))
         assertNull(SparkExitSweep.plan(emptyList(), savings, 2uL))
     }
 
     @Test
-    fun `the signed transaction carries the signer's witness and keeps the unsigned txid`() {
+    fun `the signed transaction carries the signer's witness and keeps the unsigned txid`() = test {
         val plan = assertNotNull(
             SparkExitSweep.plan(
                 listOf(
@@ -51,10 +70,9 @@ class SparkExitSweepTest {
             ),
         )
         val psbt = SparkExitSweep.psbt(plan, funding)
-        // A P2WPKH witness: two items, a 72-byte signature with its sighash flag and a 33-byte key.
-        val witness = "02" + "48" + "30".repeat(71) + "01" + "21" + "02".repeat(33)
+        val witness = StubCpfpSigner.P2WPKH_WITNESS
 
-        val hex = SparkExitSweep.signedTxHex(plan, signLikeTheSdk(psbt, witness, inputCount = 2))
+        val hex = SparkExitSweep.signedTxHex(plan, StubCpfpSigner().signPsbt(psbt))
 
         assertTrue(hex.startsWith("02000000" + "0001" + "02" + "11".repeat(32) + "00000000" + "00" + "fdffffff"))
         assertTrue(hex.endsWith(witness + witness + "00000000"))
@@ -68,31 +86,5 @@ class SparkExitSweepTest {
         val plan = assertNotNull(SparkExitSweep.plan(inputs, savings, 1uL))
 
         assertFailsWith<SparkExitSweepError> { SparkExitSweep.signedTxHex(plan, SparkExitSweep.psbt(plan, funding)) }
-    }
-
-    /** Adds a `final_scriptwitness` to each input map, as the SDK's single-key signer does. */
-    private fun signLikeTheSdk(psbt: ByteArray, witness: String, inputCount: Int): ByteArray {
-        var offset = 5
-        fun readCompactSize(): Int {
-            val prefix = psbt[offset++].toInt() and 0xff
-            if (prefix < 0xfd) return prefix
-            check(prefix == 0xfd)
-            return ((psbt[offset++].toInt() and 0xff) or ((psbt[offset++].toInt() and 0xff) shl 8))
-        }
-        fun copyMap(extra: ByteArray): ByteArray {
-            val start = offset
-            while (true) {
-                val keyLength = readCompactSize()
-                if (keyLength == 0) return psbt.copyOfRange(start, offset - 1) + extra + byteArrayOf(0x00)
-                offset += keyLength
-                val valueLength = readCompactSize()
-                offset += valueLength
-            }
-        }
-        val witnessBytes = witness.hexToByteArray()
-        val finalWitness = byteArrayOf(0x01, 0x08, witnessBytes.size.toByte()) + witnessBytes
-        var signed = psbt.copyOfRange(0, 5) + copyMap(ByteArray(0))
-        repeat(inputCount) { signed += copyMap(finalWitness) }
-        return signed + psbt.copyOfRange(offset, psbt.size)
     }
 }

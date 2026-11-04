@@ -14,6 +14,7 @@ import breez_sdk_spark.RecoveryVerdict
 import breez_sdk_spark.SdkException
 import breez_sdk_spark.SkippedLeafReason
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.safe
 import to.bitkit.utils.Logger
 import to.bitkit.utils.SignedTransactionId
 import kotlin.time.Duration.Companion.minutes
@@ -56,7 +57,12 @@ class SparkExitDriver(
     suspend fun tick(start: SparkExitRecord): SparkExitRecord {
         var record = start
         when (record.phase) {
-            SparkExitRecord.Phase.Done, is SparkExitRecord.Phase.Failed -> return record
+            SparkExitRecord.Phase.Done, is SparkExitRecord.Phase.Failed -> {
+                if (!record.isLeftoverSweepPending) return record
+                record = sweepLeftover(record)
+                save(record)
+                return record
+            }
             is SparkExitRecord.Phase.AwaitingFunding, is SparkExitRecord.Phase.NeedsFunding -> {
                 val sdk = recovering ?: return record
                 val shortfall = record.fundingShortfallSats
@@ -75,21 +81,20 @@ class SparkExitDriver(
             }
         }
         record = record.copy(claimableAtHeight = record.recovery?.let(SparkExitMath::claimableAtHeight))
+        // The tick that ends the exit also sends its leftover fee funding to savings.
+        if (record.isLeftoverSweepPending) record = sweepLeftover(record)
         save(record)
         return record
     }
 
     /**
-     * Adds every confirmed UTXO at the funding address that is neither a funding input yet nor CPFP change the exit
-     * chained there, once together they cover [requiredSats]; null while they do not. Several small payments count:
-     * the SDK spends every funding input it is given.
+     * Adds every confirmed UTXO of new funding at the funding address once together they cover [requiredSats]; null
+     * while they do not. Several small payments count: the SDK spends every funding input it is given.
      */
     private suspend fun adoptFunding(record: SparkExitRecord, requiredSats: ULong): SparkExitRecord? {
         val first = record.funding.firstOrNull() ?: return null
-        val known = record.funding.mapNotNull { f -> f.txid?.let { "$it:${f.vout ?: 0u}" } }.toSet()
-        val chained = record.recovery?.let(SparkExitTxids::cpfpChildTxids).orEmpty().toSet()
-        val candidates = chain.utxos(first.address).filter { "${it.txid}:${it.vout}" !in known && it.txid !in chained }
-        val utxos = SparkExitMath.fundingUtxos(candidates, requiredSats) ?: return null
+        val candidates = SparkExitMath.newFunding(chain.utxos(first.address), record)
+        val utxos = SparkExitMath.fundingTopUp(candidates, requiredSats) ?: return null
         val adopted = utxos.map { first.copy(index = 0u, txid = it.txid, vout = it.vout, valueSats = it.value) }
         val funding = if (record.funding.size == 1 && first.txid == null) adopted else record.funding + adopted
         return record.copy(funding = funding)
@@ -126,10 +131,14 @@ class SparkExitDriver(
             )
         }.getOrElse {
             if (it !is SdkException.InsufficientCpfpFunds) throw it
-            // The SDK names the total its funding inputs must cover (CPFP cost plus change dust), not what is
-            // missing, so the shortfall is that total less what was already funded.
+            // The SDK names the total its funding inputs must hold (CPFP cost plus change dust), not what is missing.
+            // After a Redo the inputs are partly spent, so what the address still holds decides the shortfall.
             Logger.warn("Needs '${it.requiredSats}' sats of fee funding in total for the Spark exit", context = TAG)
-            return record.copy(phase = SparkExitRecord.Phase.NeedsFunding(maxOf(it.requiredSats, record.fundedSats)))
+            val held = record.funding.firstOrNull()?.address?.let { address ->
+                runSuspendCatching { chain.utxos(address) }.getOrNull()?.let { SparkExitMath.heldSats(it, record) }
+            }
+            val needed = SparkExitMath.neededFunding(it.requiredSats, record.fundedSats, held)
+            return record.copy(phase = SparkExitRecord.Phase.NeedsFunding(needed))
         }
         if (built.transactions.isEmpty()) {
             // Cooperative leaves the operators could not co-sign now are tried again on the next tick.
@@ -186,6 +195,54 @@ class SparkExitDriver(
             tx.copy(status = ExitTransactionStatus.Confirmed(status.blockHeight))
         }
         return recovery.copy(transactions = transactions)
+    }
+
+    /**
+     * Sends what the ended exit left at its funding address to [SparkExitRecord.destination] in one transaction, once
+     * every UTXO there confirmed, at the exit's fee rate. Built and saved before it is sent, then sent again each tick
+     * until a node accepts it; not after a rejection. Dust is not sent.
+     */
+    private suspend fun sweepLeftover(record: SparkExitRecord): SparkExitRecord {
+        val built = record.leftoverSweep
+        if (built?.txHex != null) return sendSweep(record, built, built.txHex)
+        val address = record.funding.firstOrNull()?.address ?: return record
+        val utxos = runSuspendCatching { chain.utxos(address) }.getOrNull() ?: return record
+        if (utxos.isEmpty()) return record.copy(leftover = emptyList())
+        if (utxos.any { !it.status.confirmed }) return record
+        val inputs = utxos.map { SparkExitSweep.Input(it.txid, it.vout, it.value) }
+        val total = utxos.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+        val plan = runSuspendCatching { SparkExitSweep.plan(inputs, record.destination, record.feeRateSatPerVbyte) }
+            .getOrElse {
+                Logger.error("Failed to plan the Spark exit leftover sweep", it, context = TAG)
+                return record
+            }
+            ?: return record.copy(leftoverSweep = SparkExitRecord.LeftoverSweep(null, null, total))
+        val sweep = runSuspendCatching {
+            val signed = makeSigner().signPsbt(SparkExitSweep.psbt(plan, address))
+            val hex = SparkExitSweep.signedTxHex(plan, signed)
+            SparkExitRecord.LeftoverSweep(SignedTransactionId.fromHex(hex), hex, plan.amountSats)
+        }.getOrElse {
+            Logger.error("Failed to build the Spark exit leftover sweep", it, context = TAG)
+            return record
+        }
+        val hex = requireNotNull(sweep.txHex)
+        val saved = record.copy(leftoverSweep = sweep)
+        save(saved)
+        return sendSweep(saved, sweep, hex)
+    }
+
+    private suspend fun sendSweep(
+        record: SparkExitRecord,
+        sweep: SparkExitRecord.LeftoverSweep,
+        hex: String,
+    ): SparkExitRecord {
+        val outcome = chain.broadcastHex(hex)
+        Logger.info("Broadcast Spark exit leftover sweep '${sweep.txid}': '${outcome.summary}'", context = TAG)
+        return when (outcome) {
+            SparkExitBroadcastOutcome.Accepted -> record.copy(leftoverSweep = sweep.copy(isAccepted = true))
+            is SparkExitBroadcastOutcome.Rejected -> record.copy(leftoverSweep = sweep.copy(rejection = outcome.reason))
+            is SparkExitBroadcastOutcome.RetryLater -> record
+        }
     }
 
     private fun isRebuildDue(record: SparkExitRecord): Boolean {

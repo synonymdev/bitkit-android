@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import to.bitkit.models.safe
 import to.bitkit.utils.AppError
 import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 
 /**
  * Moves the fee funding an exit left at its funding address to savings once the exit is done: change from a branch
@@ -10,33 +11,44 @@ import java.io.ByteArrayOutputStream
  * the P2WPKH inputs of the PSBT built here and finalizes them, so the funding key never leaves the signer.
  */
 object SparkExitSweep {
-    /** What a sweep output must keep after its fee, below which it is not worth sending. */
-    const val DUST_SATS = 546uL
-
-    private const val P2WPKH_INPUT_VBYTES = 68uL
-    private const val TX_OVERHEAD_VBYTES = 11uL
-    private const val OUTPUT_OVERHEAD_VBYTES = 9uL
     private const val SEQUENCE_RBF = 0xfffffffdL
+
+    /** Bitcoin Core's spend sizes for its dust rule: a witness program's input, and any other. */
+    private const val WITNESS_SPEND_BYTES = 67uL
+    private const val LEGACY_SPEND_BYTES = 148uL
 
     data class Input(val txid: String, val vout: UInt, val valueSats: ULong)
 
-    /** An unsigned sweep of [inputs] to [destination], or null when it would leave less than [DUST_SATS]. */
+    /** An unsigned sweep of [inputs] to [destination], or null when what it pays would be under the dust limit. */
     class Plan(val inputs: List<Input>, val destinationScript: ByteArray, val amountSats: ULong, val feeSats: ULong)
 
     fun plan(inputs: List<Input>, destination: String, feeRateSatPerVbyte: ULong): Plan? {
         if (inputs.isEmpty()) return null
-        val script = Bech32.scriptPubKey(destination)
-        val vbytes = TX_OVERHEAD_VBYTES + P2WPKH_INPUT_VBYTES * inputs.size.toULong() +
-            OUTPUT_OVERHEAD_VBYTES + script.size.toULong()
-        val fee = vbytes * maxOf(1uL, feeRateSatPerVbyte)
+        val script = AddressScript.of(destination)
+        val fee = vsize(inputs.size, script.size) * maxOf(1uL, feeRateSatPerVbyte)
         val total = inputs.fold(0uL) { sum, input -> sum.safe() + input.valueSats.safe() }
-        if (total < fee + DUST_SATS) return null
+        if (total < fee.safe() + dustLimit(script).safe()) return null
         return Plan(inputs, script, total - fee, fee)
+    }
+
+    /** P2WPKH inputs sized for 72-byte signatures and one output: ceil((4 · base + witness) / 4). */
+    fun vsize(inputCount: Int, outputScriptSize: Int): ULong {
+        val n = inputCount.toULong()
+        val base = 10uL + 41uL * n + 9uL + outputScriptSize.toULong()
+        val witness = 2uL + 108uL * n
+        return (4uL * base + witness + 3uL) / 4uL
+    }
+
+    /** Bitcoin Core's dust limit of an output: 3 · (output size + spend size), 294 for P2WPKH, 330 for P2TR. */
+    fun dustLimit(script: ByteArray): ULong {
+        val isWitness = script.size >= 4 && (script[0] == 0.toByte() || script[0] in 0x51.toByte()..0x60.toByte())
+        val spend = if (isWitness) WITNESS_SPEND_BYTES else LEGACY_SPEND_BYTES
+        return 3uL * (9uL + script.size.toULong() + spend)
     }
 
     /** A BIP 174 PSBT of [plan], each input carrying its P2WPKH `witness_utxo` at [fundingAddress] for the signer. */
     fun psbt(plan: Plan, fundingAddress: String): ByteArray {
-        val fundingScript = Bech32.scriptPubKey(fundingAddress)
+        val fundingScript = AddressScript.of(fundingAddress)
         val out = ByteArrayOutputStream()
         out.write(byteArrayOf(0x70, 0x73, 0x62, 0x74, 0xff.toByte()))
         out.writeKeyValue(byteArrayOf(0x00), unsignedTx(plan))
@@ -153,6 +165,36 @@ object SparkExitSweep {
 }
 
 class SparkExitSweepError(message: String) : AppError(message)
+
+/** An address to the output script it pays: segwit (BIP 173 and 350), P2PKH or P2SH. */
+object AddressScript {
+    private val P2PKH_VERSIONS = setOf(0x00, 0x6f)
+    private val P2SH_VERSIONS = setOf(0x05, 0xc4)
+    private const val HASH_LENGTH = 20
+    private const val CHECKSUM_LENGTH = 4
+
+    fun of(address: String): ByteArray {
+        val hrp = address.lowercase().substringBeforeLast('1', "")
+        if (hrp in setOf("bc", "tb", "bcrt")) return Bech32.scriptPubKey(address)
+        val decoded = SparkExitFundingKey.base58Decode(address)
+            ?.takeIf { it.size == 1 + HASH_LENGTH + CHECKSUM_LENGTH }
+            ?: throw SparkExitSweepError("Invalid address '$address'")
+        val payload = decoded.copyOfRange(0, 1 + HASH_LENGTH)
+        val sha256 = MessageDigest.getInstance("SHA-256")
+        val checksum = sha256.digest(sha256.digest(payload)).copyOfRange(0, CHECKSUM_LENGTH)
+        if (!checksum.contentEquals(decoded.copyOfRange(1 + HASH_LENGTH, decoded.size))) {
+            throw SparkExitSweepError("Invalid checksum in '$address'")
+        }
+        val hash = payload.copyOfRange(1, payload.size)
+        return when (payload[0].toInt() and 0xff) {
+            in P2PKH_VERSIONS -> {
+                byteArrayOf(0x76, 0xa9.toByte(), 0x14) + hash + byteArrayOf(0x88.toByte(), 0xac.toByte())
+            }
+            in P2SH_VERSIONS -> byteArrayOf(0xa9.toByte(), 0x14) + hash + byteArrayOf(0x87.toByte())
+            else -> throw SparkExitSweepError("Unsupported address '$address'")
+        }
+    }
+}
 
 /** Segwit addresses (BIP 173 and BIP 350) to the output script they pay. */
 object Bech32 {

@@ -60,6 +60,12 @@ data class SparkExitRecord(
     /** Set and saved before a rebuild, so nothing of the diverged generation is broadcast while it is replaced. */
     val isRebuilding: Boolean = false,
     val lastBuildAt: Long? = null,
+    /** The value of the quote's leaves, to show what Spark holds outside the exit. */
+    val leafTotalSats: ULong? = null,
+    /** The CPFP child txids of replaced generations, whose change at the funding address is not new funding. */
+    val earlierCpfpTxids: List<String> = emptyList(),
+    /** The sweep of [leftover] to [destination] once the exit ended. */
+    val leftoverSweep: LeftoverSweep? = null,
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -119,6 +125,26 @@ data class SparkExitRecord(
         val valueSats: ULong,
     )
 
+    /** A built sweep of the leftover, saved before it is sent; a null [txid] means it was dust and nothing went. */
+    data class LeftoverSweep(
+        val txid: String?,
+        val txHex: String?,
+        val valueSats: ULong,
+        val isAccepted: Boolean = false,
+        val rejection: String? = null,
+    )
+
+    /** The leftover still has to be swept: not built yet, or built and neither accepted nor rejected. */
+    val isLeftoverSweepPending: Boolean
+        get() {
+            if (leftover.isEmpty()) return false
+            val sweep = leftoverSweep ?: return true
+            return sweep.txid != null && !sweep.isAccepted && sweep.rejection == null
+        }
+
+    /** Background runs and the foreground loop keep going while the exit runs and until its leftover is swept. */
+    val needsDriving: Boolean get() = isActive || isLeftoverSweepPending
+
     val isActive: Boolean
         get() = when (phase) {
             is Phase.AwaitingFunding, Phase.Running, is Phase.NeedsFunding -> true
@@ -137,14 +163,9 @@ data class SparkExitRecord(
             return shortfall.takeIf { it > 0uL }
         }
 
-    /**
-     * What the user is asked to send to the funding address: the shortfall, raised to the dust limit, since no wallet
-     * pays a smaller output. The sweep at the end returns what the exit does not spend.
-     */
-    val fundingRequestSats: ULong? get() = fundingShortfallSats?.let { maxOf(it, SparkExitSweep.DUST_SATS) }
-
     /** Starts a new generation from a fresh build, forgetting what was broadcast for the previous one. */
     fun adopt(built: RecoverFundsResponse, atMillis: Long): SparkExitRecord = copy(
+        earlierCpfpTxids = (earlierCpfpTxids + recovery?.let(SparkExitTxids::cpfpChildTxids).orEmpty()).distinct(),
         generation = generation + 1,
         recovery = built,
         broadcastLog = emptyList(),
@@ -281,6 +302,22 @@ object SparkExitJson {
         put("failedLeafCount", r.failedLeafCount)
         put("isRebuilding", r.isRebuilding)
         r.lastBuildAt?.let { put("lastBuildAt", it) }
+        r.leafTotalSats?.let { put("leafTotalSats", it.toLong()) }
+        if (r.earlierCpfpTxids.isNotEmpty()) {
+            put("earlierCpfpTxids", buildJsonArray { r.earlierCpfpTxids.forEach { add(JsonPrimitive(it)) } })
+        }
+        r.leftoverSweep?.let { sweep ->
+            put(
+                "leftoverSweep",
+                buildJsonObject {
+                    sweep.txid?.let { put("txid", it) }
+                    sweep.txHex?.let { put("txHex", it) }
+                    put("valueSats", sweep.valueSats.toLong())
+                    put("isAccepted", sweep.isAccepted)
+                    sweep.rejection?.let { put("rejection", it) }
+                },
+            )
+        }
     }
 
     private fun recordFromJson(o: JsonObject) = SparkExitRecord(
@@ -327,6 +364,17 @@ object SparkExitJson {
         failedLeafCount = o.intOrNull("failedLeafCount") ?: 0,
         isRebuilding = o.booleanOrNull("isRebuilding") ?: false,
         lastBuildAt = o.millisOrNull("lastBuildAt"),
+        leafTotalSats = o.ulongOrNull("leafTotalSats"),
+        earlierCpfpTxids = o.arrayOrEmpty("earlierCpfpTxids").map { it.jsonPrimitive.content },
+        leftoverSweep = o.objectOrNull("leftoverSweep")?.let {
+            SparkExitRecord.LeftoverSweep(
+                txid = it.stringOrNull("txid"),
+                txHex = it.stringOrNull("txHex"),
+                valueSats = it.ulong("valueSats"),
+                isAccepted = it.booleanOrNull("isAccepted") ?: false,
+                rejection = it.stringOrNull("rejection"),
+            )
+        },
     )
 
     private fun phaseToJson(phase: SparkExitRecord.Phase): JsonObject = when (phase) {

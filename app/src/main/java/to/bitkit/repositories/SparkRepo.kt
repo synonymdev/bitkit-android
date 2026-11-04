@@ -108,10 +108,6 @@ class SparkRepo @Inject constructor(
     /** The SDK is swapping leaves with the operators; their value is in flight until it ends. */
     private val isOptimizing = MutableStateFlow(false)
 
-    /** When a leaf swap was last cut short, which leaves its counter-swap unclaimed for [COUNTER_SWAP_GRACE]. */
-    @Volatile
-    private var optimizationCutShortAt: Instant? = null
-
     /** Watchers of the claims of deposits this app sent, by txid; they outlive the screens that start them. */
     private val claimJobs = ConcurrentHashMap<String, Job>()
 
@@ -191,37 +187,61 @@ class SparkRepo @Inject constructor(
         }
     }
 
+    /** Whether an exit quote has to wait first: a leaf optimization runs, or one ran or was cut short recently. */
+    suspend fun needsSettling(): Boolean =
+        isOptimizing.value || cacheStore.data.first().sparkOptimizationActivityAt != null
+
     /**
-     * Waits until every leaf is in the wallet for an emergency exit quote, which exits the leaves listed then: no leaf
-     * optimization running, and the counter-swap of one cut short claimed, which a sync does once the SDK's grace
-     * period ran out. Value still in flight would otherwise be left out of the exit.
+     * Settles the leaves for an emergency exit quote, which exits the leaves listed then. The balance leaves out an
+     * unclaimed counter-swap, and a leaf optimization cut short leaves its counter-swap unclaimed for the SDK's 300 s
+     * grace. So: wait for a running optimization, then until the last one is [COUNTER_SWAP_GRACE] old, then sync,
+     * which claims counter-swaps past the grace.
      */
-    suspend fun awaitSettledLeaves(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun settleForExit(): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
-            if (withTimeoutOrNull(OPTIMIZATION_WAIT) { isOptimizing.first { !it } } == null) {
-                Logger.warn("Quoting the Spark exit while a leaf optimization still runs", context = TAG)
+            awaitOptimizationIdle()
+            cacheStore.data.first().sparkOptimizationActivityAt?.let {
+                delay(Instant.fromEpochMilliseconds(it) + COUNTER_SWAP_GRACE - clock.now())
             }
-            optimizationCutShortAt?.let { delay(it + COUNTER_SWAP_GRACE - clock.now()) }
             sparkService.syncWallet()
+            cacheStore.update { it.copy(sparkOptimizationActivityAt = null) }
             refresh()
         }
     }
 
-    private fun onOptimization(event: AutoOptimizationEvent) {
+    /** Waits, up to [OPTIMIZATION_WAIT], for a running leaf optimization to end. */
+    suspend fun awaitOptimizationIdle() {
+        if (withTimeoutOrNull(OPTIMIZATION_WAIT) { isOptimizing.first { !it } } == null) {
+            Logger.warn("Gave up waiting for a Spark leaf optimization to end", context = TAG)
+        }
+    }
+
+    private suspend fun onOptimization(event: AutoOptimizationEvent) {
         when (event) {
-            is AutoOptimizationEvent.Started, is AutoOptimizationEvent.RoundCompleted -> isOptimizing.update { true }
-            AutoOptimizationEvent.Completed, AutoOptimizationEvent.Skipped -> isOptimizing.update { false }
+            is AutoOptimizationEvent.Started, is AutoOptimizationEvent.RoundCompleted -> {
+                isOptimizing.update { true }
+                stampOptimizationActivity()
+            }
             AutoOptimizationEvent.Cancelled, is AutoOptimizationEvent.Failed -> {
-                optimizationCutShortAt = clock.now()
                 isOptimizing.update { false }
+                stampOptimizationActivity()
+            }
+            AutoOptimizationEvent.Completed, AutoOptimizationEvent.Skipped -> {
+                isOptimizing.update { false }
+                cacheStore.update { it.copy(sparkOptimizationActivityAt = null) }
             }
         }
     }
 
-    private fun onOptimizationCutShort() {
+    private suspend fun onOptimizationCutShort() {
         if (!isOptimizing.value) return
-        optimizationCutShortAt = clock.now()
         isOptimizing.update { false }
+        stampOptimizationActivity()
+    }
+
+    private suspend fun stampOptimizationActivity() {
+        val now = clock.now().toEpochMilliseconds()
+        cacheStore.update { it.copy(sparkOptimizationActivityAt = now) }
     }
 
     private fun exitStore(walletIndex: Int) = SparkExitStore(File(Env.sparkExitRecordPath(walletIndex)))

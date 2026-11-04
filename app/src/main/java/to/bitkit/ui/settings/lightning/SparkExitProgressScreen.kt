@@ -61,7 +61,6 @@ fun SparkExitProgressScreen(
         onCancel = viewModel::cancel,
         onDone = onDone,
         onNotificationSettings = context::openNotificationSettings,
-        onSweepLeftover = viewModel::sweepLeftover,
     )
 }
 
@@ -74,7 +73,6 @@ private fun Content(
     onCancel: () -> Unit = {},
     onDone: () -> Unit = {},
     onNotificationSettings: () -> Unit = {},
-    onSweepLeftover: () -> Unit = {},
 ) {
     val record = uiState.record
     ScreenColumn {
@@ -99,7 +97,7 @@ private fun Content(
                 VerticalSpacer(8.dp)
                 BodyM(text = progressText(record).withAccentBoldBright(), color = Colors.White64)
                 VerticalSpacer(24.dp)
-                record?.let { ProgressDetails(it, uiState, onSweepLeftover) }
+                record?.let { ProgressDetails(it, uiState) }
                 if (record?.isActive == true) {
                     BackgroundNotes(
                         limits = uiState.backgroundLimits,
@@ -130,10 +128,10 @@ private fun Content(
 }
 
 @Composable
-private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, onSweepLeftover: () -> Unit) {
+private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) {
     SparkExitSteps(record = record, tipHeight = uiState.tipHeight)
     val address = record.funding.firstOrNull()?.address
-    val shortfall = record.fundingRequestSats
+    val shortfall = record.fundingShortfallSats
     if (shortfall != null && address != null) {
         VerticalSpacer(24.dp)
         SparkExitFundingAddress(address = address, requiredSats = shortfall, seenSats = uiState.fundingSeenSats)
@@ -142,16 +140,23 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
         VerticalSpacer(16.dp)
         BodyS(text = stringResource(R.string.lightning__spark_exit__errors).replace("{error}", it), color = Colors.Red)
     }
-    uiState.leftOutSats?.let {
+    uiState.outsideExitSats?.let {
         VerticalSpacer(16.dp)
         BodyS(
-            text = stringResource(
-                R.string.lightning__spark_exit__left_out
-            ).replace("{amount}", sparkExitAmountText(it)),
+            text = stringResource(R.string.lightning__spark_exit__outside_exit)
+                .replace("{amount}", sparkExitAmountText(it)),
             color = Colors.White64,
         )
     }
-    if (!record.isActive && address != null) {
+    val sweep = record.leftoverSweep
+    if (!record.isActive && sweep?.isAccepted == true) {
+        VerticalSpacer(16.dp)
+        BodyS(
+            text = stringResource(R.string.lightning__spark_exit__leftover_swept)
+                .replace("{amount}", sparkExitAmountText(sweep.valueSats)),
+            color = Colors.White64,
+        )
+    } else if (!record.isActive && address != null) {
         record.leftover.forEach {
             VerticalSpacer(16.dp)
             BodyS(
@@ -159,15 +164,6 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
                     .replace("{amount}", sparkExitAmountText(it.valueSats))
                     .replace("{address}", address),
                 color = Colors.White64,
-            )
-        }
-        if (record.leftover.isNotEmpty()) {
-            VerticalSpacer(16.dp)
-            SecondaryButton(
-                text = stringResource(R.string.lightning__spark_exit__leftover_sweep),
-                onClick = onSweepLeftover,
-                isLoading = uiState.isSweeping,
-                testTag = "SparkExitSweepLeftover",
             )
         }
     }
@@ -223,7 +219,7 @@ private fun progressText(record: SparkExitRecord?): String = when (record?.phase
     ).joinToString(" ")
     is SparkExitRecord.Phase.Failed -> stringResource(R.string.lightning__spark_exit__failed_text)
     is SparkExitRecord.Phase.NeedsFunding -> stringResource(R.string.lightning__spark_exit__needs_funding_text)
-        .replace("{amount}", sparkExitAmountText(record.fundingRequestSats ?: 0uL))
+        .replace("{amount}", sparkExitAmountText(record.fundingShortfallSats ?: 0uL))
     else -> stringResource(R.string.lightning__spark_exit__progress_text)
 }
 

@@ -169,6 +169,12 @@ data class AppCacheData(
     val quickPayLedger: QuickPayLedger? = null,
     /** LNURL-pay comments by payment hash, kept until the sent payment's activity stores them. */
     val pendingLightningMessages: Map<String, String> = mapOf(),
+    /**
+     * When a Spark leaf optimization last ran or was cut short, in epoch milliseconds; cleared once it completed or
+     * an exit quote waited out the counter-swap grace. Kept across processes, since a swap the app's close cut short
+     * leaves value in flight.
+     */
+    val sparkOptimizationActivityAt: Long? = null,
 ) {
     fun isContactDetached(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in detachedActivityContacts

@@ -255,9 +255,8 @@
     <string name="lightning__spark_exit__intro_text">Use this only if Spark stops working for you. It moves your spending balance to savings &lt;accent&gt;without the Spark operators&lt;/accent&gt;.\n\nIt takes &lt;accent&gt;up to 4 weeks&lt;/accent&gt;, costs on-chain fees paid from savings, and very small amounts can stay behind. It runs in the background, and Bitkit notifies you if it needs you.</string>
     <string name="lightning__spark_exit__intro_title">Leave Spark\n&lt;accent&gt;on-chain&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__left_behind">Stays on Spark</string>
-    <string name="lightning__spark_exit__left_out">{amount} more on Spark is not part of this exit and stays there.</string>
     <string name="lightning__spark_exit__leftover">{amount} of fee funding is still at {address}.</string>
-    <string name="lightning__spark_exit__leftover_sweep">Move to savings</string>
+    <string name="lightning__spark_exit__leftover_swept">{amount} of leftover fee funding was sent to savings.</string>
     <string name="lightning__spark_exit__nav_title">Emergency Exit</string>
     <string name="lightning__spark_exit__needs_funding_text">The exit needs &lt;accent&gt;{amount}&lt;/accent&gt; more to pay its fees. Fund it to continue.</string>
     <string name="lightning__spark_exit__needs_funding_title">More fees\n&lt;accent&gt;needed&lt;/accent&gt;</string>
@@ -275,11 +274,13 @@
     <string name="lightning__spark_exit__notification_rejected">Some of your emergency exit\'s transactions were refused. Open Bitkit before {time} to see why.</string>
     <string name="lightning__spark_exit__notification_restricted">Android stops Bitkit from running in the background. Open Bitkit before {time} to keep your emergency exit on track.</string>
     <string name="lightning__spark_exit__notification_title">Emergency exit</string>
+    <string name="lightning__spark_exit__outside_exit">{amount} on Spark is not part of this exit and stays on Spark.</string>
     <string name="lightning__spark_exit__partial_text">{count} small amounts stayed on Spark.</string>
     <string name="lightning__spark_exit__progress_text">The exit runs in the background, also while Bitkit is closed. Bitkit notifies you if it needs you.</string>
     <string name="lightning__spark_exit__progress_title">Exit in\n&lt;accent&gt;progress&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__quote_error">Could not get an exit quote. Try again.</string>
     <string name="lightning__spark_exit__quote_loading">Getting a quote…</string>
+    <string name="lightning__spark_exit__quote_settling">Waiting for Spark to finish moving your balance. This can take up to 5 minutes.</string>
     <string name="lightning__spark_exit__quote_title">Exit\n&lt;accent&gt;quote&lt;/accent&gt;</string>
     <string name="lightning__spark_exit__ready_in">Ready in {duration}</string>
     <string name="lightning__spark_exit__receive">You receive about</string>

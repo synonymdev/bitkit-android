@@ -55,7 +55,7 @@ object SparkExitFundingKey {
         return payload.copyOfRange(1, 1 + SECRET_LENGTH)
     }
 
-    private fun base58Decode(text: String): ByteArray? {
+    internal fun base58Decode(text: String): ByteArray? {
         var value = BigInteger.ZERO
         for (char in text) {
             val digit = ALPHABET.indexOf(char).takeIf { it >= 0 } ?: return null
@@ -124,8 +124,43 @@ object SparkExitMath {
     fun confirmedCount(recovery: RecoverFundsResponse): Int =
         recovery.transactions.count { it.status is ExitTransactionStatus.Confirmed }
 
-    /** Every confirmed UTXO at the funding address, the largest first, once together they cover [requiredSats]. */
-    fun fundingUtxos(utxos: List<EsploraUtxo>, requiredSats: ULong): List<EsploraUtxo>? {
+    /**
+     * UTXOs at the funding address that are new funding: neither an adopted input nor change a CPFP child of this or
+     * an earlier generation chained there.
+     */
+    fun newFunding(utxos: List<EsploraUtxo>, record: SparkExitRecord): List<EsploraUtxo> {
+        val adopted = record.funding.mapNotNull { f -> f.txid?.let { "$it:${f.vout ?: 0u}" } }.toSet()
+        val chained = (record.recovery?.let(SparkExitTxids::cpfpChildTxids).orEmpty() + record.earlierCpfpTxids).toSet()
+        return utxos.filter { "${it.txid}:${it.vout}" !in adopted && it.txid !in chained }
+    }
+
+    /** The confirmed value at the funding address that is not new funding: unspent inputs and their CPFP change. */
+    fun heldSats(utxos: List<EsploraUtxo>, record: SparkExitRecord): ULong {
+        val fresh = newFunding(utxos, record).toSet()
+        return utxos
+            .filter { it.status.confirmed && it !in fresh }
+            .fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
+    }
+
+    /**
+     * The funding a rebuild needs in all, from the SDK's [requiredSats]: the total its inputs must hold, not the extra.
+     * What is still [held] at the address counts, so the shortfall is `requiredSats - held`, at least 1; without a
+     * reading of the address, `max(requiredSats, fundedSats)`, right for a first build where nothing is spent yet.
+     */
+    fun neededFunding(requiredSats: ULong, fundedSats: ULong, held: ULong?): ULong {
+        if (held == null) return maxOf(requiredSats, fundedSats)
+        val missing = if (requiredSats > held) requiredSats - held else 0uL
+        return fundedSats.safe() + maxOf(missing, 1uL).safe()
+    }
+
+    /** Spark's balance beyond the exit's leaves while it still counts them, or null. */
+    fun outsideExitSats(leafTotalSats: ULong?, balanceSats: ULong?): ULong? {
+        if (leafTotalSats == null || balanceSats == null || balanceSats <= leafTotalSats) return null
+        return balanceSats - leafTotalSats
+    }
+
+    /** Every confirmed UTXO of new funding, the largest first, once together they cover [requiredSats]. */
+    fun fundingTopUp(utxos: List<EsploraUtxo>, requiredSats: ULong): List<EsploraUtxo>? {
         val confirmed = utxos.filter { it.status.confirmed }.sortedByDescending { it.value }
         if (confirmed.isEmpty()) return null
         val total = confirmed.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }

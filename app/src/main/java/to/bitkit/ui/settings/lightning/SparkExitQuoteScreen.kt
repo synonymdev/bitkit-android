@@ -62,6 +62,9 @@ private fun Content(
             VerticalSpacer(32.dp)
             when {
                 uiState.quote != null -> SparkExitQuoteRows(uiState.quote)
+                uiState.isQuoting && uiState.isSettling -> BodyM(
+                    text = stringResource(R.string.lightning__spark_exit__quote_settling),
+                )
                 uiState.isQuoting -> BodyM(text = stringResource(R.string.lightning__spark_exit__quote_loading))
             }
             block?.let {

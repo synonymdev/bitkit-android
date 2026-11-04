@@ -27,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -103,6 +104,10 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.success(Unit))
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.networkName).thenReturn("regtest")
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            cacheData.update(transform)
+        }
     }
 
     @Test
@@ -128,7 +133,7 @@ class SparkRepoTest : BaseUnitTest() {
         sut.start(0).getOrThrow()
         sparkEvents.emit(SdkEvent.AutoOptimization(AutoOptimizationEvent.Started(3u)))
 
-        val settled = async { sut.awaitSettledLeaves() }
+        val settled = async { sut.settleForExit() }
         runCurrent()
         verify(sparkService, never()).syncWallet()
 
