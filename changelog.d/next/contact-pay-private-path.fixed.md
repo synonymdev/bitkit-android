@@ -1,1 +1,1 @@
-Payments to a saved contact with a private payment path now stay private, and Bitkit asks you to try again shortly while that private connection is still being set up.
+Payments to saved contacts that can be paid privately always stay private, and Bitkit explains that you both need to add each other as contacts while the private connection is set up.
