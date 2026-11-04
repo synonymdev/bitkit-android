@@ -3,8 +3,11 @@ package to.bitkit.ui.screens.transfer
 import android.content.Intent
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,7 +26,6 @@ import to.bitkit.env.Env
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -52,66 +54,72 @@ fun FundingScreen(
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
-        VerticalSpacer(32.dp)
-        Display(
-            text = stringResource(R.string.lightning__funding__title).withAccent(accentColor = Colors.Purple),
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
-        VerticalSpacer(8.dp)
-        BodyM(
-            text = stringResource(
-                if (canFundWithSpark) {
-                    R.string.lightning__funding__text
-                } else {
-                    R.string.lightning__transfer_unavailable__text
-                }
-            ),
-            color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
-        VerticalSpacer(24.dp)
-        // Spark keeps Spending fundable from savings or another wallet without a channel.
-        if (canFundWithSpark) {
-            FundingOption(
-                R.string.lightning__funding__button1,
-                R.drawable.ic_transfer,
-                20.dp,
-                "FundTransfer",
-                { if (hasSavings) onTransfer() else showNoFundsAlert = true },
-            )
-            FundingOption(
-                R.string.lightning__funding__button2,
-                R.drawable.ic_qr_purple,
-                13.75.dp,
-                "FundReceive",
-                onFund
-            )
-        }
-        VerticalSpacer(8.dp)
-        RectangleButton(
-            label = stringResource(R.string.lightning__funding_advanced__button2),
-            icon = R.drawable.ic_pencil_full,
-            iconTint = Colors.Purple,
-            iconSize = 13.37.dp,
-            onClick = onManual,
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .testTag("FundManual")
-        )
-        if (!canFundWithSpark) {
-            FundingOption(R.string.lightning__funding__button1, R.drawable.ic_transfer, 20.dp, "FundTransfer")
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+        ) {
+            VerticalSpacer(32.dp)
+            Display(
+                text = stringResource(R.string.lightning__funding__title).withAccent(accentColor = Colors.Purple),
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            VerticalSpacer(8.dp)
+            BodyM(
+                text = stringResource(
+                    if (canFundWithSpark) {
+                        R.string.lightning__funding__text
+                    } else {
+                        R.string.lightning__transfer_unavailable__text
+                    }
+                ),
+                color = Colors.White64,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            VerticalSpacer(24.dp)
+            // Spark keeps Spending fundable from savings or another wallet without a channel.
+            if (canFundWithSpark) {
+                FundingOption(
+                    R.string.lightning__funding__button1,
+                    R.drawable.ic_transfer,
+                    20.dp,
+                    "FundTransfer",
+                    { if (hasSavings) onTransfer() else showNoFundsAlert = true },
+                )
+                FundingOption(
+                    R.string.lightning__funding__button2,
+                    R.drawable.ic_qr_purple,
+                    13.75.dp,
+                    "FundReceive",
+                    onFund
+                )
+            }
+            VerticalSpacer(8.dp)
+            RectangleButton(
+                label = stringResource(R.string.lightning__funding_advanced__button2),
+                icon = R.drawable.ic_pencil_full,
+                iconTint = Colors.Purple,
+                iconSize = 13.37.dp,
+                onClick = onManual,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .testTag("FundManual")
+            )
+            if (!canFundWithSpark) {
+                FundingOption(R.string.lightning__funding__button1, R.drawable.ic_transfer, 20.dp, "FundTransfer")
+            }
+            FundingOption(
+                R.string.lightning__funding__button_hw,
+                R.drawable.ic_device_tablet_speaker,
+                16.25.dp,
+                "FundHardware"
+            )
+            if (!canFundWithSpark) {
+                FundingOption(R.string.lightning__funding__button2, R.drawable.ic_qr_purple, 13.75.dp, "FundReceive")
+            }
+            VerticalSpacer(32.dp)
         }
-        FundingOption(
-            R.string.lightning__funding__button_hw,
-            R.drawable.ic_device_tablet_speaker,
-            16.25.dp,
-            "FundHardware"
-        )
-        if (!canFundWithSpark) {
-            FundingOption(R.string.lightning__funding__button2, R.drawable.ic_qr_purple, 13.75.dp, "FundReceive")
-        }
-        FillHeight()
         SecondaryButton(
             text = stringResource(R.string.common__learn_more),
             onClick = {

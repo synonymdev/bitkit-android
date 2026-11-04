@@ -2,11 +2,15 @@ package to.bitkit.ui.settings.lightning
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,32 +45,41 @@ fun SparkExitIntroScreen(
             titleText = stringResource(R.string.lightning__spark_exit__nav_title),
             onBackClick = onBack,
         )
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+        BoxWithConstraints(
             modifier = Modifier
-                .fillMaxWidth()
                 .weight(1f)
-                .padding(horizontal = 16.dp)
+                .fillMaxWidth()
         ) {
-            VerticalSpacer(32.dp)
-            Display(
-                text = stringResource(R.string.lightning__spark_exit__intro_title).withAccent(),
-                modifier = Modifier.fillMaxWidth()
-            )
-            VerticalSpacer(8.dp)
-            BodyM(
-                text = stringResource(R.string.lightning__spark_exit__intro_text).withAccentBoldBright(),
-                color = Colors.White64,
-                modifier = Modifier.fillMaxWidth()
-            )
-            FillHeight()
-            Image(
-                painter = painterResource(R.drawable.exclamation_mark),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(256.dp)
-            )
-            FillHeight()
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+                    .padding(horizontal = 16.dp)
+            ) {
+                VerticalSpacer(32.dp)
+                Display(
+                    text = stringResource(R.string.lightning__spark_exit__intro_title).withAccent(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                VerticalSpacer(8.dp)
+                BodyM(
+                    text = stringResource(R.string.lightning__spark_exit__intro_text).withAccentBoldBright(),
+                    color = Colors.White64,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                FillHeight()
+                Image(
+                    painter = painterResource(R.drawable.exclamation_mark),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(256.dp)
+                )
+                FillHeight()
+            }
+        }
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth(),

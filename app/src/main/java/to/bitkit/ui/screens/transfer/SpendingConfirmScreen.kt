@@ -9,15 +9,19 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -131,40 +135,55 @@ private fun Content(
                 .fillMaxSize()
                 .testTag("SpendingConfirm")
         ) {
-            VerticalSpacer(32.dp)
-            Display(stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
-            VerticalSpacer(8.dp)
-
-            SpendingFeeGrid(quote = quote, speed = state.speed)
-
-            VerticalSpacer(16.dp)
-
-            SpendingSpeedRows(quote = quote, speed = state.speed, onSpeedChange = onSpeedChange)
-
-            VerticalSpacer(16.dp)
-
-            PrimaryButton(
-                text = stringResource(R.string.common__learn_more),
-                size = ButtonSize.Small,
-                fullWidth = false,
-                onClick = onLearnMoreClick,
-                modifier = Modifier.testTag("SpendingConfirmMore")
-            )
-
-            Box(
-                contentAlignment = Alignment.Center,
+            BoxWithConstraints(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .weight(1f)
+                    .fillMaxWidth()
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.coin_stack_x),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
+                Column(
                     modifier = Modifier
-                        .padding(horizontal = 44.dp, vertical = 8.dp)
-                        .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
-                )
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .heightIn(min = maxHeight)
+                ) {
+                    VerticalSpacer(32.dp)
+                    Display(
+                        stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple)
+                    )
+                    VerticalSpacer(8.dp)
+
+                    SpendingFeeGrid(quote = quote, speed = state.speed)
+
+                    VerticalSpacer(16.dp)
+
+                    SpendingSpeedRows(quote = quote, speed = state.speed, onSpeedChange = onSpeedChange)
+
+                    VerticalSpacer(16.dp)
+
+                    PrimaryButton(
+                        text = stringResource(R.string.common__learn_more),
+                        size = ButtonSize.Small,
+                        fullWidth = false,
+                        onClick = onLearnMoreClick,
+                        modifier = Modifier.testTag("SpendingConfirmMore")
+                    )
+
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.coin_stack_x),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .padding(horizontal = 44.dp, vertical = 8.dp)
+                                .graphicsLayer { rotationZ = swipeProgress.floatValue * SWIPE_ROTATION_DEGREES }
+                        )
+                    }
+                }
             }
 
             val canConfirm = quote != null && quote.toSpendingSats(state.speed) > 0 && !state.isQuoting

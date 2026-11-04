@@ -3,10 +3,14 @@ package to.bitkit.ui.screens.transfer.hardware
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -152,48 +156,61 @@ private fun Content(
                 .fillMaxSize()
                 .testTag("HardwareTransferSign")
         ) {
-            VerticalSpacer(32.dp)
-            Display(
-                text = stringResource(
-                    if (hasPendingBroadcast) {
-                        R.string.lightning__transfer_hw__signed_title
-                    } else {
-                        R.string.lightning__transfer_hw__sign_title
-                    }
-                ).withAccent(accentColor = Colors.Purple),
-                modifier = Modifier.fillMaxWidth()
-            )
-            VerticalSpacer(8.dp)
-
-            SpendingFeeGrid(quote = quote, speed = state.speed)
-
-            VerticalSpacer(16.dp)
-
-            SpendingSpeedRows(quote = quote, speed = state.speed, onSpeedChange = onSpeedChange)
-
-            VerticalSpacer(16.dp)
-
-            PrimaryButton(
-                text = stringResource(R.string.common__learn_more),
-                size = ButtonSize.Small,
-                fullWidth = false,
-                enabled = !isSigning && !hasPendingBroadcast,
-                onClick = onLearnMoreClick,
-                modifier = Modifier.testTag("HardwareTransferSignLearnMore")
-            )
-
-            Box(
-                contentAlignment = Alignment.Center,
+            BoxWithConstraints(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .weight(1f)
+                    .fillMaxWidth()
             ) {
-                Image(
-                    painter = painterResource(id = vendor.illustrationRes()),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .heightIn(min = maxHeight)
+                ) {
+                    VerticalSpacer(32.dp)
+                    Display(
+                        text = stringResource(
+                            if (hasPendingBroadcast) {
+                                R.string.lightning__transfer_hw__signed_title
+                            } else {
+                                R.string.lightning__transfer_hw__sign_title
+                            }
+                        ).withAccent(accentColor = Colors.Purple),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    VerticalSpacer(8.dp)
+
+                    SpendingFeeGrid(quote = quote, speed = state.speed)
+
+                    VerticalSpacer(16.dp)
+
+                    SpendingSpeedRows(quote = quote, speed = state.speed, onSpeedChange = onSpeedChange)
+
+                    VerticalSpacer(16.dp)
+
+                    PrimaryButton(
+                        text = stringResource(R.string.common__learn_more),
+                        size = ButtonSize.Small,
+                        fullWidth = false,
+                        enabled = !isSigning && !hasPendingBroadcast,
+                        onClick = onLearnMoreClick,
+                        modifier = Modifier.testTag("HardwareTransferSignLearnMore")
+                    )
+
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
+                        Image(
+                            painter = painterResource(id = vendor.illustrationRes()),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                }
             }
 
             val canSign = quote != null && quote.toSpendingSats(state.speed) > 0 && !state.isQuoting
