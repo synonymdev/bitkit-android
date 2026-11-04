@@ -196,6 +196,10 @@ data class SparkExitRecord(
     val exitLeafIds: List<String>
         get() = leafIds - (lostLeaves.map { it.leafId } + leftBehindLeaves.map { it.leafId }).toSet()
 
+    /** Every leaf of the exit was claimed by an older state, none left behind. */
+    val isEveryLeafLost: Boolean
+        get() = lostLeaves.isNotEmpty() && lostLeaves.map { it.leafId }.containsAll(leafIds)
+
     val lostSats: ULong get() = lostLeaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }
 
     val leftBehindLeafSats: ULong get() = leftBehindLeaves.fold(0uL) { sum, leaf -> sum.safe() + leaf.valueSats.safe() }

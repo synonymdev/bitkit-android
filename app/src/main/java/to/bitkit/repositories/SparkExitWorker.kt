@@ -255,7 +255,7 @@ object SparkExitAlerts {
         return listOfNotNull(
             SparkExitAlert.Lost.takeIf { record.lostLeaves.size > previous.lostLeaves.size },
             SparkExitAlert.Failed.takeIf {
-                phase is SparkExitRecord.Phase.Failed && phase.reason != SparkExitDriver.LOST_REASON &&
+                phase is SparkExitRecord.Phase.Failed && !record.isEveryLeafLost &&
                     previous.phase !is SparkExitRecord.Phase.Failed
             },
         )

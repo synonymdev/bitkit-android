@@ -107,7 +107,9 @@ class SparkExitDriver(
     private suspend fun build(start: SparkExitRecord, sdk: SparkExitRecovering): SparkExitRecord {
         val (record, prepared) = prepare(start, sdk)
         if (prepared == null) {
-            val failed = record.copy(phase = SparkExitRecord.Phase.Failed(NO_LEAF_REASON), isRebuilding = false)
+            // The last leaf lost on a tick that could not read the funding address ends here, still as lost.
+            val reason = if (record.isEveryLeafLost) LOST_REASON else NO_LEAF_REASON
+            val failed = record.copy(phase = SparkExitRecord.Phase.Failed(reason), isRebuilding = false)
             return end(failed, record)
         }
         if (prepared.leaves.isEmpty()) {

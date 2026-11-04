@@ -689,6 +689,35 @@ class SparkExitDriverTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a single leaf lost while the funding address cannot be read ends lost through the no-leaf path`() = test {
+        val recovery = lostLeafRecovery()
+        var record = running(recovery)
+        chain.outcome = SparkExitBroadcastOutcome.InputsMissing("""sendrawtransaction RPC error: {"code":-25}""")
+        sdk.preparedResponse = SparkExitFixtures.prepared(funding = null)
+        sdk.checks += check(recovery, RecoveryVerdict.Valid)
+        repeat(2) {
+            sdk.checks += check(recovery, redo)
+            sdk.builds += recovery
+        }
+        record = driver().tick(record)
+        now += SparkExitDriver.REBUILD_INTERVAL.inWholeMilliseconds
+        record = driver().tick(record)
+        now += SparkExitDriver.REBUILD_INTERVAL.inWholeMilliseconds
+        chain.utxosError = IllegalStateException("unreachable")
+        val lost = driver().tick(record)
+        assertEquals(Phase.Running, lost.phase)
+        assertEquals(listOf(SparkExitAlert.Lost), SparkExitAlerts.losses(lost, record))
+
+        chain.utxosError = null
+        val ended = driver().tick(lost)
+
+        assertEquals(Phase.Failed(SparkExitDriver.LOST_REASON), ended.phase)
+        assertEquals(emptyList(), SparkExitAlerts.losses(ended, lost))
+        val noLeaf = ended.copy(phase = Phase.Failed(SparkExitDriver.NO_LEAF_REASON))
+        assertEquals(emptyList(), SparkExitAlerts.losses(noLeaf, lost))
+    }
+
+    @Test
     fun `a lost leaf is left out and the rest of the exit rebuilds at once`() = test {
         val recovery = lostLeafRecovery()
         val start = running(recovery).copy(leafIds = listOf("leaf-1", "leaf-2"))
