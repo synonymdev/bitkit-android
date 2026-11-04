@@ -108,6 +108,28 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an attempt keeps the hash of the invoice its address came with, and an older one has none`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System)
+
+        val attempt = store.admit(
+            walletId = WalletScope.default, requestId = null, orderId = null, address = "bcrt1qrecipient",
+            amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = false,
+            channelId = null, tags = emptyList(), beforeSendAttempt = {}, lightningPaymentHash = "010203",
+        )
+
+        assertEquals("010203", attempt.lightningPaymentHash)
+        assertEquals("010203", store.current()?.lightningPaymentHash)
+        // As an app that predates the hash saved it
+        saved = Json.encodeToString(OnchainSendAttempt.serializer(), attempt.copy(lightningPaymentHash = null))
+        assertFalse(requireNotNull(saved).contains("lightningPaymentHash"))
+        assertEquals(attempt.copy(lightningPaymentHash = null), store.current())
+    }
+
+    @Test
     fun `backup proof capture blocks receipt retention until the snapshot is complete`() = test {
         var saved: String? = null
         val keychain = mock<Keychain>()

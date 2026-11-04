@@ -31,6 +31,8 @@ data class ActiveOnchainAttemptBackup(
     val candidateFeeRates: Map<String, String>? = null,
     // Lets a release after a restore still outbid every candidate's absolute fee.
     val candidateMiningFees: Map<String, String>? = null,
+    // Lets a re-send after a restore still check the Lightning invoice the address came with. Older records lack it.
+    val lightningPaymentHash: String? = null,
     val followup: Followup? = null,
     val transfer: Transfer? = null,
 ) {
@@ -71,6 +73,7 @@ data class ActiveOnchainAttemptBackup(
         )
         require(unsigned(feeRateSatsPerVByte) <= UInt.MAX_VALUE.toULong())
         require(candidateTxids.distinct().size == candidateTxids.size && candidateTxids.all { it.matches(HEX) })
+        require(lightningPaymentHash == null || lightningPaymentHash.matches(HEX))
         val restoredFeeRates = candidateFeeRates.orEmpty().mapValues { (txid, rate) ->
             require(txid.matches(HEX) && txid in candidateTxids)
             unsigned(rate).also { require(it > 0uL && it <= UInt.MAX_VALUE.toULong()) }
@@ -135,6 +138,7 @@ data class ActiveOnchainAttemptBackup(
             candidateMiningFees = restoredMiningFees,
             transferContext = transferContext,
             backupFollowup = followup, restoredFromBackup = true,
+            lightningPaymentHash = lightningPaymentHash,
         )
     }
 
@@ -182,6 +186,7 @@ data class ActiveOnchainAttemptBackup(
                     ?.mapValues { it.value.toString() },
                 candidateMiningFees = attempt.candidateMiningFees.takeIf { it.isNotEmpty() }
                     ?.mapValues { it.value.toString() },
+                lightningPaymentHash = attempt.lightningPaymentHash,
                 followup = attempt.backupFollowup,
                 transfer = attempt.transferContext?.let {
                     Transfer(

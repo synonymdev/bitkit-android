@@ -101,6 +101,9 @@ data class OnchainSendAttempt(
     val releaseApproved: Boolean = false,
     // The transaction spending the original's coins back to the wallet, saved before it is broadcast.
     val releaseTxid: String? = null,
+    // The hash of a Lightning invoice the address came with, which every re-send checks first. An attempt saved by
+    // an app that predates it carries none.
+    val lightningPaymentHash: String? = null,
 ) {
     val winningFeeRateSatsPerVByte: ULong
         get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
@@ -235,6 +238,7 @@ class OnchainSendAttemptStore @Inject constructor(
         beforeSendAttempt: suspend () -> Unit,
         payerIdentity: String? = null,
         contactPublicKey: String? = null,
+        lightningPaymentHash: String? = null,
     ): OnchainSendAttempt = withContext(ioDispatcher) {
         mutex.withLock {
             val walletIndex = lightningService.currentWalletIndex
@@ -272,6 +276,7 @@ class OnchainSendAttemptStore @Inject constructor(
                     channelId = channelId,
                     contact = contactPublicKey?.let(::JsonPrimitive),
                 ),
+                lightningPaymentHash = lightningPaymentHash,
             )
             persist(attempt)
             inFlightPreparations += attempt.attemptId

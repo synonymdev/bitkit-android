@@ -312,6 +312,11 @@ fun SendSheet(
                             }
                         }
 
+                        is SendEffect.ResetConfirm ->
+                            navController.currentBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
+
                         is SendEffect.NavigateToQuickPay -> navController.navigateTo(SendRoute.QuickPay)
                         is SendEffect.NavigateToWithdrawConfirm -> navController.navigateTo(
                             SendRoute.WithdrawConfirm

@@ -853,6 +853,9 @@
     <string name="wallet__send_available">Disponible</string>
     <string name="wallet__send_available_spending">Disponible (dépenses)</string>
     <string name="wallet__send_max_spending__title">Solde Réserve</string>
+    <string name="wallet__send_onchain_lightning_paid">Un paiement Lightning de cette facture a déjà abouti, Bitkit ne la paiera donc pas une seconde fois onchain.</string>
+    <string name="wallet__send_onchain_lightning_pending">Un paiement Lightning de cette facture peut encore aboutir. Pour éviter de la payer deux fois, Bitkit ne la paiera pas onchain sauf si ce paiement échoue.</string>
+    <string name="wallet__send_onchain_lightning_unknown">Bitkit doit vérifier le paiement Lightning de cette facture avant de la payer onchain. Réessayez une fois le portefeuille démarré.</string>
     <string name="wallet__send_pending__description">Ce paiement prend un peu plus de temps que prévu. Vous pouvez continuer à utiliser Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Paiement en attente</string>
     <string name="wallet__send_max_spending__description">Le montant maximum pouvant être dépensé est un peu moins élevé en raison d\'un solde de Réserve requis.</string>

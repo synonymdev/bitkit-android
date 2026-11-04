@@ -56,6 +56,7 @@ import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
@@ -71,6 +72,7 @@ import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
+import to.bitkit.ext.outboundPaymentStatus
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
@@ -1424,6 +1426,17 @@ class LightningRepo @Inject constructor(
         lightningService.listPayments()
     }
 
+    /**
+     * The status of this wallet's payment of the Lightning invoice with [paymentHash], or null when it sent none. It
+     * fails while the payment store cannot be read, as before the node is set up.
+     */
+    suspend fun outboundPaymentStatus(paymentHash: String): Result<PaymentStatus?> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val payments = checkNotNull(lightningService.listPayments()) { "Payment store unavailable" }
+            payments.firstNotNullOfOrNull { it.outboundPaymentStatus(paymentHash) }
+        }
+    }
+
     suspend fun waitForUsableChannels() = withContext(bgDispatcher) {
         var state = _lightningState.value
         if (!state.nodeLifecycleState.canRun()) {
@@ -1514,6 +1527,7 @@ class LightningRepo @Inject constructor(
         payerIdentity: String? = null,
         paymentDeadlineAt: Instant? = null,
         contactPublicKey: String? = null,
+        lightningPaymentHash: String? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         requireWalletRestoreComplete()
         require(address.isNotEmpty()) { "Send address cannot be empty" }
@@ -1564,6 +1578,7 @@ class LightningRepo @Inject constructor(
                 beforeSendAttempt = beforeSendAttempt,
                 payerIdentity = payerIdentity,
                 contactPublicKey = contactPublicKey,
+                lightningPaymentHash = lightningPaymentHash,
             )
         }.getOrElse {
             val error = if (it is OnchainSendBlockedError || it is OnchainSendAttemptUnreadableError) {

@@ -86,6 +86,7 @@ import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.SyncType
 import org.lightningdevkit.ldknode.Txid
@@ -392,6 +393,8 @@ class AppViewModel @Inject constructor(
     private var amountContinuePending = false
     private var fundingSourceSwitchPending = false
     private var onchainSendRefreshJob: Job? = null
+    private var lightningPaymentStatusRefreshJob: Job? = null
+    private var hardwareConfirmJob: Job? = null
     private var sendStateGeneration = 0L
 
     fun setSendEvent(event: SendEvent) {
@@ -2406,7 +2409,10 @@ class AppViewModel @Inject constructor(
                     is Event.OnchainTransactionReorged -> handleOnchainTransactionReorged(event)
                     is Event.OnchainTransactionReplaced -> handleOnchainTransactionReplaced(event)
                     is Event.PaymentClaimable -> Unit
-                    is Event.PaymentFailed -> handlePaymentFailed(event)
+                    is Event.PaymentFailed -> {
+                        handlePaymentFailed(event)
+                        refreshLightningPaymentStatus(event.paymentHash ?: event.paymentId)
+                    }
                     is Event.PaymentForwarded -> Unit
                     is Event.PaymentReceived -> handlePaymentReceived(event, receiveSheetToClose)
                     is Event.PaymentSuccessful -> handlePaymentSuccessful(event)
@@ -3308,7 +3314,7 @@ class AppViewModel @Inject constructor(
 
         val hardwareWalletId = activeHardwareWalletId
         if (hardwareWalletId == null) {
-            extractViableLightningInvoice(invoice.params)?.let { lnInvoice ->
+            extractViableLightningInvoice(decodeLightningParam(invoice.params))?.let { lnInvoice ->
                 _sendUiState.update {
                     it.copy(
                         isAddressInputValid = true,
@@ -3399,10 +3405,10 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun extractViableLightningInvoice(
-        params: Map<String, String>?,
+        invoice: LightningInvoice?,
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ): LightningInvoice? =
-        decodeLightningParam(params).also { requireCurrentPaymentPreparation(walletGeneration) }
+        invoice.also { requireCurrentPaymentPreparation(walletGeneration) }
             ?.takeIf { lnInv ->
                 if (lnInv.isExpired) {
                     Logger.debug(
@@ -3449,15 +3455,116 @@ class AppViewModel @Inject constructor(
     private suspend fun hasOwnLightningInvoice(
         params: Map<String, String>?,
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
-    ): Boolean = decodeLightningParam(params).also { requireCurrentPaymentPreparation(walletGeneration) }
-        ?.isPayee(lightningRepo.getLastKnownNodeId()) == true
+    ): Boolean = hasOwnLightningInvoice(
+        decodeLightningParam(params).also { requireCurrentPaymentPreparation(walletGeneration) },
+    )
 
-    private suspend fun decodeLightningParam(params: Map<String, String>?): LightningInvoice? =
-        params?.get("lightning")?.let { bolt11 ->
-            runSuspendCatching { coreService.decode(bolt11) }.getOrNull()
-                ?.let { it as? Scanner.Lightning }
-                ?.invoice
+    private fun hasOwnLightningInvoice(invoice: LightningInvoice?): Boolean =
+        invoice?.isPayee(lightningRepo.getLastKnownNodeId()) == true
+
+    private fun LightningInvoice.paymentHashToCheck(): String? =
+        paymentHash.toHex().takeUnless { hasOwnLightningInvoice(this) }
+
+    private suspend fun decodeLightningParam(params: Map<String, String>?): LightningInvoice? {
+        // BIP21 keys are case-insensitive, as in an uppercase QR code, while bitkit-core keeps them as written
+        val paymentRequest = params?.entries?.firstOrNull { it.key.equals("lightning", ignoreCase = true) }?.value
+        return paymentRequest?.let { decodeBolt11(it) }
+    }
+
+    private suspend fun decodeBolt11(paymentRequest: String): LightningInvoice? {
+        val bolt11 = paymentRequest.trim().removeLightningSchemes()
+        // Anything else, such as an LNURL or a Lightning address, would be resolved over the network
+        if (BOLT11_PREFIXES.none { bolt11.startsWith(it, ignoreCase = true) }) return null
+        return runSuspendCatching { coreService.decode(bolt11) }.getOrNull()
+            ?.let { it as? Scanner.Lightning }
+            ?.invoice
+    }
+
+    private suspend fun contactLightningInvoice(): LightningInvoice? =
+        synchronized(contactPaymentContextLock) { activeContactPaymentContext }?.endpoints
+            ?.firstOrNull { it.methodId == MethodId.Bolt11 }
+            ?.let { decodeBolt11(it.paymentRequest) }
+
+    private suspend fun readLightningPaymentStatus(paymentHash: String): LightningPaymentStatus {
+        val stored = lightningRepo.outboundPaymentStatus(paymentHash)
+            .onFailure { Logger.warn("Failed to read payments for '$paymentHash'", it, context = TAG) }
+        if (stored.getOrNull() == PaymentStatus.SUCCEEDED) return LightningPaymentStatus.SUCCEEDED
+        val isPending = stored.getOrNull() == PaymentStatus.PENDING ||
+            pendingPaymentRepo.isPending(paymentHash) || quickPayRepo.hasOpen(paymentHash)
+        return when {
+            isPending -> LightningPaymentStatus.PENDING
+            // The app's own records of a send are incomplete, so only the payment store shows that none is under way
+            stored.isFailure -> LightningPaymentStatus.UNKNOWN
+            else -> LightningPaymentStatus.UNPAID
         }
+    }
+
+    private suspend fun refreshLightningPaymentStatus(paymentHash: String?) {
+        val state = _sendUiState.value
+        if (paymentHash == null || paymentHash != state.lightningPaymentHash) return
+        if (state.lightningPaymentStatus == LightningPaymentStatus.UNPAID) return
+        setLightningPaymentStatus(paymentHash, readLightningPaymentStatus(paymentHash))
+    }
+
+    private fun setLightningPaymentStatus(paymentHash: String, status: LightningPaymentStatus) {
+        _sendUiState.update {
+            if (it.lightningPaymentHash != paymentHash) return@update it
+            it.copy(lightningPaymentStatus = status)
+        }
+        updateCanSwitchWallet()
+    }
+
+    private fun refreshLightningPaymentStatusOnceNodeRuns() {
+        lightningPaymentStatusRefreshJob?.cancel()
+        val state = _sendUiState.value
+        val paymentHash = state.lightningPaymentHash ?: return
+        if (state.lightningPaymentStatus == LightningPaymentStatus.UNPAID) return
+        if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) return
+        lightningPaymentStatusRefreshJob = viewModelScope.launch {
+            lightningRepo.lightningState.first { it.nodeLifecycleState.isRunning() }
+            refreshLightningPaymentStatus(paymentHash)
+        }
+    }
+
+    private suspend fun canPayAddressInstead(state: SendUiState): Boolean {
+        val paymentHash = state.lightningPaymentHash ?: return true
+        val generation = sendStateGeneration
+        val status = readLightningPaymentStatus(paymentHash)
+        // The send may have been replaced or gone out while the payment store was read
+        if (generation != sendStateGeneration || isPaymentSubmitting()) return false
+        setLightningPaymentStatus(paymentHash, status)
+        if (status == LightningPaymentStatus.UNPAID) return true
+        showOnchainPaymentRefusal(status)
+        refreshLightningPaymentStatusOnceNodeRuns()
+        return false
+    }
+
+    private fun isPaymentSubmitting(): Boolean = isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive
+
+    private fun showOnchainPaymentRefusal(status: LightningPaymentStatus) {
+        val refusalRes = status.onchainRefusalRes ?: return
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.common__error),
+            description = context.getString(refusalRes),
+            testTag = when (status) {
+                LightningPaymentStatus.SUCCEEDED -> "LightningPaymentSucceededToast"
+                LightningPaymentStatus.UNKNOWN -> "LightningPaymentUnknownToast"
+                else -> "LightningPaymentPendingToast"
+            },
+        )
+    }
+
+    private fun rejectOnchainPayment(status: LightningPaymentStatus) {
+        showOnchainPaymentRefusal(status)
+        clearActiveContactPaymentContext()
+    }
+
+    private suspend fun onchainPaymentRefusal(paymentHash: String?): OnchainPaymentRefusedError? {
+        val status = paymentHash?.let { readLightningPaymentStatus(it) } ?: return null
+        val refusalRes = status.onchainRefusalRes ?: return null
+        return OnchainPaymentRefusedError(status, context.getString(refusalRes))
+    }
 
     private fun showAddressValidationError(
         @StringRes titleRes: Int,
@@ -4000,10 +4107,19 @@ class AppViewModel @Inject constructor(
             walletRepo.balanceState.value.maxSendOnchainSats > Defaults.dustLimit.toULong()
         val useUsdt = recipient != null && prefersUsdt(payment, hasBitcoinEndpoint, canUseLightning || canUseOnchain)
         val payMethod = paykitBitcoinMethod(canUseLightning, address, invoice, lnurl)
+        // The contact's address is not paid while a Lightning payment of its invoice may still complete, or once it did
+        val lightningPaymentHash = invoice?.paymentHashToCheck()
+        val lightningPaymentStatus = lightningPaymentHash?.let { readLightningPaymentStatus(it) }
+            ?: LightningPaymentStatus.UNPAID
+        requireCurrentPaymentPreparation(walletGeneration)
+        if (!useUsdt && payMethod == SendMethod.ONCHAIN && lightningPaymentStatus.refusesOnchainFallback) {
+            return rejectOnchainPayment(lightningPaymentStatus)
+        }
         _sendUiState.update {
             it.copy(
                 address = address, addressInput = address, isAddressInputValid = address.isNotEmpty(),
                 decodedInvoice = invoice, lnurl = lnurl, paykitUsesUsdt = useUsdt, usdtRecipient = recipient,
+                lightningPaymentHash = lightningPaymentHash, lightningPaymentStatus = lightningPaymentStatus,
                 amount = invoice?.amountSatoshis?.takeIf { payMethod == SendMethod.LIGHTNING } ?: 0u,
                 paykitAmount = "",
                 payMethod = payMethod
@@ -4025,6 +4141,7 @@ class AppViewModel @Inject constructor(
         refreshPaykitRequestAmount()
         requireCurrentPaymentPreparation(walletGeneration)
         updateCanSwitchWallet()
+        refreshLightningPaymentStatusOnceNodeRuns()
         val initialPayment = payment.initialUsdtSubscriptionPayment(Clock.System.now())?.takeIf { useUsdt }
         if (initialPayment != null) {
             paykitReviewedAmount = initialPayment.amount
@@ -4236,7 +4353,7 @@ class AppViewModel @Inject constructor(
 
     private fun updateCanSwitchWallet() {
         val state = _sendUiState.value
-        val canSwitchWallet = if (state.hardwareWalletId != null || !state.isUnified) {
+        val canSwitchWallet = if (state.hardwareWalletId != null || !state.isUnified || !state.isAddressPayable) {
             false
         } else {
             val amount = state.amount
@@ -4258,6 +4375,9 @@ class AppViewModel @Inject constructor(
         val current = _sendUiState.value
         if (current.isRetainedHardwarePayment) return
         val nextSource = nextFundingSource(current, requested) ?: return
+        // A Lightning payment of the invoice beside the address may have started or ended since it was offered
+        val paysAddress = nextSource == SendFundingSource.Savings || nextSource is SendFundingSource.Hardware
+        if (paysAddress && !canPayAddressInstead(current)) return
         val canReviewInPlace = canRebindBitcoinRequestTerms(current, nextSource)
         val wasReviewed = paykitReviewedAmount != null
         val target = if (nextSource == SendFundingSource.Usdt) PaykitAsset.USDT else PaykitAsset.BTC
@@ -5238,12 +5358,25 @@ class AppViewModel @Inject constructor(
         val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
 
         val incomingPaymentRequest = activeIncomingPaymentRequest()
+        val paramInvoice = decodeLightningParam(invoice.params)
+        requireCurrentPaymentPreparation(walletGeneration)
         val lnInvoice = if (hardwareWalletId == null) {
-            extractViableLightningInvoice(invoice.params, walletGeneration)?.takeIf {
+            extractViableLightningInvoice(paramInvoice, walletGeneration)?.takeIf {
                 incomingPaymentRequest?.acceptsLightningInvoiceAmountSats(it.amountSatoshis) != false
             }
         } else {
             null
+        }
+        // A send that pays only the address, as a hardware one does, still keeps the hash of the invoice beside it,
+        // unless the invoice is this wallet's own, which it can never have paid
+        val lightningPaymentHash = (paramInvoice ?: contactLightningInvoice())?.paymentHashToCheck()
+        val lightningPaymentStatus = lightningPaymentHash?.let { readLightningPaymentStatus(it) }
+            ?: LightningPaymentStatus.UNPAID
+        requireCurrentPaymentPreparation(walletGeneration)
+        // Falling back to the address while a Lightning payment of its invoice may still complete, or once it did, pays
+        // the invoice twice. One that cannot be checked yet is checked again before the address is paid.
+        if (lnInvoice == null && lightningPaymentStatus.refusesOnchainFallback) {
+            return rejectOnchainPayment(lightningPaymentStatus)
         }
         var amount = incomingPaymentRequest?.payment(
             if (lnInvoice != null) MethodId.Bolt11 else PublicPaykitRepo.onchainMethodId(invoice.address),
@@ -5258,6 +5391,8 @@ class AppViewModel @Inject constructor(
                 isUnified = hardwareWalletId == null && lnInvoice != null &&
                     amount <= maxSendOnchain && maxSendOnchain > 0u,
                 decodedInvoice = lnInvoice,
+                lightningPaymentHash = lightningPaymentHash,
+                lightningPaymentStatus = lightningPaymentStatus,
                 payMethod = if (hardwareWalletId != null) {
                     SendMethod.ONCHAIN
                 } else {
@@ -5268,6 +5403,7 @@ class AppViewModel @Inject constructor(
             )
         }
         updateCanSwitchWallet()
+        refreshLightningPaymentStatusOnceNodeRuns()
 
         if (incomingPaymentRequest != null) {
             if (lnInvoice != null) {
@@ -5277,6 +5413,9 @@ class AppViewModel @Inject constructor(
                     Clock.System.now()
                 ).amount.atomic
                 if (!lightningRepo.canSend(amount) && onchainAmount <= maxSendOnchain) {
+                    if (lightningPaymentStatus.refusesOnchainFallback) {
+                        return rejectOnchainPayment(lightningPaymentStatus)
+                    }
                     amount = onchainAmount
                     _sendUiState.update { it.copy(payMethod = SendMethod.ONCHAIN, amount = onchainAmount) }
                 }
@@ -5360,7 +5499,7 @@ class AppViewModel @Inject constructor(
 
         // Check on-chain balance before proceeding to amount screen
         if (maxSendOnchain == 0uL && _sendUiState.value.payMethod == SendMethod.ONCHAIN) {
-            if (hardwareWalletId == null && hasOwnLightningInvoice(invoice.params, walletGeneration)) {
+            if (hardwareWalletId == null && hasOwnLightningInvoice(paramInvoice)) {
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.other__pay_self_invoice_title),
@@ -5534,7 +5673,7 @@ class AppViewModel @Inject constructor(
                 SendFundingSource.Spending
             )
         }
-        if (state.address.isNotEmpty()) {
+        if (state.isAddressPayable) {
             add(SendFundingSource.Savings)
             hwWalletRepo.wallets.value.forEach { wallet ->
                 if (wallet.fundingBalanceSats > 0uL || wallet.id == state.hardwareWalletId) {
@@ -6077,6 +6216,13 @@ class AppViewModel @Inject constructor(
     private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
+        // A Lightning payment of the invoice may have started or ended since its address was offered
+        if (_sendUiState.value.payMethod == SendMethod.ONCHAIN) {
+            onchainPaymentRefusal(_sendUiState.value.lightningPaymentHash)?.let {
+                handlePaymentPreparationFailure(it, contactPaymentContext)
+                return
+            }
+        }
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
@@ -6494,6 +6640,8 @@ class AppViewModel @Inject constructor(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
                     attempt.orderId == original.orderId && attempt.payerIdentity == original.payerIdentity
             )
+            // A Lightning payment of the invoice the address came with may have started or ended since the original
+            onchainPaymentRefusal(attempt.lightningPaymentHash)?.let { throw it }
             if (request != null) {
                 val currentRequest =
                     (
@@ -7022,6 +7170,7 @@ class AppViewModel @Inject constructor(
         paymentDeadlineAt = paymentDeadlineAt,
         beforeSendAttempt = beforeSendAttempt,
         onBroadcast = onBroadcast,
+        lightningPaymentHash = _sendUiState.value.lightningPaymentHash,
     )
 
     private suspend fun sendLightning(
@@ -7350,6 +7499,8 @@ class AppViewModel @Inject constructor(
         if (!canPrepareSend(walletGeneration)) return false
         sendStateGeneration++
         addressValidationJob?.cancel()
+        lightningPaymentStatusRefreshJob?.cancel()
+        hardwareConfirmJob?.cancel()
         paykitReviewedAmount = null
         paykitAmountConversion = PaykitAmountConversion()
         paykitPaymentTerms = null
@@ -7828,12 +7979,12 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        isSubmittingPaymentRequest = contactPaymentContext?.incomingPaymentRequest != null
         if (_sendUiState.value.hardwareWalletId != null) {
             _sendUiState.update { it.copy(shouldConfirmPay = false) }
-            setSendEffect(SendEffect.NavigateToHardwareSign)
+            confirmHardwarePayment(_sendUiState.value.lightningPaymentHash, contactPaymentContext)
             return
         }
+        isSubmittingPaymentRequest = contactPaymentContext?.incomingPaymentRequest != null
         isSoftwarePaymentSubmissionActive = true
         viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             val finishSubmission = beginPaymentSubmission()
@@ -7846,6 +7997,29 @@ class AppViewModel @Inject constructor(
                 isSoftwarePaymentSubmissionActive = false
             }
         }
+    }
+
+    private fun confirmHardwarePayment(lightningPaymentHash: String?, contactPaymentContext: ContactPaymentContext?) {
+        if (lightningPaymentHash == null) return navigateToHardwareSign(contactPaymentContext)
+        if (hardwareConfirmJob?.isActive == true) return
+        val generation = sendStateGeneration
+        // The hardware wallet signs and broadcasts on its own, so the invoice beside the address is checked first
+        hardwareConfirmJob = viewModelScope.launch {
+            val refusal = onchainPaymentRefusal(lightningPaymentHash)
+            if (generation != sendStateGeneration) return@launch
+            if (refusal == null) return@launch navigateToHardwareSign(contactPaymentContext)
+            if (refusal.status != LightningPaymentStatus.UNKNOWN) {
+                return@launch handlePaymentPreparationFailure(refusal, contactPaymentContext)
+            }
+            // The payment store can be read once the node runs, so the send stays for Confirm to check it again
+            showOnchainPaymentRefusal(refusal.status)
+            setSendEffect(SendEffect.ResetConfirm)
+        }
+    }
+
+    private fun navigateToHardwareSign(contactPaymentContext: ContactPaymentContext?) {
+        isSubmittingPaymentRequest = contactPaymentContext?.incomingPaymentRequest != null
+        setSendEffect(SendEffect.NavigateToHardwareSign)
     }
 
     override fun onCleared() {
@@ -8808,6 +8982,9 @@ class AppViewModel @Inject constructor(
         private const val TAG = "AppViewModel"
         private val LIGHTNING_SCHEME_PATTERNS = listOf("lightning", "lnurl", "lnurlw", "lnurlc", "lnurlp")
             .map { Regex("^$it:", RegexOption.IGNORE_CASE) }
+
+        /** Prefixes of a bolt11 invoice, regtest's and signet's included, which bitkit-core decodes locally. */
+        private val BOLT11_PREFIXES = listOf("lnbc", "lntb")
         private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
         private const val TEN_USD = 10
         private const val MAX_BALANCE_FRACTION = 0.5
@@ -8904,6 +9081,13 @@ data class SendUiState(
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val decodedInvoice: LightningInvoice? = null,
+    /**
+     * The payment hash of the Lightning invoice the send's address came with, also on a route that pays only the
+     * address, such as a hardware send or a fallback from an invoice that expired.
+     */
+    val lightningPaymentHash: String? = null,
+    /** What the payment store last showed of this wallet's payment of [lightningPaymentHash]. */
+    val lightningPaymentStatus: LightningPaymentStatus = LightningPaymentStatus.UNPAID,
     val showSanityWarningDialog: SanityWarning? = null,
     val confirmedWarnings: ImmutableList<SanityWarning> = persistentListOf(),
     val shouldConfirmPay: Boolean = false,
@@ -8948,6 +9132,13 @@ data class SendUiState(
             else -> canSwitchBitcoinFundingSource
         }
 
+    /**
+     * Whether the address can be paid. It cannot while a Lightning payment of the invoice it came with may still
+     * complete, once one did, or while the payment store cannot show either, as that could pay the invoice twice.
+     */
+    val isAddressPayable: Boolean
+        get() = address.isNotEmpty() && lightningPaymentStatus == LightningPaymentStatus.UNPAID
+
     val fixedLightningAmount: ULong?
         get() = decodedInvoice?.amountSatoshis?.takeIf {
             it > 0u && !paykitUsesUsdt && payMethod == SendMethod.LIGHTNING && lnurl == null
@@ -8983,6 +9174,40 @@ enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
 }
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
+
+/** This wallet's payment of a Lightning invoice, which decides whether the address that came with it may be paid. */
+enum class LightningPaymentStatus {
+    /** Sent and not yet ended, so it may still complete. */
+    PENDING,
+    SUCCEEDED,
+
+    /** Failed, or never sent. */
+    UNPAID,
+
+    /** The payment store cannot be read, as before the node is set up, so nothing shows that the invoice is unpaid. */
+    UNKNOWN,
+    ;
+
+    /**
+     * Whether a fallback from the invoice to its address is refused. One that cannot be checked yet goes on, and the
+     * send checks the payment again before it pays the address.
+     */
+    val refusesOnchainFallback: Boolean
+        get() = this == PENDING || this == SUCCEEDED
+
+    /** The message refusing to pay the address on-chain, or null when it may be paid. */
+    @get:StringRes
+    val onchainRefusalRes: Int?
+        get() = when (this) {
+            PENDING -> R.string.wallet__send_onchain_lightning_pending
+            SUCCEEDED -> R.string.wallet__send_onchain_lightning_paid
+            UNPAID -> null
+            UNKNOWN -> R.string.wallet__send_onchain_lightning_unknown
+        }
+}
+
+/** Refuses to pay an address on-chain for this wallet's payment of the Lightning invoice the address came with. */
+class OnchainPaymentRefusedError(val status: LightningPaymentStatus, message: String) : AppError(message)
 
 sealed interface SendFundingSource {
     data object Spending : SendFundingSource
@@ -9061,6 +9286,9 @@ sealed class SendEffect {
     data object NavigateToUsdtReview : SendEffect()
     data class ShowPaykitConfirmation(val route: SendRoute) : SendEffect()
     data object NavigateToHardwareSign : SendEffect()
+
+    /** Re-enables the swipe on Confirm after a payment it started was held back. */
+    data object ResetConfirm : SendEffect()
     data object NavigateToWithdrawConfirm : SendEffect()
     data object NavigateToWithdrawError : SendEffect()
     data object NavigateToCoinSelection : SendEffect()

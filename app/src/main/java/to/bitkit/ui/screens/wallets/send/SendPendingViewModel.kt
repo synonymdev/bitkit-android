@@ -31,6 +31,7 @@ import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.utils.Logger
+import to.bitkit.viewmodels.OnchainPaymentRefusedError
 import to.bitkit.viewmodels.SanityWarning
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -143,7 +144,9 @@ class SendPendingViewModel @Inject constructor(
             _uiState.update { it.copy(invalidFeeRate = true, recoveryError = "invalid fee rate") }
             return
         }
-        _uiState.update { it.copy(isRecovering = true, recoveryError = null, invalidFeeRate = false) }
+        _uiState.update {
+            it.copy(isRecovering = true, recoveryError = null, invalidFeeRate = false, lightningPaymentRefusal = null)
+        }
         viewModelScope.launch {
             try {
                 val result = runSuspendCatching { retry(original, feeRateSatsPerVByte).getOrThrow() }
@@ -165,7 +168,10 @@ class SendPendingViewModel @Inject constructor(
                 }.onFailure { error ->
                     _uiState.update {
                         if (it.recoveredTxid == null && it.recoveredTransfer == null) {
-                            it.copy(recoveryError = error.message)
+                            it.copy(
+                                recoveryError = error.message,
+                                lightningPaymentRefusal = (error as? OnchainPaymentRefusedError)?.message,
+                            )
                         } else {
                             it
                         }
@@ -344,6 +350,7 @@ data class SendPendingUiState(
     val recoveryApproval: RecoveryApproval? = null,
     val invalidFeeRate: Boolean = false,
     val recoveryError: String? = null,
+    val lightningPaymentRefusal: String? = null,
     val currentTxid: String? = null,
     val recoveredTxid: String? = null,
     val recoveredTransfer: OnchainSendAttempt? = null,
