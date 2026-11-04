@@ -3487,8 +3487,13 @@ class AppViewModel @Inject constructor(
         val stored = lightningRepo.outboundPaymentStatus(paymentHash)
             .onFailure { Logger.warn("Failed to read payments for '$paymentHash'", it, context = TAG) }
         if (stored.getOrNull() == PaymentStatus.SUCCEEDED) return LightningPaymentStatus.SUCCEEDED
+        val isQuickPayOpen = if (stored.isFailure) {
+            quickPayRepo.hasOpen(paymentHash)
+        } else {
+            quickPayRepo.hasLiveOp(paymentHash)
+        }
         val isPending = stored.getOrNull() == PaymentStatus.PENDING ||
-            pendingPaymentRepo.isPending(paymentHash) || quickPayRepo.hasOpen(paymentHash)
+            pendingPaymentRepo.isPending(paymentHash) || isQuickPayOpen
         return when {
             isPending -> LightningPaymentStatus.PENDING
             stored.isFailure -> LightningPaymentStatus.UNKNOWN

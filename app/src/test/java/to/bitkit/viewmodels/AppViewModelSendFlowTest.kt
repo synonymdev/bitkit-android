@@ -732,6 +732,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever { quickPayRepo.canApply(any<ULong>()) }.thenReturn(Result.success(false))
         whenever { quickPayRepo.hasOpen(any()) }.thenReturn(false)
+        whenever { quickPayRepo.hasLiveOp(any()) }.thenReturn(false)
         whenever { lightningRepo.onchainPaidInvoiceHashes() }.thenReturn(emptySet())
         whenever { lightningRepo.outboundPaymentStatus(any()) }.thenReturn(Result.success(null))
         whenever(quickPayRepo.unhandledFailures).thenReturn(quickPayUnhandledFailures)
@@ -16820,6 +16821,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(toastManager).enqueue(argThat { description == "On-chain sent" })
         verify(lightningRepo, never()).payInvoice(bolt11 = bolt11, sats = null)
     }
+
+    // A ledger record reserved before a crash, and never dispatched, does not hold the address once the store shows
+    // no payment of the invoice
+    @Test
+    fun `a quickpay record from an earlier run holds the address only while the store cannot show the payment`() =
+        test {
+            val bolt11 = "lnbcrt1staleledger"
+            val paymentHash = "010203"
+            val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
+            stubPayableUnifiedScan(uri = uri, bolt11 = bolt11)
+            whenever { quickPayRepo.hasOpen(paymentHash) }.thenReturn(true)
+            sut.setIsAuthenticated(true)
+            val cases = listOf(
+                Result.success<PaymentStatus?>(null) to LightningPaymentStatus.UNPAID,
+                Result.success<PaymentStatus?>(PaymentStatus.FAILED) to LightningPaymentStatus.UNPAID,
+                Result.failure<PaymentStatus?>(AppError("Payment store unavailable")) to LightningPaymentStatus.PENDING,
+            )
+
+            for ((stored, expected) in cases) {
+                whenever(lightningRepo.outboundPaymentStatus(paymentHash)).thenReturn(stored)
+                sut.onScanResult(uri)
+                advanceUntilIdle()
+                assertEquals(expected, sut.sendUiState.value.lightningPaymentStatus, "$stored")
+            }
+
+            whenever { quickPayRepo.hasLiveOp(paymentHash) }.thenReturn(true)
+            whenever(lightningRepo.outboundPaymentStatus(paymentHash)).thenReturn(Result.success(null))
+            sut.onScanResult(uri)
+            advanceUntilIdle()
+            assertEquals(LightningPaymentStatus.PENDING, sut.sendUiState.value.lightningPaymentStatus)
+        }
 
     @Test
     fun `quickpay is skipped while an on-chain payment of the invoice's address may have gone out`() = test {

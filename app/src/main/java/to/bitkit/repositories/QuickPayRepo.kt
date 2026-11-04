@@ -207,6 +207,9 @@ class QuickPayRepo @Inject constructor(
 
     internal suspend fun hasOpen(paymentHash: String): Boolean = mutex.withLock { hasOpenLocked(paymentHash) }
 
+    /** Whether this process is paying the invoice with [paymentHash], unlike a ledger record left by an earlier one. */
+    internal suspend fun hasLiveOp(paymentHash: String): Boolean = mutex.withLock { opsByKey[paymentHash] != null }
+
     private suspend fun hasOpenLocked(paymentHash: String): Boolean =
         opsByKey[paymentHash] != null || spend.matching(paymentHash) != null
 
