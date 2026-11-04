@@ -1570,9 +1570,10 @@
     <string name="wallet__send_pending__nav_title">Payment Pending</string>
     <string name="wallet__send_pending__onchain_description">The transaction outcome is unresolved. Check its status before trying again. Other payments remain blocked. If available, use Retry original payment to authorize a fee for the same payment.</string>
     <string name="wallet__send_pending__refusal">Broadcast refused: %1$s</string>
-    <string name="wallet__send_pending__resend_paid">This payment request or order is already marked as paid, so Bitkit did not send it again. You can cancel this payment to keep its funds in your wallet.</string>
+    <string name="wallet__send_pending__resend_paid">This payment request is already marked as paid, so Bitkit did not send it again. You can cancel this payment to keep its funds in your wallet.</string>
     <string name="wallet__send_pending__resend_title">Retry without checking</string>
-    <string name="wallet__send_pending__resend_warning">Bitkit can no longer check that this payment request, quote or order is still valid. It may have expired, and the recipient may not accept a late payment. Bitkit will not send it if the request or order is already marked as paid, but if that status cannot be checked, it could be paid twice. Retry the same payment anyway?</string>
+    <string name="wallet__send_pending__resend_unchecked">Bitkit could not check whether this payment request is already paid, so it did not send it again. Check your connection and try again.</string>
+    <string name="wallet__send_pending__resend_warning">Bitkit can no longer check that this payment request or quote is still valid. It may have expired, and the recipient may not accept a late payment. Bitkit will not send it if the request is already marked as paid, so it can only be paid twice if it was also paid another way, such as over Lightning or from another wallet. Retry the same payment anyway?</string>
     <string name="wallet__send_pending__retry_authorize">Authorize retry</string>
     <string name="wallet__send_pending__retry_description">Retry the original payment using the same amount and inputs. Enter the fee rate you authorize in sat/vB. A higher fee may be unavailable; Bitkit will never reduce the payment or add other inputs.</string>
     <string name="wallet__send_pending__retry_error">The original payment could not be retried. Its funds remain protected. There may be insufficient funds for the chosen fee. Try another fee or check the transaction status.</string>

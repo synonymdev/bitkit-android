@@ -3503,6 +3503,32 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `a resend without its request keeps the original proof's checks`() = test {
+        val attempt = unknownShopAttempt("ab".repeat(32))
+        val proof = startedOnchainProof(attempt)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt)
+        val repo = paymentProofRepo()
+
+        storedProofs = listOf(proof)
+        assertTrue(repo.ensureOnchainResendAllowed(attempt).isSuccess)
+        for ((proofs, refusal) in listOf(
+            emptyList<PendingPaykitPaymentProof>() to PaykitPaymentRequestError.RequestUnavailable,
+            listOf(proof, proof.copy(paymentAppId = "other")) to PaykitPaymentRequestError.RequestUnavailable,
+            listOf(proof.copy(proofData = "ab".repeat(32))) to PaykitPaymentRequestError.OperationInProgress,
+            listOf(proof.copy(onchainAcceptanceVerified = true)) to PaykitPaymentRequestError.OperationInProgress,
+        )) {
+            storedProofs = proofs
+            assertEquals(refusal, repo.ensureOnchainResendAllowed(attempt).exceptionOrNull())
+        }
+        storedProofs = listOf(proof)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(attempt.copy(attemptId = "other"))
+        assertEquals(
+            PaykitPaymentRequestError.OperationInProgress,
+            repo.ensureOnchainResendAllowed(attempt).exceptionOrNull(),
+        )
+    }
+
+    @Test
     fun `a final spend frees the guard after a crash removed only the proof`() = test {
         val (record, period) = recurringShopRecord(Clock.System.now() - 1.minutes)
         val attempts = attemptStore()

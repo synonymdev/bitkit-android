@@ -32,6 +32,7 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainInputSpend
 import to.bitkit.repositories.OnchainOriginalPaidError
+import to.bitkit.repositories.OnchainOriginalStatusUnavailableError
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainSendAbandonPendingError
@@ -82,7 +83,8 @@ class SendPendingViewModelTest : BaseUnitTest() {
             .thenReturn(Result.failure(Exception("not found")))
         whenever(lightningRepo.onchainSendAttemptUpdates).thenReturn(attemptUpdates)
         whenever { lightningRepo.findOnchainSendCancellation(any()) }.thenReturn(Result.success(null))
-        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.failure(AppError("offline")))
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
+            .thenReturn(Result.failure(AppError("offline")))
         sut = createViewModel()
     }
 
@@ -571,6 +573,26 @@ class SendPendingViewModelTest : BaseUnitTest() {
         // The wallet does not hold it, so it may have dropped out and a replacement can still be built
         assertTrue(reopened.canCancel)
         assertEquals(9uL, reopened.suggestedFeeRate(RecoveryAction.Cancel))
+    }
+
+    @Test
+    fun `retry without checking is never offered for a subscription period and says when status is unread`() = test {
+        val original = requestOriginal()
+        val period = original.copy(
+            requestId = requireNotNull(original.requestId).copy(billingPeriodStartsAt = "2027-01-01T00:00:00Z"),
+        )
+        assertFalse(SendPendingUiState(recoveryAttempt = period).canRetryWithoutChecking)
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canRetryWithoutChecking)
+
+        sut.retryOriginal(2uL) { _, _ -> Result.failure(OnchainOriginalStatusUnavailableError(AppError("offline"))) }
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.isOriginalStatusUnknown)
+        assertFalse(sut.uiState.value.isOriginalPaid)
+        assertEquals(original, sut.uiState.value.recoveryAttempt)
     }
 
     @Test

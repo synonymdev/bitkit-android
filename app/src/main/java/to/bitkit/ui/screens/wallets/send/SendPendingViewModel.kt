@@ -24,6 +24,7 @@ import to.bitkit.models.safe
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainOriginalPaidError
+import to.bitkit.repositories.OnchainOriginalStatusUnavailableError
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainSendAbandonPendingError
@@ -206,6 +207,7 @@ class SendPendingViewModel @Inject constructor(
                 cancellationFailed = false,
                 speedUpFailed = false,
                 isOriginalPaid = false,
+                isOriginalStatusUnknown = false,
                 abandonError = null,
             )
         }
@@ -230,7 +232,11 @@ class SendPendingViewModel @Inject constructor(
                 }.onFailure { error ->
                     _uiState.update {
                         if (it.recoveredTxid == null && it.recoveredTransfer == null) {
-                            it.copy(recoveryError = error.message, isOriginalPaid = error is OnchainOriginalPaidError)
+                            it.copy(
+                                recoveryError = error.message,
+                                isOriginalPaid = error is OnchainOriginalPaidError,
+                                isOriginalStatusUnknown = error is OnchainOriginalStatusUnavailableError,
+                            )
                         } else {
                             it
                         }
@@ -260,6 +266,7 @@ class SendPendingViewModel @Inject constructor(
                 cancellationFailed = false,
                 speedUpFailed = false,
                 isOriginalPaid = false,
+                isOriginalStatusUnknown = false,
                 abandonError = null,
             )
         }
@@ -311,6 +318,7 @@ class SendPendingViewModel @Inject constructor(
                 cancellationFailed = false,
                 speedUpFailed = false,
                 isOriginalPaid = false,
+                isOriginalStatusUnknown = false,
                 abandonError = null,
             )
         }
@@ -533,6 +541,7 @@ data class SendPendingUiState(
     val hasUnknownCancellation: Boolean = false,
     val cancellationFailed: Boolean = false,
     val isOriginalPaid: Boolean = false,
+    val isOriginalStatusUnknown: Boolean = false,
     val isGuardReleased: Boolean = false,
     val abandonableAttempt: OnchainSendAttempt? = null,
     val isAbandoning: Boolean = false,
@@ -542,9 +551,12 @@ data class SendPendingUiState(
     val canRetry: Boolean
         get() = recoveryAttempt != null && cancellationTxid == null && !hasUnknownCancellation
 
-    /** Only a request can be paid late; Blocktank no longer sells channels, so an order is never paid again. */
+    /**
+     * Only a one-time request can be paid late. Blocktank no longer sells channels, so an order is never paid again,
+     * and a subscription period may have been paid unseen by Lightning or an allowance.
+     */
     val canRetryWithoutChecking: Boolean
-        get() = canRetry && recoveryAttempt?.requestId != null
+        get() = canRetry && recoveryAttempt?.requestId?.let { it.billingPeriodStartsAt == null } == true
 
     /** An expired payment's release spends the original inputs too, so it is not sent beside another cancellation. */
     val canAbandon: Boolean

@@ -256,6 +256,7 @@ private fun SendPendingUiState.recoveryErrorMessage(): String? {
         speedUpFailed -> R.string.wallet__send_pending__cancel_speed_up_error
         cancellationFailed -> R.string.wallet__send_pending__cancel_error
         isOriginalPaid -> R.string.wallet__send_pending__resend_paid
+        isOriginalStatusUnknown -> R.string.wallet__send_pending__resend_unchecked
         recoveryError != null -> R.string.wallet__send_pending__retry_error
         else -> return null
     }

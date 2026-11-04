@@ -256,6 +256,9 @@ class OnchainSendPendingError(cause: Throwable, val txid: String? = null) :
 
 class OnchainOriginalPaidError : AppError("Original on-chain payment's request is already paid")
 
+class OnchainOriginalStatusUnavailableError(cause: Throwable) :
+    AppError("Original on-chain payment's request status could not be read", cause)
+
 @OptIn(ExperimentalTime::class)
 @Singleton
 class OnchainSendAttemptStore @Inject constructor(

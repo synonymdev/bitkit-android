@@ -558,6 +558,33 @@ class PaykitPaymentProofRepo @Inject constructor(
         if (original.isNotEmpty()) persist(proofs - original.toSet())
     }
 
+    /**
+     * Checks the proof of an unresolved Shop payment that is about to be sent again without its request: exactly one
+     * started proof of this attempt, which no submission or verified acceptance has used yet.
+     */
+    suspend fun ensureOnchainResendAllowed(attempt: OnchainSendAttempt): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val current = lightningRepo.currentOnchainSendAttempt()
+            operationMutex.withLock {
+                val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
+                if (current != attempt || !attempt.isUnresolved || attempt.candidateTxids.isEmpty()) {
+                    throw PaykitPaymentRequestError.OperationInProgress
+                }
+                if (attempt.walletId != WalletScope.default || attempt.payerIdentity == null ||
+                    !PubkyPublicKeyFormat.matches(identity, attempt.payerIdentity)
+                ) {
+                    throw PaykitPaymentRequestError.OperationInProgress
+                }
+                val proof = loadProofs().singleOrNull {
+                    PubkyPublicKeyFormat.matches(it.identity, identity) && it.matchesOriginalShopAttempt(attempt)
+                } ?: throw PaykitPaymentRequestError.RequestUnavailable
+                if (proof.proofData != null || proof.onchainAcceptanceVerified) {
+                    throw PaykitPaymentRequestError.OperationInProgress
+                }
+            }
+        }
+    }
+
     private suspend fun quoteDeadlinePassed(request: PaykitPaymentRequest, identity: String, now: Instant): Boolean {
         val proof = operationMutex.withLock {
             loadProofs().lastOrNull {

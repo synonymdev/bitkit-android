@@ -164,6 +164,7 @@ import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.OnchainOriginalPaidError
+import to.bitkit.repositories.OnchainOriginalStatusUnavailableError
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
 import to.bitkit.repositories.OnchainSendBlockedError
@@ -541,6 +542,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.ensureOnchainResendAllowed(any())).thenReturn(Result.success(Unit))
         clearInvocations(paykitUsdtPayments)
         sut.startPaykitPaymentRequestPolling()
         try {
@@ -14937,6 +14939,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 }
             }
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.ensureOnchainResendAllowed(any())).thenReturn(Result.success(Unit))
 
         assertEquals(
             PaykitPaymentRequestError.RequestUnavailable,
@@ -14987,6 +14990,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 }
             }
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.ensureOnchainResendAllowed(any())).thenReturn(Result.success(Unit))
 
         paykitPaymentRequestHistory.value =
             listOf(request.copy(lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED))
@@ -15024,6 +15028,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                     OnchainSendOutcome.Unknown("ef".repeat(32))
                 }
             }
+        whenever(paykitPaymentProofRepo.ensureOnchainResendAllowed(any())).thenReturn(Result.success(Unit))
         whenever(paykitPaymentRequestRepo.refresh()).doSuspendableAnswer {
             paykitPaymentRequestHistory.value =
                 listOf(request.copy(lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED))
@@ -15035,10 +15040,56 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         assertEquals(0, dispatched)
 
+        // A request status that cannot be read is never taken as unpaid
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.failure(AppError("offline")))
         paykitPaymentRequestHistory.value = emptyList()
+        assertIs<OnchainOriginalStatusUnavailableError>(
+            sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).exceptionOrNull()
+        )
+        assertEquals(0, dispatched)
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         assertTrue(sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).isSuccess)
         assertEquals(1, dispatched)
+    }
+
+    @Test
+    fun `retry without checking keeps the local proof checks and never resends a subscription period`() = test {
+        val request = paymentRequest()
+        val requestBound = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "request-attempt", requestId = request.id, orderId = null,
+            address = "bcrt1qoriginal", amountSats = request.amount.atomic, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Rejected, payerIdentity = "payer",
+        )
+        var dispatched = 0
+        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer { invocation ->
+                val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
+                runCatching {
+                    authorize(requestBound)
+                    dispatched++
+                    OnchainSendOutcome.Unknown("ef".repeat(32))
+                }
+            }
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.ensureOnchainResendAllowed(requestBound))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.OperationInProgress))
+
+        assertEquals(
+            PaykitPaymentRequestError.OperationInProgress,
+            sut.retryOriginalOnchainSend(requestBound, 2uL, reauthorize = false).exceptionOrNull(),
+        )
+        assertEquals(0, dispatched)
+
+        val period = requestBound.copy(
+            attemptId = "period-attempt",
+            requestId = request.id.copy(billingPeriodStartsAt = "2027-01-01T00:00:00Z"),
+        )
+        assertIs<OnchainSendBlockedError>(
+            sut.retryOriginalOnchainSend(period, 2uL, reauthorize = false).exceptionOrNull()
+        )
+        verify(lightningRepo, never())
+            .retryOriginalOnchainSend(eq(period.attemptId), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test

@@ -178,6 +178,7 @@ import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.OnchainOriginalPaidError
+import to.bitkit.repositories.OnchainOriginalStatusUnavailableError
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendAttemptUnreadableError
@@ -6456,8 +6457,9 @@ class AppViewModel @Inject constructor(
 
     /**
      * Retry the original payment over its exact inputs. Without [reauthorize], the user has accepted that its request
-     * or quote may have expired, so no expiry or payment deadline applies, but a request reported as already paid
-     * still refuses the re-send.
+     * or quote may have expired, so no expiry or payment deadline applies. The re-send still refuses a request reported
+     * as paid, one whose status cannot be read, a proof already used, and a subscription period, which another route
+     * may have paid unseen.
      */
     suspend fun retryOriginalOnchainSend(
         original: OnchainSendAttempt,
@@ -6472,6 +6474,9 @@ class AppViewModel @Inject constructor(
             return Result.failure(
                 IllegalStateException(context.getString(R.string.lightning__transfer_unavailable__nav_title))
             )
+        }
+        if (!reauthorize && original.requestId?.billingPeriodStartsAt != null) {
+            return Result.failure(OnchainSendBlockedError(original))
         }
         val request = original.requestId?.takeIf { reauthorize }?.let { id ->
             (paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value)
@@ -6528,9 +6533,10 @@ class AppViewModel @Inject constructor(
 
     private suspend fun ensureOriginalUnpaid(attempt: OnchainSendAttempt) {
         val requestId = attempt.requestId ?: return
-        // The cached lists start empty, so load them first; a failed or empty lookup proves nothing, so only a
-        // request reported as paid refuses the re-send.
-        paykitPaymentRequestRepo.refresh()
+        check(requestId.billingPeriodStartsAt == null)
+        paykitPaymentProofRepo.ensureOnchainResendAllowed(attempt).getOrThrow()
+        // The cached lists start empty, so load them first; a request the payee removed is allowed, an unread one not
+        paykitPaymentRequestRepo.refresh().getOrElse { throw OnchainOriginalStatusUnavailableError(it) }
         val request = (
             paykitPaymentRequestRepo.pendingRequests.value + paykitPaymentRequestRepo.paymentRequestHistory.value
             )
