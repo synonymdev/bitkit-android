@@ -9359,19 +9359,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `main scanner onchain scan with dust amount opens amount sheet`() = test {
+    fun `main scanner onchain scan with dust amount shows the minimum without opening send`() = test {
         val input = stubOnchainAmountScan(amountSats = Defaults.dustLimit.toULong())
+        whenever(formatMoneyValue(any())).thenReturn("547 sats")
 
         sut.showScannerSheet()
         sut.onScannerSheetResult(input)
         advanceUntilIdle()
 
-        assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
-        assertFalse(sut.sendUiState.value.isAmountEditable)
+        assertFalse(sut.currentSheet.value is Sheet.Send)
+        val toasts = argumentCaptor<Toast>()
+        verify(toastManager, atLeast(1)).enqueue(toasts.capture())
+        assertTrue(toasts.allValues.any { it.testTag == "AmountTooLowToast" })
     }
 
     @Test
-    fun `main scanner onchain scan with amount opens amount sheet for manual coin selection`() = test {
+    fun `main scanner onchain scan with amount opens confirm sheet for manual coin selection`() = test {
         settingsData.update { it.copy(coinSelectAuto = false) }
         val input = stubOnchainAmountScan(amountSats = 10_000u)
 
@@ -9379,7 +9382,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onScannerSheetResult(input)
         advanceUntilIdle()
 
-        assertEquals(Sheet.Send(SendRoute.Amount), sut.currentSheet.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertEquals(10_000uL, sut.sendUiState.value.amount)
         assertFalse(sut.sendUiState.value.isAmountEditable)
 
@@ -9426,7 +9429,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `hardware send sheet onchain address opens amount when its fee estimate fails`() = test {
+    fun `hardware send sheet onchain address stays on the address when its fee estimate fails`() = test {
         val input = stubOnchainAmountScan(amountSats = 10_000u)
         stubHardwareFunding()
         whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
@@ -9438,10 +9441,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.setSendEvent(SendEvent.AddressContinue(input))
             advanceUntilIdle()
 
-            assertEquals(SendEffect.NavigateToAmount, awaitItem())
-            cancelAndIgnoreRemainingEvents()
+            expectNoEvents()
         }
-        assertFalse(sut.sendUiState.value.isAmountEditable)
+        val toasts = argumentCaptor<Toast>()
+        verify(toastManager, atLeast(1)).enqueue(toasts.capture())
+        assertTrue(toasts.allValues.isNotEmpty())
     }
 
     private fun stubHardwareFunding() {

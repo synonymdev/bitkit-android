@@ -5400,7 +5400,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (amount > 0u && openOnchainConfirmForInvoiceAmount(amount, fromMainScanner, walletGeneration)) return
+        if (amount > 0u && routeOnchainInvoiceAmount(amount, fromMainScanner, walletGeneration)) return
 
         Logger.info(
             when (amount > 0u) {
@@ -5413,17 +5413,30 @@ class AppViewModel @Inject constructor(
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount, walletGeneration)
     }
 
-    private suspend fun openOnchainConfirmForInvoiceAmount(
+    /**
+     * The payee set the amount, so it opens Confirm and never Amount. Returns false only when the
+     * request is paid another way. Manual coin selection opens the picker from the swipe.
+     */
+    private suspend fun routeOnchainInvoiceAmount(
         amount: ULong,
         fromMainScanner: Boolean,
         walletGeneration: Long?,
     ): Boolean {
         if (_sendUiState.value.payMethod != SendMethod.ONCHAIN || hasActiveContactPaymentContext()) return false
+        if (amount <= Defaults.dustLimit.toULong()) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
+                description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
+                    .replace("{amount}", formatMoneyValue(Defaults.dustLimit.toULong().safe() + 1uL.safe())),
+                testTag = "AmountTooLowToast",
+            )
+            return true
+        }
         if (!validateAmount(amount)) return false
-        val isHardware = _sendUiState.value.hardwareWalletId != null
-        if (!isHardware && !settingsStore.data.first().coinSelectAuto) return false
         requireCurrentPaymentPreparation(walletGeneration)
-        if (isHardware && !prepareHardwareSendFee()) return false
+        // A failed estimate has shown its error; the user stays where the scan started.
+        if (!prepareHardwareSendFee()) return true
         requireCurrentPaymentPreparation(walletGeneration)
 
         Logger.info("Found payable amount in invoice, proceeding to confirm", context = TAG)
