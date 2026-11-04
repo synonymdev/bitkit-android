@@ -21,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -142,6 +143,9 @@ class LightningRepo @Inject constructor(
     private val _nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>(extraBufferCapacity = 64)
     val nodeEventUpdates = _nodeEventUpdates.asSharedFlow()
     val nodeEvents = nodeEventUpdates.map { it.event }
+
+    /** Whether Spark is connected and can send and receive Lightning payments. */
+    val isSparkReady: Flow<Boolean> get() = sparkRepo.state.map { it.isReady }.distinctUntilChanged()
 
     private val scope = appScope(bgDispatcher, TAG)
 
@@ -1460,7 +1464,7 @@ class LightningRepo @Inject constructor(
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
             if (!onBeforeSend()) return Result.failure(PaymentAbortedBeforeSend())
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
-            return sparkRepo.payInvoice(bolt11, sats)
+            return sparkRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat)
         }
         return payInvoiceWithLdk(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat, onBeforeSend)
     }
@@ -2343,6 +2347,12 @@ class LightningRepo @Inject constructor(
 
     /** The completion event of a Spark send that settled before its caller started watching for it. */
     suspend fun settledSparkSendEvent(paymentHash: String): Event? = sparkRepo.settledSendEvent(paymentHash)
+
+    /** Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed. */
+    suspend fun sparkLightningSend(paymentHash: String): SparkLightningSend = sparkRepo.lightningSend(paymentHash)
+
+    /** False while Spark is supported but not connected, so its empty payment list proves nothing. */
+    fun canListSparkPayments(): Boolean = sparkRepo.canListPayments()
 
     /**
      * Whether Lightning can be received, through a usable channel or Spark; Paykit publishes a Lightning endpoint

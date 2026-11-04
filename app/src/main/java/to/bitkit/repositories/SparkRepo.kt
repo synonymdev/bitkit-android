@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,20 +35,27 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.async.appScope
+import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.SparkExitBackupV1
+import to.bitkit.models.WalletScope
+import to.bitkit.models.safe
+import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import breez_sdk_spark.PaymentType as SparkPaymentType
 
 /**
@@ -61,6 +69,9 @@ class SparkRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val sparkService: SparkService,
     private val activityRepo: Provider<ActivityRepo>,
+    private val cacheStore: CacheStore,
+    private val contactResolver: Provider<PrivatePaykitContactResolver>,
+    private val clock: Clock,
 ) {
     companion object {
         private const val TAG = "SparkRepo"
@@ -71,6 +82,8 @@ class SparkRepo @Inject constructor(
 
         /** Looks for 5 minutes before telling the user Spark hasn't seen the deposit yet. */
         private const val CLAIM_POLL_ATTEMPTS = 60
+
+        private val SEND_STATUS_PRIORITY = listOf(PaymentStatus.COMPLETED, PaymentStatus.PENDING, PaymentStatus.FAILED)
     }
 
     private val scope = appScope(bgDispatcher, TAG)
@@ -130,7 +143,7 @@ class SparkRepo @Inject constructor(
 
     fun canReceive(): Boolean = _state.value.isReady
 
-    fun canSend(amountSats: ULong): Boolean = _state.value.isReady && _state.value.balanceSats >= amountSats
+    fun canSend(amountSats: ULong): Boolean = _state.value.isReady && _state.value.sendableSats >= amountSats
 
     suspend fun createInvoice(amountSats: ULong?, description: String, expirySecs: UInt): Result<String> =
         withContext(bgDispatcher) {
@@ -141,22 +154,47 @@ class SparkRepo @Inject constructor(
     suspend fun estimateFeeSats(bolt11: String, amountSats: ULong?): Result<ULong> = withContext(bgDispatcher) {
         runSuspendCatching {
             val method = sparkService.prepareSend(bolt11, amountSats).paymentMethod
-            val bolt11 = method as SendPaymentMethod.Bolt11Invoice
-            bolt11.sparkTransferFeeSats?.takeIf { sparkService.prefersSpark } ?: bolt11.lightningFeeSats
+            (method as SendPaymentMethod.Bolt11Invoice).feeSats()
         }
     }
 
-    /** Pays [bolt11] and returns its payment hash, the id ldk-node payments use, so the send flow can match it. */
-    suspend fun payInvoice(bolt11: String, amountSats: ULong?): Result<PaymentId> = withContext(bgDispatcher) {
+    private fun SendPaymentMethod.Bolt11Invoice.feeSats(): ULong =
+        sparkTransferFeeSats?.takeIf { sparkService.prefersSpark } ?: lightningFeeSats
+
+    /**
+     * Pays [bolt11] and returns its payment hash, the id ldk-node payments use, so the send flow can match it.
+     * Fails with [SparkError.SendRefused] when nothing left the wallet: Spark was not connected, could not prepare the
+     * payment, or its fee was over [maxTotalFeeMsat]; and with [ServiceError.PaymentDeadlineExpired] past
+     * [paymentDeadlineAt]. A failure inside the send itself stays uncertain, as the payment may have been dispatched.
+     */
+    suspend fun payInvoice(
+        bolt11: String,
+        amountSats: ULong?,
+        paymentDeadlineAt: Instant? = null,
+        maxTotalFeeMsat: ULong? = null,
+    ): Result<PaymentId> = withContext(bgDispatcher) {
         runSuspendCatching {
-            val prepared = sparkService.prepareSend(bolt11, amountSats)
-            val paymentHash = (prepared.paymentMethod as SendPaymentMethod.Bolt11Invoice).invoiceDetails.paymentHash
+            ensurePaymentDeadline(paymentDeadlineAt)
+            if (!sparkService.isConnected) throw SparkError.SendRefused("Spark is not connected")
+            val prepared = runSuspendCatching { sparkService.prepareSend(bolt11, amountSats) }
+                .getOrElse { throw SparkError.SendRefused("Spark could not prepare the payment", it) }
+            val method = prepared.paymentMethod as? SendPaymentMethod.Bolt11Invoice
+                ?: throw SparkError.SendRefused("Unexpected Spark payment method '${prepared.paymentMethod}'")
+            val feeSats = method.feeSats()
+            if (maxTotalFeeMsat != null && feeSats.safe() * MSATS_PER_SAT.safe() > maxTotalFeeMsat) {
+                throw SparkError.SendRefused("Spark fee '$feeSats' sats is over the limit '$maxTotalFeeMsat' msat")
+            }
+            ensurePaymentDeadline(paymentDeadlineAt)
             val payment = sparkService.send(prepared)
             Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
-            paymentHash
+            method.invoiceDetails.paymentHash
         }.onFailure {
             Logger.error("Failed to pay invoice with Spark", it, context = TAG)
         }
+    }
+
+    private fun ensurePaymentDeadline(paymentDeadlineAt: Instant?) {
+        if (paymentDeadlineAt != null && clock.now() > paymentDeadlineAt) throw ServiceError.PaymentDeadlineExpired()
     }
 
     /** The most an Instant claim of a deposit of [amountSats] may cost: the ceiling the user accepts. */
@@ -418,6 +456,31 @@ class SparkRepo @Inject constructor(
             ?.toNodeEvent()
     }
 
+    /** False while Spark is supported but not connected, so its empty payment list proves nothing. */
+    fun canListPayments(): Boolean = !sparkService.isSupported || sparkService.isConnected
+
+    /**
+     * Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed.
+     * [SparkLightningSend.Unavailable] while Spark is supported but cannot list its payments, so a send it may hold
+     * is never read as one it never made.
+     */
+    suspend fun lightningSend(paymentHash: String): SparkLightningSend = withContext(bgDispatcher) {
+        if (!sparkService.isSupported) return@withContext SparkLightningSend.NotFound
+        if (!canListPayments()) return@withContext SparkLightningSend.Unavailable
+        val payments = runSuspendCatching { sparkService.listPayments() }
+            .onFailure { Logger.warn("Failed to list Spark payments", it, context = TAG) }
+            .getOrElse { return@withContext SparkLightningSend.Unavailable }
+        payments
+            .filter {
+                val hash = (it.details as? PaymentDetails.Lightning)?.htlcDetails?.paymentHash
+                it.paymentType == SparkPaymentType.SEND && hash.equals(paymentHash, ignoreCase = true)
+            }
+            // A retry of a failed send shares its hash, so the outcome that settles it wins.
+            .minByOrNull { SEND_STATUS_PRIORITY.indexOf(it.status) }
+            ?.let { SparkLightningSend.Found(it.status, (it.details as PaymentDetails.Lightning).htlcDetails.preimage) }
+            ?: SparkLightningSend.NotFound
+    }
+
     /** Payment hashes of the Lightning payments Spark received. */
     suspend fun receivedLightningPaymentHashes(): Set<String> =
         lightningPaymentHashes { it.paymentType == SparkPaymentType.RECEIVE && it.status == PaymentStatus.COMPLETED }
@@ -491,7 +554,7 @@ class SparkRepo @Inject constructor(
             fee = payment.fees.toLong().toULong(),
             message = lightning.description.orEmpty(),
             preimage = lightning.htlcDetails.preimage,
-            contact = existing?.contact,
+            contact = existing?.contact ?: receivedContact(payment, id),
             seenAt = existing?.seenAt,
         )
         activityRepo.get().upsertActivity(Activity.Lightning(activity))
@@ -500,6 +563,14 @@ class SparkRepo @Inject constructor(
         } else {
             sendsRecordedWithoutFee.remove(payment.id)
         }
+    }
+
+    private suspend fun receivedContact(payment: Payment, paymentHash: String): String? {
+        if (payment.paymentType != SparkPaymentType.RECEIVE || payment.status == PaymentStatus.FAILED) return null
+        if (cacheStore.data.first().isContactDetached(paymentHash, WalletScope.default)) return null
+        return runSuspendCatching { contactResolver.get().contactPublicKeyForPrivateInvoicePaymentHash(paymentHash) }
+            .onFailure { Logger.warn("Failed to resolve contact of Spark receive '$paymentHash'", it, context = TAG) }
+            .getOrNull()
     }
 
     private fun Payment.toNodeEvent(): Event? {
@@ -532,7 +603,39 @@ data class SparkState(
     val deposits: ImmutableList<SparkDeposit> = persistentListOf(),
     val withdrawals: ImmutableList<SparkWithdrawal> = persistentListOf(),
     val recoverableFundsSats: ULong = 0uL,
-)
+) {
+    /** The most Spark can send once its service fee is paid, so a payment near the full balance isn't offered. */
+    val sendableSats: ULong get() = SparkFees.sendableSats(balanceSats)
+}
+
+object SparkFees {
+    /** Spark keeps 0.25% of a Lightning send as its service fee, on top of routing. */
+    const val SERVICE_FEE_PPM = 2_500uL
+
+    private const val PPM = 1_000_000uL
+
+    /** The largest amount whose fee, rounded up, fits beside it: `amount + ceil(amount * ppm / 1e6) <= balance`. */
+    fun sendableSats(balanceSats: ULong): ULong {
+        val sendable = balanceSats.safe() * PPM.safe() / (PPM + SERVICE_FEE_PPM)
+        return if (sendable == 0uL || sendable.safe() + serviceFeeSats(sendable).safe() <= balanceSats) {
+            sendable
+        } else {
+            sendable - 1uL
+        }
+    }
+
+    fun serviceFeeSats(amountSats: ULong): ULong = (amountSats.safe() * SERVICE_FEE_PPM.safe() + (PPM - 1uL)) / PPM
+}
+
+/** Spark's record of a Lightning send. */
+sealed interface SparkLightningSend {
+    /** Spark is supported but cannot list its payments yet. */
+    data object Unavailable : SparkLightningSend
+
+    data object NotFound : SparkLightningSend
+
+    data class Found(val status: PaymentStatus, val preimage: String?) : SparkLightningSend
+}
 
 /** A Transfer to Savings out of Spark, with what Spark kept for it. */
 data class SparkWithdrawal(

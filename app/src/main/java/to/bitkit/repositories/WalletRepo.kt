@@ -427,7 +427,7 @@ class WalletRepo @Inject constructor(
     fun refreshMaxSendLightning() {
         val state = lightningRepo.lightningState.value
         if (!state.nodeLifecycleState.isRunning()) return
-        val maxSendSats = maxOf(state.channels.totalNextOutboundHtlcLimitSats(), sparkRepo.state.value.balanceSats)
+        val maxSendSats = maxOf(state.channels.totalNextOutboundHtlcLimitSats(), sparkRepo.state.value.sendableSats)
         _balanceState.update { it.copy(maxSendLightningSats = maxSendSats) }
     }
 

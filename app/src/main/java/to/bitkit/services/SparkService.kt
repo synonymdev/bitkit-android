@@ -245,7 +245,13 @@ class SparkService @Inject constructor(
     }
 }
 
-sealed class SparkError(message: String) : AppError(message) {
+sealed class SparkError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     class Unsupported : SparkError("Spark is not available on this network or build")
     class NotConnected : SparkError("Spark wallet is not connected")
+
+    /**
+     * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the
+     * payment, or its fee was over the caller's limit. A Paykit request or allowance attempt can then end as failed.
+     */
+    class SendRefused(message: String, cause: Throwable? = null) : SparkError(message, cause)
 }

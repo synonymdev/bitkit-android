@@ -325,6 +325,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         ContactPaymentSettingsRepo(settingsStore, publicPaykitRepo, privatePaykitRepo, pubkyRepo, testDispatcher)
     }
     private val isRecoveryMode = MutableStateFlow(false)
+    private val isSparkReady = MutableStateFlow(false)
     private val isPaykitEnabled = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>()
@@ -709,6 +710,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
+        whenever(lightningRepo.isSparkReady).thenReturn(isSparkReady)
         whenever(lightningRepo.nodeEventUpdates).thenReturn(nodeEventUpdates)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEventUpdates.map { it.event })
         whenever(hwWalletRepo.receivedTxs).thenReturn(hwReceivedTxs)
@@ -15271,6 +15273,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(publicPaykitRepo).requestLightningRefresh(isNull(), any())
             verify(publicPaykitRepo, times(2)).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
         }
+    }
+
+    @Test
+    fun `spark becoming ready republishes the paykit lightning endpoints`() = test {
+        enablePublicPaykitSharing()
+        advanceUntilIdle()
+        clearInvocations(publicPaykitRepo, privatePaykitRepo)
+
+        isSparkReady.value = true
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo).requestLightningRefresh(anyOrNull(), anyOrNull())
+        verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(
+            eq("spark ready"),
+            eq(true),
+            any(),
+            anyOrNull(),
+        )
     }
 
     @Test

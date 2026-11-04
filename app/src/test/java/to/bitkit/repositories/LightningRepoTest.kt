@@ -103,6 +103,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @OptIn(kotlin.time.ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class LightningRepoTest : BaseUnitTest() {
@@ -1116,7 +1117,20 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
         assertFalse(beforeSend)
-        verify(sparkRepo, never()).payInvoice(any(), anyOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `spark payment keeps the deadline and the fee limit`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Result.success("hash"))
+        val deadline = Instant.fromEpochSeconds(1_800_000_000)
+
+        val result = sut.payInvoice("invoice", 1_000uL, deadline, maxTotalRoutingFeeMsat = 10_000uL) { true }
+
+        assertEquals("hash", result.getOrThrow())
+        verify(sparkRepo).payInvoice("invoice", 1_000uL, deadline, 10_000uL)
     }
 
     @Test
@@ -1130,7 +1144,7 @@ class LightningRepoTest : BaseUnitTest() {
         })
 
         assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
-        verify(sparkRepo, never()).payInvoice(any(), anyOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull())
     }
 
     @Test

@@ -79,7 +79,8 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         val balanceState = sut().getOrThrow()
 
         assertEquals(80_000uL, balanceState.totalLightningSats)
-        assertEquals(30_000uL, balanceState.maxSendLightningSats)
+        // Spark keeps 0.25% of a send as its fee, so the most it can send leaves room for it.
+        assertEquals(29_925uL, balanceState.maxSendLightningSats)
         assertEquals(20_000uL, balanceState.balanceInTransferToSpending)
     }
 

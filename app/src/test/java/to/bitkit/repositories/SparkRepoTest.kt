@@ -1,9 +1,11 @@
 package to.bitkit.repositories
 
+import breez_sdk_spark.Bolt11InvoiceDetails
 import breez_sdk_spark.ClaimDeferredReason
 import breez_sdk_spark.ClaimDepositOutcome
 import breez_sdk_spark.ClaimDepositQuote
 import breez_sdk_spark.DepositInfo
+import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.FetchClaimDepositQuoteResponse
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateResponse
@@ -12,37 +14,53 @@ import breez_sdk_spark.PaymentDetails
 import breez_sdk_spark.PaymentMethod
 import breez_sdk_spark.PaymentStatus
 import breez_sdk_spark.PaymentType
+import breez_sdk_spark.PrepareSendPaymentResponse
 import breez_sdk_spark.SdkEvent
+import breez_sdk_spark.SdkException
+import breez_sdk_spark.SendPaymentMethod
 import breez_sdk_spark.SparkHtlcDetails
 import breez_sdk_spark.SparkHtlcStatus
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
+import to.bitkit.data.CacheStore
 import to.bitkit.env.Env
 import to.bitkit.ext.create
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.SparkExitBackupV1
+import to.bitkit.models.WalletScope
+import to.bitkit.services.SparkError
 import to.bitkit.services.SparkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.ServiceError
 import java.io.File
 import java.math.BigInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 import com.synonym.bitkitcore.PaymentType as ActivityPaymentType
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -50,11 +68,21 @@ class SparkRepoTest : BaseUnitTest() {
     private val sparkService = mock<SparkService>()
     private val activityRepo = mock<ActivityRepo>()
     private val sparkEvents = MutableSharedFlow<SdkEvent>()
+    private val cacheData = MutableStateFlow(AppCacheData())
+    private val cacheStore = mock<CacheStore> { on { data } doReturn cacheData }
+    private val contactResolver = mock<PrivatePaykitContactResolver>()
+    private val now = Instant.fromEpochSeconds(1_800_000_000)
+    private val clock = object : Clock {
+        override fun now() = this@SparkRepoTest.now
+    }
 
     private fun createSut() = SparkRepo(
         bgDispatcher = testDispatcher,
         sparkService = sparkService,
         activityRepo = { activityRepo },
+        cacheStore = cacheStore,
+        contactResolver = { contactResolver },
+        clock = clock,
     )
 
     @get:Rule
@@ -281,6 +309,135 @@ class SparkRepoTest : BaseUnitTest() {
         )
         assertEquals(SparkClaimStep.Adding, SparkClaimStep.of(SparkClaimOffer.Automatic("txid", 0u, 250uL, 0u), 500uL))
     }
+
+    @Test
+    fun `a receive recorded without its event gets its paykit contact`() = test {
+        whenever { contactResolver.contactPublicKeyForPrivateInvoicePaymentHash("hash") }.thenReturn("pubky-contact")
+        whenever { sparkService.listPayments() }.thenReturn(listOf(receivedPayment()))
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        createSut().start(0).getOrThrow()
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertEquals("pubky-contact", (activity.firstValue as Activity.Lightning).v1.contact)
+    }
+
+    @Test
+    fun `a receive whose contact the user detached stays without one`() = test {
+        cacheData.value = AppCacheData(detachedActivityContacts = setOf(scopedActivityId(WalletScope.default, "hash")))
+        whenever { contactResolver.contactPublicKeyForPrivateInvoicePaymentHash("hash") }.thenReturn("pubky-contact")
+        whenever { sparkService.listPayments() }.thenReturn(listOf(receivedPayment()))
+        whenever(sparkService.isConnected).thenReturn(true)
+
+        createSut().start(0).getOrThrow()
+
+        val activity = argumentCaptor<Activity>()
+        verify(activityRepo).upsertActivity(activity.capture())
+        assertNull((activity.firstValue as Activity.Lightning).v1.contact)
+        verify(contactResolver, never()).contactPublicKeyForPrivateInvoicePaymentHash(any())
+    }
+
+    @Test
+    fun `lightning send lookup reads spark's payments and waits while spark cannot list them`() = test {
+        val sut = createSut()
+        assertEquals(SparkLightningSend.Unavailable, sut.lightningSend("hash"))
+
+        whenever(sparkService.isConnected).thenReturn(true)
+        val failed = sentPayment(fees = 0).copy(id = "failed", status = PaymentStatus.FAILED)
+        whenever { sparkService.listPayments() }.thenReturn(listOf(failed, sentPayment(fees = 1)))
+        assertEquals(SparkLightningSend.Found(PaymentStatus.COMPLETED, "preimage"), sut.lightningSend("HASH"))
+        assertEquals(SparkLightningSend.NotFound, sut.lightningSend("other"))
+
+        whenever { sparkService.listPayments() }.thenAnswer { throw SdkException.Generic("offline") }
+        assertEquals(SparkLightningSend.Unavailable, sut.lightningSend("hash"))
+    }
+
+    @Test
+    fun `a send spark refuses before it leaves is a typed refusal`() = test {
+        val sut = createSut()
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        whenever(sparkService.isConnected).thenReturn(true)
+        val noRoute = SdkException.Generic("no route")
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenAnswer { throw noRoute }
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `a spark send over the fee limit is refused before it leaves`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 2uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sut = createSut()
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL, maxTotalFeeMsat = 1_999uL).exceptionOrNull())
+        verify(sparkService, never()).send(any())
+
+        whenever { sparkService.send(any()) }.thenReturn(sentPayment(fees = 2))
+        assertEquals("hash", sut.payInvoice("lnbc1", 100uL, maxTotalFeeMsat = 2_000uL).getOrThrow())
+    }
+
+    @Test
+    fun `a spark send past its deadline never leaves`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        val sut = createSut()
+
+        val result = sut.payInvoice("lnbc1", 100uL, paymentDeadlineAt = now - 1.minutes)
+
+        assertIs<ServiceError.PaymentDeadlineExpired>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any())
+    }
+
+    @Test
+    fun `a failure inside the spark send stays uncertain`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any()) }.thenAnswer { throw SdkException.Generic("timeout") }
+
+        val error = createSut().payInvoice("lnbc1", 100uL).exceptionOrNull()
+
+        assertIs<SdkException.Generic>(error)
+    }
+
+    @Test
+    fun `can send leaves room for spark's service fee`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(GetInfoResponse("pubkey", 100_000uL, emptyMap(), 0uL))
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+
+        assertEquals(99_750uL, sut.state.value.sendableSats)
+        assertTrue(sut.canSend(99_750uL))
+        assertFalse(sut.canSend(100_000uL))
+    }
+
+    @Test
+    fun `sendable amount fits the fee beside it`() {
+        for (balance in listOf(0uL, 1uL, 400uL, 401uL, 9_572uL, 100_000uL, 21_000_000uL)) {
+            val sendable = SparkFees.sendableSats(balance)
+            assertTrue(sendable + SparkFees.serviceFeeSats(sendable) <= balance, "$balance")
+            assertTrue(sendable + 1uL + SparkFees.serviceFeeSats(sendable + 1uL) > balance, "$balance leaves room")
+        }
+    }
+
+    private fun prepared(feeSats: ULong): PrepareSendPaymentResponse {
+        val details = mock<Bolt11InvoiceDetails> { on { paymentHash } doReturn "hash" }
+        return PrepareSendPaymentResponse(
+            paymentMethod = SendPaymentMethod.Bolt11Invoice(details, null, feeSats),
+            amount = BigInteger.valueOf(100),
+            tokenIdentifier = null,
+            conversionEstimate = null,
+            feePolicy = FeePolicy.FEES_EXCLUDED,
+        )
+    }
+
+    private fun receivedPayment() = sentPayment(fees = 0).copy(id = "receive", paymentType = PaymentType.RECEIVE)
 
     private fun listDeposit() {
         whenever { sparkService.listUnclaimedDeposits() }.thenReturn(

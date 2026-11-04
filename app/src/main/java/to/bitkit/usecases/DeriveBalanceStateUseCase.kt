@@ -60,8 +60,11 @@ class DeriveBalanceStateUseCase @Inject constructor(
                 totalOnchainSats = totalOnchainSats,
                 channelFundableBalance = channelFundableBalance,
                 totalLightningSats = totalLightningSats,
-                // A payment goes over one rail, so the larger of the two balances caps it.
-                maxSendLightningSats = maxOf(lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(), sparkSats),
+                // A payment goes over one rail, so the larger of the two balances caps it; Spark keeps its fee.
+                maxSendLightningSats = maxOf(
+                    lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
+                    sparkRepo.state.value.sendableSats,
+                ),
                 maxSendOnchainSats = getMaxSendAmount(balanceDetails),
                 balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
                 balanceInTransferToSpending = pendingChannelsSats.safe() +

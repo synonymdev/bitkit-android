@@ -773,6 +773,7 @@ class AppViewModel @Inject constructor(
         observeReceiveSheetInvoice()
         observeLdkNodeEvents()
         observeLightningUsableChannels()
+        observeSparkReady()
         observePublicPaykitEndpoints()
         observePublicPaykitInvoiceExpiry()
         observePrivatePaykitContacts()
@@ -847,6 +848,17 @@ class AppViewModel @Inject constructor(
                     }
                     hadUsableChannels = hasUsableChannels
                 }
+        }
+    }
+
+    private fun observeSparkReady() {
+        viewModelScope.launch {
+            lightningRepo.isSparkReady.filter { it }.collect {
+                refreshPaykitEndpointsAfterChannelAvailabilityChanged(
+                    reason = "spark ready",
+                    forceRefreshLightning = true,
+                )
+            }
         }
     }
 
