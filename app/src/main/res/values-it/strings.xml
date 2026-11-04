@@ -1355,6 +1355,7 @@
     <string name="lightning__savings_confirm__network_fee">Commissione di rete</string>
     <string name="lightning__savings_confirm__receive">Riceverai</string>
     <string name="lightning__savings_confirm__service_fee">Commissione di servizio</string>
+    <string name="lightning__savings_confirm__spark_fee">Commissione Spark</string>
     <string name="lightning__savings_settling__text">Il tuo trasferimento è stato avviato ed è &lt;accent&gt;in regolamento on-chain&lt;/accent&gt;. Il saldo dei tuoi risparmi si aggiornerà automaticamente al termine.</string>
     <string name="lightning__savings_settling__title">Trasferimento\n&lt;accent&gt;in corso&lt;/accent&gt;</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Connessione&lt;/accent&gt;\nalla rete</string>

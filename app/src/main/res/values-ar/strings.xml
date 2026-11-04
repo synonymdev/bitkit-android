@@ -1328,6 +1328,7 @@
     <string name="lightning__savings_confirm__network_fee">رسوم الشبكة</string>
     <string name="lightning__savings_confirm__receive">ستستلم</string>
     <string name="lightning__savings_confirm__service_fee">رسوم الخدمة</string>
+    <string name="lightning__savings_confirm__spark_fee">رسوم Spark</string>
     <string name="lightning__savings_settling__text">بدأ التحويل وهو &lt;accent&gt;قيد التسوية على السلسلة&lt;/accent&gt;. سيتم تحديث رصيد مدخراتك تلقائيًا عند اكتماله.</string>
     <string name="lightning__savings_settling__title">التحويل\n&lt;accent&gt;في الطريق&lt;/accent&gt;</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;جارٍ الاتصال&lt;/accent&gt;\nبالشبكة</string>

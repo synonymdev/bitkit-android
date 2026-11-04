@@ -1373,6 +1373,7 @@
     <string name="lightning__savings_confirm__network_fee">Сетевая комиссия</string>
     <string name="lightning__savings_confirm__receive">Вы получите</string>
     <string name="lightning__savings_confirm__service_fee">Сервисная комиссия</string>
+    <string name="lightning__savings_confirm__spark_fee">Комиссия Spark</string>
     <string name="lightning__savings_settling__text">Ваш перевод инициирован и &lt;accent&gt;проводится в блокчейне&lt;/accent&gt;. Баланс сбережений обновится автоматически после завершения.</string>
     <string name="lightning__savings_settling__title">Перевод\n&lt;accent&gt;в пути&lt;/accent&gt;</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Подключение&lt;/accent&gt;\nк сети</string>

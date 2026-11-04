@@ -1353,6 +1353,7 @@
     <string name="lightning__savings_confirm__network_fee">Netzwerkgebühr</string>
     <string name="lightning__savings_confirm__receive">Du erhältst</string>
     <string name="lightning__savings_confirm__service_fee">Servicegebühr</string>
+    <string name="lightning__savings_confirm__spark_fee">Spark-Gebühr</string>
     <string name="lightning__savings_settling__text">Deine Übertragung wurde gestartet und wird &lt;accent&gt;onchain abgewickelt&lt;/accent&gt;. Dein Sparguthaben wird automatisch aktualisiert, sobald sie abgeschlossen ist.</string>
     <string name="lightning__savings_settling__title">Übertragung\n&lt;accent&gt;unterwegs&lt;/accent&gt;</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Verbinde&lt;/accent&gt;\nmit Netzwerk</string>

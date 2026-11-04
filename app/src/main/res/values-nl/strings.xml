@@ -1351,6 +1351,7 @@
     <string name="lightning__savings_confirm__network_fee">Netwerkvergoeding</string>
     <string name="lightning__savings_confirm__receive">U ontvangt</string>
     <string name="lightning__savings_confirm__service_fee">Servicevergoeding</string>
+    <string name="lightning__savings_confirm__spark_fee">Spark-vergoeding</string>
     <string name="lightning__savings_settling__text">Uw overboeking is gestart en wordt &lt;accent&gt;on-chain afgehandeld&lt;/accent&gt;. Uw spaargeld wordt automatisch bijgewerkt zodra deze is voltooid.</string>
     <string name="lightning__savings_settling__title">Overboeking\n&lt;accent&gt;onderweg&lt;/accent&gt;</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Verbinden&lt;/accent&gt;\nmet netwerk</string>

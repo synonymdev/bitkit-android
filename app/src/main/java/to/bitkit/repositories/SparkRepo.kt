@@ -421,6 +421,15 @@ class SparkRepo @Inject constructor(
         }
     }
 
+    /** The fee [withdrawAll] pays at its speed, which comes out of the balance it moves. */
+    suspend fun estimateWithdrawAllFeeSats(address: String): Result<ULong> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val prepared = sparkService.prepareSend(address, _state.value.balanceSats, FeePolicy.FEES_INCLUDED)
+            val speed = (prepared.paymentMethod as SendPaymentMethod.BitcoinAddress).feeQuote.speedMedium
+            speed.userFeeSat.safe() + speed.l1BroadcastFeeSat.safe()
+        }
+    }
+
     /**
      * Lists a deposit the app just broadcast as pending right away, then syncs so Spark sees it sooner than its
      * minute-long background sync; Spark's own deposit state replaces it once listed.

@@ -1334,6 +1334,7 @@
     <string name="lightning__savings_confirm__network_fee">Τέλος δικτύου</string>
     <string name="lightning__savings_confirm__receive">Θα λάβεις</string>
     <string name="lightning__savings_confirm__service_fee">Τέλος υπηρεσίας</string>
+    <string name="lightning__savings_confirm__spark_fee">Τέλος Spark</string>
     <string name="lightning__savings_settling__text">Η μεταφορά σου ξεκίνησε και &lt;accent&gt;εκκαθαρίζεται onchain&lt;/accent&gt;. Το υπόλοιπο αποταμιεύσεων θα ενημερωθεί αυτόματα μόλις ολοκληρωθεί.</string>
     <string name="lightning__savings_settling__title">Η μεταφορά\n&lt;accent&gt;είναι καθ\' οδόν&lt;/accent&gt;</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Σύνδεση&lt;/accent&gt;\nστο δίκτυο</string>

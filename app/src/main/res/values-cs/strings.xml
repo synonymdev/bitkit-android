@@ -1356,6 +1356,7 @@
     <string name="lightning__savings_confirm__network_fee">Síťový poplatek</string>
     <string name="lightning__savings_confirm__receive">Obdržíte</string>
     <string name="lightning__savings_confirm__service_fee">Poplatek za službu</string>
+    <string name="lightning__savings_confirm__spark_fee">Poplatek Spark</string>
     <string name="lightning__savings_settling__text">Váš převod byl zahájen a &lt;accent&gt;vypořádává se on-chain&lt;/accent&gt;. Zůstatek vašich úspor se po dokončení automaticky aktualizuje.</string>
     <string name="lightning__savings_settling__title">Převod\n&lt;accent&gt;je na cestě&lt;/accent&gt;</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Připojování&lt;/accent&gt;\nk síti</string>

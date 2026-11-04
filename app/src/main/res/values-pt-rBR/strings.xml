@@ -1357,6 +1357,7 @@
     <string name="lightning__savings_confirm__network_fee">Taxa de rede</string>
     <string name="lightning__savings_confirm__receive">Você receberá</string>
     <string name="lightning__savings_confirm__service_fee">Taxa de serviço</string>
+    <string name="lightning__savings_confirm__spark_fee">Taxa do Spark</string>
     <string name="lightning__savings_settling__text">Sua transferência foi iniciada e está sendo &lt;accent&gt;liquidada onchain&lt;/accent&gt;. Seu saldo de poupança será atualizado automaticamente quando ela for concluída.</string>
     <string name="lightning__savings_settling__title">Transferência\n&lt;accent&gt;a caminho&lt;/accent&gt;</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Conectando&lt;/accent&gt;\nà rede</string>

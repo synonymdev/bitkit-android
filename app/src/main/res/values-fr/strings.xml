@@ -1352,6 +1352,7 @@
     <string name="lightning__savings_confirm__network_fee">Frais de réseau</string>
     <string name="lightning__savings_confirm__receive">Vous recevrez</string>
     <string name="lightning__savings_confirm__service_fee">Frais de service</string>
+    <string name="lightning__savings_confirm__spark_fee">Frais Spark</string>
     <string name="lightning__savings_settling__text">Votre transfert a été initié et est &lt;accent&gt;en cours de règlement on-chain&lt;/accent&gt;. Votre solde d\'épargne se mettra à jour automatiquement une fois terminé.</string>
     <string name="lightning__savings_settling__title">Transfert\n&lt;accent&gt;en cours&lt;/accent&gt;</string>
     <string name="lightning__sync_connecting">&lt;accent&gt;Connexion&lt;/accent&gt;\nau réseau</string>

@@ -33,10 +33,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.filterOpen
+import to.bitkit.models.safe
 import to.bitkit.ui.components.AmountSlider
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
@@ -58,6 +58,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.transferViewModel
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.walletViewModel
+import to.bitkit.viewmodels.SavingsSelection
 import to.bitkit.viewmodels.SavingsSwapQuote
 import to.bitkit.viewmodels.SavingsTransferMode
 
@@ -75,22 +76,23 @@ fun SavingsConfirmScreen(
     val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
     val openChannels = lightningState.channels.filterOpen()
 
-    val hasMultiple = openChannels.size > 1
-
-    val selectedChannelIds by transfer.selectedChannelIdsState.collectAsStateWithLifecycle()
-    val selectedChannels: List<ChannelDetails>? = selectedChannelIds
-        .takeIf { it.isNotEmpty() }
-        ?.let { list -> openChannels.filter { channel -> list.contains(channel.channelId) } }
-
-    val hasSelected = selectedChannelIds.isNotEmpty()
-
-    val channels = selectedChannels ?: openChannels
-
     val sparkState by wallet.sparkState.collectAsStateWithLifecycle()
+    val sparkSats = sparkState.spendingSats
+
+    // Spark counts as one more item: the selection list is offered once there are two to choose from.
+    val hasMultiple = openChannels.size + (if (sparkSats > 0uL) 1 else 0) > 1
+
+    val selection by transfer.savingsSelection.collectAsStateWithLifecycle()
+    val hasSelected = !selection.isAll
+
+    val channels = selection.channels(openChannels)
+    val withdrawsSpark = selection.withdrawsSpark(sparkSats)
+
     val channelsAmount = channels.sumOf { it.amountOnClose }
-    val amount = channelsAmount + sparkState.spendingSats
+    val sparkAmount = if (withdrawsSpark) sparkSats else 0uL
 
     val swapState by transfer.savingsSwapState.collectAsStateWithLifecycle()
+    val sparkFeeSats by transfer.sparkWithdrawFeeSats.collectAsStateWithLifecycle()
 
     // Pull the latest node balances so a just-received payment is reflected in the amounts below.
     LaunchedEffect(Unit) {
@@ -98,13 +100,20 @@ fun SavingsConfirmScreen(
     }
 
     // Present the swap fee before the user commits. Recomputed when the amount changes.
+    // A zero amount clears an earlier quote, so a Spark-only transfer never swaps channel funds.
     LaunchedEffect(channelsAmount) {
-        if (channelsAmount > 0uL) transfer.loadSavingsSwapQuote(channelsAmount)
+        transfer.loadSavingsSwapQuote(channelsAmount)
+    }
+
+    LaunchedEffect(withdrawsSpark, sparkSats) {
+        if (withdrawsSpark) transfer.loadSparkWithdrawFee()
     }
 
     Box {
         SavingsConfirmContent(
-            fallbackAmount = amount,
+            fallbackAmount = channelsAmount,
+            sparkAmount = sparkAmount,
+            sparkFeeSats = sparkFeeSats.takeIf { withdrawsSpark },
             isSwapEnabled = swapState.isSwapEnabled,
             quote = swapState.quote,
             isQuoteLoading = swapState.isLoading,
@@ -116,13 +125,13 @@ fun SavingsConfirmScreen(
             onBackClick = onBackClick,
             onAmountClick = { currency.switchUnit() },
             onAdvancedClick = onAdvancedClick,
-            onSelectAllClick = { transfer.setSelectedChannelIds(emptySet()) },
+            onSelectAllClick = { transfer.setSavingsSelection(SavingsSelection()) },
             onSwipeConfirm = {
-                transfer.onTransferToSavingsConfirm(channels)
+                transfer.onTransferToSavingsConfirm(channels, withdrawsSpark)
                 onConfirm()
             },
             onCloseConfirm = {
-                transfer.onTransferToSavingsConfirm(channels, SavingsTransferMode.CLOSE)
+                transfer.onTransferToSavingsConfirm(channels, withdrawsSpark, SavingsTransferMode.CLOSE)
                 onConfirm()
             },
         )
@@ -142,6 +151,8 @@ fun SavingsConfirmScreen(
 @Composable
 private fun SavingsConfirmContent(
     fallbackAmount: ULong,
+    sparkAmount: ULong,
+    sparkFeeSats: ULong?,
     isSwapEnabled: Boolean,
     quote: SavingsSwapQuote?,
     isQuoteLoading: Boolean,
@@ -158,7 +169,9 @@ private fun SavingsConfirmContent(
     onCloseConfirm: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    val headlineAmount = quote?.amountSat ?: fallbackAmount
+    val headlineAmount = (quote?.amountSat ?: fallbackAmount).safe() + sparkAmount.safe()
+    val sparkReceive = sparkAmount.safe() - (sparkFeeSats ?: 0uL).safe()
+    val receiveAmount = (quote?.receiveSat ?: 0uL).safe() + sparkReceive.safe()
     // Only show the swap-pricing spinner while swaps are enabled and a quote is still being fetched;
     // otherwise the swipe just falls back to closing the channel and there is nothing to wait for.
     val isPricingSwap = isSwapEnabled && quote == null && isQuoteLoading
@@ -203,11 +216,11 @@ private fun SavingsConfirmContent(
                 ) {
                     FeeInfo(
                         label = stringResource(R.string.lightning__savings_confirm__amount),
-                        amount = quote.amountSat.toLong(),
+                        amount = headlineAmount.toLong(),
                     )
                     FeeInfo(
                         label = stringResource(R.string.lightning__savings_confirm__receive),
-                        amount = quote.receiveSat.toLong(),
+                        amount = receiveAmount.toLong(),
                     )
                 }
 
@@ -219,6 +232,19 @@ private fun SavingsConfirmContent(
                         min = minSat.toLong(),
                         max = maxSat.toLong(),
                         onValueChange = onAmountChange,
+                    )
+                }
+            }
+
+            if (sparkFeeSats != null) {
+                VerticalSpacer(if (quote != null) 0.dp else 24.dp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.height(IntrinsicSize.Min),
+                ) {
+                    FeeInfo(
+                        label = stringResource(R.string.lightning__savings_confirm__spark_fee),
+                        amount = sparkFeeSats.toLong(),
                     )
                 }
             }
@@ -302,6 +328,8 @@ private fun SavingsConfirmScreenPreview() {
     AppThemeSurface {
         SavingsConfirmContent(
             fallbackAmount = 50_123u,
+            sparkAmount = 12_000u,
+            sparkFeeSats = 1_470u,
             isSwapEnabled = true,
             quote = SavingsSwapQuote(
                 amountSat = 50_123u,

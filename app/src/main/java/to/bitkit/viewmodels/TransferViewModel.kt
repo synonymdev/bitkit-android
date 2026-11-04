@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.BoltzPairInfo
 import com.synonym.bitkitcore.BoltzSwapEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -67,8 +68,11 @@ class TransferViewModel @Inject constructor(
     private val _isForceTransferLoading = MutableStateFlow(false)
     val isForceTransferLoading = _isForceTransferLoading.asStateFlow()
 
-    private val _selectedChannelIdsState = MutableStateFlow<Set<String>>(emptySet())
-    val selectedChannelIdsState = _selectedChannelIdsState.asStateFlow()
+    private val _savingsSelection = MutableStateFlow(SavingsSelection())
+    val savingsSelection = _savingsSelection.asStateFlow()
+
+    private val _sparkWithdrawFeeSats = MutableStateFlow<ULong?>(null)
+    val sparkWithdrawFeeSats = _sparkWithdrawFeeSats.asStateFlow()
 
     private val isNodeRunning = lightningRepo.lightningState.map { it.nodeStatus?.isRunning ?: false }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
@@ -76,6 +80,7 @@ class TransferViewModel @Inject constructor(
     // region Savings
 
     private var channelsToClose = emptyList<ChannelDetails>()
+    private var withdrawsSpark = false
 
     /**
      * How the LN -> onchain "transfer to savings" is executed. Closing a channel is the
@@ -113,6 +118,11 @@ class TransferViewModel @Inject constructor(
     fun loadSavingsSwapQuote(requestedSat: ULong) {
         if (!boltzService.isSwapSupported) return
         savingsSwapQuoteJob?.cancel()
+        if (requestedSat == 0uL) {
+            pendingSwapAmountSat = 0uL
+            _savingsSwapState.update { it.copy(isLoading = false, quote = null, minSat = 0uL, maxSat = 0uL) }
+            return
+        }
         savingsSwapQuoteJob = viewModelScope.launch {
             val isSwapEnabled = boltzService.isSwapEnabled()
             _savingsSwapState.update { it.copy(isSwapEnabled = isSwapEnabled) }
@@ -202,7 +212,7 @@ class TransferViewModel @Inject constructor(
     fun startSavingsSwap() {
         if (savingsSwapJob?.isActive == true || _savingsSwapResult.value != null) return
         savingsSwapJob = viewModelScope.launch {
-            withdrawSparkToSavings()
+            if (withdrawsSpark) withdrawSparkToSavings()
             val result = executeSavingsSwap()
             _savingsSwapResult.update { result }
         }
@@ -282,8 +292,20 @@ class TransferViewModel @Inject constructor(
         return SavingsSwapResult.Failure(event.reason.toUserMessage(context))
     }
 
-    fun setSelectedChannelIds(channelIds: Set<String>) {
-        _selectedChannelIdsState.update { channelIds }
+    fun setSavingsSelection(selection: SavingsSelection) {
+        _savingsSelection.update { selection }
+    }
+
+    /** Prices Spark's withdrawal to savings for the confirm screen; null until priced or when it can't be. */
+    fun loadSparkWithdrawFee() {
+        viewModelScope.launch {
+            _sparkWithdrawFeeSats.update { null }
+            val address = walletRepo.getOnchainAddress().ifBlank { lightningRepo.newAddress().getOrNull() }
+                ?: return@launch
+            sparkRepo.estimateWithdrawAllFeeSats(address)
+                .onSuccess { fee -> _sparkWithdrawFeeSats.update { fee } }
+                .onFailure { Logger.warn("Failed to estimate Spark withdrawal fee", it, context = TAG) }
+        }
     }
 
     /**
@@ -293,24 +315,30 @@ class TransferViewModel @Inject constructor(
      */
     fun onTransferToSavingsConfirm(
         channels: List<ChannelDetails>,
-        mode: SavingsTransferMode = resolveSavingsTransferMode(),
+        withdrawSpark: Boolean,
+        mode: SavingsTransferMode = resolveSavingsTransferMode(channels),
     ) {
         _savingsTransferMode.update { mode }
         // Drop any outcome from an earlier attempt so the progress screen cannot act on it.
         _savingsSwapResult.update { null }
-        _selectedChannelIdsState.update { emptySet() }
+        _savingsSelection.update { SavingsSelection() }
         channelsToClose = channels
+        withdrawsSpark = withdrawSpark
     }
 
-    private fun resolveSavingsTransferMode(): SavingsTransferMode =
-        if (_savingsSwapState.value.quote != null) SavingsTransferMode.SWAP else SavingsTransferMode.CLOSE
+    private fun resolveSavingsTransferMode(channels: List<ChannelDetails>): SavingsTransferMode =
+        if (channels.isNotEmpty() && _savingsSwapState.value.quote != null) {
+            SavingsTransferMode.SWAP
+        } else {
+            SavingsTransferMode.CLOSE
+        }
 
     /** Whether Transfer to Savings closes channels, rather than only withdrawing Spark's balance. */
     fun hasChannelsToClose(): Boolean = channelsToClose.isNotEmpty()
 
-    /** Withdraws Spark's balance, then closes the channels selected earlier, pending closure */
+    /** Withdraws Spark's balance when selected, then closes the channels selected earlier, pending closure */
     suspend fun closeSelectedChannels(): List<ChannelDetails> {
-        withdrawSparkToSavings()
+        if (withdrawsSpark) withdrawSparkToSavings()
         return closeChannels(channelsToClose)
     }
 
@@ -463,6 +491,23 @@ class TransferViewModel @Inject constructor(
         /** Minimum sats held back from a swap to cover Lightning routing fees. */
         private const val MIN_LN_ROUTING_FEE_RESERVE_SATS = 10L
     }
+}
+
+/**
+ * What Transfer to Savings moves: the open channels picked in [channelIds], null for all of them, and whether
+ * Spark's balance goes too. The default moves everything.
+ */
+@Immutable
+data class SavingsSelection(
+    val channelIds: ImmutableSet<String>? = null,
+    val includesSpark: Boolean = true,
+) {
+    val isAll: Boolean get() = channelIds == null && includesSpark
+
+    fun channels(openChannels: List<ChannelDetails>): List<ChannelDetails> =
+        channelIds?.let { ids -> openChannels.filter { it.channelId in ids } } ?: openChannels
+
+    fun withdrawsSpark(sparkSats: ULong): Boolean = includesSpark && sparkSats > 0uL
 }
 
 /** Whether a transfer to savings swaps funds out or closes a channel (default). */

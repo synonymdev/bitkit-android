@@ -5,6 +5,7 @@ import app.cash.turbine.test
 import com.synonym.bitkitcore.BoltzPairInfo
 import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.ReverseSwapResponse
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,14 +24,16 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.SparkRepo
+import to.bitkit.repositories.SparkState
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.test.idleSparkRepo
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
@@ -52,7 +55,8 @@ class TransferViewModelTest : BaseUnitTest() {
     private val transferRepo = mock<TransferRepo>()
     private val clock = mock<Clock>()
     private val boltzService = mock<BoltzService>()
-    private val sparkRepo = idleSparkRepo()
+    private val sparkState = MutableStateFlow(SparkState())
+    private val sparkRepo = mock<SparkRepo>()
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val boltzEvents = MutableSharedFlow<BoltzSwapEvent>(extraBufferCapacity = 8)
@@ -69,6 +73,11 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(boltzService.isSwapSupported).thenReturn(true)
         whenever { boltzService.isSwapEnabled() }.thenReturn(true)
+        whenever(sparkRepo.state).thenReturn(sparkState)
+        whenever { sparkRepo.withdrawAll(any()) }.thenReturn(Result.success(Unit))
+        whenever(walletRepo.getOnchainAddress()).thenReturn(CLAIM_ADDRESS)
+        whenever { lightningRepo.newAddress() }.thenReturn(Result.success(CLAIM_ADDRESS))
+        whenever { lightningRepo.closeChannel(any(), any(), anyOrNull()) }.thenReturn(Result.success(Unit))
 
         sut = TransferViewModel(
             context = context,
@@ -82,12 +91,103 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `transfer to savings with only spark doesn't wait for a lightning peer`() = test {
-        sut.onTransferToSavingsConfirm(channels = emptyList(), mode = SavingsTransferMode.CLOSE)
+    fun `savings selection moves everything by default`() {
+        val selection = SavingsSelection()
 
+        assertTrue(selection.isAll)
+        assertEquals(listOf(CHANNEL_A, CHANNEL_B), selection.channels(listOf(CHANNEL_A, CHANNEL_B)))
+        assertTrue(selection.withdrawsSpark(SPARK_SATS))
+        assertFalse(selection.withdrawsSpark(0uL))
+    }
+
+    @Test
+    fun `savings selection moves only the picked channels and spark`() {
+        val channelsOnly = SavingsSelection(channelIds = persistentSetOf(CHANNEL_B.channelId), includesSpark = false)
+        val sparkOnly = SavingsSelection(channelIds = persistentSetOf(), includesSpark = true)
+
+        assertFalse(channelsOnly.isAll)
+        assertEquals(listOf(CHANNEL_B), channelsOnly.channels(listOf(CHANNEL_A, CHANNEL_B)))
+        assertFalse(channelsOnly.withdrawsSpark(SPARK_SATS))
+        assertFalse(sparkOnly.isAll)
+        assertTrue(sparkOnly.channels(listOf(CHANNEL_A, CHANNEL_B)).isEmpty())
+        assertTrue(sparkOnly.withdrawsSpark(SPARK_SATS))
+    }
+
+    @Test
+    fun `transfer to savings with only spark withdraws spark and closes no channel`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
         assertFalse(sut.hasChannelsToClose())
         assertTrue(sut.closeSelectedChannels().isEmpty())
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS)
         verify(lightningRepo, never()).awaitPeerConnected(any())
+        verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `transfer to savings with only channels leaves spark untouched`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_B), withdrawSpark = false)
+
+        assertTrue(sut.closeSelectedChannels().isEmpty())
+        verify(sparkRepo, never()).withdrawAll(any())
+        verify(lightningRepo).closeChannel(CHANNEL_B, false, null)
+        verify(lightningRepo, never()).closeChannel(CHANNEL_A, false, null)
+    }
+
+    @Test
+    fun `transfer to savings with channels and spark moves both`() = test {
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A, CHANNEL_B), withdrawSpark = true)
+
+        assertTrue(sut.closeSelectedChannels().isEmpty())
+        verify(sparkRepo).withdrawAll(CLAIM_ADDRESS)
+        verify(lightningRepo).closeChannel(CHANNEL_A, false, null)
+        verify(lightningRepo).closeChannel(CHANNEL_B, false, null)
+    }
+
+    @Test
+    fun `transfer to savings with only spark ignores a quote left from a channel selection`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+        assertNotNull(sut.savingsSwapState.value.quote)
+
+        sut.loadSavingsSwapQuote(0uL)
+        advanceUntilIdle()
+        assertNull(sut.savingsSwapState.value.quote)
+
+        sut.onTransferToSavingsConfirm(channels = emptyList(), withdrawSpark = true)
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+    }
+
+    @Test
+    fun `swap to savings withdraws spark only when it is selected`() = test {
+        stubSavingsSwapHappyPath()
+        sparkState.value = SparkState(balanceSats = SPARK_SATS)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.onTransferToSavingsConfirm(channels = listOf(CHANNEL_A), withdrawSpark = false)
+        assertEquals(SavingsTransferMode.SWAP, sut.savingsTransferMode.value)
+        sut.startSavingsSwap()
+        advanceUntilIdle()
+
+        verify(sparkRepo, never()).withdrawAll(any())
+        verify(lightningRepo, never()).closeChannel(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `loadSparkWithdrawFee publishes spark's withdrawal fee`() = test {
+        whenever(sparkRepo.estimateWithdrawAllFeeSats(CLAIM_ADDRESS)).thenReturn(Result.success(SPARK_FEE))
+
+        sut.loadSparkWithdrawFee()
+        advanceUntilIdle()
+
+        assertEquals(SPARK_FEE, sut.sparkWithdrawFeeSats.value)
     }
 
     @Test
@@ -123,7 +223,7 @@ class TransferViewModelTest : BaseUnitTest() {
         assertNull(state.quote)
         assertEquals(0uL, state.maxSat)
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(emptyList(), withdrawSpark = false)
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
 
         sut.startSavingsSwap()
@@ -143,7 +243,7 @@ class TransferViewModelTest : BaseUnitTest() {
         assertNull(sut.savingsSwapState.value.quote)
         assertFalse(sut.savingsSwapState.value.isLoading)
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(emptyList(), withdrawSpark = false)
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
     }
 
@@ -158,7 +258,7 @@ class TransferViewModelTest : BaseUnitTest() {
         assertEquals(SavingsSwapUiState(), sut.savingsSwapState.value)
         verify(boltzService, never()).reverseLimits(anyOrNull())
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(emptyList(), withdrawSpark = false)
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
     }
 
@@ -173,7 +273,7 @@ class TransferViewModelTest : BaseUnitTest() {
         assertEquals(SavingsSwapUiState(), sut.savingsSwapState.value)
         verify(boltzService, never()).reverseLimits(anyOrNull())
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(emptyList(), withdrawSpark = false)
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
     }
 
@@ -184,10 +284,10 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(listOf(CHANNEL_A), withdrawSpark = false)
         assertEquals(SavingsTransferMode.SWAP, sut.savingsTransferMode.value)
 
-        sut.onTransferToSavingsConfirm(emptyList(), SavingsTransferMode.CLOSE)
+        sut.onTransferToSavingsConfirm(listOf(CHANNEL_A), withdrawSpark = false, SavingsTransferMode.CLOSE)
         assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
     }
 
@@ -201,7 +301,7 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(SavingsSwapResult.Failure(PAY_ERROR), sut.savingsSwapResult.value)
 
-        sut.onTransferToSavingsConfirm(emptyList())
+        sut.onTransferToSavingsConfirm(emptyList(), withdrawSpark = false)
 
         assertNull(sut.savingsSwapResult.value)
     }
@@ -362,6 +462,10 @@ class TransferViewModelTest : BaseUnitTest() {
     )
 
     private companion object {
+        val CHANNEL_A = createChannelDetails().copy(channelId = "channel_a")
+        val CHANNEL_B = createChannelDetails().copy(channelId = "channel_b")
+        const val SPARK_SATS = 40_000uL
+        const val SPARK_FEE = 1_470uL
         const val TXID = "tx-abc"
         const val SPENDABLE_LN = 150_000uL
         const val REQUESTED_SAT = 200_000uL
