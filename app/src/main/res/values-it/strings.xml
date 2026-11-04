@@ -1220,6 +1220,10 @@
     <string name="hardware__remove_keep_error">Impossibile mantenere i tag di questo wallet nel backup. Riprova, oppure rimuovilo senza mantenerli.</string>
     <string name="hardware__rename_error">Impossibile rinominare l\'hardware wallet. Riprova.</string>
     <string name="hardware__search_error">Impossibile cercare hardware wallet. Controlla la connessione e riprova.</string>
+    <string name="hardware__send_again">Invia di nuovo</string>
+    <string name="hardware__send_already_sent_text">Questo pagamento è già stato inviato il %1$s. Inviarlo di nuovo?</string>
+    <string name="hardware__send_already_sent_text_undated">Questo pagamento è già stato inviato. Inviarlo di nuovo?</string>
+    <string name="hardware__send_already_sent_title">Pagamento già inviato</string>
     <string name="hardware__send_broadcast_accepted">La rete ha accettato questo pagamento. Si completerà non appena il tuo wallet vedrà la transazione.</string>
     <string name="hardware__send_broadcast_failed_text">Controlla la connessione e riprova.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento non confermato</string>
@@ -1234,6 +1238,7 @@
     <string name="hardware__send_open_connect">Apri Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">Firma con Jade</string>
     <string name="hardware__send_sign_title">Firma con il Dispositivo</string>
+    <string name="hardware__send_view_sent">Vedi pagamento</string>
     <string name="hardware__verify_address">Verifica sul Dispositivo</string>
     <string name="hardware__verify_address_error">Verifica dell\'indirizzo non riuscita. Controlla l\'indirizzo sul tuo dispositivo e riprova.</string>
     <string name="hardware__wallet_mismatch">Questo dispositivo contiene un wallet diverso da quello associato. Connetti il wallet associato o aggiungi questo come nuovo hardware wallet.</string>

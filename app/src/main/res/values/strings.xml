@@ -232,6 +232,10 @@
     <string name="hardware__remove_keep_error">Could not keep this wallet\'s tags in your backup. Try again, or remove it without keeping them.</string>
     <string name="hardware__rename_error">Could not rename the hardware wallet. Please try again.</string>
     <string name="hardware__search_error">Could not search for hardware wallets. Check your connection and try again.</string>
+    <string name="hardware__send_again">Send again</string>
+    <string name="hardware__send_already_sent_text">This payment was already sent on %1$s. Send it again?</string>
+    <string name="hardware__send_already_sent_text_undated">This payment was already sent. Send it again?</string>
+    <string name="hardware__send_already_sent_title">Payment already sent</string>
     <string name="hardware__send_broadcast_accepted">The network accepted this payment. It completes once your wallet sees the transaction.</string>
     <string name="hardware__send_broadcast_failed_text">Check your connection and try again.</string>
     <string name="hardware__send_broadcast_failed_title">Payment not confirmed</string>
@@ -246,6 +250,7 @@
     <string name="hardware__send_open_connect">Open Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">Sign With Jade</string>
     <string name="hardware__send_sign_title">Sign With Device</string>
+    <string name="hardware__send_view_sent">View payment</string>
     <string name="hardware__verify_address">Verify on Device</string>
     <string name="hardware__verify_address_error">Address verification failed. Check the address on your device and try again.</string>
     <string name="hardware__wallet_mismatch">This device holds a different wallet than the one you paired. Connect the paired wallet, or add this one as a new hardware wallet.</string>

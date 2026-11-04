@@ -1224,6 +1224,10 @@
     <string name="hardware__remove_keep_error">No se pudieron conservar las etiquetas de esta billetera en su copia de seguridad. Vuelva a intentarlo o quítela sin conservarlas.</string>
     <string name="hardware__rename_error">No se pudo renombrar la billetera de hardware. Inténtelo de nuevo.</string>
     <string name="hardware__search_error">No se pudieron buscar billeteras de hardware. Revise su conexión y vuelva a intentarlo.</string>
+    <string name="hardware__send_again">Enviar de nuevo</string>
+    <string name="hardware__send_already_sent_text">Este pago ya se envió el %1$s. ¿Desea enviarlo de nuevo?</string>
+    <string name="hardware__send_already_sent_text_undated">Este pago ya se envió. ¿Desea enviarlo de nuevo?</string>
+    <string name="hardware__send_already_sent_title">Pago ya enviado</string>
     <string name="hardware__send_broadcast_accepted">La red aceptó este pago. Se completará cuando su billetera vea la transacción.</string>
     <string name="hardware__send_broadcast_failed_text">Revise su conexión y vuelva a intentarlo.</string>
     <string name="hardware__send_broadcast_failed_title">Pago no confirmado</string>
@@ -1238,6 +1242,7 @@
     <string name="hardware__send_open_connect">Abrir Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">Firmar con Jade</string>
     <string name="hardware__send_sign_title">Firmar con el dispositivo</string>
+    <string name="hardware__send_view_sent">Ver pago</string>
     <string name="hardware__verify_address">Verificar en el dispositivo</string>
     <string name="hardware__verify_address_error">Falló la verificación de la dirección. Revise la dirección en su dispositivo y vuelva a intentarlo.</string>
     <string name="hardware__wallet_mismatch">Este dispositivo contiene una billetera distinta a la que vinculó. Conecte la billetera vinculada o añada esta como una nueva billetera de hardware.</string>

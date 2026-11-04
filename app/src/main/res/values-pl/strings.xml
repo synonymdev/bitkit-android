@@ -1221,6 +1221,10 @@
     <string name="hardware__remove_keep_error">Nie udało się zachować tagów tego portfela w kopii zapasowej. Spróbuj ponownie lub usuń go bez ich zachowywania.</string>
     <string name="hardware__rename_error">Nie udało się zmienić nazwy portfela sprzętowego. Spróbuj ponownie.</string>
     <string name="hardware__search_error">Nie udało się wyszukać portfeli sprzętowych. Sprawdź połączenie i spróbuj ponownie.</string>
+    <string name="hardware__send_again">Wyślij ponownie</string>
+    <string name="hardware__send_already_sent_text">Ta płatność została już wysłana %1$s. Wysłać ją ponownie?</string>
+    <string name="hardware__send_already_sent_text_undated">Ta płatność została już wysłana. Wysłać ją ponownie?</string>
+    <string name="hardware__send_already_sent_title">Płatność została już wysłana</string>
     <string name="hardware__send_broadcast_accepted">Sieć przyjęła tę płatność. Zostanie zakończona, gdy Twój portfel zobaczy transakcję.</string>
     <string name="hardware__send_broadcast_failed_text">Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_title">Płatność niepotwierdzona</string>
@@ -1235,6 +1239,7 @@
     <string name="hardware__send_open_connect">Otwórz Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">Podpisz za pomocą Jade</string>
     <string name="hardware__send_sign_title">Podpisz urządzeniem</string>
+    <string name="hardware__send_view_sent">Zobacz płatność</string>
     <string name="hardware__verify_address">Zweryfikuj na urządzeniu</string>
     <string name="hardware__verify_address_error">Weryfikacja adresu nie powiodła się. Sprawdź adres na urządzeniu i spróbuj ponownie.</string>
     <string name="hardware__wallet_mismatch">To urządzenie zawiera inny portfel niż sparowany. Połącz sparowany portfel lub dodaj ten jako nowy portfel sprzętowy.</string>

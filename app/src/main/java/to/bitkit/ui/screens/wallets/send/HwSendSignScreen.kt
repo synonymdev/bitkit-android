@@ -111,6 +111,24 @@ fun HwSendSignScreen(
         onOpenConnect = signAndBroadcast,
     )
 
+    uiState.alreadySentSend?.let { alreadySent ->
+        AppAlertDialog(
+            title = stringResource(R.string.hardware__send_already_sent_title),
+            text = if (alreadySent.sentAt.isEmpty()) {
+                stringResource(R.string.hardware__send_already_sent_text_undated)
+            } else {
+                stringResource(R.string.hardware__send_already_sent_text, alreadySent.sentAt)
+            },
+            confirmText = stringResource(R.string.hardware__send_again),
+            dismissText = stringResource(R.string.hardware__send_view_sent),
+            onConfirm = {
+                viewModel.confirmSendAgain()
+                signAndBroadcast()
+            },
+            onDismiss = viewModel::showAlreadySentSend,
+        )
+    }
+
     if (uiState.unreadableHeldSendsWalletId != null) {
         AppAlertDialog(
             title = stringResource(R.string.hardware__held_sends_unreadable_title),

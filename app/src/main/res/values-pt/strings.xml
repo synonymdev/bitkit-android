@@ -1189,6 +1189,10 @@
     <string name="hardware__remove_keep_error">Não foi possível manter as etiquetas desta carteira na cópia de segurança. Tente novamente ou remova-a sem as manter.</string>
     <string name="hardware__rename_error">Não foi possível mudar o nome da carteira de hardware. Tente novamente.</string>
     <string name="hardware__search_error">Não foi possível procurar carteiras de hardware. Verifique a ligação e tente novamente.</string>
+    <string name="hardware__send_again">Enviar novamente</string>
+    <string name="hardware__send_already_sent_text">Este pagamento já foi enviado em %1$s. Enviar novamente?</string>
+    <string name="hardware__send_already_sent_text_undated">Este pagamento já foi enviado. Enviar novamente?</string>
+    <string name="hardware__send_already_sent_title">Pagamento já enviado</string>
     <string name="hardware__send_broadcast_accepted">A rede aceitou este pagamento. Fica concluído assim que a sua carteira vir a transação.</string>
     <string name="hardware__send_broadcast_failed_text">Verifique a ligação e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento não confirmado</string>
@@ -1203,6 +1207,7 @@
     <string name="hardware__send_open_connect">Abrir Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">Assinar com o Jade</string>
     <string name="hardware__send_sign_title">Assinar com o dispositivo</string>
+    <string name="hardware__send_view_sent">Ver pagamento</string>
     <string name="hardware__verify_address">Verificar no dispositivo</string>
     <string name="hardware__verify_address_error">Falha na verificação do endereço. Verifique o endereço no seu dispositivo e tente novamente.</string>
     <string name="hardware__wallet_mismatch">Este dispositivo contém uma carteira diferente da que emparelhou. Ligue a carteira emparelhada ou adicione esta como nova carteira de hardware.</string>

@@ -1222,6 +1222,10 @@
     <string name="hardware__remove_keep_error">Tagy této peněženky se nepodařilo ponechat v záloze. Zkuste to znovu, nebo ji odeberte bez jejich ponechání.</string>
     <string name="hardware__rename_error">Hardwarovou peněženku se nepodařilo přejmenovat. Zkuste to prosím znovu.</string>
     <string name="hardware__search_error">Hardwarové peněženky se nepodařilo vyhledat. Zkontrolujte připojení a zkuste to znovu.</string>
+    <string name="hardware__send_again">Odeslat znovu</string>
+    <string name="hardware__send_already_sent_text">Tato platba již byla odeslána %1$s. Odeslat ji znovu?</string>
+    <string name="hardware__send_already_sent_text_undated">Tato platba již byla odeslána. Odeslat ji znovu?</string>
+    <string name="hardware__send_already_sent_title">Platba již byla odeslána</string>
     <string name="hardware__send_broadcast_accepted">Síť tuto platbu přijala. Dokončí se, jakmile vaše peněženka transakci uvidí.</string>
     <string name="hardware__send_broadcast_failed_text">Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="hardware__send_broadcast_failed_title">Platba nebyla potvrzena</string>
@@ -1236,6 +1240,7 @@
     <string name="hardware__send_open_connect">Otevřít Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">Podepsat pomocí Jade</string>
     <string name="hardware__send_sign_title">Podepsat zařízením</string>
+    <string name="hardware__send_view_sent">Zobrazit platbu</string>
     <string name="hardware__verify_address">Ověřit na zařízení</string>
     <string name="hardware__verify_address_error">Ověření adresy se nezdařilo. Zkontrolujte adresu na zařízení a zkuste to znovu.</string>
     <string name="hardware__wallet_mismatch">Toto zařízení obsahuje jinou peněženku než tu, kterou jste spárovali. Připojte spárovanou peněženku, nebo tuto přidejte jako novou hardwarovou peněženku.</string>

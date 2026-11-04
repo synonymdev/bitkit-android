@@ -1197,6 +1197,10 @@
     <string name="hardware__remove_keep_error">Δεν ήταν δυνατή η διατήρηση των ετικετών αυτού του πορτοφολιού στο αντίγραφο ασφαλείας. Δοκίμασε ξανά ή αφαίρεσέ το χωρίς να τις διατηρήσεις.</string>
     <string name="hardware__rename_error">Δεν ήταν δυνατή η μετονομασία του πορτοφολιού υλικού. Δοκίμασε ξανά.</string>
     <string name="hardware__search_error">Δεν ήταν δυνατή η αναζήτηση πορτοφολιών υλικού. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
+    <string name="hardware__send_again">Αποστολή ξανά</string>
+    <string name="hardware__send_already_sent_text">Αυτή η πληρωμή έχει ήδη σταλεί στις %1$s. Να σταλεί ξανά;</string>
+    <string name="hardware__send_already_sent_text_undated">Αυτή η πληρωμή έχει ήδη σταλεί. Να σταλεί ξανά;</string>
+    <string name="hardware__send_already_sent_title">Η πληρωμή έχει ήδη σταλεί</string>
     <string name="hardware__send_broadcast_accepted">Το δίκτυο αποδέχτηκε αυτή την πληρωμή. Θα ολοκληρωθεί μόλις το πορτοφόλι σου δει τη συναλλαγή.</string>
     <string name="hardware__send_broadcast_failed_text">Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="hardware__send_broadcast_failed_title">Η πληρωμή δεν επιβεβαιώθηκε</string>
@@ -1211,6 +1215,7 @@
     <string name="hardware__send_open_connect">Άνοιγμα Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">Υπογραφή με Jade</string>
     <string name="hardware__send_sign_title">Υπογραφή με συσκευή</string>
+    <string name="hardware__send_view_sent">Προβολή πληρωμής</string>
     <string name="hardware__verify_address">Επαλήθευση στη συσκευή</string>
     <string name="hardware__verify_address_error">Η επαλήθευση της διεύθυνσης απέτυχε. Έλεγξε τη διεύθυνση στη συσκευή σου και δοκίμασε ξανά.</string>
     <string name="hardware__wallet_mismatch">Αυτή η συσκευή περιέχει διαφορετικό πορτοφόλι από αυτό που συζεύχθηκε. Σύνδεσε το συζευγμένο πορτοφόλι ή πρόσθεσε αυτό ως νέο πορτοφόλι υλικού.</string>

@@ -1193,6 +1193,31 @@ class HwWalletRepo @Inject constructor(
     init {
         observeWatcherEvents()
         syncWatchers()
+        releaseSeenHeldSends()
+    }
+
+    private fun releaseSeenHeldSends() {
+        scope.launch {
+            activities.collect { activities ->
+                // A held send its wallet has seen went out, so it is recorded with its tags and released, and a later
+                // send of the same payment is a new one. A replaced transaction no longer exists and is not seen.
+                val seen = activities.filterIsInstance<Activity.Onchain>()
+                    .filter { it.v1.doesExist }
+                    .associate { (it.v1.walletId to it.v1.txId.lowercase()) to it.v1.id }
+                if (seen.isEmpty()) return@collect
+                runSuspendCatching {
+                    val held = hwHeldSendStore.load().heldSends.filter { (it.walletId to it.txId.lowercase()) in seen }
+                    if (held.isEmpty()) return@runSuspendCatching
+                    held.filter { it.tags.isNotEmpty() }.forEach { send ->
+                        val activityId = seen.getValue(send.walletId to send.txId.lowercase())
+                        activityRepo.addTagsToActivity(activityId, send.tags, send.walletId)
+                            .onFailure { Logger.warn("Failed to tag seen held send '${send.txId}'", it, context = TAG) }
+                    }
+                    hwHeldSendStore.releaseHeldSends(held.mapTo(mutableSetOf()) { it.txId })
+                    Logger.info("Released '${held.size}' held hardware sends their wallets have seen", context = TAG)
+                }.onFailure { Logger.warn("Failed to release seen held hardware sends", it, context = TAG) }
+            }
+        }
     }
 
     private fun observeWatcherEvents() {

@@ -1191,6 +1191,10 @@
     <string name="hardware__remove_keep_error">تعذر الاحتفاظ بعلامات هذه المحفظة في نسختك الاحتياطية. حاول مرة أخرى، أو أزلها دون الاحتفاظ بها.</string>
     <string name="hardware__rename_error">تعذرت إعادة تسمية محفظة الأجهزة. يرجى المحاولة مرة أخرى.</string>
     <string name="hardware__search_error">تعذر البحث عن محافظ الأجهزة. تحقق من اتصالك وحاول مرة أخرى.</string>
+    <string name="hardware__send_again">إرسال مرة أخرى</string>
+    <string name="hardware__send_already_sent_text">تم إرسال هذه الدفعة بالفعل في %1$s. هل تريد إرسالها مرة أخرى؟</string>
+    <string name="hardware__send_already_sent_text_undated">تم إرسال هذه الدفعة بالفعل. هل تريد إرسالها مرة أخرى؟</string>
+    <string name="hardware__send_already_sent_title">تم إرسال الدفعة بالفعل</string>
     <string name="hardware__send_broadcast_accepted">قبلت الشبكة هذه الدفعة. تكتمل بمجرد أن ترى محفظتك المعاملة.</string>
     <string name="hardware__send_broadcast_failed_text">تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="hardware__send_broadcast_failed_title">الدفعة غير مؤكدة</string>
@@ -1205,6 +1209,7 @@
     <string name="hardware__send_open_connect">فتح Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">التوقيع باستخدام Jade</string>
     <string name="hardware__send_sign_title">التوقيع بالجهاز</string>
+    <string name="hardware__send_view_sent">عرض الدفعة</string>
     <string name="hardware__verify_address">التحقق على الجهاز</string>
     <string name="hardware__verify_address_error">فشل التحقق من العنوان. تحقق من العنوان على جهازك وحاول مرة أخرى.</string>
     <string name="hardware__wallet_mismatch">يحتوي هذا الجهاز على محفظة مختلفة عن التي أقرنتها. وصّل المحفظة المقترنة، أو أضف هذه كمحفظة أجهزة جديدة.</string>

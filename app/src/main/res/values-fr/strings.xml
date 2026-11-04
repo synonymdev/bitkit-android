@@ -1218,6 +1218,10 @@
     <string name="hardware__remove_keep_error">Impossible de garder les étiquettes de ce portefeuille dans votre sauvegarde. Réessayez ou retirez-le sans les garder.</string>
     <string name="hardware__rename_error">Impossible de renommer le portefeuille matériel. Veuillez réessayer.</string>
     <string name="hardware__search_error">Impossible de rechercher des portefeuilles matériels. Vérifiez votre connexion et réessayez.</string>
+    <string name="hardware__send_again">Envoyer à nouveau</string>
+    <string name="hardware__send_already_sent_text">Ce paiement a déjà été envoyé le %1$s. L\'envoyer à nouveau ?</string>
+    <string name="hardware__send_already_sent_text_undated">Ce paiement a déjà été envoyé. L\'envoyer à nouveau ?</string>
+    <string name="hardware__send_already_sent_title">Paiement déjà envoyé</string>
     <string name="hardware__send_broadcast_accepted">Le réseau a accepté ce paiement. Il sera finalisé dès que votre portefeuille verra la transaction.</string>
     <string name="hardware__send_broadcast_failed_text">Vérifiez votre connexion et réessayez.</string>
     <string name="hardware__send_broadcast_failed_title">Paiement non confirmé</string>
@@ -1232,6 +1236,7 @@
     <string name="hardware__send_open_connect">Ouvrir Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">Signer avec Jade</string>
     <string name="hardware__send_sign_title">Signer avec l\'appareil</string>
+    <string name="hardware__send_view_sent">Voir le paiement</string>
     <string name="hardware__verify_address">Vérifier sur l\'appareil</string>
     <string name="hardware__verify_address_error">Échec de la vérification de l\'adresse. Vérifiez l\'adresse sur votre appareil et réessayez.</string>
     <string name="hardware__wallet_mismatch">Cet appareil contient un autre portefeuille que celui que vous avez associé. Connectez le portefeuille associé ou ajoutez celui-ci comme nouveau portefeuille matériel.</string>

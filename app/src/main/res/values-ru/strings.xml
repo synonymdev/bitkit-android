@@ -1239,6 +1239,10 @@
     <string name="hardware__remove_keep_error">Не удалось сохранить теги этого кошелька в резервной копии. Попробуйте снова или удалите его без сохранения тегов.</string>
     <string name="hardware__rename_error">Не удалось переименовать аппаратный кошелёк. Пожалуйста, попробуйте снова.</string>
     <string name="hardware__search_error">Не удалось найти аппаратные кошельки. Проверьте подключение и попробуйте снова.</string>
+    <string name="hardware__send_again">Отправить снова</string>
+    <string name="hardware__send_already_sent_text">Этот платёж уже был отправлен %1$s. Отправить его снова?</string>
+    <string name="hardware__send_already_sent_text_undated">Этот платёж уже был отправлен. Отправить его снова?</string>
+    <string name="hardware__send_already_sent_title">Платёж уже отправлен</string>
     <string name="hardware__send_broadcast_accepted">Сеть приняла этот платёж. Он завершится, как только ваш кошелёк увидит транзакцию.</string>
     <string name="hardware__send_broadcast_failed_text">Проверьте подключение и попробуйте снова.</string>
     <string name="hardware__send_broadcast_failed_title">Платёж не подтверждён</string>
@@ -1253,6 +1257,7 @@
     <string name="hardware__send_open_connect">Открыть Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">Подписать на Jade</string>
     <string name="hardware__send_sign_title">Подписать на Устройстве</string>
+    <string name="hardware__send_view_sent">Посмотреть платёж</string>
     <string name="hardware__verify_address">Проверить на Устройстве</string>
     <string name="hardware__verify_address_error">Проверка адреса не удалась. Сверьте адрес на устройстве и попробуйте снова.</string>
     <string name="hardware__wallet_mismatch">На этом устройстве другой кошелёк, а не тот, который вы сопрягли. Подключите сопряжённый кошелёк или добавьте этот как новый аппаратный кошелёк.</string>

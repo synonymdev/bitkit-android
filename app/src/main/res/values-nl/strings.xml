@@ -1215,6 +1215,10 @@
     <string name="hardware__remove_keep_error">Kon de tags van deze wallet niet in uw backup bewaren. Probeer het opnieuw, of verwijder de wallet zonder ze te bewaren.</string>
     <string name="hardware__rename_error">Kon de naam van de hardwarewallet niet wijzigen. Probeer het opnieuw.</string>
     <string name="hardware__search_error">Kon niet zoeken naar hardwarewallets. Controleer uw verbinding en probeer het opnieuw.</string>
+    <string name="hardware__send_again">Opnieuw verzenden</string>
+    <string name="hardware__send_already_sent_text">Deze betaling is al verzonden op %1$s. Opnieuw verzenden?</string>
+    <string name="hardware__send_already_sent_text_undated">Deze betaling is al verzonden. Opnieuw verzenden?</string>
+    <string name="hardware__send_already_sent_title">Betaling al verzonden</string>
     <string name="hardware__send_broadcast_accepted">Het netwerk heeft deze betaling geaccepteerd. Ze wordt voltooid zodra uw wallet de transactie ziet.</string>
     <string name="hardware__send_broadcast_failed_text">Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="hardware__send_broadcast_failed_title">Betaling niet bevestigd</string>
@@ -1229,6 +1233,7 @@
     <string name="hardware__send_open_connect">Trezor Connect openen</string>
     <string name="hardware__send_open_connect_jade">Ondertekenen met Jade</string>
     <string name="hardware__send_sign_title">Ondertekenen met apparaat</string>
+    <string name="hardware__send_view_sent">Betaling bekijken</string>
     <string name="hardware__verify_address">Verifiëren op apparaat</string>
     <string name="hardware__verify_address_error">Adresverificatie mislukt. Controleer het adres op uw apparaat en probeer het opnieuw.</string>
     <string name="hardware__wallet_mismatch">Dit apparaat bevat een andere wallet dan de wallet die u hebt gekoppeld. Verbind de gekoppelde wallet, of voeg deze toe als nieuwe hardwarewallet.</string>

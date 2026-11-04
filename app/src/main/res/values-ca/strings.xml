@@ -1216,6 +1216,10 @@
     <string name="hardware__remove_keep_error">No s\'han pogut conservar les etiquetes d\'aquesta cartera a la còpia de seguretat. Torna-ho a provar o elimina-la sense conservar-les.</string>
     <string name="hardware__rename_error">No s\'ha pogut canviar el nom de la cartera de maquinari. Torna-ho a provar.</string>
     <string name="hardware__search_error">No s\'han pogut cercar carteres de maquinari. Comprova la connexió i torna-ho a provar.</string>
+    <string name="hardware__send_again">Tornar a enviar</string>
+    <string name="hardware__send_already_sent_text">Aquest pagament ja es va enviar el %1$s. El vols tornar a enviar?</string>
+    <string name="hardware__send_already_sent_text_undated">Aquest pagament ja es va enviar. El vols tornar a enviar?</string>
+    <string name="hardware__send_already_sent_title">Pagament ja enviat</string>
     <string name="hardware__send_broadcast_accepted">La xarxa ha acceptat aquest pagament. Es completarà quan la teva cartera vegi la transacció.</string>
     <string name="hardware__send_broadcast_failed_text">Comprova la connexió i torna-ho a provar.</string>
     <string name="hardware__send_broadcast_failed_title">Pagament no confirmat</string>
@@ -1230,6 +1234,7 @@
     <string name="hardware__send_open_connect">Obrir Trezor Connect</string>
     <string name="hardware__send_open_connect_jade">Signar amb Jade</string>
     <string name="hardware__send_sign_title">Signar amb el dispositiu</string>
+    <string name="hardware__send_view_sent">Veure el pagament</string>
     <string name="hardware__verify_address">Verificar al dispositiu</string>
     <string name="hardware__verify_address_error">Ha fallat la verificació de l\'adreça. Comprova l\'adreça al teu dispositiu i torna-ho a provar.</string>
     <string name="hardware__wallet_mismatch">Aquest dispositiu conté una cartera diferent de la que has vinculat. Connecta la cartera vinculada o afegeix aquesta com a nova cartera de maquinari.</string>

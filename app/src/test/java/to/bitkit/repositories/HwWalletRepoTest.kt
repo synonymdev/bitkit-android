@@ -170,6 +170,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever { activityRepo.getTagMetadataForWallet(any()) }.thenReturn(Result.success(emptyList()))
         whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }.thenReturn(Result.success(Unit))
         whenever { hwWalletStore.setPendingName(any(), anyOrNull()) }.thenReturn(Unit)
+        whenever { hwHeldSendStore.load() }.thenReturn(HwHeldSendData())
     }
 
     @Test
@@ -382,6 +383,46 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertNull(sut.heldSendFor("other-wallet", HELD_ADDRESS, 25_000uL).getOrThrow())
         verify(hwHeldSendStore, never()).releaseHeldSends(any())
     }
+
+    @Test
+    fun `a held send its wallet has seen is tagged and released, unless the transaction was replaced`() = test {
+        val held = HeldHwSend(
+            walletId = HARDWARE_WALLET_ID,
+            txId = "T1",
+            address = HELD_ADDRESS,
+            amountSats = 25_000uL,
+            satsPerVByte = 2uL,
+            tags = listOf("rent"),
+            serializedTx = "00",
+            miningFeeSats = 200uL,
+            feeRate = 2uL,
+            totalSpent = 25_200uL,
+        )
+        whenever(hwHeldSendStore.load()).thenReturn(HwHeldSendData(heldSends = listOf(held)))
+        whenever(activityRepo.addTagsToActivity(any(), any(), any())).thenReturn(Result.success(Unit))
+        createRepo()
+
+        emitSent(watcherActivity(amount = 25_000uL, txid = "t1", txType = PaymentType.SENT, doesExist = false))
+        verify(hwHeldSendStore, never()).releaseHeldSends(any())
+
+        emitSent(watcherActivity(amount = 25_000uL, txid = "t1", txType = PaymentType.SENT))
+        inOrder(activityRepo, hwHeldSendStore) {
+            verify(activityRepo).addTagsToActivity("t1", listOf("rent"), HARDWARE_WALLET_ID)
+            verify(hwHeldSendStore).releaseHeldSends(setOf("T1"))
+        }
+    }
+
+    private suspend fun emitSent(activity: Activity) = watcherEvents.emit(
+        "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
+            balance = walletBalance(total = 0uL),
+            activities = listOf(activity),
+            transactionDetails = emptyList(),
+            txCount = 1u,
+            blockHeight = 850_000u,
+            accountType = AccountType.NATIVE_SEGWIT,
+            nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
+        )
+    )
 
     @Test
     fun `an unreadable held send refuses sends of its wallet, and of every wallet when its wallet is unreadable`() =
@@ -2651,6 +2692,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         confirmations: UInt = 3u,
         fee: ULong = 0uL,
         walletId: String = HARDWARE_WALLET_ID,
+        doesExist: Boolean = true,
     ) = Activity.Onchain(
         OnchainActivity.create(
             walletId = walletId,
@@ -2662,6 +2704,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             address = "",
             timestamp = timestamp ?: 0uL,
             confirmed = blockHeight != null && confirmations > 0u,
+            doesExist = doesExist,
         )
     )
 

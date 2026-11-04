@@ -6,6 +6,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.OnchainActivity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
@@ -35,6 +36,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.R
 import to.bitkit.data.HeldHwSend
 import to.bitkit.data.HwHeldSendsUnreadableError
+import to.bitkit.ext.formatToString
 import to.bitkit.ext.isBroadcastConnectivityFailure
 import to.bitkit.ext.isHardwareBroadcastInputsSpent
 import to.bitkit.ext.isHardwareBroadcastNeverConfirmable
@@ -166,28 +168,9 @@ class HwSendViewModel @Inject constructor(
                     } else {
                         null
                     }
-                    if (held != null && isSeenByWallet(request.walletId, held.txId)) {
-                        // It went out, so it is recorded and shown as sent; only a new send signs it again
-                        Logger.info("Recorded held hardware send '${held.txId}' the wallet has seen", context = TAG)
-                        val heldPayment = held.toPendingBroadcast(request)
-                        val signedTx = heldPayment.signedTx
-                        val result = HwFundingBroadcastResult(
-                            txId = held.txId,
-                            miningFeeSats = signedTx.miningFeeSats,
-                            feeRate = signedTx.feeRate,
-                            totalSpent = signedTx.totalSpent,
-                        )
-                        runSuspendCatching { persistResult(heldPayment.request, result) }
-                            .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
-                        releaseHeldSend(held.txId)
-                        pendingResult.update {
-                            HwSendResult(
-                                walletId = request.walletId,
-                                txId = held.txId,
-                                amountSats = request.amountSats,
-                                paymentIdentity = request.paymentIdentity,
-                            )
-                        }
+                    val seen = held?.let { seenActivityOf(request.walletId, it.txId, hwWalletRepo.activities.value) }
+                    if (held != null && seen != null) {
+                        recordSeenHeldSend(held, request, seen)
                         return@runCatching
                     }
                     if (held != null) {
@@ -404,6 +387,41 @@ class HwSendViewModel @Inject constructor(
         }
     }
 
+    private suspend fun recordSeenHeldSend(held: HeldHwSend, request: HwSendRequest, seen: OnchainActivity) {
+        // It went out, so it is recorded and released, and the user decides whether to send the same payment again
+        Logger.info("Recorded held hardware send '${held.txId}' the wallet has seen", context = TAG)
+        val heldPayment = held.toPendingBroadcast(request)
+        val signedTx = heldPayment.signedTx
+        val result = HwFundingBroadcastResult(
+            txId = held.txId,
+            miningFeeSats = signedTx.miningFeeSats,
+            feeRate = signedTx.feeRate,
+            totalSpent = signedTx.totalSpent,
+        )
+        // A failed save still releases the hold: the wallet has the transaction, so it is never lost
+        runSuspendCatching { persistResult(heldPayment.request, result) }
+            .onFailure { Logger.error("Failed to persist seen hardware send '${held.txId}'", it, context = TAG) }
+        releaseHeldSend(held.txId)
+        val send = HwSendResult(
+            walletId = request.walletId,
+            txId = held.txId,
+            amountSats = request.amountSats,
+            paymentIdentity = request.paymentIdentity,
+        )
+        val sentAt = seen.timestamp.takeIf { it > 0uL }.formatToString().orEmpty()
+        _uiState.update { it.copy(alreadySentSend = AlreadySentHwSend(send, sentAt)) }
+    }
+
+    /** Shows the payment the user tried to make again as the one already sent. */
+    fun showAlreadySentSend() {
+        val alreadySent = _uiState.value.alreadySentSend ?: return
+        _uiState.update { it.copy(alreadySentSend = null) }
+        pendingResult.update { alreadySent.send }
+    }
+
+    /** Lets the user sign the payment again, as a new one beside the one already sent. */
+    fun confirmSendAgain() = _uiState.update { it.copy(alreadySentSend = null) }
+
     private suspend fun markDispatched(payment: PendingHwSendBroadcast, isDispatched: AtomicBoolean) {
         val request = payment.request
         request.paymentRequestId?.let {
@@ -528,8 +546,12 @@ class HwSendViewModel @Inject constructor(
     }
 
     private fun isSeenByWallet(walletId: String, txId: String): Boolean =
-        hwWalletRepo.activities.value.filterIsInstance<Activity.Onchain>().any {
-            it.v1.walletId == walletId && it.v1.txId.equals(txId, ignoreCase = true)
+        seenActivityOf(walletId, txId, hwWalletRepo.activities.value) != null
+
+    private fun seenActivityOf(walletId: String, txId: String, activities: List<Activity>): OnchainActivity? =
+        activities.filterIsInstance<Activity.Onchain>().map { it.v1 }.firstOrNull {
+            // A replaced transaction no longer exists, so it does not count as sent
+            it.walletId == walletId && it.txId.equals(txId, ignoreCase = true) && it.doesExist
         }
 
     private suspend fun toastNotSent(@StringRes description: Int) = ToastEventBus.send(
@@ -552,11 +574,7 @@ class HwSendViewModel @Inject constructor(
         val unresolved = UnresolvedHwSend(payment, send)
         unresolvedSends.put(txId, unresolved)?.watch?.cancel()
         unresolved.watch = viewModelScope.launch {
-            hwWalletRepo.activities.first { activities ->
-                activities.filterIsInstance<Activity.Onchain>().any {
-                    it.v1.walletId == send.walletId && it.v1.txId.equals(send.txId, ignoreCase = true)
-                }
-            }
+            hwWalletRepo.activities.first { seenActivityOf(send.walletId, send.txId, it) != null }
             completeUnresolvedSend(unresolved)
         }
         _uiState.update {
@@ -977,6 +995,8 @@ data class HwSendUiState(
     /** Sends whose broadcast may have gone out: each is pending until it is sent, and is never signed again. */
     val unresolvedSends: ImmutableList<HwSendResult> = persistentListOf(),
     val retryingSendTxIds: ImmutableSet<String> = persistentSetOf(),
+    /** A payment the user tried to make again that its wallet has already sent, waiting for their choice. */
+    val alreadySentSend: AlreadySentHwSend? = null,
     /** The wallet whose sends are refused because an earlier held send of it cannot be read. */
     val unreadableHeldSendsWalletId: String? = null,
 ) {
@@ -996,6 +1016,8 @@ data class HwSendResult(
     val paymentRequestId: PaykitPaymentRequestId? = null,
     val paymentIdentity: String? = null,
 )
+
+data class AlreadySentHwSend(val send: HwSendResult, val sentAt: String)
 
 sealed interface HeldHwSendEvent {
     val send: HwSendResult

@@ -1229,16 +1229,18 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a held payment the wallet has seen is recorded as sent instead of signed again`() = test {
+    fun `a held payment the wallet has seen is recorded, then shown as sent unless sent again`() = test {
         val fixture = stubSuccessfulPayment()
         whenever(hwWalletRepo.heldSendFor(WALLET_ID, ADDRESS, AMOUNT_SATS))
             .thenReturn(Result.success(heldSend(fixture.signedTx)))
         walletActivities.value = persistentListOf(sentActivity())
+        val held = HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)
 
         sut.signAndBroadcast(request())
         advanceUntilIdle()
 
-        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.results.first())
+        assertEquals(held, sut.uiState.value.alreadySentSend?.send)
+        assertTrue(sut.uiState.value.alreadySentSend?.sentAt?.isNotEmpty() == true)
         verify(hwWalletRepo, never()).signFunding(any(), any())
         verify(hwWalletRepo, never()).broadcastFunding(any(), anyOrNull())
         inOrder(activityService, hwWalletRepo) {
@@ -1254,6 +1256,47 @@ class HwSendViewModelTest : BaseUnitTest() {
             )
             verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
         }
+
+        sut.showAlreadySentSend()
+
+        assertNull(sut.uiState.value.alreadySentSend)
+        assertEquals(held, sut.results.first())
+    }
+
+    @Test
+    fun `a held payment the wallet has seen is signed anew only when the user sends it again`() = test {
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.heldSendFor(WALLET_ID, ADDRESS, AMOUNT_SATS))
+            .thenReturn(Result.success(heldSend(fixture.signedTx)), Result.success(null))
+        walletActivities.value = persistentListOf(sentActivity())
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+
+        sut.confirmSendAgain()
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertNull(sut.uiState.value.alreadySentSend)
+        verify(hwWalletRepo, times(1)).signFunding(WALLET_ID, fixture.funding)
+        assertEquals(fixture.broadcast.txId, sut.results.first().txId)
+    }
+
+    @Test
+    fun `a replaced transaction does not count as sent`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        walletActivities.value = persistentListOf(sentActivity(doesExist = false))
+        advanceUntilIdle()
+
+        assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
+        verify(hwWalletRepo, never()).releaseHeldSend(any())
     }
 
     @Test
@@ -2421,7 +2464,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         activities = persistentListOf(),
     )
 
-    private fun sentActivity(walletId: String = WALLET_ID) = Activity.Onchain(
+    private fun sentActivity(walletId: String = WALLET_ID, doesExist: Boolean = true) = Activity.Onchain(
         OnchainActivity.create(
             walletId = walletId,
             id = SIGNED_TXID,
@@ -2431,6 +2474,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             fee = 1_000uL,
             address = ADDRESS,
             timestamp = 1_700_000_000uL,
+            doesExist = doesExist,
         )
     )
 
