@@ -54,7 +54,7 @@ class SparkExitAlertsTest {
     }
 
     @Test
-    fun `posts each lost leaf event, and a failure unless every leaf was claimed`() {
+    fun `posts each lost leaf event, and a failure unless every leaf was lost`() {
         val lost = running.copy(lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 16_384uL)))
         val claimed = lost.copy(phase = Phase.Failed(SparkExitDriver.LOST_REASON))
         val stopped = running.copy(phase = Phase.Failed(SparkExitDriver.NO_LEAF_REASON))
@@ -63,9 +63,16 @@ class SparkExitAlertsTest {
         assertEquals(listOf(SparkExitAlert.Lost), SparkExitAlerts.losses(claimed, running))
         assertEquals(emptyList(), SparkExitAlerts.losses(claimed, lost))
         assertEquals(listOf(SparkExitAlert.Failed), SparkExitAlerts.losses(stopped, running))
+        // Every leaf lost says it alone, whatever the reason; a leaf left behind as well also fails the exit.
+        val stoppedLost = stopped.copy(lostLeaves = lost.lostLeaves)
+        assertEquals(listOf(SparkExitAlert.Lost), SparkExitAlerts.losses(stoppedLost, running))
+        val leftBehind = SparkExitRecord.LeftBehindLeaf("leaf-2", 4_000uL, "Not recoverable at this fee rate")
         assertEquals(
             listOf(SparkExitAlert.Lost, SparkExitAlert.Failed),
-            SparkExitAlerts.losses(stopped.copy(lostLeaves = lost.lostLeaves), running),
+            SparkExitAlerts.losses(
+                stoppedLost.copy(leafIds = listOf("leaf-1", "leaf-2"), leftBehindLeaves = listOf(leftBehind)),
+                running,
+            ),
         )
         assertEquals(emptyList(), SparkExitAlerts.losses(stopped, stopped))
         assertEquals(emptyList(), SparkExitAlerts.losses(SparkExitFixtures.record(Phase.Done), running))
