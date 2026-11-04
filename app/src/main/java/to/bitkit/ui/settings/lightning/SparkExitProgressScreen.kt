@@ -143,6 +143,7 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState) 
                 address = address,
                 requiredSats = funding.sats,
                 seenSats = 0uL,
+                partial = funding.partial,
             )
             is SparkExitFundingState.Paid -> SparkExitTxNote(
                 text = stringResource(R.string.lightning__spark_exit__fund_paid),

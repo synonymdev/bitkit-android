@@ -8,6 +8,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
@@ -234,7 +235,7 @@ class SparkExitFundingTest {
         assertEquals(SparkExitFundingState.Paid("paid"), SparkExitMath.fundingState(record, utxos = null))
         // Confirmed but short: only the rest is asked for.
         val paidShort = listOf(SparkExitFixtures.utxo("paid", value = 15_000uL))
-        assertEquals(SparkExitFundingState.Ask(5_000uL), SparkExitMath.fundingState(record, paidShort))
+        assertEquals(SparkExitFundingState.Ask(5_000uL, 15_000uL), SparkExitMath.fundingState(record, paidShort))
         // Once adopted, a later shortfall no longer reads as paid.
         val topUp = record.copy(
             phase = SparkExitRecord.Phase.NeedsFunding(30_000uL),
@@ -249,7 +250,7 @@ class SparkExitFundingTest {
         val seen = listOf(SparkExitFixtures.utxo("ext", value = 20_000uL, confirmed = false))
         assertEquals(SparkExitFundingState.Seen("ext"), SparkExitMath.fundingState(record, seen))
         val partial = listOf(SparkExitFixtures.utxo("ext", value = 8_000uL, confirmed = false))
-        assertEquals(SparkExitFundingState.Ask(12_000uL), SparkExitMath.fundingState(record, partial))
+        assertEquals(SparkExitFundingState.Ask(12_000uL, 8_000uL), SparkExitMath.fundingState(record, partial))
         assertNull(SparkExitMath.fundingState(record.copy(phase = SparkExitRecord.Phase.Running), seen))
     }
 
@@ -272,5 +273,20 @@ class SparkExitFundingTest {
         assertEquals(4u, SparkExitMath.nextFundingIndex(kept = 4, stored = old))
         val later = old.copy(funding = old.funding.map { it.copy(index = 6u) })
         assertEquals(7u, SparkExitMath.nextFundingIndex(kept = 4, stored = later))
+    }
+
+    @Test
+    fun `a partial payment shows what arrived and what is still due`() {
+        val partial = SparkExitPartialFunding(8_000uL, 20_000uL, 12_000uL)
+        assertEquals(partial, SparkExitMath.partialFunding(8_000uL, 20_000uL))
+        assertNull(SparkExitMath.partialFunding(0uL, 20_000uL))
+        assertNull(SparkExitMath.partialFunding(20_000uL, 20_000uL))
+
+        // On Progress the top-up counts only new funding, unconfirmed included, against the shortfall.
+        val record = SparkExitFixtures.record()
+        val seen = listOf(SparkExitFixtures.utxo("ext", value = 8_000uL, confirmed = false))
+        val ask = assertIs<SparkExitFundingState.Ask>(SparkExitMath.fundingState(record, seen))
+        assertEquals(partial, ask.partial)
+        assertNull(SparkExitFundingState.Ask(20_000uL).partial)
     }
 }

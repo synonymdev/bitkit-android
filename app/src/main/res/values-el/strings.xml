@@ -244,6 +244,7 @@
     <string name="lightning__spark_exit__fund_external_text">Send at least {amount} to this address. The exit starts once it confirms.</string>
     <string name="lightning__spark_exit__fund_insufficient">Your savings can\'t cover the fee funding.</string>
     <string name="lightning__spark_exit__fund_paid">Paid from savings, waiting for confirmation.</string>
+    <string name="lightning__spark_exit__fund_partial">{received} of {required} received, send {missing} more.</string>
     <string name="lightning__spark_exit__fund_pending">Payment seen, waiting for confirmation.</string>
     <string name="lightning__spark_exit__fund_savings">Pay from savings</string>
     <string name="lightning__spark_exit__fund_seen">Payment seen.</string>
@@ -260,7 +261,7 @@
     <string name="lightning__spark_exit__leftover_sending">Sending {amount} of leftover fee funding to savings.</string>
     <string name="lightning__spark_exit__leftover_swept">{amount} of leftover fee funding was sent to savings.</string>
     <string name="lightning__spark_exit__leftover_txid">Transaction ID: {txid}</string>
-    <string name="lightning__spark_exit__lost_leaves">{amount} was claimed on-chain by an older state of this wallet and can\'t be recovered.</string>
+    <string name="lightning__spark_exit__lost_leaves">{amount} was claimed on-chain by an older owner of these funds and can\'t be recovered.</string>
     <string name="lightning__spark_exit__nav_title">Emergency Exit</string>
     <string name="lightning__spark_exit__needs_funding_text">The exit needs &lt;accent&gt;{amount}&lt;/accent&gt; more to pay its fees. Fund it to continue.</string>
     <string name="lightning__spark_exit__needs_funding_title">More fees\n&lt;accent&gt;needed&lt;/accent&gt;</string>

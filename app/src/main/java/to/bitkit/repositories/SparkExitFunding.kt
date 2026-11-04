@@ -223,7 +223,13 @@ object SparkExitMath {
             val txid = (fresh.firstOrNull { !it.status.confirmed } ?: fresh.first()).txid
             return SparkExitFundingState.Seen(txid)
         }
-        return SparkExitFundingState.Ask(shortfall - seen)
+        return SparkExitFundingState.Ask(shortfall - seen, receivedSats = seen)
+    }
+
+    /** What reached the funding address against [requiredSats], once some but not all of it did; else null. */
+    fun partialFunding(receivedSats: ULong, requiredSats: ULong): SparkExitPartialFunding? {
+        if (receivedSats == 0uL || receivedSats >= requiredSats) return null
+        return SparkExitPartialFunding(receivedSats, requiredSats, requiredSats - receivedSats)
     }
 
     /** Every confirmed UTXO of new funding, the largest first, once together they cover [requiredSats]. */
@@ -308,9 +314,15 @@ sealed interface SparkExitFundingState {
     /** A payment covering it, [txid] among them, was seen and waits to confirm. */
     data class Seen(val txid: String) : SparkExitFundingState
 
-    /** [sats] are still missing at the funding address. */
-    data class Ask(val sats: ULong) : SparkExitFundingState
+    /** [sats] are still missing at the funding address, after [receivedSats] of new funding seen there. */
+    data class Ask(val sats: ULong, val receivedSats: ULong = 0uL) : SparkExitFundingState {
+        val partial: SparkExitPartialFunding?
+            get() = SparkExitMath.partialFunding(receivedSats, sats.safe() + receivedSats.safe())
+    }
 }
+
+/** A funding payment short of what is needed: [receivedSats] of [requiredSats] arrived, [missingSats] still due. */
+data class SparkExitPartialFunding(val receivedSats: ULong, val requiredSats: ULong, val missingSats: ULong)
 
 /** When to warn that the exit fell behind, and when its next step's operator window closes, both from now. */
 data class SparkExitDeadline(val warnIn: Duration, val deadlineIn: Duration)

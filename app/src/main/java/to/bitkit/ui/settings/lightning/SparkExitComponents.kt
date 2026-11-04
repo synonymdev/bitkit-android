@@ -22,6 +22,7 @@ import breez_sdk_spark.RecoverFundsResponse
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.repositories.SparkExitMath
+import to.bitkit.repositories.SparkExitPartialFunding
 import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.ui.components.BodyS
@@ -60,13 +61,14 @@ private fun SparkExitAmountRow(label: String, sats: ULong) {
     SectionRow(name = label, valueContent = { MoneyCaptionB(sats = sats.toLong(), symbol = true) })
 }
 
-/** The funding address as QR and text, which copies it on tap, with what it must receive. */
+/** The funding address as QR and text, which copies it on tap, with what it must receive and what arrived so far. */
 @Composable
 internal fun SparkExitFundingAddress(
     address: String,
     requiredSats: ULong,
     seenSats: ULong,
     modifier: Modifier = Modifier,
+    partial: SparkExitPartialFunding? = SparkExitMath.partialFunding(seenSats, requiredSats),
 ) {
     val context = LocalContext.current
     Column(
@@ -90,6 +92,18 @@ internal fun SparkExitFundingAddress(
                 .clickableAlpha { context.setClipboardText(address) }
                 .testTag("SparkExitFundingAddress")
         )
+        partial?.let {
+            BodyS(
+                text = stringResource(R.string.lightning__spark_exit__fund_partial)
+                    .replace("{received}", sparkExitAmountText(it.receivedSats))
+                    .replace("{required}", sparkExitAmountText(it.requiredSats))
+                    .replace("{missing}", sparkExitAmountText(it.missingSats)),
+                color = Colors.White64,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("SparkExitFundingPartial")
+            )
+        }
         if (requiredSats > 0uL && seenSats >= requiredSats) {
             CaptionM(
                 text = stringResource(R.string.lightning__spark_exit__fund_seen).withAccent(),
