@@ -135,8 +135,8 @@ class MainActivity : FragmentActivity() {
                 val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
                 val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
                 val keepActive by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
-                val walletExists = walletViewModel.walletExists
                 val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
+                val walletExists = walletState.walletExists
                 val walletResetRecovery = walletState.walletResetRecovery
                 val isCheckingRNMigration by walletViewModel.isCheckingRNMigration.collectAsStateWithLifecycle()
                 val isRNMigrationUnavailable by walletViewModel.isRNMigrationUnavailable.collectAsStateWithLifecycle()

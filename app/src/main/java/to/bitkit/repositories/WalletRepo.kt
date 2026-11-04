@@ -101,7 +101,18 @@ class WalletRepo @Inject constructor(
     init {
         repoScope.launch {
             profileRemovalStore.walletResetRecovery.collect { recovery ->
-                _walletState.update { it.copy(walletResetRecovery = recovery) }
+                runSuspendCatching {
+                    _walletState.update {
+                        it.copy(
+                            walletExists =
+                            if (recovery == WalletResetRecovery.Clear) walletExists() else it.walletExists,
+                            walletResetRecovery = recovery,
+                        )
+                    }
+                }.onFailure {
+                    _walletState.update { it.copy(walletResetRecovery = WalletResetRecovery.Unavailable) }
+                    Logger.warn("Failed to refresh wallet existence for reset recovery", it, context = TAG)
+                }
             }
         }
         repoScope.launch {
@@ -711,7 +722,9 @@ class WalletRepo @Inject constructor(
         }
 
     fun resetState() {
-        _walletState.update { WalletState() }
+        _walletState.update {
+            WalletState(walletExists = it.walletExists, walletResetRecovery = it.walletResetRecovery)
+        }
         _balanceState.update { BalanceState() }
     }
 

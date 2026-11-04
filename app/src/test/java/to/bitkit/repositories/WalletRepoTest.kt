@@ -52,6 +52,7 @@ import to.bitkit.data.ProfileRemovalScope
 import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WalletResetRecovery
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
@@ -2077,6 +2078,55 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
         assertTrue(sut.walletState.value.bip21.contains(INVOICE_REPLACEMENT))
+    }
+
+    @Test
+    fun `completed wallet reset publishes current credential absence with clear recovery`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sut.setWalletExistsState()
+        testScheduler.runCurrent()
+        val attempt = "00000000-0000-0000-0000-000000000001"
+        profileRemovalStore.withAccess(attempt, ProfileRemovalScope.WALLET_WIPE) {
+            profileRemovalStore.begin(attempt)
+            testScheduler.runCurrent()
+            assertEquals(WalletResetRecovery.Pending(attempt), sut.walletState.value.walletResetRecovery)
+            assertTrue(sut.walletState.value.walletExists)
+
+            whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(false)
+            profileRemovalStore.complete(attempt)
+            testScheduler.runCurrent()
+
+            assertEquals(WalletResetRecovery.Clear, sut.walletState.value.walletResetRecovery)
+            assertFalse(sut.walletState.value.walletExists)
+        }
+    }
+
+    @Test
+    fun `unreadable wallet presence keeps completed reset unavailable until refresh`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sut.setWalletExistsState()
+        testScheduler.runCurrent()
+        val attempt = "00000000-0000-0000-0000-000000000002"
+        profileRemovalStore.withAccess(attempt, ProfileRemovalScope.WALLET_WIPE) {
+            profileRemovalStore.begin(attempt)
+            testScheduler.runCurrent()
+            whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenAnswer { throw error }
+            profileRemovalStore.complete(attempt)
+            testScheduler.runCurrent()
+
+            assertEquals(WalletResetRecovery.Unavailable, sut.walletState.value.walletResetRecovery)
+            assertTrue(sut.walletState.value.walletExists)
+
+            sut.resetState()
+            assertEquals(WalletResetRecovery.Unavailable, sut.walletState.value.walletResetRecovery)
+            assertTrue(sut.walletState.value.walletExists)
+
+            doReturn(false).whenever(keychain).exists(Keychain.Key.BIP39_MNEMONIC.name)
+            sut.refreshWalletResetRecovery()
+            testScheduler.runCurrent()
+            assertEquals(WalletResetRecovery.Clear, sut.walletState.value.walletResetRecovery)
+            assertFalse(sut.walletState.value.walletExists)
+        }
     }
 
     @Test

@@ -7,8 +7,11 @@ import com.synonym.paykit.PaykitException
 import com.synonym.vssclient.VssItem
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -20,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
@@ -100,6 +104,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import javax.inject.Provider
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -255,9 +260,13 @@ class BackupRepoTest : BaseUnitTest() {
             sut.startObservingBackups()
             runCurrent()
             verify(vssBackupClient, times(1)).setupWithRetry(any(), any(), any())
+            assertTrue(statuses.value.getValue(BackupCategory.SETTINGS).running)
             val recovery = connectionRecoveryFixture(settingsStore, keychain, vssClients)
             assertFailsWith<BackupRepoTestError> {
-                recovery.withIdentityChange { throw BackupRepoTestError("credentials unchanged") }
+                recovery.withIdentityChange {
+                    assertFalse(statuses.value.getValue(BackupCategory.SETTINGS).running)
+                    throw BackupRepoTestError("credentials unchanged")
+                }
             }
             runCurrent()
             verify(vssBackupClient, times(2)).setupWithRetry(any(), any(), any())
@@ -267,6 +276,82 @@ class BackupRepoTest : BaseUnitTest() {
             verify(vssBackupClient, times(1)).putObject(eq(BackupCategory.SETTINGS.name), any())
         } finally {
             sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `retired replacement reservation cannot leave a cancelled backup running`() = test {
+        for (retireBeforeCleanup in listOf(true, false)) {
+            val category = BackupCategory.SETTINGS
+            val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+            stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+            stubBackupObservers()
+            val finishCleanup = CompletableDeferred<Unit>()
+            var holdCleanup = false
+            var cleanupEntered = false
+            var holdDispatch = false
+            val queued = mutableListOf<Pair<CoroutineContext, Runnable>>()
+            val delegate = StandardTestDispatcher(testScheduler)
+
+            @OptIn(InternalCoroutinesApi::class)
+            val dispatcher = object : CoroutineDispatcher(), Delay by (delegate as Delay) {
+                override fun dispatch(context: CoroutineContext, block: Runnable) {
+                    if (holdDispatch) queued += context to block else delegate.dispatch(context, block)
+                }
+            }
+            sut = createSut(ioDispatcher = dispatcher)
+            whenever(cacheStore.updateBackupStatus(any(), any())).doSuspendableAnswer {
+                val target = it.getArgument<BackupCategory>(0)
+                val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
+                if (target == category && holdCleanup && !cleanupEntered) {
+                    cleanupEntered = true
+                    finishCleanup.await()
+                }
+                statuses.update { it + (target to transform(it[target] ?: BackupItemStatus())) }
+            }
+            try {
+                sut.startObservingBackups()
+                runCurrent()
+                assertTrue(statuses.value.getValue(category).running)
+                holdCleanup = true
+                sut.stopObservingBackups()
+                runCurrent()
+                assertTrue(cleanupEntered)
+
+                holdDispatch = true
+                sut.scheduleFullBackup()
+                holdDispatch = false
+                assertTrue(queued.isNotEmpty())
+                if (retireBeforeCleanup) {
+                    val retiring = launch(start = CoroutineStart.UNDISPATCHED) {
+                        vssClients.withSuspendedClients(shutdown = {}) {
+                            assertFalse(statuses.value.getValue(category).running)
+                        }
+                    }
+                    assertNull(vssClients.owners.value)
+                    finishCleanup.complete(Unit)
+                    runCurrent()
+                    retiring.join()
+                } else {
+                    finishCleanup.complete(Unit)
+                    runCurrent()
+                    vssClients.withSuspendedClients(shutdown = {}) {
+                        assertFalse(statuses.value.getValue(category).running)
+                    }
+                }
+                queued.forEach { (context, block) -> delegate.dispatch(context, block) }
+                queued.clear()
+                runCurrent()
+
+                assertFalse(statuses.value.getValue(category).running)
+                assertTrue(statuses.value.getValue(category).isRequired)
+                verify(vssBackupClient, never()).putObject(eq(category.name), any())
+            } finally {
+                holdDispatch = false
+                finishCleanup.complete(Unit)
+                queued.forEach { (context, block) -> delegate.dispatch(context, block) }
+                sut.reset()
+            }
         }
     }
 
@@ -396,6 +481,7 @@ class BackupRepoTest : BaseUnitTest() {
             runCurrent()
 
             assertTrue(statuses.value.getValue(BackupCategory.WALLET).isRequired)
+            assertTrue(statuses.value.getValue(BackupCategory.WALLET).running)
             verify(privatePaykitRepo, never()).backupSnapshot()
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
 
@@ -2127,6 +2213,83 @@ class BackupRepoTest : BaseUnitTest() {
 
             verify(context, atLeastOnce()).getString(R.string.settings__backup__failed_title)
         } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `scheduled backup stays running until completion or observation stops`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        stubBackupStatuses(statuses, CompletableDeferred(Unit)) {}
+        stubBackupObservers()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            advanceTimeBy(4_999)
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            verify(vssBackupClient, never()).putObject(eq(category.name), any())
+
+            sut.stopObservingBackups()
+            runCurrent()
+            assertFalse(statuses.value.getValue(category).running)
+            assertTrue(statuses.value.getValue(category).isRequired)
+
+            sut.startObservingBackups()
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).running)
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `delayed startup cleanup preserves a newly scheduled backup status`() = test {
+        val category = BackupCategory.SETTINGS
+        val statuses = MutableStateFlow(mapOf(category to BackupItemStatus(required = 1_000)))
+        val finishSetup = CompletableDeferred<Unit>()
+        val finishCleanup = CompletableDeferred<Unit>()
+        var cleanupEntered = false
+        whenever(vssBackupClient.setupWithRetry(any(), any(), any())).doSuspendableAnswer {
+            finishSetup.await()
+            Result.success(Unit)
+        }
+        whenever(cacheStore.backupStatuses).thenReturn(statuses)
+        whenever(cacheStore.updateBackupStatus(any(), any())).doSuspendableAnswer {
+            val updatedCategory = it.getArgument<BackupCategory>(0)
+            val transform = it.getArgument<(BackupItemStatus) -> BackupItemStatus>(1)
+            if (updatedCategory == category && !cleanupEntered) {
+                cleanupEntered = true
+                finishCleanup.await()
+            }
+            statuses.update { current ->
+                current + (updatedCategory to transform(current[updatedCategory] ?: BackupItemStatus()))
+            }
+        }
+        stubBackupObservers()
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            assertTrue(cleanupEntered)
+            assertTrue(statuses.value.getValue(category).running)
+
+            finishCleanup.complete(Unit)
+            runCurrent()
+            assertTrue(statuses.value.getValue(category).running)
+            advanceTimeBy(5_000)
+            runCurrent()
+            verify(vssBackupClient).putObject(eq(category.name), any())
+            assertFalse(statuses.value.getValue(category).isRequired)
+        } finally {
+            finishCleanup.complete(Unit)
+            finishSetup.complete(Unit)
             sut.stopObservingBackups()
         }
     }
