@@ -265,7 +265,7 @@ import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
 import java.math.BigDecimal
-import java.util.concurrent.atomic.AtomicLong
+import java.util.UUID
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
@@ -346,7 +346,6 @@ class AppViewModel @Inject constructor(
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
 
-    private val quickPayRequestIds = AtomicLong(0L)
     private val _quickPayData = MutableStateFlow<QuickPayRequest?>(null)
     val quickPayData = _quickPayData.asStateFlow()
 
@@ -5903,7 +5902,7 @@ class AppViewModel @Inject constructor(
         }
 
         _quickPayData.update {
-            QuickPayRequest(id = quickPayRequestIds.incrementAndGet(), data = quickPayData)
+            QuickPayRequest(id = UUID.randomUUID().toString(), data = quickPayData)
         }
 
         if (lnurlPay != null) {
@@ -9148,7 +9147,7 @@ sealed interface QuickPayData {
 
 @Stable
 data class QuickPayRequest(
-    val id: Long,
+    val id: String,
     val data: QuickPayData,
 )
 // endregion

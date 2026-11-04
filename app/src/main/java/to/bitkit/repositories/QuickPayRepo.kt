@@ -65,6 +65,7 @@ class QuickPayRepo @Inject constructor(
     private val scope = appScope(ioDispatcher, TAG)
     private val mutex = Mutex()
     private val opsByKey = mutableMapOf<String, InFlightOp>()
+    private val lnurlInvoicesByRequest = mutableMapOf<QuickPayPayRequest.LnurlPay, ResolvedInvoice>()
     private val sessionFlows = ConcurrentHashMap<String, MutableSharedFlow<QuickPaySessionEvent>>()
     private val unackedFailures = ConcurrentHashMap<String, Throwable>()
 
@@ -186,10 +187,17 @@ class QuickPayRepo @Inject constructor(
 
     internal suspend fun payNow(session: QuickPaySession, request: QuickPayPayRequest) {
         val invoice = resolveInvoice(session, request) ?: return
-        val invoiceHash = invoiceHashOrEmit(session, invoice) ?: return
+        val invoiceHash = invoiceHashOrEmit(session, invoice)
+        if (invoiceHash == null) {
+            mutex.withLock { forgetLnurlInvoiceLocked(invoice.bolt11) }
+            return
+        }
         when (preparePay(session, invoice, invoiceHash)) {
             PreparePayResult.LIVE -> return
-            PreparePayResult.REJECTED -> return
+            PreparePayResult.REJECTED -> mutex.withLock {
+                // The invoice stays while another ask of the same request has it open
+                if (!hasOpenLocked(invoiceHash)) forgetLnurlInvoiceLocked(invoice.bolt11)
+            }
             PreparePayResult.RECOVERED -> settleRecovered(invoiceHash)
             PreparePayResult.FRESH -> {
                 dispatchBolt11(invoice, invoiceHash)
@@ -198,9 +206,10 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    internal suspend fun hasOpen(paymentHash: String): Boolean = mutex.withLock {
+    internal suspend fun hasOpen(paymentHash: String): Boolean = mutex.withLock { hasOpenLocked(paymentHash) }
+
+    private suspend fun hasOpenLocked(paymentHash: String): Boolean =
         opsByKey[paymentHash] != null || spend.matching(paymentHash) != null
-    }
 
     private fun invoiceHashOrEmit(session: QuickPaySession, invoice: ResolvedInvoice): String? {
         val invoiceHash = invoiceParser.parse(invoice.bolt11)
@@ -375,11 +384,17 @@ class QuickPayRepo @Inject constructor(
                 parseError = null,
             )
             is QuickPayPayRequest.LnurlPay -> {
+                // A request asked again while its invoice is open, as by a recreated screen, pays that invoice again
+                // rather than a fresh one, so the invoice hash dedupes it and the node refuses to pay it twice
+                mutex.withLock { lnurlInvoicesByRequest[request] }?.let { return it }
                 lightningRepo.fetchLnurlInvoice(
                     data = request.data,
                     amountMsats = request.data.callbackAmountMsats(request.amountSats),
                 ).fold(
-                    onSuccess = { ResolvedInvoice(it.bolt11, request.amountSats, null) },
+                    onSuccess = { fetched ->
+                        val invoice = ResolvedInvoice(fetched.bolt11, request.amountSats, null)
+                        mutex.withLock { lnurlInvoicesByRequest.getOrPut(request) { invoice } }
+                    },
                     onFailure = {
                         if (sessionFlows[session.id] != null) {
                             emitToSession(
@@ -643,6 +658,11 @@ class QuickPayRepo @Inject constructor(
 
     private fun removeOpLocked(op: InFlightOp) {
         opsByKey.entries.removeAll { it.value === op }
+        forgetLnurlInvoiceLocked(op.paymentRequest)
+    }
+
+    private fun forgetLnurlInvoiceLocked(bolt11: String) {
+        lnurlInvoicesByRequest.values.removeAll { it.bolt11 == bolt11 }
     }
 
     private fun emitOutcomeLocked(
@@ -783,6 +803,7 @@ sealed interface QuickPayPayRequest {
     data class LnurlPay(
         val data: LnurlPayData,
         override val amountSats: ULong,
+        val requestId: String,
     ) : QuickPayPayRequest
 }
 

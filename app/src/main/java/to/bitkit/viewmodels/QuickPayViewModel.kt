@@ -39,6 +39,8 @@ class QuickPayViewModel @Inject constructor(
     private var isPayRequested = false
 
     fun attach(session: QuickPaySession) {
+        // A recreated screen attaches its saved session again, which keeps the payment it requested and its result
+        if (session == this.session) return
         this.session = session
         isPayRequested = false
         _uiState.update { QuickPayUiState() }
@@ -59,10 +61,10 @@ class QuickPayViewModel @Inject constructor(
 
     fun acknowledge(session: QuickPaySession) = quickPayRepo.acknowledge(session)
 
-    fun pay(session: QuickPaySession, data: QuickPayData) {
+    fun pay(session: QuickPaySession, data: QuickPayData, requestId: String) {
         if (isPayRequested || _uiState.value.result != null) return
         isPayRequested = true
-        quickPayRepo.pay(session, data.toPayRequest())
+        quickPayRepo.pay(session, data.toPayRequest(requestId))
     }
 
     override fun onCleared() {
@@ -102,9 +104,9 @@ class QuickPayViewModel @Inject constructor(
         }
     }
 
-    private fun QuickPayData.toPayRequest(): QuickPayPayRequest = when (this) {
+    private fun QuickPayData.toPayRequest(requestId: String): QuickPayPayRequest = when (this) {
         is QuickPayData.Bolt11 -> QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = sats)
-        is QuickPayData.LnurlPay -> QuickPayPayRequest.LnurlPay(data = data, amountSats = sats)
+        is QuickPayData.LnurlPay -> QuickPayPayRequest.LnurlPay(data = data, amountSats = sats, requestId = requestId)
     }
 }
 

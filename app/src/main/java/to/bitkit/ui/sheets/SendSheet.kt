@@ -671,6 +671,7 @@ fun SendSheet(
                     val request = displayedRequest ?: return@composableWithDefaultTransitions
                     key(request.id) {
                         SendQuickPayScreen(
+                            requestId = request.id,
                             quickPayData = request.data,
                             isRequestActive = quickPayRequest?.id == request.id,
                             onPaymentComplete = { paymentHash, amountWithFee ->
