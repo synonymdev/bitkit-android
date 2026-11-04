@@ -1476,6 +1476,19 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `local capacity check hands back a request under limits this wallet does not check`() = test {
+        collectEvents()
+        val unchecked = listOf(fixtures.allowance(hasUncheckedLimits = true))
+
+        val isManual = sut.classifyAboveLimit(fixtures.paymentRequest(), unchecked, identity)
+
+        assertTrue(isManual)
+        assertTrue(events.isEmpty(), "Limits this wallet does not check raise no Limit Reached")
+        val mixed = unchecked + fixtures.allowance(allowanceId = PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID)
+        assertFalse(sut.classifyAboveLimit(fixtures.paymentRequest(), mixed, identity))
+    }
+
+    @Test
     fun `local capacity check flags only requests that fit no allowance`() = test {
         collectEvents()
         accountingState = stateNearTheMonthlyCap()

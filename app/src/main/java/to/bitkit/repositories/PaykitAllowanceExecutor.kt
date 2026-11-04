@@ -441,7 +441,9 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     /**
      * True when [request] fits no active Allowance of its contact, checked locally while the node cannot pay yet;
-     * such a request asks at once instead of waiting for channels, and raises Limit Reached.
+     * such a request asks at once instead of waiting for channels, and raises Limit Reached. Also true, without Limit
+     * Reached, while automatic payments are paused or when every matching Allowance has limits this wallet does not
+     * check.
      */
     suspend fun classifyAboveLimit(
         request: PaykitPaymentRequest,
@@ -455,6 +457,8 @@ class PaykitAllowanceExecutor @Inject constructor(
                 PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
         }
         if (matching.isEmpty()) return@withContext false
+        // Requests under limits this wallet does not check never pay automatically, so they ask without waiting.
+        if (matching.all { it.hasUncheckedLimits }) return@withContext true
         // Paused automatic payments keep the request manual, without waiting for the node.
         if (isPausedAfterRestore()) return@withContext true
         val read = runSuspendCatching { paykitSdkService.allowanceAccountingState() }
