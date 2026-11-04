@@ -667,8 +667,9 @@ private fun UsdtConfirmationLoading(
             isPaymentRequest = isPaymentRequest,
             modifier = Modifier.weight(1f),
         )
-        state.error?.let {
-            BodyM(state.errorMessage(it), color = Colors.Brand)
+        state.error?.let { BodyM(state.errorMessage(it), color = Colors.Brand) }
+        // Also offered without an error: a review restored after process death has no quote in flight.
+        if (state.error != null || !state.busy) {
             PrimaryButton(
                 text = stringResource(R.string.common__try_again),
                 onClick = onRetry,
