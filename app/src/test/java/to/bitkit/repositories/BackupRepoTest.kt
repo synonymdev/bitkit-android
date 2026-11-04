@@ -716,7 +716,7 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `wallet restore pauses automatic allowance payments after restoring their state`() = test {
+    fun `wallet restore pauses automatic allowance payments before restoring wallet state`() = test {
         val identity = "pubky" + "z".repeat(52)
         val allowances = PaykitAllowanceStateBackup(ledgerRevisionFloor = 5uL)
         stubWalletBackup(
@@ -730,9 +730,10 @@ class BackupRepoTest : BaseUnitTest() {
 
         sut.performFullRestoreFromLatestBackup().getOrThrow()
 
-        val order = inOrder(paykitAllowanceStore)
-        order.verify(paykitAllowanceStore).restoreBackup(mapOf(identity to allowances.restored()))
+        val order = inOrder(paykitAllowanceStore, privatePaykitRepo)
         order.verify(paykitAllowanceStore).pauseAfterRestore()
+        order.verify(paykitAllowanceStore).restoreBackup(mapOf(identity to allowances.restored()))
+        order.verify(privatePaykitRepo).restoreBackup("saved-sdk-state")
     }
 
     @Test

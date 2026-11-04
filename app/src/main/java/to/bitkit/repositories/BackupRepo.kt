@@ -1116,6 +1116,8 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
+        // Automatic allowance payments wait for the user to resume them before any restored state is written.
+        paykitAllowanceStore.pauseAfterRestore()
         keychain.upsertString(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name, String(dataBytes))
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
         var restoredAttempt: OnchainSendAttempt? = null
@@ -1153,8 +1155,6 @@ class BackupRepo @Inject constructor(
             paykitPresentationStore.restoreAcceptedOneTimeRequests(it.acceptedOneTimeRequests.orEmpty())
             paykitAllowanceStore.restoreBackup(allowances)
         }
-        // Automatic allowance payments wait for the user to resume them; restored spending still counts.
-        paykitAllowanceStore.pauseAfterRestore()
         db.transferDao().upsert(parsed.transfers)
         watchOnlyAccountRepo.restore(
             parsed.watchOnlyAccounts.orEmpty(),
