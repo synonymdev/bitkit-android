@@ -383,19 +383,19 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
+    /** Pays the fee funding from savings as an ordinary payment: it is a fee, not a transfer to spending. */
     private suspend fun payFunding(address: String, sats: ULong) {
         val outcome = lightningRepo.sendOnChain(
             address = address,
             sats = sats,
             speed = TransactionSpeed.Fast,
-            isTransfer = true,
         ).getOrThrow()
         if (outcome !is OnchainSendOutcome.Accepted) {
             throw SparkExitError(
                 "Spark exit funding was not accepted: '$outcome'"
             )
         }
-        runSuspendCatching { lightningRepo.completeAcceptedTransferFollowup(orderId = null, txid = outcome.txid) }
+        runSuspendCatching { lightningRepo.completeAcceptedOrdinaryFollowup(outcome.txid) }
             .onFailure { Logger.warn("Failed to finish the Spark exit funding locally", it, context = TAG) }
         Logger.info("Funded the Spark exit with '$sats' sats in '${outcome.txid}'", context = TAG)
     }
