@@ -21,12 +21,15 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -40,6 +43,90 @@ class EditProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+
+    @Test
+    fun `active subscription stops profile deletion before private or contact cleanup`() = test {
+        val sut = createSut()
+        whenever(
+            pubkyRepo.checkProfileDeletionAllowed()
+        ).thenReturn(Result.failure(PubkyContactError.ActiveSubscription))
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
+        advanceUntilIdle()
+
+        sut.deleteProfile()
+        advanceUntilIdle()
+
+        verify(pubkyRepo).checkProfileDeletionAllowed()
+        verify(context).getString(R.string.profile__delete_active_subscription)
+        verify(privatePaykitRepo, never()).beginProfileDeletion()
+        verify(privatePaykitRepo, never()).endProfileDeletion()
+        verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
+        verify(privatePaykitRepo, never()).closeAndClear()
+        verify(pubkyRepo, never()).deleteProfile()
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isDeleting)
+    }
+
+    @Test
+    fun `fixed term refusal displays the supplied expiry without starting cleanup`() = test {
+        val previousLocale = Locale.getDefault()
+        Locale.setDefault(Locale.US)
+        try {
+            val sut = createSut()
+            val endsAt = 1_800_000_000_000L
+            whenever(pubkyRepo.checkProfileDeletionAllowed()).thenReturn(
+                Result.failure(PubkyContactError.ActiveProfileSubscriptions(endsAt)),
+            )
+            advanceUntilIdle()
+
+            sut.deleteProfile()
+            advanceUntilIdle()
+
+            verify(context).getString(R.string.profile__delete_active_subscription)
+            verify(context).getString(R.string.subscriptions__expires_date, endsAt.toLocalizedTimestamp())
+            verify(privatePaykitRepo, never()).beginProfileDeletion()
+            verify(privatePaykitRepo, never()).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
+            verify(pubkyRepo, never()).deleteProfile()
+            assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        } finally {
+            Locale.setDefault(previousLocale)
+        }
+    }
+
+    @Test
+    fun `unavailable subscription read retains cleanup and shows failure`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.checkProfileDeletionAllowed()).thenReturn(Result.failure(TestAppError("Unavailable")))
+        advanceUntilIdle()
+
+        sut.deleteProfile()
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isDeleting)
+        verify(privatePaykitRepo, never()).beginProfileDeletion()
+        verify(privatePaykitRepo, never()).endProfileDeletion()
+        verify(pubkyRepo, never()).deleteProfile()
+    }
+
+    @Test
+    fun `cancellation during subscription read does not start or end private cleanup`() = test {
+        val sut = createSut()
+        val read = CompletableDeferred<Result<Unit>>()
+        whenever(pubkyRepo.checkProfileDeletionAllowed()).doSuspendableAnswer { read.await() }
+        advanceUntilIdle()
+        sut.deleteProfile()
+        advanceUntilIdle()
+
+        sut.viewModelScope.cancel()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isDeleting)
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        verify(privatePaykitRepo, never()).beginProfileDeletion()
+        verify(privatePaykitRepo, never()).endProfileDeletion()
+        verify(pubkyRepo, never()).deleteProfile()
+    }
 
     @Test
     fun `disconnect finishes private cleanup after the screen is closed`() = test {
@@ -179,6 +266,49 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.updateLinkUrl(0, "https://updated.example.com")
 
         assertEquals("https://updated.example.com", sut.uiState.value.links.first().url)
+    }
+
+    @Test
+    fun `failed private cleanup stops deletion and preserves pending state`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        whenever(privatePaykitRepo.removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true)))
+            .thenReturn(Result.failure(TestAppError("Withdrawal pending")))
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
+
+        sut.effects.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isDeleting)
+        verify(pubkyRepo, never()).deleteProfile()
+        verify(privatePaykitRepo, never()).closeAndClear()
+        verify(privatePaykitRepo).endProfileDeletion()
+    }
+
+    @Test
+    fun `failed local finalization does not report deletion success`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
+        whenever(
+            privatePaykitRepo.closeAndClear()
+        ).thenReturn(Result.failure(TestAppError("Local storage unavailable")))
+
+        sut.effects.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isDeleting)
+        verify(pubkyRepo).deleteProfile()
+        verify(privatePaykitRepo).closeAndClear()
+        verify(privatePaykitRepo).endProfileDeletion()
     }
 
     @Test
@@ -350,29 +480,6 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `deleteProfile should continue when private cleanup fails`() = test {
-        val sut = createSut()
-        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true)) }
-            .thenReturn(Result.failure(TestAppError("cleanup failed")))
-        whenever(pubkyRepo.deleteProfile()).thenReturn(Result.success(Unit))
-        advanceUntilIdle()
-
-        sut.effects.test {
-            sut.deleteProfile()
-            advanceUntilIdle()
-
-            assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
-        }
-        assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        assertFalse(sut.uiState.value.isDeleting)
-        inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any(), deferAppSync = eq(true))
-            verify(pubkyRepo).deleteProfile()
-            verify(privatePaykitRepo).closeAndClear()
-        }
-    }
-
-    @Test
     fun `dismissDeleteFailureDialog should hide retry dialog`() = test {
         whenever(pubkyRepo.deleteProfile()).thenReturn(
             Result.failure(TestAppError("expired session")),
@@ -398,6 +505,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         } else {
             whenever { pubkyRepo.isRingAdoptedIdentity() }.thenReturn(isRingIdentity)
         }
+        whenever { pubkyRepo.checkProfileDeletionAllowed() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
