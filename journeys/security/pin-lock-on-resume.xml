@@ -43,6 +43,7 @@
     <action>Verify the PIN pad is visible and the Send amount screen is not shown</action>
     <action>Enter the PIN with the number pad keys</action>
     <action>Verify the Send Confirm screen opens (title "Confirm", amount testTag "ReviewAmount") showing 10 000 sats and the Receive sheet (testTag "ReceiveScreen") is gone</action>
+    <action>Press back and verify the Send Amount screen (testTag "SendNumberField") shows 10 000 sats</action>
     <action>Press back to close the Send sheet and verify the wallet home screen is visible</action>
   </actions>
 </journey>
