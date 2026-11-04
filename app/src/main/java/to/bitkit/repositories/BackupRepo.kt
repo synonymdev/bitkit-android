@@ -268,14 +268,12 @@ class BackupRepo @Inject constructor(
 
         launchForWallet {
             BackupCategory.entries.forEach { category ->
-                if (category !in runningBackups) {
-                    cacheStore.updateBackupStatus(category) { status ->
-                        if (status.running) {
-                            Logger.debug("Clearing stale running flag for: '$category'", context = TAG)
-                            status.copy(running = false)
-                        } else {
-                            status
-                        }
+                cacheStore.updateBackupStatus(category) { status ->
+                    if (status.running && category !in runningBackups && !pendingBackups.containsKey(category)) {
+                        Logger.debug("Clearing stale running flag for: '$category'", context = TAG)
+                        status.copy(running = false)
+                    } else {
+                        status
                     }
                 }
             }
@@ -534,11 +532,27 @@ class BackupRepo @Inject constructor(
             scope.launch(start = CoroutineStart.LAZY) {
                 try {
                     vssClients.withWallet(owner) {
-                        delay(BACKUP_DEBOUNCE)
-                        if (category == BackupCategory.WALLET) paykitSdkService.isPaymentSubmissionActive.first { !it }
-                        pendingBackups.remove(category, owner)
-                        val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
-                        if (status.shouldBackup(category)) triggerBackup(category)
+                        try {
+                            cacheStore.updateBackupStatus(category) { it.copy(running = true) }
+                            delay(BACKUP_DEBOUNCE)
+                            if (category == BackupCategory.WALLET) {
+                                paykitSdkService.isPaymentSubmissionActive.first { !it }
+                            }
+                            pendingBackups.remove(category, owner)
+                            val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
+                            if (status.copy(running = category in runningBackups).shouldBackup(category)) {
+                                triggerBackup(category)
+                            }
+                        } finally {
+                            withContext(NonCancellable) {
+                                pendingBackups.remove(category, owner)
+                                cacheStore.updateBackupStatus(category) {
+                                    it.copy(
+                                        running = category in runningBackups || pendingBackups.containsKey(category)
+                                    )
+                                }
+                            }
+                        }
                     }
                 } finally {
                     pendingBackups.remove(category, owner)
