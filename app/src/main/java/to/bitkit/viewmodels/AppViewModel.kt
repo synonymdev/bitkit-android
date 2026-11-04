@@ -5433,6 +5433,10 @@ class AppViewModel @Inject constructor(
             )
             return true
         }
+        // Savings cannot cover it but a hardware wallet can, so pay from that instead of opening Amount.
+        if (!validateAmount(amount) && _sendUiState.value.hardwareWalletId == null) {
+            selectHardwareFundingSourceForAmount(amount, walletGeneration)
+        }
         if (!validateAmount(amount)) return false
         requireCurrentPaymentPreparation(walletGeneration)
         // A failed estimate has shown its error; the user stays where the scan started.

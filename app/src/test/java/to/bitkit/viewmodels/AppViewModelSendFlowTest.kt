@@ -9448,6 +9448,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(toasts.allValues.isNotEmpty())
     }
 
+    @Test
+    fun `main scanner onchain scan only a hardware wallet covers opens confirm on it`() = test {
+        val input = stubOnchainAmountScan(amountSats = 20_000u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 5_000u)
+        stubHardwareFunding()
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(250uL))
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(input)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+        assertEquals(20_000uL, sut.sendUiState.value.amount)
+    }
+
     private fun stubHardwareFunding() {
         hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
         whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }.thenReturn(Result.success(48_000uL))
