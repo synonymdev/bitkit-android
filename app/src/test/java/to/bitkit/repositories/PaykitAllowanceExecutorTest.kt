@@ -55,6 +55,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.repositories.PaykitAllowanceFixtures.ALLOWANCE_ID
+import to.bitkit.repositories.PaykitAllowanceFixtures.SECOND_ALLOWANCE_ID
 import to.bitkit.repositories.PaykitAllowanceLocalState.JournalEntry
 import to.bitkit.repositories.PaykitAllowanceLocalState.Stage
 import to.bitkit.services.PaykitSdkService
@@ -1492,6 +1493,82 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `local capacity check hands back a request only an allowance with unchecked limits fits`() = test {
+        collectEvents()
+        val request = fixtures.paymentRequest(amountSats = 20_000uL)
+
+        val isManual = sut.classifyAboveLimit(request, mixedAllowances(), identity)
+
+        assertTrue(isManual)
+        assertTrue(events.isEmpty(), "A request an allowance still fits raises no Limit Reached")
+    }
+
+    @Test
+    fun `a request only an allowance with unchecked limits fits stays manual without Limit Reached`() = test {
+        collectEvents()
+        val request = fixtures.paymentRequest(amountSats = 20_000uL)
+        val aboveCheckedCap = candidate(AllowanceAccountingBlock.SharedRule("amount_outside_range"))
+        val candidateSets = listOf(
+            listOf(aboveCheckedCap, candidate(allowanceId = SECOND_ALLOWANCE_ID)),
+            listOf(
+                aboveCheckedCap,
+                candidate(AllowanceAccountingBlock.SharedRule("lifetime_limit"), allowanceId = SECOND_ALLOWANCE_ID),
+            ),
+        )
+
+        for (sdkCandidates in candidateSets) {
+            candidates = sdkCandidates
+
+            val result = sut.autoPay(request, mixedAllowances(), identity)
+
+            assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        }
+        assertTrue(events.isEmpty(), "A request an allowance still fits raises no Limit Reached")
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+        verifyNoInteractions(payer)
+    }
+
+    @Test
+    fun `a request a checked allowance fits pays through it even when an unchecked one also matches`() = test {
+        candidates = listOf(candidate(allowanceId = SECOND_ALLOWANCE_ID), candidate())
+
+        val result = sut.autoPay(fixtures.paymentRequest(amountSats = 1_000uL), mixedAllowances(), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.STARTED, result)
+        assertEquals(listOf(ALLOWANCE_ID), selections.map { it.allowanceId })
+    }
+
+    @Test
+    fun `a request no matching allowance fits raises Limit Reached`() = test {
+        collectEvents()
+        val request = fixtures.paymentRequest(amountSats = 20_000uL)
+        val spend = PaykitAllowanceLocalState.AutomaticSpend(
+            attemptId = "local-unchecked",
+            counterparty = fixtures.counterpartyKey,
+            allowanceId = SECOND_ALLOWANCE_ID,
+            amountSats = 40_000uL,
+            admittedAtMillis = fixtures.now.toEpochMilliseconds(),
+        )
+        sut.updateLocalState(identity) { it.copy(automaticSpends = listOf(spend)) }
+        candidates = listOf(
+            candidate(AllowanceAccountingBlock.SharedRule("amount_outside_range")),
+            candidate(allowanceId = SECOND_ALLOWANCE_ID),
+        )
+        val limitReached: PaykitAllowanceEvent = PaykitAllowanceEvent.LimitReached(fixtures.counterpartyKey, 20_000uL)
+
+        val result = sut.autoPay(request, mixedAllowances(), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
+        assertEquals(listOf(limitReached), events)
+        verifyNoInteractions(payer)
+
+        val isManual = sut.classifyAboveLimit(request, mixedAllowances(), identity)
+
+        assertTrue(isManual)
+        assertEquals(listOf(limitReached), events, "Limit Reached is raised once per request")
+    }
+
+    @Test
     fun `local capacity check flags only requests that fit no allowance`() = test {
         collectEvents()
         accountingState = stateNearTheMonthlyCap()
@@ -1869,12 +1946,25 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         SubscriptionClockOffset.setOffsetDays(0)
     }
 
+    private fun mixedAllowances() = listOf(
+        fixtures.allowance(perPaymentMaxSats = 5_000uL, monthlyLimitSats = 50_000uL),
+        fixtures.allowance(
+            allowanceId = SECOND_ALLOWANCE_ID,
+            perPaymentMaxSats = 50_000uL,
+            monthlyLimitSats = 50_000uL,
+            hasUncheckedLimits = true,
+        ),
+    )
+
     private fun TestScope.collectEvents() {
         backgroundScope.launch { sut.events.collect { events += it } }
     }
 
-    private fun candidate(blocked: AllowanceAccountingBlock? = null) = AllowanceCandidate(
-        allowanceId = ALLOWANCE_ID,
+    private fun candidate(
+        blocked: AllowanceAccountingBlock? = null,
+        allowanceId: String = ALLOWANCE_ID,
+    ) = AllowanceCandidate(
+        allowanceId = allowanceId,
         eligiblePaymentEndpointIdentifiers = listOf(PaykitAllowanceFixtures.lightningIdentifier),
         blocked = blocked,
     )
