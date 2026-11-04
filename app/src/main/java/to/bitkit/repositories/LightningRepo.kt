@@ -64,6 +64,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.requireWalletRestoreComplete
 import to.bitkit.di.BgDispatcher
@@ -128,6 +129,7 @@ class LightningRepo @Inject constructor(
     private val onchainSendAttemptStore: OnchainSendAttemptStore,
     private val connectivityRepo: ConnectivityRepo,
     private val vssBackupClientLdk: VssBackupClientLdk,
+    private val vssClients: VssClientCoordinator,
     private val urlValidator: UrlValidator,
     private val electrumProbeService: ElectrumProbeService,
 ) : OnchainReleasing {
@@ -353,153 +355,159 @@ class LightningRepo @Inject constructor(
         shouldValidateGraph: Boolean = true,
         shouldRetryYieldToStop: Boolean = false,
         shouldCancelPendingStop: Boolean = true,
-    ): Result<Unit> = withContext(bgDispatcher) {
-        if (_isRecoveryMode.value) {
-            return@withContext Result.failure(RecoveryModeError())
-        }
+    ): Result<Unit> = vssClients.withWallet {
+        withContext(bgDispatcher) {
+            if (_isRecoveryMode.value) {
+                return@withContext Result.failure(RecoveryModeError())
+            }
 
-        if (shouldCancelPendingStop) cancelPendingStop()
+            if (shouldCancelPendingStop) cancelPendingStop()
 
-        eventHandler?.let { _eventHandlers.add(it) }
+            eventHandler?.let { _eventHandlers.add(it) }
 
-        // Track retry state outside mutex to avoid deadlock (Mutex is non-reentrant)
-        var shouldRetryStart = false
-        var shouldRestartForGraphReset = false
-        var initialLifecycleState: NodeLifecycleState
+            // Track retry state outside mutex to avoid deadlock (Mutex is non-reentrant)
+            var shouldRetryStart = false
+            var shouldRestartForGraphReset = false
+            var initialLifecycleState: NodeLifecycleState
 
-        val result = lifecycleMutex.withLock {
-            if (isWiping) return@withLock Result.failure(WipeInProgressError())
-            initialLifecycleState = _lightningState.value.nodeLifecycleState
-            if (initialLifecycleState.isRunningOrStarting()) {
-                return@withLock skipStartForRunningNode(
-                    lifecycleState = initialLifecycleState,
+            val result = lifecycleMutex.withLock {
+                if (isWiping) return@withLock Result.failure(WipeInProgressError())
+                initialLifecycleState = _lightningState.value.nodeLifecycleState
+                if (initialLifecycleState.isRunningOrStarting()) {
+                    return@withLock skipStartForRunningNode(
+                        lifecycleState = initialLifecycleState,
+                        customServerUrl = customServerUrl,
+                        customRgsServerUrl = customRgsServerUrl,
+                    )
+                }
+
+                runCatching {
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
+
+                    // Setup if needed
+                    if (lightningService.node == null) {
+                        val setupResult =
+                            setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration)
+                        if (setupResult.isFailure) {
+                            _lightningState.update {
+                                it.copy(
+                                    nodeLifecycleState = NodeLifecycleState.ErrorStarting(
+                                        setupResult.exceptionOrNull() ?: NodeSetupError()
+                                    )
+                                )
+                            }
+                            return@withLock setupResult
+                        }
+                    }
+
+                    if (lightningService.status?.isRunning == true) {
+                        Logger.info("LDK node already running", context = TAG)
+                        runSuspendCatching { lightningService.reconcileWatchOnlyAccounts() }
+                            .onFailure {
+                                Logger.warn(
+                                    "Failed to reconcile Paykit Server accounts during startup",
+                                    it,
+                                    context = TAG,
+                                )
+                            }
+                        return@withLock adoptRunningNode()
+                    }
+
+                    lightningService.start(timeout, ::onEvent)
+
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+
+                    // Initial state sync
+                    syncState()
+                    logNodeSupportSummary("node started")
+                    refreshChannelCache()
+
+                    if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
+                        Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
+
+                        lightningService.stop()
+                        clearNetworkGraph(walletIndex)
+
+                        _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                        shouldRestartForGraphReset = true
+                        return@withLock Result.success(Unit)
+                    }
+
+                    // Post-startup tasks (non-blocking)
+                    disconnectIdlePeers().onFailure {
+                        Logger.error("Failed to disconnect idle peers", it, context = TAG)
+                    }
+                    logNodeSupportSummary("idle peers disconnected")
+
+                    sync().onFailure { e ->
+                        Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
+                    }
+                    Result.success(Unit)
+                }.getOrElse { e ->
+                    if (e is CancellationException) {
+                        withContext(NonCancellable) { reconcileCancelledStart(initialLifecycleState) }
+                        throw e
+                    }
+
+                    val currentState = _lightningState.value.nodeLifecycleState
+                    if (currentState.isRunning()) {
+                        Logger.warn("Start error but node is $currentState, skipping retry", e, context = TAG)
+                        return@withLock Result.success(Unit)
+                    }
+
+                    if (lightningService.status?.isRunning == true) {
+                        Logger.warn("Start error but LDK node is running, adopting it", e, context = TAG)
+                        return@withLock adoptRunningNode()
+                    }
+
+                    if (shouldRetry) {
+                        Logger.warn("Start error, will retry...", e, context = TAG)
+                        _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
+                        shouldRetryStart = true
+                        Result.failure(e)
+                    } else {
+                        _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e)) }
+                        Result.failure(e)
+                    }
+                }
+            }
+
+            // Retry OUTSIDE the mutex to avoid deadlock (Kotlin Mutex is non-reentrant)
+            if (shouldRetryStart) {
+                delay(2.seconds)
+                // A stop requested after this start began wins over the retry; a foreground start cancels it
+                if (shouldRetryYieldToStop && pendingStopJob.get() != null) {
+                    Logger.info("Skipped start retry because a stop was requested", context = TAG)
+                    return@withContext Result.failure(NodeStartYieldedToStopError(result.exceptionOrNull()))
+                }
+                return@withContext startNode(
+                    walletIndex = walletIndex,
+                    timeout = timeout,
+                    shouldRetry = false,
                     customServerUrl = customServerUrl,
                     customRgsServerUrl = customRgsServerUrl,
+                    channelMigration = channelMigration,
+                    shouldValidateGraph = shouldValidateGraph,
+                    shouldCancelPendingStop = !shouldRetryYieldToStop,
                 )
             }
 
-            runCatching {
-                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
-
-                // Setup if needed
-                if (lightningService.node == null) {
-                    val setupResult =
-                        setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration)
-                    if (setupResult.isFailure) {
-                        _lightningState.update {
-                            it.copy(
-                                nodeLifecycleState = NodeLifecycleState.ErrorStarting(
-                                    setupResult.exceptionOrNull() ?: NodeSetupError()
-                                )
-                            )
-                        }
-                        return@withLock setupResult
-                    }
-                }
-
-                if (lightningService.status?.isRunning == true) {
-                    Logger.info("LDK node already running", context = TAG)
-                    runSuspendCatching { lightningService.reconcileWatchOnlyAccounts() }
-                        .onFailure {
-                            Logger.warn("Failed to reconcile Paykit Server accounts during startup", it, context = TAG)
-                        }
-                    return@withLock adoptRunningNode()
-                }
-
-                lightningService.start(timeout, ::onEvent)
-
-                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-
-                // Initial state sync
-                syncState()
-                logNodeSupportSummary("node started")
-                refreshChannelCache()
-
-                if (shouldValidateGraph && !lightningService.aresRequiredPeersInNetworkGraph()) {
-                    Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
-
-                    lightningService.stop()
-                    clearNetworkGraph(walletIndex)
-
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
-                    shouldRestartForGraphReset = true
-                    return@withLock Result.success(Unit)
-                }
-
-                // Post-startup tasks (non-blocking)
-                disconnectIdlePeers().onFailure {
-                    Logger.error("Failed to disconnect idle peers", it, context = TAG)
-                }
-                logNodeSupportSummary("idle peers disconnected")
-
-                sync().onFailure { e ->
-                    Logger.warn("Initial sync failed, event-driven sync will retry", e, context = TAG)
-                }
-                Result.success(Unit)
-            }.getOrElse { e ->
-                if (e is CancellationException) {
-                    withContext(NonCancellable) { reconcileCancelledStart(initialLifecycleState) }
-                    throw e
-                }
-
-                val currentState = _lightningState.value.nodeLifecycleState
-                if (currentState.isRunning()) {
-                    Logger.warn("Start error but node is $currentState, skipping retry", e, context = TAG)
-                    return@withLock Result.success(Unit)
-                }
-
-                if (lightningService.status?.isRunning == true) {
-                    Logger.warn("Start error but LDK node is running, adopting it", e, context = TAG)
-                    return@withLock adoptRunningNode()
-                }
-
-                if (shouldRetry) {
-                    Logger.warn("Start error, will retry...", e, context = TAG)
-                    _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
-                    shouldRetryStart = true
-                    Result.failure(e)
-                } else {
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e)) }
-                    Result.failure(e)
-                }
+            // Restart after graph reset OUTSIDE the mutex to avoid deadlock
+            if (shouldRestartForGraphReset) {
+                return@withContext start(
+                    walletIndex = walletIndex,
+                    timeout = timeout,
+                    shouldRetry = shouldRetry,
+                    customServerUrl = customServerUrl,
+                    customRgsServerUrl = customRgsServerUrl,
+                    eventHandler = eventHandler,
+                    channelMigration = channelMigration,
+                    shouldValidateGraph = false, // Prevent infinite loop
+                )
             }
-        }
 
-        // Retry OUTSIDE the mutex to avoid deadlock (Kotlin Mutex is non-reentrant)
-        if (shouldRetryStart) {
-            delay(2.seconds)
-            // A stop requested after this start began wins over the retry; a foreground start cancels it
-            if (shouldRetryYieldToStop && pendingStopJob.get() != null) {
-                Logger.info("Skipped start retry because a stop was requested", context = TAG)
-                return@withContext Result.failure(NodeStartYieldedToStopError(result.exceptionOrNull()))
-            }
-            return@withContext startNode(
-                walletIndex = walletIndex,
-                timeout = timeout,
-                shouldRetry = false,
-                customServerUrl = customServerUrl,
-                customRgsServerUrl = customRgsServerUrl,
-                channelMigration = channelMigration,
-                shouldValidateGraph = shouldValidateGraph,
-                shouldCancelPendingStop = !shouldRetryYieldToStop,
-            )
+            result
         }
-
-        // Restart after graph reset OUTSIDE the mutex to avoid deadlock
-        if (shouldRestartForGraphReset) {
-            return@withContext start(
-                walletIndex = walletIndex,
-                timeout = timeout,
-                shouldRetry = shouldRetry,
-                customServerUrl = customServerUrl,
-                customRgsServerUrl = customRgsServerUrl,
-                eventHandler = eventHandler,
-                channelMigration = channelMigration,
-                shouldValidateGraph = false, // Prevent infinite loop
-            )
-        }
-
-        result
     }
 
     private suspend fun adoptRunningNode(): Result<Unit> {
@@ -729,14 +737,16 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun resetNetworkGraph(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
-        Logger.warn("Resetting network graph (manual)", context = TAG)
-        runCatching {
-            if (lightningService.node != null) {
-                lightningService.stop()
+    suspend fun resetNetworkGraph(walletIndex: Int = 0): Result<Unit> = vssClients.withWallet {
+        withContext(bgDispatcher) {
+            Logger.warn("Resetting network graph (manual)", context = TAG)
+            runSuspendCatching {
+                if (lightningService.node != null) {
+                    lightningService.stop()
+                }
+                // Propagate VSS failures: a manual reset that leaves the graph in VSS is ineffective.
+                clearNetworkGraph(walletIndex).getOrThrow()
             }
-            // Propagate VSS failures: a manual reset that leaves the graph in VSS is ineffective.
-            clearNetworkGraph(walletIndex).getOrThrow()
         }
     }
 
@@ -749,8 +759,7 @@ class LightningRepo @Inject constructor(
         }
 
         return runSuspendCatching {
-            vssBackupClientLdk.setup(walletIndex).getOrThrow()
-            vssBackupClientLdk.deleteObject("network_graph").getOrThrow()
+            vssBackupClientLdk.deleteObjects(listOf("network_graph"), walletIndex).getOrThrow()
             Logger.info("Cleared network graph from VSS", context = TAG)
         }.onFailure {
             Logger.warn("Failed to clear network graph from VSS", it, context = TAG)
@@ -2451,100 +2460,110 @@ class LightningRepo @Inject constructor(
      * so callers can require any scores sync timestamp to be strictly newer to prove a post-reset download.
      */
     @OptIn(ExperimentalTime::class)
-    suspend fun resetPathfindingScores(walletIndex: Int = 0): Result<Long> = withContext(bgDispatcher) {
-        Logger.info("Resetting pathfinding scores", context = TAG)
+    suspend fun resetPathfindingScores(walletIndex: Int = 0): Result<Long> = vssClients.withWallet {
+        withContext(bgDispatcher) {
+            Logger.info("Resetting pathfinding scores", context = TAG)
 
-        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-        stop().onFailure {
-            Logger.error("Failed to stop node during pathfinding scores reset", it, context = TAG)
-            return@withContext Result.failure(it)
+            waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
+            stop().onFailure {
+                Logger.error("Failed to stop node during pathfinding scores reset", it, context = TAG)
+                return@withContext Result.failure(it)
+            }
+
+            runSuspendCatching {
+                val lifecycleState = _lightningState.value.nodeLifecycleState
+                check(lifecycleState == NodeLifecycleState.Stopped) {
+                    "Node lifecycle changed to '$lifecycleState' during pathfinding scores reset"
+                }
+                // Gate the destructive VSS deletes on the previous node's release, so the old node cannot
+                // re-persist scores over the delete while it is still draining.
+                lightningService.awaitNodeRelease()
+                vssBackupClientLdk.deleteObjects(
+                    listOf(VSS_KEY_SCORER, VSS_KEY_EXTERNAL_SCORES_CACHE),
+                    walletIndex,
+                ).getOrThrow()
+            }.onFailure {
+                Logger.error("Failed to delete pathfinding scores from VSS", it, context = TAG)
+                start(walletIndex = walletIndex, shouldRetry = false, shouldValidateGraph = false)
+                    .onFailure { startError ->
+                        Logger.error(
+                            "Failed to restart node after pathfinding scores reset failure",
+                            startError,
+                            context = TAG,
+                        )
+                    }
+                return@withContext Result.failure(it)
+            }
+
+            val resetAtSecs = nowMillis() / 1000
+
+            start(walletIndex = walletIndex, shouldRetry = false, shouldValidateGraph = false)
+                .map { resetAtSecs }
+                .onSuccess {
+                    Logger.info("Pathfinding scores reset at '$resetAtSecs'", context = TAG)
+                }
         }
-
-        runCatching {
-            val lifecycleState = _lightningState.value.nodeLifecycleState
-            check(lifecycleState == NodeLifecycleState.Stopped) {
-                "Node lifecycle changed to '$lifecycleState' during pathfinding scores reset"
-            }
-            // Gate the destructive VSS deletes on the previous node's release, so the old node cannot
-            // re-persist scores over the delete while it is still draining.
-            lightningService.awaitNodeRelease()
-            vssBackupClientLdk.setup(walletIndex).getOrThrow()
-            vssBackupClientLdk.deleteObject(VSS_KEY_SCORER).getOrThrow()
-            vssBackupClientLdk.deleteObject(VSS_KEY_EXTERNAL_SCORES_CACHE).getOrThrow()
-        }.onFailure {
-            Logger.error("Failed to delete pathfinding scores from VSS", it, context = TAG)
-            start(walletIndex = walletIndex, shouldRetry = false, shouldValidateGraph = false).onFailure { startError ->
-                Logger.error("Failed to restart node after pathfinding scores reset failure", startError, context = TAG)
-            }
-            return@withContext Result.failure(it)
-        }
-
-        val resetAtSecs = nowMillis() / 1000
-
-        start(walletIndex = walletIndex, shouldRetry = false, shouldValidateGraph = false)
-            .map { resetAtSecs }
-            .onSuccess {
-                Logger.info("Pathfinding scores reset at '$resetAtSecs'", context = TAG)
-            }
     }
 
-    suspend fun resetPaymentRoutingCachesAndWait(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
-        val refreshStartedAtMs = nowMillis()
-        val refreshStartedAtSecs = (refreshStartedAtMs / 1000).toULong()
-        val requiresRgsRefresh = Env.network != Network.REGTEST &&
-            !settingsStore.data.first().rgsServerUrl.isNullOrEmpty()
-        val requiresScorerRefresh = Env.ldkScorerUrl != null
-        val resetErrors = mutableListOf<Throwable>()
+    suspend fun resetPaymentRoutingCachesAndWait(walletIndex: Int = 0): Result<Unit> = vssClients.withWallet {
+        withContext(bgDispatcher) {
+            val refreshStartedAtMs = nowMillis()
+            val refreshStartedAtSecs = (refreshStartedAtMs / 1000).toULong()
+            val requiresRgsRefresh = Env.network != Network.REGTEST &&
+                !settingsStore.data.first().rgsServerUrl.isNullOrEmpty()
+            val requiresScorerRefresh = Env.ldkScorerUrl != null
+            val resetErrors = mutableListOf<Throwable>()
 
-        Logger.info(
-            "Started payment routing refresh rgs='$requiresRgsRefresh' scorer='$requiresScorerRefresh'",
-            context = TAG,
-        )
-
-        val resetResult = withContext(NonCancellable) reset@{
-            stop().onFailure {
-                start(
-                    walletIndex = walletIndex,
-                    shouldRetry = false,
-                    shouldValidateGraph = false,
-                ).onFailure { startError ->
-                    Logger.error(
-                        "Failed to restart node after payment routing refresh stop failure",
-                        startError,
-                        context = TAG,
-                    )
-                }
-                return@reset Result.failure(it)
-            }
-
-            clearNetworkGraph(walletIndex).onFailure {
-                resetErrors.add(it)
-            }
-
-            resetPathfindingScores(walletIndex).onFailure {
-                resetErrors.add(it)
-            }
-
-            resetErrors.firstOrNull()?.let {
-                Result.failure(it)
-            } ?: Result.success(Unit)
-        }
-        resetResult.onFailure {
-            return@withContext Result.failure(it)
-        }
-
-        val result = waitForPaymentRoutingDataRefresh(
-            walletIndex = walletIndex,
-            refreshStartedAtMs = refreshStartedAtMs,
-            refreshStartedAtSecs = refreshStartedAtSecs,
-            requiresRgsRefresh = requiresRgsRefresh,
-            requiresScorerRefresh = requiresScorerRefresh,
-        )
-        result.onSuccess {
             Logger.info(
-                "Finished payment routing refresh elapsedMs='${nowMillis() - refreshStartedAtMs}'",
+                "Started payment routing refresh rgs='$requiresRgsRefresh' scorer='$requiresScorerRefresh'",
                 context = TAG,
             )
+
+            val resetResult = withContext(NonCancellable) reset@{
+                stop().onFailure {
+                    start(
+                        walletIndex = walletIndex,
+                        shouldRetry = false,
+                        shouldValidateGraph = false,
+                    ).onFailure { startError ->
+                        Logger.error(
+                            "Failed to restart node after payment routing refresh stop failure",
+                            startError,
+                            context = TAG,
+                        )
+                    }
+                    return@reset Result.failure(it)
+                }
+
+                clearNetworkGraph(walletIndex).onFailure {
+                    resetErrors.add(it)
+                }
+
+                resetPathfindingScores(walletIndex).onFailure {
+                    resetErrors.add(it)
+                }
+
+                resetErrors.firstOrNull()?.let {
+                    Result.failure(it)
+                } ?: Result.success(Unit)
+            }
+            resetResult.onFailure {
+                return@withContext Result.failure(it)
+            }
+
+            val result = waitForPaymentRoutingDataRefresh(
+                walletIndex = walletIndex,
+                refreshStartedAtMs = refreshStartedAtMs,
+                refreshStartedAtSecs = refreshStartedAtSecs,
+                requiresRgsRefresh = requiresRgsRefresh,
+                requiresScorerRefresh = requiresScorerRefresh,
+            )
+            result.onSuccess {
+                Logger.info(
+                    "Finished payment routing refresh elapsedMs='${nowMillis() - refreshStartedAtMs}'",
+                    context = TAG,
+                )
+            }
         }
     }
 
@@ -2605,30 +2624,35 @@ class LightningRepo @Inject constructor(
      * The caller still awaits the [Result], so a live caller keeps reporting the outcome; a cancelled
      * one only loses the reporting, never the restart.
      */
-    suspend fun restartNodeDetached(): Result<Unit> = scope.async { restartNode() }.await()
+    suspend fun restartNodeDetached(): Result<Unit> {
+        val owner = vssClients.captureOwner()
+        return scope.async { vssClients.withWallet(owner) { restartNode() } }.await()
+    }
 
     suspend fun restartNode(
         channelMigration: ChannelDataMigration? = null,
         walletIndex: Int = 0,
-    ): Result<Unit> = withContext(bgDispatcher) {
-        Logger.info("Restarting node", context = TAG)
-        stop().onFailure {
-            Logger.error("Failed to stop node during restart", it, context = TAG)
-            return@withContext Result.failure(it)
-        }
-        startNode(
-            walletIndex = walletIndex,
-            channelMigration = channelMigration,
-            shouldRetryYieldToStop = true
-        ).onFailure {
-            if (it is NodeStartYieldedToStopError) {
-                Logger.info("Deferred node restart to a requested stop", context = TAG)
-            } else {
-                Logger.error("Failed to start node during restart", it, context = TAG)
+    ): Result<Unit> = vssClients.withWallet {
+        withContext(bgDispatcher) {
+            Logger.info("Restarting node", context = TAG)
+            stop().onFailure {
+                Logger.error("Failed to stop node during restart", it, context = TAG)
+                return@withContext Result.failure(it)
             }
-            return@withContext Result.failure(it)
-        }.onSuccess {
-            Logger.info("Node restarted successfully", context = TAG)
+            startNode(
+                walletIndex = walletIndex,
+                channelMigration = channelMigration,
+                shouldRetryYieldToStop = true
+            ).onFailure {
+                if (it is NodeStartYieldedToStopError) {
+                    Logger.info("Deferred node restart to a requested stop", context = TAG)
+                } else {
+                    Logger.error("Failed to start node during restart", it, context = TAG)
+                }
+                return@withContext Result.failure(it)
+            }.onSuccess {
+                Logger.info("Node restarted successfully", context = TAG)
+            }
         }
     }
 
