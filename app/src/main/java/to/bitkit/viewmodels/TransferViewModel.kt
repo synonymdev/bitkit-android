@@ -10,6 +10,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -234,17 +235,19 @@ class TransferViewModel @Inject constructor(
                     outcome.complete(awaitSwapClaim(swap.id))
                 }
 
-                // Pay the hold invoice (amount is encoded). It stays pending until Boltz
-                // locks funds on-chain and we claim them, which is the expected happy path.
-                val paymentHash = lightningRepo.payInvoice(bolt11 = swap.invoice).getOrThrow()
-
                 // payInvoice returns as soon as the HTLC is dispatched, and a hold invoice never
                 // settles until Boltz claims, so nothing else notices a payment that fails to route.
                 // Watch for it so an unroutable payment surfaces as an error instead of idling into
-                // the claim timeout and reporting a settling transfer that never completes.
-                val failure = launch {
+                // the claim timeout and reporting a settling transfer that never completes. The node
+                // can report the failure before payInvoice returns, so the watch starts before paying.
+                val paymentHash = CompletableDeferred<PaymentId>()
+                val failure = launch(start = CoroutineStart.UNDISPATCHED) {
                     outcome.complete(awaitPaymentFailure(paymentHash))
                 }
+
+                // Pay the hold invoice (amount is encoded). It stays pending until Boltz
+                // locks funds on-chain and we claim them, which is the expected happy path.
+                paymentHash.complete(lightningRepo.payInvoice(bolt11 = swap.invoice).getOrThrow())
 
                 outcome.await().also {
                     claim.cancel()
@@ -272,10 +275,10 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Suspends until the paid hold invoice fails to route on Lightning, then maps it to a reason. */
-    private suspend fun awaitPaymentFailure(paymentHash: PaymentId): SavingsSwapResult {
+    private suspend fun awaitPaymentFailure(paymentHash: Deferred<PaymentId>): SavingsSwapResult {
         val event = lightningRepo.nodeEvents
             .filterIsInstance<Event.PaymentFailed>()
-            .first { it.paymentHash == paymentHash }
+            .first { it.paymentHash == paymentHash.await() }
         return SavingsSwapResult.Failure(event.reason.toUserMessage(context))
     }
 

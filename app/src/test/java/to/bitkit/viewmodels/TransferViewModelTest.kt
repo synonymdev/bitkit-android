@@ -18,6 +18,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -296,6 +297,30 @@ class TransferViewModelTest : BaseUnitTest() {
                 reason = PaymentFailureReason.ROUTE_NOT_FOUND,
             ),
         )
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Failure(ROUTE_NOT_FOUND_MSG), sut.savingsSwapResult.value)
+    }
+
+    @Test
+    fun `startSavingsSwap fails when the routing failure arrives before the payment call returns`() = test {
+        stubSavingsSwapHappyPath()
+        whenever(context.getString(R.string.wallet__payment_route_not_found))
+            .thenReturn(ROUTE_NOT_FOUND_MSG)
+        whenever(lightningRepo.payInvoice(any(), anyOrNull())).doSuspendableAnswer {
+            nodeEvents.emit(
+                Event.PaymentFailed(
+                    paymentId = PAYMENT_ID,
+                    paymentHash = PAYMENT_ID,
+                    reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                ),
+            )
+            Result.success(PAYMENT_ID)
+        }
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
         advanceUntilIdle()
 
         assertEquals(SavingsSwapResult.Failure(ROUTE_NOT_FOUND_MSG), sut.savingsSwapResult.value)
