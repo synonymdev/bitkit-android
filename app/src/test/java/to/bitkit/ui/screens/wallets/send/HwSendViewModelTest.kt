@@ -59,7 +59,6 @@ import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.withRetainedSendStatus
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -572,7 +571,8 @@ class HwSendViewModelTest : BaseUnitTest() {
         sut.cancel()
         advanceUntilIdle()
 
-        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        assertTrue(sut.offersRetry(request()))
         assertTrue(sut.uiState.value.canLeave)
         verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
 
@@ -1943,7 +1943,7 @@ class HwSendViewModelTest : BaseUnitTest() {
 
         val status = sut.retainedSendStatus(ADDRESS, AMOUNT_SATS, WALLET_ID, false)
 
-        assertEquals(fixture.signedTx, assertIs<HwRetainedSendStatus.Retry>(status).signedTx)
+        assertEquals(HwRetainedSendStatus.Retry(fixture.signedTx.feeRate, fixture.signedTx.miningFeeSats), status)
         assertEquals(
             HwRetainedSendStatus.Blocking,
             sut.retainedSendStatus(OTHER_ADDRESS, AMOUNT_SATS, WALLET_ID, false),
@@ -2105,11 +2105,11 @@ class HwSendViewModelTest : BaseUnitTest() {
 
     @Test
     fun `a retry status locks the original fee on the review`() {
-        val state = reviewState().withStatus(HwRetainedSendStatus.Retry(RETAINED_TX))
+        val state = reviewState().withStatus(RETAINED_RETRY)
 
         assertTrue(state.isRetainedHardwarePayment)
-        assertEquals(TransactionSpeed.Custom(RETAINED_TX.feeRate.toUInt()), state.speed)
-        assertEquals(OnchainFeeUi(FeeRate.CUSTOM, RETAINED_TX.miningFeeSats.toLong()), state.onchainFeeUi)
+        assertEquals(TransactionSpeed.Custom(RETAINED_RETRY.feeRate.toUInt()), state.speed)
+        assertEquals(OnchainFeeUi(FeeRate.CUSTOM, RETAINED_RETRY.miningFeeSats.toLong()), state.onchainFeeUi)
         assertFalse(state.isRetainedSendCheckPending)
         assertFalse(state.needsRetainedSendWarning)
         assertNull(state.retainedSendToAbandon)
@@ -2119,7 +2119,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     fun `a status for a payment no longer on review changes nothing`() {
         val state = reviewState()
 
-        val stale = state.withStatus(HwRetainedSendStatus.Retry(RETAINED_TX), address = OTHER_ADDRESS)
+        val stale = state.withStatus(RETAINED_RETRY, address = OTHER_ADDRESS)
 
         assertEquals(state, stale)
         assertTrue(stale.isRetainedSendCheckPending)
@@ -2157,7 +2157,7 @@ class HwSendViewModelTest : BaseUnitTest() {
 
     @Test
     fun `leaving the retried payment unlocks the fee at the default speed`() {
-        val locked = reviewState().withStatus(HwRetainedSendStatus.Retry(RETAINED_TX))
+        val locked = reviewState().withStatus(RETAINED_RETRY)
 
         val changed = locked
             .copy(amount = AMOUNT_SATS + 1uL)
@@ -2236,7 +2236,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         const val CORRUPT_ENTRY = "{\"walletId\":\"hardware-wallet\""
         val RETAINED_KEY = Keychain.Key.HW_RETAINED_SEND.name
         val SHOP_REQUEST_ID = PaykitPaymentRequestId("request", "counterparty")
-        val RETAINED_TX = HwFundingSignedTx("00", miningFeeSats = 300uL, feeRate = 7uL, totalSpent = 25_300uL)
+        val RETAINED_RETRY = HwRetainedSendStatus.Retry(feeRate = 7uL, miningFeeSats = 300uL)
         val UNKNOWN_FAILURE = BroadcastException.ElectrumException("Broadcast failed: response lost")
         val CONNECT_FAILURE = BroadcastException.ElectrumException("Failed to connect to Electrum: unreachable")
         val REFUSAL = BroadcastException.ElectrumException(

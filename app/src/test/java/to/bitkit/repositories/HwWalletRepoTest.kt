@@ -1963,6 +1963,30 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a failed retained send release retries on the next unchanged watcher event`() = test {
+        whenever(hwRetainedSendRepo.releaseIfObserved(any(), any())).thenReturn(
+            Result.failure(KeychainError.FailedToLoad("retained")),
+            Result.success(Unit),
+        )
+        createRepo()
+        val event = WatcherEvent.TransactionsChanged(
+            balance = walletBalance(total = 1uL),
+            activities = listOf(watcherActivity(amount = 1uL, txid = "seen")),
+            transactionDetails = emptyList(),
+            txCount = 1u,
+            blockHeight = 850_000u,
+            accountType = AccountType.NATIVE_SEGWIT,
+            nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
+        )
+
+        watcherEvents.emit("hardware-wallet|nativeSegwit" to event)
+        watcherEvents.emit("hardware-wallet|nativeSegwit" to event)
+
+        verify(hwRetainedSendRepo, times(2)).releaseIfObserved(HARDWARE_WALLET_ID, listOf("seen"))
+        verify(activityRepo).persistHwSnapshot(any<String>(), any<List<Activity>>(), any<List<TransactionDetails>>())
+    }
+
+    @Test
     fun `removeDevice keeping backup data rewrites the tag metadata after deleting the activities`() = test {
         val named = device.copy(customLabel = "Cold Storage")
         val tagMetadata = listOf(preActivityMetadata())

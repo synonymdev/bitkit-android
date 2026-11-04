@@ -524,8 +524,7 @@ private fun ContentRunning(
             color = accentColor,
             enabled = !isPreparing && uiState.isAmountInputValid &&
                 !uiState.isFundingSourceLoading &&
-                uiState.isHardwareFeeReady &&
-                !uiState.isRetainedSendCheckPending,
+                uiState.isHardwareReviewReady,
             loading = isPreparing || isLoading,
             confirmed = !isPreparing && isLoading,
             progress = swipeProgress,

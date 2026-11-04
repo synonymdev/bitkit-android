@@ -1909,18 +1909,14 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 contactPaymentProfile = activeContactPaymentProfile(),
-                isRetainedHardwarePayment = true,
                 address = requireNotNull(proof.onchainAddress),
                 addressInput = requireNotNull(proof.onchainAddress),
                 isAddressInputValid = true,
                 amount = requireNotNull(proof.onchainAmountSats),
-                isAmountInputValid = true,
                 payMethod = SendMethod.ONCHAIN,
-                speed = TransactionSpeed.Custom(requireNotNull(proof.hardwareFeeRate).toUInt()),
-                onchainFeeUi = OnchainFeeUi(
-                    rate = FeeRate.CUSTOM,
-                    sats = requireNotNull(proof.hardwareMiningFeeSats).toLong(),
-                ),
+            ).withLockedRetainedFee(
+                feeRate = requireNotNull(proof.hardwareFeeRate),
+                miningFeeSats = requireNotNull(proof.hardwareMiningFeeSats),
             )
         }
         preparation?.let { paymentRequestPreparation.compareAndSet(it, null) }
@@ -5949,7 +5945,7 @@ class AppViewModel @Inject constructor(
 
     private fun onSwipeToPay() {
         Logger.debug("Swipe to pay event, checking send confirmation conditions", context = TAG)
-        if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareFeeReady) return
+        if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareReviewReady) return
         viewModelScope.launch {
             if (!prepareCoinSelection()) return@launch
             val amount = _sendUiState.value.amount
@@ -7824,7 +7820,7 @@ class AppViewModel @Inject constructor(
     private fun onConfirmPay() {
         Logger.debug("Payment checks confirmed, proceeding…", context = TAG)
         if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive ||
-            !_sendUiState.value.isHardwareFeeReady
+            !_sendUiState.value.isHardwareReviewReady
         ) {
             return
         }
@@ -8073,7 +8069,10 @@ class AppViewModel @Inject constructor(
         amountSats: ULong,
         status: HwRetainedSendStatus,
     ) {
-        val defaultSpeed = settingsStore.data.first().defaultTransactionSpeed
+        val state = _sendUiState.value
+        val releasesFeeLock = state.isRetainedHardwarePayment && state.incomingPaymentRequestId == null &&
+            status !is HwRetainedSendStatus.Retry
+        val defaultSpeed = if (releasesFeeLock) settingsStore.data.first().defaultTransactionSpeed else state.speed
         val wasFeeLocked = _sendUiState.value.isRetainedHardwarePayment
         _sendUiState.update { it.withRetainedSendStatus(walletId, address, amountSats, status, defaultSpeed) }
         val isFeeLocked = _sendUiState.value.isRetainedHardwarePayment
@@ -9000,6 +8999,9 @@ data class SendUiState(
     val isHardwareFeeReady: Boolean
         get() = hardwareWalletId == null || (!onchainFeeUi.isLoading && !onchainFeeUi.requiresRefresh)
 
+    val isHardwareReviewReady: Boolean
+        get() = isHardwareFeeReady && !isRetainedSendCheckPending
+
     val isAmountEditable: Boolean
         get() = !isPaymentRequest && fixedLightningAmount == null
 
@@ -9017,13 +9019,21 @@ data class OnchainFeeUi(
     val requiresRefresh: Boolean = false,
 )
 
-/** What the durable record said about one ordinary hardware payment. Holds no signed bytes, unlike the status. */
+/** What the durable record said about one ordinary hardware payment. */
 @Immutable
 data class RetainedSendCheck(
     val walletId: String,
     val address: String,
     val amountSats: ULong,
     val isBlocking: Boolean,
+)
+
+/** Shows the fee of the signed bytes that will go out, and stops it being edited. */
+internal fun SendUiState.withLockedRetainedFee(feeRate: ULong, miningFeeSats: ULong): SendUiState = copy(
+    isRetainedHardwarePayment = true,
+    isAmountInputValid = true,
+    speed = TransactionSpeed.Custom(feeRate.toUInt()),
+    onchainFeeUi = OnchainFeeUi(rate = FeeRate.CUSTOM, sats = miningFeeSats.toLong()),
 )
 
 /**
@@ -9052,12 +9062,7 @@ internal fun SendUiState.withRetainedSendStatus(
         },
     )
     return when (status) {
-        is HwRetainedSendStatus.Retry -> checked.copy(
-            isRetainedHardwarePayment = true,
-            isAmountInputValid = true,
-            speed = TransactionSpeed.Custom(status.signedTx.feeRate.toUInt()),
-            onchainFeeUi = OnchainFeeUi(rate = FeeRate.CUSTOM, sats = status.signedTx.miningFeeSats.toLong()),
-        )
+        is HwRetainedSendStatus.Retry -> checked.withLockedRetainedFee(status.feeRate, status.miningFeeSats)
         HwRetainedSendStatus.Blocking, HwRetainedSendStatus.None -> if (isRetainedHardwarePayment) {
             checked.copy(
                 isRetainedHardwarePayment = false,

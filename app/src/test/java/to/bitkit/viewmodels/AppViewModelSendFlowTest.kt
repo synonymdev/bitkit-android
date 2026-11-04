@@ -232,6 +232,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.TimedSheetType
+import to.bitkit.ui.screens.wallets.send.HwRetainedSendStatus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
@@ -7203,6 +7204,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
         )
 
+        applyRetainedStatus(HwRetainedSendStatus.None)
         sut.setSendEvent(SendEvent.SwipeToPay)
         advanceUntilIdle()
 
@@ -7211,6 +7213,235 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.setSendEvent(SendEvent.PayConfirmed)
             assertEquals(SendEffect.NavigateToHardwareSign, awaitItem())
         }
+    }
+
+    @Test
+    fun `a blocking retained send warns before every other sanity check`() = test {
+        stubRetainedReviewFiatValue()
+        setSendState(retainedReviewState().copy(hardwareAvailableSats = 1_000uL))
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+
+        assertEquals(SanityWarning.RETAINED_HARDWARE_SEND, sut.sendUiState.value.showSanityWarningDialog)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+
+        sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.RETAINED_HARDWARE_SEND))
+        advanceUntilIdle()
+
+        assertEquals(SanityWarning.OVER_HALF_BALANCE, sut.sendUiState.value.showSanityWarningDialog)
+    }
+
+    @Test
+    fun `cancelling the retained send warning stays on the review without consent`() = test {
+        stubRetainedReviewFiatValue()
+        setSendState(retainedReviewState())
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertEquals(SanityWarning.RETAINED_HARDWARE_SEND, sut.sendUiState.value.showSanityWarningDialog)
+
+            sut.setSendEvent(SendEvent.DismissAmountWarning)
+            advanceUntilIdle()
+
+            assertNull(sut.sendUiState.value.showSanityWarningDialog)
+            assertFalse(sut.sendUiState.value.shouldConfirmPay)
+            assertNull(sut.sendUiState.value.retainedSendToAbandon)
+            assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
+            expectNoEvents()
+
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertEquals(SanityWarning.RETAINED_HARDWARE_SEND, sut.sendUiState.value.showSanityWarningDialog)
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `consent to discard a retained send does not carry to another wallet address or amount`() = test {
+        stubRetainedReviewFiatValue()
+        val changes = listOf<(SendUiState) -> SendUiState>(
+            { it.copy(hardwareWalletId = "another-wallet") },
+            { it.copy(address = "bcrt1qother") },
+            { it.copy(amount = 2_000uL) },
+        )
+        for (change in changes) {
+            setSendState(retainedReviewState())
+            applyRetainedStatus(HwRetainedSendStatus.Blocking)
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.RETAINED_HARDWARE_SEND))
+            advanceUntilIdle()
+            assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToAbandon)
+
+            setSendState(change(sut.sendUiState.value).copy(shouldConfirmPay = false))
+
+            assertNull(sut.sendUiState.value.retainedSendToAbandon)
+            assertTrue(sut.sendUiState.value.isRetainedSendCheckPending)
+
+            applyRetainedStatus(HwRetainedSendStatus.Blocking)
+
+            assertNull(sut.sendUiState.value.retainedSendToAbandon)
+            assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertEquals(SanityWarning.RETAINED_HARDWARE_SEND, sut.sendUiState.value.showSanityWarningDialog)
+        }
+    }
+
+    @Test
+    fun `a retry status locks the original fee and the fee cannot be edited`() = test {
+        setSendState(retainedReviewState())
+        applyRetainedStatus(RETAINED_RETRY)
+
+        val locked = sut.sendUiState.value
+        assertTrue(locked.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Custom(RETAINED_RETRY.feeRate.toUInt()), locked.speed)
+        assertEquals(OnchainFeeUi(FeeRate.CUSTOM, RETAINED_RETRY.miningFeeSats.toLong()), locked.onchainFeeUi)
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.SpeedAndFee)
+            sut.onSelectSpeed(TransactionSpeed.Custom(0u))
+            sut.onSelectSpeed(TransactionSpeed.Fast)
+            sut.setTransactionSpeed(TransactionSpeed.Fast)
+            advanceUntilIdle()
+
+            assertEquals(locked, sut.sendUiState.value)
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `moving to another amount or address releases the fee lock`() = test {
+        settingsData.value = SettingsData(coinSelectAuto = false, defaultTransactionSpeed = TransactionSpeed.Fast)
+        val changes = listOf<(SendUiState) -> SendUiState>(
+            { it.copy(amount = 2_000uL) },
+            { it.copy(address = "bcrt1qother") },
+        )
+        for (change in changes) {
+            setSendState(retainedReviewState())
+            applyRetainedStatus(RETAINED_RETRY)
+            assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
+
+            setSendState(change(sut.sendUiState.value))
+            applyRetainedStatus(HwRetainedSendStatus.Blocking)
+            advanceUntilIdle()
+
+            assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+            assertEquals(TransactionSpeed.Fast, sut.sendUiState.value.speed)
+            assertEquals(FeeRate.fromSpeed(TransactionSpeed.Fast), sut.sendUiState.value.onchainFeeUi.rate)
+        }
+    }
+
+    @Test
+    fun `retained status reads settings only when a fee lock is released`() = test {
+        setSendState(retainedReviewState())
+        clearInvocations(settingsStore)
+
+        applyRetainedStatus(HwRetainedSendStatus.None)
+        applyRetainedStatus(RETAINED_RETRY)
+
+        verify(settingsStore, never()).data
+
+        applyRetainedStatus(HwRetainedSendStatus.None)
+
+        verify(settingsStore, atLeast(1)).data
+    }
+
+    @Test
+    fun `reopened Shop hardware request keeps its exact retained state and ignores the status`() = test {
+        val (request, signed) = reopenRetainedHardwareRequest(balanceSats = 1_000_000uL, amountSats = 30_000uL)
+        val state = sut.sendUiState.value
+
+        assertEquals(
+            state.copy(
+                isRetainedHardwarePayment = true,
+                address = REGTEST_ADDRESS,
+                addressInput = REGTEST_ADDRESS,
+                isAddressInputValid = true,
+                amount = request.amount.atomic,
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Custom(signed.feeRate.toUInt()),
+                onchainFeeUi = OnchainFeeUi(rate = FeeRate.CUSTOM, sats = signed.miningFeeSats.toLong()),
+            ),
+            state,
+        )
+        clearInvocations(settingsStore)
+
+        sut.applyRetainedSendStatus(
+            HARDWARE_WALLET_ID,
+            state.address,
+            state.amount,
+            HwRetainedSendStatus.Blocking,
+        )
+
+        assertEquals(state, sut.sendUiState.value)
+        assertFalse(state.isRetainedSendCheckPending)
+        verify(settingsStore, never()).data
+    }
+
+    @Test
+    fun `swipe and confirm do nothing while the retained record check is pending`() = test {
+        stubRetainedReviewFiatValue()
+        setSendState(retainedReviewState())
+        assertTrue(sut.sendUiState.value.isRetainedSendCheckPending)
+        assertFalse(sut.sendUiState.value.isHardwareReviewReady)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertFalse(sut.sendUiState.value.shouldConfirmPay)
+            assertNull(sut.sendUiState.value.showSanityWarningDialog)
+
+            setSendState(sut.sendUiState.value.copy(shouldConfirmPay = true))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            expectNoEvents()
+
+            setSendState(sut.sendUiState.value.copy(shouldConfirmPay = false))
+            applyRetainedStatus(HwRetainedSendStatus.None)
+            assertTrue(sut.sendUiState.value.isHardwareReviewReady)
+
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertTrue(sut.sendUiState.value.shouldConfirmPay)
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            assertEquals(SendEffect.NavigateToHardwareSign, awaitItem())
+        }
+    }
+
+    private fun retainedReviewState() = SendUiState(
+        address = REGTEST_ADDRESS,
+        amount = 1_000uL,
+        isAmountInputValid = true,
+        hardwareWalletId = HARDWARE_WALLET_ID,
+        hardwareAvailableSats = 100_000uL,
+        payMethod = SendMethod.ONCHAIN,
+        onchainFeeUi = OnchainFeeUi(sats = 100L),
+    )
+
+    private suspend fun applyRetainedStatus(status: HwRetainedSendStatus) {
+        val state = sut.sendUiState.value
+        sut.applyRetainedSendStatus(requireNotNull(state.hardwareWalletId), state.address, state.amount, status)
+    }
+
+    private fun stubRetainedReviewFiatValue() {
+        settingsData.value = SettingsData(coinSelectAuto = false)
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal.ZERO,
+                    formatted = "0.00",
+                    symbol = "$",
+                    currency = USD,
+                    flag = "",
+                    sats = 1_000,
+                )
+            )
+        )
     }
 
     @Test
@@ -17799,6 +18030,7 @@ private const val SAMROCK_SETUP_URL =
 /** Stands in for the epoch second a seed restore began. */
 private const val RESTORE_STARTED_AT = 1_700_000_000L
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
+private val RETAINED_RETRY = HwRetainedSendStatus.Retry(feeRate = 7uL, miningFeeSats = 300uL)
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
 private const val OWN_NODE_ID = "02abababababababababababababababababababababababababababababababab"
 private const val FOREIGN_NODE_ID = "03cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
