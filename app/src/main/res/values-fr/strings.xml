@@ -156,9 +156,10 @@
     <string name="lightning__spark_exit__nothing">Nothing can be exited right now.</string>
     <string name="lightning__spark_exit__notification_battery">Android\'s battery settings held back your emergency exit. Open Bitkit before {time} to keep it on track.</string>
     <string name="lightning__spark_exit__notification_behind">Your emergency exit could not continue in the background. Open Bitkit before {time} to keep it on track.</string>
+    <string name="lightning__spark_exit__notification_failed">Your emergency exit stopped. Open Bitkit to see why.</string>
     <string name="lightning__spark_exit__notification_funding">Your emergency exit needs more fee funding. Open Bitkit to fund it.</string>
     <string name="lightning__spark_exit__notification_late">Your emergency exit fell behind in the background. Open Bitkit to continue it.</string>
-    <string name="lightning__spark_exit__notification_lost">Part of your exit can\'t be recovered. Open Bitkit to see why.</string>
+    <string name="lightning__spark_exit__notification_lost">{amount} of your exit can\'t be recovered. Open Bitkit to see why.</string>
     <string name="lightning__spark_exit__notification_offline">Your emergency exit can\'t continue without internet. Connect and open Bitkit before {time} to keep it on track.</string>
     <string name="lightning__spark_exit__notification_rejected">Some of your emergency exit\'s transactions were refused. Open Bitkit before {time} to see why.</string>
     <string name="lightning__spark_exit__notification_restricted">Android stops Bitkit from running in the background. Open Bitkit before {time} to keep your emergency exit on track.</string>

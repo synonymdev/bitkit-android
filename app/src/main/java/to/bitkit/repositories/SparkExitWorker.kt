@@ -35,6 +35,8 @@ import to.bitkit.env.Env
 import to.bitkit.ext.alarmManager
 import to.bitkit.ext.connectivityManager
 import to.bitkit.ext.nowMs
+import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.areNotificationsEnabled
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
@@ -172,10 +174,14 @@ class SparkExitWork @Inject constructor(
     }
 
     /** Posts the exit's notification, unless Bitkit is on screen, where the progress screen says the same. */
-    fun notify(alert: SparkExitAlert, deadlineAtMillis: Long? = null) {
-        if (App.currentActivity?.value != null) return
+    fun notify(alert: SparkExitAlert, deadlineAtMillis: Long? = null, amountSats: ULong? = null) {
+        // Losses are posted on screen too: the user may be anywhere in the app when an exit fails or loses a leaf.
+        if (App.currentActivity?.value != null && alert !in ALWAYS_POSTED) return
         val time = deadlineAtMillis?.let { DateFormat.getTimeFormat(context).format(Date(it)) }
-        val text = context.getString(alert.textRes(hasDeadline = time != null)).replace("{time}", time.orEmpty())
+        val amount = amountSats?.let { "$BITCOIN_SYMBOL ${it.formatToModernDisplay()}" }
+        val text = context.getString(alert.textRes(hasDeadline = time != null))
+            .replace("{time}", time.orEmpty())
+            .replace("{amount}", amount.orEmpty())
         context.pushNotification(
             title = context.getString(R.string.lightning__spark_exit__notification_title),
             text = text,
@@ -235,9 +241,22 @@ data class SparkExitBackgroundLimits(
 )
 
 /** Why the user is asked to open Bitkit. */
-enum class SparkExitAlert { Funding, Lost, Rejected, Offline, Restricted, Battery, Behind }
+enum class SparkExitAlert { Funding, Lost, Failed, Rejected, Offline, Restricted, Battery, Behind }
+
+private val ALWAYS_POSTED = setOf(SparkExitAlert.Lost, SparkExitAlert.Failed)
 
 object SparkExitAlerts {
+    /**
+     * What a tick that moved the exit from [previous] to [record] lost, posted once: leaves an older owner claimed, or,
+     * failing for another reason, the exit itself. A tick that does both posts only the lost leaves, with their amount.
+     */
+    fun loss(record: SparkExitRecord, previous: SparkExitRecord): SparkExitAlert? = when {
+        record.lostLeaves.size > previous.lostLeaves.size -> SparkExitAlert.Lost
+        record.phase is SparkExitRecord.Phase.Failed && previous.phase !is SparkExitRecord.Phase.Failed ->
+            SparkExitAlert.Failed
+        else -> null
+    }
+
     /** Why a running exit fell behind its deadline, or null when it needs nothing from the user. */
     fun reason(record: SparkExitRecord?, isOnline: Boolean, limits: SparkExitBackgroundLimits): SparkExitAlert? {
         if (record?.isActive != true) return null
@@ -257,6 +276,7 @@ object SparkExitAlerts {
 private fun SparkExitAlert.textRes(hasDeadline: Boolean): Int = when (this) {
     SparkExitAlert.Funding -> R.string.lightning__spark_exit__notification_funding
     SparkExitAlert.Lost -> R.string.lightning__spark_exit__notification_lost
+    SparkExitAlert.Failed -> R.string.lightning__spark_exit__notification_failed
     SparkExitAlert.Rejected if hasDeadline -> R.string.lightning__spark_exit__notification_rejected
     SparkExitAlert.Offline if hasDeadline -> R.string.lightning__spark_exit__notification_offline
     SparkExitAlert.Restricted if hasDeadline -> R.string.lightning__spark_exit__notification_restricted

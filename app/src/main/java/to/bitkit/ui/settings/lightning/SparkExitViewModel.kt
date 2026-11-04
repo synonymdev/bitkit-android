@@ -135,6 +135,11 @@ class SparkExitViewModel @Inject constructor(
         }
     }
 
+    /** Progress showed the result of an ended exit, so a later Emergency exit can start a new one. */
+    fun onResultShown() {
+        viewModelScope.launch { sparkExitRepo.markResultSeen() }
+    }
+
     fun refresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
@@ -187,6 +192,9 @@ data class SparkExitUiState(
     val isSettling: Boolean = false,
 ) {
     val fundingSats: ULong get() = quote?.fundingSats ?: 0uL
+
+    /** Continue after funding from another wallet: once the funding address holds what the quote asks for. */
+    val canContinueFunding: Boolean get() = fundingSats > 0uL && fundingSeenSats >= fundingSats
 
     /** Why the quote cannot continue, or null when it can. */
     val quoteBlock: SparkExitQuoteBlock?

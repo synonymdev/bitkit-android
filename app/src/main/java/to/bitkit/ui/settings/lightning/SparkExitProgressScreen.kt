@@ -51,6 +51,8 @@ fun SparkExitProgressScreen(
         viewModel.refresh()
         viewModel.effects.collect { if (it == SparkExitEffect.Cancelled) onDone() }
     }
+    val isEnded = uiState.record?.isActive == false
+    LaunchedEffect(isEnded) { if (isEnded) viewModel.onResultShown() }
     LifecycleResumeEffect(Unit) {
         viewModel.refreshBackgroundLimits()
         onPauseOrDispose {}

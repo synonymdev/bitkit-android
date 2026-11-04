@@ -75,6 +75,8 @@ data class SparkExitRecord(
     val fundingPaymentTxid: String? = null,
     /** Leaves an older state of this wallet claimed on-chain; builds leave them out. */
     val lostLeaves: List<LostLeaf> = emptyList(),
+    /** The user opened the result of an exit that failed or lost leaves, so Emergency exit may start a new one. */
+    val isResultSeen: Boolean = false,
     /** Leaves a rebuild could not exit, such as a fee-ladder leaf whose refund cannot pay its fee; left on Spark. */
     val leftBehindLeaves: List<LeftBehindLeaf> = emptyList(),
 ) {
@@ -166,9 +168,14 @@ data class SparkExitRecord(
     /**
      * Emergency exit opens progress, not a new exit, while this one runs and until its leftover fee funding is swept
      * and confirmed, or kept as dust. A rejected sweep keeps it too: progress names the address the leftover is at.
+     * An exit that failed or lost leaves keeps it until the user opened it once.
      */
     val showsResult: Boolean
-        get() = isActive || isLeftoverSweepPending || (leftover.isNotEmpty() && leftoverSweep?.rejection != null)
+        get() = isActive || isLeftoverSweepPending || (leftover.isNotEmpty() && leftoverSweep?.rejection != null) ||
+            (hasLoss && !isResultSeen)
+
+    /** The exit failed or lost leaves, which the user is shown at least once. */
+    val hasLoss: Boolean get() = phase is Phase.Failed || lostLeaves.isNotEmpty()
 
     /** Background runs and the foreground loop keep going while the exit runs and until its leftover is swept. */
     val needsDriving: Boolean get() = isActive || isLeftoverSweepPending
@@ -390,6 +397,7 @@ object SparkExitJson {
             )
         }
         r.fundingPaymentTxid?.let { put("fundingPaymentTxid", it) }
+        if (r.isResultSeen) put("isResultSeen", true)
         if (r.spentStepStrikes.isNotEmpty()) {
             put(
                 "spentStepStrikes",
@@ -487,6 +495,7 @@ object SparkExitJson {
             )
         },
         fundingPaymentTxid = o.stringOrNull("fundingPaymentTxid"),
+        isResultSeen = o.booleanOrNull("isResultSeen") ?: false,
         spentStepStrikes = o.objectOrNull("spentStepStrikes")
             ?.mapValues { it.value.jsonPrimitive.content.toInt() }
             .orEmpty(),

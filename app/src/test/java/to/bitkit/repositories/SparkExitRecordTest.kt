@@ -228,4 +228,21 @@ class SparkExitRecordTest {
         assertFalse(file.exists())
         assertTrue(File(file.parentFile, "spark-exit.unreadable-42.json").exists())
     }
+
+    @Test
+    fun `a failed or lossy exit stays reachable until its result was seen`() {
+        val done = SparkExitFixtures.record(SparkExitRecord.Phase.Done)
+        assertFalse(done.showsResult)
+
+        val failed = SparkExitFixtures.record(SparkExitRecord.Phase.Failed(SparkExitDriver.LOST_REASON))
+        assertTrue(failed.showsResult)
+        assertFalse(failed.copy(isResultSeen = true).showsResult)
+
+        val partial = done.copy(lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 16_384uL)))
+        assertTrue(partial.showsResult)
+        assertFalse(partial.copy(isResultSeen = true).showsResult)
+
+        val seen = failed.copy(isResultSeen = true)
+        assertEquals(seen, SparkExitJson.decode(SparkExitJson.encode(seen)))
+    }
 }

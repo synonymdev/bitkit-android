@@ -348,7 +348,9 @@ class SparkExitDriverTest : BaseUnitTest() {
 
         assertTrue(assertNotNull(record.leftoverSweep).isConfirmed)
         assertFalse(record.needsDriving)
-        assertFalse(record.showsResult)
+        // A failed exit stays reachable until its result was seen.
+        assertTrue(record.showsResult)
+        assertFalse(record.copy(isResultSeen = true).showsResult)
         record = driver().tick(record)
         assertEquals(3, chain.rawBroadcasts.size)
     }

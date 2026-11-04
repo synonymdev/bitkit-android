@@ -207,7 +207,7 @@ object SparkExitMath {
     /**
      * What progress shows while the exit still needs fee funding, or null when it does not. [utxos] is what the funding
      * address holds, null when it could not be read. A payment from savings that has not confirmed, or new funding
-     * covering the shortfall that has not, is waited for; only what is still missing is asked for.
+     * covering the shortfall that has not, is waited for; only what is still missing is asked for, at least dust.
      */
     fun fundingState(record: SparkExitRecord, utxos: List<EsploraUtxo>?): SparkExitFundingState? {
         val shortfall = record.fundingShortfallSats ?: return null
@@ -223,7 +223,8 @@ object SparkExitMath {
             val txid = (fresh.firstOrNull { !it.status.confirmed } ?: fresh.first()).txid
             return SparkExitFundingState.Seen(txid)
         }
-        return SparkExitFundingState.Ask(shortfall - seen, receivedSats = seen)
+        // Nodes refuse an output under its dust limit, so a smaller remainder is asked as the funding output's dust.
+        return SparkExitFundingState.Ask(maxOf(shortfall - seen, FUNDING_DUST_SATS), receivedSats = seen)
     }
 
     /** What reached the funding address against [requiredSats], once some but not all of it did; else null. */
@@ -245,6 +246,9 @@ object SparkExitMath {
         val blockTime = if (network == Network.REGTEST) REGTEST_BLOCK_TIME else BLOCK_TIME
         return blockTime * BlockTimeHelpers.blocksRemaining(height, tip)
     }
+
+    /** The dust limit of the funding address's P2WPKH output, the least a top-up can pay. */
+    const val FUNDING_DUST_SATS = 294uL
 
     /** About how many blocks after a step matures the operators may publish their own version of it. */
     private const val OPERATOR_WINDOW_BLOCKS = 50

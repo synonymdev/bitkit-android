@@ -100,7 +100,7 @@ private fun Content(
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),
                     onClick = onContinue,
-                    enabled = uiState.fundingSeenSats >= fundingSats,
+                    enabled = uiState.canContinueFunding,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("SparkExitFundingContinue")

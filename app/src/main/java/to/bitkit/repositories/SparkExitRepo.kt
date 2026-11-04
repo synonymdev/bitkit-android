@@ -283,8 +283,11 @@ class SparkExitRepo @Inject constructor(
      * funding is notified once, at once.
      */
     private fun updateAlerts(record: SparkExitRecord, previous: SparkExitRecord, isOnTrack: Boolean) {
-        // Once for each leaf found claimed by an older state.
-        if (record.lostLeaves.size > previous.lostLeaves.size) work.notify(SparkExitAlert.Lost)
+        when (SparkExitAlerts.loss(record, previous)) {
+            SparkExitAlert.Lost -> work.notify(SparkExitAlert.Lost, amountSats = record.lostSats)
+            SparkExitAlert.Failed -> work.notify(SparkExitAlert.Failed)
+            else -> Unit
+        }
         when (record.phase) {
             SparkExitRecord.Phase.Running -> {
                 if (!isOnTrack) return
@@ -463,6 +466,19 @@ class SparkExitRepo @Inject constructor(
                 record.fundedSats == 0uL &&
                 exit.fundingSeenSats == 0uL
         }
+
+    /** The user opened the result of an exit that failed or lost leaves: Emergency exit may start a new one now. */
+    suspend fun markResultSeen(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            tickMutex.withLock {
+                val record = _state.value.record?.takeIf { !it.isActive && it.hasLoss && !it.isResultSeen }
+                    ?: return@withLock
+                val seen = record.copy(isResultSeen = true)
+                store.save(seen)
+                _state.update { it.copy(record = seen) }
+            }
+        }
+    }
 
     suspend fun cancel(): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {

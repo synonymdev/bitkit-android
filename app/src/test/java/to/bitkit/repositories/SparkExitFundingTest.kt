@@ -289,4 +289,11 @@ class SparkExitFundingTest {
         assertEquals(partial, ask.partial)
         assertNull(SparkExitFundingState.Ask(20_000uL).partial)
     }
+
+    @Test
+    fun `a top up under dust is asked as the funding output's dust limit`() {
+        val record = SparkExitFixtures.record()
+        val almost = listOf(SparkExitFixtures.utxo("ext", value = 19_932uL))
+        assertEquals(SparkExitFundingState.Ask(294uL, 19_932uL), SparkExitMath.fundingState(record, almost))
+    }
 }

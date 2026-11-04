@@ -52,4 +52,16 @@ class SparkExitAlertsTest {
         assertNull(SparkExitAlerts.reason(SparkExitFixtures.record(Phase.Done), isOnline = false, unlimited))
         assertNull(SparkExitAlerts.reason(null, isOnline = false, unlimited))
     }
+
+    @Test
+    fun `posts a lost leaf or a failed exit once, the lost leaves when both happen together`() {
+        val lost = running.copy(lostLeaves = listOf(SparkExitRecord.LostLeaf("leaf-1", 16_384uL)))
+        val failed = lost.copy(phase = Phase.Failed(SparkExitDriver.LOST_REASON))
+
+        assertEquals(SparkExitAlert.Lost, SparkExitAlerts.loss(lost, running))
+        assertEquals(SparkExitAlert.Lost, SparkExitAlerts.loss(failed, running))
+        assertEquals(SparkExitAlert.Failed, SparkExitAlerts.loss(failed, lost))
+        assertNull(SparkExitAlerts.loss(failed, failed))
+        assertNull(SparkExitAlerts.loss(SparkExitFixtures.record(Phase.Done), running))
+    }
 }
