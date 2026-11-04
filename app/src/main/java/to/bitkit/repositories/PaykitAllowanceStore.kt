@@ -104,6 +104,8 @@ class PaykitAllowanceStore @Inject constructor(
     @Serializable
     private data class Stored(
         val statesByIdentity: Map<String, PaykitAllowanceLocalState> = emptyMap(),
+        /** Set by a wallet restore and kept out of the backup; cleared when the user resumes automatic payments. */
+        val isPausedAfterRestore: Boolean = false,
     )
 
     private val _backupStateVersion = MutableStateFlow(0L)
@@ -147,6 +149,26 @@ class PaykitAllowanceStore @Inject constructor(
             .mapValues { (key, state) -> stored.statesByIdentity[key]?.let(state::withChecksFrom) ?: state }
         keychain.upsertString(KEY, storeJson.encodeToString(stored.copy(stored.statesByIdentity + restored)))
         _backupStateVersion.update { it + 1 }
+    }
+
+    /** True from a wallet restore until the user resumes automatic payments, also across app restarts. */
+    fun isPausedAfterRestore(): Boolean =
+        runCatching { loadAll().isPausedAfterRestore }
+            .onFailure { Logger.warn("Failed to load Paykit allowance state", it, context = TAG) }
+            .getOrDefault(false)
+
+    /** Pauses automatic payments of every identity after a wallet restore, until [resumeAfterRestore]. */
+    suspend fun pauseAfterRestore() {
+        // A restore may replace state this build cannot read, as restoreBackup does.
+        val stored = runCatching { loadAll() }.getOrDefault(Stored())
+        keychain.upsertString(KEY, storeJson.encodeToString(stored.copy(isPausedAfterRestore = true)))
+    }
+
+    /** Clears the pause [pauseAfterRestore] set. Throws on state this build cannot read, which it never replaces. */
+    suspend fun resumeAfterRestore() {
+        val stored = loadAll()
+        if (!stored.isPausedAfterRestore) return
+        keychain.upsertString(KEY, storeJson.encodeToString(stored.copy(isPausedAfterRestore = false)))
     }
 
     private fun PaykitAllowanceLocalState.withoutWatermark() = copy(lastTrustedTimeMillis = null)

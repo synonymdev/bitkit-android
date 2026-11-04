@@ -38,6 +38,7 @@ import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -712,6 +713,36 @@ class BackupRepoTest : BaseUnitTest() {
         sut.performFullRestoreFromLatestBackup().getOrThrow()
 
         verify(paykitAllowanceStore).restoreBackup(mapOf(identity to allowances.restored()))
+    }
+
+    @Test
+    fun `wallet restore pauses automatic allowance payments after restoring their state`() = test {
+        val identity = "pubky" + "z".repeat(52)
+        val allowances = PaykitAllowanceStateBackup(ledgerRevisionFloor = 5uL)
+        stubWalletBackup(
+            paykitSdkBackupState = "saved-sdk-state",
+            paykitPaymentState = PaykitPaymentStateBackup(
+                subscriptions = emptyMap(),
+                pendingProofs = emptyList(),
+                allowances = mapOf(identity to allowances),
+            ),
+        )
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        val order = inOrder(paykitAllowanceStore)
+        order.verify(paykitAllowanceStore).restoreBackup(mapOf(identity to allowances.restored()))
+        order.verify(paykitAllowanceStore).pauseAfterRestore()
+    }
+
+    @Test
+    fun `wallet restore without allowance state still pauses automatic allowance payments`() = test {
+        stubWalletBackup(paykitSdkBackupState = "saved-sdk-state")
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        verify(paykitAllowanceStore, never()).restoreBackup(any())
+        verify(paykitAllowanceStore).pauseAfterRestore()
     }
 
     @Test

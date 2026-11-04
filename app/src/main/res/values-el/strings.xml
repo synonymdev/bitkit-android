@@ -1453,6 +1453,7 @@
     <string name="subscriptions__allowances_empty_description">Μπορείς να ορίσεις όρια δαπανών για να εκπληρώνονται αυτόματα αιτήματα πληρωμής από αξιόπιστες επαφές.</string>
     <string name="subscriptions__allowances_empty_headline">Ρύθμισε\n&lt;accent&gt;προϋπολογισμούς&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Τα αρχεία των προϋπολογισμών σου είναι παλαιότερα από αρχεία που έχει ήδη χρησιμοποιήσει αυτό το πορτοφόλι. Τα αιτήματα θα ζητούν την έγκρισή σου μέχρι να συνεχίσεις.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Αυτό το πορτοφόλι επαναφέρθηκε από αντίγραφο ασφαλείας. Τα αιτήματα θα ζητούν την έγκρισή σου μέχρι να συνεχίσεις.</string>
     <string name="subscriptions__allowances_paused_resume">Συνέχεια</string>
     <string name="subscriptions__allowances_paused_title">Οι αυτόματες πληρωμές έχουν παυθεί</string>
     <string name="subscriptions__cancel_subscription">Ακύρωση συνδρομής</string>

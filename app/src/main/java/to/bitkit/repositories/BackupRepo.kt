@@ -1153,6 +1153,8 @@ class BackupRepo @Inject constructor(
             paykitPresentationStore.restoreAcceptedOneTimeRequests(it.acceptedOneTimeRequests.orEmpty())
             paykitAllowanceStore.restoreBackup(allowances)
         }
+        // Automatic allowance payments wait for the user to resume them; restored spending still counts.
+        paykitAllowanceStore.pauseAfterRestore()
         db.transferDao().upsert(parsed.transfers)
         watchOnlyAccountRepo.restore(
             parsed.watchOnlyAccounts.orEmpty(),

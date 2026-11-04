@@ -1461,6 +1461,7 @@
     <string name="subscriptions__allowances_empty_description">Můžete nastavit limity útraty pro automatické vyřizování žádostí o platbu od důvěryhodných kontaktů.</string>
     <string name="subscriptions__allowances_empty_headline">Nastavte si\n&lt;accent&gt;rozpočty&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Záznamy vašich rozpočtů jsou starší než ty, které tato peněženka už použila. Požadavky budou čekat na vaše schválení, dokud platby neobnovíte.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Tato peněženka byla obnovena ze zálohy. Požadavky budou čekat na vaše schválení, dokud platby neobnovíte.</string>
     <string name="subscriptions__allowances_paused_resume">Obnovit</string>
     <string name="subscriptions__allowances_paused_title">Automatické platby pozastaveny</string>
     <string name="subscriptions__cancel_subscription">Zrušit předplatné</string>

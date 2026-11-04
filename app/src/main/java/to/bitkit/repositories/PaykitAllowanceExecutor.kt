@@ -324,6 +324,14 @@ class PaykitAllowanceExecutor @Inject constructor(
         updateLocalStateDurably(identity) { it.copy(ledgerRevisionFloor = ledger?.revision) }
     }
 
+    /** True after a wallet restore until [resumeAfterRestore]; every request asks for approval meanwhile. */
+    fun isPausedAfterRestore(): Boolean = store.isPausedAfterRestore()
+
+    /** Lets automatic payments run again after a wallet restore. The restored spends still count toward the limits. */
+    suspend fun resumeAfterRestore(): Unit = withContext(ioDispatcher) {
+        stateMutex.withLock { store.resumeAfterRestore() }
+    }
+
     // endregion
 
     // region Ledger
@@ -445,6 +453,8 @@ class PaykitAllowanceExecutor @Inject constructor(
                 PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
         }
         if (matching.isEmpty()) return@withContext false
+        // Paused automatic payments keep the request manual, without waiting for the node.
+        if (isPausedAfterRestore()) return@withContext true
         val read = runSuspendCatching { paykitSdkService.allowanceAccountingState() }
         // A ledger behind this wallet keeps the request manual, without waiting for the node.
         if (read.isSuccess && runSuspendCatching { !acceptsLedger(read.getOrNull(), identity) }.getOrDefault(true)) {
@@ -589,6 +599,10 @@ class PaykitAllowanceExecutor @Inject constructor(
 
         val activation = activeIdentity
         try {
+            if (isPausedAfterRestore()) {
+                Logger.info("Kept an incoming request manual: paused after a wallet restore", context = TAG)
+                return@withContext PaykitAllowanceAutoPayResult.MANUAL
+            }
             runSuspendCatching {
                 ensureReconciled(identity)
                 // Survive a cancelled caller: stopping after the acceptance would leave the request unpaid.

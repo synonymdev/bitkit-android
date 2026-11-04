@@ -166,6 +166,57 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a restored wallet pauses automatic payments while it pays an allowance`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        records = listOf(fixtures.record())
+
+        sut.activate(identity)
+
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `a restored wallet shows no pause without an allowance it pays`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        records = listOf(
+            fixtures.record(localRole = AllowanceLocalRole.ALLOWEE),
+            fixtures.record(allowanceId = "allowance-ended", state = AllowanceLifecycleState.ENDED),
+        )
+
+        sut.activate(identity)
+
+        assertEquals(2, sut.entries.value.size)
+        assertNull(sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `a ledger behind this wallet explains the pause before a restore does`() = test {
+        whenever(executor.isPausedAfterRestore()).thenReturn(true)
+        whenever(executor.isLedgerBehind(identity)).thenReturn(true)
+        records = listOf(fixtures.record())
+
+        sut.activate(identity)
+
+        assertEquals(PaykitAllowancePause.LEDGER_BEHIND, sut.automaticPaymentPause.value)
+    }
+
+    @Test
+    fun `resuming ends the pause after a restore`() = test {
+        var isPaused = true
+        whenever(executor.isPausedAfterRestore()).thenAnswer { isPaused }
+        whenever(executor.resumeAfterRestore()).doSuspendableAnswer { isPaused = false }
+        records = listOf(fixtures.record())
+        sut.activate(identity)
+        assertEquals(PaykitAllowancePause.RESTORED, sut.automaticPaymentPause.value)
+
+        sut.resumeAutomaticPayments().getOrThrow()
+
+        verify(executor).acceptCurrentLedger(identity)
+        verify(executor).resumeAfterRestore()
+        assertNull(sut.automaticPaymentPause.value)
+    }
+
+    @Test
     fun `auto-paid sats and requests come from the lasting totals, not the trimmed journal`() = test {
         records = listOf(fixtures.record(allowanceId = ALLOWANCE_ID))
         val paid = fixtures.paymentRequest(id = "paid")

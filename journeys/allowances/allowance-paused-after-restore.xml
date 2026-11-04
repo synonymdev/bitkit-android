@@ -1,0 +1,31 @@
+<journey name="Allowance Paused After Restore">
+  <description>
+    Automatic payments stay paused after a payer restores its wallet from its recovery phrase, until
+    the payer resumes them: the Allowances tab explains the pause, a request within the limits asks
+    for approval instead of paying, the pause survives a relaunch, and Resume turns automatic
+    payments back on. Reset And Restore wipes the keychain and reads the allowance state back from
+    the wallet backup, so no second install is needed. Requires the Active allowance from
+    set-and-accept.xml and the payer's notification permission granted. When the payer requires a
+    PIN for payments, Resume asks for it, as in pin-gates-allowance-changes.xml. The journey wipes
+    the payer half way through, so do not run it against a wallet whose funds matter.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app on both instances with the $5 a payment, $50 a month allowance from set-and-accept.xml Active, and the payer's notification permission granted</action>
+    <action>On the payer instance, open the menu, navigate to Settings, then the "Security" tab (testTag "Tab-security"), then tap "Back Up Your Money" (testTag "BackupWallet"), continue past the intro (testTag "BackupIntroViewContinue"), tap to reveal the phrase (testTag "TapToReveal") and record the phrase from the word grid (testTag "SeedContainer")</action>
+    <action>Open Settings, then the "Security" tab, then "Data Backups" (testTag "BackupSettings"), and wait on the list (testTag "BackupScrollView") until the "Boosts &amp; Transfers" row reports a backup made after the allowance became Active — that row carries no testTag, so read its text</action>
+    <action>Open Settings, then the "Security" tab, then "Reset And Restore" (testTag "ResetAndRestore"), tap "Reset Wallet" (testTag "restore_reset_button") and confirm in the dialog (testTag "restore_reset_dialog")</action>
+    <action>On the onboarding screen tap "Restore" (testTag "RestoreWallet"), enter the recorded words into the word inputs (testTag "Word-0" onwards) and tap Restore (testTag "RestoreButton")</action>
+    <action>Wait for the restore to finish and tap "Get Started" (testTag "GetStartedButton")</action>
+    <action>Open the drawer menu, tap Subscriptions and tap the Allowances tab (testTag "Tab-allowances")</action>
+    <action>Verify the paused notice (testTag "AllowancesPaused") reads "Automatic payments paused" and "This wallet was restored from a backup. Requests ask for your approval until you resume.", shows Resume (testTag "AllowancesResume"), and the payee's row (testTag "AllowanceRow-&lt;entryId&gt;") is listed as Active</action>
+    <action>On the payee instance, open the drawer menu, tap Subscriptions, tap the Payments tab (testTag "Tab-payments") and send the payer a one-time Payment Request for $2 with the note "Paused"</action>
+    <action>Switch to the payer instance, with Bitkit in the foreground, and verify the Payment Request sheet (testTag "PaymentRequestsSheet") opens for the request, or the bell (testTag "PaymentRequestsBell") shows one pending request, and that no "Payment Executed" notification is posted, reading notifications back with `adb shell dumpsys notification --noredact`</action>
+    <action>Pay it from the sheet (testTag "PaymentRequestPay-&lt;paymentRequestId&gt;") and complete Swipe To Pay, then verify Bitcoin Sent shows about $2.00</action>
+    <action>Relaunch the payer with `adb shell am force-stop to.bitkit.dev` and `adb shell monkey -p to.bitkit.dev -c android.intent.category.LAUNCHER 1`, open the drawer menu, tap Subscriptions and tap the Allowances tab</action>
+    <action>Verify the paused notice (testTag "AllowancesPaused") still reads "This wallet was restored from a backup. Requests ask for your approval until you resume."</action>
+    <action>Tap Resume (testTag "AllowancesResume") and, if the PIN pad shows, enter the PIN</action>
+    <action>Verify the paused notice (testTag "AllowancesPaused") is gone and the payee's row is still listed as Active</action>
+    <action>On the payee instance, send the payer a one-time Payment Request for $2 with the note "Resumed"</action>
+    <action>Switch to the payer instance, with Bitkit in the foreground, and verify a "Payment Executed" notification with the text "Auto-pay sent $2.00 to &lt;payee&gt;" is posted, reading it back with `adb shell dumpsys notification --noredact`</action>
+  </actions>
+</journey>

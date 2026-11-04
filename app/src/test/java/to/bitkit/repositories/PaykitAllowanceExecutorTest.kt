@@ -522,6 +522,26 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a restored wallet keeps requests manual until automatic payments resume`() = test {
+        PaykitAllowanceStore(keychain).pauseAfterRestore()
+        val request = fixtures.paymentRequest()
+
+        val paused = sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        assertEquals(PaykitAllowanceAutoPayResult.MANUAL, paused)
+        assertTrue(sut.isPausedAfterRestore())
+        verify(sdk, never()).evaluateAllowanceCandidates(any(), any())
+        verify(sdk, never()).acceptPaymentRequestAutomatically(any(), any(), any(), any())
+        verifyNoInteractions(payer)
+
+        sut.resumeAfterRestore()
+        val resumed = sut.autoPay(request, listOf(fixtures.allowance()), identity)
+
+        assertFalse(sut.isPausedAfterRestore())
+        assertEquals(PaykitAllowanceAutoPayResult.STARTED, resumed)
+    }
+
+    @Test
     fun `a ledger that goes behind this wallet during admission keeps the request manual`() = test {
         sut.updateLocalState(identity) { it.copy(ledgerRevisionFloor = 5uL) }
         whenever(sdk.allowanceAccountingState())
@@ -1396,6 +1416,18 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
 
         assertTrue(isManual)
         assertTrue(events.isEmpty(), "A ledger behind the wallet raises no Limit Reached")
+    }
+
+    @Test
+    fun `local capacity check hands back a request while paused after a restore`() = test {
+        collectEvents()
+        PaykitAllowanceStore(keychain).pauseAfterRestore()
+
+        val isManual = sut.classifyAboveLimit(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        assertTrue(isManual)
+        assertTrue(events.isEmpty(), "A restore pause raises no Limit Reached")
+        verify(sdk, never()).allowanceAccountingState()
     }
 
     @Test

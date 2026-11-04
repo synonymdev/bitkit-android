@@ -1460,6 +1460,7 @@
     <string name="subscriptions__allowances_empty_description">Możesz ustawić limity wydatków, aby automatycznie realizować żądania płatności od zaufanych kontaktów.</string>
     <string name="subscriptions__allowances_empty_headline">Skonfiguruj\n&lt;accent&gt;budżety&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Dane Twoich budżetów są starsze niż te, których ten portfel już użył. Prośby będą czekać na Twoją zgodę, dopóki nie wznowisz.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Ten portfel został przywrócony z kopii zapasowej. Prośby będą czekać na Twoją zgodę, dopóki nie wznowisz.</string>
     <string name="subscriptions__allowances_paused_resume">Wznów</string>
     <string name="subscriptions__allowances_paused_title">Płatności automatyczne wstrzymane</string>
     <string name="subscriptions__cancel_subscription">Anuluj subskrypcję</string>

@@ -1461,6 +1461,7 @@
     <string name="subscriptions__allowances_empty_description">Você pode definir limites de gastos para pagar automaticamente solicitações de pagamento de contatos de confiança.</string>
     <string name="subscriptions__allowances_empty_headline">Configure\n&lt;accent&gt;mesadas&lt;/accent&gt;</string>
     <string name="subscriptions__allowances_paused_description">Os registros das suas mesadas são mais antigos do que outros que esta carteira já usou. As solicitações vão pedir sua aprovação até você retomar.</string>
+    <string name="subscriptions__allowances_paused_restore_description">Esta carteira foi restaurada a partir de um backup. As solicitações vão pedir sua aprovação até você retomar.</string>
     <string name="subscriptions__allowances_paused_resume">Retomar</string>
     <string name="subscriptions__allowances_paused_title">Pagamentos automáticos pausados</string>
     <string name="subscriptions__cancel_subscription">Cancelar Assinatura</string>

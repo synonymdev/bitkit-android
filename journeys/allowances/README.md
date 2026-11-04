@@ -5,6 +5,8 @@ contact, the payee's wallet accepts it by itself, requests within the limits are
 limit falls back to the normal Payment Request sheet, and either side ends it. The restart journey
 pins the one rule that must never break: a payment interrupted mid-flight is never paid twice.
 The restore journey checks that a payer restored from its recovery phrase keeps its allowance history.
+`allowance-paused-after-restore.xml` checks that a restored payer's automatic payments stay paused,
+also across a relaunch, until the payer taps Resume on the Allowances tab.
 
 ## Setup
 

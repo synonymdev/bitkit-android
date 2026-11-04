@@ -12,6 +12,8 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class PaykitAllowanceStoreTest : BaseUnitTest() {
     private val identity = PaykitAllowanceFixtures.identityKey
@@ -69,6 +71,45 @@ class PaykitAllowanceStoreTest : BaseUnitTest() {
         assertEquals(setOf("kept"), sut.load(other).notifiedRequestIds)
         assertEquals(before + 1, sut.backupStateVersion.value)
         assertEquals(2, sut.backupSnapshot().size)
+    }
+
+    @Test
+    fun `restore pause survives a reload until resumed`() = test {
+        sut.save(identity, PaykitAllowanceLocalState(notifiedRequestIds = setOf("request-1")))
+
+        sut.pauseAfterRestore()
+
+        assertTrue(PaykitAllowanceStore(keychain).isPausedAfterRestore())
+        assertEquals(setOf("request-1"), PaykitAllowanceStore(keychain).load(identity).notifiedRequestIds)
+
+        sut.resumeAfterRestore()
+
+        assertFalse(PaykitAllowanceStore(keychain).isPausedAfterRestore())
+        assertEquals(setOf("request-1"), sut.load(identity).notifiedRequestIds)
+    }
+
+    @Test
+    fun `restore pause stays out of the backup and outlives restored state`() = test {
+        val restored = PaykitAllowanceLocalState(autoPaidSatsByAllowance = mapOf("key" to 1_000uL))
+        sut.pauseAfterRestore()
+        val before = sut.backupStateVersion.value
+
+        sut.restoreBackup(mapOf(identity to restored))
+        sut.save(identity, restored.copy(notifiedRequestIds = setOf("request-1")))
+
+        assertTrue(sut.isPausedAfterRestore())
+        assertEquals(before + 2, sut.backupStateVersion.value)
+        assertEquals(setOf(PubkyPublicKeyFormat.normalized(identity) ?: identity), sut.backupSnapshot().keys)
+    }
+
+    @Test
+    fun `resuming never replaces state this build cannot read`() = test {
+        stored = "{\"statesByIdentity\":{\"other\":{\"journal\":[{\"stage\":\"from-a-newer-build\"}]}}}"
+        val unreadable = stored
+
+        assertFalse(sut.isPausedAfterRestore())
+        assertFailsWith<SerializationException> { sut.resumeAfterRestore() }
+        assertEquals(unreadable, stored)
     }
 
     @Test
