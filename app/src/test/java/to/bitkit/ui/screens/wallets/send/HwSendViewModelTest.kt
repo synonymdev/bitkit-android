@@ -35,6 +35,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.HeldHwSend
+import to.bitkit.data.HwHeldSendsUnreadableError
 import to.bitkit.ext.create
 import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingBroadcastResult
@@ -1026,6 +1027,43 @@ class HwSendViewModelTest : BaseUnitTest() {
         }
         verify(hwWalletRepo, never()).releaseHeldSend(any())
         assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
+    }
+
+    @Test
+    fun `a send whose held records cannot be read is never signed and offers an explicit clear`() = test {
+        stubSuccessfulPayment()
+        whenever(hwWalletRepo.heldSendFor(WALLET_ID, ADDRESS, AMOUNT_SATS))
+            .thenReturn(Result.failure(HwHeldSendsUnreadableError(WALLET_ID)))
+        whenever(hwWalletRepo.clearUnreadableHeldSends(WALLET_ID)).thenReturn(Result.success(Unit))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFundingAtBoundary(any(), anyOrNull(), any())
+        assertEquals(WALLET_ID, sut.uiState.value.unreadableHeldSendsWalletId)
+        verify(hwWalletRepo, never()).clearUnreadableHeldSends(any())
+
+        sut.clearUnreadableHeldSends()
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).clearUnreadableHeldSends(WALLET_ID)
+        assertNull(sut.uiState.value.unreadableHeldSendsWalletId)
+    }
+
+    @Test
+    fun `a send whose held records fail to load is never signed`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        stubSuccessfulPayment()
+        whenever(hwWalletRepo.heldSendFor(WALLET_ID, ADDRESS, AMOUNT_SATS))
+            .thenReturn(Result.failure(AppError("Disk unreadable")))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFundingAtBoundary(any(), anyOrNull(), any())
+        assertFalse(sut.uiState.value.isSigning)
     }
 
     @Test

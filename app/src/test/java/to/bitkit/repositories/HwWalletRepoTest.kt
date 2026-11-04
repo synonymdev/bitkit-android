@@ -32,6 +32,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -45,6 +48,9 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.HeldHwSend
+import to.bitkit.data.HwHeldSendData
+import to.bitkit.data.HwHeldSendStore
+import to.bitkit.data.HwHeldSendsUnreadableError
 import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PendingNameUpdate
@@ -94,6 +100,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val hwWalletStore = mock<HwWalletStore>()
+    private val hwHeldSendStore = mock<HwHeldSendStore>()
     private val settingsStore = mock<SettingsStore>()
 
     private lateinit var storeData: MutableStateFlow<HwWalletData>
@@ -308,6 +315,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         activityRepo = activityRepo,
         preActivityMetadataRepo = preActivityMetadataRepo,
         hwWalletStore = hwWalletStore,
+        hwHeldSendStore = hwHeldSendStore,
         settingsStore = settingsStore,
         ioDispatcher = testDispatcher,
     )
@@ -353,7 +361,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a held send stays held for its payment even once the wallet sees it`() = test {
+    fun `a held send is found for its own payment only`() = test {
         val held = HeldHwSend(
             walletId = HARDWARE_WALLET_ID,
             txId = "T1",
@@ -365,31 +373,36 @@ class HwWalletRepoTest : BaseUnitTest() {
             feeRate = 2uL,
             totalSpent = 25_200uL,
         )
-        storeData.value = storeData.value.copy(heldSends = listOf(held))
-        whenever(hwWalletStore.loadHeldSends()).thenAnswer { storeData.value.heldSends }
+        whenever(hwHeldSendStore.load()).thenReturn(HwHeldSendData(heldSends = listOf(held)))
         val sut = createRepo()
 
         assertEquals(held, sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_000uL).getOrThrow())
         assertEquals(held, sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS.uppercase(), 25_000uL).getOrThrow())
         assertNull(sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_001uL).getOrThrow())
         assertNull(sut.heldSendFor("other-wallet", HELD_ADDRESS, 25_000uL).getOrThrow())
-
-        watcherEvents.emit(
-            "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
-                balance = walletBalance(total = 0uL),
-                activities = listOf(watcherActivity(amount = 25_000uL, txid = "t1", txType = PaymentType.SENT)),
-                transactionDetails = emptyList(),
-                txCount = 1u,
-                blockHeight = 850_000u,
-                accountType = AccountType.NATIVE_SEGWIT,
-                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
-            )
-        )
-
-        // The send screen records a seen send before it is released, so it is never signed again unrecorded
-        assertEquals(held, sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_000uL).getOrThrow())
-        verify(hwWalletStore, never()).releaseHeldSends(any())
+        verify(hwHeldSendStore, never()).releaseHeldSends(any())
     }
+
+    @Test
+    fun `an unreadable held send refuses sends of its wallet, and of every wallet when its wallet is unreadable`() =
+        test {
+            val unreadable = buildJsonObject {
+                put("walletId", HARDWARE_WALLET_ID)
+                put("txId", 7)
+            }
+            whenever(hwHeldSendStore.load()).thenReturn(HwHeldSendData(unreadable = listOf(unreadable)))
+            val sut = createRepo()
+
+            val refused = sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_000uL).exceptionOrNull()
+            assertEquals(HARDWARE_WALLET_ID, (refused as HwHeldSendsUnreadableError).walletId)
+            assertNull(sut.heldSendFor("other-wallet", HELD_ADDRESS, 25_000uL).getOrThrow())
+
+            whenever(hwHeldSendStore.load()).thenReturn(HwHeldSendData(unreadable = listOf(JsonPrimitive("?"))))
+            assertTrue(sut.heldSendFor("other-wallet", HELD_ADDRESS, 25_000uL).isFailure)
+
+            whenever(hwHeldSendStore.load()).doSuspendableAnswer { throw HwHeldSendsUnreadableError(walletId = null) }
+            assertTrue(sut.heldSendFor("other-wallet", HELD_ADDRESS, 25_000uL).isFailure)
+        }
 
     @Test
     fun `a held send is proven unconfirmable only by a final spend of its coin by another transaction`() = test {

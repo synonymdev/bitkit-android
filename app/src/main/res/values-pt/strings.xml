@@ -1147,6 +1147,9 @@
     <string name="hardware__found_header_jade">&lt;accent&gt;Jade&lt;/accent&gt; encontrado</string>
     <string name="hardware__found_text">Pretende emparelhar este %1$s de forma segura com a Bitkit?</string>
     <string name="hardware__found_title">Dispositivo encontrado</string>
+    <string name="hardware__held_sends_clear">Limpar registo</string>
+    <string name="hardware__held_sends_unreadable_text">A Bitkit não conseguiu ler um pagamento anterior desta carteira de hardware, por isso não vai assinar um novo. Limpar esse registo permite que a Bitkit volte a assinar. Só o limpe se nenhum pagamento anterior desta carteira ainda estiver pendente, ou o mesmo pagamento poderá ser enviado duas vezes.</string>
+    <string name="hardware__held_sends_unreadable_title">Não é possível ler um pagamento anterior</string>
     <string name="hardware__intro_header">Adicione a sua &lt;accent&gt;carteira de hardware&lt;/accent&gt;</string>
     <string name="hardware__intro_text">Ligue o seu dispositivo de hardware para acompanhar ou gerir os seus fundos a longo prazo.</string>
     <string name="hardware__intro_title">Carteira de hardware</string>

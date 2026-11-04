@@ -1173,6 +1173,9 @@
     <string name="hardware__found_header_jade">&lt;accent&gt;Jade&lt;/accent&gt; gevonden</string>
     <string name="hardware__found_text">Wilt u deze %1$s veilig koppelen met Bitkit?</string>
     <string name="hardware__found_title">Apparaat gevonden</string>
+    <string name="hardware__held_sends_clear">Gegevens wissen</string>
+    <string name="hardware__held_sends_unreadable_text">Bitkit kon een eerdere betaling van deze hardwarewallet niet lezen en ondertekent daarom geen nieuwe. Door dat gegeven te wissen kan Bitkit weer ondertekenen. Wis het alleen als geen eerdere betaling van deze wallet nog in behandeling is, anders kan dezelfde betaling twee keer worden verzonden.</string>
+    <string name="hardware__held_sends_unreadable_title">Eerdere betaling onleesbaar</string>
     <string name="hardware__intro_header">Voeg uw &lt;accent&gt;hardware wallet&lt;/accent&gt; toe</string>
     <string name="hardware__intro_text">Verbind uw hardwareapparaat om uw geld voor de lange termijn te volgen of te beheren.</string>
     <string name="hardware__intro_title">Hardwarewallet</string>

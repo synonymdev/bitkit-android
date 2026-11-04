@@ -36,6 +36,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
 import to.bitkit.data.HeldHwSend
+import to.bitkit.data.HwHeldSendStore
+import to.bitkit.data.HwHeldSendsUnreadableError
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
@@ -97,6 +99,7 @@ class HwWalletRepo @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val hwWalletStore: HwWalletStore,
+    private val hwHeldSendStore: HwHeldSendStore,
     private val settingsStore: SettingsStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
@@ -908,20 +911,33 @@ class HwWalletRepo @Inject constructor(
      * again beside it until the wallet sees it.
      */
     suspend fun holdSend(send: HeldHwSend): Result<Unit> = withContext(ioDispatcher) {
-        runSuspendCatching { hwWalletStore.holdSend(send) }
+        runSuspendCatching { hwHeldSendStore.holdSend(send) }
     }
 
     suspend fun releaseHeldSend(txId: String): Result<Unit> = withContext(ioDispatcher) {
-        runSuspendCatching { hwWalletStore.releaseHeldSends(setOf(txId)) }
+        runSuspendCatching { hwHeldSendStore.releaseHeldSends(setOf(txId)) }
     }
 
-    /** The held send of this payment, which is never signed again until it is recorded as sent or released. */
+    /**
+     * The held send of this payment, which is never signed again until it is recorded as sent or released. Fails with
+     * [HwHeldSendsUnreadableError] when an earlier send of [walletId] may be among records that cannot be read.
+     */
     suspend fun heldSendFor(walletId: String, address: String, amountSats: ULong): Result<HeldHwSend?> =
         withContext(ioDispatcher) {
             runSuspendCatching {
-                hwWalletStore.loadHeldSends().firstOrNull { it.isPaymentOf(walletId, address, amountSats) }
+                val data = hwHeldSendStore.load()
+                if (data.hasUnreadableFor(walletId)) throw HwHeldSendsUnreadableError(walletId)
+                data.heldSends.firstOrNull { it.isPaymentOf(walletId, address, amountSats) }
             }
         }
+
+    /**
+     * Discards the held send records of [walletId] that cannot be read, so its sends are signed again. Only an explicit
+     * choice of the user calls this, as a payment those records held may then be sent twice.
+     */
+    suspend fun clearUnreadableHeldSends(walletId: String): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching { hwHeldSendStore.clearUnreadable(walletId) }
+    }
 
     /**
      * Whether a fresh read of [walletId]'s history shows another transaction, [FINAL_SPEND_CONFIRMATIONS] deep,

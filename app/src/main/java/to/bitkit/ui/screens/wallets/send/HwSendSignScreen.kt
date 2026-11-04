@@ -32,6 +32,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.illustrationRes
 import to.bitkit.ui.components.sendOpenConnectRes
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.transfer.hardware.HwPassphrasePromptSheet
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -109,6 +110,16 @@ fun HwSendSignScreen(
         onBack = onBackRequest,
         onOpenConnect = signAndBroadcast,
     )
+
+    if (uiState.unreadableHeldSendsWalletId != null) {
+        AppAlertDialog(
+            title = stringResource(R.string.hardware__held_sends_unreadable_title),
+            text = stringResource(R.string.hardware__held_sends_unreadable_text),
+            confirmText = stringResource(R.string.hardware__held_sends_clear),
+            onConfirm = viewModel::clearUnreadableHeldSends,
+            onDismiss = viewModel::dismissUnreadableHeldSends,
+        )
+    }
 
     if (uiState.isPassphraseRequired) {
         HwPassphrasePromptSheet(

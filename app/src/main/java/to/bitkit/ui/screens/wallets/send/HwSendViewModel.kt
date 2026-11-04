@@ -34,6 +34,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.R
 import to.bitkit.data.HeldHwSend
+import to.bitkit.data.HwHeldSendsUnreadableError
 import to.bitkit.ext.isBroadcastConnectivityFailure
 import to.bitkit.ext.isHardwareBroadcastInputsSpent
 import to.bitkit.ext.isHardwareBroadcastNeverConfirmable
@@ -709,6 +710,23 @@ class HwSendViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Discards the unreadable held send records of the wallet the sheet was refused for, on the user's explicit choice
+     * after being told a payment they held may then be sent twice.
+     */
+    fun clearUnreadableHeldSends() {
+        val walletId = _uiState.value.unreadableHeldSendsWalletId ?: return
+        _uiState.update { it.copy(unreadableHeldSendsWalletId = null) }
+        viewModelScope.launch {
+            hwWalletRepo.clearUnreadableHeldSends(walletId).onFailure {
+                Logger.error("Failed to clear unreadable held sends of '$walletId'", it, context = TAG)
+                _uiState.update { state -> state.copy(unreadableHeldSendsWalletId = walletId) }
+            }
+        }
+    }
+
+    fun dismissUnreadableHeldSends() = _uiState.update { it.copy(unreadableHeldSendsWalletId = null) }
+
     fun dismissPassphrase() {
         passphraseJob?.cancel()
         passphraseJob = null
@@ -888,6 +906,11 @@ class HwSendViewModel @Inject constructor(
             it.copy(isBroadcastUnresolved = retainedShopPayment && pendingBroadcast?.blocksNavigation == true)
         }
         when {
+            generateSequence(error) { it.cause }.any { it is HwHeldSendsUnreadableError } -> {
+                // Nothing is signed until the user decides, knowing what it risks, to clear the unreadable record
+                Logger.warn("Refused hardware send of '$walletId' with unreadable holds", error, context = TAG)
+                _uiState.update { it.copy(unreadableHeldSendsWalletId = walletId) }
+            }
             error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)
             }
@@ -954,6 +977,8 @@ data class HwSendUiState(
     /** Sends whose broadcast may have gone out: each is pending until it is sent, and is never signed again. */
     val unresolvedSends: ImmutableList<HwSendResult> = persistentListOf(),
     val retryingSendTxIds: ImmutableSet<String> = persistentSetOf(),
+    /** The wallet whose sends are refused because an earlier held send of it cannot be read. */
+    val unreadableHeldSendsWalletId: String? = null,
 ) {
     /**
      * Whether the sign sheet may be dismissed. Connecting or unlocking can be abandoned, and leaving

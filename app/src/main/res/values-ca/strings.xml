@@ -1174,6 +1174,9 @@
     <string name="hardware__found_header_jade">&lt;accent&gt;Jade&lt;/accent&gt; trobat</string>
     <string name="hardware__found_text">Vols vincular de forma segura aquest %1$s amb Bitkit?</string>
     <string name="hardware__found_title">Dispositiu trobat</string>
+    <string name="hardware__held_sends_clear">Esborrar el registre</string>
+    <string name="hardware__held_sends_unreadable_text">Bitkit no ha pogut llegir un pagament anterior d\'aquesta cartera de maquinari, així que no en signarà cap de nou. Esborrar aquest registre permet que Bitkit torni a signar. Esborra\'l només si cap pagament anterior d\'aquesta cartera continua pendent, o el mateix pagament es podria enviar dues vegades.</string>
+    <string name="hardware__held_sends_unreadable_title">No es pot llegir un pagament anterior</string>
     <string name="hardware__intro_header">Afegeix la teva &lt;accent&gt;cartera de maquinari&lt;/accent&gt;</string>
     <string name="hardware__intro_text">Connecta el teu dispositiu de maquinari per supervisar o gestionar els teus fons a llarg termini.</string>
     <string name="hardware__intro_title">Cartera de maquinari</string>

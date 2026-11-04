@@ -1177,6 +1177,9 @@
     <string name="hardware__found_header_jade">&lt;accent&gt;Jade&lt;/accent&gt; gefunden</string>
     <string name="hardware__found_text">Möchtest du deinen %1$s sicher mit Bitkit koppeln?</string>
     <string name="hardware__found_title">Gerät gefunden</string>
+    <string name="hardware__held_sends_clear">Aufzeichnung löschen</string>
+    <string name="hardware__held_sends_unreadable_text">Bitkit konnte eine frühere Zahlung von diesem Hardware-Wallet nicht lesen und signiert daher keine neue. Wenn du diese Aufzeichnung löschst, signiert Bitkit wieder. Lösche sie nur, wenn keine frühere Zahlung von diesem Wallet mehr aussteht, sonst könnte dieselbe Zahlung zweimal gesendet werden.</string>
+    <string name="hardware__held_sends_unreadable_title">Frühere Zahlung nicht lesbar</string>
     <string name="hardware__intro_header">Füge dein\n&lt;accent&gt;Hardware-\nWallet&lt;/accent&gt; hinzu</string>
     <string name="hardware__intro_text">Verbinde dein Hardware-Gerät, um dein langfristiges Guthaben zu beobachten oder zu verwalten.</string>
     <string name="hardware__intro_title">Hardware-Wallet</string>
