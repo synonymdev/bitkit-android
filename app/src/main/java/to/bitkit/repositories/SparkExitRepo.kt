@@ -277,7 +277,7 @@ class SparkExitRepo @Inject constructor(
     }
 
     /**
-     * Pushes back the warning that the exit fell behind, to halfway through the operators' window of the next step to
+     * Pushes back the warning that the exit fell behind, to 12 blocks into the operators' window of the next step to
      * mature (about 50 blocks after it, when they may publish their own version), or of the steps already waiting to
      * be published. Only a run that kept the exit on track pushes it; a stalled exit lets it fire. Needing more fee
      * funding is notified once, at once.

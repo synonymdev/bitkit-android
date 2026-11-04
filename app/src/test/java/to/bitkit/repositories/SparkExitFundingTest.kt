@@ -149,19 +149,19 @@ class SparkExitFundingTest {
     }
 
     @Test
-    fun `deadline warns halfway through the operators' window of the next step`() {
+    fun `deadline warns 12 blocks into the operators' window of the next step`() {
         val mainnet = SparkExitMath.deadline(2.hours, Network.BITCOIN)
-        assertEquals(SparkExitDeadline(warnIn = 6.hours + 10.minutes, deadlineIn = 10.hours + 20.minutes), mainnet)
+        assertEquals(SparkExitDeadline(warnIn = 4.hours, deadlineIn = 10.hours + 20.minutes), mainnet)
         val regtest = SparkExitMath.deadline(Duration.ZERO, Network.REGTEST)
-        assertEquals(SparkExitDeadline(warnIn = 12.5.minutes, deadlineIn = 25.minutes), regtest)
+        assertEquals(SparkExitDeadline(warnIn = 6.minutes, deadlineIn = 25.minutes), regtest)
     }
 
     @Test
-    fun `deadline warns within half of the 50-block window on every network`() {
+    fun `deadline warns under half of the smaller of the 50- and 100-block windows on every network`() {
         listOf(Network.BITCOIN to 10.minutes, Network.REGTEST to 30.seconds).forEach { (network, block) ->
             val maturity = 3.hours
             val deadline = SparkExitMath.deadline(maturity, network)
-            assertTrue(deadline.warnIn - maturity <= block * 25, "$network warns too late")
+            assertTrue(deadline.warnIn - maturity < block * minOf(50, 100) / 2, "$network warns too late")
             assertEquals(block * 50, deadline.deadlineIn - maturity)
         }
     }

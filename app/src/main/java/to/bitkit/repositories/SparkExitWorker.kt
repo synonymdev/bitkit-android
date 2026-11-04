@@ -54,7 +54,7 @@ import kotlin.time.Duration.Companion.minutes
  *
  * A unique periodic work drives the exit every 15 minutes while it runs; WorkManager keeps it across app kills and
  * reboots, and app start queues it again if it is missing. Each run that moves the exit forward re-arms a deadline
- * alarm halfway through the operators' window of the next step. The alarm fires only when no run made it in time
+ * alarm 12 blocks into the operators' window of the next step. The alarm fires only when no run made it in time
  * (no network, battery settings, background restrictions, failures), and then posts a notification naming the
  * deadline. Needing more fee funding is notified at once.
  */

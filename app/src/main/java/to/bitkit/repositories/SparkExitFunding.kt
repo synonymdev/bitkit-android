@@ -255,6 +255,9 @@ object SparkExitMath {
      */
     private const val OLDER_STATE_LEAD_BLOCKS = 100
 
+    /** Blocks after a step matures before Bitkit warns that it was not published: 38 of the 50 are left to publish. */
+    private const val WARN_GRACE_BLOCKS = 12
+
     /**
      * About how long until a step can be published: zero while one already can (its parents confirmed, and ready or
      * its timelock behind [tip]) or when it is unknown, else until the next step matures.
@@ -285,12 +288,14 @@ object SparkExitMath {
     /**
      * When Bitkit warns that the background run fell behind, and the deadline it names: [untilMaturity] is how long
      * until the next step matures, zero while steps already wait to be published. The deadline is the end of the
-     * window; the warning comes halfway through it, well before the operators or an older state may publish.
+     * window; the warning comes 12 blocks after maturity, well before the operators or an older state may publish.
      */
     fun deadline(untilMaturity: Duration, network: Network): SparkExitDeadline {
-        val window = operatorWindow(network)
-        return SparkExitDeadline(warnIn = untilMaturity + window / 2, deadlineIn = untilMaturity + window)
+        val grace = blockTime(network) * WARN_GRACE_BLOCKS
+        return SparkExitDeadline(warnIn = untilMaturity + grace, deadlineIn = untilMaturity + operatorWindow(network))
     }
+
+    private fun blockTime(network: Network) = if (network == Network.REGTEST) REGTEST_BLOCK_TIME else BLOCK_TIME
 
     /**
      * The funding key index of the next exit: past the one the last exit took ([kept]), and past the [stored] record's,
