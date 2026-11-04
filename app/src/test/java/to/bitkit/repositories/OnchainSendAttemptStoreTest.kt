@@ -232,12 +232,11 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         )
         val recorded = store.recordOutcome(admitted.attemptId, OnchainSendOutcome.Unknown("cd".repeat(32)), 0)
         assertEquals(recorded, store.current())
-        assertEquals(setOf(hash), store.paidInvoiceHashes())
 
-        saved[paidKey] = "not a record"
-        val restored = OnchainPaidInvoice("ef".repeat(32), ULong.MAX_VALUE / 2uL)
-        store.restorePaidInvoices(listOf(restored), 0)
-        assertEquals(setOf(restored.paymentHash), store.paidInvoiceHashes())
+        // The record is left as it was, so it still refuses Lightning instead of losing what it may hold
+        store.restorePaidInvoices(listOf(OnchainPaidInvoice("ef".repeat(32), ULong.MAX_VALUE / 2uL)), 0)
+        assertEquals("not a record", saved[paidKey])
+        assertFailsWith<Exception> { store.paidInvoiceHashes() }
     }
 
     @Test

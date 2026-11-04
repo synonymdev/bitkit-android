@@ -770,10 +770,13 @@ class OnchainSendAttemptStore @Inject constructor(
 
     /** The entries to back up, or none while the record cannot be read, so the backup itself never fails on it. */
     suspend fun paidInvoicesBackupSnapshot(walletIndex: Int): List<OnchainPaidInvoice> = withContext(ioDispatcher) {
-        mutex.withLock { loadPaidInvoicesOrEmpty(walletIndex) }
+        mutex.withLock { loadPaidInvoicesOrNull(walletIndex).orEmpty() }
     }
 
-    /** Keeps the well-formed entries of a restored backup and drops the rest. */
+    /**
+     * Keeps the well-formed entries of a restored backup and drops the rest. A local record that cannot be read is
+     * left as it is, so it keeps refusing Lightning rather than lose the invoices it may hold.
+     */
     suspend fun restorePaidInvoices(invoices: List<OnchainPaidInvoice>, walletIndex: Int) =
         withContext(ioDispatcher + NonCancellable) {
             mutex.withLock {
@@ -781,7 +784,8 @@ class OnchainSendAttemptStore @Inject constructor(
                 if (malformed.isNotEmpty()) {
                     Logger.warn("Dropped '${malformed.size}' malformed paid invoices from a restore", context = TAG)
                 }
-                val merged = (loadPaidInvoicesOrEmpty(walletIndex) + valid).distinctBy { it.paymentHash }
+                val current = loadPaidInvoicesOrNull(walletIndex) ?: return@withLock
+                val merged = (current + valid).distinctBy { it.paymentHash }
                 runSuspendCatching { savePaidInvoices(merged, walletIndex) }
                     .onFailure { Logger.warn("Failed to restore paid invoices", it, context = TAG) }
             }
@@ -790,17 +794,16 @@ class OnchainSendAttemptStore @Inject constructor(
     private suspend fun rememberPaidInvoice(attempt: OnchainSendAttempt) {
         val paymentHash = attempt.lightningPaymentHash ?: return
         val expiresAt = attempt.lightningInvoiceExpiresAt ?: return
-        val paid = loadPaidInvoicesOrEmpty(attempt.walletIndex)
+        val paid = loadPaidInvoicesOrNull(attempt.walletIndex) ?: return
         if (paid.any { it.paymentHash == paymentHash }) return
         runSuspendCatching { savePaidInvoices(paid + OnchainPaidInvoice(paymentHash, expiresAt), attempt.walletIndex) }
             .onFailure { Logger.warn("Failed to record paid invoice '$paymentHash'", it, context = TAG) }
     }
 
-    private fun loadPaidInvoicesOrEmpty(walletIndex: Int): List<OnchainPaidInvoice> =
-        runCatching { loadPaidInvoices(walletIndex) }.getOrElse {
-            Logger.warn("Failed to read paid invoices, starting a new record", it, context = TAG)
-            emptyList()
-        }
+    private fun loadPaidInvoicesOrNull(walletIndex: Int): List<OnchainPaidInvoice>? =
+        runCatching { loadPaidInvoices(walletIndex) }
+            .onFailure { Logger.warn("Failed to read paid invoices, leaving the record as it is", it, context = TAG) }
+            .getOrNull()
 
     private fun loadPaidInvoices(walletIndex: Int): List<OnchainPaidInvoice> {
         val value = keychain.loadString(PAID_INVOICES_KEY, walletIndex) ?: return emptyList()
