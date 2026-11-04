@@ -16498,7 +16498,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val send = confirmableOnchainSend(REGTEST_ADDRESS).copy(lightningPaymentHash = paymentHash)
         stubOnchainRefusalCopy()
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
-        stubSuccessfulOnchainSend(REGTEST_ADDRESS, 10_000uL)
+        val dispatched = stubCountedOnchainSend()
         val refusals = listOf<Pair<Result<PaymentStatus?>, String>>(
             Result.success(PaymentStatus.PENDING) to "Lightning pending",
             Result.success(PaymentStatus.SUCCEEDED) to "Lightning paid",
@@ -16515,10 +16515,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.setSendEvent(SendEvent.PayConfirmed)
             advanceUntilIdle()
 
-            verify(toastManager).enqueue(argThat { title == "Error" && description == message })
+            verify(toastManager).enqueue(argThat { description == message })
             assertNull(sut.currentSheet.value)
         }
-        verifyNoOnchainSend()
+        assertEquals(0, dispatched())
 
         whenever(lightningRepo.outboundPaymentStatus(paymentHash)).thenReturn(Result.success(PaymentStatus.FAILED))
         sut.showSheet(Sheet.Send(SendRoute.Confirm))
@@ -16529,7 +16529,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         // The attempt keeps the hash, so a re-send from Payment Pending checks the invoice again
-        verifyOnchainSend(REGTEST_ADDRESS, 10_000uL, lightningPaymentHash = paymentHash)
+        verifyOnchainSend(REGTEST_ADDRESS, 10_000uL, lightningPaymentHash = paymentHash, times = refusals.size + 1)
+        assertEquals(1, dispatched())
+    }
+
+    // The node may still be starting when Confirm is swiped, and the send waits for it as it always did
+    @Test
+    fun `confirm checks the invoice's lightning payment once the node can show it`() = test {
+        val paymentHash = "010203"
+        stubOnchainRefusalCopy()
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(lightningRepo.outboundPaymentStatus(paymentHash))
+            .thenReturn(Result.failure(AppError("Payment store unavailable")))
+        val dispatched = stubCountedOnchainSend(
+            onNodeRunning = {
+                whenever(lightningRepo.outboundPaymentStatus(paymentHash)).thenReturn(Result.success(null))
+            },
+        )
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        setSendState(confirmableOnchainSend(REGTEST_ADDRESS).copy(lightningPaymentHash = paymentHash))
+        clearInvocations(toastManager)
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        assertEquals(1, dispatched())
+        verify(toastManager, never()).enqueue(argThat { description == "Lightning unknown" })
     }
 
     // The address was paid on-chain first, then the same code was scanned and paid over Lightning
@@ -17085,6 +17111,41 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         lightningPaymentHash = paymentHash,
     )
 
+    /** Like the repository, waits for the node and runs the check as the attempt is admitted, counting dispatches. */
+    private suspend fun stubCountedOnchainSend(onNodeRunning: suspend () -> Unit = {}): () -> Int {
+        var dispatched = 0
+        whenever {
+            lightningRepo.sendOnChain(
+                address = any(),
+                sats = any(),
+                speed = anyOrNull(),
+                utxosToSpend = anyOrNull(),
+                feeRates = anyOrNull(),
+                isTransfer = any(),
+                channelId = anyOrNull(),
+                isMaxAmount = any(),
+                tags = any(),
+                beforeSendAttempt = any(),
+                onBroadcast = any(),
+                requestId = anyOrNull(),
+                orderId = anyOrNull(),
+                transferContext = anyOrNull(),
+                payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                lightningPaymentHash = anyOrNull(),
+            )
+        }.doSuspendableAnswer { invocation ->
+            runSuspendCatching {
+                onNodeRunning()
+                invocation.getArgument<suspend () -> Unit>(9)()
+                dispatched++
+                OnchainSendOutcome.Accepted("txid")
+            }
+        }
+        return { dispatched }
+    }
+
     private fun hardwareSendOfInvoiceAddress(paymentHash: String) = SendUiState(
         address = REGTEST_ADDRESS,
         amount = 1_000uL,
@@ -17102,18 +17163,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(context.getString(R.string.wallet__send_onchain_lightning_unknown)).thenReturn("Lightning unknown")
     }
 
-    private suspend fun verifyNoOnchainSend() = verify(lightningRepo, never()).sendOnChain(
-        any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(), any(),
-        anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-        lightningPaymentHash = anyOrNull(),
+    private suspend fun verifyOnchainSend(
+        address: String,
+        sats: ULong,
+        lightningPaymentHash: String? = null,
+        times: Int = 1,
+    ) = verify(lightningRepo, times(times)).sendOnChain(
+        eq(address), eq(sats), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(),
+        any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+        lightningPaymentHash = if (lightningPaymentHash == null) anyOrNull() else eq(lightningPaymentHash),
     )
-
-    private suspend fun verifyOnchainSend(address: String, sats: ULong, lightningPaymentHash: String? = null) =
-        verify(lightningRepo).sendOnChain(
-            eq(address), eq(sats), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(),
-            any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
-            lightningPaymentHash = if (lightningPaymentHash == null) anyOrNull() else eq(lightningPaymentHash),
-        )
 
     private suspend fun stubPayableUnifiedScan(uri: String, bolt11: String) {
         stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 1_000u, payeeNodeId = FOREIGN_NODE_ID.fromHex())

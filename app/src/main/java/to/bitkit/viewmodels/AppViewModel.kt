@@ -6228,13 +6228,6 @@ class AppViewModel @Inject constructor(
     private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
-        // A Lightning payment of the invoice may have started or ended since its address was offered
-        if (_sendUiState.value.payMethod == SendMethod.ONCHAIN) {
-            onchainPaymentRefusal(_sendUiState.value.lightningPaymentHash)?.let {
-                handlePaymentPreparationFailure(it, contactPaymentContext)
-                return
-            }
-        }
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
@@ -6397,6 +6390,7 @@ class AppViewModel @Inject constructor(
         }
         val address = _sendUiState.value.address
         val tags = _sendUiState.value.selectedTags
+        val lightningPaymentHash = _sendUiState.value.lightningPaymentHash
         val proofPreparation = incomingPaymentRequest?.let { paymentProofPreparation(contactPaymentContext) }
         var proofRequest = preparedPaymentProofRequest
         var paymentProofStarted = false
@@ -6409,7 +6403,9 @@ class AppViewModel @Inject constructor(
             payerIdentity = originalPayer,
             contactPublicKey = contactPaymentContext?.publicKey,
             paymentDeadlineAt = incomingPaymentRequest?.submissionDeadline(paykitPaymentTerms),
+            lightningPaymentHash = lightningPaymentHash,
             beforeSendAttempt = {
+                onchainPaymentRefusal(lightningPaymentHash)?.let { throw it }
                 if (preparedPaymentProofRequest != null) {
                     markOnchainPaymentStarted(
                         incomingPaymentRequest,
@@ -6601,11 +6597,13 @@ class AppViewModel @Inject constructor(
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.wallet__error_sending_title),
-                description = error.message ?: context.getString(R.string.common__error_body),
+                description = error.onchainFailureMessage() ?: context.getString(R.string.common__error_body),
             )
             hideSheet()
         }
     }
+
+    private fun Throwable.onchainFailureMessage(): String? = (cause as? OnchainPaymentRefusedError ?: this).message
 
     suspend fun retryOriginalOnchainSend(
         original: OnchainSendAttempt,
@@ -7172,6 +7170,7 @@ class AppViewModel @Inject constructor(
         payerIdentity: String? = null,
         contactPublicKey: String? = null,
         paymentDeadlineAt: Instant? = null,
+        lightningPaymentHash: String? = null,
         beforeSendAttempt: suspend () -> Unit = {},
         onBroadcast: suspend (Txid) -> Unit = {},
     ): Result<OnchainSendOutcome> = lightningRepo.sendOnChain(
@@ -7189,7 +7188,7 @@ class AppViewModel @Inject constructor(
         paymentDeadlineAt = paymentDeadlineAt,
         beforeSendAttempt = beforeSendAttempt,
         onBroadcast = onBroadcast,
-        lightningPaymentHash = _sendUiState.value.lightningPaymentHash,
+        lightningPaymentHash = lightningPaymentHash,
     )
 
     private suspend fun sendLightning(
