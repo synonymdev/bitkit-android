@@ -838,6 +838,7 @@
     <string name="wallet__send">Envoyer</string>
     <string name="wallet__receive">Recevoir</string>
     <string name="wallet__send_bitcoin">Envoyer des bitcoins</string>
+    <string name="wallet__send_pending__abandon_pending">L\'annulation a été envoyée mais n\'est pas encore confirmée. Les autres paiements onchain sont débloqués dès qu\'elle a 6 confirmations. Si elle n\'est pas confirmée, vous pouvez annuler à nouveau.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Les transferts vers le solde de dépenses ne sont plus disponibles. Bitkit vérifie d\'abord le réseau, puis renvoie les pièces de ce transfert vers votre portefeuille afin que le transfert d\'origine ne soit jamais confirmé. Cela coûte des frais de réseau.</string>
     <string name="wallet__send_to">Pour</string>
     <string name="wallet__recipient_contact">Contact</string>
@@ -1612,6 +1613,15 @@
     <string name="wallet__send_contact_empty">Vous n\'avez pas encore de contacts.</string>
     <string name="wallet__send_from">De</string>
     <string name="wallet__send_pending__blocked_new_send">Le nouveau paiement n\'a pas été envoyé. Terminez le paiement précédent avant de réessayer.</string>
+    <string name="wallet__send_pending__cancel_authorize">Autoriser l\'annulation</string>
+    <string name="wallet__send_pending__cancel_description">Annulez en renvoyant les entrées de ce paiement vers votre portefeuille. Saisissez le taux de frais que vous autorisez en sat/vB ; utilisez un taux plus élevé que l\'original pour que l\'annulation puisse le remplacer. Une annulation précédente ne peut être remplacée qu\'après avoir quitté le réseau sans être confirmée. Les autres paiements onchain restent bloqués jusqu\'à ce qu\'une annulation ait 6 confirmations.</string>
+    <string name="wallet__send_pending__cancel_error">Le paiement n\'a pas pu être annulé. Ses fonds restent protégés. Essayez des frais plus élevés ou vérifiez l\'état de la transaction.</string>
+    <string name="wallet__send_pending__cancel_hint">Si ce paiement ne peut plus aboutir, vous pouvez l\'annuler et conserver ses fonds dans votre portefeuille.</string>
+    <string name="wallet__send_pending__cancel_pending">Annulation envoyée. Les autres paiements onchain sont débloqués dès qu\'elle a 6 confirmations. Si elle quitte le réseau sans être confirmée, vous pouvez annuler à nouveau.</string>
+    <string name="wallet__send_pending__cancel_pending_error">Une annulation précédente est toujours en attente, une nouvelle ne peut donc pas encore la remplacer. Les fonds du paiement restent protégés. Attendez qu\'elle soit confirmée, ou annulez à nouveau si elle quitte le réseau sans être confirmée.</string>
+    <string name="wallet__send_pending__cancel_title">Annuler le paiement</string>
+    <string name="wallet__send_pending__cancelled_description">L\'annulation a 6 confirmations. Les paiements onchain sont de nouveau disponibles.</string>
+    <string name="wallet__send_pending__cancelled_title">Paiement annulé</string>
     <string name="wallet__send_pending__onchain_description">Le résultat de la transaction n\'est pas résolu. Vérifiez son état avant de réessayer. Les autres paiements restent bloqués. Si disponible, utilisez Réessayer le paiement d\'origine pour autoriser des frais pour ce même paiement.</string>
     <string name="wallet__send_pending__refusal">Diffusion refusée : %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autoriser la nouvelle tentative</string>

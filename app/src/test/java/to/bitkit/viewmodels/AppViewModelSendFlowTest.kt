@@ -14915,6 +14915,76 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cancel approval carries fee warnings without reauthorizing the original`() = test {
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "original", requestId = PaykitPaymentRequestId("gone", "payee"),
+            orderId = null, address = "bcrt1qoriginal", amountSats = 1_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Rejected, payerIdentity = "payer",
+        )
+        val receipt = to.bitkit.repositories.OnchainPreparedReceipt(
+            txid = "ef".repeat(32),
+            inputs = emptyList(),
+            address = "bcrt1qown",
+            amountSats = 546uL,
+            feeRateSatsPerVByte = 3uL,
+            miningFeeSats = 600uL,
+        )
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
+            .thenReturn(Result.failure(Exception("USD unavailable")))
+        whenever(
+            lightningRepo.cancelOriginalOnchainSend(any(), any(), any(), any())
+        ).doSuspendableAnswer { invocation ->
+            val approve = invocation.getArgument<suspend (to.bitkit.repositories.OnchainPreparedReceipt) -> Unit>(3)
+            runCatching {
+                approve(receipt)
+                OnchainSendOutcome.Accepted(receipt.txid)
+            }
+        }
+        var approved = false
+
+        val result = sut.cancelOriginalOnchainSend(original, 3uL) { prepared, warnings ->
+            assertEquals(receipt, prepared)
+            assertEquals(listOf(SanityWarning.FEE_OVER_HALF_VALUE), warnings)
+            approved = true
+        }
+
+        assertEquals(OnchainSendOutcome.Accepted(receipt.txid), result.getOrThrow())
+        assertTrue(approved)
+        verify(lightningRepo).cancelOriginalOnchainSend(eq(original.attemptId), eq(original.walletId), eq(3uL), any())
+        verify(paykitPaymentProofRepo, never()).authorizeOnchainRecovery(any(), any())
+    }
+
+    @Test
+    fun `onchain sync releases a finally cancelled send and tells the user`() = test {
+        val released = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "original", requestId = null, orderId = null,
+            address = "bcrt1qoriginal", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,
+            isTransfer = false, channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Rejected,
+        )
+        whenever(context.getString(R.string.wallet__send_pending__cancelled_title)).thenReturn("Payment Cancelled")
+        whenever { paykitPaymentProofRepo.releaseCancelledOnchainPayment() }.thenReturn(Result.success(null))
+        clearInvocations(toastManager)
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.LIGHTNING_WALLET, syncedBlockHeight = 100u))
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+        verify(paykitPaymentProofRepo, times(1)).releaseCancelledOnchainPayment()
+        verify(toastManager, never()).enqueue(any())
+
+        whenever { paykitPaymentProofRepo.releaseCancelledOnchainPayment() }.thenReturn(Result.success(released))
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 101u))
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.SUCCESS, it.type)
+                assertEquals("Payment Cancelled", it.title)
+            }
+        )
+    }
+
+    @Test
     fun `private lightning contact payment consumes private list before send`() = test {
         val bolt11 = "lnbcrt1privatecontact"
         val paymentHash = "payment_hash"

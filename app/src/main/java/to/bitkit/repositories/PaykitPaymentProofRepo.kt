@@ -516,6 +516,32 @@ class PaykitPaymentProofRepo @Inject constructor(
             (request != null && quoteDeadlinePassed(request, identity, now))
     }
 
+    /**
+     * Releases the current unresolved on-chain send once a final spend of its coins pays the recipient nothing, so no
+     * candidate can ever confirm. The release removes what allowance recovery reads, so a Shop payment's manual
+     * allowance attempt is failed first; a failure leaves the guard, to be released again after a later sync. Its
+     * unproven proof is then removed with the guard.
+     */
+    suspend fun releaseCancelledOnchainPayment(): Result<OnchainSendAttempt?> = withContext(ioDispatcher) {
+        lightningRepo.releaseCancelledOnchainSend(
+            beforeRelease = { attempt ->
+                attempt.requestId?.let { allowanceExecutor.get().onchainSendReleased(attempt.payerIdentity, it) }
+            },
+            removeOriginalProof = ::removeCancelledOnchainProof,
+        )
+    }
+
+    /**
+     * Removes the unproven Shop proof of an attempt a final wallet spend cancelled, so the request is not left started.
+     * Its candidates may have exposed the private address, so that payment list version stays consumed.
+     */
+    internal suspend fun removeCancelledOnchainProof(attempt: OnchainSendAttempt): Boolean {
+        if (attempt.requestId == null) return true
+        return runSuspendCatching { removeOriginalShopProofs(attempt) }
+            .onFailure { Logger.warn("Failed to remove cancelled Shop proof", it, context = TAG) }
+            .getOrDefault(false)
+    }
+
     private suspend fun removeOriginalShopProofs(attempt: OnchainSendAttempt): Boolean = operationMutex.withLock {
         val proofs = loadProofs()
         val original = proofs.filter {
@@ -523,14 +549,16 @@ class PaykitPaymentProofRepo @Inject constructor(
                 PubkyPublicKeyFormat.matches(it.identity, requireNotNull(attempt.payerIdentity))
         }
         val safe = original.all { proof ->
+            // A dispatched payment's proof may name one of its candidates; before dispatch no identifier is expected
             val identifier = proof.paymentIdentifier
-            val isCandidate = identifier == null ||
+            val namesOwnCandidate = identifier == null || attempt.initialDispatchAttempted &&
                 attempt.candidateTxids.any { it.equals(identifier, ignoreCase = true) }
+            val matchesPayment = !proof.paymentStarted ||
+                (proof.onchainAddress == attempt.address && proof.onchainAmountSats == attempt.amountSats)
             proof.onchainWalletId == attempt.walletId && proof.proofData == null &&
-                !proof.onchainAcceptanceVerified && isCandidate
+                !proof.onchainAcceptanceVerified && namesOwnCandidate && matchesPayment
         }
         if (!safe) return@withLock false
-        for (proof in original) releaseDeniedPrivateConsumption(proof)
         if (original.isNotEmpty()) persist(proofs - original.toSet())
         true
     }
@@ -550,8 +578,11 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     /**
-     * Releases an unresolved Shop payment whose request has ended once [neverReachedNetwork] shows that none of its
-     * transactions reached the mempool or the chain. Its original proof is removed so the request stays unpaid.
+     * Sends the coins of an unresolved Shop payment, or a Blocktank funding, whose request has ended back to the
+     * wallet, once [wallet] shows that none of its transactions reached the mempool or the chain. Until that release,
+     * or another spend of the original's coins that pays the recipient nothing, is final, a candidate may still
+     * confirm, so the guard and the original proof stay and this fails with [OnchainSendAbandonPendingError].
+     * [releaseCancelledOnchainPayment] then releases both.
      */
     suspend fun abandonUnbroadcastOnchainPayment(
         attempt: OnchainSendAttempt,
@@ -562,45 +593,40 @@ class PaykitPaymentProofRepo @Inject constructor(
             if (!onchainRequestHasEnded(attempt)) throw OnchainSendAbandonRefusedError(requestOpen = true)
             val pendingRelease = attempt.releaseTxid
             if (pendingRelease != null && wallet.walletKnowsTransaction(pendingRelease)) {
-                return@runSuspendCatching finishRelease(attempt)
+                throw OnchainSendAbandonPendingError()
             }
             if (!wallet.onchainCandidatesNeverReachedNetwork(attempt)) {
                 throw OnchainSendAbandonRefusedError(requestOpen = false)
             }
-            // Approve before anything changes, so a cancel cut short after the proof is removed can still finish.
+            // Approve before anything is sent, so a cancel cut short can finish once the request record is gone.
             val approved = if (attempt.releaseApproved) attempt else lightningRepo.approveOnchainRelease(attempt)
             approved ?: throw OnchainSendBlockedError(attempt)
-            // No candidate is known, yet a coin is spent: an earlier release, or another transaction, already made
-            // the original unconfirmable, including one whose ID a restart or a restore lost.
-            if (wallet.originalCoinSpentElsewhere(approved)) return@runSuspendCatching finishRelease(approved)
+            // No candidate is known, yet a coin is spent. A spend that pays the recipient nothing, such as an earlier
+            // release or a Cancel payment whose ID a restart or a restore lost, ends the payment once it is final. Any
+            // other spend may pay the request, so this never treats it as a cancellation.
+            if (wallet.originalCoinSpentElsewhere(approved)) {
+                val spends = wallet.originalCoinSpends(approved)
+                if (spends.isNotEmpty() && spends.all(approved::isCancelledBy)) throw OnchainSendAbandonPendingError()
+                throw OnchainSendAbandonRefusedError(requestOpen = false)
+            }
             val prepared = wallet.prepareRelease(approved)
             check(releaseOutbids(prepared.receipt, approved))
             approveRelease(prepared.receipt)
-            val recorded = lightningRepo.recordOnchainRelease(approved, prepared.receipt.txid)
+            val recorded = lightningRepo.recordOnchainRelease(approved, prepared.receipt)
                 ?: throw OnchainSendBlockedError(attempt)
             when (prepared.broadcast()) {
-                is OnchainSendOutcome.Accepted -> finishRelease(recorded)
+                is OnchainSendOutcome.Accepted -> {
+                    Logger.info(
+                        "Sent release '${recorded.releaseTxid}' of on-chain payment '${recorded.txid}'",
+                        context = TAG,
+                    )
+                    throw OnchainSendAbandonPendingError()
+                }
                 // A conflicting candidate may be in a mempool; keep the guard until a sync resolves it.
                 is OnchainSendOutcome.Rejected -> throw OnchainSendAbandonRefusedError(requestOpen = false)
                 is OnchainSendOutcome.Unknown -> throw OnchainSendAbandonPendingError()
             }
         }
-    }
-
-    /** Removes the original proof, then the attempt, once its release reached the network. */
-    private suspend fun finishRelease(attempt: OnchainSendAttempt) {
-        // The release removes what allowance recovery reads, so the request's ledger attempt is failed first; a
-        // failure leaves the release unfinished, to be finished again later.
-        attempt.requestId?.let { allowanceExecutor.get().onchainSendReleased(attempt.payerIdentity, it) }
-        val removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean =
-            { if (it.isBlocktankFunding) true else removeOriginalShopProofs(it) }
-        if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt, removeOriginalProof)) {
-            throw OnchainSendBlockedError(attempt)
-        }
-        Logger.info(
-            "Released on-chain payment '${attempt.txid}' through '${attempt.releaseTxid}' after its request ended",
-            context = TAG,
-        )
     }
 
     suspend fun completeRecoveredOnchainPayment(request: PaykitPaymentRequest, attempt: OnchainSendAttempt): Boolean =

@@ -15,6 +15,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
@@ -24,6 +25,7 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
     private val input = OnchainSendInput("11".repeat(32), 0u)
     private val firstTxid = "ab".repeat(32)
     private val nextTxid = "cd".repeat(32)
+    private val cancelTxid = "ef".repeat(32)
 
     private inner class Fixture {
         var saved: String? = null
@@ -69,6 +71,16 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             val attempt = admit()
             store.retainPreparedReceipt(attempt.attemptId, 0, receipt(), false)
             return store.recordOutcome(attempt.attemptId, OnchainSendOutcome.Unknown(firstTxid), 0)
+        }
+
+        suspend fun dispatchedUnknown(): OnchainSendAttempt {
+            val attempt = admit()
+            store.retainPreparedReceipt(attempt.attemptId, 0, receipt(), false)
+            val outcome = store.broadcastPreparedCandidate(attempt.attemptId, 0, firstTxid) { beforeDispatch ->
+                beforeDispatch()
+                OnchainSendOutcome.Unknown(firstTxid)
+            }
+            return store.recordOutcome(attempt.attemptId, outcome, 0)
         }
     }
 
@@ -754,6 +766,174 @@ class OnchainSendCoordinatorTest : BaseUnitTest() {
             )
         }
         assertEquals(listOf(firstTxid), f.store.current()?.candidateTxids)
+    }
+
+    @Test
+    fun `cancellation approves exact original inputs to this wallet before dispatch and keeps the guard`() = test {
+        val f = Fixture()
+        val original = f.dispatchedUnknown()
+        val cancellation = OnchainPreparedReceipt(cancelTxid, listOf(input), "bcrt1qown", 546uL, miningFeeSats = 300uL)
+        var broadcasts = 0
+        var approved = false
+        val coordinator = OnchainSendCoordinator(f.store, mock(), testDispatcher)
+
+        val outcome = coordinator.cancelOriginal(
+            original.attemptId,
+            original.walletId,
+            5uL,
+            prepareCancellation = { attempt, feeRate ->
+                assertEquals(original, attempt)
+                assertEquals(5uL, feeRate)
+                PreparedOnchainSend(cancellation) {
+                    it()
+                    broadcasts++
+                    OnchainSendOutcome.Accepted(cancelTxid)
+                }
+            },
+        ) { preview ->
+            assertEquals(cancellation.copy(feeRateSatsPerVByte = 5uL), preview)
+            assertEquals(0, broadcasts)
+            approved = true
+        }.getOrThrow()
+
+        assertEquals(OnchainSendOutcome.Accepted(cancelTxid), outcome)
+        assertTrue(approved)
+        assertEquals(1, broadcasts)
+        assertEquals(original, f.store.current())
+        assertTrue(f.store.current()?.blocksNextSend == true)
+    }
+
+    @Test
+    fun `replacement cancellation spends the same original inputs while the guard stays held`() = test {
+        val f = Fixture()
+        val original = f.dispatchedUnknown()
+        val replacementTxid = "12".repeat(32)
+        val dispatched = mutableListOf<OnchainPreparedReceipt>()
+        val coordinator = OnchainSendCoordinator(f.store, mock(), testDispatcher)
+        val prepareCancellation: suspend (OnchainSendAttempt, ULong) -> PreparedOnchainSend = { attempt, _ ->
+            assertEquals(original, attempt)
+            val txid = if (dispatched.isEmpty()) cancelTxid else replacementTxid
+            val receipt = OnchainPreparedReceipt(txid, attempt.originalInputs.orEmpty(), "bcrt1qown", 546uL)
+            PreparedOnchainSend(receipt) {
+                it()
+                dispatched += receipt
+                OnchainSendOutcome.Accepted(txid)
+            }
+        }
+
+        coordinator.cancelOriginal(original.attemptId, original.walletId, 5uL, prepareCancellation).getOrThrow()
+        val replacement =
+            coordinator.cancelOriginal(original.attemptId, original.walletId, 6uL, prepareCancellation).getOrThrow()
+
+        assertEquals(OnchainSendOutcome.Accepted(replacementTxid), replacement)
+        assertEquals(listOf(cancelTxid, replacementTxid), dispatched.map { it.txid })
+        assertEquals(listOf(listOf(input), listOf(input)), dispatched.map { it.inputs })
+        assertEquals(original, f.store.current())
+        assertTrue(f.store.current()?.blocksNextSend == true)
+    }
+
+    @Test
+    fun `cancellation must pay more in total than a release that added other coins`() = test {
+        val f = Fixture()
+        val dispatched = f.dispatchedUnknown()
+        // The release spent the original's coin with another, so at 5 sat/vB it paid 1,000 sats
+        val released = dispatched.copy(
+            releaseApproved = true,
+            releaseTxid = "77".repeat(32),
+            releaseFeeRateSatsPerVByte = 5uL,
+            releaseMiningFeeSats = 1_000uL,
+        )
+        f.saved = Json.encodeToString(OnchainSendAttempt.serializer(), released)
+        var approvals = 0
+        var broadcasts = 0
+        val coordinator = OnchainSendCoordinator(f.store, mock(), testDispatcher)
+        suspend fun cancel(feeRate: ULong, fee: ULong) = coordinator.cancelOriginal(
+            released.attemptId,
+            released.walletId,
+            feeRate,
+            prepareCancellation = { _, _ ->
+                val receipt = OnchainPreparedReceipt(cancelTxid, listOf(input), "bcrt1qown", 546uL, miningFeeSats = fee)
+                PreparedOnchainSend(receipt) {
+                    broadcasts++
+                    OnchainSendOutcome.Accepted(cancelTxid)
+                }
+            },
+        ) { approvals++ }
+
+        // Over the original's coin alone, a Cancel payment at 6 sat/vB pays 700 sats
+        val underbid = cancel(6uL, 700uL).exceptionOrNull()
+
+        // 700 sats at 6 sat/vB is over 116.5 vB and at most 117 vB, so it must pay 1,117 sats: 10 sat/vB pays more
+        // than 1,165 sats, and 9 sat/vB at most 1,050
+        assertEquals(9uL, assertIs<OnchainSendCancelUnderbidsReleaseError>(underbid).feeRate)
+        // At 9 sat/vB it pays more than the release, but not for its own size as well
+        assertIs<OnchainSendCancelUnderbidsReleaseError>(cancel(9uL, 1_050uL).exceptionOrNull())
+        // 1,001 sats at 6 sat/vB is up to 167 vB, so it must pay 1,167 sats
+        val short = cancel(6uL, 1_001uL).exceptionOrNull()
+        assertEquals(6uL, assertIs<OnchainSendCancelUnderbidsReleaseError>(short).feeRate)
+        assertIs<OnchainSendCancelUnderbidsReleaseError>(cancel(6uL, 1_199uL).exceptionOrNull())
+        assertEquals(0, approvals)
+        assertEquals(0, broadcasts)
+        // The suggested 10 sat/vB pays 1,166 sats, at least the release's 1,000 plus its 117 vB
+        assertEquals(OnchainSendOutcome.Accepted(cancelTxid), cancel(10uL, 1_166uL).getOrThrow())
+        assertEquals(1, approvals)
+        assertEquals(1, broadcasts)
+        // 1,200 sats at 6 sat/vB is up to 200 vB, so it pays exactly enough
+        assertTrue(cancel(6uL, 1_200uL).isSuccess)
+        assertEquals(2, broadcasts)
+        // A release saved before its fee was kept cannot be checked, so the network decides as before
+        val unknownFee = released.copy(releaseMiningFeeSats = null)
+        f.saved = Json.encodeToString(OnchainSendAttempt.serializer(), unknownFee)
+        assertTrue(cancel(6uL, 700uL).isSuccess)
+        assertEquals(3, broadcasts)
+        assertEquals(unknownFee, f.store.current())
+    }
+
+    @Test
+    fun `highest underbidding rate follows the prepared fee's rounding`() {
+        // 141 vB pays 846 sats at 6 sat/vB; 8 sat/vB pays 1,128 and 7 sat/vB 987, below a 1,000-sat target
+        assertEquals(7uL, highestFeeRateNotAbove(1_000uL, 846uL, 6uL))
+        assertEquals(6uL, highestFeeRateNotAbove(846uL, 846uL, 6uL))
+        assertEquals(1_000uL, highestFeeRateNotAbove(1_000uL, 1uL, 1uL))
+        assertEquals(ULong.MAX_VALUE, highestFeeRateNotAbove(ULong.MAX_VALUE, 2uL, 2uL))
+    }
+
+    @Test
+    fun `cancellation never dispatches changed inputs the recipient a candidate or an accepted payment`() = test {
+        val f = Fixture()
+        val original = f.dispatchedUnknown()
+        val other = OnchainSendInput("22".repeat(32), 1u)
+        val refused = listOf(
+            OnchainPreparedReceipt(cancelTxid, listOf(other), "bcrt1qown", 546uL),
+            OnchainPreparedReceipt(cancelTxid, listOf(input, other), "bcrt1qown", 546uL),
+            OnchainPreparedReceipt(cancelTxid, listOf(input), original.address.uppercase(), 546uL),
+            OnchainPreparedReceipt(firstTxid, listOf(input), "bcrt1qown", 546uL),
+        )
+        var broadcasts = 0
+        val coordinator = OnchainSendCoordinator(f.store, mock(), testDispatcher)
+        for (receipt in refused) {
+            val prepared = PreparedOnchainSend(receipt) {
+                broadcasts++
+                error("dispatched")
+            }
+            val result = coordinator.cancelOriginal(
+                original.attemptId,
+                original.walletId,
+                5uL,
+                prepareCancellation = { _, _ -> prepared },
+            ) { error("refused cancellation must not reach approval") }
+            assertTrue(result.isFailure)
+        }
+        f.store.observeExactTransaction(firstTxid)
+        val accepted = coordinator.cancelOriginal(
+            original.attemptId,
+            original.walletId,
+            5uL,
+            prepareCancellation = { _, _ -> error("an accepted payment must not be cancelled") },
+        )
+        assertIs<OnchainSendBlockedError>(accepted.exceptionOrNull())
+        assertEquals(0, broadcasts)
+        assertTrue(f.store.current()?.hasPositiveEvidence == true)
     }
 
     @Test

@@ -70,6 +70,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.WalletBackupRestorePendingError
+import to.bitkit.env.Defaults
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
 import to.bitkit.models.ActiveOnchainAttemptBackup
@@ -78,6 +79,7 @@ import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.WalletScope
 import to.bitkit.services.ActivityService
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.CoreService
@@ -2157,6 +2159,175 @@ class LightningRepoTest : BaseUnitTest() {
             isNull(),
         )
         verify(onchainSendAttemptStore, never()).broadcastPreparedCandidate(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `cancellation prepares exact original inputs to a fresh wallet address without dispatching first`() = test {
+        startNodeForTesting()
+        val originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u), OnchainSendInput("22".repeat(32), 1u))
+        val original = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Rejected,
+            txid = "aa".repeat(32),
+            originalInputs = originalInputs,
+            candidateTxids = listOf("aa".repeat(32)),
+        )
+        whenever(onchainSendAttemptStore.current()).thenReturn(original)
+        whenever(lightningService.newAddress()).thenReturn("bcrt1qown")
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenThrow(IllegalStateException("fixture stops after exact preparation request"))
+
+        val result = sut.cancelOriginalOnchainSend(original.attemptId, original.walletId, 4uL) {
+            error("an unprepared cancellation must not reach approval")
+        }
+
+        assertTrue(result.isFailure)
+        verify(lightningService).prepareOnchainSend(
+            eq("bcrt1qown"),
+            eq(Defaults.dustLimit.toULong()),
+            eq(4uL),
+            argThat { map { OnchainSendInput(it.outpoint.txid, it.outpoint.vout) } == originalInputs },
+            eq(false),
+            eq(original.walletIndex),
+            isNull(),
+        )
+        verify(onchainSendAttemptStore, never()).broadcastCancellation(any(), any(), any())
+    }
+
+    @Test
+    fun `cancellation is refused while a wallet restore is pending`() = test {
+        startNodeForTesting()
+        val original = pendingSendAttempt().copy(
+            evidence = OnchainSendEvidence.Rejected,
+            txid = "aa".repeat(32),
+            originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+            candidateTxids = listOf("aa".repeat(32)),
+        )
+        whenever(onchainSendAttemptStore.current()).thenReturn(original)
+        whenever(keychain.exists(Keychain.Key.PAYKIT_PENDING_BACKUP_RESTORE.name)).thenReturn(true)
+
+        val result = sut.cancelOriginalOnchainSend(original.attemptId, original.walletId, 4uL) {
+            error("a pending restore must not reach approval")
+        }
+
+        assertIs<WalletBackupRestorePendingError>(result.exceptionOrNull())
+        verify(lightningService, never())
+            .prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull())
+        verify(onchainSendAttemptStore, never()).broadcastCancellation(any(), any(), any())
+    }
+
+    @Test
+    fun `cancelled guard releases only after a final non-payment spend and original proof removal`() = test {
+        val store = realAttemptStore()
+        val txid = "aa".repeat(32)
+        val inputs = listOf(OnchainSendInput("11".repeat(32), 0u))
+        val admitted = store.admit(
+            walletId = WalletScope.default, requestId = PaykitPaymentRequestId("request", "payee"), orderId = null,
+            address = "bcrt1qrecipient", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,
+            isTransfer = false, channelId = null, tags = emptyList(), beforeSendAttempt = {}, payerIdentity = "payer",
+        )
+        store.retainPreparedReceipt(
+            admitted.attemptId,
+            0,
+            OnchainPreparedReceipt(txid, inputs, admitted.address, admitted.amountSats),
+            false,
+        )
+        val unresolved = store.recordOutcome(admitted.attemptId, OnchainSendOutcome.Rejected(txid, "expired"), 0)
+        val cancellation = OnchainInputSpend("ef".repeat(32), inputs, listOf("bcrt1qown", "bcrt1qchange"), false)
+        whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(listOf(cancellation))
+        var removals = 0
+        var notified = 0
+
+        assertNull(
+            sut.releaseCancelledOnchainSend(
+                beforeRelease = { error("a confirming spend must not release anything") },
+            ) { error("a confirming spend must not remove the proof") }.getOrThrow()
+        )
+        assertEquals(cancellation, sut.findOnchainSendCancellation(unresolved).getOrThrow())
+        whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(
+            listOf(cancellation.copy(outputAddresses = listOf(admitted.address)), cancellation.copy(isFinal = true)),
+        )
+        assertNull(sut.releaseCancelledOnchainSend { false }.getOrThrow())
+        assertEquals(unresolved, store.current())
+        // A failure before the release keeps the guard for a later sync
+        assertTrue(sut.releaseCancelledOnchainSend(beforeRelease = { error("ledger unavailable") }) { true }.isFailure)
+        assertEquals(unresolved, store.current())
+        val released = sut.releaseCancelledOnchainSend(beforeRelease = { notified++ }) {
+            assertEquals(unresolved, it)
+            assertEquals(1, notified)
+            removals++
+            true
+        }.getOrThrow()
+
+        assertEquals(unresolved, released)
+        assertEquals(1, removals)
+        assertNull(store.current())
+    }
+
+    @Test
+    fun `expired Shop release frees the guard only once it is final`() = test {
+        val store = realAttemptStore()
+        val txid = "aa".repeat(32)
+        val inputs = listOf(OnchainSendInput("11".repeat(32), 0u))
+        val admitted = store.admit(
+            walletId = WalletScope.default, requestId = PaykitPaymentRequestId("request", "payee"), orderId = null,
+            address = "bcrt1qrecipient", amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL,
+            isTransfer = false, channelId = null, tags = emptyList(), beforeSendAttempt = {}, payerIdentity = "payer",
+        )
+        val receipt = OnchainPreparedReceipt(txid, inputs, admitted.address, admitted.amountSats)
+        store.retainPreparedReceipt(admitted.attemptId, 0, receipt, false)
+        store.broadcastPreparedCandidate(admitted.attemptId, 0, txid) { beforeDispatch ->
+            beforeDispatch()
+            OnchainSendOutcome.Unknown(txid)
+        }
+        val unknown = store.recordOutcome(admitted.attemptId, OnchainSendOutcome.Unknown(txid), 0)
+        val releaseTxid = "77".repeat(32)
+        val releaseReceipt = OnchainPreparedReceipt(releaseTxid, inputs, "bcrt1qrelease", 1_000uL, 3uL, 423uL)
+        val approved = requireNotNull(store.approveRelease(unknown))
+        val released = requireNotNull(store.recordRelease(approved, releaseReceipt))
+        val release = OnchainInputSpend(releaseTxid, inputs, listOf("bcrt1qrelease", "bcrt1qchange"), false)
+        whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(listOf(release))
+
+        assertNull(
+            sut.releaseCancelledOnchainSend { error("an unconfirmed release must not remove the proof") }.getOrThrow()
+        )
+        assertEquals(released, store.current())
+
+        whenever(lightningService.walletSpendsOf(inputs, 0)).thenReturn(listOf(release.copy(isFinal = true)))
+        val settled = sut.releaseCancelledOnchainSend {
+            assertEquals(released, it)
+            true
+        }.getOrThrow()
+
+        assertEquals(released, settled)
+        assertNull(store.current())
+    }
+
+    private fun realAttemptStore(): OnchainSendAttemptStore {
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        var saved: String? = null
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever { keychain.upsertString(eq(key), any(), eq(0)) }.doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever { keychain.delete(key, 0) }.doSuspendableAnswer {
+            saved = null
+            Unit
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
+        sut = LightningRepo(
+            bgDispatcher = testDispatcher,
+            lightningService = lightningService,
+            settingsStore = settingsStore,
+            coreService = coreService,
+            keychain = keychain,
+            lnurlService = lnurlService,
+            cacheStore = cacheStore,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = store,
+            connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk,
+            urlValidator = urlValidator,
+            electrumProbeService = electrumProbeService,
+        )
+        return store
     }
 
     @Test

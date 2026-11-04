@@ -86,11 +86,15 @@ fun SendPendingScreen(
     viewModel: SendPendingViewModel,
     walletId: String = WalletScope.default,
     refusalReason: String? = null,
-    retryOriginal:
-    suspend (
+    retryOriginal: suspend (
         OnchainSendAttempt,
         ULong,
-        suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit
+        suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit,
+    ) -> Result<OnchainSendOutcome>,
+    cancelOriginal: suspend (
+        OnchainSendAttempt,
+        ULong,
+        suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit,
     ) -> Result<OnchainSendOutcome>,
     onRecovered: (String, Long) -> Unit,
     savedStateHandle: SavedStateHandle,
@@ -125,7 +129,6 @@ fun SendPendingScreen(
     var showAbandonConfirmation by remember { mutableStateOf(false) }
     AbandonExpiredPayment(
         abandonError = uiState.abandonErrorMessage(),
-        isAbandoned = uiState.abandoned,
         isTransfer = uiState.abandonableAttempt?.isBlocktankFunding == true,
         showConfirmation = showAbandonConfirmation,
         onConfirm = { requiresPin, useBiometrics ->
@@ -133,7 +136,6 @@ fun SendPendingScreen(
             viewModel.abandonExpired(requiresPin, useBiometrics)
         },
         onDismiss = { showAbandonConfirmation = false },
-        onClose = onClose,
     )
 
     uiState.recoveredTxid?.let { winner ->
@@ -142,6 +144,9 @@ fun SendPendingScreen(
     uiState.recoveredTransfer?.let { winner ->
         LaunchedEffect(winner.attemptId, winner.txid) { onRecoveredTransfer(winner) }
     }
+    if (uiState.isGuardReleased) {
+        LaunchedEffect(Unit) { onClose() }
+    }
     RecoveryAuthorization(
         uiState,
         savedStateHandle,
@@ -149,8 +154,14 @@ fun SendPendingScreen(
         viewModel,
         beginPaymentReview,
         showAbandonConfirmation,
-        { rate, approve -> viewModel.retryOriginal(rate) { attempt, fee -> retryOriginal(attempt, fee, approve) } },
-    ) { onRetry ->
+        { action, rate, approve ->
+            if (action == RecoveryAction.Cancel) {
+                viewModel.cancelOriginal(rate) { attempt, fee -> cancelOriginal(attempt, fee, approve) }
+            } else {
+                viewModel.retryOriginal(rate) { attempt, fee -> retryOriginal(attempt, fee, approve) }
+            }
+        },
+    ) { onRecover ->
         SendPendingContent(
             amount = if (observeResolution || isOnchain) uiState.amount else amount,
             isOnchain = isOnchain,
@@ -159,11 +170,14 @@ fun SendPendingScreen(
             refusalReason = refusalReason,
             onClose = onClose,
             onViewDetails = onViewDetails,
-            canRetry = uiState.recoveryAttempt != null,
+            canRetry = uiState.canRetry,
+            canCancel = uiState.canCancel,
+            cancellationTxid = uiState.cancellationTxid,
             isRecovering = uiState.isRecovering,
             recoveryError = uiState.abandonErrorMessage() ?: uiState.recoveryErrorMessage(),
-            onRetry = onRetry,
-            canAbandon = uiState.abandonableAttempt != null,
+            onRetry = { onRecover(RecoveryAction.Retry) },
+            onCancel = { onRecover(RecoveryAction.Cancel) },
+            canAbandon = uiState.canAbandon,
             isAbandoning = uiState.isAbandoning,
             onAbandon = { showAbandonConfirmation = true },
         )
@@ -173,28 +187,19 @@ fun SendPendingScreen(
 @Composable
 private fun AbandonExpiredPayment(
     abandonError: String?,
-    isAbandoned: Boolean,
     isTransfer: Boolean,
     showConfirmation: Boolean,
     onConfirm: (requiresPin: Boolean, useBiometrics: Boolean) -> Unit,
     onDismiss: () -> Unit,
-    onClose: () -> Unit,
 ) {
     val settings = settingsViewModel ?: return
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
-    val abandonedToast = stringResource(R.string.wallet__send_pending__abandon_done)
-    // The cancel can take up to 30 s; a failure is announced, not only shown above the hourglass.
+    // The cancel can take up to 30 s; its outcome is announced, not only shown above the hourglass.
     LaunchedEffect(abandonError) {
         abandonError?.let { ToastEventBus.send(type = Toast.ToastType.WARNING, title = it) }
-    }
-    LaunchedEffect(isAbandoned) {
-        if (isAbandoned) {
-            ToastEventBus.send(type = Toast.ToastType.SUCCESS, title = abandonedToast)
-            onClose()
-        }
     }
     if (showConfirmation) {
         AppAlertDialog(
@@ -226,14 +231,15 @@ private fun SendPendingUiState.abandonErrorMessage(): String? = abandonError?.le
 }
 
 @Composable
-private fun SendPendingUiState.recoveryErrorMessage(): String? = recoveryError?.let {
-    stringResource(
-        if (invalidFeeRate) {
-            R.string.wallet__send_pending__retry_invalid_fee
-        } else {
-            R.string.wallet__send_pending__retry_error
-        }
-    )
+private fun SendPendingUiState.recoveryErrorMessage(): String? {
+    val message = when {
+        invalidFeeRate -> R.string.wallet__send_pending__retry_invalid_fee
+        isEarlierCancellationPending -> R.string.wallet__send_pending__cancel_pending_error
+        cancellationFailed -> R.string.wallet__send_pending__cancel_error
+        recoveryError != null -> R.string.wallet__send_pending__retry_error
+        else -> return null
+    }
+    return stringResource(message)
 }
 
 @Composable
@@ -244,10 +250,10 @@ private fun RecoveryAuthorization(
     viewModel: SendPendingViewModel,
     beginPaymentReview: () -> (() -> Unit),
     showAbandonConfirmation: Boolean,
-    retryOriginal: (ULong, suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit) -> Unit,
-    content: @Composable (() -> Unit) -> Unit,
+    recover: (RecoveryAction, ULong, suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit) -> Unit,
+    content: @Composable ((RecoveryAction) -> Unit) -> Unit,
 ) {
-    var showFeeApproval by remember { mutableStateOf(false) }
+    var feeAction by remember { mutableStateOf<RecoveryAction?>(null) }
     var feeInput by rememberSaveable { mutableStateOf("") }
     val settings = settingsViewModel ?: return
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
@@ -255,7 +261,7 @@ private fun RecoveryAuthorization(
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val reviewing = (showFeeApproval && uiState.recoveryAttempt != null) ||
+    val reviewing = (feeAction != null && uiState.recoveryAttempt != null) ||
         showAbandonConfirmation || uiState.recoveryApproval != null
     LaunchedEffect(reviewing, lifecycle, beginPaymentReview) {
         if (!reviewing) return@LaunchedEffect
@@ -273,16 +279,31 @@ private fun RecoveryAuthorization(
     }
     when (val approval = uiState.recoveryApproval) {
         is RecoveryApproval.Fee -> AppAlertDialog(
-            title = stringResource(R.string.wallet__send_pending__retry_title),
-            confirmText = stringResource(R.string.wallet__send_pending__retry_authorize),
+            title = stringResource(
+                if (approval.isCancellation) {
+                    R.string.wallet__send_pending__cancel_title
+                } else {
+                    R.string.wallet__send_pending__retry_title
+                }
+            ),
+            confirmText = stringResource(
+                if (approval.isCancellation) {
+                    R.string.wallet__send_pending__cancel_authorize
+                } else {
+                    R.string.wallet__send_pending__retry_authorize
+                }
+            ),
             dismissText = stringResource(R.string.common__cancel),
             onConfirm = { viewModel.answerRecoveryApproval(true) },
             onDismiss = { viewModel.answerRecoveryApproval(false) },
             properties = DialogProperties(),
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                RecoveryRecipient(approval.receipt.address, approval.receipt.amountSats.toLong())
-                VerticalSpacer(16.dp)
+                // A cancellation pays only this wallet, so its own address and dust output are not shown.
+                if (!approval.isCancellation) {
+                    RecoveryRecipient(approval.receipt.address, approval.receipt.amountSats.toLong())
+                    VerticalSpacer(16.dp)
+                }
                 Caption13Up(stringResource(R.string.wallet__send_fee_and_speed), color = Colors.White64)
                 VerticalSpacer(8.dp)
                 BodySSB(
@@ -318,30 +339,33 @@ private fun RecoveryAuthorization(
         )
         else -> Unit
     }
-    if (showFeeApproval) {
+    val openFeeDialog: (RecoveryAction) -> Unit = { action ->
+        feeInput = uiState.suggestedFeeRate(action)?.toString().orEmpty()
+        feeAction = action
+    }
+    feeAction?.let { action ->
         uiState.recoveryAttempt?.let { original ->
-            RecoveryFeeDialog(original, feeInput, { feeInput = it }, { showFeeApproval = false }) { rate ->
-                showFeeApproval = false
-                retryOriginal(rate) { receipt, warnings ->
+            RecoveryFeeDialog(original, action, feeInput, { feeInput = it }, { feeAction = null }) { rate ->
+                feeAction = null
+                recover(action, rate) { receipt, warnings ->
                     viewModel.approveRecoveryFee(
                         receipt,
                         warnings,
                         isPinEnabled && pinForPayments,
-                        isBiometricEnabled && isBiometrySupported
+                        isBiometricEnabled && isBiometrySupported,
+                        isCancellation = action == RecoveryAction.Cancel,
                     )
                 }
             }
         }
     }
-    content {
-        feeInput = uiState.recoveryAttempt?.feeRateSatsPerVByte?.toString().orEmpty()
-        showFeeApproval = true
-    }
+    content(openFeeDialog)
 }
 
 @Composable
 private fun RecoveryFeeDialog(
     original: OnchainSendAttempt,
+    action: RecoveryAction,
     feeInput: String,
     onFeeChange: (String) -> Unit,
     onClose: () -> Unit,
@@ -350,7 +374,12 @@ private fun RecoveryFeeDialog(
     val feeRate = OnchainRecoveryFeeRate.parse(feeInput)
     val isInvalid = feeInput.isNotBlank() && feeRate == null
     AppAlertDialog(
-        title = stringResource(R.string.wallet__send_pending__retry_title),
+        title = stringResource(
+            when (action) {
+                RecoveryAction.Retry -> R.string.wallet__send_pending__retry_title
+                RecoveryAction.Cancel -> R.string.wallet__send_pending__cancel_title
+            }
+        ),
         confirmText = stringResource(R.string.common__continue),
         dismissText = stringResource(R.string.common__cancel),
         confirmEnabled = feeRate != null,
@@ -359,7 +388,16 @@ private fun RecoveryFeeDialog(
         properties = DialogProperties(),
     ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-            BodyM(stringResource(R.string.wallet__send_pending__retry_description), color = Colors.White64)
+            BodyM(
+                stringResource(
+                    if (action == RecoveryAction.Cancel) {
+                        R.string.wallet__send_pending__cancel_description
+                    } else {
+                        R.string.wallet__send_pending__retry_description
+                    }
+                ),
+                color = Colors.White64,
+            )
             VerticalSpacer(16.dp)
             RecoveryRecipient(original.address, original.amountSats.toLong())
             VerticalSpacer(16.dp)
@@ -401,9 +439,12 @@ internal fun SendPendingContent(
     txid: String? = null,
     refusalReason: String? = null,
     canRetry: Boolean = false,
+    canCancel: Boolean = false,
+    cancellationTxid: String? = null,
     isRecovering: Boolean = false,
     recoveryError: String? = null,
     onRetry: () -> Unit = {},
+    onCancel: () -> Unit = {},
     canAbandon: Boolean = false,
     isAbandoning: Boolean = false,
     onAbandon: () -> Unit = {},
@@ -457,6 +498,17 @@ internal fun SendPendingContent(
                             BodyM(stringResource(R.string.wallet__send_pending__txid, it), color = Colors.White64)
                         }
                     }
+                    if (canRetry) {
+                        VerticalSpacer(16.dp)
+                        BodyM(stringResource(R.string.wallet__send_pending__cancel_hint), color = Colors.White64)
+                    }
+                    cancellationTxid?.let {
+                        VerticalSpacer(16.dp)
+                        BodyM(stringResource(R.string.wallet__send_pending__cancel_pending), color = Colors.White64)
+                        SelectionContainer {
+                            BodyM(stringResource(R.string.wallet__send_pending__txid, it), color = Colors.White64)
+                        }
+                    }
                 }
 
                 VerticalSpacer(32.dp)
@@ -469,6 +521,15 @@ internal fun SendPendingContent(
                     text = stringResource(R.string.wallet__send_pending__retry_title),
                     enabled = !isRecovering && !isAbandoning,
                     onClick = onRetry,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                VerticalSpacer(16.dp)
+            }
+            if (canCancel) {
+                SecondaryButton(
+                    text = stringResource(R.string.wallet__send_pending__cancel_title),
+                    enabled = !isRecovering && !isAbandoning,
+                    onClick = onCancel,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 VerticalSpacer(16.dp)
@@ -538,6 +599,27 @@ private fun Preview() {
                 activityId = null,
                 onClose = {},
                 onViewDetails = {},
+                modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewOnchainRecovery() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            SendPendingContent(
+                amount = 50_000L,
+                isOnchain = true,
+                activityId = null,
+                onClose = {},
+                onViewDetails = {},
+                txid = "ab".repeat(32),
+                refusalReason = "min relay fee not met",
+                canRetry = true,
+                canCancel = true,
                 modifier = Modifier.sheetHeight(),
             )
         }

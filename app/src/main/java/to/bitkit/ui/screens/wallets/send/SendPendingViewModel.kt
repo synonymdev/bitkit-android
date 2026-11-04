@@ -19,6 +19,7 @@ import kotlinx.coroutines.withContext
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.WalletScope
+import to.bitkit.models.safe
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.OnchainPreparedReceipt
@@ -26,6 +27,7 @@ import to.bitkit.repositories.OnchainRecoveryFeeRate
 import to.bitkit.repositories.OnchainSendAbandonPendingError
 import to.bitkit.repositories.OnchainSendAbandonSyncError
 import to.bitkit.repositories.OnchainSendAttempt
+import to.bitkit.repositories.OnchainSendCancelUnderbidsReleaseError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PendingPaymentRepo
@@ -83,7 +85,18 @@ class SendPendingViewModel @Inject constructor(
                 val hasOriginalReceipt = !attempt?.originalInputs.isNullOrEmpty() &&
                     attempt.candidateTxids.any { it.equals(txid, true) }
                 if (matchesOriginalWallet && hasOriginalReceipt) {
-                    if (attempt.isUnresolved) _uiState.update { it.copy(recoveryAttempt = attempt) }
+                    if (attempt.isUnresolved) {
+                        // A recorded release may have reached the network, so it holds the original like a sent
+                        // cancellation, even before the wallet knows it, and a Cancel payment must outbid it.
+                        _uiState.update {
+                            it.copy(
+                                recoveryAttempt = attempt,
+                                hasUnknownCancellation = attempt.releaseTxid != null,
+                                cancellationFeeRate = attempt.releaseFeeRateSatsPerVByte,
+                            )
+                        }
+                        observeCancellation(attempt)
+                    }
                     observeOriginalCompletion(attempt)
                     offerAbandonIfRequestEnded(attempt)
                 }
@@ -122,6 +135,29 @@ class SendPendingViewModel @Inject constructor(
         }
     }
 
+    private fun observeCancellation(original: OnchainSendAttempt) {
+        viewModelScope.launch { showKnownCancellation(original) }
+        viewModelScope.launch {
+            lightningRepo.onchainSendAttemptUpdates.collect {
+                runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.onSuccess { current ->
+                    // Only a final cancellation, including an expired payment's release, or a wipe removes a
+                    // dispatched unresolved guard.
+                    if (current?.attemptId != original.attemptId) {
+                        _uiState.update { it.copy(recoveryAttempt = null, isGuardReleased = true) }
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun showKnownCancellation(original: OnchainSendAttempt) {
+        lightningRepo.findOnchainSendCancellation(original).onSuccess { spend ->
+            if (spend != null) {
+                _uiState.update { it.copy(cancellationTxid = spend.txid, isCancellationFinal = spend.isFinal) }
+            }
+        }
+    }
+
     private fun OnchainSendAttempt.matchesOriginalRoute(original: OnchainSendAttempt): Boolean {
         val sameOperation = attemptId == original.attemptId && amountSats == original.amountSats &&
             address == original.address && originalInputs == original.originalInputs
@@ -138,12 +174,20 @@ class SendPendingViewModel @Inject constructor(
         retry: suspend (OnchainSendAttempt, ULong) -> Result<OnchainSendOutcome>,
     ) {
         val original = _uiState.value.recoveryAttempt ?: return
-        if (_uiState.value.isRecovering) return
+        if (_uiState.value.isRecovering || !_uiState.value.canRetry) return
         if (!OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte)) {
             _uiState.update { it.copy(invalidFeeRate = true, recoveryError = "invalid fee rate") }
             return
         }
-        _uiState.update { it.copy(isRecovering = true, recoveryError = null, invalidFeeRate = false) }
+        _uiState.update {
+            it.copy(
+                isRecovering = true,
+                recoveryError = null,
+                invalidFeeRate = false,
+                cancellationFailed = false,
+                abandonError = null,
+            )
+        }
         viewModelScope.launch {
             try {
                 val result = runSuspendCatching { retry(original, feeRateSatsPerVByte).getOrThrow() }
@@ -169,6 +213,55 @@ class SendPendingViewModel @Inject constructor(
                         } else {
                             it
                         }
+                    }
+                }
+            } finally {
+                _uiState.update { it.copy(isRecovering = false) }
+            }
+        }
+    }
+
+    fun cancelOriginal(
+        feeRateSatsPerVByte: ULong,
+        cancel: suspend (OnchainSendAttempt, ULong) -> Result<OnchainSendOutcome>,
+    ) {
+        val original = _uiState.value.recoveryAttempt ?: return
+        if (_uiState.value.isRecovering) return
+        if (!OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte)) {
+            _uiState.update { it.copy(invalidFeeRate = true, recoveryError = "invalid fee rate") }
+            return
+        }
+        _uiState.update {
+            it.copy(
+                isRecovering = true,
+                recoveryError = null,
+                invalidFeeRate = false,
+                cancellationFailed = false,
+                abandonError = null,
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val result = runSuspendCatching { cancel(original, feeRateSatsPerVByte).getOrThrow() }
+                val outcome = result.getOrNull()
+                // Any dispatched cancellation may have been relayed, so a replacement must pay more than it.
+                val dispatchedFeeRate = outcome?.let { feeRateSatsPerVByte }
+                // Only a higher rate outbids a release that added other coins.
+                val underbidFeeRate = (result.exceptionOrNull() as? OnchainSendCancelUnderbidsReleaseError)?.feeRate
+                // A cancellation the wallet now knows, such as the release, holds the original's coins, so none
+                // builds over them until it confirms or drops out.
+                if (outcome !is OnchainSendOutcome.Accepted) showKnownCancellation(original)
+                // A refused or unknown cancellation leaves the guard unchanged, and another fee rate may still work.
+                _uiState.update {
+                    val feeRate = listOfNotNull(it.cancellationFeeRate, dispatchedFeeRate, underbidFeeRate).maxOrNull()
+                    if (outcome is OnchainSendOutcome.Accepted) {
+                        it.copy(cancellationTxid = outcome.txid, cancellationFeeRate = feeRate)
+                    } else {
+                        it.copy(
+                            cancellationFailed = true,
+                            cancellationFeeRate = feeRate,
+                            hasUnknownCancellation = it.hasUnknownCancellation || outcome is OnchainSendOutcome.Unknown,
+                        )
                     }
                 }
             } finally {
@@ -207,7 +300,7 @@ class SendPendingViewModel @Inject constructor(
     }
 
     fun abandonExpired(requiresPin: Boolean, useBiometrics: Boolean) {
-        val attempt = _uiState.value.abandonableAttempt ?: return
+        val attempt = _uiState.value.abandonableAttempt?.takeIf { _uiState.value.canAbandon } ?: return
         if (_uiState.value.isAbandoning) return
         _uiState.update { it.copy(isAbandoning = true, abandonError = null) }
         viewModelScope.launch {
@@ -223,6 +316,7 @@ class SendPendingViewModel @Inject constructor(
         // An earlier try may have saved its approval and release since the screen loaded the attempt.
         val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
             ?.takeIf { it.attemptId == shown.attemptId } ?: shown
+        var approvedRelease: OnchainPreparedReceipt? = null
         paykitPaymentProofRepo.abandonUnbroadcastOnchainPayment(attempt, lightningRepo) { receipt ->
             withContext(Dispatchers.Main.immediate) {
                 requestRecoveryApproval(RecoveryApproval.Release(receipt))
@@ -230,12 +324,16 @@ class SendPendingViewModel @Inject constructor(
                     requestRecoveryApproval(if (useBiometrics) RecoveryApproval.Biometrics else RecoveryApproval.Pin)
                 }
             }
-        }.onSuccess {
-            _uiState.update {
-                it.copy(isAbandoning = false, abandoned = true, abandonableAttempt = null, recoveryAttempt = null)
-            }
+            approvedRelease = receipt
         }.onFailure { error ->
             Logger.warn("Could not release on-chain payment '${attempt.txid}'", error, context = TAG)
+            val stored = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }
+            // Another path, such as a final cancellation, may have released the guard while this cancel ran.
+            if (stored.map { it?.attemptId != shown.attemptId }.getOrDefault(false)) {
+                _uiState.update { it.copy(isAbandoning = false, recoveryAttempt = null, isGuardReleased = true) }
+                return
+            }
+            if (error is OnchainSendAbandonPendingError) showKnownCancellation(attempt)
             _uiState.update {
                 it.copy(
                     isAbandoning = false,
@@ -245,6 +343,12 @@ class SendPendingViewModel @Inject constructor(
                         is OnchainSendAbandonPendingError -> AbandonError.ReleasePending
                         else -> AbandonError.MayStillConfirm
                     },
+                    // A release that was recorded or may have reached the network can still confirm, so the original
+                    // is not retried, no other release is sent beside it, and a Cancel payment must outbid it.
+                    hasUnknownCancellation = it.hasUnknownCancellation || error is OnchainSendAbandonPendingError ||
+                        stored.getOrNull()?.releaseTxid != null,
+                    cancellationFeeRate = listOfNotNull(it.cancellationFeeRate, approvedRelease?.feeRateSatsPerVByte)
+                        .maxOrNull(),
                 )
             }
         }
@@ -255,9 +359,10 @@ class SendPendingViewModel @Inject constructor(
         warnings: List<SanityWarning>,
         requiresPin: Boolean,
         useBiometrics: Boolean,
+        isCancellation: Boolean = false,
     ) = withContext(Dispatchers.Main.immediate) {
         requireNotNull(receipt.miningFeeSats)
-        requestRecoveryApproval(RecoveryApproval.Fee(receipt))
+        requestRecoveryApproval(RecoveryApproval.Fee(receipt, isCancellation))
         warnings.forEach { requestRecoveryApproval(RecoveryApproval.Warning(it)) }
         if (requiresPin) {
             requestRecoveryApproval(if (useBiometrics) RecoveryApproval.Biometrics else RecoveryApproval.Pin)
@@ -347,16 +452,54 @@ data class SendPendingUiState(
     val currentTxid: String? = null,
     val recoveredTxid: String? = null,
     val recoveredTransfer: OnchainSendAttempt? = null,
+    val cancellationTxid: String? = null,
+    val cancellationFeeRate: ULong? = null,
+    val isCancellationFinal: Boolean = false,
+    val hasUnknownCancellation: Boolean = false,
+    val cancellationFailed: Boolean = false,
+    val isGuardReleased: Boolean = false,
     val abandonableAttempt: OnchainSendAttempt? = null,
     val isAbandoning: Boolean = false,
-    val abandoned: Boolean = false,
     val abandonError: AbandonError? = null,
-)
+) {
+    /** A sent or possibly relayed cancellation may still confirm, so the original must not be retried beside it. */
+    val canRetry: Boolean
+        get() = recoveryAttempt != null && cancellationTxid == null && !hasUnknownCancellation
+
+    /** An expired payment's release spends the original inputs too, so it is not sent beside another cancellation. */
+    val canAbandon: Boolean
+        get() = abandonableAttempt != null && cancellationTxid == null && !hasUnknownCancellation
+
+    /** A cancellation can drop out of mempools until it is final, so it stays replaceable over the same inputs. */
+    val canCancel: Boolean
+        get() = recoveryAttempt != null && !isCancellationFinal
+
+    /** A known cancellation holds the original inputs until it confirms or drops out, so a new one fails meanwhile. */
+    val isEarlierCancellationPending: Boolean
+        get() = cancellationFailed && cancellationTxid != null && !isCancellationFinal
+
+    fun suggestedFeeRate(action: RecoveryAction): ULong? {
+        val original = recoveryAttempt ?: return null
+        return when (action) {
+            // A replacement must pay a higher rate than every candidate and cancellation it conflicts with.
+            RecoveryAction.Cancel -> minOf(
+                maxOf(
+                    original.candidateFeeRates.values.maxOrNull() ?: original.feeRateSatsPerVByte,
+                    cancellationFeeRate ?: 0uL,
+                ).safe() + 1uL.safe(),
+                OnchainRecoveryFeeRate.maximum,
+            )
+            RecoveryAction.Retry -> original.feeRateSatsPerVByte
+        }
+    }
+}
+
+enum class RecoveryAction { Retry, Cancel }
 
 enum class AbandonError { MayStillConfirm, SyncUnavailable, ReleasePending }
 
 sealed interface RecoveryApproval {
-    data class Fee(val receipt: OnchainPreparedReceipt) : RecoveryApproval
+    data class Fee(val receipt: OnchainPreparedReceipt, val isCancellation: Boolean = false) : RecoveryApproval
     data class Warning(val warning: SanityWarning) : RecoveryApproval
     data object Biometrics : RecoveryApproval
     data object Pin : RecoveryApproval

@@ -1002,6 +1002,7 @@
     <string name="wallet__send_invoice_expiration">Expirace faktury</string>
     <string name="wallet__send_max_spending__description">Maximální částka, kterou lze utratit, je o něco nižší kvůli požadovanému zůstatku rezervy.</string>
     <string name="wallet__send_max_spending__title">Zůstatek rezervy</string>
+    <string name="wallet__send_pending__abandon_pending">Zrušení bylo odesláno, ale zatím není potvrzeno. Ostatní onchain platby se odblokují, jakmile bude mít 6 potvrzení. Pokud se nepotvrdí, můžete platbu zrušit znovu.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Převody na útratový zůstatek už nejsou dostupné. Bitkit nejprve zkontroluje síť a pak vrátí mince tohoto převodu do vaší peněženky, aby se původní převod nikdy nepotvrdil. Stojí to síťový poplatek.</string>
     <string name="wallet__send_pending__description">Tato platba trvá o něco déle, než se očekávalo. Bitkit můžete používat i nadále.</string>
     <string name="wallet__send_pending__nav_title">Platba čeká na vyřízení</string>
@@ -1613,6 +1614,15 @@
     <string name="wallet__send_contact_empty">Zatím nemáte žádné kontakty.</string>
     <string name="wallet__send_from">Z</string>
     <string name="wallet__send_pending__blocked_new_send">Nová platba nebyla odeslána. Před dalším pokusem dokončete předchozí platbu.</string>
+    <string name="wallet__send_pending__cancel_authorize">Autorizovat zrušení</string>
+    <string name="wallet__send_pending__cancel_description">Zrušte platbu odesláním jejích vstupů zpět do vaší peněženky. Zadejte sazbu poplatku, kterou autorizujete, v sat/vB; použijte vyšší sazbu než původní, aby zrušení mohlo původní platbu nahradit. Dřívější zrušení lze nahradit až poté, co vypadne ze sítě bez potvrzení. Ostatní onchain platby zůstanou zablokované, dokud zrušení nebude mít 6 potvrzení.</string>
+    <string name="wallet__send_pending__cancel_error">Platbu se nepodařilo zrušit. Její prostředky zůstávají chráněny. Zkuste vyšší poplatek nebo zkontrolujte stav transakce.</string>
+    <string name="wallet__send_pending__cancel_hint">Pokud tato platba již nemůže projít, můžete ji zrušit a ponechat si její prostředky v peněžence.</string>
+    <string name="wallet__send_pending__cancel_pending">Zrušení odesláno. Ostatní onchain platby se odblokují, jakmile bude mít 6 potvrzení. Pokud vypadne ze sítě bez potvrzení, můžete platbu zrušit znovu.</string>
+    <string name="wallet__send_pending__cancel_pending_error">Dřívější zrušení stále čeká na potvrzení, proto ho nové zatím nemůže nahradit. Prostředky platby zůstávají chráněny. Počkejte, až bude potvrzeno, nebo platbu zrušte znovu, pokud vypadne ze sítě bez potvrzení.</string>
+    <string name="wallet__send_pending__cancel_title">Zrušit platbu</string>
+    <string name="wallet__send_pending__cancelled_description">Zrušení má 6 potvrzení. Onchain platby jsou opět k dispozici.</string>
+    <string name="wallet__send_pending__cancelled_title">Platba zrušena</string>
     <string name="wallet__send_pending__onchain_description">Výsledek transakce není vyřešen. Před dalším pokusem zkontrolujte její stav. Ostatní platby zůstávají zablokované. Je-li k dispozici, použijte Zopakovat původní platbu a autorizujte poplatek pro stejnou platbu.</string>
     <string name="wallet__send_pending__refusal">Odeslání do sítě odmítnuto: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autorizovat opakování</string>

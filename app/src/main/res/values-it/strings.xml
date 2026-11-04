@@ -1000,6 +1000,7 @@
     <string name="wallet__send_invoice_expiration">Scadenza invoice</string>
     <string name="wallet__send_max_spending__description">L\'importo massimo spendibile e\' leggermente inferiore a causa di un saldo di riserva richiesto.</string>
     <string name="wallet__send_max_spending__title">Saldo di Riserva</string>
+    <string name="wallet__send_pending__abandon_pending">L\'annullamento è stato inviato ma non è ancora confermato. Gli altri pagamenti onchain si sbloccano quando avrà 6 conferme. Se non viene confermato, puoi annullare di nuovo.</string>
     <string name="wallet__send_pending__abandon_transfer_note">I trasferimenti al saldo di spesa non sono più disponibili. Bitkit controlla prima la rete, poi rimanda le monete di questo trasferimento al tuo wallet, così il trasferimento originale non potrà mai essere confermato. Questo costa una commissione di rete.</string>
     <string name="wallet__send_pending__description">Questo pagamento sta richiedendo un po\' più tempo del previsto. Puoi continuare a utilizzare Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pagamento in sospeso</string>
@@ -1612,6 +1613,15 @@
     <string name="wallet__send_contact_empty">Non hai ancora nessun contatto.</string>
     <string name="wallet__send_from">Da</string>
     <string name="wallet__send_pending__blocked_new_send">Il nuovo pagamento non è stato inviato. Completa il pagamento precedente prima di riprovare.</string>
+    <string name="wallet__send_pending__cancel_authorize">Autorizza annullamento</string>
+    <string name="wallet__send_pending__cancel_description">Annulla il pagamento rimandando i suoi input al tuo wallet. Inserisci il tasso di commissione che autorizzi in sat/vB; usa un tasso più alto dell\'originale affinché l\'annullamento possa sostituirlo. Un annullamento precedente può essere sostituito solo dopo che è uscito dalla rete senza essere confermato. Gli altri pagamenti onchain restano bloccati finché un annullamento non ha 6 conferme.</string>
+    <string name="wallet__send_pending__cancel_error">Non è stato possibile annullare il pagamento. I suoi fondi restano protetti. Prova una commissione più alta o controlla lo stato della transazione.</string>
+    <string name="wallet__send_pending__cancel_hint">Se questo pagamento non può più andare a buon fine, puoi annullarlo e mantenerne i fondi nel tuo wallet.</string>
+    <string name="wallet__send_pending__cancel_pending">Annullamento inviato. Gli altri pagamenti onchain si sbloccano quando avrà 6 conferme. Se esce dalla rete senza essere confermato, puoi annullare di nuovo.</string>
+    <string name="wallet__send_pending__cancel_pending_error">Un annullamento precedente è ancora in attesa, quindi uno nuovo non può ancora sostituirlo. I fondi del pagamento restano protetti. Attendi che venga confermato, oppure annulla di nuovo se esce dalla rete senza essere confermato.</string>
+    <string name="wallet__send_pending__cancel_title">Annulla pagamento</string>
+    <string name="wallet__send_pending__cancelled_description">L\'annullamento ha 6 conferme. I pagamenti onchain sono di nuovo disponibili.</string>
+    <string name="wallet__send_pending__cancelled_title">Pagamento annullato</string>
     <string name="wallet__send_pending__onchain_description">L\'esito della transazione non è risolto. Controlla il suo stato prima di riprovare. Gli altri pagamenti restano bloccati. Se disponibile, usa Riprova pagamento originale per autorizzare una commissione per lo stesso pagamento.</string>
     <string name="wallet__send_pending__refusal">Trasmissione rifiutata: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autorizza nuovo tentativo</string>

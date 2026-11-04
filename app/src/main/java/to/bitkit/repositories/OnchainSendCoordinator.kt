@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.safe
 import to.bitkit.utils.AppError
 import kotlin.time.Instant
 
@@ -19,6 +20,16 @@ object OnchainRecoveryFeeRate {
 
     fun parse(input: String): ULong? = input.toULongOrNull()?.takeIf(::isValid)
 }
+
+/**
+ * The highest rate at which a transaction that pays [fee] at [feeRate] may pay no more than [targetFee]. Its fee is
+ * rounded up, so it is larger than (fee - 1) / feeRate vB, and every higher rate pays more than [targetFee].
+ */
+internal fun highestFeeRateNotAbove(targetFee: ULong, fee: ULong, feeRate: ULong): ULong =
+    (targetFee.safe() * feeRate.safe()) / maxOf(fee.safe() - 1uL.safe(), 1uL)
+
+private fun divideRoundingUp(dividend: ULong, divisor: ULong): ULong =
+    (dividend.safe() + (divisor.safe() - 1uL.safe()).safe()) / divisor
 
 /** The prepared native handle refused this invocation before calling native broadcast. */
 internal class PreparedOnchainSendRefused(cause: Throwable) : AppError(cause)
@@ -192,6 +203,51 @@ class OnchainSendCoordinator(
             }
         }
         result
+    }
+
+    /**
+     * Spend the exact original inputs back to this wallet, conflicting with every candidate without paying anyone.
+     * The guard stays until that spend is final, through [OnchainSendAttemptStore.releaseCancelled]. A release that
+     * may be in a mempool is replaced only by one paying more in total, by at least its own size at the 1 sat/vB
+     * incremental relay fee (BIP125 rules 3 and 4), so a smaller one fails before approval with
+     * [OnchainSendCancelUnderbidsReleaseError].
+     */
+    suspend fun cancelOriginal(
+        attemptId: String,
+        walletId: String,
+        feeRateSatsPerVByte: ULong,
+        prepareCancellation: suspend (OnchainSendAttempt, ULong) -> PreparedOnchainSend,
+        approvePrepared: suspend (OnchainPreparedReceipt) -> Unit = {},
+    ): Result<OnchainSendOutcome> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            mutex.withLock {
+                val attempt = store.current()
+                if (attempt?.attemptId != attemptId || attempt.walletId != walletId || !attempt.isUnresolved) {
+                    throw OnchainSendBlockedError(attempt)
+                }
+                val inputs = attempt.originalInputs
+                if (inputs.isNullOrEmpty() || attempt.candidateTxids.isEmpty()) throw OnchainSendBlockedError(attempt)
+                require(OnchainRecoveryFeeRate.isValid(feeRateSatsPerVByte))
+                val prepared = prepareCancellation(attempt, feeRateSatsPerVByte)
+                val receipt = prepared.receipt.copy(feeRateSatsPerVByte = feeRateSatsPerVByte)
+                require(receipt.inputs.size == inputs.size && receipt.inputs.toSet() == inputs.toSet())
+                require(!receipt.address.equals(attempt.address, ignoreCase = true))
+                require(attempt.candidateTxids.none { it.equals(receipt.txid, ignoreCase = true) })
+                attempt.releaseMiningFeeSats?.let { releaseFee ->
+                    val fee = requireNotNull(receipt.miningFeeSats)
+                    // The release's fee plus its own size at 1 sat/vB. Its fee is rounded up, so the fee over the
+                    // rate, rounded up, is at least its size.
+                    val floor = releaseFee.safe() + divideRoundingUp(fee, feeRateSatsPerVByte).safe()
+                    if (fee < floor) {
+                        throw OnchainSendCancelUnderbidsReleaseError(
+                            highestFeeRateNotAbove(floor.safe() - 1uL.safe(), fee, feeRateSatsPerVByte)
+                        )
+                    }
+                }
+                approvePrepared(receipt)
+                store.broadcastCancellation(attempt.attemptId, attempt.walletIndex) { prepared.broadcast() }
+            }
+        }
     }
 
     private suspend fun submit(

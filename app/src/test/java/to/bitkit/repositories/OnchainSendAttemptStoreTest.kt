@@ -814,7 +814,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `abandon releases an unresolved Shop payment only after its proof is removed`() = test {
+    fun `expired Shop payment keeps its guard until its recorded release is final`() = test {
         var saved: String? = null
         val keychain = mock<Keychain>()
         whenever(keychain.loadString(key, 0)).thenAnswer { saved }
@@ -844,21 +844,38 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         // The release transaction, not the restore marker, keeps a restored attempt safe to cancel.
         assertTrue(unknown.copy(restoredFromBackup = true).canBeAbandoned)
 
-        assertFalse(store.abandonUnbroadcast(unknown) { false })
-        assertEquals(unknown, store.current())
-        assertNull(store.recordRelease(unknown, "77".repeat(32)), "A release needs the approval first")
+        val releaseReceipt = OnchainPreparedReceipt(
+            txid = "77".repeat(32),
+            inputs = receipt.inputs,
+            address = "bcrt1qown",
+            amountSats = 1_000uL,
+            feeRateSatsPerVByte = 3uL,
+            miningFeeSats = 423uL,
+        )
+        assertNull(store.recordRelease(unknown, releaseReceipt), "A release needs the approval first")
         val approved = requireNotNull(store.approveRelease(unknown))
         assertTrue(approved.releaseApproved)
         assertEquals(approved, store.approveRelease(unknown))
-        assertNull(store.recordRelease(approved, "ab".repeat(32)), "A candidate cannot be its own release")
+        val candidateRelease = releaseReceipt.copy(txid = "ab".repeat(32))
+        assertNull(store.recordRelease(approved, candidateRelease), "A candidate cannot be its own release")
         // A restore of the same operation keeps the local approval and its release.
         store.restoreActive(unknown.copy(restoredFromBackup = true))
         val restored = requireNotNull(store.current())
         assertTrue(restored.releaseApproved && restored.canBeAbandoned)
-        assertFalse(store.abandonUnbroadcast(unknown) { true })
-        assertFalse(store.abandonUnbroadcast(restored.copy(amountSats = 999uL)) { true })
-        assertEquals(restored, store.current())
-        assertTrue(store.abandonUnbroadcast(restored) { true })
+        assertNull(store.recordRelease(restored.copy(amountSats = 999uL), releaseReceipt))
+        val recorded = requireNotNull(store.recordRelease(restored, releaseReceipt))
+        // The release's rate and fee are saved with it, so a reopened Cancel payment can still outbid it
+        assertEquals(releaseReceipt.txid, recorded.releaseTxid)
+        assertEquals(3uL, recorded.releaseFeeRateSatsPerVByte)
+        assertEquals(423uL, recorded.releaseMiningFeeSats)
+        assertEquals(recorded, OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System).current())
+        store.restoreActive(unknown.copy(restoredFromBackup = true))
+        assertEquals(recorded, store.current())
+        val release = OnchainInputSpend("77".repeat(32), receipt.inputs, listOf("bcrt1qown", "bcrt1qchange"), false)
+        assertFalse(store.releaseCancelled(recorded.attemptId, 0, release) { true })
+        assertFalse(store.releaseCancelled(recorded.attemptId, 0, release.copy(isFinal = true)) { false })
+        assertEquals(recorded, store.current())
+        assertTrue(store.releaseCancelled(recorded.attemptId, 0, release.copy(isFinal = true)) { true })
         assertNull(store.current())
         assertTrue(store.admitForTest(walletId = WalletScope.default).attemptId != attempt.attemptId)
     }
@@ -875,7 +892,7 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         val unknown = requireNotNull(store.current())
 
         assertFalse(unknown.canBeAbandoned)
-        assertFalse(store.abandonUnbroadcast(unknown) { true })
+        assertNull(store.approveRelease(unknown))
         assertEquals(unknown, store.current())
     }
 
@@ -912,6 +929,161 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         // Retry original is refused while transfers are unavailable, so release is the only exit.
         assertTrue(refused.blocksNextSend)
         assertTrue(refused.canBeAbandoned, "A refused Blocktank funding attempt must be releasable")
+    }
+
+    @Test
+    fun `a release saved before its fee was kept reads with an unknown fee`() = test {
+        val keychain = mock<Keychain>()
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System)
+        val released = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "attempt",
+            requestId = PaykitPaymentRequestId("request", "payee"), orderId = null, address = "bcrt1qrecipient",
+            amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = false,
+            channelId = null, tags = emptyList(), evidence = OnchainSendEvidence.Unknown, txid = "ab".repeat(32),
+            originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u)), candidateTxids = listOf("ab".repeat(32)),
+            payerIdentity = "payer", releaseApproved = true, releaseTxid = "77".repeat(32),
+        )
+        // As an app that predates the release's fee saved it
+        val saved = Json.encodeToString(OnchainSendAttempt.serializer(), released)
+        assertTrue(saved.contains("releaseTxid") && !saved.contains("releaseMiningFeeSats"))
+        whenever(keychain.loadString(key, 0)).thenReturn(saved)
+
+        val current = requireNotNull(store.current())
+
+        assertEquals(released, current)
+        assertNull(current.releaseFeeRateSatsPerVByte)
+        assertNull(current.releaseMiningFeeSats)
+    }
+
+    @Test
+    fun `final non-payment spend of an original input releases an unresolvable request or order guard`() = test {
+        for (orderBound in listOf(false, true)) {
+            val keychain = inMemoryKeychain()
+            val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System)
+            val unresolved = store.dispatchedForTest(orderBound, OnchainSendOutcome.Rejected(firstTxid, "fee too low"))
+            assertFailsWith<OnchainSendBlockedError> { store.admitForTest(walletId = WalletScope.default) }
+            var removedProof: OnchainSendAttempt? = null
+
+            val released = store.releaseCancelled(unresolved.attemptId, 0, finalCancellation) {
+                removedProof = it
+                true
+            }
+
+            assertTrue(released)
+            assertEquals(unresolved, removedProof)
+            assertNull(store.current())
+            store.admitForTest(walletId = WalletScope.default)
+        }
+    }
+
+    @Test
+    fun `spends a candidate could still beat or that may pay the recipient never release the guard`() = test {
+        val store = OnchainSendAttemptStore(testDispatcher, inMemoryKeychain(), mock(), Clock.System)
+        val unresolved = store.dispatchedForTest(outcome = OnchainSendOutcome.Unknown(firstTxid))
+        val keptSpends = listOf(
+            finalCancellation.copy(isFinal = false),
+            finalCancellation.copy(txid = firstTxid.uppercase()),
+            finalCancellation.copy(outputAddresses = listOf("BCRT1QRECIPIENT", "bcrt1qchange")),
+            finalCancellation.copy(outputAddresses = listOf(null, "bcrt1qchange")),
+            finalCancellation.copy(outputAddresses = emptyList()),
+            finalCancellation.copy(inputs = listOf(OnchainSendInput("33".repeat(32), 0u))),
+        )
+
+        for (spend in keptSpends) {
+            assertFalse(store.releaseCancelled(unresolved.attemptId, 0, spend) { error("proof must stay") })
+            assertEquals(unresolved, store.current())
+        }
+        assertFalse(store.releaseCancelled("other-attempt", 0, finalCancellation) { error("proof must stay") })
+        assertFalse(store.releaseCancelled(unresolved.attemptId, 0, finalCancellation) { false })
+        assertEquals(unresolved, store.current())
+
+        val observed = requireNotNull(store.observeExactTransaction(firstTxid))
+        assertFalse(store.releaseCancelled(unresolved.attemptId, 0, finalCancellation) { error("proof must stay") })
+        assertEquals(observed, store.current())
+        assertTrue(observed.blocksNextSend)
+    }
+
+    @Test
+    fun `cancellation dispatches only while no candidate has positive evidence and keeps the guard`() = test {
+        val store = OnchainSendAttemptStore(testDispatcher, inMemoryKeychain(), mock(), Clock.System)
+        val unresolved = store.dispatchedForTest(outcome = OnchainSendOutcome.Unknown(firstTxid))
+        var broadcasts = 0
+        val cancel: suspend () -> OnchainSendOutcome = {
+            broadcasts++
+            OnchainSendOutcome.Accepted(finalCancellation.txid)
+        }
+
+        assertEquals(
+            OnchainSendOutcome.Accepted(finalCancellation.txid),
+            store.broadcastCancellation(
+                unresolved.attemptId,
+                0,
+                cancel,
+            )
+        )
+        assertEquals(unresolved, store.current())
+        assertFailsWith<OnchainSendBlockedError> { store.broadcastCancellation(unresolved.attemptId, 1, cancel) }
+        assertFailsWith<OnchainSendBlockedError> { store.broadcastCancellation("other-attempt", 0, cancel) }
+        store.observeExactTransaction(firstTxid)
+        assertFailsWith<OnchainSendBlockedError> { store.broadcastCancellation(unresolved.attemptId, 0, cancel) }
+        assertEquals(1, broadcasts)
+
+        val liveStore = OnchainSendAttemptStore(testDispatcher, inMemoryKeychain(), mock(), Clock.System)
+        val live = liveStore.admitForTest(walletId = WalletScope.default)
+        liveStore.retainPreparedReceipt(
+            live.attemptId,
+            0,
+            OnchainPreparedReceipt(firstTxid, originalInputs, live.address, live.amountSats),
+            false,
+        )
+        assertFailsWith<OnchainSendBlockedError> { liveStore.broadcastCancellation(live.attemptId, 0, cancel) }
+        assertEquals(1, broadcasts)
+    }
+
+    private val firstTxid = "ab".repeat(32)
+    private val originalInputs = listOf(OnchainSendInput("11".repeat(32), 0u), OnchainSendInput("22".repeat(32), 1u))
+    private val finalCancellation = OnchainInputSpend(
+        txid = "ef".repeat(32),
+        inputs = listOf(OnchainSendInput("22".repeat(32), 1u)),
+        outputAddresses = listOf("bcrt1qown", "bcrt1qchange"),
+        isFinal = true,
+    )
+
+    private fun inMemoryKeychain(): Keychain {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever { keychain.upsertString(eq(key), any(), eq(0)) }.doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever { keychain.delete(key, 0) }.doSuspendableAnswer { saved = null }
+        return keychain
+    }
+
+    private suspend fun OnchainSendAttemptStore.dispatchedForTest(
+        orderBound: Boolean = false,
+        outcome: OnchainSendOutcome,
+    ): OnchainSendAttempt {
+        val attempt = admit(
+            walletId = WalletScope.default,
+            requestId = PaykitPaymentRequestId("request", "payee").takeUnless { orderBound },
+            orderId = "order".takeIf { orderBound },
+            address = "bcrt1qrecipient",
+            amountSats = 1_000uL,
+            isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL,
+            isTransfer = orderBound,
+            channelId = null,
+            tags = emptyList(),
+            transferContext = OnchainTransferContext(1_100uL, 2_000uL, 900uL, 1_000uL).takeIf { orderBound },
+            beforeSendAttempt = {},
+            payerIdentity = "payer".takeUnless { orderBound },
+        )
+        val receipt = OnchainPreparedReceipt(firstTxid, originalInputs, attempt.address, attempt.amountSats)
+        retainPreparedReceipt(attempt.attemptId, 0, receipt, false)
+        broadcastPreparedCandidate(attempt.attemptId, 0, firstTxid) { beforeDispatch ->
+            beforeDispatch()
+            outcome
+        }
+        return recordOutcome(attempt.attemptId, outcome, 0)
     }
 
     private suspend fun OnchainSendAttemptStore.admitForTest(

@@ -45,6 +45,7 @@ import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.PendingSweepBalance
 import org.lightningdevkit.ldknode.PublicKey
@@ -77,6 +78,7 @@ import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
+import to.bitkit.repositories.OnchainInputSpend
 import to.bitkit.repositories.OnchainPreparedReceipt
 import to.bitkit.repositories.OnchainSendAttempt
 import to.bitkit.repositories.OnchainSendInput
@@ -1093,11 +1095,27 @@ class LightningService internal constructor(
                 } ?: break
                 // Every spendable original coin must go, so no candidate can still confirm.
                 check(prepared.receipt.inputs.containsAll(originalCoins))
-                if (releaseOutbids(prepared.receipt, attempt)) return prepared
+                if (releaseOutbids(prepared.receipt, attempt)) {
+                    // A Cancel payment over the same coins must pay a higher rate than the release
+                    val receipt = prepared.receipt.copy(feeRateSatsPerVByte = feeRate)
+                    return PreparedOnchainSend(receipt) { prepared.broadcast(it) }
+                }
                 feeRate *= 2uL
             }
         }
         throw lastError
+    }
+
+    /** Read spends of [inputs] from the node wallet's own history, never from a backend or mempool query. */
+    suspend fun walletSpendsOf(inputs: List<OnchainSendInput>, walletIndex: Int): List<OnchainInputSpend> {
+        val originalNode = node ?: throw ServiceError.NodeNotSetup()
+        return callOnchainSend {
+            if (currentWalletIndex != walletIndex || node !== originalNode) throw ServiceError.NodeNotSetup()
+            originalNode.listPayments().mapNotNull { payment ->
+                val kind = payment.kind as? PaymentKind.Onchain ?: return@mapNotNull null
+                originalNode.getTransactionDetails(kind.txid)?.let { onchainInputSpend(payment, it, inputs) }
+            }
+        }
     }
 
     internal suspend fun <T> callOnchainSend(block: suspend () -> T): T =
@@ -1556,6 +1574,24 @@ data class NetworkGraphInfo(
 )
 
 class NetworkGraphCacheDeleteError : AppError("Failed to delete network graph cache")
+
+/** LDK reports an on-chain payment succeeded only once its transaction is ANTI_REORG_DELAY blocks deep. */
+internal fun onchainInputSpend(
+    payment: PaymentDetails,
+    details: TransactionDetails,
+    inputs: List<OnchainSendInput>,
+): OnchainInputSpend? {
+    val kind = payment.kind as? PaymentKind.Onchain ?: return null
+    val guarded = inputs.map { it.copy(txid = it.txid.lowercase()) }.toSet()
+    val spent = details.inputs.map { OnchainSendInput(it.txid.lowercase(), it.vout) }
+    if (spent.none { it in guarded }) return null
+    return OnchainInputSpend(
+        txid = kind.txid.lowercase(),
+        inputs = spent,
+        outputAddresses = details.outputs.map { it.scriptpubkeyAddress },
+        isFinal = kind.status is ConfirmationStatus.Confirmed && payment.status == PaymentStatus.SUCCEEDED,
+    )
+}
 
 /** Exact signed transaction inputs/prevouts, never an estimate or a backend-absence inference. */
 internal fun exactOriginalSendFee(

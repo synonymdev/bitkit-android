@@ -2507,7 +2507,10 @@ class AppViewModel @Inject constructor(
         val onActivitiesSynced: suspend () -> Unit = {
             viewModelScope.launch { refreshPublicPaykitAddressAfterActivitySync(canPublish) }
         }
-        if (event.syncType == SyncType.ONCHAIN_WALLET) completePendingRestoreActivitySeen(event.syncedBlockHeight)
+        if (event.syncType == SyncType.ONCHAIN_WALLET) {
+            completePendingRestoreActivitySeen(event.syncedBlockHeight)
+            releaseCancelledOnchainSend()
+        }
 
         val isShowingLoading = migrationService.isShowingMigrationLoading.value
         val isRestoringRemote = migrationService.isRestoringFromRNRemoteBackup.value
@@ -6480,16 +6483,7 @@ class AppViewModel @Inject constructor(
             original.walletId,
             feeRateSatsPerVByte,
             paymentDeadlineAt = paymentDeadline,
-            approvePrepared = { receipt ->
-                val fee = requireNotNull(receipt.miningFeeSats)
-                check(fee <= Long.MAX_VALUE.toULong())
-                val feeInUsd = currencyRepo.convertSatsToFiat(fee.toLong(), USD).getOrNull()
-                val warnings = buildList {
-                    if (fee > original.amountSats / 2uL) add(SanityWarning.FEE_OVER_HALF_VALUE)
-                    if (feeInUsd != null && feeInUsd.value > BigDecimal(TEN_USD)) add(SanityWarning.FEE_OVER_10_USD)
-                }
-                approvePrepared(receipt, warnings)
-            },
+            approvePrepared = { approvePrepared(it, recoveryFeeWarnings(it, original.amountSats)) },
         ) { attempt ->
             check(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
@@ -6519,6 +6513,38 @@ class AppViewModel @Inject constructor(
             }.onFailure { Logger.warn("Failed to finish original recovered send locally", it, context = TAG) }
         }
         return result
+    }
+
+    /** Spend the original inputs back to this wallet. Other sends stay blocked until that spend is final. */
+    suspend fun cancelOriginalOnchainSend(
+        original: OnchainSendAttempt,
+        feeRateSatsPerVByte: ULong,
+        approvePrepared: suspend (OnchainPreparedReceipt, List<SanityWarning>) -> Unit,
+    ): Result<OnchainSendOutcome> = lightningRepo.cancelOriginalOnchainSend(
+        original.attemptId,
+        original.walletId,
+        feeRateSatsPerVByte,
+    ) { approvePrepared(it, recoveryFeeWarnings(it, original.amountSats)) }
+
+    private suspend fun recoveryFeeWarnings(receipt: OnchainPreparedReceipt, amountSats: ULong): List<SanityWarning> {
+        val fee = requireNotNull(receipt.miningFeeSats)
+        check(fee <= Long.MAX_VALUE.toULong())
+        val feeInUsd = currencyRepo.convertSatsToFiat(fee.toLong(), USD).getOrNull()
+        return buildList {
+            if (fee > amountSats / 2uL) add(SanityWarning.FEE_OVER_HALF_VALUE)
+            if (feeInUsd != null && feeInUsd.value > BigDecimal(TEN_USD)) add(SanityWarning.FEE_OVER_10_USD)
+        }
+    }
+
+    private suspend fun releaseCancelledOnchainSend() {
+        paykitPaymentProofRepo.releaseCancelledOnchainPayment()
+            .onFailure { Logger.warn("Failed to check for a final on-chain send cancellation", it, context = TAG) }
+            .getOrNull() ?: return
+        toast(
+            type = Toast.ToastType.SUCCESS,
+            title = context.getString(R.string.wallet__send_pending__cancelled_title),
+            description = context.getString(R.string.wallet__send_pending__cancelled_description),
+        )
     }
 
     fun onRecoveredTransfer(original: OnchainSendAttempt) {

@@ -1004,6 +1004,7 @@
     <string name="wallet__send_invoice_expiration">Expiración de la factura</string>
     <string name="wallet__send_max_spending__description">La cantidad máxima que se puede gastar es un poco más baja debido al saldo de reserva exigido.</string>
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
+    <string name="wallet__send_pending__abandon_pending">La cancelación se envió, pero aún no está confirmada. Los demás pagos onchain se desbloquean cuando tenga 6 confirmaciones. Si no se confirma, puede cancelar de nuevo.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Las transferencias al saldo de gasto ya no están disponibles. Bitkit primero revisa la red y luego devuelve las monedas de esta transferencia a tu billetera para que la transferencia original nunca se confirme. Esto tiene una comisión de red.</string>
     <string name="wallet__send_pending__description">Este pago está tardando un poco más de lo esperado. Puede seguir utilizando Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pago pendiente</string>
@@ -1612,6 +1613,15 @@
     <string name="wallet__send_contact_empty">Aún no tiene contactos.</string>
     <string name="wallet__send_from">Desde</string>
     <string name="wallet__send_pending__blocked_new_send">El nuevo pago no se envió. Termine el pago anterior antes de volver a intentarlo.</string>
+    <string name="wallet__send_pending__cancel_authorize">Autorizar cancelación</string>
+    <string name="wallet__send_pending__cancel_description">Cancele el pago devolviendo sus entradas a su billetera. Introduzca la tarifa que autoriza en sat/vB; use una tarifa más alta que la original para que la cancelación pueda reemplazarlo. Una cancelación anterior solo puede reemplazarse después de que salga de la red sin confirmarse. Los demás pagos onchain siguen bloqueados hasta que una cancelación tenga 6 confirmaciones.</string>
+    <string name="wallet__send_pending__cancel_error">No se pudo cancelar el pago. Sus fondos siguen protegidos. Pruebe una comisión más alta o revise el estado de la transacción.</string>
+    <string name="wallet__send_pending__cancel_hint">Si este pago ya no puede completarse, puede cancelarlo y conservar sus fondos en su billetera.</string>
+    <string name="wallet__send_pending__cancel_pending">Cancelación enviada. Los demás pagos onchain se desbloquean cuando tenga 6 confirmaciones. Si sale de la red sin confirmarse, puede cancelar de nuevo.</string>
+    <string name="wallet__send_pending__cancel_pending_error">Una cancelación anterior sigue pendiente, por lo que una nueva aún no puede reemplazarla. Los fondos del pago siguen protegidos. Espere a que se confirme o vuelva a cancelar si sale de la red sin confirmarse.</string>
+    <string name="wallet__send_pending__cancel_title">Cancelar pago</string>
+    <string name="wallet__send_pending__cancelled_description">La cancelación tiene 6 confirmaciones. Los pagos onchain vuelven a estar disponibles.</string>
+    <string name="wallet__send_pending__cancelled_title">Pago cancelado</string>
     <string name="wallet__send_pending__onchain_description">El resultado de la transacción no está resuelto. Revise su estado antes de volver a intentarlo. Los demás pagos siguen bloqueados. Si está disponible, use Reintentar pago original para autorizar una comisión para el mismo pago.</string>
     <string name="wallet__send_pending__refusal">Transmisión rechazada: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autorizar reintento</string>

@@ -978,6 +978,7 @@
     <string name="wallet__send_invoice_expiration">Λήξη τιμολογίου</string>
     <string name="wallet__send_max_spending__description">Το μέγιστο δαπανήσιμο ποσό είναι λίγο χαμηλότερο λόγω απαιτούμενου αποθεματικού υπολοίπου.</string>
     <string name="wallet__send_max_spending__title">Αποθεματικό υπόλοιπο</string>
+    <string name="wallet__send_pending__abandon_pending">Η ακύρωση στάλθηκε, αλλά δεν έχει επιβεβαιωθεί ακόμα. Οι άλλες onchain πληρωμές ξεκλειδώνονται μόλις λάβει 6 επιβεβαιώσεις. Αν δεν επιβεβαιωθεί, μπορείς να ακυρώσεις ξανά.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Οι μεταφορές στο υπόλοιπο δαπανών δεν είναι πλέον διαθέσιμες. Το Bitkit ελέγχει πρώτα το δίκτυο και μετά επιστρέφει τα νομίσματα αυτής της μεταφοράς στο πορτοφόλι σας, ώστε η αρχική μεταφορά να μην επιβεβαιωθεί ποτέ. Αυτό έχει χρέωση δικτύου.</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Πληρωμή\n&lt;accent&gt;τιμολογίου...&lt;/accent&gt;</string>
@@ -1606,6 +1607,15 @@
     <string name="wallet__send_contact_title">Επιλογή επαφής</string>
     <string name="wallet__send_from">Από</string>
     <string name="wallet__send_pending__blocked_new_send">Η νέα πληρωμή δεν στάλθηκε. Ολοκλήρωσε την προηγούμενη πληρωμή πριν δοκιμάσεις ξανά.</string>
+    <string name="wallet__send_pending__cancel_authorize">Έγκριση ακύρωσης</string>
+    <string name="wallet__send_pending__cancel_description">Ακύρωσε στέλνοντας τις εισόδους αυτής της πληρωμής πίσω στο πορτοφόλι σου. Εισήγαγε το ποσοστό τέλους που εγκρίνεις σε sat/vB· χρησιμοποίησε υψηλότερο ποσοστό από το αρχικό ώστε η ακύρωση να μπορεί να την αντικαταστήσει. Μια προηγούμενη ακύρωση μπορεί να αντικατασταθεί μόνο αφού αποχωρήσει από το δίκτυο χωρίς επιβεβαίωση. Οι άλλες onchain πληρωμές παραμένουν μπλοκαρισμένες μέχρι μια ακύρωση να λάβει 6 επιβεβαιώσεις.</string>
+    <string name="wallet__send_pending__cancel_error">Η πληρωμή δεν μπόρεσε να ακυρωθεί. Τα κεφάλαιά της παραμένουν προστατευμένα. Δοκίμασε υψηλότερο τέλος ή έλεγξε την κατάσταση της συναλλαγής.</string>
+    <string name="wallet__send_pending__cancel_hint">Αν αυτή η πληρωμή δεν μπορεί πλέον να ολοκληρωθεί, μπορείς να την ακυρώσεις και να κρατήσεις τα κεφάλαιά της στο πορτοφόλι σου.</string>
+    <string name="wallet__send_pending__cancel_pending">Η ακύρωση στάλθηκε. Οι άλλες onchain πληρωμές ξεκλειδώνονται μόλις λάβει 6 επιβεβαιώσεις. Αν αποχωρήσει από το δίκτυο χωρίς επιβεβαίωση, μπορείς να ακυρώσεις ξανά.</string>
+    <string name="wallet__send_pending__cancel_pending_error">Μια προηγούμενη ακύρωση εκκρεμεί ακόμη, οπότε μια νέα δεν μπορεί ακόμη να την αντικαταστήσει. Τα κεφάλαια της πληρωμής παραμένουν προστατευμένα. Περίμενε να επιβεβαιωθεί ή ακύρωσε ξανά αν αποχωρήσει από το δίκτυο χωρίς επιβεβαίωση.</string>
+    <string name="wallet__send_pending__cancel_title">Ακύρωση πληρωμής</string>
+    <string name="wallet__send_pending__cancelled_description">Η ακύρωση έχει 6 επιβεβαιώσεις. Οι onchain πληρωμές είναι ξανά διαθέσιμες.</string>
+    <string name="wallet__send_pending__cancelled_title">Η πληρωμή ακυρώθηκε</string>
     <string name="wallet__send_pending__description">Αυτή η πληρωμή διαρκεί λίγο περισσότερο από το αναμενόμενο. Μπορείς να συνεχίσεις να χρησιμοποιείς το Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Πληρωμή σε εκκρεμότητα</string>
     <string name="wallet__send_pending__onchain_description">Το αποτέλεσμα της συναλλαγής δεν έχει επιλυθεί. Έλεγξε την κατάστασή της πριν δοκιμάσεις ξανά. Οι άλλες πληρωμές παραμένουν μπλοκαρισμένες. Αν είναι διαθέσιμο, χρησιμοποίησε την Επανάληψη αρχικής πληρωμής για να εγκρίνεις τέλος για την ίδια πληρωμή.</string>

@@ -67,6 +67,16 @@ data class OnchainPreparedReceipt(
     val miningFeeSats: ULong? = null,
 )
 
+/** A transaction in the node's own wallet history that spends at least one guarded input. */
+data class OnchainInputSpend(
+    val txid: String,
+    val inputs: List<OnchainSendInput>,
+    /** A null entry is an output without an address, which never proves the recipient went unpaid. */
+    val outputAddresses: List<String?>,
+    /** Confirmed at the node's anti-reorg depth, so no conflicting candidate can replace it. */
+    val isFinal: Boolean,
+)
+
 @Serializable
 data class OnchainSendAttempt(
     val walletId: String,
@@ -97,10 +107,14 @@ data class OnchainSendAttempt(
     val verifiedWinningFeeSats: ULong? = null,
     // Write-ahead boundary: false is proof that this original prepared payment never dispatched.
     val initialDispatchAttempted: Boolean = true,
-    // Set once its request was found ended, so a release cut short after its proof was removed can finish.
+    // Set once its request was found ended, so a cancel cut short can finish once the request record is gone.
     val releaseApproved: Boolean = false,
     // The transaction spending the original's coins back to the wallet, saved before it is broadcast.
     val releaseTxid: String? = null,
+    // The release's fee rate and fee, which a Cancel payment over the same coins must outbid. A release saved by an
+    // app that predates them has neither.
+    val releaseFeeRateSatsPerVByte: ULong? = null,
+    val releaseMiningFeeSats: ULong? = null,
 ) {
     val winningFeeRateSatsPerVByte: ULong
         get() = candidateFeeRates[txid?.lowercase()] ?: feeRateSatsPerVByte.takeIf {
@@ -117,6 +131,21 @@ data class OnchainSendAttempt(
 
     val blocksNextSend: Boolean
         get() = isUnresolved || (hasPositiveEvidence && !localFollowupComplete)
+
+    /**
+     * Every candidate spends all original inputs and pays [address], including one a stale backup never recorded.
+     * A spend of any original input that pays nothing to [address] therefore conflicts with all of them unpaid.
+     */
+    fun isCancelledBy(spend: OnchainInputSpend): Boolean {
+        val inputs = originalInputs ?: return false
+        val spendsOriginalInput = spend.inputs.any { spent ->
+            inputs.any { it.txid.equals(spent.txid, ignoreCase = true) && it.vout == spent.vout }
+        }
+        return isUnresolved && candidateTxids.isNotEmpty() && spendsOriginalInput &&
+            candidateTxids.none { it.equals(spend.txid, ignoreCase = true) } &&
+            spend.outputAddresses.isNotEmpty() &&
+            spend.outputAddresses.all { it != null && !it.equals(address, ignoreCase = true) }
+    }
 
     val highestCandidateFee: ULong
         get() = maxOf(candidateMiningFees.values.maxOrNull() ?: 0uL, verifiedWinningFeeSats ?: 0uL)
@@ -149,6 +178,14 @@ class OnchainSendAbandonSyncError : AppError("The on-chain wallet could not sync
 class OnchainSendAbandonPendingError : AppError("The release transaction was sent but is not confirmed yet.")
 
 /**
+ * A Cancel payment spends only the original's coins, so after a release that added other coins it can pay a higher
+ * rate and still too little in total. Nodes holding the release refuse a replacement that does not pay more than it
+ * by at least its own size at 1 sat/vB. Any rate above [feeRate] pays enough.
+ */
+class OnchainSendCancelUnderbidsReleaseError(val feeRate: ULong) :
+    AppError("A Cancel payment must pay a higher fee than this payment's release.")
+
+/**
  * A release must spend at least one of the original's coins and pay more than any candidate, so it replaces a
  * candidate a node may still hold, and no candidate can confirm once it does.
  */
@@ -179,6 +216,9 @@ interface OnchainReleasing {
 
     /** Whether a transaction that is not a candidate already spent one of the original's coins. */
     suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean
+
+    /** The wallet's transactions that spend one of the original's coins. */
+    suspend fun originalCoinSpends(attempt: OnchainSendAttempt): List<OnchainInputSpend>
     suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend
 }
 
@@ -316,7 +356,7 @@ class OnchainSendAttemptStore @Inject constructor(
         }
     }
 
-    /** Records that the payment's request has ended before its original proof is removed. */
+    /** Records that the payment's request has ended, before its release is prepared. */
     suspend fun approveRelease(expected: OnchainSendAttempt): OnchainSendAttempt? =
         withContext(ioDispatcher + NonCancellable) {
             mutex.withLock {
@@ -330,38 +370,24 @@ class OnchainSendAttemptStore @Inject constructor(
             }
         }
 
-    /** Saves the release transaction before it is broadcast, so a later cancel can find it in the wallet. */
-    suspend fun recordRelease(expected: OnchainSendAttempt, txid: String): OnchainSendAttempt? =
+    /**
+     * Saves the release transaction before it is broadcast, so a later cancel can find it in the wallet, and its fee
+     * rate and fee, so a Cancel payment can still outbid it once Payment Pending reopens.
+     */
+    suspend fun recordRelease(expected: OnchainSendAttempt, release: OnchainPreparedReceipt): OnchainSendAttempt? =
         withContext(ioDispatcher + NonCancellable) {
             mutex.withLock {
                 val current = loadWithRetainedAccepted(expected.walletIndex)
-                val isCandidate = current?.candidateTxids?.any { it.equals(txid, ignoreCase = true) } == true
+                val isCandidate = current?.candidateTxids?.any { it.equals(release.txid, ignoreCase = true) } == true
                 val releasable = current == expected && current.canBeAbandoned && current.releaseApproved
                 if (!releasable || isCandidate) return@withLock null
-                current.copy(releaseTxid = txid.lowercase()).also { persist(it) }
+                current.copy(
+                    releaseTxid = release.txid.lowercase(),
+                    releaseFeeRateSatsPerVByte = release.feeRateSatsPerVByte,
+                    releaseMiningFeeSats = release.miningFeeSats,
+                ).also { persist(it) }
             }
         }
-
-    /**
-     * Releases a Shop payment whose request has ended once the caller has shown that none of its candidates
-     * reached the network. The original proof is removed first, so a crash in between leaves an attempt that
-     * a later call can still release.
-     */
-    suspend fun abandonUnbroadcast(
-        expected: OnchainSendAttempt,
-        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
-    ): Boolean = withContext(ioDispatcher + NonCancellable) {
-        mutex.withLock {
-            val current = loadWithRetainedAccepted(expected.walletIndex) ?: return@withLock false
-            if (current != expected || !current.canBeAbandoned || current.attemptId in inFlightPreparations) {
-                return@withLock false
-            }
-            if (!removeOriginalProof(current)) return@withLock false
-            keychain.delete(KEY, current.walletIndex)
-            _backupStateVersion.update { it + 1 }
-            true
-        }
-    }
 
     suspend fun retainPreparedReceipt(
         attemptId: String,
@@ -527,6 +553,45 @@ class OnchainSendAttemptStore @Inject constructor(
         }
     }
 
+    /** Dispatch a spend of the guarded inputs back to this wallet only while no candidate has positive evidence. */
+    suspend fun broadcastCancellation(
+        attemptId: String,
+        walletIndex: Int,
+        broadcast: suspend () -> OnchainSendOutcome,
+    ): OnchainSendOutcome = withContext(ioDispatcher + NonCancellable) {
+        mutex.withLock {
+            val current = loadWithRetainedAccepted(walletIndex)
+            if (current?.attemptId != attemptId || walletIndex != lightningService.currentWalletIndex) {
+                throw OnchainSendBlockedError(current)
+            }
+            if (!current.isUnresolved || attemptId in inFlightPreparations) throw OnchainSendBlockedError(current)
+            // Observation waits on this mutex, so no candidate gains positive evidence before dispatch.
+            broadcast()
+        }
+    }
+
+    /**
+     * Release an unresolved guard only on positive evidence that no candidate can ever confirm: a final wallet
+     * spend of an original input that pays nothing to the recipient. Rejection, expiry or mempool absence never do.
+     */
+    suspend fun releaseCancelled(
+        attemptId: String,
+        walletIndex: Int,
+        spend: OnchainInputSpend,
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Boolean = withContext(ioDispatcher + NonCancellable) {
+        mutex.withLock {
+            val current = loadWithRetainedAccepted(walletIndex) ?: return@withLock false
+            if (current.attemptId != attemptId || walletIndex != lightningService.currentWalletIndex) {
+                return@withLock false
+            }
+            if (!spend.isFinal || !current.isCancelledBy(spend) || !removeOriginalProof(current)) return@withLock false
+            keychain.delete(KEY, walletIndex)
+            _backupStateVersion.update { it + 1 }
+            true
+        }
+    }
+
     suspend fun recordOutcome(attemptId: String, outcome: OnchainSendOutcome, walletIndex: Int): OnchainSendAttempt =
         withContext(ioDispatcher + NonCancellable) {
             mutex.withLock {
@@ -661,6 +726,8 @@ class OnchainSendAttemptStore @Inject constructor(
                     // A local release approval and its transaction are not part of the shared backup record.
                     releaseApproved = attempt.releaseApproved,
                     releaseTxid = attempt.releaseTxid,
+                    releaseFeeRateSatsPerVByte = attempt.releaseFeeRateSatsPerVByte,
+                    releaseMiningFeeSats = attempt.releaseMiningFeeSats,
                 ) == attempt
                 check(sameOperation && existing.candidateTxids.containsAll(attempt.candidateTxids)) {
                     "Cannot change a restored on-chain operation's original context"

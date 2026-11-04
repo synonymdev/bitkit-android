@@ -1777,6 +1777,79 @@ class LightningRepo @Inject constructor(
         result
     }
 
+    suspend fun cancelOriginalOnchainSend(
+        attemptId: String,
+        walletId: String,
+        feeRateSatsPerVByte: ULong,
+        approvePrepared: suspend (OnchainPreparedReceipt) -> Unit,
+    ): Result<OnchainSendOutcome> = executeWhenNodeRunning("cancelOriginalOnchainSend") {
+        requireWalletRestoreComplete()
+        recoveryCoordinator.cancelOriginal(
+            attemptId,
+            walletId,
+            feeRateSatsPerVByte,
+            ::prepareOnchainCancellation,
+            approvePrepared,
+        )
+    }
+
+    private suspend fun prepareOnchainCancellation(attempt: OnchainSendAttempt, feeRate: ULong): PreparedOnchainSend {
+        val selected = requireNotNull(attempt.originalInputs).map { SpendableUtxo(OutPoint(it.txid, it.vout), 0uL) }
+        requireWalletRestoreComplete()
+        // Both outputs stay in this wallet: a dust-limit output to a fresh address plus change. Unlike a sweep,
+        // this stays within the node's spendable-balance and anchor-reserve checks for any original input set.
+        return guardPreparedBroadcast(
+            lightningService.prepareOnchainSend(
+                lightningService.newAddress(),
+                Defaults.dustLimit.toULong(),
+                feeRate,
+                selected,
+                false,
+                attempt.walletIndex,
+            )
+        )
+    }
+
+    /** The wallet's own spend that cancels [attempt], final or still confirming, if one exists. */
+    suspend fun findOnchainSendCancellation(attempt: OnchainSendAttempt): Result<OnchainInputSpend?> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val inputs = attempt.originalInputs ?: return@runSuspendCatching null
+                val cancellations = lightningService.walletSpendsOf(inputs, attempt.walletIndex)
+                    .filter(attempt::isCancelledBy)
+                cancellations.firstOrNull { it.isFinal } ?: cancellations.firstOrNull()
+            }
+        }
+
+    /**
+     * Release the current guard once a final non-payment spend of its inputs invalidates every candidate.
+     * [beforeRelease] runs once that spend is found, before the guard's lock is taken.
+     */
+    suspend fun releaseCancelledOnchainSend(
+        beforeRelease: suspend (OnchainSendAttempt) -> Unit = {},
+        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
+    ): Result<OnchainSendAttempt?> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val attempt = onchainSendAttemptStore.current()?.takeIf { it.isUnresolved }
+                ?: return@runSuspendCatching null
+            val spend = findOnchainSendCancellation(attempt).getOrThrow()?.takeIf { it.isFinal }
+                ?: return@runSuspendCatching null
+            beforeRelease(attempt)
+            val released = onchainSendAttemptStore.releaseCancelled(
+                attempt.attemptId,
+                attempt.walletIndex,
+                spend,
+                removeOriginalProof,
+            )
+            if (!released) return@runSuspendCatching null
+            Logger.info(
+                "Released on-chain send '${attempt.attemptId}' after final cancellation '${spend.txid}'",
+                context = TAG,
+            )
+            attempt
+        }
+    }
+
     private suspend fun finishOnchainSendLocally(attempt: OnchainSendAttempt) {
         val originalFollowup = attempt.backupFollowup
         check(
@@ -1906,6 +1979,9 @@ class LightningRepo @Inject constructor(
     override suspend fun originalCoinSpentElsewhere(attempt: OnchainSendAttempt): Boolean =
         lightningService.originalCoinSpentElsewhere(attempt)
 
+    override suspend fun originalCoinSpends(attempt: OnchainSendAttempt): List<OnchainInputSpend> =
+        lightningService.walletSpendsOf(attempt.originalInputs.orEmpty(), attempt.walletIndex)
+
     override suspend fun prepareRelease(attempt: OnchainSendAttempt): PreparedOnchainSend {
         requireWalletRestoreComplete()
         return guardPreparedBroadcast(lightningService.prepareRelease(attempt))
@@ -1921,16 +1997,13 @@ class LightningRepo @Inject constructor(
             }
         }
 
-    suspend fun recordOnchainRelease(expected: OnchainSendAttempt, txid: String): OnchainSendAttempt? =
-        onchainSendAttemptStore.recordRelease(expected, txid)
+    suspend fun recordOnchainRelease(
+        expected: OnchainSendAttempt,
+        release: OnchainPreparedReceipt,
+    ): OnchainSendAttempt? = onchainSendAttemptStore.recordRelease(expected, release)
 
     suspend fun approveOnchainRelease(expected: OnchainSendAttempt): OnchainSendAttempt? =
         onchainSendAttemptStore.approveRelease(expected)
-
-    suspend fun abandonUnbroadcastOnchainSend(
-        expected: OnchainSendAttempt,
-        removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,
-    ): Boolean = onchainSendAttemptStore.abandonUnbroadcast(expected, removeOriginalProof)
 
     suspend fun releaseInterruptedShopPreparation(
         removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean,

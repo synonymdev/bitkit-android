@@ -148,6 +148,7 @@ class SendPendingObservationDeviceTest {
                                 onViewDetails = {},
                                 viewModel = vm,
                                 retryOriginal = { _, _, _ -> error("Observation must not invoke retry") },
+                                cancelOriginal = { _, _, _ -> error("Observation must not invoke cancellation") },
                                 onRecovered = { txid, amount -> recovered = txid to amount },
                                 savedStateHandle = SavedStateHandle(),
                                 onNavigateToPin = { error("Observation must not request spend authentication") },
