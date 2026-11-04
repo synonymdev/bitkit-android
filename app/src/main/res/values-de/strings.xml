@@ -853,7 +853,7 @@
     <string name="wallet__send_available_spending">Verfügbar (ausgeben)</string>
     <string name="wallet__send_max_spending__title">Reserve-Saldo</string>
     <string name="wallet__send_pending__description">Diese Zahlung dauert länger als erwartet. Du kannst Bitkit weiterhin verwenden.</string>
-    <string name="wallet__send_pending__hardware_description">Bitkit konnte nicht bestätigen, dass das Netzwerk diese Zahlung erhalten hat. Sie wird abgeschlossen, sobald dein Wallet die Transaktion sieht. Erscheint sie nicht, nutze „Ursprüngliche Zahlung wiederholen“, um dieselbe signierte Transaktion erneut zu senden. Andere Hardware-Wallet-Zahlungen bleiben bis dahin blockiert.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit konnte nicht bestätigen, dass das Netzwerk diese Zahlung erhalten hat. Sie wird abgeschlossen, sobald dein Wallet die Transaktion sieht. Erscheint sie nicht, nutze „Erneut senden“, um dieselbe signierte Transaktion noch einmal zu senden. Bis dahin signiert Bitkit diese Zahlung nicht erneut.</string>
     <string name="wallet__send_pending__nav_title">Zahlung ausstehend</string>
     <string name="wallet__send_max_spending__description">Der maximal auszahlbare Betrag ist etwas niedriger, da eine Reserve erforderlich ist.</string>
     <string name="wallet__send_review">Bestätigen</string>
@@ -1612,6 +1612,7 @@
     <string name="wallet__send_contact_empty">Du hast noch keine Kontakte.</string>
     <string name="wallet__send_from">Von</string>
     <string name="wallet__send_pending__blocked_new_send">Die neue Zahlung wurde nicht gesendet. Schließe die vorherige Zahlung ab, bevor du es erneut versuchst.</string>
+    <string name="wallet__send_pending__broadcast_again">Erneut senden</string>
     <string name="wallet__send_pending__onchain_description">Das Ergebnis der Transaktion ist ungeklärt. Überprüfe ihren Status, bevor du es erneut versuchst. Andere Zahlungen bleiben blockiert. Falls verfügbar, nutze „Ursprüngliche Zahlung wiederholen“, um eine Gebühr für dieselbe Zahlung zu autorisieren.</string>
     <string name="wallet__send_pending__refusal">Übertragung verweigert: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Wiederholung autorisieren</string>

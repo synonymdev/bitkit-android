@@ -1609,8 +1609,9 @@
     <string name="wallet__send_contact_empty">Aún no tienes ningún contacto.</string>
     <string name="wallet__send_from">Desde</string>
     <string name="wallet__send_pending__blocked_new_send">El nuevo pago no se envió. Finaliza el pago anterior antes de volver a intentarlo.</string>
+    <string name="wallet__send_pending__broadcast_again">Transmitir de nuevo</string>
     <string name="wallet__send_pending__description">Este pago está tardando un poco más de lo esperado. Puedes seguir usando Bitkit.</string>
-    <string name="wallet__send_pending__hardware_description">Bitkit no pudo confirmar que la red recibiera este pago. Se completará cuando tu monedero vea la transacción. Si no aparece, usa Reintentar el pago original para enviar de nuevo la misma transacción firmada. Los demás pagos con monedero de hardware siguen bloqueados hasta entonces.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit no pudo confirmar que la red recibiera este pago. Se completará cuando tu monedero vea la transacción. Si no aparece, usa Transmitir de nuevo para enviar otra vez la misma transacción firmada. Bitkit no volverá a firmar este pago hasta entonces.</string>
     <string name="wallet__send_pending__nav_title">Pago pendiente</string>
     <string name="wallet__send_pending__onchain_description">El resultado de la transacción está sin resolver. Comprueba su estado antes de volver a intentarlo. Los demás pagos siguen bloqueados. Si está disponible, usa Reintentar el pago original para autorizar una comisión para el mismo pago.</string>
     <string name="wallet__send_pending__refusal">Difusión rechazada: %1$s</string>

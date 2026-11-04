@@ -160,7 +160,7 @@ data class HeldHwSend(
     val totalSpent: ULong,
 ) {
     fun isPaymentOf(walletId: String, address: String, amountSats: ULong): Boolean =
-        this.walletId == walletId && this.address == address && this.amountSats == amountSats
+        this.walletId == walletId && this.address.equals(address, ignoreCase = true) && this.amountSats == amountSats
 }
 
 /**

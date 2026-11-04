@@ -997,7 +997,7 @@
     <string name="wallet__send_max_spending__title">Reservesaldo</string>
     <string name="wallet__send_pending__abandon_transfer_note">Overboekingen naar je bestedingssaldo zijn niet meer beschikbaar. Bitkit controleert eerst het netwerk en stuurt de munten van deze overboeking dan terug naar je wallet, zodat de oorspronkelijke overboeking nooit bevestigd wordt. Dit kost netwerkkosten.</string>
     <string name="wallet__send_pending__description">Deze betaling duurt iets langer dan verwacht. U kunt Bitkit blijven gebruiken.</string>
-    <string name="wallet__send_pending__hardware_description">Bitkit kon niet bevestigen dat het netwerk deze betaling heeft ontvangen. De betaling wordt voltooid zodra uw wallet de transactie ziet. Verschijnt deze niet, gebruik dan ‘Oorspronkelijke betaling opnieuw proberen’ om dezelfde ondertekende transactie opnieuw te verzenden. Andere betalingen met een hardwarewallet blijven tot dan geblokkeerd.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit kon niet bevestigen dat het netwerk deze betaling heeft ontvangen. De betaling wordt voltooid zodra uw wallet de transactie ziet. Verschijnt deze niet, gebruik dan ‘Opnieuw uitzenden’ om dezelfde ondertekende transactie opnieuw te versturen. Tot die tijd ondertekent Bitkit deze betaling niet opnieuw.</string>
     <string name="wallet__send_pending__nav_title">Betaling Onderweg</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Factuur\n&lt;accent&gt;betalen...&lt;/accent&gt;</string>
@@ -1613,6 +1613,7 @@
     <string name="wallet__send_contact_empty">U hebt nog geen contacten.</string>
     <string name="wallet__send_from">Van</string>
     <string name="wallet__send_pending__blocked_new_send">De nieuwe betaling is niet verzonden. Rond de vorige betaling af voordat u het opnieuw probeert.</string>
+    <string name="wallet__send_pending__broadcast_again">Opnieuw uitzenden</string>
     <string name="wallet__send_pending__onchain_description">De uitkomst van de transactie is onbekend. Controleer de status voordat u het opnieuw probeert. Andere betalingen blijven geblokkeerd. Gebruik indien beschikbaar ‘Oorspronkelijke betaling opnieuw proberen’ om een vergoeding voor dezelfde betaling te autoriseren.</string>
     <string name="wallet__send_pending__refusal">Verzending geweigerd: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Nieuwe poging autoriseren</string>

@@ -475,7 +475,7 @@ internal fun SendPendingContent(
             VerticalSpacer(16.dp)
             if (canRetryHardwareSend) {
                 SecondaryButton(
-                    text = stringResource(R.string.wallet__send_pending__retry_title),
+                    text = stringResource(R.string.wallet__send_pending__broadcast_again),
                     isLoading = isRetryingHardwareSend,
                     enabled = !isRetryingHardwareSend,
                     onClick = onRetryHardwareSend,

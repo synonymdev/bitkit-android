@@ -1004,7 +1004,7 @@
     <string name="wallet__send_max_spending__title">Zůstatek rezervy</string>
     <string name="wallet__send_pending__abandon_transfer_note">Převody na útratový zůstatek už nejsou dostupné. Bitkit nejprve zkontroluje síť a pak vrátí mince tohoto převodu do vaší peněženky, aby se původní převod nikdy nepotvrdil. Stojí to síťový poplatek.</string>
     <string name="wallet__send_pending__description">Tato platba trvá o něco déle, než se očekávalo. Bitkit můžete používat i nadále.</string>
-    <string name="wallet__send_pending__hardware_description">Bitkit nemohl potvrdit, že síť tuto platbu přijala. Platba se dokončí, jakmile vaše peněženka transakci uvidí. Pokud se neobjeví, použijte Zopakovat původní platbu a odešlete stejnou podepsanou transakci znovu. Ostatní platby z hardwarové peněženky do té doby zůstávají zablokované.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit nemohl potvrdit, že síť tuto platbu přijala. Platba se dokončí, jakmile vaše peněženka transakci uvidí. Pokud se neobjeví, použijte Odeslat znovu do sítě a odešlete stejnou podepsanou transakci znovu. Do té doby Bitkit tuto platbu znovu nepodepíše.</string>
     <string name="wallet__send_pending__nav_title">Platba čeká na vyřízení</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Placení\n&lt;accent&gt;faktury...&lt;/accent&gt;</string>
@@ -1615,6 +1615,7 @@
     <string name="wallet__send_contact_empty">Zatím nemáte žádné kontakty.</string>
     <string name="wallet__send_from">Z</string>
     <string name="wallet__send_pending__blocked_new_send">Nová platba nebyla odeslána. Před dalším pokusem dokončete předchozí platbu.</string>
+    <string name="wallet__send_pending__broadcast_again">Odeslat znovu do sítě</string>
     <string name="wallet__send_pending__onchain_description">Výsledek transakce není vyřešen. Před dalším pokusem zkontrolujte její stav. Ostatní platby zůstávají zablokované. Je-li k dispozici, použijte Zopakovat původní platbu a autorizujte poplatek pro stejnou platbu.</string>
     <string name="wallet__send_pending__refusal">Odeslání do sítě odmítnuto: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autorizovat opakování</string>

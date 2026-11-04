@@ -1006,7 +1006,7 @@
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_pending__abandon_transfer_note">As transferências para o saldo de gastos não estão mais disponíveis. O Bitkit primeiro verifica a rede e depois devolve as moedas desta transferência para sua carteira, para que a transferência original nunca seja confirmada. Isso tem uma taxa de rede.</string>
     <string name="wallet__send_pending__description">Esse pagamento está demorando mais do que o esperado. Enquanto isso, você pode continuar usando a Bitkit.</string>
-    <string name="wallet__send_pending__hardware_description">A Bitkit não conseguiu confirmar que a rede recebeu este pagamento. Ele será concluído assim que sua carteira vir a transação. Se ela não aparecer, use Tentar novamente o pagamento original para enviar de novo a mesma transação assinada. Outros pagamentos com carteira de hardware continuam bloqueados até lá.</string>
+    <string name="wallet__send_pending__hardware_description">A Bitkit não conseguiu confirmar que a rede recebeu este pagamento. Ele será concluído assim que sua carteira vir a transação. Se ela não aparecer, use Transmitir novamente para enviar de novo a mesma transação assinada. Até lá, a Bitkit não assinará este pagamento novamente.</string>
     <string name="wallet__send_pending__nav_title">Pagamento Pendente</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagando \n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
@@ -1614,6 +1614,7 @@
     <string name="wallet__send_contact_empty">Você ainda não tem nenhum contato.</string>
     <string name="wallet__send_from">De</string>
     <string name="wallet__send_pending__blocked_new_send">O novo pagamento não foi enviado. Conclua o pagamento anterior antes de tentar novamente.</string>
+    <string name="wallet__send_pending__broadcast_again">Transmitir novamente</string>
     <string name="wallet__send_pending__onchain_description">O resultado da transação não foi resolvido. Verifique o status dela antes de tentar novamente. Outros pagamentos continuam bloqueados. Se disponível, use Tentar novamente o pagamento original para autorizar uma taxa para o mesmo pagamento.</string>
     <string name="wallet__send_pending__refusal">Transmissão recusada: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autorizar nova tentativa</string>

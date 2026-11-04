@@ -1608,8 +1608,9 @@
     <string name="wallet__send_contact_title">Selecionar contacto</string>
     <string name="wallet__send_from">De</string>
     <string name="wallet__send_pending__blocked_new_send">O novo pagamento não foi enviado. Conclua o pagamento anterior antes de tentar novamente.</string>
+    <string name="wallet__send_pending__broadcast_again">Transmitir novamente</string>
     <string name="wallet__send_pending__description">Este pagamento está a demorar um pouco mais do que o previsto. Pode continuar a usar a Bitkit.</string>
-    <string name="wallet__send_pending__hardware_description">A Bitkit não conseguiu confirmar que a rede recebeu este pagamento. Fica concluído assim que a sua carteira vir a transação. Se não aparecer, use Repetir pagamento original para enviar novamente a mesma transação assinada. Os outros pagamentos com carteira de hardware continuam bloqueados até lá.</string>
+    <string name="wallet__send_pending__hardware_description">A Bitkit não conseguiu confirmar que a rede recebeu este pagamento. Fica concluído assim que a sua carteira vir a transação. Se não aparecer, use Transmitir novamente para enviar de novo a mesma transação assinada. Até lá, a Bitkit não volta a assinar este pagamento.</string>
     <string name="wallet__send_pending__nav_title">Pagamento pendente</string>
     <string name="wallet__send_pending__onchain_description">O resultado da transação não está resolvido. Verifique o estado antes de tentar novamente. Os outros pagamentos continuam bloqueados. Se disponível, use Repetir pagamento original para autorizar uma taxa para o mesmo pagamento.</string>
     <string name="wallet__send_pending__refusal">Difusão recusada: %1$s</string>

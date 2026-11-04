@@ -856,7 +856,7 @@
     <string name="wallet__send_available_spending">Dostępne (na wydawanie)</string>
     <string name="wallet__send_max_spending__title">Saldo rezerwy</string>
     <string name="wallet__send_pending__description">Ta płatność trwa nieco dłużej niż oczekiwano. Możesz kontynuować korzystanie z Bitkit.</string>
-    <string name="wallet__send_pending__hardware_description">Bitkit nie mógł potwierdzić, że sieć otrzymała tę płatność. Zostanie ona zakończona, gdy Twój portfel zobaczy transakcję. Jeśli się nie pojawi, użyj opcji Ponów oryginalną płatność, aby ponownie wysłać tę samą podpisaną transakcję. Inne płatności z portfela sprzętowego pozostają do tego czasu zablokowane.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit nie mógł potwierdzić, że sieć otrzymała tę płatność. Zostanie ona zakończona, gdy Twój portfel zobaczy transakcję. Jeśli się nie pojawi, użyj opcji Roześlij ponownie, aby wysłać tę samą podpisaną transakcję jeszcze raz. Do tego czasu Bitkit nie podpisze tej płatności ponownie.</string>
     <string name="wallet__send_pending__nav_title">Płatność w toku</string>
     <string name="wallet__send_max_spending__description">Maksymalna kwota do wydania jest nieco niższa ze względu na wymagane saldo rezerwowe.</string>
     <string name="wallet__send_review">Potwierdź</string>
@@ -1614,6 +1614,7 @@
     <string name="wallet__send_contact_empty">Nie masz jeszcze żadnych kontaktów.</string>
     <string name="wallet__send_from">Z</string>
     <string name="wallet__send_pending__blocked_new_send">Nowa płatność nie została wysłana. Dokończ poprzednią płatność, zanim spróbujesz ponownie.</string>
+    <string name="wallet__send_pending__broadcast_again">Roześlij ponownie</string>
     <string name="wallet__send_pending__onchain_description">Wynik transakcji jest nierozstrzygnięty. Sprawdź jej status, zanim spróbujesz ponownie. Inne płatności pozostają zablokowane. Jeśli to możliwe, użyj opcji Ponów oryginalną płatność, aby zatwierdzić opłatę dla tej samej płatności.</string>
     <string name="wallet__send_pending__refusal">Rozgłoszenie odrzucone: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Zatwierdź ponowienie</string>

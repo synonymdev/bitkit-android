@@ -1610,8 +1610,9 @@
     <string name="wallet__send_contact_empty">Encara no tens cap contacte.</string>
     <string name="wallet__send_from">Des de</string>
     <string name="wallet__send_pending__blocked_new_send">El pagament nou no s\'ha enviat. Finalitza el pagament anterior abans de tornar-ho a provar.</string>
+    <string name="wallet__send_pending__broadcast_again">Tornar a difondre</string>
     <string name="wallet__send_pending__description">Aquest pagament està trigant una mica més del previst. Pots continuar utilitzant Bitkit.</string>
-    <string name="wallet__send_pending__hardware_description">Bitkit no ha pogut confirmar que la xarxa hagi rebut aquest pagament. Es completarà quan la teva cartera vegi la transacció. Si no apareix, utilitza Reintentar el pagament original per tornar a enviar la mateixa transacció signada. Els altres pagaments amb cartera de maquinari continuen bloquejats fins aleshores.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit no ha pogut confirmar que la xarxa hagi rebut aquest pagament. Es completarà quan la teva cartera vegi la transacció. Si no apareix, utilitza Tornar a difondre per enviar de nou la mateixa transacció signada. Bitkit no tornarà a signar aquest pagament fins aleshores.</string>
     <string name="wallet__send_pending__onchain_description">El resultat de la transacció està sense resoldre. Comprova\'n l\'estat abans de tornar-ho a provar. Els altres pagaments continuen bloquejats. Si està disponible, utilitza Reintentar el pagament original per autoritzar una tarifa per al mateix pagament.</string>
     <string name="wallet__send_pending__refusal">Difusió rebutjada: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autoritzar el reintent</string>

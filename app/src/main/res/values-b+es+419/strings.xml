@@ -1006,7 +1006,7 @@
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_pending__abandon_transfer_note">Las transferencias al saldo de gasto ya no están disponibles. Bitkit primero revisa la red y luego devuelve las monedas de esta transferencia a tu billetera para que la transferencia original nunca se confirme. Esto tiene una comisión de red.</string>
     <string name="wallet__send_pending__description">Este pago está tardando un poco más de lo esperado. Puede seguir utilizando Bitkit.</string>
-    <string name="wallet__send_pending__hardware_description">Bitkit no pudo confirmar que la red recibiera este pago. Se completará cuando su billetera vea la transacción. Si no aparece, use Reintentar pago original para enviar de nuevo la misma transacción firmada. Los demás pagos con billetera de hardware siguen bloqueados hasta entonces.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit no pudo confirmar que la red recibiera este pago. Se completará cuando su billetera vea la transacción. Si no aparece, use Transmitir de nuevo para enviar otra vez la misma transacción firmada. Bitkit no volverá a firmar este pago hasta entonces.</string>
     <string name="wallet__send_pending__nav_title">Pago pendiente</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagando\n&lt;accent&gt;factura...&lt;/accent&gt;</string>
@@ -1614,6 +1614,7 @@
     <string name="wallet__send_contact_empty">Aún no tiene contactos.</string>
     <string name="wallet__send_from">Desde</string>
     <string name="wallet__send_pending__blocked_new_send">El nuevo pago no se envió. Termine el pago anterior antes de volver a intentarlo.</string>
+    <string name="wallet__send_pending__broadcast_again">Transmitir de nuevo</string>
     <string name="wallet__send_pending__onchain_description">El resultado de la transacción no está resuelto. Revise su estado antes de volver a intentarlo. Los demás pagos siguen bloqueados. Si está disponible, use Reintentar pago original para autorizar una comisión para el mismo pago.</string>
     <string name="wallet__send_pending__refusal">Transmisión rechazada: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autorizar reintento</string>

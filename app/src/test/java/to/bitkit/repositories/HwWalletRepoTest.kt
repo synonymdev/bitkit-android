@@ -371,6 +371,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         val sut = createRepo()
 
         assertEquals(held, sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_000uL).getOrThrow())
+        assertEquals(held, sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS.uppercase(), 25_000uL).getOrThrow())
         assertNull(sut.heldSendFor(HARDWARE_WALLET_ID, HELD_ADDRESS, 25_001uL).getOrThrow())
         assertNull(sut.heldSendFor("other-wallet", HELD_ADDRESS, 25_000uL).getOrThrow())
 

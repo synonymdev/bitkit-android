@@ -40,8 +40,10 @@ import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.Toast
+import to.bitkit.models.TransportType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwWalletMismatchError
 import to.bitkit.repositories.HwWalletRepo
@@ -76,6 +78,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val proofRepo = mock<PaykitPaymentProofRepo>()
     private val walletActivities = MutableStateFlow<ImmutableList<Activity>>(persistentListOf())
+    private val hwWallets = MutableStateFlow<ImmutableList<HwWallet>>(persistentListOf(hwWallet(WALLET_ID)))
 
     private lateinit var sut: HwSendViewModel
     private var now = Instant.parse("2026-10-06T11:59:59Z")
@@ -120,6 +123,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             }
         whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
         whenever(hwWalletRepo.activities).thenReturn(walletActivities)
+        whenever(hwWalletRepo.wallets).thenReturn(hwWallets)
         whenever { hwWalletRepo.heldSendFor(any(), any(), any()) }.thenReturn(Result.success(null))
         whenever { hwWalletRepo.holdSend(any()) }.thenReturn(Result.success(Unit))
         whenever { hwWalletRepo.releaseHeldSend(any()) }.thenReturn(Result.success(Unit))
@@ -513,7 +517,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(sut.uiState.value.isBroadcastUnresolved)
-        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
         assertFalse(sut.uiState.value.isSigning)
     }
 
@@ -623,7 +627,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
             .thenReturn(Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)))
         val results = mutableListOf<HwSendResult>()
-        backgroundScope.launch { sut.results.collect { results += it } }
+        backgroundScope.launch { sut.heldSendEvents.collect { results += it.send } }
 
         sut.signAndBroadcast(request())
         advanceUntilIdle()
@@ -636,7 +640,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), results)
-        assertNull(sut.uiState.value.unresolvedSend)
+        assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
         verify(activityService).createSentOnchainActivityFromSendResult(
             txid = SIGNED_TXID,
             address = ADDRESS,
@@ -710,7 +714,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(heldSend(fixture.signedTx)))
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.success(fixture.broadcast))
         val results = mutableListOf<HwSendResult>()
-        backgroundScope.launch { sut.results.collect { results += it } }
+        backgroundScope.launch { sut.heldSendEvents.collect { results += it.send } }
 
         sut.signAndBroadcast(request())
         advanceUntilIdle()
@@ -719,9 +723,9 @@ class HwSendViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo, never()).broadcastFunding(any(), anyOrNull())
         assertEquals(1, toasts.count { it.description == "blocked" })
         assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.uiState.value.unresolvedSend)
-        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.refuseNewSend())
+        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.refuseNewSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
 
-        sut.retryUnresolvedSend()
+        sut.retryUnresolvedSend(SIGNED_TXID)
         advanceUntilIdle()
         toastJob.cancel()
 
@@ -781,7 +785,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             Result.success(fixture.broadcast),
         )
         val results = mutableListOf<HwSendResult>()
-        backgroundScope.launch { sut.results.collect { results += it } }
+        backgroundScope.launch { sut.heldSendEvents.collect { results += it.send } }
         val held = HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)
 
         sut.signAndBroadcast(request())
@@ -789,25 +793,24 @@ class HwSendViewModelTest : BaseUnitTest() {
         sut.cancel()
         advanceUntilIdle()
         repeat(2) {
-            sut.retryUnresolvedSend()
+            sut.retryUnresolvedSend(SIGNED_TXID)
             advanceUntilIdle()
 
-            assertEquals(held, sut.uiState.value.unresolvedSend)
-            assertTrue(sut.uiState.value.hasPendingBroadcast)
-            assertFalse(sut.uiState.value.isRetryingUnresolvedSend)
+            assertEquals(listOf(held), sut.uiState.value.unresolvedSends)
+            assertTrue(sut.uiState.value.retryingSendTxIds.isEmpty())
         }
         assertTrue(results.isEmpty())
         assertEquals(1, toasts.count { it.description == "try again" })
         assertEquals(1, toasts.count { it.description == "refused" })
 
-        sut.retryUnresolvedSend()
+        sut.retryUnresolvedSend(SIGNED_TXID)
         advanceUntilIdle()
         walletActivities.value = persistentListOf(sentActivity())
         advanceUntilIdle()
         toastJob.cancel()
 
         assertEquals(listOf(held), results)
-        assertNull(sut.uiState.value.unresolvedSend)
+        assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
         verify(hwWalletRepo, times(1)).signFunding(any(), any())
         verify(hwWalletRepo, times(4)).broadcastFunding(fixture.signedTx)
         verify(activityService, times(1)).createSentOnchainActivityFromSendResult(
@@ -836,18 +839,17 @@ class HwSendViewModelTest : BaseUnitTest() {
             Result.failure(BroadcastException.ElectrumException(INPUTS_SPENT)),
         )
         val results = mutableListOf<HwSendResult>()
-        backgroundScope.launch { sut.results.collect { results += it } }
+        backgroundScope.launch { sut.heldSendEvents.collect { results += it.send } }
 
         sut.signAndBroadcast(request())
         advanceUntilIdle()
-        sut.retryUnresolvedSend()
+        sut.retryUnresolvedSend(SIGNED_TXID)
         advanceUntilIdle()
         toastJob.cancel()
 
         assertEquals(1, toasts.count { it.description == "refused" })
         assertEquals(0, toasts.count { it.description == "try again" })
-        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.uiState.value.unresolvedSend)
-        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
         assertTrue(results.isEmpty())
     }
 
@@ -862,13 +864,13 @@ class HwSendViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
             .thenReturn(Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)))
 
-        assertNull(sut.refuseNewSend())
+        assertNull(sut.refuseNewSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
         sut.signAndBroadcast(request())
         advanceUntilIdle()
         sut.cancel()
         advanceUntilIdle()
 
-        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.refuseNewSend())
+        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.refuseNewSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
         advanceUntilIdle()
         assertEquals(1, toasts.count { it.description == "blocked" })
 
@@ -877,8 +879,77 @@ class HwSendViewModelTest : BaseUnitTest() {
         sut.completeBroadcast()
         toastJob.cancel()
 
-        assertNull(sut.refuseNewSend())
+        assertNull(sut.refuseNewSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
         assertEquals(1, toasts.count { it.description == "blocked" })
+    }
+
+    @Test
+    fun `a held send blocks only its own payment`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)),
+            Result.success(fixture.broadcast),
+        )
+        val other = request().copy(amountSats = AMOUNT_SATS + 1uL)
+        whenever(hwWalletRepo.composeFundingTransaction(WALLET_ID, ADDRESS, other.amountSats, SATS_PER_VBYTE))
+            .thenReturn(Result.success(fixture.funding))
+        val results = mutableListOf<HwSendResult>()
+        backgroundScope.launch { sut.results.collect { results += it } }
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        sut.cancel()
+        advanceUntilIdle()
+
+        assertNull(sut.refuseNewSend(WALLET_ID, ADDRESS, other.amountSats))
+        assertNull(sut.refuseNewSend(OTHER_WALLET_ID, ADDRESS, AMOUNT_SATS))
+        sut.signAndBroadcast(other)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
+        assertEquals(listOf(fixture.broadcast.txId), results.map { it.txId })
+        assertEquals(listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS)), sut.uiState.value.unresolvedSends)
+    }
+
+    @Test
+    fun `removing a wallet forgets its held send for the session`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        hwWallets.value = persistentListOf(hwWallet(OTHER_WALLET_ID))
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
+        assertNull(sut.uiState.value.unresolvedSend)
+        assertNull(sut.refuseNewSend(WALLET_ID, ADDRESS, AMOUNT_SATS))
+        verify(hwWalletRepo, never()).releaseHeldSend(any())
+    }
+
+    @Test
+    fun `a held send completed while no sheet listens is not replayed as a result`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.ElectrumException(LOST_AFTER_WRITE)))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        sut.cancel()
+        walletActivities.value = persistentListOf(sentActivity())
+        advanceUntilIdle()
+        val replayed = mutableListOf<Any>()
+        backgroundScope.launch { sut.results.collect { replayed += it } }
+        backgroundScope.launch { sut.heldSendEvents.collect { replayed += it } }
+        advanceUntilIdle()
+
+        assertTrue(replayed.isEmpty())
+        assertTrue(sut.uiState.value.unresolvedSends.isEmpty())
+        verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
     }
 
     private suspend fun TestScope.assertCancelReleasesSignedTransaction(error: Throwable) {
@@ -927,19 +998,18 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.uiState.value.unresolvedSend)
         sut.cancel()
         advanceUntilIdle()
-        assertTrue(sut.uiState.value.hasPendingBroadcast)
-        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.uiState.value.unresolvedSend)
+        val held = listOf(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS))
+        assertEquals(held, sut.uiState.value.unresolvedSends)
 
-        sut.signAndBroadcast(request())
-        advanceUntilIdle()
-        sut.signAndBroadcast(request().copy(amountSats = AMOUNT_SATS + 1uL))
+        sut.signAndBroadcast(request().copy(address = ADDRESS.uppercase()))
         advanceUntilIdle()
         toastJob.cancel()
 
         verify(hwWalletRepo, times(1)).signFunding(any(), any())
         verify(hwWalletRepo, times(1)).broadcastFunding(any(), anyOrNull())
-        assertEquals(2, toasts.count { it.description == "blocked" })
-        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertEquals(1, toasts.count { it.description == "blocked" })
+        assertEquals(HwSendResult(WALLET_ID, SIGNED_TXID, AMOUNT_SATS), sut.uiState.value.unresolvedSend)
+        assertEquals(held, sut.uiState.value.unresolvedSends)
         assertTrue(sut.uiState.value.canLeave)
     }
 
@@ -1048,6 +1118,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isSigning)
         sut.cancel()
         assertFalse(sut.uiState.value.hasPendingBroadcast)
+        verify(hwWalletRepo).releaseHeldSend(SIGNED_TXID)
     }
 
     @Test
@@ -1169,6 +1240,8 @@ class HwSendViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.hasPendingBroadcast)
         assertTrue(sut.uiState.value.isBroadcastUnresolved)
         verify(hwWalletRepo).signFunding(WALLET_ID, fixture.funding)
+        // Only the first broadcast, which could not connect, released its hold
+        verify(hwWalletRepo, times(1)).releaseHeldSend(SIGNED_TXID)
     }
 
     @Test
@@ -1911,6 +1984,16 @@ class HwSendViewModelTest : BaseUnitTest() {
 
     private fun connectedDevice() = HwConnectedDevice(vendor = HwWalletVendor.TREZOR, id = "dev1")
 
+    private fun hwWallet(id: String) = HwWallet(
+        id = id,
+        name = id,
+        model = null,
+        transportType = TransportType.USB,
+        isConnected = true,
+        balanceSats = 100_000uL,
+        activities = persistentListOf(),
+    )
+
     private fun sentActivity(walletId: String = WALLET_ID) = Activity.Onchain(
         OnchainActivity.create(
             walletId = walletId,
@@ -1926,6 +2009,7 @@ class HwSendViewModelTest : BaseUnitTest() {
 
     private companion object {
         const val WALLET_ID = "hardware-wallet"
+        const val OTHER_WALLET_ID = "other-wallet"
         const val SIGNED_TXID = "605fe246a6d51450ecff51ac3d0415f8824964e06a60ed6e186fa163cf1e9d4e"
         const val CONNECT_FAILURE = "Failed to connect to Electrum: I/O error: Connection refused (os error 111)"
         const val LOST_AFTER_WRITE =

@@ -1610,8 +1610,9 @@
     <string name="wallet__send_contact_title">اختر جهة اتصال</string>
     <string name="wallet__send_from">من</string>
     <string name="wallet__send_pending__blocked_new_send">لم يتم إرسال الدفعة الجديدة. أكمل الدفعة السابقة قبل المحاولة مرة أخرى.</string>
+    <string name="wallet__send_pending__broadcast_again">إعادة البث</string>
     <string name="wallet__send_pending__description">تستغرق هذه الدفعة وقتًا أطول قليلاً من المتوقع. يمكنك متابعة استخدام Bitkit.</string>
-    <string name="wallet__send_pending__hardware_description">تعذّر على Bitkit التأكد من أن الشبكة استلمت هذه الدفعة. تكتمل الدفعة بمجرد أن ترى محفظتك المعاملة. إن لم تظهر، استخدم «إعادة محاولة الدفعة الأصلية» لإرسال المعاملة الموقّعة نفسها مرة أخرى. تبقى مدفوعات محفظة الأجهزة الأخرى محظورة حتى ذلك الحين.</string>
+    <string name="wallet__send_pending__hardware_description">تعذّر على Bitkit التأكد من أن الشبكة استلمت هذه الدفعة. تكتمل الدفعة بمجرد أن ترى محفظتك المعاملة. إن لم تظهر، استخدم إعادة البث لإرسال المعاملة الموقّعة نفسها مرة أخرى. لن يوقّع Bitkit هذه الدفعة مرة أخرى حتى ذلك الحين.</string>
     <string name="wallet__send_pending__nav_title">الدفعة معلقة</string>
     <string name="wallet__send_pending__onchain_description">نتيجة المعاملة لم تُحسم بعد. تحقق من حالتها قبل المحاولة مرة أخرى. تبقى المدفوعات الأخرى محظورة. إن توفر، استخدم «إعادة محاولة الدفعة الأصلية» لتفويض رسوم للدفعة نفسها.</string>
     <string name="wallet__send_pending__refusal">تم رفض البث: %1$s</string>

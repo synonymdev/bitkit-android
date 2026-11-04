@@ -854,7 +854,7 @@
     <string name="wallet__send_available_spending">Disponible (dépenses)</string>
     <string name="wallet__send_max_spending__title">Solde Réserve</string>
     <string name="wallet__send_pending__description">Ce paiement prend un peu plus de temps que prévu. Vous pouvez continuer à utiliser Bitkit.</string>
-    <string name="wallet__send_pending__hardware_description">Bitkit n\'a pas pu confirmer que le réseau a reçu ce paiement. Il sera finalisé dès que votre portefeuille verra la transaction. Si elle n\'apparaît pas, utilisez Réessayer le paiement d\'origine pour renvoyer la même transaction signée. Les autres paiements avec un portefeuille matériel restent bloqués d\'ici là.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit n\'a pas pu confirmer que le réseau a reçu ce paiement. Il sera finalisé dès que votre portefeuille verra la transaction. Si elle n\'apparaît pas, utilisez Diffuser à nouveau pour renvoyer la même transaction signée. D\'ici là, Bitkit ne signera pas ce paiement une nouvelle fois.</string>
     <string name="wallet__send_pending__nav_title">Paiement en attente</string>
     <string name="wallet__send_max_spending__description">Le montant maximum pouvant être dépensé est un peu moins élevé en raison d\'un solde de Réserve requis.</string>
     <string name="wallet__send_review">Confirmer</string>
@@ -1614,6 +1614,7 @@
     <string name="wallet__send_contact_empty">Vous n\'avez pas encore de contacts.</string>
     <string name="wallet__send_from">De</string>
     <string name="wallet__send_pending__blocked_new_send">Le nouveau paiement n\'a pas été envoyé. Terminez le paiement précédent avant de réessayer.</string>
+    <string name="wallet__send_pending__broadcast_again">Diffuser à nouveau</string>
     <string name="wallet__send_pending__onchain_description">Le résultat de la transaction n\'est pas résolu. Vérifiez son état avant de réessayer. Les autres paiements restent bloqués. Si disponible, utilisez Réessayer le paiement d\'origine pour autoriser des frais pour ce même paiement.</string>
     <string name="wallet__send_pending__refusal">Diffusion refusée : %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autoriser la nouvelle tentative</string>

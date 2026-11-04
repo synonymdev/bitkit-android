@@ -1002,7 +1002,7 @@
     <string name="wallet__send_max_spending__title">Saldo di Riserva</string>
     <string name="wallet__send_pending__abandon_transfer_note">I trasferimenti al saldo di spesa non sono più disponibili. Bitkit controlla prima la rete, poi rimanda le monete di questo trasferimento al tuo wallet, così il trasferimento originale non potrà mai essere confermato. Questo costa una commissione di rete.</string>
     <string name="wallet__send_pending__description">Questo pagamento sta richiedendo un po\' più tempo del previsto. Puoi continuare a utilizzare Bitkit.</string>
-    <string name="wallet__send_pending__hardware_description">Bitkit non è riuscito a confermare che la rete abbia ricevuto questo pagamento. Si completerà non appena il tuo wallet vedrà la transazione. Se non compare, usa Riprova pagamento originale per inviare di nuovo la stessa transazione firmata. Gli altri pagamenti con hardware wallet restano bloccati fino ad allora.</string>
+    <string name="wallet__send_pending__hardware_description">Bitkit non è riuscito a confermare che la rete abbia ricevuto questo pagamento. Si completerà non appena il tuo wallet vedrà la transazione. Se non compare, usa Trasmetti di nuovo per inviare di nuovo la stessa transazione firmata. Fino ad allora Bitkit non firmerà di nuovo questo pagamento.</string>
     <string name="wallet__send_pending__nav_title">Pagamento in sospeso</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Pagamento\n&lt;accent&gt;fattura...&lt;/accent&gt;</string>
@@ -1614,6 +1614,7 @@
     <string name="wallet__send_contact_empty">Non hai ancora nessun contatto.</string>
     <string name="wallet__send_from">Da</string>
     <string name="wallet__send_pending__blocked_new_send">Il nuovo pagamento non è stato inviato. Completa il pagamento precedente prima di riprovare.</string>
+    <string name="wallet__send_pending__broadcast_again">Trasmetti di nuovo</string>
     <string name="wallet__send_pending__onchain_description">L\'esito della transazione non è risolto. Controlla il suo stato prima di riprovare. Gli altri pagamenti restano bloccati. Se disponibile, usa Riprova pagamento originale per autorizzare una commissione per lo stesso pagamento.</string>
     <string name="wallet__send_pending__refusal">Trasmissione rifiutata: %1$s</string>
     <string name="wallet__send_pending__retry_authorize">Autorizza nuovo tentativo</string>
