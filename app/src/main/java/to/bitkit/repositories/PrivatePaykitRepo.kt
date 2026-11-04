@@ -561,7 +561,8 @@ class PrivatePaykitRepo @Inject constructor(
      * Opens a payment to the saved contact [publicKey]. A contact with a private payment path is only paid
      * privately: when that path is not ready yet the result is [PublicPaykitPaymentResult.PrivateLinkPending], never
      * a payment to its public endpoints. Only a contact without any private payment path, including a missing
-     * Noise key authorization, is paid through its public endpoints.
+     * Noise key authorization, is paid through its public endpoints, as is every contact while this wallet's own
+     * identity can only make public payments.
      */
     suspend fun beginSavedContactPayment(publicKey: String): Result<PublicPaykitPaymentResult> =
         withContext(serializedDispatcher) {
@@ -1157,6 +1158,9 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private suspend fun hasPrivatePaymentPath(publicKey: String): Boolean {
+        val identity = paykitSdkService.identityStatus(Priority.Interactive)
+        if (identity?.publicKey == null) throw PublicPaykitError.SessionNotActive
+        if (identity.capability == PubkyIdentityCapability.PUBLIC_ONLY) return false
         if (ensureState().contacts[publicKey]?.hasCacheState == true) return true
         val hasLinkedPeer = paykitSdkService.linkedPeers(Priority.Interactive).any {
             PubkyPublicKeyFormat.matches(it.counterparty, publicKey)

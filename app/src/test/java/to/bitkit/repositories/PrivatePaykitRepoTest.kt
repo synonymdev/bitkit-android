@@ -3613,6 +3613,53 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `beginSavedContactPayment pays publicly without a private attempt for a public-only identity`() = test {
+        cacheData.update {
+            PrivatePaykitCacheData(
+                contacts = mapOf(CONTACT_KEY to PrivatePaykitContactCacheData(consumedPrivatePaymentListVersion = 3uL)),
+            )
+        }
+        sut = createSut()
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+        whenever(paykitSdkService.identityStatus())
+            .thenReturn(IdentityStatus(OWN_KEY, PubkyIdentityCapability.PUBLIC_ONLY))
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic"), result)
+        verifyBlocking(publicPaykitRepo) { beginPayment(CONTACT_KEY) }
+        verifyBlocking(paykitSdkService, never()) {
+            prepareAndResolvePrivateContactPayment(any(), anyOrNull(), anyOrNull())
+        }
+        verifyBlocking(paykitSdkService, never()) { hasPaykitNoiseKeyAuthorization(any()) }
+        verifyBlocking(paykitSdkService, never()) { linkedPeers(Priority.Interactive) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment fails without public payment when this identity cannot be read`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        var failure: Throwable? = PaykitException.Transport("transport", "Connection unavailable")
+        whenever(paykitSdkService.identityStatus()).doSuspendableAnswer {
+            failure?.let { throw it }
+            null
+        }
+
+        val unreadable = sut.beginSavedContactPayment(CONTACT_KEY)
+
+        assertIs<PaykitException.Transport>(unreadable.exceptionOrNull())
+
+        failure = null
+        val missing = sut.beginSavedContactPayment(CONTACT_KEY)
+
+        assertEquals(PublicPaykitError.SessionNotActive, missing.exceptionOrNull())
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        verifyBlocking(paykitSdkService, never()) {
+            prepareAndResolvePrivateContactPayment(any(), anyOrNull(), anyOrNull())
+        }
+    }
+
+    @Test
     fun `beginSavedContactPayment fails without public payment when the authorization lookup fails`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever(paykitSdkService.hasPaykitNoiseKeyAuthorization(CONTACT_KEY)).doSuspendableAnswer {
