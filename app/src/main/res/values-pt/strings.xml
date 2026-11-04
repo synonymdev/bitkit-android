@@ -727,6 +727,7 @@
     <string name="wallet__send_confirming_in">Confirmando em</string>
     <string name="wallet__send_invoice_expiration">Vencimento do invoice</string>
     <string name="wallet__send_lightning_onchain_sent">Um pagamento onchain para o endereço desta fatura pode já ter sido enviado, por isso Bitkit não pagará também a fatura via Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit não consegue ler os seus registos de pagamentos onchain, por isso não sabe se o endereço desta fatura já foi pago. Para evitar pagar duas vezes, não pagará a fatura via Lightning.</string>
     <string name="wallet__send_swipe">Deslize para Pagar</string>
     <string name="wallet__send_yes">Sim, Enviar</string>
     <string name="wallet__send_dialog1">Parece que você está enviando mais de US$ 100. Deseja continuar?</string>

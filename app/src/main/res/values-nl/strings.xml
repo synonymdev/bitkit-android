@@ -994,6 +994,7 @@
     <string name="wallet__send_invoice">Factuur</string>
     <string name="wallet__send_invoice_expiration">Factuutvervaldatum</string>
     <string name="wallet__send_lightning_onchain_sent">Er is mogelijk al een onchain-betaling naar het adres van deze factuur verstuurd, dus Bitkit betaalt de factuur niet ook via Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit kan zijn onchain-betalingsgegevens niet lezen en weet daarom niet of het adres van deze factuur al is betaald. Om dubbel betalen te voorkomen, betaalt het de factuur niet via Lightning.</string>
     <string name="wallet__send_max_spending__description">Het maximaal te besteden bedrag is iets lager vanwege een vereist reservesaldo.</string>
     <string name="wallet__send_max_spending__title">Reservesaldo</string>
     <string name="wallet__send_onchain_lightning_paid">Een Lightning-betaling van deze factuur is al geslaagd, dus Bitkit betaalt deze niet nogmaals onchain.</string>

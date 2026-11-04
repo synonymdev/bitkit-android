@@ -863,6 +863,7 @@
     <string name="wallet__send_contact_title">Kontakt auswählen</string>
     <string name="wallet__send_invoice_expiration">Rechnungsverfall</string>
     <string name="wallet__send_lightning_onchain_sent">Eine Onchain-Zahlung an die Adresse dieser Rechnung wurde möglicherweise bereits gesendet, daher bezahlt Bitkit die Rechnung nicht zusätzlich über Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit kann seine Onchain-Zahlungsdaten nicht lesen und daher nicht erkennen, ob die Adresse dieser Rechnung bereits bezahlt wurde. Damit nicht doppelt bezahlt wird, bezahlt es die Rechnung nicht über Lightning.</string>
     <string name="wallet__send_swipe">Zum Bezahlen wischen</string>
     <string name="wallet__send_yes">Ja, senden</string>
     <string name="wallet__send_dialog1">Es scheint, dass du über $100 sendest. Möchtest du fortfahren?</string>

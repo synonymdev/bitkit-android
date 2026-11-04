@@ -1527,6 +1527,7 @@ class LightningRepo @Inject constructor(
         paymentDeadlineAt: Instant? = null,
         contactPublicKey: String? = null,
         lightningPaymentHash: String? = null,
+        lightningInvoiceExpiresAt: ULong? = null,
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         requireWalletRestoreComplete()
         require(address.isNotEmpty()) { "Send address cannot be empty" }
@@ -1578,6 +1579,7 @@ class LightningRepo @Inject constructor(
                 payerIdentity = payerIdentity,
                 contactPublicKey = contactPublicKey,
                 lightningPaymentHash = lightningPaymentHash,
+                lightningInvoiceExpiresAt = lightningInvoiceExpiresAt,
             )
         }.getOrElse {
             val error = if (it is OnchainSendBlockedError || it is OnchainSendAttemptUnreadableError) {
@@ -1890,6 +1892,8 @@ class LightningRepo @Inject constructor(
     val onchainSendAttemptUpdates get() = onchainSendAttemptStore.backupStateVersion
 
     suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
+
+    suspend fun onchainPaidInvoiceHashes(): Set<String> = onchainSendAttemptStore.paidInvoiceHashes()
 
     /** Syncs the on-chain wallet, then checks that none of the attempt's candidates reached the mempool or chain. */
     override suspend fun onchainCandidatesNeverReachedNetwork(attempt: OnchainSendAttempt): Boolean =

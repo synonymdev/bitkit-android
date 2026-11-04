@@ -1018,6 +1018,7 @@
     <string name="wallet__send_invoice">Инвойс</string>
     <string name="wallet__send_invoice_expiration">Срок действия инвойса</string>
     <string name="wallet__send_lightning_onchain_sent">Onchain-платёж на адрес этого счёта, возможно, уже отправлен, поэтому Bitkit не будет дополнительно оплачивать счёт через Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit не может прочитать свои записи об onchain-платежах, поэтому не знает, был ли уже оплачен адрес этого счёта. Чтобы не оплатить дважды, он не будет оплачивать счёт через Lightning.</string>
     <string name="wallet__send_max_spending__description">Максимальная сумма для траты немного меньше из-за необходимого резервного баланса.</string>
     <string name="wallet__send_max_spending__title">Резервный баланс</string>
     <string name="wallet__send_onchain_lightning_paid">Lightning-платёж по этому счёту уже прошёл успешно, поэтому Bitkit не будет оплачивать его повторно onchain.</string>

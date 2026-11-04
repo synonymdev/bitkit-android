@@ -169,6 +169,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(db.configDao().getAll()).thenReturn(MutableStateFlow(listOf(to.bitkit.data.entities.ConfigEntity())))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(null))
         whenever(onchainSendAttemptStore.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(onchainSendAttemptStore.paidInvoicesBackupSnapshot(any())).thenReturn(emptyList())
         whenever(onchainSendAttemptStore.backupSnapshot(eq(0), any())).doSuspendableAnswer {
             val capture = it.getArgument<suspend () -> List<to.bitkit.models.PaykitPaymentStateBackup.Proof>>(1)
             onchainSendAttemptStore.backupSnapshot(0) to capture()

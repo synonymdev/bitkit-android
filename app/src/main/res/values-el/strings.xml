@@ -977,6 +977,7 @@
     <string name="wallet__send_invoice">Τιμολόγιο</string>
     <string name="wallet__send_invoice_expiration">Λήξη τιμολογίου</string>
     <string name="wallet__send_lightning_onchain_sent">Μια πληρωμή onchain στη διεύθυνση αυτού του τιμολογίου μπορεί να έχει ήδη σταλεί, οπότε το Bitkit δεν θα πληρώσει επίσης το τιμολόγιο μέσω Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Το Bitkit δεν μπορεί να διαβάσει τα αρχεία των πληρωμών του onchain, οπότε δεν μπορεί να ξέρει αν η διεύθυνση αυτού του τιμολογίου έχει ήδη πληρωθεί. Για να μην πληρωθεί δύο φορές, δεν θα πληρώσει το τιμολόγιο μέσω Lightning.</string>
     <string name="wallet__send_max_spending__description">Το μέγιστο δαπανήσιμο ποσό είναι λίγο χαμηλότερο λόγω απαιτούμενου αποθεματικού υπολοίπου.</string>
     <string name="wallet__send_max_spending__title">Αποθεματικό υπόλοιπο</string>
     <string name="wallet__send_onchain_lightning_paid">Μια πληρωμή Lightning αυτού του τιμολογίου έχει ήδη ολοκληρωθεί με επιτυχία, οπότε το Bitkit δεν θα το πληρώσει ξανά onchain.</string>

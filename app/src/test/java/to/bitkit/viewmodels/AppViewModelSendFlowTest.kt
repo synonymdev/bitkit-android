@@ -732,6 +732,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever { quickPayRepo.canApply(any<ULong>()) }.thenReturn(Result.success(false))
         whenever { quickPayRepo.hasOpen(any()) }.thenReturn(false)
+        whenever { lightningRepo.onchainPaidInvoiceHashes() }.thenReturn(emptySet())
         whenever { lightningRepo.outboundPaymentStatus(any()) }.thenReturn(Result.success(null))
         whenever(quickPayRepo.unhandledFailures).thenReturn(quickPayUnhandledFailures)
         whenever {
@@ -7633,6 +7634,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), any(), any(), any(), any(), anyOrNull(),
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
     }
@@ -11390,6 +11392,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                     paymentDeadlineAt = anyOrNull(),
                     contactPublicKey = anyOrNull(),
                     lightningPaymentHash = anyOrNull(),
+                    lightningInvoiceExpiresAt = anyOrNull(),
                 ),
             ).doSuspendableAnswer {
                 entered.complete(Unit)
@@ -11513,6 +11516,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
         verify(
             paykitPaymentProofRepo
@@ -11679,6 +11683,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -11730,6 +11735,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
         verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
             any(),
@@ -12685,6 +12691,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -12831,6 +12838,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -12924,6 +12932,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -14181,6 +14190,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -14228,6 +14238,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -14295,6 +14306,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -14424,6 +14436,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -14636,6 +14649,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -16529,7 +16543,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         // The attempt keeps the hash, so a re-send from Payment Pending checks the invoice again
-        verifyOnchainSend(REGTEST_ADDRESS, 10_000uL, lightningPaymentHash = paymentHash, times = refusals.size + 1)
+        // Pending and succeeded are refused before the send starts; unknown only once the attempt is admitted
+        verifyOnchainSend(REGTEST_ADDRESS, 10_000uL, lightningPaymentHash = paymentHash, times = 2)
         assertEquals(1, dispatched())
     }
 
@@ -16573,11 +16588,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             payMethod = SendMethod.LIGHTNING,
             decodedInvoice = lightningInvoice(bolt11, 1_000uL),
         )
+        // A rejected re-send leaves the original unresolved, and a saved attempt may be dispatching
         val refusals = listOf<suspend () -> OnchainSendAttempt?>(
             { attempt.copy(evidence = OnchainSendEvidence.Pending) },
+            { attempt.copy(evidence = OnchainSendEvidence.Pending, initialDispatchAttempted = false) },
             { attempt.copy(evidence = OnchainSendEvidence.Unknown) },
+            { attempt.copy(evidence = OnchainSendEvidence.Rejected) },
             { attempt.copy(evidence = OnchainSendEvidence.Accepted, txid = "ab".repeat(32)) },
-            { throw AppError("On-chain send store unreadable") },
+            {
+                attempt.copy(
+                    evidence = OnchainSendEvidence.Observed,
+                    txid = "ab".repeat(32),
+                    localFollowupComplete = true,
+                )
+            },
         )
 
         var current: suspend () -> OnchainSendAttempt? = { null }
@@ -16598,11 +16622,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         verify(lightningRepo, never()).payInvoice(bolt11 = bolt11, sats = null)
 
-        // A rejected attempt, or one that never dispatched, sent nothing
         val allowed = listOf(
-            attempt.copy(evidence = OnchainSendEvidence.Rejected),
-            attempt.copy(initialDispatchAttempted = false),
+            null,
             attempt.copy(lightningPaymentHash = null),
+            attempt.copy(lightningPaymentHash = "040506"),
         )
         allowed.forEach { attempt ->
             current = { attempt }
@@ -16614,6 +16637,188 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
         }
         verify(lightningRepo, times(allowed.size)).payInvoice(bolt11 = bolt11, sats = null)
+    }
+
+    @Test
+    fun `unreadable on-chain records hold back only an invoice that came with an address`() = test {
+        val bolt11 = "lnbcrt1unreadablerecords"
+        val paymentHash = "010203"
+        whenever(context.getString(R.string.wallet__send_lightning_onchain_unreadable)).thenReturn("Unreadable")
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        whenever { lightningRepo.currentOnchainSendAttempt() }.doSuspendableAnswer {
+            throw OnchainSendAttemptUnreadableError(AppError("Keychain unavailable"))
+        }
+        val bare = SendUiState(
+            address = bolt11,
+            amount = 1_000uL,
+            isAmountInputValid = true,
+            payMethod = SendMethod.LIGHTNING,
+            decodedInvoice = lightningInvoice(bolt11, 1_000uL),
+        )
+
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        setSendState(bare.copy(address = REGTEST_ADDRESS, lightningPaymentHash = paymentHash))
+        clearInvocations(toastManager)
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(argThat { description == "Unreadable" })
+        verify(lightningRepo, never()).payInvoice(bolt11 = bolt11, sats = null)
+
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        setSendState(bare)
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
+    }
+
+    @Test
+    fun `a refused request payment claims and accepts nothing`() = test {
+        val request = paymentRequest()
+        val paymentHash = "010203"
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        stubOnchainRefusalCopy()
+        whenever(context.getString(R.string.wallet__send_lightning_onchain_sent)).thenReturn("On-chain sent")
+        whenever(lightningRepo.outboundPaymentStatus(paymentHash)).thenReturn(Result.success(PaymentStatus.PENDING))
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(invoiceAddressAttempt(paymentHash))
+        val dispatched = stubCountedOnchainSend()
+        val sends = listOf(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+                lightningPaymentHash = paymentHash,
+            ),
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+                decodedInvoice = lightningInvoice("lnbcrt1requestrefused", request.amount.atomic),
+                lightningPaymentHash = paymentHash,
+            ),
+        )
+
+        sends.forEach { send ->
+            setActiveContactPaymentContext(testPublicKey, privateContext, request)
+            sut.showSheet(Sheet.Send(SendRoute.Confirm))
+            runCurrent()
+            setSendState(send)
+            clearInvocations(toastManager)
+
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+
+            verify(toastManager).enqueue(
+                argThat { description == "Lightning pending" || description == "On-chain sent" },
+            )
+        }
+        assertEquals(0, dispatched())
+        verify(paykitPaymentRequestRepo, never()).claimForPayment(any())
+        verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
+        verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
+    }
+
+    // The status may become readable, and pending, only once the node runs; the attempt saved for it is then released
+    @Test
+    fun `a request payment refused as its attempt is saved reconciles that attempt away`() = test {
+        val request = paymentRequest()
+        val paymentHash = "010203"
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        stubOnchainRefusalCopy()
+        whenever(lightningRepo.outboundPaymentStatus(paymentHash))
+            .thenReturn(Result.failure(AppError("Payment store unavailable")))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever {
+            lightningRepo.sendOnChain(
+                address = any(),
+                sats = any(),
+                speed = anyOrNull(),
+                utxosToSpend = anyOrNull(),
+                feeRates = anyOrNull(),
+                isTransfer = any(),
+                channelId = anyOrNull(),
+                isMaxAmount = any(),
+                tags = any(),
+                beforeSendAttempt = any(),
+                onBroadcast = any(),
+                requestId = anyOrNull(),
+                orderId = anyOrNull(),
+                transferContext = anyOrNull(),
+                payerIdentity = anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                lightningPaymentHash = anyOrNull(),
+                lightningInvoiceExpiresAt = anyOrNull(),
+            )
+        }.doSuspendableAnswer { invocation ->
+            whenever(lightningRepo.outboundPaymentStatus(paymentHash))
+                .thenReturn(Result.success(PaymentStatus.PENDING))
+            // Like the repository, a failure before dispatch is reported as not dispatched
+            runSuspendCatching { invocation.getArgument<suspend () -> Unit>(9)() }
+                .fold({ Result.success(OnchainSendOutcome.Accepted("txid")) }, {
+                    Result.failure(OnchainSendNotDispatchedError(it))
+                })
+        }
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+                lightningPaymentHash = paymentHash,
+            ),
+        )
+        clearInvocations(toastManager)
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(argThat { description == "Lightning pending" })
+        verify(paykitPaymentProofRepo, atLeastOnce()).reconcile()
+        verify(paykitPaymentProofRepo, never())
+            .markOnchainPaymentStarted(any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull())
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+    }
+
+    // The attempt is replaced by a later send, or lost in a restore, while its invoice can still be paid
+    @Test
+    fun `lightning is refused for an invoice whose address an earlier on-chain send paid`() = test {
+        val bolt11 = "lnbcrt1paidearlier"
+        val paymentHash = "010203"
+        whenever(context.getString(R.string.wallet__send_lightning_onchain_sent)).thenReturn("On-chain sent")
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(invoiceAddressAttempt("040506"))
+        whenever { lightningRepo.onchainPaidInvoiceHashes() }.thenReturn(setOf(paymentHash))
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1_000uL,
+                isAmountInputValid = true,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 1_000uL),
+            ),
+        )
+        clearInvocations(toastManager)
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(argThat { description == "On-chain sent" })
+        verify(lightningRepo, never()).payInvoice(bolt11 = bolt11, sats = null)
     }
 
     @Test
@@ -16929,65 +17134,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(paymentHash, fallback.lightningPaymentHash)
         }
 
+    // A contact's public endpoint reuses one zero-amount invoice across payments, so it says nothing about this one
     @Test
-    fun `a contact send hides savings and hardware while its lightning endpoint's payment is pending`() = test {
-        val bolt11 = "lnbcrt1contactpending"
+    fun `a contact paid again on-chain is not held back by its reusable lightning endpoint`() = test {
+        val bolt11 = "lnbcrt1contactreusable"
         val paymentHash = "010203"
         stubMixedContactEndpoints(bolt11)
-        whenever(lightningRepo.outboundPaymentStatus(paymentHash)).thenReturn(Result.success(PaymentStatus.PENDING))
+        whenever(lightningRepo.canSend(any())).thenReturn(false)
+        whenever(lightningRepo.outboundPaymentStatus(paymentHash))
+            .thenReturn(Result.success(PaymentStatus.SUCCEEDED))
+        clearInvocations(toastManager)
 
         openMixedContactPayment(bolt11)
 
-        val pending = sut.sendUiState.value
-        assertEquals(SendMethod.LIGHTNING, pending.payMethod)
-        assertEquals(paymentHash, pending.lightningPaymentHash)
-        assertEquals(LightningPaymentStatus.PENDING, pending.lightningPaymentStatus)
-        assertFalse(pending.fundingOptions.single { it.source == SendFundingSource.Savings }.enabled)
-        assertFalse(pending.fundingOptions.single { it.source is SendFundingSource.Hardware }.enabled)
+        val send = sut.sendUiState.value
+        assertEquals(REGTEST_ADDRESS, send.address)
+        assertEquals(SendMethod.ONCHAIN, send.payMethod)
+        assertNull(send.lightningPaymentHash)
+        assertTrue(send.fundingOptions.single { it.source == SendFundingSource.Savings }.enabled)
+        assertTrue(send.fundingOptions.single { it.source is SendFundingSource.Hardware }.enabled)
+        verify(toastManager, never()).enqueue(argThat { testTag?.startsWith("LightningPayment") == true })
+        verify(lightningRepo, never()).outboundPaymentStatus(any())
     }
 
     @Test
-    fun `a contact that only its address can pay is refused while its lightning endpoint's payment is pending`() =
-        test {
-            val bolt11 = "lnbcrt1contactunpayable"
-            val paymentHash = "010203"
-            stubMixedContactEndpoints(bolt11)
-            whenever(lightningRepo.canSend(any())).thenReturn(false)
-            whenever(lightningRepo.outboundPaymentStatus(paymentHash))
-                .thenReturn(Result.success(PaymentStatus.PENDING))
-            clearInvocations(toastManager)
-
-            openMixedContactPayment(bolt11)
-
-            verify(toastManager).enqueue(argThat { testTag == "LightningPaymentPendingToast" })
-            assertNull(activeContactPaymentContext())
-            assertEquals("", sut.sendUiState.value.address)
-        }
-
-    @Test
-    fun `a contact send paid from a hardware wallet signs only once its lightning payment failed`() = test {
-        val bolt11 = "lnbcrt1contacthardware"
+    fun `a contact paid again over lightning is not held back by an earlier on-chain payment to it`() = test {
+        val bolt11 = "lnbcrt1contactlightning"
         val paymentHash = "010203"
         stubMixedContactEndpoints(bolt11)
-        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(250uL))
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(invoiceAddressAttempt(paymentHash))
+        whenever { lightningRepo.onchainPaidInvoiceHashes() }.thenReturn(setOf(paymentHash))
 
-        openMixedContactPaymentFromHardware(bolt11)
-        // The contact's invoice is being paid over Lightning by the time the hardware send is confirmed
-        whenever(lightningRepo.outboundPaymentStatus(paymentHash)).thenReturn(Result.success(PaymentStatus.PENDING))
-        sut.sendEffect.test {
-            sut.setSendEvent(SendEvent.PayConfirmed)
-            advanceUntilIdle()
-            expectNoEvents()
-        }
-        assertNull(sut.currentSheet.value)
+        openMixedContactPayment(bolt11)
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        setSendState(sut.sendUiState.value.copy(isAmountInputValid = true))
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
 
-        whenever(lightningRepo.outboundPaymentStatus(paymentHash)).thenReturn(Result.success(null))
-        openMixedContactPaymentFromHardware(bolt11)
-        whenever(lightningRepo.outboundPaymentStatus(paymentHash)).thenReturn(Result.success(PaymentStatus.FAILED))
-        sut.sendEffect.test {
-            sut.setSendEvent(SendEvent.PayConfirmed)
-            assertEquals(SendEffect.NavigateToHardwareSign, awaitItem())
-        }
+        verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
     }
 
     @Test
@@ -17134,6 +17319,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 lightningPaymentHash = anyOrNull(),
+                lightningInvoiceExpiresAt = anyOrNull(),
             )
         }.doSuspendableAnswer { invocation ->
             runSuspendCatching {
@@ -17172,6 +17358,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         eq(address), eq(sats), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), any(), any(), any(),
         any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
         lightningPaymentHash = if (lightningPaymentHash == null) anyOrNull() else eq(lightningPaymentHash),
+        lightningInvoiceExpiresAt = anyOrNull(),
     )
 
     private suspend fun stubPayableUnifiedScan(uri: String, bolt11: String) {
@@ -17222,13 +17409,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
     }
 
-    private fun TestScope.openMixedContactPaymentFromHardware(bolt11: String) {
-        openMixedContactPayment(bolt11)
-        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Hardware(HARDWARE_WALLET_ID)))
-        advanceUntilIdle()
-        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
-    }
-
     private suspend fun TestScope.confirmCurrentPayment() {
         sut.setSendEvent(SendEvent.SwipeToPay)
         advanceUntilIdle()
@@ -17267,6 +17447,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 lightningPaymentHash = anyOrNull(),
+                lightningInvoiceExpiresAt = anyOrNull(),
             )
         }.doSuspendableAnswer { invocation ->
             kotlin.check(invocation.getArgument<String>(0) == address)
@@ -18665,6 +18846,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             anyOrNull(), any(), any(), any(), any(), anyOrNull(),
             anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())

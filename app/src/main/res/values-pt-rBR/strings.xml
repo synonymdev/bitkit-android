@@ -1003,6 +1003,7 @@
     <string name="wallet__send_invoice">Invoice</string>
     <string name="wallet__send_invoice_expiration">Vencimento do invoice</string>
     <string name="wallet__send_lightning_onchain_sent">Um pagamento onchain para o endereço deste invoice pode já ter sido enviado, então Bitkit não pagará o invoice também via Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit não consegue ler seus registros de pagamentos onchain, então não sabe se o endereço deste invoice já foi pago. Para evitar pagar duas vezes, não pagará o invoice via Lightning.</string>
     <string name="wallet__send_max_spending__description">O valor máximo utilizável é um pouco menor devido a um saldo de reserva obrigatório.</string>
     <string name="wallet__send_max_spending__title">Saldo de reserva</string>
     <string name="wallet__send_onchain_lightning_paid">Um pagamento Lightning deste invoice já foi concluído com sucesso, então Bitkit não o pagará novamente onchain.</string>

@@ -1908,6 +1908,7 @@ class LightningRepoTest : BaseUnitTest() {
                 anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 lightningPaymentHash = anyOrNull(),
+                lightningInvoiceExpiresAt = anyOrNull(),
             )
         }
             .thenReturn(attempt)
@@ -2184,6 +2185,7 @@ class LightningRepoTest : BaseUnitTest() {
             anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = anyOrNull(),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -2223,6 +2225,7 @@ class LightningRepoTest : BaseUnitTest() {
                 anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 lightningPaymentHash = anyOrNull(),
+                lightningInvoiceExpiresAt = anyOrNull(),
             )
         ).thenReturn(attempt)
         startNodeForTesting()
@@ -2279,6 +2282,7 @@ class LightningRepoTest : BaseUnitTest() {
             anyOrNull(), any(), anyOrNull(), any(), anyOrNull(),
             contactPublicKey = anyOrNull(),
             lightningPaymentHash = eq("010203"),
+            lightningInvoiceExpiresAt = anyOrNull(),
         )
     }
 
@@ -2877,6 +2881,7 @@ class LightningRepoTest : BaseUnitTest() {
                     eq(context), any(), anyOrNull(),
                     contactPublicKey = anyOrNull(),
                     lightningPaymentHash = anyOrNull(),
+                    lightningInvoiceExpiresAt = anyOrNull(),
                 )
                 preparedOutcome(OnchainSendOutcome.Unknown("ab".repeat(32)))
             }

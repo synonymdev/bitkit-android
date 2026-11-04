@@ -23,13 +23,17 @@ import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.WalletScope
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.viewmodels.LightningPaymentStatus
+import to.bitkit.viewmodels.OnchainPaymentRefusedError
 import java.io.FileOutputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 private val lenientJson = Json { ignoreUnknownKeys = true }
 
@@ -128,6 +132,79 @@ class OnchainSendAttemptStoreTest : BaseUnitTest() {
         assertFalse(requireNotNull(saved).contains("lightningPaymentHash"))
         assertEquals(attempt.copy(lightningPaymentHash = null), store.current())
     }
+
+    @Test
+    fun `a request attempt refused before dispatch is released and leaves no backup`() = test {
+        var saved: String? = null
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer { saved = null }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), Clock.System)
+
+        assertFailsWith<OnchainPaymentRefusedError> {
+            store.admit(
+                walletId = WalletScope.default, requestId = PaykitPaymentRequestId("request", "payee"),
+                orderId = null, address = "bcrt1qrecipient", amountSats = 1_000uL, isMaxAmount = false,
+                feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+                beforeSendAttempt = {
+                    throw OnchainPaymentRefusedError(LightningPaymentStatus.PENDING, "Lightning pending")
+                },
+                payerIdentity = "payer", lightningPaymentHash = "010203",
+            )
+        }
+
+        val held = assertNotNull(store.current())
+        assertTrue(held.preparationPending && !held.initialDispatchAttempted)
+        assertTrue(store.releaseInterruptedShopPreparation { true })
+        assertNull(store.current())
+        assertNull(store.backupSnapshot(0))
+    }
+
+    @Test
+    fun `a dispatched send keeps its invoice's hash until the invoice expires, past the attempt and a restore`() =
+        test {
+            val saved = mutableMapOf<String, String>()
+            val keychain = mock<Keychain>()
+            whenever(keychain.loadString(any(), eq(0))).thenAnswer { saved[it.getArgument(0)] }
+            whenever(keychain.upsertString(any(), any(), eq(0))).doSuspendableAnswer {
+                saved[it.getArgument(0)] = it.getArgument(1)
+            }
+            whenever(keychain.delete(any(), eq(0))).doSuspendableAnswer {
+                saved.remove(it.getArgument<String>(0))
+                Unit
+            }
+            var now = Instant.fromEpochSeconds(1_000_000)
+            val clock = object : Clock {
+                override fun now() = now
+            }
+            val hash = "ab".repeat(32)
+            val store = OnchainSendAttemptStore(testDispatcher, keychain, mock(), clock)
+            val admitted = store.admit(
+                walletId = WalletScope.default, requestId = null, orderId = null, address = "bcrt1qrecipient",
+                amountSats = 1_000uL, isMaxAmount = false, feeRateSatsPerVByte = 1uL, isTransfer = false,
+                channelId = null, tags = emptyList(), beforeSendAttempt = {},
+                lightningPaymentHash = hash, lightningInvoiceExpiresAt = 1_003_600uL,
+            )
+            // Admitted but not yet dispatched: the attempt itself holds the invoice
+            assertTrue(store.paidInvoiceHashes().isEmpty())
+
+            store.recordOutcome(admitted.attemptId, OnchainSendOutcome.Unknown("cd".repeat(32)), 0)
+            assertEquals(setOf(hash), store.paidInvoiceHashes())
+            saved.remove(Keychain.Key.ONCHAIN_SEND_ATTEMPT.name)
+            assertNull(store.current())
+            assertEquals(setOf(hash), store.paidInvoiceHashes())
+
+            val backup = store.paidInvoicesBackupSnapshot(0)
+            saved.clear()
+            store.restorePaidInvoices(backup, 0)
+            assertEquals(setOf(hash), store.paidInvoiceHashes())
+
+            now = Instant.fromEpochSeconds(1_003_600 + 3_599)
+            assertEquals(setOf(hash), store.paidInvoiceHashes())
+            now = Instant.fromEpochSeconds(1_003_600 + 3_600)
+            assertTrue(store.paidInvoiceHashes().isEmpty())
+        }
 
     @Test
     fun `backup proof capture blocks receipt retention until the snapshot is complete`() = test {

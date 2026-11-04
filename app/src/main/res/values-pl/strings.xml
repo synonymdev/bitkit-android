@@ -866,6 +866,7 @@
     <string name="wallet__send_contact_title">Wybierz kontakt</string>
     <string name="wallet__send_invoice_expiration">Termin faktury</string>
     <string name="wallet__send_lightning_onchain_sent">Płatność onchain na adres tej faktury mogła już zostać wysłana, więc Bitkit nie opłaci faktury dodatkowo przez Lightning.</string>
+    <string name="wallet__send_lightning_onchain_unreadable">Bitkit nie może odczytać swoich zapisów płatności onchain, więc nie wie, czy adres tej faktury został już opłacony. Aby uniknąć podwójnej płatności, nie opłaci faktury przez Lightning.</string>
     <string name="wallet__send_swipe">Przesuń, aby zapłacić</string>
     <string name="wallet__send_yes">Tak, wyślij</string>
     <string name="wallet__send_dialog1">Wygląda na to, że wysyłasz ponad $100. Czy kontynuować?</string>

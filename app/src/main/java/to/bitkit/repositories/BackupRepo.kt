@@ -862,6 +862,9 @@ class BackupRepo @Inject constructor(
                 allowances = paykitAllowanceStore.backupSnapshot()
                     .mapValues { PaykitAllowanceStateBackup(it.value) }
                     .ifEmpty { null },
+                onchainPaidInvoices = onchainSendAttemptStore.paidInvoicesBackupSnapshot(walletIndex)
+                    .map { PaykitPaymentStateBackup.OnchainPaidInvoiceBackup(it) }
+                    .ifEmpty { null },
             ),
         )
 
@@ -1130,6 +1133,9 @@ class BackupRepo @Inject constructor(
                 }
             }
             val walletIndex = backupWalletIndex()
+            it.onchainPaidInvoices?.let { invoices ->
+                onchainSendAttemptStore.restorePaidInvoices(invoices.map { invoice -> invoice.restored() }, walletIndex)
+            }
             it.activeOnchainAttempt?.let { wire ->
                 validateActiveProof(wire, it.pendingProofs)
                 val attempt = wire.restored(
