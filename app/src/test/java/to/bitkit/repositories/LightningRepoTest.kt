@@ -3470,6 +3470,30 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `estimateMaxSendOnchain should return zero when the send-all fee exceeds the spendable balance`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(
+            BalanceDetails(
+                totalOnchainBalanceSats = 1_000uL,
+                spendableOnchainBalanceSats = 1_000uL,
+                totalAnchorChannelsReserveSats = 0uL,
+                totalLightningBalanceSats = 0uL,
+                lightningBalances = emptyList(),
+                pendingBalancesFromChannelClosures = emptyList(),
+            ),
+        )
+        whenever { lightningService.estimateSendAllFee(any(), any()) }.thenReturn(2_000uL)
+
+        val result = sut.estimateMaxSendOnchain(
+            address = "bcrt1qtest",
+            speed = TransactionSpeed.Fast,
+            feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+        )
+
+        assertEquals(0uL, result.getOrNull())
+    }
+
+    @Test
     fun `sendOnChain should drain when the amount is the max after sync`() = test {
         startNodeForTesting()
         whenever(lightningService.balances).thenReturn(spendableBalance(100_000uL))
