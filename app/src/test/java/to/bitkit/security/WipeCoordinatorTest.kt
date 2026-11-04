@@ -576,6 +576,28 @@ class WipeCoordinatorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a reset confirmed while an attempt lowers the gate still wipes`() = test {
+        var readError: Throwable? = KeychainError.FailedToLoad(InMemoryKeychain.WIPE_PENDING)
+        whenever(keychain.loadWipePending()).thenAnswer { readError?.let { throw it } ?: store.wipePending }
+        sut.resumeAtLaunch()
+        assertIs<WipeState.Blocked>(sut.state.value)
+        var intentAtWipe: String? = null
+        wipe = {
+            intentAtWipe = store.wipePending
+            completeWipe()
+        }
+        // The reset lands while the attempt refreshes the wallet state just before lowering the gate
+        whenever(walletRepo.setWalletExistsState()).thenAnswer { sut.reset() }
+
+        readError = null
+        advanceBy(5)
+
+        verify(walletRepo).wipeWallet(any())
+        assertTrue(intentAtWipe.orEmpty().contains("userReset"))
+        assertEquals(WipeState.Idle, sut.state.value)
+    }
+
+    @Test
     fun `reset with an unreadable intent tries to write one and fails without wiping`() = test {
         val readError = KeychainError.FailedToLoad(InMemoryKeychain.WIPE_PENDING)
         whenever(keychain.loadWipePending()).thenAnswer { throw readError }

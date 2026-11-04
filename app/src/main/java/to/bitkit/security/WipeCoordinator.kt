@@ -134,7 +134,10 @@ class WipeCoordinator @Inject constructor(
         if (_state.value !is WipeState.Blocked && _state.value !is WipeState.Failed) return
         Logger.warn("Resetting the wallet from the wipe gate", context = TAG)
         forcedWipeReason = forcedWipeReason ?: WipeReason.USER_RESET
-        retry()
+        // Running keeps the gate up, and an attempt in flight keeps going until it has run the reset
+        _state.update { WipeState.Running }
+        retryRequests.trySend(Unit)
+        launchAttempts()
     }
 
     /** Locks the app behind the gate for a wallet state that could not be read, until a read succeeds. */
@@ -161,12 +164,19 @@ class WipeCoordinator @Inject constructor(
         if (job?.isActive == true) return@synchronized
         job = scope.launch {
             retryRequests.tryReceive()
-            if (!isRetry && attemptOrFail()) return@launch
+            if (!isRetry && attemptOrFail() && isDone()) return@launch
             for (wait in RETRY_DELAYS) {
                 withTimeoutOrNull(wait) { retryRequests.receive() }
-                if (attemptOrFail()) return@launch
+                if (attemptOrFail() && isDone()) return@launch
             }
         }
+    }
+
+    // Decided under the job lock, so a reset either sees this job ending and starts another, or this job runs it
+    private fun isDone(): Boolean = synchronized(jobLock) {
+        val isDone = forcedWipeReason == null
+        if (isDone) job = null
+        isDone
     }
 
     private suspend fun attemptOrFail(): Boolean = runCatching { attempt() }.getOrElse { error ->
@@ -222,8 +232,13 @@ class WipeCoordinator @Inject constructor(
         if (wasChecking) return true
         return runSuspendCatching { walletRepo.get().setWalletExistsState() }.fold(
             onSuccess = {
-                _state.update { WipeState.Idle }
-                true
+                var isLowered = false
+                _state.update {
+                    // A reset confirmed meanwhile must run, not be dropped with the gate
+                    isLowered = forcedWipeReason == null
+                    if (isLowered) WipeState.Idle else it
+                }
+                isLowered || forcedWipe()
             },
             onFailure = { error ->
                 Logger.warn("Failed to read wallet state before lowering the wipe gate", error, context = TAG)
